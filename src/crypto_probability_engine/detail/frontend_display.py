@@ -24,7 +24,7 @@ def build_frontend_display(
         "detail_available": True,
         "key_reasons": list(gate.get("hard_blocks", [])),
         "invalidation_conditions": list(gate.get("hard_blocks", [])),
-        "data_quality_warnings": [],
+        "data_quality_warnings": list(data_quality.get("warnings", [])),
         "execution_warnings": list(quant_result["execution_realism"].get("warnings", [])),
         "news_warnings": list(news_blocks["news_addon_state"].get("warnings", [])),
         "heat_legend": "Signal heat — not risk",

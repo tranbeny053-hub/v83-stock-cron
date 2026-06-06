@@ -19,6 +19,7 @@ def make_client() -> TestClient:
         session_signing_key="test-signing-key",
         dev_mode_enabled=True,
         session_cookie_secure=False,
+        data_mode="fixture",
     )
     return TestClient(create_app(settings))
 

@@ -69,3 +69,11 @@ Decision: Apply Claude final-review fixes for Sprint 1 without new product scope
 Rationale: Claude identified merge-blocking and deploy-blocking safety gaps before merge/deploy.
 
 Impact: Sprint 1 remains analysis-only and fixture-backed. `codex/sprint1-prod-build` requires Claude re-review before merge/deploy.
+
+## 2026-06-07 - Sprint 2 Public Market Data Integration
+
+Decision: Implement live Binance/OKX spot market data through public unauthenticated endpoints only, with `UCPE_DATA_MODE=live` default and explicit `UCPE_DATA_MODE=fixture` for demo/test fixture mode.
+
+Rationale: Claude Sprint 2 plan verified the Binance/OKX spot endpoint families for keyless public market data and required truthful `is_live_data` / `data_source` behavior.
+
+Impact: Live-mode failures or cross-provider conflicts fail closed as visible degraded/unavailable errors and never silently return fixture data. No Binance/OKX API keys, private exchange calls, live news fetching, quant/scoring/gate/news authority changes, merge, or deploy are included.

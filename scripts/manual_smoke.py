@@ -16,6 +16,7 @@ def main() -> int:
         session_signing_key="smoke-signing-key",
         dev_mode_enabled=True,
         session_cookie_secure=False,
+        data_mode="fixture",
     )
     client = TestClient(create_app(settings))
     health = client.get("/healthcheck")

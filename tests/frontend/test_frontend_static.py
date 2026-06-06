@@ -14,6 +14,8 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "Signal heat — not risk" in js
     assert "News disabled in METRICS_ONLY." in js
     assert "DEMO DATA" in js
+    assert "DEGRADED DATA" in js
+    assert "DATA UNAVAILABLE" in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -47,3 +49,10 @@ def test_no_secret_markers_in_frontend() -> None:
         "PRIVATE_KEY",
     ):
         assert marker not in combined
+
+
+def test_live_smoke_script_is_flag_gated() -> None:
+    script = (ROOT / "scripts" / "live_smoke.py").read_text(encoding="utf-8")
+    assert "UCPE_LIVE_SMOKE_ENABLED" in script
+    assert "SKIP:" in script
+    assert "data_mode=\"live\"" in script

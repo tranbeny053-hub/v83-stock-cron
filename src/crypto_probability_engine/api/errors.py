@@ -34,9 +34,16 @@ def api_error(
     message: str,
     *,
     retry_after_seconds: int | None = None,
+    provider_state_snapshot: dict | None = None,
+    system_status_snapshot: dict | None = None,
 ) -> HTTPException:
     return HTTPException(
         status_code=status_code,
-        detail=error_payload(code, message, retry_after_seconds=retry_after_seconds),
+        detail=error_payload(
+            code,
+            message,
+            retry_after_seconds=retry_after_seconds,
+            provider_state_snapshot=provider_state_snapshot,
+            system_status_snapshot=system_status_snapshot,
+        ),
     )
-

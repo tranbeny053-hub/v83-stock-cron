@@ -30,15 +30,26 @@ function setLoading(id, active) {
   document.querySelector(id).classList.toggle("hidden", !active);
 }
 
+function dataBannerText(display) {
+  if (display.is_live_data) {
+    return `LIVE DATA — ${display.data_source}`;
+  }
+  if (display.data_source === "FIXTURE_DEMO") {
+    return `DEMO DATA — ${display.data_source}`;
+  }
+  if (display.data_source === "UNAVAILABLE") {
+    return `DATA UNAVAILABLE — ${display.data_source}`;
+  }
+  return `DEGRADED DATA — ${display.data_source}`;
+}
+
 function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
   node.querySelector("h2").textContent = payload.normalized_symbol;
   const demoBanner = document.createElement("p");
   demoBanner.className = "demo-banner";
-  demoBanner.textContent = display.is_live_data
-    ? `LIVE DATA — ${display.data_source}`
-    : `DEMO DATA — ${display.data_source}`;
+  demoBanner.textContent = dataBannerText(display);
   node.insertBefore(demoBanner, node.querySelector("dl"));
   const values = [
     ["Disposition", display.disposition],
@@ -47,7 +58,7 @@ function overviewCard(payload) {
     ["Down", `${display.prob_down_pct.toFixed(2)}%`],
     ["Timeout", `${display.prob_timeout_pct.toFixed(2)}%`],
     ["Mode", display.analysis_mode_badge],
-    ["Data", display.is_live_data ? "LIVE" : "DEMO"],
+    ["Data", display.is_live_data ? "LIVE" : display.data_source],
     ["Heat", display.heat_legend || heatLegend],
   ];
   const dl = node.querySelector("dl");

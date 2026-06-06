@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from crypto_probability_engine.adapters.fixtures import build_fixture_snapshot
-from crypto_probability_engine.adapters.public_market import FixturePublicAdapter, ProviderRouter
+from crypto_probability_engine.adapters.provider_selection import (
+    ProviderSelectionError,
+    select_market_data,
+)
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
@@ -44,32 +46,27 @@ def analyze_request(
     except SymbolNormalizationError as exc:
         raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc
 
-    snapshot = build_fixture_snapshot(
-        normalized_symbol=symbol.display,
-        timeframe=request.timeframe,
-    )
-    router = ProviderRouter(
-        [
-            FixturePublicAdapter(
-                "fixture",
-                {(symbol.display, request.timeframe): snapshot},
-            )
-        ]
-    )
-    snapshot = router.fetch_first_valid(symbol, request.timeframe)
-    provider_state = router.public_state()
+    try:
+        selection = select_market_data(symbol, request.timeframe, settings=settings)
+    except ProviderSelectionError as exc:
+        raise api_error(
+            _status_for_selection_error(exc.code),
+            exc.code,
+            exc.message,
+            provider_state_snapshot={
+                "provider_state": exc.provider_state,
+                "data_quality": exc.data_quality,
+            },
+        ) from exc
+
+    snapshot = selection.snapshot
+    provider_state = selection.provider_state
+    data_quality = selection.data_quality
     quant_result = run_quant_pipeline(snapshot, provider_state)
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
     )
-    data_quality = {
-        "status": "OK",
-        "warnings": [],
-        "freshness_budget": "DEFAULT_PHASE1A",
-        "is_live_data": False,
-        "data_source": "FIXTURE_DEMO",
-    }
     run_id = f"run_{uuid4().hex}"
     frontend_display = build_frontend_display(
         quant_result,
@@ -128,7 +125,7 @@ def analyze_request(
         "detail_view": detail_view,
         "gate_result": quant_result["gate_result"],
         "debug": {
-            "warnings": [],
+            "warnings": list(data_quality.get("warnings", [])),
             "news_influence": news_blocks["news_influence"],
             "analysis_hash_source": "backend_only",
         },
@@ -138,3 +135,11 @@ def analyze_request(
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     run_store.put(run_id, validated)
     return validated
+
+
+def _status_for_selection_error(code: ErrorCode) -> int:
+    if code == ErrorCode.DATA_CONFLICT:
+        return 409
+    if code == ErrorCode.INVALID_SYMBOL:
+        return 400
+    return 503

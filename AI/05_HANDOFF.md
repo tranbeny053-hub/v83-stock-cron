@@ -7,15 +7,54 @@ Codex
 Claude
 
 ## Current Goal
+Sprint 2 live public Binance/OKX market-data integration. WP2.6 is complete with offline verification passing. Next step is commit on `codex/sprint2-live-market-data`, then Claude final review. Do not merge or deploy.
+
+Previous goal:
 Production Build Sprint 1 WP0-WP8 plus Claude final-review fixes completed. Next step is Claude re-review; do not merge or deploy.
 
 ## Current Branch / Worktree
+`codex/sprint2-live-market-data` / project root `v8-crypto-api-clean/` inside the parent Git repo.
+
+Previous branch:
 `codex/sprint1-prod-build` / repo root `v8-crypto-api-clean/`
 
 ## Risk Level
+Sprint 2 is R2/R3 provider integration and data honesty. Quant/scoring/gate/news authority must remain unchanged. Provider integration, data honesty, no-network unit tests, Docker/HF env table, and release gate require Claude final review.
+
 Overall sprint R3. WP2 auth/security, WP4 quant/financial logic, WP5 news authority, and WP8 Docker/deployment/checkers are implemented with final-review fixes and require Claude re-review.
 
 ## Files Changed
+- Sprint 2 WP2.0:
+  - `docs/source_verification_matrix.md`
+  - `src/crypto_probability_engine/config/defaults.py`
+  - `src/crypto_probability_engine/config/settings.py`
+  - `src/crypto_probability_engine/adapters/http_client.py`
+  - `src/crypto_probability_engine/adapters/mappers.py`
+  - `src/crypto_probability_engine/adapters/provider_selection.py`
+  - `src/crypto_probability_engine/adapters/public_market.py`
+  - `src/crypto_probability_engine/api/analysis_service.py`
+  - `src/crypto_probability_engine/api/errors.py`
+  - `src/crypto_probability_engine/detail/frontend_display.py`
+  - `tests/adapters/test_public_market_adapters.py`
+  - `tests/adapters/test_provider_selection.py`
+  - `tests/api/test_analysis_endpoints.py`
+  - `tests/api/test_analysis_live_data_wiring.py`
+  - `frontend/app.js`
+  - `scripts/live_smoke.py`
+  - `tests/frontend/test_frontend_static.py`
+  - `tests/conftest.py`
+  - `tests/test_no_network_guard.py`
+  - `scripts/manual_smoke.py`
+  - `.github/workflows/ci.yml`
+  - `README.md`
+  - `RELEASE_GATE.md`
+  - `CHANGELOG.md`
+  - `AI/07_DECISION_LOG.md`
+  - `AI/06_TEST_COMMANDS.md`
+  - `AI/08_IMPLEMENTATION_MEMORY.md`
+  - `AI/03_CURRENT_STATE.md`
+  - `AI/05_HANDOFF.md`
+
 - `IMPLEMENTATION_SPEC.md`
 - `IMPLEMENTATION_DECISIONS.md`
 - `.gitignore`
@@ -92,6 +131,46 @@ Overall sprint R3. WP2 auth/security, WP4 quant/financial logic, WP5 news author
 - Existing workspace listing, including `.claude/` presence, without editing forbidden files.
 
 ## Commands Run
+- Sprint 2 WP2.0:
+  - `git branch --show-current`: PASS, `codex/sprint2-live-market-data`.
+  - `git status --short --untracked-files=all -- .`: PASS before edits, clean.
+  - Required Sprint 2 source/doc/code reads: PASS.
+  - `PYTHONPATH=src python3 -c 'from crypto_probability_engine.config.settings import Settings; ...'`: PASS, default live-provider flags loaded.
+  - `ruff check src tests scripts`: initially FAIL on settings import order; after `ruff check src/crypto_probability_engine/config/settings.py --fix`, PASS.
+  - `PYTHONPATH=src python3 -m pytest -q`: PASS, 56 passed, 3 warnings.
+- Sprint 2 WP2.1:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py -q`: initially FAIL on malformed test setup; final PASS, 6 passed.
+  - `ruff check src tests scripts`: initially FAIL on line length and pending OKX imports; final PASS.
+  - `git status --short --untracked-files=all -- .`: PASS, only in-project Sprint 2 paths changed/untracked.
+- Sprint 2 WP2.2:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py -q`: PASS, 9 passed.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.3:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_provider_selection.py -q`: PASS, 6 passed.
+  - `ruff check src tests scripts`: initially FAIL on formatting/line length in `provider_selection.py`; final PASS.
+- Sprint 2 WP2.4:
+  - `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 17 passed, 1 warning.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.5:
+  - `PYTHONPATH=src python3 -m pytest tests/frontend -q`: PASS, 4 passed.
+  - `PYTHONPATH=src python3 scripts/live_smoke.py`: PASS/SKIP, `UCPE_LIVE_SMOKE_ENABLED` not true.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.6 / global verification:
+  - `git branch --show-current`: PASS, `codex/sprint2-live-market-data`.
+  - `git status --short --untracked-files=all -- .`: PASS, only in-project Sprint 2 paths changed/untracked before staging.
+  - `python3 --version`: PASS, Python 3.14.3.
+  - `PYTHONPATH=src python3 -m pytest -q`: PASS, 76 passed, 3 warnings.
+  - `ruff check src tests scripts`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` deprecation warning.
+  - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/live_smoke.py`: PASS/SKIP, `UCPE_LIVE_SMOKE_ENABLED` not true.
+  - `PYTHONPATH=src python3 -m pytest tests/test_no_network_guard.py -q`: PASS.
+  - Fixture fallback grep: PASS, live failure tests assert `FIXTURE_DEMO` is not returned.
+  - `git diff -- .`: PASS, reviewed app-project diff.
+
 - `git switch -c codex/sprint1-prod-build`: PASS.
 - Sprint source/doc reads: PASS.
 - `python --version`: FAIL, local command not found.
@@ -137,6 +216,27 @@ Overall sprint R3. WP2 auth/security, WP4 quant/financial logic, WP5 news author
   - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
   - `grep -rn '"AVOID"' src`: PASS, no output.
   - `grep -rn "secure=False" src`: PASS, no output.
+
+## Hugging Face Variables and Secrets Required
+
+| Type | Name | Value | Purpose | Required now? | Notes |
+|---|---|---|---|---|---|
+| Variable | `UCPE_DATA_MODE` | `live` | Live public providers | yes | Use `fixture` only for demo/test. |
+| Variable | `UCPE_PROVIDER_PRIORITY` | `binance,okx` | Provider order | yes | Public spot only. |
+| Variable | `UCPE_PROVIDER_TIMEOUT_SECONDS` | `8` | Provider timeout | yes | |
+| Variable | `UCPE_PROVIDER_MAX_RETRIES` | `1` | Bounded retry | yes | |
+| Variable | `UCPE_PROVIDER_RATE_LIMIT_PER_MIN` | `60` | Local throttle | yes | |
+| Variable | `UCPE_CANDLE_CACHE_TTL_SECONDS` | `300` | Candle cache TTL | yes | |
+| Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow single-provider live with warning | yes | |
+| Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep live smoke manual | yes | Do not enable in CI. |
+| Variable | `UCPE_COOKIE_SECURE` | `true` | Secure cookies | yes | |
+| Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | |
+| Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | KDF iterations | yes | |
+| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator auth hash | yes | Generate locally with configured salt. |
+| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode auth hash | later | Required only if Dev Mode enabled. |
+| Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Session signing | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
+| Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | PBKDF2 salt | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
+| Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required. |
 
 ## What Works Now
 WP0-WP8 and Claude final-review fixes are implemented locally. The app boots, healthcheck passes, authenticated analysis works in both modes, full pytest passes, checkers pass, manual smoke passes, Dockerfile exists, README metadata starts at line 1, static frontend mounts, fixture/demo data is clearly labeled, secure cookies default on, and access-code hashes use PBKDF2.

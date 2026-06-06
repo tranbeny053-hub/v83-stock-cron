@@ -64,6 +64,47 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] Claude re-review completed for WP5 news authority.
 - [ ] Claude re-review completed for WP8 Docker/deployment/checkers.
 
+## Sprint 2 Data Gate
+
+- [x] Binance spot public endpoint families documented as `VERIFIED_PUBLIC` in `docs/source_verification_matrix.md`.
+- [x] OKX spot public endpoint families documented as `VERIFIED_PUBLIC` in `docs/source_verification_matrix.md`.
+- [x] Perp/news rows remain `TO_VERIFY`.
+- [x] Public provider HTTP client uses allow-listed hosts only.
+- [x] Binance/OKX adapters use public unauthenticated endpoints only.
+- [x] Unit tests use mocked provider responses and do not require live network.
+- [x] Socket guard blocks real unit-test network probes.
+- [x] Live provider selection enforces `CROSS_PROVIDER`, single-source warning, `DATA_CONFLICT`, `UNAVAILABLE`, and explicit `FIXTURE_DEMO` semantics.
+- [x] Live-mode provider failure does not return fixture data.
+- [x] `is_live_data=true` is only returned from validated live-provider selection.
+- [x] Frontend hides demo/degraded banner only when backend `is_live_data` is true.
+- [x] Manual live smoke script exists and skips unless `UCPE_LIVE_SMOKE_ENABLED=true`.
+- [ ] Manual real-network live smoke run completed by Claude/User before deploy.
+- [ ] Claude final review completed for provider integration.
+- [ ] Claude final review completed for data honesty.
+- [ ] Claude final review completed for no-network unit tests.
+- [ ] Claude final review completed for Docker/Hugging Face env table.
+
+## Hugging Face Variables and Secrets Required
+
+| Type | Name | Value | Purpose | Required now? | Notes |
+|---|---|---|---|---|---|
+| Variable | `UCPE_DATA_MODE` | `live` | Use live public market data by default | yes | `fixture` is explicit demo/test mode only. |
+| Variable | `UCPE_PROVIDER_PRIORITY` | `binance,okx` | Ordered provider preference | yes | Public spot only. |
+| Variable | `UCPE_PROVIDER_TIMEOUT_SECONDS` | `8` | Provider HTTP timeout | yes | |
+| Variable | `UCPE_PROVIDER_MAX_RETRIES` | `1` | Bounded retry/backoff | yes | |
+| Variable | `UCPE_PROVIDER_RATE_LIMIT_PER_MIN` | `60` | Local request throttle | yes | |
+| Variable | `UCPE_CANDLE_CACHE_TTL_SECONDS` | `300` | Candle cache TTL | yes | |
+| Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow single validated provider with warning | yes | |
+| Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep live smoke manual/off by default | yes | Never enable in CI. |
+| Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | |
+| Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | |
+| Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | KDF iterations | yes | |
+| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator access hash | yes | Generate locally; never commit. |
+| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode access hash | later | Required only if Dev Mode enabled. |
+| Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Session signing | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
+| Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | PBKDF2 salt | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
+| Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required for Sprint 2. |
+
 ## Required Evidence
 
 - Commands run or attempted.

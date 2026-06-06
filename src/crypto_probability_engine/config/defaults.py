@@ -54,6 +54,14 @@ class Phase1ADefaults:
     execution_cost_hard_gate_frac: float = 0.02
     access_code_pbkdf2_iterations: int = 210_000
     access_code_local_salt: str = "ucpe-local-dev-salt-change-per-deploy"
+    data_mode_default: str = "live"
+    provider_priority: tuple[str, ...] = ("binance", "okx")
+    provider_timeout_seconds: float = 8.0
+    provider_max_retries: int = 1
+    provider_rate_limit_per_min: int = 60
+    candle_cache_ttl_seconds: int = 300
+    cross_provider_required: bool = False
+    live_smoke_enabled: bool = False
 
 
 DEFAULT_PHASE1A = Phase1ADefaults()

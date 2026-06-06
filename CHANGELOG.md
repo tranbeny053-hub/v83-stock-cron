@@ -97,3 +97,29 @@ Notes:
 - No deploy and no merge performed.
 - Sprint 2 first task is live public Binance/OKX adapters plus real `data_quality`.
 - Claude re-review is required before merge/deploy.
+
+## 2026-06-07 - Sprint 2 Live Public Market Data
+
+Blueprint version: `v1.2.2`
+schema_version: `1.1-crypto-probability`
+app_version: `0.1.0`
+
+Added:
+- `docs/source_verification_matrix.md` with Binance/OKX spot public endpoint rows marked `VERIFIED_PUBLIC`.
+- Env-driven live data config: `UCPE_DATA_MODE`, provider priority, timeout, retries, rate limit, candle cache TTL, cross-provider requirement, and live-smoke gate.
+- Safe public HTTP client with host allow-list, bounded timeout/retries, local throttle, and typed provider errors.
+- Binance and OKX public spot adapters for candles and books using keyless endpoints only.
+- Provider selection layer with cross-provider coherence, single-source warning, `DATA_CONFLICT` fail-closed behavior, all-provider `UNAVAILABLE`, explicit fixture mode, and no silent live-to-fixture fallback.
+- Analysis-service data-quality wiring and frontend data-source honesty banner.
+- `scripts/live_smoke.py`, gated by `UCPE_LIVE_SMOKE_ENABLED=true`.
+- Pytest socket guard blocking real network in unit tests.
+
+Verification:
+- Full pytest with socket guard: PASS, 76 passed, 3 warnings.
+- Ruff: PASS after package fixes.
+
+Notes:
+- No deploy and no merge performed.
+- No Binance/OKX API keys or private/authenticated exchange calls were added.
+- Live smoke was not run because `UCPE_LIVE_SMOKE_ENABLED` was not enabled.
+- Claude final review is required for provider integration, data honesty, no-network tests, HF env table, and release gate.

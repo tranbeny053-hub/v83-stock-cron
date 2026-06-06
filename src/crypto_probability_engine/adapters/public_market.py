@@ -5,12 +5,26 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol
 
+from crypto_probability_engine.adapters.http_client import PublicHttpClient
+from crypto_probability_engine.adapters.mappers import (
+    BINANCE_BASE_URL,
+    OKX_BASE_URL,
+    map_interval,
+    parse_binance_candles,
+    parse_binance_order_book,
+    parse_okx_candles,
+    parse_okx_order_book,
+    provider_symbol,
+)
 from crypto_probability_engine.adapters.types import (
     MarketSnapshot,
     ProviderError,
     ProviderState,
     ProviderStatus,
 )
+from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
+from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.config.unit_discipline import utc_now
 from crypto_probability_engine.normalizers.symbols import NormalizedSymbol
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
@@ -55,28 +69,86 @@ class FixturePublicAdapter:
 
 
 class BinancePublicAdapter:
-    """Public Binance adapter placeholder; source details remain TO_VERIFY in Sprint 1."""
+    """Keyless Binance spot market-data adapter."""
 
     name = "binance"
 
+    def __init__(
+        self,
+        *,
+        settings: Settings | None = None,
+        http_client: PublicHttpClient | None = None,
+    ) -> None:
+        self.settings = settings or Settings.from_env()
+        self.http_client = http_client or PublicHttpClient.from_settings(self.settings)
+
     def fetch_market_snapshot(self, symbol: NormalizedSymbol, timeframe: str) -> MarketSnapshot:
-        raise ProviderError(
-            "PROVIDER_TO_VERIFY",
-            "Binance public adapter details remain TO_VERIFY for Sprint 1.",
+        symbol_param = provider_symbol(symbol, self.name)
+        interval = map_interval(timeframe, self.name)
+        limit = min(DEFAULT_PHASE1A.min_history_bars + 1, 1000)
+        klines = self.http_client.get_json(
+            base_url=BINANCE_BASE_URL,
+            path="/api/v3/klines",
+            params={"symbol": symbol_param, "interval": interval, "limit": limit},
             provider=self.name,
+        )
+        depth = self.http_client.get_json(
+            base_url=BINANCE_BASE_URL,
+            path="/api/v3/depth",
+            params={"symbol": symbol_param, "limit": 100},
+            provider=self.name,
+        )
+        as_of_utc = utc_now()
+        return MarketSnapshot(
+            provider=self.name,
+            normalized_symbol=symbol.display,
+            timeframe=timeframe,
+            candles=parse_binance_candles(klines, timeframe=timeframe),
+            order_book=parse_binance_order_book(depth, as_of_utc=as_of_utc),
+            as_of_utc=as_of_utc,
+            source_status=ProviderStatus.OK,
         )
 
 
 class OkxPublicAdapter:
-    """Public OKX adapter placeholder; source details remain TO_VERIFY in Sprint 1."""
+    """Keyless OKX spot market-data adapter."""
 
     name = "okx"
 
+    def __init__(
+        self,
+        *,
+        settings: Settings | None = None,
+        http_client: PublicHttpClient | None = None,
+    ) -> None:
+        self.settings = settings or Settings.from_env()
+        self.http_client = http_client or PublicHttpClient.from_settings(self.settings)
+
     def fetch_market_snapshot(self, symbol: NormalizedSymbol, timeframe: str) -> MarketSnapshot:
-        raise ProviderError(
-            "PROVIDER_TO_VERIFY",
-            "OKX public adapter details remain TO_VERIFY for Sprint 1.",
+        inst_id = provider_symbol(symbol, self.name)
+        bar = map_interval(timeframe, self.name)
+        limit = min(DEFAULT_PHASE1A.min_history_bars + 1, 300)
+        candles_payload = self.http_client.get_json(
+            base_url=OKX_BASE_URL,
+            path="/api/v5/market/candles",
+            params={"instId": inst_id, "bar": bar, "limit": limit},
             provider=self.name,
+        )
+        books_payload = self.http_client.get_json(
+            base_url=OKX_BASE_URL,
+            path="/api/v5/market/books",
+            params={"instId": inst_id, "sz": 100},
+            provider=self.name,
+        )
+        as_of_utc = utc_now()
+        return MarketSnapshot(
+            provider=self.name,
+            normalized_symbol=symbol.display,
+            timeframe=timeframe,
+            candles=parse_okx_candles(candles_payload, timeframe=timeframe),
+            order_book=parse_okx_order_book(books_payload, as_of_utc=as_of_utc),
+            as_of_utc=as_of_utc,
+            source_status=ProviderStatus.OK,
         )
 
 

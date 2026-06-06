@@ -1,6 +1,12 @@
 # Implementation Memory
 
 ## Context-Resume Summary
+Sprint 2 live public market-data integration is underway on `codex/sprint2-live-market-data`.
+The project worktree is `v8-crypto-api-clean/`; do not touch sibling folders in the parent Git repo.
+WP2.6 is complete: socket guard, CI/docs/gates finalization, and full offline verification are done.
+All offline Sprint 2 checks pass locally. Next step is commit on `codex/sprint2-live-market-data`, then Claude final review.
+No merge or deploy has been performed.
+
 Production Build Sprint 1 is on `codex/sprint1-prod-build`, based from `codex/phase0-artifacts`.
 The sprint is governed by the Claude Code Opus Production Build Sprint 1 Master Plan and Phase 0 artifacts.
 Work must proceed sequentially WP0 through WP8 with memory/state/handoff updates after each package.
@@ -18,13 +24,18 @@ Claude final-review fixes are applied: blueprint disposition vocabulary, liquidi
 Resume with Claude re-review; do not merge or deploy yet.
 
 ## Latest App State
+Sprint 2 default config now uses `UCPE_DATA_MODE=live`; explicit fixture mode remains available via `UCPE_DATA_MODE=fixture`.
+Provider priority defaults to `binance,okx`; timeout, retries, local rate limit, candle cache TTL, cross-provider requirement, and live-smoke gate are env-driven.
+Binance/OKX spot endpoint families are documented as public/keyless; perp and news source rows remain `TO_VERIFY`.
+Unit tests have an autouse socket guard and mocked provider fixtures; manual live smoke is skipped unless `UCPE_LIVE_SMOKE_ENABLED=true`.
+
 The package imports with `PYTHONPATH=src python3`.
 Schema/model tests pass for both `METRICS_ONLY` and `NEWS_ADDON` fixtures.
 FastAPI boots in tests; `/healthcheck`, `/v1/system_status`, `/v1/auth/login`, and `/v1/auth/dev` are implemented.
 Session checks are server-side and use PBKDF2-HMAC-SHA256 env-code comparison; attempted codes are not stored.
 README begins with the required Hugging Face Docker metadata.
 Dockerfile and checkers exist; no deploy was performed.
-Provider adapters remain public-only and fixture-first; Binance/OKX live source details remain `TO_VERIFY` and fail closed.
+Provider adapters remain public-only. Binance and OKX live adapters exist, and analysis now uses the provider selector according to `UCPE_DATA_MODE`.
 Quant is deterministic and hashable, but uncalibrated; it exposes `DEFAULT_PHASE1A` and `INSUFFICIENT_SAMPLE`.
 News blocks are schema-valid stubs: `METRICS_ONLY` does not fetch; `NEWS_ADDON` without configured sources returns `UNAVAILABLE`; news influence remains `0.0`.
 End-to-end fixture analysis returns schema-valid payloads in both modes; batch isolates item failures; detail/debug endpoints use in-memory recent runs.
@@ -35,7 +46,7 @@ Final-review fix verification passes locally: pytest, Ruff, checkers, schema val
 ## Implemented Components
 - config: done
 - api: partial; schema, auth, health/status, analysis, batch, detail, and debug endpoints done
-- adapters: partial; public interface, fixture adapter, Binance/OKX `TO_VERIFY` placeholders, and router done
+- adapters: partial; fixture adapter, Binance/OKX public adapters, provider selector, cache TTL, and router done
 - validation: partial; candle/book/coherence validation done
 - quant: partial; deterministic DEFAULT_PHASE1A baseline done
 - features: partial; Sprint 1 deterministic feature states done
@@ -80,9 +91,49 @@ DEFAULT_PHASE1A values are approved by the Sprint 1 Master Plan and must live in
 News evidence remains `0.0` in Sprint 1.
 WP2 auth/security, WP4 quant/financial logic, and WP5 news authority require Claude final review before merge/deploy.
 Final-review fix decisions: score fallback is `ELEVATED_RISK_AVOID`; bad liquidity, high tail CVaR, or excessive round-trip cost forces `NO_TRADE`; constants live in config; cookies default secure; access codes use PBKDF2 with env-configurable salt/iterations; Sprint 1 data is labeled `FIXTURE_DEMO`; `H_primary`/`H_extended` share one directional split until Sprint 2; full liquidity/tail/execution hard-gating is Sprint 2.
+Sprint 2 default `UCPE_DATA_MODE` is `live`; fixture mode is explicit via `UCPE_DATA_MODE=fixture`; no live-mode failure may silently return fixture data.
+Hugging Face deployment notes: Variables should include `UCPE_DATA_MODE=live`, `UCPE_PROVIDER_PRIORITY=binance,okx`, timeout `8`, retries `1`, rate limit `60`, cache TTL `300`, `UCPE_CROSS_PROVIDER_REQUIRED=false`, `UCPE_LIVE_SMOKE_ENABLED=false`, `UCPE_COOKIE_SECURE=true`, and `UCPE_DEV_MODE_ENABLED=false`. Secrets are `APP_ACCESS_CODE_HASH`, optional `DEV_MODE_CODE_HASH`, `SESSION_SIGNING_KEY`, and `UCPE_ACCESS_CODE_SALT`; generate locally and never commit. No Binance/OKX secrets are required.
 See `AI/07_DECISION_LOG.md` for governance and source-verification decisions.
 
 ## Commands Run And Results
+- Sprint 2 WP2.0:
+  - `git branch --show-current`: PASS, `codex/sprint2-live-market-data`.
+  - `git status --short --untracked-files=all -- .`: PASS before edits, clean.
+  - Required Sprint 2 source/doc/code reads: PASS.
+  - `PYTHONPATH=src python3 -c 'from crypto_probability_engine.config.settings import Settings; ...'`: PASS, printed `live ('binance', 'okx') 8.0 1 60 300 False False`.
+  - `ruff check src tests scripts`: initially FAIL on import ordering in `settings.py`; after `ruff check src/crypto_probability_engine/config/settings.py --fix`, PASS.
+  - `PYTHONPATH=src python3 -m pytest -q`: PASS, 56 passed, 3 warnings.
+- Sprint 2 WP2.1:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py -q`: initially FAIL because the malformed-payload test only supplied a row intentionally dropped as in-progress; final PASS, 6 passed.
+  - `ruff check src tests scripts`: initially FAIL on line length and pending OKX imports; final PASS.
+  - `git status --short --untracked-files=all -- .`: PASS, only in-project Sprint 2 paths changed/untracked.
+- Sprint 2 WP2.2:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py -q`: PASS, 9 passed.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.3:
+  - `PYTHONPATH=src python3 -m pytest tests/adapters/test_provider_selection.py -q`: PASS, 6 passed.
+  - `ruff check src tests scripts`: initially FAIL on formatting/line length in `provider_selection.py`; after formatting/wrapping, PASS.
+- Sprint 2 WP2.4:
+  - `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 17 passed, 1 existing TestClient cookie warning.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.5:
+  - `PYTHONPATH=src python3 -m pytest tests/frontend -q`: PASS, 4 passed.
+  - `PYTHONPATH=src python3 scripts/live_smoke.py`: PASS/SKIP, `UCPE_LIVE_SMOKE_ENABLED` not true, no live smoke run.
+  - `ruff check src tests scripts`: PASS.
+- Sprint 2 WP2.6 / global verification:
+  - `PYTHONPATH=src python3 -m pytest -q`: PASS, 76 passed, 3 warnings.
+  - `ruff check src tests scripts`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` deprecation warning.
+  - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
+  - `PYTHONPATH=src python3 scripts/live_smoke.py`: PASS/SKIP, env flag not enabled.
+  - `PYTHONPATH=src python3 -m pytest tests/test_no_network_guard.py -q`: PASS, 1 passed.
+  - Fixture fallback grep: PASS, live failure tests assert `FIXTURE_DEMO` is not returned.
+  - `git diff -- .`: PASS, reviewed app-project diff.
+  - `git status --short --untracked-files=all -- .`: PASS, only in-project Sprint 2 paths changed/untracked before staging.
+
 - `git switch -c codex/sprint1-prod-build`: PASS.
 - Sprint source/doc reads: PASS.
 - `python --version`: FAIL, `python` command not found.
