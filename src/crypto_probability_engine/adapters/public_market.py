@@ -85,7 +85,7 @@ class BinancePublicAdapter:
     def fetch_market_snapshot(self, symbol: NormalizedSymbol, timeframe: str) -> MarketSnapshot:
         symbol_param = provider_symbol(symbol, self.name)
         interval = map_interval(timeframe, self.name)
-        limit = min(DEFAULT_PHASE1A.min_history_bars + 1, 1000)
+        limit = min(DEFAULT_PHASE1A.min_history_bars + 5, 1000)
         klines = self.http_client.get_json(
             base_url=BINANCE_BASE_URL,
             path="/api/v3/klines",
@@ -127,7 +127,7 @@ class OkxPublicAdapter:
     def fetch_market_snapshot(self, symbol: NormalizedSymbol, timeframe: str) -> MarketSnapshot:
         inst_id = provider_symbol(symbol, self.name)
         bar = map_interval(timeframe, self.name)
-        limit = min(DEFAULT_PHASE1A.min_history_bars + 1, 300)
+        limit = min(DEFAULT_PHASE1A.min_history_bars + 5, 300)
         candles_payload = self.http_client.get_json(
             base_url=OKX_BASE_URL,
             path="/api/v5/market/candles",

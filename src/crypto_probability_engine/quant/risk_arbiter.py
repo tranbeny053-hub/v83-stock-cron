@@ -11,7 +11,7 @@ def compute_risk_arbiter(
     liquidity_state: dict,
     execution_state: dict,
 ) -> dict:
-    alpha = float(trend_state.get("primary_return_frac") or 0.0)
+    alpha = float(trend_state.get("primary_return") or 0.0)
     omega = float(liquidity_state.get("spread_frac") or 0.0)
     sigma = float(volatility_state.get("realized_vol_frac") or 0.0)
     cost = float(execution_state.get("round_trip_cost_frac") or 0.0)
@@ -30,9 +30,8 @@ def compute_risk_arbiter(
         "w_alpha": DEFAULT_PHASE1A.w_alpha,
         "w_omega": DEFAULT_PHASE1A.w_omega,
         "w_sigma": DEFAULT_PHASE1A.w_sigma,
-        "alpha_signal_frac": alpha,
-        "net_signal_frac": net_signal,
+        "alpha_signal": alpha,
+        "net_signal": net_signal,
         "risk_pressure_frac": risk_pressure,
         "arbiter_value": arbiter_value,
     }
-

@@ -12,7 +12,7 @@ from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import hash_code, session_limiter
 from crypto_probability_engine.api.schemas import ErrorCode, validate_analysis_response
 from crypto_probability_engine.config.settings import Settings
-from tests.fixtures.market_data import make_snapshot
+from tests.fixtures.market_data import make_downtrend_snapshot, make_snapshot
 
 
 def make_live_client(monkeypatch) -> TestClient:
@@ -68,6 +68,52 @@ def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
     assert payload["frontend_display"]["is_live_data"] is True
     assert payload["frontend_display"]["data_source"] == "BINANCE_PUBLIC"
     assert payload["frontend_display"]["data_quality_warnings"]
+
+
+def test_down_market_live_response_validates_with_signed_negative_fields(monkeypatch) -> None:
+    def fake_select(symbol, timeframe, *, settings):
+        return ProviderSelectionResult(
+            snapshot=make_downtrend_snapshot(provider="binance", symbol=symbol.display),
+            provider_state={
+                "status": "OK",
+                "active_provider": "binance",
+                "providers": {"binance": {"status": "OK"}},
+            },
+            data_quality={
+                "status": "OK",
+                "warnings": ["single-source, cross-check unavailable"],
+                "freshness_budget": "DEFAULT_PHASE1A",
+                "is_live_data": True,
+                "data_source": "BINANCE_PUBLIC",
+                "latest_candle_age_seconds": 120,
+                "provider_failures": {},
+            },
+        )
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.analysis_service.select_market_data",
+        fake_select,
+    )
+    client = make_live_client(monkeypatch)
+    login(client)
+
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    trend = payload["market_features"]["trend_mtf"]
+    risk = payload["risk_arbiter_state"]
+    score = payload["score_stack"]
+    assert trend["primary_return"] < 0.0
+    assert trend["extended_return"] < 0.0
+    assert risk["alpha_signal"] < 0.0
+    assert risk["net_signal"] < 0.0
+    assert score["directional_edge"] < 0.0
+    horizon = payload["probability_state"]["horizons"]["H_primary"]
+    assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
+    serialized = json.dumps(payload)
+    for forbidden_base in ("primary_return", "net_signal", "directional_edge"):
+        assert forbidden_base + "_frac" not in serialized
 
 
 def test_live_failure_returns_visible_error_without_fixture(monkeypatch) -> None:
@@ -156,4 +202,3 @@ def test_live_batch_keeps_partial_failure_isolated(monkeypatch) -> None:
     assert len(payload["errors"]) == 1
     assert payload["results"][0]["data_quality"]["data_source"] == "BINANCE_PUBLIC"
     assert payload["errors"][0]["detail"]["error"]["code"] == "PROVIDER_DEGRADED"
-

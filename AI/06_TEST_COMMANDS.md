@@ -37,12 +37,13 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`
 - `PYTHONPATH=src python3 scripts/live_smoke.py` skips unless `UCPE_LIVE_SMOKE_ENABLED=true`; do not run in CI or unit tests.
+- `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` generates an access-code hash only when `UCPE_ACCESS_CODE_SALT` is set locally; it prompts for the code without printing it.
 
 ## Manual Live Smoke
 
 - Default: `PYTHONPATH=src python3 scripts/live_smoke.py` returns SKIP and makes no real network call.
 - Manual real-network run only after Claude/User approval: `UCPE_LIVE_SMOKE_ENABLED=true PYTHONPATH=src python3 scripts/live_smoke.py`
-- Expected Sprint 2 behavior when enabled: BTC `METRICS_ONLY` and `NEWS_ADDON` return schema-valid live public data; `NEWS_ADDON` news state remains `UNAVAILABLE`; no Binance/OKX secrets are required.
+- Expected Sprint 2 behavior when enabled: BTC and ETH `METRICS_ONLY` / `NEWS_ADDON` return schema-valid live public data; `NEWS_ADDON` news state remains `UNAVAILABLE`; no Binance/OKX secrets are required.
 
 ## HTTP Smoke
 
@@ -78,6 +79,8 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`
 - `PYTHONPATH=src python3 scripts/live_smoke.py` (expected SKIP unless `UCPE_LIVE_SMOKE_ENABLED=true`)
+- `UCPE_LIVE_SMOKE_ENABLED=true PYTHONPATH=src python3 scripts/live_smoke.py` (manual real-network smoke; never run in CI)
+- `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` (deployment helper; requires local `UCPE_ACCESS_CODE_SALT`)
 - Confirm socket guard with `PYTHONPATH=src python3 -m pytest tests/test_no_network_guard.py -q`
 
 ## Definition of Done

@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Sprint 1 implemented locally with Claude final-review fixes applied. Claude re-review is required before merge/deploy.
+Status: Sprint 2 targeted fixes applied locally. Claude re-review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -78,7 +78,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `is_live_data=true` is only returned from validated live-provider selection.
 - [x] Frontend hides demo/degraded banner only when backend `is_live_data` is true.
 - [x] Manual live smoke script exists and skips unless `UCPE_LIVE_SMOKE_ENABLED=true`.
-- [ ] Manual real-network live smoke run completed by Claude/User before deploy.
+- [x] Signed return/signal/edge fields no longer use `_frac` names.
+- [x] Down-market fixture covers negative signed fields and schema validation.
+- [x] Manual real-network live smoke run completed by Codex for BTC and ETH in `METRICS_ONLY` and `NEWS_ADDON`.
 - [ ] Claude final review completed for provider integration.
 - [ ] Claude final review completed for data honesty.
 - [ ] Claude final review completed for no-network unit tests.
@@ -99,8 +101,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | |
 | Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | |
 | Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | KDF iterations | yes | |
-| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator access hash | yes | Generate locally; never commit. |
-| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode access hash | later | Required only if Dev Mode enabled. |
+| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator access hash | yes | Generate with `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` after exporting `UCPE_ACCESS_CODE_SALT`. |
+| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode access hash | later | Generate with `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH` if Dev Mode is enabled. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Session signing | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | PBKDF2 salt | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
 | Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required for Sprint 2. |

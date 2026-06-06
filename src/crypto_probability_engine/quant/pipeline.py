@@ -44,7 +44,7 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
     risk_arbiter = compute_risk_arbiter(trend, volatility, liquidity, execution)
     timeout_frac = compute_timeout_probability(volatility, liquidity)
     probability = compute_probability_state(
-        net_signal_frac=risk_arbiter["net_signal_frac"],
+        net_signal=risk_arbiter["net_signal"],
         timeout_frac=timeout_frac,
         epistemic_state=epistemic,
     )
@@ -104,7 +104,7 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
         "score_stack": score,
         "trend_summary": {
             "label": trend["label"],
-            "magnitude_pct": trend["primary_return_frac"] * 100.0,
+            "magnitude_pct": trend["primary_return"] * 100.0,
         },
         "gate_result": gate,
         "global_risk_state": risk_flags,

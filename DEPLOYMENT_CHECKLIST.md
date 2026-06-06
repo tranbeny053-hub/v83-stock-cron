@@ -1,6 +1,6 @@
 # Deployment Checklist
 
-Status: Phase 0 docs-only. No deployment config is created here. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
+Status: Sprint 2 build exists locally. No deployment has been performed. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
 
 ## Pre-Deploy Review
 
@@ -25,11 +25,18 @@ Status: Phase 0 docs-only. No deployment config is created here. This checklist 
 
 ## Environment and Secrets
 
+- [ ] Generate access-code salt locally: `python3 -c "import secrets; print(secrets.token_urlsafe(24))"`.
+- [ ] Set `UCPE_ACCESS_CODE_SALT` in Hugging Face Secrets.
+- [ ] Generate `APP_ACCESS_CODE_HASH`: `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` with `UCPE_ACCESS_CODE_SALT` exported locally; enter the access code only at the hidden prompt or via a local-only env var.
+- [ ] Generate `DEV_MODE_CODE_HASH` the same way with `--name DEV_MODE_CODE_HASH` if Dev Mode is enabled.
+- [ ] Generate `SESSION_SIGNING_KEY`: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+- [ ] Set `SESSION_SIGNING_KEY` in Hugging Face Secrets.
 - [ ] Access-code hash configured in secrets.
-- [ ] Dev Mode code hash configured separately.
-- [ ] Session signing key configured.
+- [ ] Dev Mode code hash configured separately if Dev Mode is enabled.
+- [ ] `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` matches the helper iteration count.
 - [ ] Optional persistence secret configured only if external store is used.
-- [ ] Optional provider/news keys are absent or read-only/source-appropriate.
+- [ ] Binance/OKX API keys are absent; Sprint 2 public market data requires no Binance/OKX secrets.
+- [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
 - [ ] Private exchange keys, if used later, are read-only only.
 - [ ] Secret presence in health/debug is masked as `set (****)`.
 
@@ -59,4 +66,3 @@ Status: Phase 0 docs-only. No deployment config is created here. This checklist 
 - [ ] News overriding gates, sentiment-only action, fabricated news, or full article body.
 - [ ] Frontend recomputing backend authority fields.
 - [ ] Missing rollback plan or last-known-good build.
-

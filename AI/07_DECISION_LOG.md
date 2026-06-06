@@ -77,3 +77,11 @@ Decision: Implement live Binance/OKX spot market data through public unauthentic
 Rationale: Claude Sprint 2 plan verified the Binance/OKX spot endpoint families for keyless public market data and required truthful `is_live_data` / `data_source` behavior.
 
 Impact: Live-mode failures or cross-provider conflicts fail closed as visible degraded/unavailable errors and never silently return fixture data. No Binance/OKX API keys, private exchange calls, live news fetching, quant/scoring/gate/news authority changes, merge, or deploy are included.
+
+## 2026-06-07 - Sprint 2 Targeted Fixes Applied
+
+Decision: Apply Claude `APPROVE_WITH_TARGETED_FIXES` without redesigning Sprint 2: rename signed return/signal/edge fields to non-`_frac` names, add down-market fixture coverage, add a PBKDF2 access-hash helper, and fetch a small provider candle margin.
+
+Rationale: Real live data can produce negative signed ratios; `_frac` is reserved for bounded `[0,1]` values and is enforced by sentinel validation. Non-coder deployment also needed a safe hash-generation path.
+
+Impact: Live smoke now passes for BTC and ETH in both modes with schema-valid `CROSS_PROVIDER` payloads. No quant math, provider architecture, trading capability, private provider call, live news fetch, merge, or deploy was added.

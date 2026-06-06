@@ -7,7 +7,7 @@ from crypto_probability_engine.gates.composite import apply_composite_gates
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline
 from crypto_probability_engine.quant.tail_cvar import compute_tail_cvar
 from crypto_probability_engine.score_stack.score import ALLOWED_DISPOSITIONS, compute_score_stack
-from tests.fixtures.market_data import make_candles, make_snapshot
+from tests.fixtures.market_data import make_candles, make_downtrend_snapshot, make_snapshot
 
 
 def test_probability_invariant_for_pipeline() -> None:
@@ -18,6 +18,23 @@ def test_probability_invariant_for_pipeline() -> None:
         assert 0.0 <= horizon["p_up_frac"] <= 1.0
         assert 0.0 <= horizon["p_down_frac"] <= 1.0
         assert 0.0 <= horizon["p_timeout_frac"] <= 1.0
+
+
+def test_down_market_fixture_allows_negative_signed_fields() -> None:
+    result = run_quant_pipeline(make_downtrend_snapshot(), {"status": "OK"})
+    trend = result["market_features"]["trend_mtf"]
+    risk = result["risk_arbiter_state"]
+    score = result["score_stack"]
+    assert trend["primary_return"] < 0.0
+    assert trend["extended_return"] < 0.0
+    assert risk["alpha_signal"] < 0.0
+    assert risk["net_signal"] < 0.0
+    assert score["directional_edge"] < 0.0
+    assert not any(key.endswith("_return_frac") for key in trend)
+    assert not any(key.endswith("_signal_frac") for key in risk)
+    assert "directional_edge" + "_frac" not in score
+    horizon = result["probability_state"]["horizons"]["H_primary"]
+    assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
 
 
 def test_pipeline_is_deterministic_under_fixed_fixture() -> None:

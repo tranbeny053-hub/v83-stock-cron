@@ -43,7 +43,7 @@ def compute_score_stack(probability_state: dict, risk_arbiter_state: dict) -> di
     return {
         "status": "OK",
         "total_score": total_score,
-        "directional_edge_frac": directional_edge,
+        "directional_edge": directional_edge,
         "disposition": disposition,
         "news_influence_frac": 0.0,
     }

@@ -54,8 +54,8 @@ If live providers fail or disagree, the app must show degraded/unavailable data 
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | Use `false` only for local HTTP smoke. |
 | Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | Enable only if Dev Mode secret is configured. |
 | Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | Access-code KDF work factor | yes | Must match hash generation. |
-| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator login code hash | yes | Generate with `UCPE_ACCESS_CODE_SALT=<salt> PYTHONPATH=src python3 -c 'from crypto_probability_engine.api.auth import pbkdf2_hash_code; import getpass, os; print(pbkdf2_hash_code(getpass.getpass("Access code: "), salt=os.environ["UCPE_ACCESS_CODE_SALT"], iterations=int(os.environ.get("UCPE_ACCESS_CODE_PBKDF2_ITERATIONS", "210000"))))'`. |
-| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode re-auth code hash | later | Required only if `UCPE_DEV_MODE_ENABLED=true`; use the same hash command with the Dev Mode code. |
+| Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator login code hash | yes | Generate salt first, export `UCPE_ACCESS_CODE_SALT`, then run `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH`; enter the code at the hidden prompt. |
+| Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode re-auth code hash | later | Required only if `UCPE_DEV_MODE_ENABLED=true`; use `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH`. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Sign session cookies | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Per-deploy PBKDF2 salt | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
 | Secret | Binance/OKX API keys | not required | Public market data only | no | No Binance/OKX secrets required for Sprint 2. |

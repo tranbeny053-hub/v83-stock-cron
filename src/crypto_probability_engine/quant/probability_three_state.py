@@ -8,9 +8,9 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 from crypto_probability_engine.utils.invariants import validate_probability_triplet
 
 
-def _directional_split(net_signal_frac: float, timeout_frac: float) -> tuple[float, float]:
+def _directional_split(net_signal: float, timeout_frac: float) -> tuple[float, float]:
     directional_mass = max(0.0, 1.0 - timeout_frac)
-    tilt = tanh(net_signal_frac * DEFAULT_PHASE1A.probability_signal_sensitivity)
+    tilt = tanh(net_signal * DEFAULT_PHASE1A.probability_signal_sensitivity)
     up = directional_mass * (
         DEFAULT_PHASE1A.probability_tilt_midpoint
         + DEFAULT_PHASE1A.probability_tilt_scale * tilt
@@ -28,7 +28,7 @@ def _user_norm(up: float, down: float) -> tuple[float, float]:
 
 def compute_probability_state(
     *,
-    net_signal_frac: float,
+    net_signal: float,
     timeout_frac: float,
     epistemic_state: dict,
 ) -> dict:
@@ -36,7 +36,7 @@ def compute_probability_state(
         max(timeout_frac, DEFAULT_PHASE1A.timeout_min_frac),
         DEFAULT_PHASE1A.timeout_max_frac,
     )
-    up, down = _directional_split(net_signal_frac, p_timeout)
+    up, down = _directional_split(net_signal, p_timeout)
     if epistemic_state.get("sufficiency_level") != "SUFFICIENT":
         directional = 1.0 - p_timeout
         up = directional / 2.0

@@ -123,3 +123,28 @@ Notes:
 - No Binance/OKX API keys or private/authenticated exchange calls were added.
 - Live smoke was not run because `UCPE_LIVE_SMOKE_ENABLED` was not enabled.
 - Claude final review is required for provider integration, data honesty, no-network tests, HF env table, and release gate.
+
+## 2026-06-07 - Sprint 2 Targeted Fix Pass
+
+Blueprint version: `v1.2.2`
+schema_version: `1.1-crypto-probability`
+app_version: `0.1.0`
+
+Changed:
+- Renamed signed fields from `_frac` names to `primary_return`, `extended_return`, `alpha_signal`, `net_signal`, and `directional_edge`.
+- Added down-market fixture and regression tests for negative signed fields, schema validation, and probability invariant.
+- Added `scripts/make_access_hash.py` for PBKDF2-HMAC-SHA256 access-code hash generation with local `UCPE_ACCESS_CODE_SALT`.
+- Added Binance/OKX candle fetch margin before closed-candle validation.
+- Updated live smoke to test BTC and ETH in both `METRICS_ONLY` and `NEWS_ADDON`.
+- Updated deployment docs, release gate, test commands, memory, current state, handoff, and decision log.
+
+Verification:
+- Full pytest: PASS, 80 passed, 3 warnings.
+- Ruff: PASS.
+- Safety/schema/manual smoke scripts: PASS.
+- Live smoke with `UCPE_LIVE_SMOKE_ENABLED=true`: PASS for BTC/ETH in both modes, all `CROSS_PROVIDER`.
+
+Notes:
+- No deploy and no merge performed.
+- No Binance/OKX API keys, private exchange calls, live news fetching, or trading capability were added.
+- Claude re-review is required before merge/deploy.

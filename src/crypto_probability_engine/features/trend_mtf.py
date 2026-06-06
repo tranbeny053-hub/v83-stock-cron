@@ -29,8 +29,7 @@ def compute_trend_mtf(candles: tuple[MarketCandle, ...]) -> dict:
     return {
         "status": "OK",
         "trend_timeframes": list(DEFAULT_PHASE1A.trend_timeframes),
-        "primary_return_frac": primary_return,
-        "extended_return_frac": extended_return,
+        "primary_return": primary_return,
+        "extended_return": extended_return,
         "label": label,
     }
-
