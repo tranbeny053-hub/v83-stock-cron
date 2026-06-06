@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/detail_view.schema.json",
+  "type": "object",
+  "required": ["symbol", "run_id", "analysis_mode", "sections"],
+  "properties": {
+    "symbol": { "type": "string" },
+    "run_id": { "type": "string" },
+    "analysis_mode": { "enum": ["METRICS_ONLY", "NEWS_ADDON"] },
+    "sections": { "type": "array", "items": { "type": "string" } },
+    "metrics_detail": { "type": "object" },
+    "probability_detail": { "type": "object" },
+    "score_detail": { "type": "object" },
+    "risk_detail": { "type": "object" },
+    "liquidity_execution_detail": { "type": "object" },
+    "data_quality_detail": { "type": "object" },
+    "invalidation_detail": { "type": "object" },
+    "news_detail": { "type": "object" },
+    "macro_detail": { "type": "object" },
+    "debug_lite": { "type": "object" }
+  }
+}

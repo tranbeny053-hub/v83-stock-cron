@@ -1,0 +1,2 @@
+"""Global risk state."""
+

@@ -1,0 +1,62 @@
+# Deployment Checklist
+
+Status: Phase 0 docs-only. No deployment config is created here. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
+
+## Pre-Deploy Review
+
+- [ ] Claude final review completed for security, deployment, auth/session, persistence, and financial/news safety boundaries.
+- [ ] Source Verification Matrix rows required for the phase are complete; unverified provider/source specifics remain `TO_VERIFY`.
+- [ ] No app code contains forbidden execution capability.
+- [ ] No secrets are committed.
+- [ ] No full article bodies are stored/exported.
+- [ ] `CHANGELOG.md` updated with blueprint/schema/app versions.
+- [ ] Last-known-good commit/build identified before deploy.
+
+## Hugging Face Docker Space
+
+- [ ] Space uses Docker SDK.
+- [ ] Runtime binds FastAPI to `0.0.0.0:7860`.
+- [ ] Static frontend is served by the same app.
+- [ ] Runtime user is non-root where platform requires.
+- [ ] Cache/temp writes go to `/tmp` or another documented ephemeral path.
+- [ ] Local disk is treated as ephemeral.
+- [ ] Secrets are configured only in Space settings.
+- [ ] Public repo/log exposure assumed; no secrets in code or logs.
+
+## Environment and Secrets
+
+- [ ] Access-code hash configured in secrets.
+- [ ] Dev Mode code hash configured separately.
+- [ ] Session signing key configured.
+- [ ] Optional persistence secret configured only if external store is used.
+- [ ] Optional provider/news keys are absent or read-only/source-appropriate.
+- [ ] Private exchange keys, if used later, are read-only only.
+- [ ] Secret presence in health/debug is masked as `set (****)`.
+
+## Smoke Tests
+
+- [ ] `/healthcheck` returns OK within documented cold-start budget.
+- [ ] `/v1/system_status` returns runtime/system/provider/news-source/shelter state after session auth.
+- [ ] `BTC` with `METRICS_ONLY` returns schema-valid payload and no news fetch.
+- [ ] `BTC` with `NEWS_ADDON` returns schema-valid payload; if sources are not configured, `news_addon_state.status = UNAVAILABLE` and metrics are unaffected.
+- [ ] Detail endpoint returns correct recent `run_id` detail or `RUN_NOT_FOUND`.
+- [ ] Dev Mode requires re-auth and exports sanitized debug pack.
+- [ ] No response/log/export contains secrets, full env dump, or full article body.
+
+## Restart Drill
+
+- [ ] Restart Space.
+- [ ] `/healthcheck` recovers.
+- [ ] If external store is configured, durable state reloads.
+- [ ] If no external store is configured, stateless mode is clearly labeled.
+- [ ] Re-run both-mode `BTC` smoke.
+
+## Release Blockers
+
+- [ ] Failed schema/invariant check.
+- [ ] Secret leak or unmasked env output.
+- [ ] Forbidden execution capability in implementation paths.
+- [ ] News overriding gates, sentiment-only action, fabricated news, or full article body.
+- [ ] Frontend recomputing backend authority fields.
+- [ ] Missing rollback plan or last-known-good build.
+

@@ -1,0 +1,39 @@
+# Implementation Decisions
+
+Canonical source: Ultimate_Crypto_Probability_Engine_Blueprint_v1_2_2.md (v1.2.2, locked; held by the operator, not in this repo).
+
+Status: Phase 0 defaults extracted from Blueprint section 2.2. Sprint 1 rows promoted to `DEFAULT_PHASE1A` reflect Claude-approved Sprint 1 implementation defaults and remain visible config, not silent hardcoding.
+
+Defaults must be visible config, never silent hardcoding. R4 behavior remains subject to Claude final review before merge/deploy.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Supported timeframes | `15m, 1H, 4H, 1D, 1W`; primary default `4H`; trend set `{1H, 4H, 1D}` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; keep configurable and visible. |
+| Analysis horizons | `H_primary = 6 bars`; `H_extended = 24 bars` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; labels remain horizon names in responses. |
+| Analysis-mode default | `METRICS_ONLY` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; `NEWS_ADDON` remains opt-in per request. |
+| News source set | Provider-agnostic adapters; none mandatory | DEFAULT_PROPOSED | Configure at least one reliable source to enable live `NEWS_ADDON`; otherwise return `UNAVAILABLE`. Specific sources remain `TO_VERIFY`. |
+| News freshness budgets | `freshness budget = 1.5x timeframe interval` for Sprint 1 market-data freshness | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; future news-specific category budgets remain `TO_VERIFY`. |
+| News snippet policy | Short, sanitized, attributed, linked | DEFAULT_PROPOSED | Never store or display full copyrighted bodies; store title/url hash plus metadata. |
+| Persistence backend | Supabase free tier or equivalent low-cost external store | DEFAULT_PROPOSED | Must support row-scoping controls comparable to RLS. If absent, run stateless with clear labeling. |
+| Detail-view delivery | Embed in single mode; fetch-on-click in batch | DEFAULT_PROPOSED | Follow the blueprint detail delivery contract; frontend still recomputes nothing. |
+| Access-code storage | PBKDF2-HMAC-SHA256 hash in env/secret with env-configurable iterations and per-deploy salt | DEFAULT_PHASE1A | Claude final-review fix; no plaintext production passcode in frontend or repo. |
+| Perp venue | OKX swaps + Binance USD-M candidates | DEFAULT_PROPOSED | Phase 3 only, gated behind `CRYPTO_PERP`; venue/source details remain `TO_VERIFY`. |
+| Cross-provider tolerance | `price_disagreement_bps = 50` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; fail closed on conflicts above tolerance. |
+
+Additional `DEFAULT_PHASE1A` config values from the Sprint 1 plan:
+
+- `min_history_bars = 200`; otherwise `INSUFFICIENT_DATA`.
+- Fees: `taker_fee_frac = 0.001`, `maker_fee_frac = 0.001`; net-of-cost is binding.
+- Slippage model: depth-aware Sprint 1 baseline.
+- Arbiter weights: `w_alpha = 1.0`, `w_omega = 1.0`, `w_sigma = 1.5`; `risk_arbiter_version = risk_arbiter_v1`.
+- News evidence: `0.0`.
+- Probability: `probability_v1_phase1a`; `p_timeout` clamp `[0.10, 0.80]`; up/down via bounded transform; shrink toward 0.5 when epistemic is below `SUFFICIENT`; normalize to enforce invariant.
+- Tail: `HISTORICAL_CVAR` at `99%`; EVT disabled.
+- `calibration_status = DEFAULT_PHASE1A`; `reliability_status = INSUFFICIENT_SAMPLE`.
+- Probability constants now live in config: signal sensitivity, tilt midpoint/scale, and extended-horizon confidence multiplier.
+- Timeout constants now live in config: base timeout, volatility cap, spread multiplier, and spread cap.
+- Score constants now live in config: base score, directional-edge multiplier, score bounds, constructive/elevated-risk thresholds, and risk-pressure cap.
+- Sprint 1 risk-guard thresholds now live in config: liquidity max spread, liquidity minimum depth, tail CVaR breach, and execution cost hard-gate threshold.
+- Sprint 1 limitation: `H_primary` and `H_extended` share the same directional split, with only extended-horizon confidence scaled. Full horizon-specific modeling is Sprint 2.
+- Sprint 1 limitation: liquidity/tail/execution hard gating is deterministic guardrail coverage only. Full hard-gating depth for these areas is a Sprint 2 item.
+- Sprint 2 first task: wire live public Binance/OKX adapters plus real `data_quality`; keep fixture/demo labeling until live data is actually verified.

@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+AI/
+tests/
+docs/
+__pycache__/
+*.md
+claude_review_packet*

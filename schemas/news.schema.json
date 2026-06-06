@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/news.schema.json",
+  "type": "object",
+  "required": [
+    "news_addon_state",
+    "macro_context",
+    "micro_news_context",
+    "news_materiality_state",
+    "event_horizon_state",
+    "narrative_state",
+    "novelty_surprise_state",
+    "source_confidence_state",
+    "information_state",
+    "catalyst_state"
+  ],
+  "properties": {
+    "news_addon_state": { "type": "object" },
+    "macro_context": { "type": "object" },
+    "micro_news_context": { "type": "object" },
+    "news_materiality_state": { "type": "object" },
+    "event_horizon_state": { "type": "object" },
+    "narrative_state": { "type": "object" },
+    "novelty_surprise_state": { "type": "object" },
+    "source_confidence_state": { "type": "object" },
+    "information_state": { "type": "object" },
+    "catalyst_state": { "type": "object" }
+  }
+}

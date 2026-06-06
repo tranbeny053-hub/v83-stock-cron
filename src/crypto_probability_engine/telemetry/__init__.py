@@ -1,0 +1,2 @@
+"""Non-blocking telemetry sink."""
+

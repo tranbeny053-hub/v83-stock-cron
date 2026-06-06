@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - codex/**
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - run: ruff check src tests
+      - run: PYTHONPATH=src python -m pytest
+      - run: PYTHONPATH=src python scripts/validate_schemas.py
+      - run: python scripts/check_no_forbidden_scope.py
+      - run: python scripts/check_no_full_article_body.py
+      - run: python scripts/check_no_secrets.py
+
