@@ -6,7 +6,7 @@ colorTo: gray
 sdk: docker
 app_port: 7860
 pinned: false
-short_description: Deterministic crypto probability and risk analysis app. Analysis-only; no trading.
+short_description: Crypto probability risk analysis only.
 tags:
   - crypto
   - fastapi
