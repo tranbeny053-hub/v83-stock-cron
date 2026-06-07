@@ -1,97 +1,98 @@
 # Implementation Memory
 
 ## Context-Resume Summary
-The app is on `dev` after Sprint 3 and a deployed frontend polish hotfix.
+The app is on branch `codex/wave1-supabase-watchlist`, based on `dev`.
 Worktree scope is `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`; do not touch sibling folders.
-Hugging Face deployment smoke had succeeded before this pass.
-This hotfix is frontend-only: six heat bands, Batch Detail visibility, and site-wide Kha signature.
-No backend quant/scoring/gates/news/auth/deploy/provider logic was changed.
-Full offline pytest, ruff, safety scripts, schema validation, and manual smoke pass after the hotfix.
-No deploy/push to Hugging Face was performed by Codex.
-Next step is user approval, then push only the app root to the HF Space.
+Wave 1 adds optional Supabase Postgres persistence and a Watchlist feature.
+No quant/scoring/gates/probability/news math, provider behavior, Docker/deploy logic, or trading capability was changed.
+The app still runs without Supabase and reports `persistence_status=STATELESS`.
+Persistence failure is degraded-safe: analysis returns normally and reports `UNAVAILABLE`.
+Full offline pytest, ruff, safety scripts, schema validation, and manual smoke pass.
+No merge/deploy/push to Hugging Face has been performed by Codex.
 
 ## Latest App State
 Default data mode remains live public market data, with explicit fixture mode only through `UCPE_DATA_MODE=fixture`.
 Supported timeframes remain `15m`, `1H`, `4H`, `1D`, `1W`, and `1M`.
-Single Analysis still renders six progressive timeframe cards.
-Card heat styling now uses six discrete backend-score bands from `frontend_display.total_score`.
-Batch Analysis cards now open structured Detail Analysis through the shared detail panel.
-Detail fetch uses `/v1/analyze/detail/{run_id}` and falls back to embedded `detail_view`.
-Raw JSON remains collapsed/debug-only.
-Footer signature is visible in normal page flow: `Copyright © 2026 by Kha`.
+Optional Supabase persistence is selected only when `SUPABASE_DB_URL` exists.
+Without Supabase, recent-run detail remains in memory and Watchlist can use browser storage fallback.
+Analysis responses include debug-safe `persistence_status`.
+Watchlist backend endpoints are session-gated.
+Watchlist frontend tab can add/remove/list symbols and run six-timeframe analysis for a selected symbol.
+Supabase migrations exist but were not applied to a live database in this pass.
 
 ## Implemented Components
-- api: unchanged.
+- api: partial/done for Wave 1 watchlist routes and persistence wiring.
 - adapters: unchanged.
 - validation: unchanged.
 - quant: unchanged.
 - news: unchanged; no live fetching added.
-- frontend: score heat bands, shared detail panel outside Single tab, batch detail fallback behavior, footer signature.
-- config: unchanged.
-- docs: current state, handoff, memory, changelog updated for hotfix.
-- tests: frontend static tests updated for heat bands, batch detail wiring, raw JSON collapsed state, no-recompute, and signature.
+- frontend: Watchlist tab, localStorage fallback, six-timeframe Watchlist Symbol View, Detail reuse.
+- config: Supabase env settings added; repr/log safe.
+- docs: Wave 1 entries added to README, deployment checklist, release gate, source matrix, decisions, changelog, current state, handoff, and test commands.
+- tests: stateless analysis, persistence outage, watchlist CRUD, migration safety, and frontend static coverage.
 - deployment: unchanged; no deploy/push.
 
 ## Files Changed By Area
-- frontend: `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`
-- tests: `tests/frontend/test_frontend_static.py`
-- docs: `CHANGELOG.md`, `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, `AI/08_IMPLEMENTATION_MEMORY.md`
-- api: none
+- api: `src/crypto_probability_engine/api/app.py`, `src/crypto_probability_engine/api/analysis_service.py`, `src/crypto_probability_engine/api/schemas.py`
 - adapters: none
 - quant: none
 - news: none
-- config: none
+- frontend: `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`
+- config: `src/crypto_probability_engine/config/settings.py`, `requirements.txt`
+- docs: `README.md`, `DEPLOYMENT_CHECKLIST.md`, `RELEASE_GATE.md`, `IMPLEMENTATION_DECISIONS.md`, `CHANGELOG.md`, `docs/source_verification_matrix.md`, `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, `AI/06_TEST_COMMANDS.md`, `AI/08_IMPLEMENTATION_MEMORY.md`
+- tests: `tests/api/test_analysis_endpoints.py`, `tests/api/test_watchlist_endpoints.py`, `tests/frontend/test_frontend_static.py`, `tests/persistence/test_persistence_foundation.py`
 - deployment: none
+- persistence: `migrations/0001_init.sql`, `scripts/apply_migrations.py`, `scripts/check_no_secrets.py`, `src/crypto_probability_engine/persistence/repository.py`
 
 ## Important Decisions
-Heat display remains frontend-only and uses backend `frontend_display.total_score`; it does not recompute score or any analysis field.
-Scores `86-100`, `71-85`, `56-70`, `41-55`, `21-40`, and `0-20` map to the requested six red/grey bands.
-Score `0`, `null`, `undefined`, nonnumeric, or out-of-range values fall back safely through the Cold / Neutral band after clamping.
-Batch and Single use the same structured detail renderer.
-Footer signature is normal document flow, not fixed, to avoid covering content.
+Supabase persistence is optional and backend-only.
+`SUPABASE_DB_URL` enables the Supabase repository; absence means `STATELESS`.
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are declared backend settings but unused in Wave 1.
+Only compact summaries are persisted; full analysis payloads and article bodies are not stored.
+Persistence operations are best-effort and never raise into the analysis hot path.
+Watchlist symbols are normalized through the existing backend normalizer and capped at `20`.
+Frontend Watchlist uses backend endpoints only; no direct Supabase calls or secret names appear in frontend files.
 
 ## Commands Run And Results
-- `git branch --show-current`: PASS, `dev`.
-- `git status --short --untracked-files=all -- .`: PASS before edits, clean; after edits only allowed hotfix files modified.
+- `git branch --show-current`: PASS, `codex/wave1-supabase-watchlist`.
+- `git status --short --untracked-files=all -- .`: PASS, only Wave 1 app-root files modified/untracked before commit.
 - `python3 --version`: PASS, Python 3.14.3.
-- Required read-first docs/frontend/tests scan: PASS.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 10 passed.
-- First `ruff check tests/frontend/test_frontend_static.py`: FAIL, one E501 long test line; fixed.
+- `PYTHONPATH=src python3 -m pytest tests/api/test_analysis_endpoints.py tests/api/test_watchlist_endpoints.py tests/persistence/test_persistence_foundation.py tests/frontend/test_frontend_static.py -q`: PASS, 25 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 102 passed, 3 warnings.
 - `ruff check src tests scripts`: PASS.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 94 passed, 3 warnings.
+- First `PYTHONPATH=src python3 scripts/check_no_secrets.py`: FAIL, false positive on safe settings env reads; checker updated.
+- Second `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- Signature grep: PASS.
-- Six-band threshold/color grep: PASS.
-- `/v1/analyze/detail` frontend grep: PASS.
+- Supabase frontend grep: PASS, no output.
 - Forbidden capability grep: PASS, no output.
-- Frontend no-recompute grep: PASS, no output.
 
 ## Known Blockers
-No hotfix blocker remains.
+No implementation blocker remains.
+Supabase live connectivity is not verified because no live database operation was requested.
 
 ## Open Risks
-No local browser visual smoke was run in this pass.
-Hugging Face Space still needs to be resynced/pushed by the user after approval.
+Supabase migrations must be applied before durable persistence is expected.
+Database availability and Supabase limits remain operational risks.
+Browser visual smoke for Watchlist was not run in this pass.
 External provider availability/rate limits remain operational risks.
 Quant remains `DEFAULT_PHASE1A` and uncalibrated; no profitability/reliability claim is allowed.
 Local interpreter is Python 3.14.3 while Docker targets Python 3.11.
 `jsonschema.RefResolver` warning remains non-blocking technical debt.
 
 ## Next Recommended Steps
-1. Commit hotfix on `dev`.
-2. User approves the frontend polish.
-3. Push/sync only `/Users/kha/Documents/New project/v8-crypto-api-clean` to the Hugging Face Space.
+1. Commit Wave 1 on `codex/wave1-supabase-watchlist`.
+2. Claude/User reviews persistence and Watchlist implementation.
+3. If approved, apply Supabase migrations and proceed through release gate before merge/deploy.
 
 ## Do Not Change
 Do not touch sibling folders outside `v8-crypto-api-clean/`.
 Do not edit external source Markdown files.
-Do not commit `.env`, salts, access codes, hashes from real codes, signing keys, API keys, or full env dumps.
+Do not commit `.env`, salts, access codes, real hashes, signing keys, database URLs, API keys, or full env dumps.
 Do not add trading, order, withdrawal, transfer, leverage-changing, or autonomous execution capability.
 Do not add Binance/OKX private/authenticated calls or live news fetching.
 Do not silently fall back from live mode to fixture mode.
-Do not change backend quant/scoring/gates/news/auth/deploy/provider behavior for this hotfix.
+Do not change backend quant/scoring/gates/news/provider behavior for Wave 1.
 Do not deploy or push to Hugging Face without explicit approval.

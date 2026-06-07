@@ -38,6 +38,7 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`
 - `PYTHONPATH=src python3 scripts/live_smoke.py` skips unless `UCPE_LIVE_SMOKE_ENABLED=true`; do not run in CI or unit tests.
 - `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` generates an access-code hash only when `UCPE_ACCESS_CODE_SALT` is set locally; it prompts for the code without printing it.
+- `PYTHONPATH=src python3 scripts/apply_migrations.py` applies Supabase migrations only when `SUPABASE_DB_URL` is set locally; it must never run in unit tests or print the URL.
 
 ## Manual Live Smoke
 
@@ -100,6 +101,22 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py tests/validation/test_market_validation.py tests/api/test_analysis_endpoints.py tests/quant/test_quant_pipeline.py tests/frontend/test_frontend_static.py -q`
 - Manual UI smoke, if feasible: local server, login, Single Analysis `BTC/USDT` `METRICS_ONLY`, confirm six cards, click `1M`, confirm structured detail and collapsed raw JSON.
 - Optional 1M live smoke: not supported by `scripts/live_smoke.py` unless timeframe targeting is added; rely on adapter/API tests when not run.
+
+## Wave 1 Required Checks
+
+- `git branch --show-current`
+- `git status --short --untracked-files=all -- .`
+- `python3 --version`
+- `PYTHONPATH=src python3 -m pytest -q`
+- `ruff check src tests scripts`
+- `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`
+- `PYTHONPATH=src python3 scripts/check_no_secrets.py`
+- `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`
+- `PYTHONPATH=src python3 scripts/validate_schemas.py`
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`
+- `grep -R "SUPABASE_SERVICE_ROLE_KEY\|SUPABASE_DB_URL\|SUPABASE_URL" frontend || true`
+- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`
+- Optional migration application only after user approval and only with local secret env configured: `PYTHONPATH=src python3 scripts/apply_migrations.py`.
 
 ## Definition of Done
 

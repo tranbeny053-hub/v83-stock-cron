@@ -16,6 +16,7 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "DEMO DATA" in js
     assert "DEGRADED DATA" in js
     assert "DATA UNAVAILABLE" in js
+    assert "Watchlist persistence:" in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -112,6 +113,34 @@ def test_batch_cards_reuse_structured_detail_renderer() -> None:
     assert "payload.detail_view" in js
     assert "renderStructuredDetail(payload, detailView)" in js
     assert "Detail Analysis is unavailable for this result." in js
+
+
+def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert 'data-tab="watchlist"' in html
+    assert 'id="watchlistPanel"' in html
+    assert "Back to Watchlist" in html
+    assert 'id="watchlistResult"' in html
+    assert "timeframe-card-grid" in html
+    assert "openWatchlistSymbol(symbol)" in js
+    assert "runTimeframeSet" in js
+    assert "watchlistPayloads" in js
+    assert "/v1/watchlist" in js
+    assert "openDetail(payload)" in js
+    assert "/v1/analyze/detail/" in js
+
+
+def test_frontend_has_no_direct_supabase_reference() -> None:
+    combined = "\n".join(
+        [
+            read_frontend("index.html"),
+            read_frontend("styles.css"),
+            read_frontend("app.js"),
+        ]
+    )
+    for marker in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        assert marker not in combined
 
 
 def test_site_signature_is_visible_and_in_normal_flow() -> None:

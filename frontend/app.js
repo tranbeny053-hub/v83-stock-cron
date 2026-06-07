@@ -4,9 +4,11 @@ const workspace = document.querySelector("#workspace");
 const overviewTemplate = document.querySelector("#overviewTemplate");
 const singleResult = document.querySelector("#singleResult");
 const detailPanel = document.querySelector("#detailPanel");
+const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const singlePayloads = new Map();
+const watchlistPayloads = new Map();
 const scoreHeatBands = [
   {
     min: 86,
@@ -39,10 +41,13 @@ function showPanel(name) {
   for (const button of document.querySelectorAll(".tab")) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
-  for (const panel of ["single", "batch", "dev"]) {
+  for (const panel of ["single", "batch", "watchlist", "dev"]) {
     document.querySelector(`#${panel}Panel`).classList.toggle("hidden", panel !== name);
   }
   hideDetail();
+  if (name === "watchlist") {
+    loadWatchlist();
+  }
 }
 
 function setLoading(id, active) {
@@ -209,26 +214,24 @@ function renderResults(target, payloads, errors = []) {
   }
 }
 
-function replaceTimeframeCard(timeframe, node) {
-  const current = singleResult.querySelector(`[data-timeframe-card="${timeframe}"]`);
+function replaceTimeframeCard(target, timeframe, node) {
+  const current = target.querySelector(`[data-timeframe-card="${timeframe}"]`);
   if (current) {
     current.replaceWith(node);
   } else {
-    singleResult.append(node);
+    target.append(node);
   }
 }
 
-function renderSinglePlaceholders() {
-  singleResult.replaceChildren(...singleTimeframes.map((timeframe) => loadingCard(timeframe)));
+function renderTimeframePlaceholders(target) {
+  target.replaceChildren(...singleTimeframes.map((timeframe) => loadingCard(timeframe)));
   hideDetail();
 }
 
-async function runSingleAnalysis(form) {
-  const symbol = String(form.get("symbol") || "").trim();
-  const analysisMode = form.get("analysis_mode");
-  singlePayloads.clear();
-  renderSinglePlaceholders();
-  setLoading("#singleLoading", true);
+async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, payloadStore }) {
+  payloadStore.clear();
+  renderTimeframePlaceholders(target);
+  setLoading(loadingSelector, true);
   const requests = singleTimeframes.map(async (timeframe) => {
     try {
       const payload = await api("/v1/analyze", {
@@ -239,15 +242,25 @@ async function runSingleAnalysis(form) {
           timeframe,
         }),
       });
-      singlePayloads.set(timeframe, payload);
-      singlePayloads.set(payload.run_id, payload);
-      replaceTimeframeCard(timeframe, overviewCard(payload));
+      payloadStore.set(timeframe, payload);
+      payloadStore.set(payload.run_id, payload);
+      replaceTimeframeCard(target, timeframe, overviewCard(payload));
     } catch (error) {
-      replaceTimeframeCard(timeframe, errorCard(timeframe, error));
+      replaceTimeframeCard(target, timeframe, errorCard(timeframe, error));
     }
   });
   await Promise.allSettled(requests);
-  setLoading("#singleLoading", false);
+  setLoading(loadingSelector, false);
+}
+
+async function runSingleAnalysis(form) {
+  await runTimeframeSet({
+    symbol: String(form.get("symbol") || "").trim(),
+    analysisMode: form.get("analysis_mode"),
+    target: singleResult,
+    loadingSelector: "#singleLoading",
+    payloadStore: singlePayloads,
+  });
 }
 
 async function openDetail(payload) {
@@ -467,6 +480,126 @@ document.querySelector("#batchForm").addEventListener("submit", async (event) =>
   }
 });
 
+function readLocalWatchlist() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(watchlistStorageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalWatchlist(symbols) {
+  localStorage.setItem(watchlistStorageKey, JSON.stringify([...new Set(symbols)].slice(0, 20)));
+}
+
+function setWatchlistStatus(status) {
+  const target = document.querySelector("#watchlistStatus");
+  const browserFallback = status !== "OK";
+  target.textContent = browserFallback
+    ? `Watchlist persistence: ${status}. Browser fallback is active.`
+    : "Watchlist persistence: OK.";
+}
+
+function renderWatchlist(symbols, status) {
+  const target = document.querySelector("#watchlistList");
+  setWatchlistStatus(status);
+  target.replaceChildren();
+  if (!symbols.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No symbols yet.";
+    target.append(empty);
+    return;
+  }
+  for (const symbol of symbols) {
+    const row = document.createElement("article");
+    row.className = "watchlist-row";
+    const symbolButton = document.createElement("button");
+    symbolButton.type = "button";
+    symbolButton.className = "watchlist-symbol";
+    symbolButton.textContent = symbol;
+    symbolButton.addEventListener("click", () => openWatchlistSymbol(symbol));
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "watchlist-remove";
+    removeButton.textContent = "Remove";
+    removeButton.addEventListener("click", () => removeWatchlistSymbol(symbol));
+    row.append(symbolButton, removeButton);
+    target.append(row);
+  }
+}
+
+async function loadWatchlist() {
+  try {
+    const payload = await api("/v1/watchlist");
+    let symbols = payload.symbols || [];
+    if (payload.persistence_status !== "OK") {
+      const localSymbols = readLocalWatchlist();
+      symbols = localSymbols.length ? localSymbols : symbols;
+      writeLocalWatchlist(symbols);
+    }
+    renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
+  } catch (error) {
+    renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
+    document.querySelector("#watchlistStatus").textContent = `Watchlist unavailable: ${error.message}`;
+  }
+}
+
+async function addWatchlistSymbol(symbol) {
+  const payload = await api("/v1/watchlist", {
+    method: "POST",
+    body: JSON.stringify({ symbol }),
+  });
+  let symbols = payload.symbols || [];
+  if (payload.persistence_status !== "OK") {
+    symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
+    writeLocalWatchlist(symbols);
+  }
+  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
+}
+
+async function removeWatchlistSymbol(symbol) {
+  const payload = await api(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
+    method: "DELETE",
+  });
+  let symbols = payload.symbols || [];
+  if (payload.persistence_status !== "OK") {
+    symbols = readLocalWatchlist().filter((item) => item !== symbol);
+    writeLocalWatchlist(symbols);
+  }
+  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
+}
+
+async function openWatchlistSymbol(symbol) {
+  hideDetail();
+  document.querySelector("#watchlistList").classList.add("hidden");
+  document.querySelector("#watchlistView").classList.remove("hidden");
+  document.querySelector("#watchlistSymbolTitle").textContent = `${symbol} Watchlist Symbol View`;
+  await runTimeframeSet({
+    symbol,
+    analysisMode: document.querySelector("#watchlistMode").value,
+    target: document.querySelector("#watchlistResult"),
+    loadingSelector: "#watchlistLoading",
+    payloadStore: watchlistPayloads,
+  });
+}
+
+document.querySelector("#watchlistForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const symbol = String(new FormData(event.currentTarget).get("symbol") || "").trim();
+  if (!symbol) {
+    return;
+  }
+  await addWatchlistSymbol(symbol);
+});
+
+document.querySelector("#backToWatchlist").addEventListener("click", () => {
+  hideDetail();
+  document.querySelector("#watchlistView").classList.add("hidden");
+  document.querySelector("#watchlistList").classList.remove("hidden");
+});
+
 document.querySelector("#devForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
@@ -493,4 +626,4 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
   }
 });
 
-renderSinglePlaceholders();
+renderTimeframePlaceholders(singleResult);

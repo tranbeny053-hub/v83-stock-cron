@@ -79,6 +79,12 @@ class BatchAnalysisRequest(BaseModel):
     requests: list[AnalysisRequest] = Field(min_length=1, max_length=5)
 
 
+class WatchlistRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+
+
 class HorizonProbability(BaseModel):
     model_config = ConfigDict(extra="allow")
 

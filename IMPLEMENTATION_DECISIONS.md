@@ -14,7 +14,7 @@ Defaults must be visible config, never silent hardcoding. R4 behavior remains su
 | News source set | Provider-agnostic adapters; none mandatory | DEFAULT_PROPOSED | Configure at least one reliable source to enable live `NEWS_ADDON`; otherwise return `UNAVAILABLE`. Specific sources remain `TO_VERIFY`. |
 | News freshness budgets | `freshness budget = 1.5x timeframe interval` for Sprint 1 market-data freshness | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; future news-specific category budgets remain `TO_VERIFY`. |
 | News snippet policy | Short, sanitized, attributed, linked | DEFAULT_PROPOSED | Never store or display full copyrighted bodies; store title/url hash plus metadata. |
-| Persistence backend | Supabase free tier or equivalent low-cost external store | DEFAULT_PROPOSED | Must support row-scoping controls comparable to RLS. If absent, run stateless with clear labeling. |
+| Persistence backend | Supabase Postgres direct database URL, optional | WAVE1_IMPLEMENTED | Compact summaries only. If absent, run `STATELESS`; if failing, report `UNAVAILABLE` and keep analysis working. |
 | Detail-view delivery | Embed in single mode; fetch-on-click in batch | DEFAULT_PROPOSED | Follow the blueprint detail delivery contract; frontend still recomputes nothing. |
 | Access-code storage | PBKDF2-HMAC-SHA256 hash in env/secret with env-configurable iterations and per-deploy salt | DEFAULT_PHASE1A | Claude final-review fix; no plaintext production passcode in frontend or repo. |
 | Perp venue | OKX swaps + Binance USD-M candidates | DEFAULT_PROPOSED | Phase 3 only, gated behind `CRYPTO_PERP`; venue/source details remain `TO_VERIFY`. |
@@ -50,6 +50,19 @@ Status: `SAFE_TO_IMPLEMENT` from Claude Sprint 3 plan; R2 because it touches dat
 | Binance monthly mapping | `1M -> 1M` | SPRINT3_APPROVED | Public spot kline monthly interval. |
 | OKX monthly mapping | `1M -> 1Mutc` | SPRINT3_APPROVED | UTC-aligned monthly candles reduce provider boundary mismatch for monthly analysis. |
 | Existing OKX 1D/1W alignment mismatch | Future item | DEFERRED | Pre-existing HK alignment mismatch remains out of scope for Sprint 3. |
+
+## Wave 1 Persistence Decisions
+
+Status: Wave 1 implemented as persistence foundation only. It does not change market data, news authority, calibration, scoring, probability, gates, provider behavior, or deployment.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Database adapter | Supabase Postgres via `SUPABASE_DB_URL` | WAVE1_IMPLEMENTED | Uses backend-only `psycopg`; frontend never references Supabase. |
+| Optional Supabase URL/key settings | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | WAVE1_DECLARED_UNUSED | Names exist for future backend-only use; unused in Wave 1. |
+| No configured DB | `persistence_status=STATELESS` | WAVE1_IMPLEMENTED | Analysis returns normally; watchlist can use in-memory backend and browser fallback. |
+| DB operation failure | `persistence_status=UNAVAILABLE` | WAVE1_IMPLEMENTED | Persistence errors are caught and never raised into the analysis hot path. |
+| Stored analysis data | Compact run/timeframe/provider summaries only | WAVE1_IMPLEMENTED | Full analysis payloads and full article bodies are not stored. |
+| Watchlist limit | `20` symbols per operator | WAVE1_IMPLEMENTED | Symbols are validated through the existing normalizer. |
 
 ## `_frac` Field Audit
 

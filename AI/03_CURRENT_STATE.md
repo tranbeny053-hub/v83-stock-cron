@@ -4,80 +4,102 @@ Updated: 2026-06-07
 
 ## Branch / Worktree
 
-- Branch: `dev`
+- Branch: `codex/wave1-supabase-watchlist`
+- Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
 - Merge/deploy status: no merge, no deploy/push to Hugging Face
 
 ## Current Phase
 
-- Phase: deployed frontend polish hotfix after successful Hugging Face smoke.
-- Current status: frontend hotfix implemented and verified locally; commit next.
-- Scope: frontend UI/tests plus changelog/current-state/handoff/memory docs only.
+- Phase: Wave 1 Supabase persistence and watchlist foundation.
+- Current status: implemented locally and offline checks pass; commit pending.
+- Scope: optional backend persistence, idempotent migration, watchlist API/UI, docs, and tests.
 
 ## What Changed
 
-- Replaced continuous card heat styling with six discrete backend-score bands:
-  - `86-100`: Extreme / Burning, `#FF1A1A`
-  - `71-85`: Very Hot, `#F43F3F`
-  - `56-70`: Hot, `#DC2626`
-  - `41-55`: Warm, `#9F3A3A`
-  - `21-40`: Low, `#5A4545`
-  - `0-20` or missing score: Cold / Neutral, `#374151`
-- Kept card heat based only on backend `frontend_display.total_score`.
-- Moved the shared Detail Analysis panel outside the Single Analysis panel so Batch result cards can display structured detail while the Batch tab is active.
-- Batch cards now reuse the same `openDetail` and `renderStructuredDetail` path as Single cards.
-- Detail fetch uses `/v1/analyze/detail/{run_id}` and falls back to embedded `detail_view`; unavailable detail shows a clear non-crashing message.
-- Added site-wide footer signature: `Copyright © 2026 by Kha`.
-- Added frontend static regression tests for heat bands, batch detail wiring, raw JSON collapsed/debug-only behavior, no-recompute boundary, and signature visibility.
+- Added optional backend Supabase Postgres settings for `SUPABASE_DB_URL`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`; all are repr/log safe.
+- Added `migrations/0001_init.sql` with idempotent tables for watchlist, analysis run summaries, timeframe summaries, provider observations, and app events.
+- Added `scripts/apply_migrations.py`; it requires the database URL from local env and never prints it.
+- Added backend persistence repository layer:
+  - `STATELESS` when no database URL is configured.
+  - `OK` when configured database writes succeed.
+  - `UNAVAILABLE` when database operations fail.
+- Analysis now best-effort persists compact run/timeframe/provider summaries and still returns normally if persistence fails.
+- Added `persistence_status` in debug-safe response data and detail debug-lite data.
+- Added session-gated watchlist endpoints:
+  - `GET /v1/watchlist`
+  - `POST /v1/watchlist`
+  - `DELETE /v1/watchlist/{symbol}`
+- Added Watchlist frontend tab with add/remove/list, six-timeframe symbol view, structured Detail support, and browser storage fallback when persistence is not OK.
+- Added `psycopg[binary]>=3,<4` to `requirements.txt`.
+- Updated docs, release gate, deployment checklist, source matrix, changelog, memory, and test commands.
 
 ## What Was Not Changed
 
-- No backend quant/scoring/gates/news/auth/session code changed.
-- No provider adapter or live market-data behavior changed.
+- No quant/scoring/gates/probability/news math changed.
+- No provider adapter or public market-data behavior changed.
+- No auth/session logic changed beyond adding session-gated watchlist routes.
 - No Dockerfile/deployment logic changed.
+- No frontend Supabase calls or Supabase values were added.
 - No secrets, env files, API keys, or access values added.
 - No trading/order/withdraw/transfer/leverage/autonomous capability added.
 
 ## Checks Run / Attempted
 
-- `git branch --show-current`: PASS, `dev`.
-- `git status --short --untracked-files=all -- .`: PASS before edits, clean; after edits only allowed hotfix files modified.
+- `git branch --show-current`: PASS, `codex/wave1-supabase-watchlist`.
+- `git status --short --untracked-files=all -- .`: PASS, only Wave 1 app-root files modified/untracked before commit.
 - `python3 --version`: PASS, Python 3.14.3.
-- Required read-first docs/frontend/tests scan: PASS.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 10 passed.
+- `PYTHONPATH=src python3 -m pytest tests/api/test_analysis_endpoints.py tests/api/test_watchlist_endpoints.py tests/persistence/test_persistence_foundation.py tests/frontend/test_frontend_static.py -q`: PASS, 25 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 102 passed, 3 warnings.
 - `ruff check src tests scripts`: PASS.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 94 passed, 3 warnings.
+- First `PYTHONPATH=src python3 scripts/check_no_secrets.py`: FAIL, checker flagged safe `os.environ.get(...)` settings reads; checker updated to allow env reads while still denying real assignments.
+- Second `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `grep -R "Copyright.*Kha\|Copyright (2026) by Kha\|Copyright © 2026 by Kha" frontend`: PASS.
-- `grep -R "86\|71\|56\|41\|21\|#FF1A1A\|#F43F3F\|#DC2626\|#9F3A3A\|#5A4545\|#374151" frontend`: PASS.
-- `grep -R "/v1/analyze/detail" frontend/app.js`: PASS.
-- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" frontend src tests schemas .github || true`: PASS, no output.
-- Frontend no-recompute grep over `frontend/app.js`: PASS, no output.
+- `grep -R "SUPABASE_SERVICE_ROLE_KEY\|SUPABASE_DB_URL\|SUPABASE_URL" frontend || true`: PASS, no output.
+- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`: PASS, no output.
 
 ## Files Changed
 
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
+- `AI/06_TEST_COMMANDS.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
+- `DEPLOYMENT_CHECKLIST.md`
+- `IMPLEMENTATION_DECISIONS.md`
+- `README.md`
+- `RELEASE_GATE.md`
+- `docs/source_verification_matrix.md`
 - `frontend/index.html`
 - `frontend/app.js`
 - `frontend/styles.css`
+- `migrations/0001_init.sql`
+- `requirements.txt`
+- `scripts/apply_migrations.py`
+- `scripts/check_no_secrets.py`
+- `src/crypto_probability_engine/api/analysis_service.py`
+- `src/crypto_probability_engine/api/app.py`
+- `src/crypto_probability_engine/api/schemas.py`
+- `src/crypto_probability_engine/config/settings.py`
+- `src/crypto_probability_engine/persistence/repository.py`
+- `tests/api/test_analysis_endpoints.py`
+- `tests/api/test_watchlist_endpoints.py`
 - `tests/frontend/test_frontend_static.py`
+- `tests/persistence/test_persistence_foundation.py`
 
 ## Current Blockers / Unknowns
 
-- No code blocker remains for the hotfix.
-- No browser visual smoke was run locally in this pass.
-- User still needs to resync/push this commit to the Hugging Face Space after approval.
+- No implementation blocker remains.
+- Supabase migration was not applied because no real database operation was requested.
+- Supabase connectivity was not live-tested; unit tests use in-memory/mocked paths only.
+- Claude/User review is still required before merge/deploy.
 
 ## Next Steps
 
-1. Commit the hotfix on `dev`.
-2. User reviews the deployed-frontend polish locally/from diff.
-3. After user approval, push only the app root to Hugging Face.
+1. Commit Wave 1 on `codex/wave1-supabase-watchlist`.
+2. Claude/User reviews the persistence/watchlist foundation.
+3. If approved, apply migrations in Supabase and then merge/deploy through the normal release gate.

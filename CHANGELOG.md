@@ -198,3 +198,20 @@ Notes:
 - Frontend-only hotfix.
 - No backend quant/scoring/gates/news/auth/deploy/provider logic was changed.
 - No deploy or Hugging Face push was performed.
+
+## 2026-06-07 - Wave 1 Supabase Persistence and Watchlist Foundation
+
+Changed:
+- Added optional Supabase Postgres persistence foundation with idempotent `migrations/0001_init.sql`.
+- Added `scripts/apply_migrations.py` for local, URL-safe migration application.
+- Added backend persistence repository layer with stateless in-memory fallback and Supabase adapter.
+- Added best-effort compact persistence for analysis runs, timeframe results, and provider observations.
+- Added `persistence_status` to debug-safe response data.
+- Added session-gated watchlist backend endpoints and a frontend Watchlist tab with browser storage fallback.
+- Added `psycopg[binary]>=3,<4` to backend requirements.
+- Added tests for stateless analysis, persistence outage degradation, watchlist CRUD, migration safety, and frontend watchlist hooks.
+
+Notes:
+- No backend quant/scoring/gates/news math was changed.
+- No provider adapter behavior, Binance/OKX keys, private exchange calls, live news fetching, or trading capability was added.
+- No deploy or Hugging Face push was performed.

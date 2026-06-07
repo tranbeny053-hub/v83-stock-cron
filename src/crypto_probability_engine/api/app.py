@@ -25,19 +25,26 @@ from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
     BatchAnalysisRequest,
     ErrorCode,
+    WatchlistRequest,
 )
 from crypto_probability_engine.config.settings import Settings, get_settings
+from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.repository import build_persistence_repository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.telemetry.events import TelemetrySink
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
+
+WATCHLIST_LIMIT = 20
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
     app = FastAPI(title=app_settings.app_name, version=app_settings.app_version)
     run_store = InMemoryRunStore(limit=app_settings.recent_run_limit)
+    persistence_repository = build_persistence_repository(app_settings)
     telemetry = TelemetrySink()
     app.state.run_store = run_store
+    app.state.persistence_repository = persistence_repository
     app.state.telemetry = telemetry
 
     origins = list(app_settings.strict_cors_origins)
@@ -45,7 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=origins or ["http://localhost:7860", "http://127.0.0.1:7860"],
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
@@ -101,7 +108,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body: AnalysisRequest,
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
-        result = analyze_request(body, settings=app_settings, run_store=run_store)
+        result = analyze_request(
+            body,
+            settings=app_settings,
+            run_store=run_store,
+            persistence_repository=app.state.persistence_repository,
+        )
         telemetry.record("analysis_completed", {"run_id": result["run_id"]})
         return result
 
@@ -114,7 +126,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         errors: list[dict] = []
         for index, item in enumerate(body.requests):
             try:
-                results.append(analyze_request(item, settings=app_settings, run_store=run_store))
+                results.append(
+                    analyze_request(
+                        item,
+                        settings=app_settings,
+                        run_store=run_store,
+                        persistence_repository=app.state.persistence_repository,
+                    )
+                )
             except Exception as exc:
                 if hasattr(exc, "detail"):
                     errors.append({"index": index, "detail": exc.detail})
@@ -130,6 +149,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         }
                     )
         return {"results": results, "errors": errors}
+
+    @app.get("/v1/watchlist")
+    def list_watchlist(session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
+        repository = app.state.persistence_repository
+        operator_id = session.get("sub", "operator")
+        return {
+            "symbols": repository.list_watchlist(operator_id=operator_id),
+            "persistence_status": repository.persistence_status(),
+        }
+
+    @app.post("/v1/watchlist")
+    def add_watchlist(
+        body: WatchlistRequest,
+        session: dict = Depends(require_app_session),  # noqa: B008
+    ) -> dict:
+        repository = app.state.persistence_repository
+        operator_id = session.get("sub", "operator")
+        symbol = _normalize_watchlist_symbol(body.symbol)
+        symbols = repository.list_watchlist(operator_id=operator_id)
+        if symbol not in symbols and len(symbols) >= WATCHLIST_LIMIT:
+            raise api_error(400, ErrorCode.BATCH_LIMIT_EXCEEDED, "Watchlist limit is 20 symbols.")
+        repository.add_watchlist(symbol, operator_id=operator_id)
+        return {
+            "symbols": repository.list_watchlist(operator_id=operator_id),
+            "persistence_status": repository.persistence_status(),
+        }
+
+    @app.delete("/v1/watchlist/{symbol:path}")
+    def remove_watchlist(
+        symbol: str,
+        session: dict = Depends(require_app_session),  # noqa: B008
+    ) -> dict:
+        repository = app.state.persistence_repository
+        operator_id = session.get("sub", "operator")
+        normalized = _normalize_watchlist_symbol(symbol)
+        repository.remove_watchlist(normalized, operator_id=operator_id)
+        return {
+            "symbols": repository.list_watchlist(operator_id=operator_id),
+            "persistence_status": repository.persistence_status(),
+        }
 
     @app.get("/v1/analyze/detail/{run_id}")
     def analyze_detail(
@@ -183,3 +242,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 app = create_app()
+
+
+def _normalize_watchlist_symbol(raw_symbol: str) -> str:
+    try:
+        return normalize_symbol(raw_symbol).display
+    except SymbolNormalizationError as exc:
+        raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc

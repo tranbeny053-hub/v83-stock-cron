@@ -29,6 +29,7 @@
         <nav class="tabs" aria-label="Mode">
           <button class="tab active" data-tab="single">Single Crypto Analysis</button>
           <button class="tab" data-tab="batch">Batch Crypto Analysis</button>
+          <button class="tab" data-tab="watchlist">Watchlist</button>
           <button class="tab" data-tab="dev">Dev Mode</button>
         </nav>
 
@@ -86,6 +87,41 @@
             <span>Queueing</span><span>Isolating failures</span><span>Rendering backend fields</span>
           </div>
           <div id="batchResult" class="result-grid"></div>
+        </section>
+
+        <section class="panel hidden" id="watchlistPanel">
+          <form id="watchlistForm" class="analysis-form">
+            <label>
+              Symbol
+              <input name="symbol" value="BTC" autocomplete="off" />
+            </label>
+            <label>
+              Analysis mode
+              <select name="analysis_mode" id="watchlistMode">
+                <option value="METRICS_ONLY">METRICS_ONLY</option>
+                <option value="NEWS_ADDON">NEWS_ADDON</option>
+              </select>
+            </label>
+            <button type="submit">Add Symbol</button>
+          </form>
+          <p class="muted" id="watchlistStatus">Watchlist not loaded yet.</p>
+          <div id="watchlistList" class="watchlist-list" aria-label="Watchlist symbols"></div>
+          <section id="watchlistView" class="watchlist-view hidden">
+            <div class="watchlist-view-header">
+              <button id="backToWatchlist" type="button">Back to Watchlist</button>
+              <h2 id="watchlistSymbolTitle">Watchlist Symbol View</h2>
+            </div>
+            <div class="loading hidden" id="watchlistLoading">
+              <span>Loading six timeframes</span><span>Keeping detail links</span>
+            </div>
+            <p class="heat-label">Signal heat — not risk</p>
+            <div
+              id="watchlistResult"
+              class="timeframe-card-grid"
+              aria-label="Watchlist symbol timeframe cards"
+            ></div>
+          </section>
+
         </section>
 
         <section class="panel hidden" id="devPanel">

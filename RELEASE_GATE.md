@@ -106,6 +106,22 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] Manual local UI smoke completed or explicitly recorded as not run with reason.
 - [ ] Claude UI/timeframe review completed before merge/deploy.
 
+## Wave 1 Persistence / Watchlist Gate
+
+- [x] `psycopg[binary]>=3,<4` is pinned in `requirements.txt`.
+- [x] Supabase settings are backend-only and repr/log safe.
+- [x] `migrations/0001_init.sql` is idempotent and contains no destructive table changes.
+- [x] `scripts/apply_migrations.py` requires `SUPABASE_DB_URL` and does not print the database URL.
+- [x] No configured database returns `persistence_status=STATELESS`.
+- [x] Persistence write failure returns `persistence_status=UNAVAILABLE` without breaking analysis.
+- [x] Analysis persists compact run/timeframe/provider summaries only.
+- [x] Watchlist endpoints are session-gated and normalize symbols through the backend normalizer.
+- [x] Watchlist size is capped at `20` symbols.
+- [x] Frontend Watchlist tab calls backend endpoints only and never references Supabase directly.
+- [x] Frontend Watchlist symbol view reuses six timeframe cards and structured detail.
+- [x] Unit tests do not require real database or network.
+- [ ] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |
@@ -125,6 +141,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode access hash | later | Generate with `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH` if Dev Mode is enabled. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Session signing | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | PBKDF2 salt | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
+| Secret | `SUPABASE_DB_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional durable persistence | later | Required only for durable watchlist/run summaries. |
+| Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional future Supabase backend setting | later | Unused in Wave 1. |
+| Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional future server-side Supabase key | later | Unused in Wave 1; never expose to frontend. |
 | Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required for Sprint 2. |
 
 ## Required Evidence

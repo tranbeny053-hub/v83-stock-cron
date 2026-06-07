@@ -52,6 +52,9 @@ class Settings(BaseModel):
     access_code_salt: str = Field(default=DEFAULT_PHASE1A.access_code_local_salt, repr=False)
     access_code_pbkdf2_iterations: int = DEFAULT_PHASE1A.access_code_pbkdf2_iterations
     session_signing_key: str | None = Field(default=None, repr=False)
+    supabase_db_url: str | None = Field(default=None, repr=False)
+    supabase_url: str | None = Field(default=None, repr=False)
+    supabase_service_role_key: str | None = Field(default=None, repr=False)
     external_store_configured: bool = False
 
     @classmethod
@@ -118,7 +121,10 @@ class Settings(BaseModel):
                 )
             ),
             session_signing_key=os.environ.get("SESSION_SIGNING_KEY"),
-            external_store_configured=bool(os.environ.get("SUPABASE_URL")),
+            supabase_db_url=os.environ.get("SUPABASE_DB_URL"),
+            supabase_url=os.environ.get("SUPABASE_URL"),
+            supabase_service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+            external_store_configured=bool(os.environ.get("SUPABASE_DB_URL")),
         )
 
 

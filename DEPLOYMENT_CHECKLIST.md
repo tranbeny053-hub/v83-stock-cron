@@ -36,6 +36,9 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 - [ ] Dev Mode code hash configured separately if Dev Mode is enabled.
 - [ ] `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` matches the helper iteration count.
 - [ ] Optional persistence secret configured only if external store is used.
+- [ ] If durable watchlist/run summaries are wanted, set `SUPABASE_DB_URL` in Hugging Face Secrets only.
+- [ ] Optional `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` remain server-side only and are unused in Wave 1.
+- [ ] Supabase migrations applied before expecting durable watchlist/run summaries.
 - [ ] Binance/OKX API keys are absent; Sprint 2 public market data requires no Binance/OKX secrets.
 - [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
 - [ ] Private exchange keys, if used later, are read-only only.
@@ -45,6 +48,15 @@ Clarifications:
 - Type the plain access code into the UI login, not `APP_ACCESS_CODE_HASH`.
 - `UCPE_ACCESS_CODE_SALT`, `SESSION_SIGNING_KEY`, and any Hugging Face upload token are not the app login code.
 - No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
+
+## Optional Supabase Persistence Setup
+
+- [ ] Create or select a Supabase Postgres project.
+- [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
+- [ ] Confirm tables exist: `watchlist`, `analysis_runs`, `analysis_timeframe_results`, `provider_observations`, and `app_events`.
+- [ ] Set `SUPABASE_DB_URL` in Hugging Face Secrets if durable persistence is required.
+- [ ] Leave `SUPABASE_DB_URL` absent to run in stateless mode; analysis should still work and the watchlist UI uses browser fallback.
+- [ ] Do not enter Supabase values in the frontend, README, debug export, logs, or code.
 
 ## Smoke Tests
 

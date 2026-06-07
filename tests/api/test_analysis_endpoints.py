@@ -46,6 +46,31 @@ def test_analyze_metrics_only_returns_schema_valid_payload() -> None:
     assert payload["data_quality"]["is_live_data"] is False
     assert payload["data_quality"]["data_source"] == "FIXTURE_DEMO"
     assert payload["frontend_display"]["data_source"] == "FIXTURE_DEMO"
+    assert payload["debug"]["persistence_status"] == "STATELESS"
+
+
+def test_persistence_failure_does_not_break_analysis() -> None:
+    class BrokenRepository:
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def save_run(self, summary: dict) -> str:
+            raise RuntimeError("simulated persistence outage")
+
+        def save_timeframe_result(self, row: dict) -> str:
+            return "OK"
+
+        def save_provider_observation(self, row: dict) -> str:
+            return "OK"
+
+    client = make_client()
+    client.app.state.persistence_repository = BrokenRepository()
+    login(client)
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    assert payload["debug"]["persistence_status"] == "UNAVAILABLE"
 
 
 def test_analyze_monthly_timeframe_returns_schema_valid_payload() -> None:

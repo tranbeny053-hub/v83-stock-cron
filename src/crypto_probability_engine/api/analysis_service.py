@@ -21,6 +21,7 @@ from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.repository import PersistenceRepository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 
@@ -30,6 +31,7 @@ def analyze_request(
     *,
     settings: Settings,
     run_store: InMemoryRunStore,
+    persistence_repository: PersistenceRepository | None = None,
 ) -> dict:
     if request.asset_class == AssetClass.CRYPTO_PERP and not settings.enable_derivatives:
         raise api_error(
@@ -128,11 +130,15 @@ def analyze_request(
             "warnings": list(data_quality.get("warnings", [])),
             "news_influence": news_blocks["news_influence"],
             "analysis_hash_source": "backend_only",
+            "persistence_status": "STATELESS",
         },
         "analysis_hash": "",
     }
     response["analysis_hash"] = stable_hash(response)
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
+    persistence_status = _best_effort_persist(validated, persistence_repository)
+    validated["debug"]["persistence_status"] = persistence_status
+    validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
 
@@ -143,3 +149,96 @@ def _status_for_selection_error(code: ErrorCode) -> int:
     if code == ErrorCode.INVALID_SYMBOL:
         return 400
     return 503
+
+
+def _best_effort_persist(
+    payload: dict,
+    repository: PersistenceRepository | None,
+) -> str:
+    if repository is None:
+        return "STATELESS"
+    try:
+        run_summary = _run_summary(payload)
+        run_summary["persistence_status"] = repository.persistence_status()
+        statuses = [
+            repository.save_run(run_summary),
+            repository.save_timeframe_result(_timeframe_result(payload)),
+        ]
+        statuses.extend(
+            repository.save_provider_observation(row) for row in _provider_observations(payload)
+        )
+    except Exception:
+        return "UNAVAILABLE"
+    if any(status == "UNAVAILABLE" for status in statuses):
+        return "UNAVAILABLE"
+    return repository.persistence_status()
+
+
+def _run_summary(payload: dict) -> dict:
+    display = payload.get("frontend_display", {})
+    data_quality = payload.get("data_quality", {})
+    return {
+        "run_id": payload.get("run_id"),
+        "operator_id": "operator",
+        "symbol": payload.get("symbol"),
+        "normalized_symbol": payload.get("normalized_symbol"),
+        "analysis_mode": payload.get("analysis_mode"),
+        "asset_class": payload.get("asset_class"),
+        "primary_timeframe": payload.get("timeframes", {}).get("primary"),
+        "disposition": display.get("disposition"),
+        "total_score": display.get("total_score"),
+        "data_source": data_quality.get("data_source"),
+        "is_live_data": bool(data_quality.get("is_live_data", False)),
+        "persistence_status": payload.get("debug", {}).get("persistence_status", "STATELESS"),
+        "analysis_hash": payload.get("analysis_hash"),
+        "as_of_utc": payload.get("as_of_utc"),
+    }
+
+
+def _timeframe_result(payload: dict) -> dict:
+    display = payload.get("frontend_display", {})
+    return {
+        "run_id": payload.get("run_id"),
+        "timeframe": payload.get("timeframes", {}).get("primary"),
+        "disposition": display.get("disposition"),
+        "total_score": display.get("total_score"),
+        "prob_up_pct": display.get("prob_up_pct"),
+        "prob_down_pct": display.get("prob_down_pct"),
+        "prob_timeout_pct": display.get("prob_timeout_pct"),
+        "gate_action": payload.get("gate_result", {}).get("action"),
+        "data_source": payload.get("data_quality", {}).get("data_source"),
+        "is_live_data": bool(payload.get("data_quality", {}).get("is_live_data", False)),
+    }
+
+
+def _provider_observations(payload: dict) -> list[dict]:
+    provider_state = payload.get("provider_state", {})
+    data_quality = payload.get("data_quality", {})
+    providers = provider_state.get("providers") or {}
+    rows: list[dict] = []
+    for provider, state in providers.items():
+        warnings = state.get("warnings", []) if isinstance(state, dict) else []
+        rows.append(
+            {
+                "run_id": payload.get("run_id"),
+                "provider": provider,
+                "provider_status": state.get("status") if isinstance(state, dict) else None,
+                "active_provider": provider_state.get("active_provider"),
+                "data_source": data_quality.get("data_source"),
+                "is_live_data": bool(data_quality.get("is_live_data", False)),
+                "warning_count": len(warnings),
+            }
+        )
+    if not rows:
+        rows.append(
+            {
+                "run_id": payload.get("run_id"),
+                "provider": provider_state.get("active_provider") or "provider_selection",
+                "provider_status": provider_state.get("status"),
+                "active_provider": provider_state.get("active_provider"),
+                "data_source": data_quality.get("data_source"),
+                "is_live_data": bool(data_quality.get("is_live_data", False)),
+                "warning_count": len(data_quality.get("warnings", [])),
+            }
+        )
+    return rows

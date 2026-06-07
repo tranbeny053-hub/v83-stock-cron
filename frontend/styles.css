@@ -177,6 +177,46 @@ h2 {
   margin-top: 16px;
 }
 
+.watchlist-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.watchlist-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(5, 8, 11, 0.7);
+}
+
+.watchlist-symbol {
+  color: var(--text);
+  text-align: left;
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.watchlist-remove {
+  border-color: var(--line);
+  color: var(--muted);
+  background: transparent;
+}
+
+.watchlist-view {
+  margin-top: 16px;
+}
+
+.watchlist-view-header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .timeframe-card-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
