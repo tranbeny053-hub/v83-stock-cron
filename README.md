@@ -59,3 +59,12 @@ If live providers fail or disagree, the app must show degraded/unavailable data 
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Sign session cookies | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Per-deploy PBKDF2 salt | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
 | Secret | Binance/OKX API keys | not required | Public market data only | no | No Binance/OKX secrets required for Sprint 2. |
+
+## Login Code vs Deployment Secrets
+
+- The UI login uses the plain access code chosen by the operator.
+- `APP_ACCESS_CODE_HASH` is the generated hash of that code and is never typed into the UI.
+- `UCPE_ACCESS_CODE_SALT` is a PBKDF2 salt, not the login code.
+- `SESSION_SIGNING_KEY` signs sessions, not the login code.
+- A Hugging Face token, if used for repository upload outside this app, is not the app login code.
+- No Binance/OKX API keys or exchange secrets are required for the current public market-data build.

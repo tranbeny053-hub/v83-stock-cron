@@ -25,6 +25,7 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 
 ## Environment and Secrets
 
+- [ ] Choose the plain UI login access code locally. This is what the operator types into the app login screen.
 - [ ] Generate access-code salt locally: `python3 -c "import secrets; print(secrets.token_urlsafe(24))"`.
 - [ ] Set `UCPE_ACCESS_CODE_SALT` in Hugging Face Secrets.
 - [ ] Generate `APP_ACCESS_CODE_HASH`: `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` with `UCPE_ACCESS_CODE_SALT` exported locally; enter the access code only at the hidden prompt or via a local-only env var.
@@ -39,6 +40,11 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 - [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
 - [ ] Private exchange keys, if used later, are read-only only.
 - [ ] Secret presence in health/debug is masked as `set (****)`.
+
+Clarifications:
+- Type the plain access code into the UI login, not `APP_ACCESS_CODE_HASH`.
+- `UCPE_ACCESS_CODE_SALT`, `SESSION_SIGNING_KEY`, and any Hugging Face upload token are not the app login code.
+- No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
 
 ## Smoke Tests
 
