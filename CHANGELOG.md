@@ -166,3 +166,22 @@ Changed:
 Notes:
 - No deploy and no merge performed.
 - No Binance/OKX API keys, private exchange calls, live news fetching, or trading capability were added.
+
+## 2026-06-07 - Sprint 3 UI and 1M Timeframe Polish
+
+Blueprint version: `v1.2.2`
+schema_version: `1.1-crypto-probability`
+app_version: `0.1.0`
+
+Changed:
+- Added `1M` monthly timeframe support with Binance `1M` and OKX `1Mutc` public candle mappings.
+- Added timeframe-aware minimum history: `1M` requires `24` candles while sub-monthly timeframes keep the `200`-bar default.
+- Updated live public adapter fetch limits to request the timeframe-specific minimum plus a small closed-candle margin.
+- Replaced Single Analysis timeframe dropdown with six progressive timeframe cards: `15m`, `1H`, `4H`, `1D`, `1W`, and `1M`.
+- Added red-to-grey signal heat styling and preserved the required `Signal heat — not risk` label.
+- Replaced raw JSON as the primary detail experience with structured Overview, Probability, Risk/Gates, Market Data Quality, Provider State, Quant Signals, News Add-on, and collapsed Debug/Raw JSON sections.
+- Added frontend static checks plus backend validation/API/quant tests for `1M`.
+
+Notes:
+- No deploy and no merge performed.
+- No auth/security, Docker, provider HTTP client internals, scoring/gate/probability/news math, private exchange calls, live news fetching, or trading capability were added.

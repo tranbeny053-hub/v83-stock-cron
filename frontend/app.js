@@ -2,7 +2,11 @@ const sessionStatus = document.querySelector("#sessionStatus");
 const loginPanel = document.querySelector("#loginPanel");
 const workspace = document.querySelector("#workspace");
 const overviewTemplate = document.querySelector("#overviewTemplate");
+const singleResult = document.querySelector("#singleResult");
+const detailPanel = document.querySelector("#detailPanel");
 const heatLegend = "Signal heat — not risk";
+const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
+const singlePayloads = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -30,23 +34,76 @@ function setLoading(id, active) {
   document.querySelector(id).classList.toggle("hidden", !active);
 }
 
-function dataBannerText(display) {
+function dataBannerText(display = {}) {
   if (display.is_live_data) {
-    return `LIVE DATA — ${display.data_source}`;
+    return `LIVE DATA - ${display.data_source}`;
   }
   if (display.data_source === "FIXTURE_DEMO") {
-    return `DEMO DATA — ${display.data_source}`;
+    return `DEMO DATA - ${display.data_source}`;
   }
   if (display.data_source === "UNAVAILABLE") {
-    return `DATA UNAVAILABLE — ${display.data_source}`;
+    return `DATA UNAVAILABLE - ${display.data_source}`;
   }
-  return `DEGRADED DATA — ${display.data_source}`;
+  return `DEGRADED DATA - ${display.data_source || "DEGRADED"}`;
+}
+
+function formatNumber(value, digits = 2) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return value.toFixed(digits);
+}
+
+function formatPct(value) {
+  return `${formatNumber(value)}%`;
+}
+
+function formatValue(value) {
+  if (value === null || value === undefined) {
+    return "n/a";
+  }
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : formatNumber(value, 4);
+  }
+  if (typeof value === "boolean") {
+    return value ? "yes" : "no";
+  }
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "none";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function heatColor(totalScore) {
+  const raw = typeof totalScore === "number" ? totalScore : 0;
+  const intensity = Math.max(0, Math.min(1, raw / 100));
+  const red = Math.round(64 + (255 - 64) * intensity);
+  const other = Math.round(64 * (1 - intensity));
+  return `rgb(${red}, ${other}, ${other})`;
+}
+
+function firstReason(payload) {
+  const display = payload.frontend_display || {};
+  const candidates = [
+    ...(display.key_reasons || []),
+    ...(display.data_quality_warnings || []),
+    ...(display.execution_warnings || []),
+    ...(display.news_warnings || []),
+  ];
+  return candidates.find(Boolean) || "OK";
 }
 
 function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
-  node.querySelector("h2").textContent = payload.normalized_symbol;
+  const timeframe = payload.timeframes?.primary || "n/a";
+  node.classList.add("timeframe-card");
+  node.dataset.timeframeCard = timeframe;
+  node.style.setProperty("--heat-color", heatColor(display.total_score));
+  node.querySelector("h2").textContent = `${timeframe} ${payload.normalized_symbol}`;
   const demoBanner = document.createElement("p");
   demoBanner.className = "demo-banner";
   demoBanner.textContent = dataBannerText(display);
@@ -54,31 +111,69 @@ function overviewCard(payload) {
   const values = [
     ["Disposition", display.disposition],
     ["Score", display.total_score],
-    ["Up", `${display.prob_up_pct.toFixed(2)}%`],
-    ["Down", `${display.prob_down_pct.toFixed(2)}%`],
-    ["Timeout", `${display.prob_timeout_pct.toFixed(2)}%`],
-    ["Mode", display.analysis_mode_badge],
+    ["Up", formatPct(display.prob_up_pct)],
+    ["Down", formatPct(display.prob_down_pct)],
+    ["Timeout", formatPct(display.prob_timeout_pct)],
     ["Data", display.is_live_data ? "LIVE" : display.data_source],
-    ["Heat", display.heat_legend || heatLegend],
+    ["Source", display.data_source],
+    ["Gate", firstReason(payload)],
   ];
-  const dl = node.querySelector("dl");
-  for (const [label, value] of values) {
-    const dt = document.createElement("dt");
-    const dd = document.createElement("dd");
-    dt.textContent = label;
-    dd.textContent = value;
-    dl.append(dt, dd);
-  }
+  appendDefinitionRows(node.querySelector("dl"), values);
   const note = node.querySelector(".news-note");
   note.textContent =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News disabled in METRICS_ONLY."
       : payload.news_addon_state.status;
-  node.querySelector(".detail-button").addEventListener("click", async () => {
-    const detail = await api(`/v1/analyze/detail/${payload.run_id}`);
-    note.textContent = JSON.stringify(detail, null, 2);
+  node.querySelector(".detail-button").addEventListener("click", () => openDetail(payload));
+  node.addEventListener("click", (event) => {
+    if (event.target.closest("button")) {
+      return;
+    }
+    openDetail(payload);
   });
   return node;
+}
+
+function loadingCard(timeframe) {
+  const node = document.createElement("article");
+  node.className = "result-card timeframe-card loading-card";
+  node.dataset.timeframeCard = timeframe;
+  node.innerHTML = `
+    <header><h2>${timeframe}</h2><span class="badge">Loading</span></header>
+    <p class="muted">Awaiting backend analysis.</p>
+    <p class="heat-mini">${heatLegend}</p>
+  `;
+  return node;
+}
+
+function errorCard(timeframe, error) {
+  const node = document.createElement("article");
+  node.className = "result-card timeframe-card error-card";
+  node.dataset.timeframeCard = timeframe;
+  const header = document.createElement("header");
+  const heading = document.createElement("h2");
+  const badge = document.createElement("span");
+  const message = document.createElement("p");
+  const heat = document.createElement("p");
+  heading.textContent = timeframe;
+  badge.className = "badge danger";
+  badge.textContent = "Error";
+  message.textContent = error.message || "Analysis failed.";
+  heat.className = "heat-mini";
+  heat.textContent = heatLegend;
+  header.append(heading, badge);
+  node.append(header, message, heat);
+  return node;
+}
+
+function appendDefinitionRows(dl, values) {
+  for (const [label, value] of values) {
+    const dt = document.createElement("dt");
+    const dd = document.createElement("dd");
+    dt.textContent = label;
+    dd.textContent = formatValue(value);
+    dl.append(dt, dd);
+  }
 }
 
 function renderResults(target, payloads, errors = []) {
@@ -92,6 +187,185 @@ function renderResults(target, payloads, errors = []) {
     node.textContent = `Item ${item.index + 1}: ${item.detail.error.code}`;
     target.append(node);
   }
+}
+
+function replaceTimeframeCard(timeframe, node) {
+  const current = singleResult.querySelector(`[data-timeframe-card="${timeframe}"]`);
+  if (current) {
+    current.replaceWith(node);
+  } else {
+    singleResult.append(node);
+  }
+}
+
+function renderSinglePlaceholders() {
+  singleResult.replaceChildren(...singleTimeframes.map((timeframe) => loadingCard(timeframe)));
+  detailPanel.classList.add("hidden");
+}
+
+async function runSingleAnalysis(form) {
+  const symbol = String(form.get("symbol") || "").trim();
+  const analysisMode = form.get("analysis_mode");
+  singlePayloads.clear();
+  renderSinglePlaceholders();
+  setLoading("#singleLoading", true);
+  const requests = singleTimeframes.map(async (timeframe) => {
+    try {
+      const payload = await api("/v1/analyze", {
+        method: "POST",
+        body: JSON.stringify({
+          symbol,
+          analysis_mode: analysisMode,
+          timeframe,
+        }),
+      });
+      singlePayloads.set(timeframe, payload);
+      singlePayloads.set(payload.run_id, payload);
+      replaceTimeframeCard(timeframe, overviewCard(payload));
+    } catch (error) {
+      replaceTimeframeCard(timeframe, errorCard(timeframe, error));
+    }
+  });
+  await Promise.allSettled(requests);
+  setLoading("#singleLoading", false);
+}
+
+async function openDetail(payload) {
+  let detailView = payload.detail_view || {};
+  try {
+    detailView = await api(`/v1/analyze/detail/${payload.run_id}`);
+  } catch {
+    detailView = payload.detail_view || {};
+  }
+  renderStructuredDetail(payload, detailView);
+  detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function section(title, children) {
+  const node = document.createElement("section");
+  node.className = "detail-section";
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  node.append(heading, ...children);
+  return node;
+}
+
+function keyValueTable(values) {
+  const dl = document.createElement("dl");
+  dl.className = "detail-kv";
+  appendDefinitionRows(dl, values);
+  return dl;
+}
+
+function objectTable(value) {
+  const table = document.createElement("table");
+  table.className = "detail-table";
+  const body = document.createElement("tbody");
+  for (const [key, item] of Object.entries(value || {})) {
+    const row = document.createElement("tr");
+    const label = document.createElement("th");
+    const content = document.createElement("td");
+    label.textContent = key.replaceAll("_", " ");
+    if (item && typeof item === "object") {
+      const nested = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
+      const pre = document.createElement("pre");
+      pre.textContent = JSON.stringify(item, null, 2);
+      nested.append(summary, pre);
+      content.append(nested);
+    } else {
+      content.textContent = formatValue(item);
+    }
+    row.append(label, content);
+    body.append(row);
+  }
+  table.append(body);
+  return table;
+}
+
+function renderStructuredDetail(payload, detailView) {
+  const display = payload.frontend_display || {};
+  const dataQuality = payload.data_quality || {};
+  const providerState = payload.provider_state || {};
+  const gate = payload.gate_result || {};
+  const details = detailView || {};
+  const newsCopy =
+    payload.analysis_mode === "METRICS_ONLY"
+      ? "News analysis disabled for this run."
+      : payload.news_addon_state?.status || "UNAVAILABLE";
+
+  const rawJson = document.createElement("details");
+  rawJson.className = "raw-json";
+  const summary = document.createElement("summary");
+  summary.textContent = "Debug / Raw JSON";
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(payload, null, 2);
+  rawJson.append(summary, pre);
+
+  detailPanel.replaceChildren(
+    section("Overview", [
+      keyValueTable([
+        ["Symbol", payload.normalized_symbol],
+        ["Timeframe", payload.timeframes?.primary],
+        ["Analysis mode", payload.analysis_mode],
+        ["Disposition", display.disposition],
+        ["Score", display.total_score],
+        ["As of UTC", payload.as_of_utc],
+        ["Run ID", payload.run_id],
+        ["Data source", display.data_source],
+        ["Live data", display.is_live_data],
+      ]),
+    ]),
+    section("Probability", [
+      keyValueTable([
+        ["Up", formatPct(display.prob_up_pct)],
+        ["Down", formatPct(display.prob_down_pct)],
+        ["Timeout", formatPct(display.prob_timeout_pct)],
+        ["Confidence", formatValue(details.probability_detail?.horizons?.H_primary?.confidence_frac)],
+      ]),
+    ]),
+    section("Risk / Gates", [
+      keyValueTable([
+        ["Gate action", gate.action],
+        ["Hard blocks", gate.hard_blocks],
+        ["Warnings", dataQuality.warnings],
+      ]),
+      objectTable(details.risk_detail),
+    ]),
+    section("Market Data Quality", [
+      keyValueTable([
+        ["Status", dataQuality.status],
+        ["Latest age seconds", dataQuality.latest_candle_age_seconds],
+        ["Warnings", dataQuality.warnings],
+        ["Failures", dataQuality.provider_failures],
+        ["Data source", dataQuality.data_source],
+        ["Live data", dataQuality.is_live_data],
+      ]),
+    ]),
+    section("Provider State", [
+      keyValueTable([
+        ["Active provider", providerState.active_provider],
+        ["Status", providerState.status],
+        ["Cross-provider state", display.data_source],
+      ]),
+      objectTable(providerState.providers),
+    ]),
+    section("Quant Signals", [
+      objectTable(details.metrics_detail),
+      objectTable(details.liquidity_execution_detail),
+    ]),
+    section("News Add-on", [
+      keyValueTable([
+        ["State", newsCopy],
+        ["Mode", payload.analysis_mode],
+        ["Warnings", display.news_warnings],
+      ]),
+      objectTable(details.news_detail),
+    ]),
+    section("Debug / Raw JSON", [rawJson]),
+  );
+  detailPanel.classList.remove("hidden");
 }
 
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
@@ -112,17 +386,7 @@ for (const button of document.querySelectorAll(".tab")) {
 
 document.querySelector("#singleForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  setLoading("#singleLoading", true);
-  try {
-    const form = new FormData(event.currentTarget);
-    const payload = await api("/v1/analyze", {
-      method: "POST",
-      body: JSON.stringify(Object.fromEntries(form.entries())),
-    });
-    renderResults(document.querySelector("#singleResult"), [payload]);
-  } finally {
-    setLoading("#singleLoading", false);
-  }
+  await runSingleAnalysis(new FormData(event.currentTarget));
 });
 
 document.querySelector("#batchForm").addEventListener("submit", async (event) => {
@@ -175,3 +439,5 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
     target.append(document.createElement("br"), button);
   }
 });
+
+renderSinglePlaceholders();

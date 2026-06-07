@@ -7,6 +7,7 @@ from math import nan
 import pytest
 
 from crypto_probability_engine.api.schemas import ErrorCode
+from crypto_probability_engine.config.defaults import TIMEFRAME_SECONDS, min_history_for
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
     assert_snapshots_coherent,
@@ -19,6 +20,21 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_order_book,
 
 def test_valid_snapshot_passes() -> None:
     validate_market_snapshot(make_snapshot(), min_bars=3)
+
+
+def test_monthly_snapshot_uses_lower_per_timeframe_min_history() -> None:
+    snapshot = make_snapshot(timeframe="1M", count=30)
+    validate_market_snapshot(snapshot)
+    assert min_history_for("1M") == 24
+    assert snapshot.candles[-1].close_time_utc - snapshot.candles[-1].open_time_utc == timedelta(
+        seconds=TIMEFRAME_SECONDS["1M"]
+    )
+
+
+def test_monthly_snapshot_below_min_history_fails_closed() -> None:
+    with pytest.raises(DataValidationError) as excinfo:
+        validate_market_snapshot(make_snapshot(timeframe="1M", count=23))
+    assert excinfo.value.code == ErrorCode.INSUFFICIENT_DATA
 
 
 def test_stale_candles_fail_closed() -> None:

@@ -32,6 +32,48 @@ def test_frontend_uses_backend_display_fields() -> None:
         assert forbidden not in js
 
 
+def test_single_analysis_has_six_timeframe_cards_not_primary_dropdown() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    single_section = html.split('id="singlePanel"', maxsplit=1)[1].split(
+        'id="batchPanel"', maxsplit=1
+    )[0]
+    assert 'name="timeframe"' not in single_section
+    assert "timeframe-card-grid" in single_section
+    for timeframe in ("15m", "1H", "4H", "1D", "1W", "1M"):
+        assert f'"{timeframe}"' in js
+
+
+def test_batch_timeframe_dropdown_includes_monthly() -> None:
+    html = read_frontend("index.html")
+    batch_section = html.split('id="batchPanel"', maxsplit=1)[1].split(
+        'id="devPanel"', maxsplit=1
+    )[0]
+    assert 'name="timeframe"' in batch_section
+    assert "<option>1M</option>" in batch_section
+
+
+def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
+    css = read_frontend("styles.css")
+    js = read_frontend("app.js")
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in css
+    assert "renderStructuredDetail" in js
+    for heading in (
+        "Overview",
+        "Probability",
+        "Risk / Gates",
+        "Market Data Quality",
+        "Provider State",
+        "Quant Signals",
+        "News Add-on",
+        "Debug / Raw JSON",
+    ):
+        assert heading in js
+    assert "raw-json" in js
+    assert "News analysis disabled for this run." in js
+
+
 def test_no_secret_markers_in_frontend() -> None:
     combined = "\n".join(
         [

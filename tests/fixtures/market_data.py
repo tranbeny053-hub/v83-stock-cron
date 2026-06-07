@@ -11,6 +11,7 @@ from crypto_probability_engine.adapters.types import (
     OrderBookSnapshot,
     ProviderStatus,
 )
+from crypto_probability_engine.config.defaults import TIMEFRAME_SECONDS
 
 FIXED_NOW = datetime(2026, 6, 6, 12, 0, tzinfo=UTC)
 
@@ -119,7 +120,7 @@ def make_downtrend_snapshot(
     symbol: str = "BTC/USDT",
     timeframe: str = "4H",
 ) -> MarketSnapshot:
-    candles = make_downtrend_candles()
+    candles = make_downtrend_candles(timeframe_seconds=TIMEFRAME_SECONDS[timeframe])
     last_close = candles[-1].close
     return MarketSnapshot(
         provider=provider,
@@ -138,7 +139,7 @@ def make_high_volatility_snapshot(
     symbol: str = "BTC/USDT",
     timeframe: str = "4H",
 ) -> MarketSnapshot:
-    candles = make_high_volatility_candles()
+    candles = make_high_volatility_candles(timeframe_seconds=TIMEFRAME_SECONDS[timeframe])
     last_close = candles[-1].close
     return MarketSnapshot(
         provider=provider,
@@ -156,9 +157,10 @@ def make_snapshot(
     provider: str = "fixture",
     symbol: str = "BTC/USDT",
     timeframe: str = "4H",
+    count: int = 210,
     close_shift: float = 0.0,
 ) -> MarketSnapshot:
-    candles = list(make_candles())
+    candles = list(make_candles(count=count, timeframe_seconds=TIMEFRAME_SECONDS[timeframe]))
     last = candles[-1]
     candles[-1] = MarketCandle(
         open_time_utc=last.open_time_utc,

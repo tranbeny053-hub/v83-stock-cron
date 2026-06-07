@@ -7,7 +7,11 @@ from math import isfinite
 
 from crypto_probability_engine.adapters.types import MarketCandle, MarketSnapshot, OrderBookSnapshot
 from crypto_probability_engine.api.schemas import ErrorCode
-from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
+from crypto_probability_engine.config.defaults import (
+    DEFAULT_PHASE1A,
+    TIMEFRAME_SECONDS,
+    min_history_for,
+)
 
 
 class DataValidationError(ValueError):
@@ -57,11 +61,12 @@ def validate_candles(
     timeframe: str,
     *,
     now_utc: datetime | None = None,
-    min_bars: int = DEFAULT_PHASE1A.min_history_bars,
+    min_bars: int | None = None,
 ) -> None:
     if timeframe not in TIMEFRAME_SECONDS:
         raise DataValidationError(ErrorCode.SCHEMA_VALIDATION_FAILED, "Unsupported timeframe.")
-    if len(candles) < min_bars:
+    required_bars = min_bars if min_bars is not None else min_history_for(timeframe)
+    if len(candles) < required_bars:
         raise DataValidationError(ErrorCode.INSUFFICIENT_DATA, "Insufficient candle history.")
 
     last_close: datetime | None = None
@@ -108,7 +113,7 @@ def validate_order_book(book: OrderBookSnapshot | None) -> None:
         raise DataValidationError(ErrorCode.DATA_CONFLICT, "Order book is crossed or locked.")
 
 
-def validate_market_snapshot(snapshot: MarketSnapshot, *, min_bars: int) -> None:
+def validate_market_snapshot(snapshot: MarketSnapshot, *, min_bars: int | None = None) -> None:
     _ensure_utc(snapshot.as_of_utc, "snapshot.as_of_utc")
     validate_candles(
         snapshot.candles,

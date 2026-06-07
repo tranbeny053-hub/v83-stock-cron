@@ -89,6 +89,23 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] Claude final review completed for no-network unit tests.
 - [ ] Claude final review completed for Docker/Hugging Face env table.
 
+## Sprint 3 UI / Timeframe Gate
+
+- [x] `1M` is listed in supported timeframe config.
+- [x] `TIMEFRAME_SECONDS["1M"]` uses approximate 30-day month duration.
+- [x] `MIN_HISTORY_BARS_BY_TIMEFRAME["1M"] = 24`; sub-monthly global minimum remains `200`.
+- [x] Binance monthly mapping is `1M`.
+- [x] OKX monthly mapping is `1Mutc` for UTC-aligned monthly candles.
+- [x] Existing OKX 1D/1W HK alignment mismatch is documented as future/out-of-scope.
+- [x] Single Analysis uses six always-visible timeframe cards instead of a primary timeframe dropdown.
+- [x] Batch timeframe dropdown includes `1M`.
+- [x] Frontend card heat label remains `Signal heat — not risk`.
+- [x] Detail Analysis primary view is structured; raw JSON is collapsed/debug-only.
+- [x] Frontend no-recompute/no-secret static checks pass in targeted tests.
+- [x] Full Sprint 3 offline check suite completed and recorded.
+- [ ] Manual local UI smoke completed or explicitly recorded as not run with reason.
+- [ ] Claude UI/timeframe review completed before merge/deploy.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |

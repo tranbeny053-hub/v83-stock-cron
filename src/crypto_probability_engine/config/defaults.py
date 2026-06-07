@@ -8,7 +8,7 @@ from types import MappingProxyType
 
 @dataclass(frozen=True)
 class Phase1ADefaults:
-    timeframes: tuple[str, ...] = ("15m", "1H", "4H", "1D", "1W")
+    timeframes: tuple[str, ...] = ("15m", "1H", "4H", "1D", "1W", "1M")
     primary_timeframe: str = "4H"
     trend_timeframes: tuple[str, ...] = ("1H", "4H", "1D")
     h_primary_bars: int = 6
@@ -66,6 +66,8 @@ class Phase1ADefaults:
 
 DEFAULT_PHASE1A = Phase1ADefaults()
 
+MIN_HISTORY_BARS_BY_TIMEFRAME = MappingProxyType({"1M": 24})
+
 TIMEFRAME_SECONDS = MappingProxyType(
     {
         "15m": 15 * 60,
@@ -73,5 +75,11 @@ TIMEFRAME_SECONDS = MappingProxyType(
         "4H": 4 * 60 * 60,
         "1D": 24 * 60 * 60,
         "1W": 7 * 24 * 60 * 60,
+        # Monthly candles use an approximate 30-day duration for validation/freshness windows.
+        "1M": 30 * 24 * 60 * 60,
     }
 )
+
+
+def min_history_for(timeframe: str) -> int:
+    return MIN_HISTORY_BARS_BY_TIMEFRAME.get(timeframe, DEFAULT_PHASE1A.min_history_bars)

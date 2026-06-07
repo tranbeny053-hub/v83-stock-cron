@@ -84,6 +84,23 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH` (deployment helper; requires local `UCPE_ACCESS_CODE_SALT`)
 - Confirm socket guard with `PYTHONPATH=src python3 -m pytest tests/test_no_network_guard.py -q`
 
+## Sprint 3 Required Checks
+
+- `git branch --show-current`
+- `git status --short --untracked-files=all -- .`
+- `python3 --version`
+- `PYTHONPATH=src python3 -m pytest -q`
+- `ruff check src tests scripts`
+- `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`
+- `PYTHONPATH=src python3 scripts/check_no_secrets.py`
+- `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`
+- `PYTHONPATH=src python3 scripts/validate_schemas.py`
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`
+- `rg -n '"1M"|1Mutc|MIN_HISTORY_BARS_BY_TIMEFRAME|min_history_for' src/crypto_probability_engine/config src/crypto_probability_engine/adapters src/crypto_probability_engine/validation src/crypto_probability_engine/quant tests frontend`
+- `PYTHONPATH=src python3 -m pytest tests/adapters/test_public_market_adapters.py tests/validation/test_market_validation.py tests/api/test_analysis_endpoints.py tests/quant/test_quant_pipeline.py tests/frontend/test_frontend_static.py -q`
+- Manual UI smoke, if feasible: local server, login, Single Analysis `BTC/USDT` `METRICS_ONLY`, confirm six cards, click `1M`, confirm structured detail and collapsed raw JSON.
+- Optional 1M live smoke: not supported by `scripts/live_smoke.py` unless timeframe targeting is added; rely on adapter/API tests when not run.
+
 ## Definition of Done
 
 A task is complete only when relevant commands were run or attempted, results were recorded in `AI/03_CURRENT_STATE.md` and `AI/05_HANDOFF.md`, risks are listed, and the user receives a non-technical summary.

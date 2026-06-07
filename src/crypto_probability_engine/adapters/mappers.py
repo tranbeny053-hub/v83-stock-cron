@@ -23,6 +23,7 @@ BINANCE_INTERVALS = {
     "4H": "4h",
     "1D": "1d",
     "1W": "1w",
+    "1M": "1M",
 }
 OKX_INTERVALS = {
     "15m": "15m",
@@ -30,6 +31,7 @@ OKX_INTERVALS = {
     "4H": "4H",
     "1D": "1D",
     "1W": "1W",
+    "1M": "1Mutc",
 }
 
 

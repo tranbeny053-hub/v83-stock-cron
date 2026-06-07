@@ -20,7 +20,7 @@ from crypto_probability_engine.adapters.types import (
     ProviderStatus,
 )
 from crypto_probability_engine.api.schemas import ErrorCode
-from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
+from crypto_probability_engine.config.defaults import min_history_for
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import NormalizedSymbol
 from crypto_probability_engine.validation.market_data import (
@@ -145,7 +145,7 @@ def _live_selection(
                 timeframe,
                 ttl_seconds=settings.candle_cache_ttl_seconds,
             )
-            validate_market_snapshot(snapshot, min_bars=DEFAULT_PHASE1A.min_history_bars)
+            validate_market_snapshot(snapshot, min_bars=min_history_for(timeframe))
         except (ProviderError, DataValidationError) as exc:
             code = getattr(exc, "code", "PROVIDER_DEGRADED")
             message = f"{code}: {exc}"

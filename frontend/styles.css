@@ -9,6 +9,7 @@
   --green: #8aff80;
   --magenta: #ff3df2;
   --warning: #ffd166;
+  --danger: #ff4d4d;
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }
 
@@ -88,8 +89,14 @@ textarea {
 
 .eyebrow,
 .muted,
-.news-note {
+.news-note,
+.heat-mini {
   color: var(--muted);
+}
+
+.heat-label {
+  margin-top: 16px;
+  color: var(--warning);
 }
 
 .demo-banner {
@@ -169,18 +176,56 @@ h2 {
   margin-top: 16px;
 }
 
+.timeframe-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .result-card {
+  --heat-color: #404040;
   padding: 16px;
+}
+
+.timeframe-card {
+  min-height: 274px;
+  border-color: color-mix(in srgb, var(--heat-color) 70%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--heat-color) 34%, transparent), transparent 58%),
+    rgba(13, 17, 23, 0.94);
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.timeframe-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--heat-color) 92%, var(--cyan));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--heat-color) 42%, transparent);
+}
+
+.loading-card,
+.error-card {
+  cursor: default;
+}
+
+.error-card {
+  border-color: var(--danger);
 }
 
 .result-card header {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  align-items: start;
 }
 
 .detail-button {
   width: 84px;
+  min-width: 84px;
 }
 
 dl {
@@ -197,6 +242,93 @@ dt {
 dd {
   margin: 0;
   text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid var(--cyan);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.08);
+  font-size: 12px;
+}
+
+.badge.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.detail-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.detail-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: rgba(5, 8, 11, 0.88);
+}
+
+.detail-section h3 {
+  margin: 0 0 12px;
+  color: var(--cyan);
+  font-size: 16px;
+}
+
+.detail-kv {
+  grid-template-columns: minmax(160px, 0.7fr) minmax(180px, 1.3fr);
+  margin: 0;
+}
+
+.detail-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+}
+
+.detail-table th,
+.detail-table td {
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+  vertical-align: top;
+  text-align: left;
+}
+
+.detail-table th {
+  width: 30%;
+  padding-right: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.detail-table details,
+.raw-json {
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 240, 255, 0.04);
+}
+
+.detail-table summary,
+.raw-json summary {
+  cursor: pointer;
+  color: var(--warning);
+}
+
+pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 .loading {
@@ -237,6 +369,24 @@ dd {
 
   .topbar {
     display: grid;
+  }
+
+  .timeframe-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-kv {
+    grid-template-columns: 1fr;
+  }
+
+  dd {
+    text-align: left;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1020px) {
+  .timeframe-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

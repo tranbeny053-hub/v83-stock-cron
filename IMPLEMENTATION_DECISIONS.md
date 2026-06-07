@@ -8,7 +8,7 @@ Defaults must be visible config, never silent hardcoding. R4 behavior remains su
 
 | Decision | Default | Status | Notes |
 |---|---|---|---|
-| Supported timeframes | `15m, 1H, 4H, 1D, 1W`; primary default `4H`; trend set `{1H, 4H, 1D}` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; keep configurable and visible. |
+| Supported timeframes | `15m, 1H, 4H, 1D, 1W, 1M`; primary default `4H`; trend set `{1H, 4H, 1D}` | DEFAULT_PHASE1A + SPRINT3_APPROVED | Sprint 3 adds monthly analysis support. Trend timeframes remain unchanged. |
 | Analysis horizons | `H_primary = 6 bars`; `H_extended = 24 bars` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; labels remain horizon names in responses. |
 | Analysis-mode default | `METRICS_ONLY` | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; `NEWS_ADDON` remains opt-in per request. |
 | News source set | Provider-agnostic adapters; none mandatory | DEFAULT_PROPOSED | Configure at least one reliable source to enable live `NEWS_ADDON`; otherwise return `UNAVAILABLE`. Specific sources remain `TO_VERIFY`. |
@@ -37,6 +37,19 @@ Additional `DEFAULT_PHASE1A` config values from the Sprint 1 plan:
 - Sprint 1 limitation: `H_primary` and `H_extended` share the same directional split, with only extended-horizon confidence scaled. Full horizon-specific modeling is Sprint 2.
 - Sprint 1 limitation: liquidity/tail/execution hard gating is deterministic guardrail coverage only. Full hard-gating depth for these areas is a Sprint 2 item.
 - Sprint 2 first task: wire live public Binance/OKX adapters plus real `data_quality`; keep fixture/demo labeling until live data is actually verified.
+
+## Sprint 3 1M Timeframe Decision
+
+Status: `SAFE_TO_IMPLEMENT` from Claude Sprint 3 plan; R2 because it touches data validation/min-history but not scoring, gate, probability, or news math.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Monthly timeframe support | Add `1M` to supported timeframes | SPRINT3_APPROVED | Single and batch analysis may request monthly analysis. |
+| Monthly duration | `TIMEFRAME_SECONDS["1M"] = 30 * 24 * 60 * 60` | SPRINT3_APPROVED | Approximate calendar-month duration for validation/freshness windows. |
+| Monthly min history | `MIN_HISTORY_BARS_BY_TIMEFRAME["1M"] = 24` | SPRINT3_APPROVED | Global `min_history_bars = 200` remains unchanged for sub-monthly timeframes. |
+| Binance monthly mapping | `1M -> 1M` | SPRINT3_APPROVED | Public spot kline monthly interval. |
+| OKX monthly mapping | `1M -> 1Mutc` | SPRINT3_APPROVED | UTC-aligned monthly candles reduce provider boundary mismatch for monthly analysis. |
+| Existing OKX 1D/1W alignment mismatch | Future item | DEFERRED | Pre-existing HK alignment mismatch remains out of scope for Sprint 3. |
 
 ## `_frac` Field Audit
 

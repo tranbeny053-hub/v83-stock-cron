@@ -14,6 +14,7 @@ from crypto_probability_engine.adapters.mappers import (
 )
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
 from crypto_probability_engine.adapters.types import ProviderError
+from crypto_probability_engine.config.defaults import TIMEFRAME_SECONDS, min_history_for
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.validation.market_data import validate_market_snapshot
@@ -85,8 +86,10 @@ def okx_payload(*, count: int = 202, timeframe_seconds: int = 14_400) -> dict:
 def test_interval_mapping_is_provider_specific() -> None:
     assert map_interval("1H", "binance") == "1h"
     assert map_interval("4H", "binance") == "4h"
+    assert map_interval("1M", "binance") == "1M"
     assert map_interval("1H", "okx") == "1H"
     assert map_interval("4H", "okx") == "4H"
+    assert map_interval("1M", "okx") == "1Mutc"
     with pytest.raises(ProviderError):
         map_interval("2H", "binance")
 
@@ -180,6 +183,64 @@ def test_okx_public_adapter_fetches_keyless_public_snapshot() -> None:
     assert snapshot.provider == "okx"
     assert snapshot.normalized_symbol == "BTC/USDT"
     assert seen_paths == ["/api/v5/market/candles", "/api/v5/market/books"]
+
+
+def test_monthly_public_adapter_limits_use_per_timeframe_history() -> None:
+    rows = binance_rows(count=30, timeframe_seconds=TIMEFRAME_SECONDS["1M"])
+    payload = okx_payload(count=30, timeframe_seconds=TIMEFRAME_SECONDS["1M"])
+    seen_limits: dict[str, str] = {}
+
+    def binance_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v3/klines":
+            seen_limits["binance"] = request.url.params["limit"]
+            assert request.url.params["interval"] == "1M"
+            return httpx.Response(200, json=rows)
+        if request.url.path == "/api/v3/depth":
+            return httpx.Response(
+                200,
+                json={"bids": [["120.0", "2.0"]], "asks": [["120.5", "2.5"]]},
+            )
+        return httpx.Response(404)
+
+    def okx_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v5/market/candles":
+            seen_limits["okx"] = request.url.params["limit"]
+            assert request.url.params["bar"] == "1Mutc"
+            return httpx.Response(200, json=payload)
+        if request.url.path == "/api/v5/market/books":
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "bids": [["120.0", "2.0", "0", "1"]],
+                            "asks": [["120.5", "2.5", "0", "1"]],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(404)
+
+    symbol = normalize_symbol("BTC")
+    binance = BinancePublicAdapter(
+        settings=Settings(data_mode="live"),
+        http_client=public_client(httpx.MockTransport(binance_handler)),
+    )
+    okx = OkxPublicAdapter(
+        settings=Settings(data_mode="live"),
+        http_client=public_client(httpx.MockTransport(okx_handler)),
+    )
+
+    binance_snapshot = binance.fetch_market_snapshot(symbol, "1M")
+    okx_snapshot = okx.fetch_market_snapshot(symbol, "1M")
+
+    assert seen_limits == {
+        "binance": str(min_history_for("1M") + 5),
+        "okx": str(min_history_for("1M") + 5),
+    }
+    validate_market_snapshot(binance_snapshot)
+    validate_market_snapshot(okx_snapshot)
 
 
 def test_public_client_maps_429_to_typed_provider_error() -> None:

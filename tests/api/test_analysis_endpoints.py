@@ -48,6 +48,22 @@ def test_analyze_metrics_only_returns_schema_valid_payload() -> None:
     assert payload["frontend_display"]["data_source"] == "FIXTURE_DEMO"
 
 
+def test_analyze_monthly_timeframe_returns_schema_valid_payload() -> None:
+    client = make_client()
+    login(client)
+    response = client.post(
+        "/v1/analyze",
+        json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY", "timeframe": "1M"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    assert payload["timeframes"]["primary"] == "1M"
+    horizon = payload["probability_state"]["horizons"]["H_primary"]
+    assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
+    assert payload["epistemic_sufficiency_state"]["min_history_bars"] == 24
+
+
 def test_news_addon_unavailable_and_metrics_unaffected() -> None:
     client = make_client()
     login(client)

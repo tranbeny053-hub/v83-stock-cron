@@ -123,6 +123,16 @@ def test_epistemic_void_aborts_pipeline() -> None:
     assert result["probability_state"]["null_reason"] == "INSUFFICIENT_DATA"
 
 
+def test_monthly_epistemic_uses_timeframe_specific_min_history() -> None:
+    result = run_quant_pipeline(make_snapshot(timeframe="1M", count=24), {"status": "OK"})
+    assert result["epistemic_sufficiency_state"]["sufficiency_level"] == "SUFFICIENT"
+    assert result["epistemic_sufficiency_state"]["min_history_bars"] == 24
+
+    short_result = run_quant_pipeline(make_snapshot(timeframe="1M", count=23), {"status": "OK"})
+    assert short_result["epistemic_sufficiency_state"]["sufficiency_level"] == "VOID"
+    assert short_result["gate_result"]["action"] == "ABORT"
+
+
 def test_net_of_cost_binding_removes_tiny_signal() -> None:
     snapshot = make_snapshot()
     candles = list(snapshot.candles)

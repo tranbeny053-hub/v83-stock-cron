@@ -45,22 +45,14 @@
                 <option value="NEWS_ADDON">NEWS_ADDON</option>
               </select>
             </label>
-            <label>
-              Timeframe
-              <select name="timeframe">
-                <option>15m</option>
-                <option>1H</option>
-                <option selected>4H</option>
-                <option>1D</option>
-                <option>1W</option>
-              </select>
-            </label>
             <button type="submit">Analyze</button>
           </form>
           <div class="loading hidden" id="singleLoading">
             <span>Normalizing</span><span>Validating</span><span>Computing</span><span>Rendering</span>
           </div>
-          <div id="singleResult" class="result-grid"></div>
+          <p class="heat-label">Signal heat — not risk</p>
+          <div id="singleResult" class="timeframe-card-grid" aria-label="Single Analysis timeframe cards"></div>
+          <div id="detailPanel" class="detail-panel hidden" aria-live="polite"></div>
         </section>
 
         <section class="panel hidden" id="batchPanel">
@@ -85,6 +77,7 @@
                   <option selected>4H</option>
                   <option>1D</option>
                   <option>1W</option>
+                  <option>1M</option>
                 </select>
               </label>
               <button type="submit">Analyze Batch</button>
