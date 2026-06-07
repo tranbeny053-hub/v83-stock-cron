@@ -54,6 +54,12 @@ class InMemoryPersistenceRepository:
     def persistence_status(self) -> PersistenceStatus:
         return "STATELESS"
 
+    def repository_type(self) -> str:
+        return "IN_MEMORY"
+
+    def circuit_state(self) -> str:
+        return "STATELESS"
+
     def save_run(self, summary: Mapping[str, Any]) -> PersistenceStatus:
         run_id = str(summary.get("run_id", ""))
         if run_id:
@@ -121,6 +127,20 @@ class SupabasePersistenceRepository:
             if self._last_status == "UNAVAILABLE" and self._clock() < self._circuit_open_until:
                 return "UNAVAILABLE"
             return self._last_status
+
+    def repository_type(self) -> str:
+        return "SUPABASE"
+
+    def circuit_state(self) -> str:
+        with self._lock:
+            now = self._clock()
+            if self._last_status != "UNAVAILABLE":
+                return "CLOSED"
+            if now < self._circuit_open_until:
+                return "OPEN"
+            if self._trial_in_progress:
+                return "HALF_OPEN"
+            return "HALF_OPEN"
 
     def maybe_can_attempt(self) -> bool:
         with self._lock:

@@ -10,6 +10,7 @@ def read_frontend(name: str) -> str:
 
 
 def test_heat_legend_and_metrics_only_news_copy_present() -> None:
+    html = read_frontend("index.html")
     js = read_frontend("app.js")
     assert "Signal heat — not risk" in js
     assert "News disabled in METRICS_ONLY." in js
@@ -17,6 +18,7 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "DEGRADED DATA" in js
     assert "DATA UNAVAILABLE" in js
     assert "Watchlist persistence:" in js
+    assert "Persistence:" in html
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -129,6 +131,34 @@ def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
     assert "/v1/watchlist" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
+
+
+def test_refresh_control_and_persistence_badge_are_visible() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    css = read_frontend("styles.css")
+    assert 'id="refreshButton"' in html
+    assert "Re-analyze" in html
+    assert 'id="lastRefreshed"' in html
+    assert "last refreshed" in html
+    assert 'id="persistenceStatusBadge"' in html
+    assert "refreshCurrentView" in js
+    assert "runSingleAnalysis" in js
+    assert "runBatchAnalysis" in js
+    assert "openWatchlistSymbol(currentWatchlistSymbol)" in js
+    assert "refreshCooldownMs = 15000" in js
+    assert "setAnalysisActive" in js
+    assert ".shell-status-bar" in css
+    assert ".status-badge" in css
+
+
+def test_dev_mode_disabled_ux_copy_is_present_without_secret_names() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert "Dev Mode is disabled in this deployment." in html
+    assert "Dev Mode is disabled in this deployment." in js
+    assert "updateDevModeUx" in js
+    assert "devModeStatus" in js
 
 
 def test_frontend_has_no_direct_supabase_reference() -> None:

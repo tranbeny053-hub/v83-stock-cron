@@ -59,7 +59,13 @@ def test_system_status_with_session() -> None:
         cookies={SESSION_COOKIE: login_response.cookies[SESSION_COOKIE]},
     )
     assert response.status_code == 200
-    assert response.json()["system"]["store_status"] == "STATELESS"
+    payload = response.json()
+    assert payload["system"]["store_status"] == "STATELESS"
+    assert payload["system"]["persistence_status"] == "STATELESS"
+    assert payload["system"]["repository_type"] == "IN_MEMORY"
+    assert payload["system"]["circuit_state"] == "STATELESS"
+    assert payload["system"]["dev_mode"] == {"enabled": True, "configured": True}
+    assert "test-signing-key" not in response.text
 
 
 def test_bad_login_does_not_set_session_cookie() -> None:

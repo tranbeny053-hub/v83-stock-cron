@@ -89,6 +89,8 @@ def test_interval_mapping_is_provider_specific() -> None:
     assert map_interval("1M", "binance") == "1M"
     assert map_interval("1H", "okx") == "1H"
     assert map_interval("4H", "okx") == "4H"
+    assert map_interval("1D", "okx") == "1Dutc"
+    assert map_interval("1W", "okx") == "1Wutc"
     assert map_interval("1M", "okx") == "1Mutc"
     with pytest.raises(ProviderError):
         map_interval("2H", "binance")

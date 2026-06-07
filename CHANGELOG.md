@@ -231,3 +231,21 @@ Notes:
 - No quant/scoring/probability/gates/news math changed.
 - No Binance/OKX provider logic, private exchange calls, live news fetching, or trading capability was added.
 - No deploy, merge, or Hugging Face push was performed.
+
+## 2026-06-07 - Wave 1.1 Stabilization Hotfix
+
+Changed:
+- Mapped OKX daily and weekly public candles to UTC intervals: `1Dutc` and `1Wutc`.
+- Changed cross-provider coherence to compare the latest common closed candle bucket instead of each provider's latest row.
+- Preserved the existing cross-provider tolerance while allowing explicit single public-provider live fallback when `UCPE_CROSS_PROVIDER_REQUIRED=false`.
+- Added provider-state details for cross-provider state, disagreement basis, fallback flag, and fallback reason.
+- Added a visible app-shell `Re-analyze` control with cooldown and last-refreshed timestamp.
+- Added app-shell persistence status visibility and surfaced persistence status in Detail/System status.
+- Clarified Dev Mode disabled/configuration UX without changing security semantics.
+- Added regression tests for 1D/1W alignment, open-candle exclusion, optional/required cross-provider conflict behavior, refresh/static UI hooks, persistence status, and Dev Mode disabled copy.
+
+Notes:
+- Cross-provider tolerance was not loosened.
+- Live mode still never falls back to fixture data.
+- No quant/scoring/probability/gates/news math, private provider endpoints, secrets, deployment logic, or trading capability changed.
+- No deploy, merge, or Hugging Face push was performed.

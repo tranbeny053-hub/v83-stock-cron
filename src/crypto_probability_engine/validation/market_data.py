@@ -130,13 +130,66 @@ def assert_snapshots_coherent(
     *,
     tolerance_bps: float = DEFAULT_PHASE1A.price_disagreement_bps,
 ) -> None:
-    left_price = left.candles[-1].close
-    right_price = right.candles[-1].close
+    report = snapshot_coherence_report(left, right, tolerance_bps=tolerance_bps)
+    if report["status"] != "OK":
+        raise DataValidationError(ErrorCode.DATA_CONFLICT, report["reason"])
+
+
+def snapshot_coherence_report(
+    left: MarketSnapshot,
+    right: MarketSnapshot,
+    *,
+    tolerance_bps: float = DEFAULT_PHASE1A.price_disagreement_bps,
+) -> dict:
+    left_candle, right_candle = _latest_common_closed_candles(left, right)
+    left_price = left_candle.close
+    right_price = right_candle.close
     _ensure_finite(left_price, "left_price")
     _ensure_finite(right_price, "right_price")
     mid = (left_price + right_price) / 2.0
     if mid <= 0:
         raise DataValidationError(ErrorCode.DATA_CONFLICT, "Invalid comparison price.")
     disagreement_bps = abs(left_price - right_price) / mid * 10_000.0
-    if disagreement_bps > tolerance_bps:
-        raise DataValidationError(ErrorCode.DATA_CONFLICT, "Provider price conflict.")
+    status = "OK" if disagreement_bps <= tolerance_bps else "DATA_CONFLICT"
+    reason = "Providers are coherent." if status == "OK" else "Provider price conflict."
+    return {
+        "status": status,
+        "reason": reason,
+        "left_provider": left.provider,
+        "right_provider": right.provider,
+        "aligned_open_time_utc": _as_z(left_candle.open_time_utc),
+        "aligned_close_time_utc": _as_z(left_candle.close_time_utc),
+        "left_price": left_price,
+        "right_price": right_price,
+        "disagreement_bps": round(disagreement_bps, 6),
+        "tolerance_bps": tolerance_bps,
+    }
+
+
+def _latest_common_closed_candles(
+    left: MarketSnapshot,
+    right: MarketSnapshot,
+) -> tuple[MarketCandle, MarketCandle]:
+    closed_cutoff = min(left.as_of_utc, right.as_of_utc)
+    left_by_close = {
+        candle.close_time_utc: candle
+        for candle in left.candles
+        if candle.close_time_utc <= closed_cutoff
+    }
+    right_by_close = {
+        candle.close_time_utc: candle
+        for candle in right.candles
+        if candle.close_time_utc <= closed_cutoff
+    }
+    common_closes = sorted(set(left_by_close) & set(right_by_close))
+    if not common_closes:
+        raise DataValidationError(
+            ErrorCode.DATA_CONFLICT,
+            "No equivalent closed candle bucket for provider comparison.",
+        )
+    close_time = common_closes[-1]
+    return left_by_close[close_time], right_by_close[close_time]
+
+
+def _as_z(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")

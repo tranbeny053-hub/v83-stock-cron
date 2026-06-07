@@ -23,18 +23,29 @@ def runtime_health(settings: Settings) -> dict:
     }
 
 
-def system_status(settings: Settings) -> dict:
+def system_status(settings: Settings, *, persistence: dict | None = None) -> dict:
+    persistence_status = persistence or {
+        "persistence_status": "OK" if settings.external_store_configured else "STATELESS",
+        "repository_type": "SUPABASE" if settings.external_store_configured else "IN_MEMORY",
+        "circuit_state": "CLOSED" if settings.external_store_configured else "STATELESS",
+    }
     return {
         "runtime": runtime_health(settings),
         "system": {
             "binance_status": "TO_VERIFY",
             "okx_status": "TO_VERIFY",
             "store_status": "CONFIGURED" if settings.external_store_configured else "STATELESS",
+            "persistence_status": persistence_status["persistence_status"],
+            "repository_type": persistence_status["repository_type"],
+            "circuit_state": persistence_status["circuit_state"],
             "news_sources_status": "UNAVAILABLE",
             "last_calibration_utc": None,
             "shelter_mode": False,
             "kill_switch": False,
             "provider_mode": settings.provider_mode,
+            "dev_mode": {
+                "enabled": settings.dev_mode_enabled,
+                "configured": bool(settings.dev_mode_code_hash),
+            },
         },
     }
-

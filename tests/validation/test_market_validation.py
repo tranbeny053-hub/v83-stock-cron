@@ -11,6 +11,7 @@ from crypto_probability_engine.config.defaults import TIMEFRAME_SECONDS, min_his
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
     assert_snapshots_coherent,
+    snapshot_coherence_report,
     validate_candles,
     validate_market_snapshot,
     validate_order_book,
@@ -82,3 +83,40 @@ def test_provider_price_conflict() -> None:
             make_snapshot(provider="b", close_shift=10.0),
         )
     assert excinfo.value.code == ErrorCode.DATA_CONFLICT
+
+
+@pytest.mark.parametrize("timeframe", ["1D", "1W"])
+def test_daily_weekly_coherence_uses_equivalent_closed_bucket(timeframe: str) -> None:
+    report = snapshot_coherence_report(
+        make_snapshot(provider="binance", timeframe=timeframe),
+        make_snapshot(provider="okx", timeframe=timeframe),
+    )
+    assert report["status"] == "OK"
+    assert report["aligned_close_time_utc"]
+    assert report["disagreement_bps"] == 0.0
+
+
+def test_coherence_ignores_non_equivalent_open_candle() -> None:
+    left = make_snapshot(provider="binance", timeframe="1D")
+    right = make_snapshot(provider="okx", timeframe="1D")
+    candles = list(right.candles)
+    last = candles[-1]
+    unclosed = replace(
+        last,
+        open_time_utc=last.close_time_utc,
+        close_time_utc=last.close_time_utc + timedelta(days=1),
+        open=last.close,
+        high=last.close + 500.0,
+        low=last.close - 1.0,
+        close=last.close + 499.0,
+    )
+    right_with_open_candle = replace(right, candles=tuple(candles + [unclosed]))
+
+    report = snapshot_coherence_report(left, right_with_open_candle)
+
+    assert report["status"] == "OK"
+    assert report["right_price"] == last.close
+    assert report["aligned_close_time_utc"] == last.close_time_utc.isoformat().replace(
+        "+00:00",
+        "Z",
+    )

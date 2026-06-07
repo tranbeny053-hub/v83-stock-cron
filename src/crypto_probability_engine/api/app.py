@@ -104,7 +104,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/system_status")
     def get_system_status(_session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
-        return system_status(app_settings)
+        return system_status(
+            app_settings,
+            persistence=_persistence_diagnostic(app.state.persistence_repository),
+        )
 
     @app.post("/v1/auth/login")
     def login(body: LoginRequest, request: Request, response: Response) -> dict:
@@ -273,3 +276,25 @@ def _normalize_watchlist_symbol(raw_symbol: str) -> str:
         return normalize_symbol(raw_symbol).display
     except SymbolNormalizationError as exc:
         raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc
+
+
+def _persistence_diagnostic(repository) -> dict:
+    status = current_persistence_status(repository)
+    repository_type = _safe_repository_field(repository, "repository_type", "IN_MEMORY")
+    circuit_state = _safe_repository_field(repository, "circuit_state", "STATELESS")
+    return {
+        "persistence_status": status,
+        "repository_type": repository_type,
+        "circuit_state": circuit_state,
+    }
+
+
+def _safe_repository_field(repository, method_name: str, fallback: str) -> str:
+    method = getattr(repository, method_name, None)
+    if not callable(method):
+        return fallback
+    try:
+        value = method()
+    except Exception:
+        return fallback
+    return str(value)

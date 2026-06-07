@@ -34,11 +34,16 @@ class FakeAdapter:
         return self.snapshot
 
 
-def live_settings(*, priority: tuple[str, ...] = ("binance", "okx")) -> Settings:
+def live_settings(
+    *,
+    priority: tuple[str, ...] = ("binance", "okx"),
+    cross_provider_required: bool = False,
+) -> Settings:
     return Settings(
         data_mode="live",
         provider_priority=priority,
         candle_cache_ttl_seconds=0,
+        cross_provider_required=cross_provider_required,
     )
 
 
@@ -58,6 +63,8 @@ def test_both_providers_ok_returns_cross_provider_live() -> None:
     assert result.data_quality["data_source"] == "CROSS_PROVIDER"
     assert result.data_quality["is_live_data"] is True
     assert result.provider_state["active_provider"] == "cross_provider"
+    assert result.provider_state["cross_provider_state"] == "COHERENT"
+    assert result.provider_state["fallback_to_single_provider"] is False
 
 
 def test_single_provider_ok_returns_live_with_warning() -> None:
@@ -96,13 +103,36 @@ def test_both_providers_fail_returns_unavailable_without_fixture() -> None:
     assert "FIXTURE_DEMO" not in str(excinfo.value.data_quality)
 
 
-def test_provider_disagreement_fails_closed_as_data_conflict() -> None:
+def test_provider_disagreement_uses_single_live_provider_when_optional() -> None:
+    symbol = normalize_symbol("BTC")
+    result = select_market_data(
+        symbol,
+        "4H",
+        settings=live_settings(cross_provider_required=False),
+        providers=[
+            FakeAdapter("binance", make_snapshot(provider="binance")),
+            FakeAdapter("okx", make_snapshot(provider="okx", close_shift=10.0)),
+        ],
+    )
+
+    assert result.snapshot.provider == "binance"
+    assert result.data_quality["data_source"] == "BINANCE_PUBLIC"
+    assert result.data_quality["is_live_data"] is True
+    assert result.data_quality["cross_provider_state"] == "DATA_CONFLICT"
+    assert result.data_quality["fallback_to_single_provider"] is True
+    assert result.provider_state["status"] == "DEGRADED"
+    assert result.provider_state["active_provider"] == "binance"
+    assert result.provider_state["fallback_to_single_provider"] is True
+    assert "cross-provider confirmation is optional" in result.data_quality["warnings"][0]
+
+
+def test_provider_disagreement_blocks_when_cross_provider_required() -> None:
     symbol = normalize_symbol("BTC")
     with pytest.raises(ProviderSelectionError) as excinfo:
         select_market_data(
             symbol,
             "4H",
-            settings=live_settings(),
+            settings=live_settings(cross_provider_required=True),
             providers=[
                 FakeAdapter("binance", make_snapshot(provider="binance")),
                 FakeAdapter("okx", make_snapshot(provider="okx", close_shift=10.0)),
@@ -112,6 +142,7 @@ def test_provider_disagreement_fails_closed_as_data_conflict() -> None:
     assert excinfo.value.code.value == "DATA_CONFLICT"
     assert excinfo.value.data_quality["data_source"] == "DEGRADED"
     assert excinfo.value.data_quality["is_live_data"] is False
+    assert excinfo.value.provider_state["fallback_to_single_provider"] is False
 
 
 def test_fixture_mode_is_explicit_and_marked_demo() -> None:
@@ -141,4 +172,3 @@ def test_live_cache_reuses_provider_snapshot_within_ttl() -> None:
 
     assert first.snapshot == second.snapshot
     assert adapter.calls == 1
-

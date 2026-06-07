@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Sprint 2 targeted fixes applied locally. Claude re-review is required before merge/deploy.
+Status: Wave 1.1 stabilization hotfix applied locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -96,7 +96,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `MIN_HISTORY_BARS_BY_TIMEFRAME["1M"] = 24`; sub-monthly global minimum remains `200`.
 - [x] Binance monthly mapping is `1M`.
 - [x] OKX monthly mapping is `1Mutc` for UTC-aligned monthly candles.
-- [x] Existing OKX 1D/1W HK alignment mismatch is documented as future/out-of-scope.
+- [x] OKX daily/weekly mappings are UTC-aligned as `1Dutc` and `1Wutc` after Wave 1.1.
 - [x] Single Analysis uses six always-visible timeframe cards instead of a primary timeframe dropdown.
 - [x] Batch timeframe dropdown includes `1M`.
 - [x] Frontend card heat label remains `Signal heat — not risk`.
@@ -108,7 +108,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 
 ## Wave 1 Persistence / Watchlist Gate
 
-- [x] `psycopg[binary]>=3,<4` is pinned in `requirements.txt`.
+- [x] `psycopg[binary,pool]>=3,<4` is pinned in `requirements.txt`.
 - [x] Supabase settings are backend-only and repr/log safe.
 - [x] `migrations/0001_init.sql` is idempotent and contains no destructive table changes.
 - [x] `scripts/apply_migrations.py` requires `SUPABASE_DB_URL` and does not print the database URL.
@@ -124,6 +124,20 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Supabase repository has a cooldown circuit breaker and small connection pool.
 - [x] Failure-path tests prove analysis returns 200 under persistence failure.
 - [ ] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy.
+
+## Wave 1.1 Stabilization Gate
+
+- [x] Daily/weekly OKX public candle mappings use UTC variants: `1Dutc`, `1Wutc`.
+- [x] Cross-provider comparison uses the latest common closed candle bucket.
+- [x] Currently forming/non-equivalent candles are ignored in cross-provider disagreement comparison.
+- [x] `UCPE_CROSS_PROVIDER_REQUIRED=false` allows explicit single public-provider live fallback with provider-state warning.
+- [x] `UCPE_CROSS_PROVIDER_REQUIRED=true` still blocks provider disagreement with `DATA_CONFLICT`.
+- [x] Global `Re-analyze` control exists with active-run disable state and cooldown.
+- [x] Single, Watchlist Symbol View, and Batch refresh reuse existing backend analyze paths.
+- [x] Persistence status is visible in the shell, Watchlist, Detail, and system status.
+- [x] Dev Mode disabled deployments show clear copy and disabled re-auth controls.
+- [x] No provider-private endpoint, secret, scoring/gate/probability/news, deployment, or trading capability change.
+- [ ] Manual deployed UI smoke completed after merge/deploy.
 
 ## Hugging Face Variables and Secrets Required
 

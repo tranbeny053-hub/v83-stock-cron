@@ -49,7 +49,20 @@ Status: `SAFE_TO_IMPLEMENT` from Claude Sprint 3 plan; R2 because it touches dat
 | Monthly min history | `MIN_HISTORY_BARS_BY_TIMEFRAME["1M"] = 24` | SPRINT3_APPROVED | Global `min_history_bars = 200` remains unchanged for sub-monthly timeframes. |
 | Binance monthly mapping | `1M -> 1M` | SPRINT3_APPROVED | Public spot kline monthly interval. |
 | OKX monthly mapping | `1M -> 1Mutc` | SPRINT3_APPROVED | UTC-aligned monthly candles reduce provider boundary mismatch for monthly analysis. |
-| Existing OKX 1D/1W alignment mismatch | Future item | DEFERRED | Pre-existing HK alignment mismatch remains out of scope for Sprint 3. |
+| OKX daily/weekly mapping | `1D -> 1Dutc`; `1W -> 1Wutc` | WAVE1_1_HOTFIX | UTC-aligned daily/weekly candles reduce Binance/OKX boundary mismatch without changing scoring, gates, probability, or provider auth behavior. |
+
+## Wave 1.1 Stabilization Decisions
+
+Status: Wave 1.1 hotfix only. It does not change Market Data v2, News Authority, calibration, scoring, probability, gates, news math, private provider endpoints, or deployment.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Cross-provider comparison bucket | Latest common closed candle by close time | WAVE1_1_HOTFIX | Avoids comparing non-equivalent open/closed provider candles, especially daily/weekly boundaries. |
+| Optional cross-provider conflict handling | Explicit single public-provider live fallback when `UCPE_CROSS_PROVIDER_REQUIRED=false` | WAVE1_1_HOTFIX | No fixture fallback. Provider state records `cross_provider_state`, `fallback_to_single_provider`, `disagreement_bps`, and reason. |
+| Required cross-provider conflict handling | Block with `DATA_CONFLICT` when `UCPE_CROSS_PROVIDER_REQUIRED=true` | WAVE1_1_HOTFIX | Existing tolerance remains unchanged. |
+| App refresh control | Global `Re-analyze` button with cooldown | WAVE1_1_HOTFIX | Reuses existing analyze paths; frontend recomputes no score/probability/gate/news values. |
+| Persistence visibility | Shell badge plus watchlist/detail/system status | WAVE1_1_HOTFIX | Shows `STATELESS`, `OK`, or `UNAVAILABLE`; no DB URL, host, username, password, or Supabase key. |
+| Dev Mode disabled UX | Show clear disabled copy and disable re-auth controls | WAVE1_1_HOTFIX | Security semantics unchanged. |
 
 ## Wave 1 Persistence Decisions
 

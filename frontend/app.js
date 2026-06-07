@@ -4,11 +4,21 @@ const workspace = document.querySelector("#workspace");
 const overviewTemplate = document.querySelector("#overviewTemplate");
 const singleResult = document.querySelector("#singleResult");
 const detailPanel = document.querySelector("#detailPanel");
+const refreshButton = document.querySelector("#refreshButton");
+const lastRefreshed = document.querySelector("#lastRefreshed");
+const persistenceStatusBadge = document.querySelector("#persistenceStatusBadge");
+const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const singlePayloads = new Map();
 const watchlistPayloads = new Map();
+const refreshCooldownMs = 15000;
+let refreshReadyAt = 0;
+let refreshTimer = null;
+let analysisActive = false;
+let lastBatchRequest = null;
+let currentWatchlistSymbol = null;
 const scoreHeatBands = [
   {
     min: 86,
@@ -31,10 +41,75 @@ async function api(path, options = {}) {
     ...options,
   });
   const payload = await response.json();
+  if (response.ok) {
+    updateStatusFromPayload(payload);
+  }
   if (!response.ok) {
     throw new Error(payload?.detail?.error?.message || "Request failed");
   }
   return payload;
+}
+
+function updateStatusFromPayload(payload = {}) {
+  const status =
+    payload.persistence_status ||
+    payload.debug?.persistence_status ||
+    payload.detail_view?.debug_lite?.persistence_status ||
+    payload.system?.persistence_status;
+  if (status) {
+    updatePersistenceStatus(status);
+  }
+  if (payload.system?.dev_mode) {
+    updateDevModeUx(payload.system.dev_mode);
+  }
+}
+
+function updatePersistenceStatus(status) {
+  const safeStatus = status || "UNKNOWN";
+  persistenceStatusBadge.textContent = `Persistence: ${safeStatus}`;
+  persistenceStatusBadge.dataset.persistenceStatus = safeStatus;
+  persistenceStatusBadge.classList.remove("status-ok", "status-warn", "status-unknown");
+  if (safeStatus === "OK") {
+    persistenceStatusBadge.classList.add("status-ok");
+  } else if (safeStatus === "STATELESS" || safeStatus === "UNAVAILABLE") {
+    persistenceStatusBadge.classList.add("status-warn");
+  } else {
+    persistenceStatusBadge.classList.add("status-unknown");
+  }
+}
+
+function updateDevModeUx(devMode = {}) {
+  const enabled = devMode.enabled === true;
+  const configured = devMode.configured === true;
+  const codeInput = document.querySelector("#devCode");
+  const submitButton = document.querySelector("#devForm button[type='submit']");
+  const loadRunsButton = document.querySelector("#loadRuns");
+  if (!enabled) {
+    devModeStatus.textContent = "Dev Mode is disabled in this deployment.";
+    codeInput.disabled = true;
+    submitButton.disabled = true;
+    loadRunsButton.disabled = true;
+    return;
+  }
+  if (!configured) {
+    devModeStatus.textContent = "Dev Mode is enabled, but no Dev Mode code is configured.";
+    codeInput.disabled = true;
+    submitButton.disabled = true;
+    loadRunsButton.disabled = true;
+    return;
+  }
+  devModeStatus.textContent = "Dev Mode is available. Re-auth to load debug tools.";
+  codeInput.disabled = false;
+  submitButton.disabled = false;
+  loadRunsButton.disabled = false;
+}
+
+async function loadSystemStatus() {
+  try {
+    await api("/v1/system_status");
+  } catch {
+    updatePersistenceStatus("UNKNOWN");
+  }
 }
 
 function showPanel(name) {
@@ -52,6 +127,41 @@ function showPanel(name) {
 
 function setLoading(id, active) {
   document.querySelector(id).classList.toggle("hidden", !active);
+}
+
+function setAnalysisActive(active) {
+  analysisActive = active;
+  updateRefreshButton();
+}
+
+function updateRefreshButton() {
+  const now = Date.now();
+  const cooldownActive = now < refreshReadyAt;
+  refreshButton.disabled = analysisActive || cooldownActive || workspace.classList.contains("hidden");
+  if (analysisActive) {
+    refreshButton.textContent = "Re-analyzing...";
+  } else if (cooldownActive) {
+    refreshButton.textContent = `Re-analyze (${Math.ceil((refreshReadyAt - now) / 1000)}s)`;
+  } else {
+    refreshButton.textContent = "Re-analyze";
+  }
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+  if (cooldownActive) {
+    refreshTimer = setTimeout(updateRefreshButton, 1000);
+  }
+}
+
+function markRefreshed() {
+  lastRefreshed.textContent = `last refreshed at ${new Date().toLocaleTimeString()}`;
+  refreshReadyAt = Date.now() + refreshCooldownMs;
+  updateRefreshButton();
+}
+
+function activeTabName() {
+  return document.querySelector(".tab.active")?.dataset.tab || "single";
 }
 
 function dataBannerText(display = {}) {
@@ -232,25 +342,31 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
   payloadStore.clear();
   renderTimeframePlaceholders(target);
   setLoading(loadingSelector, true);
-  const requests = singleTimeframes.map(async (timeframe) => {
-    try {
-      const payload = await api("/v1/analyze", {
-        method: "POST",
-        body: JSON.stringify({
-          symbol,
-          analysis_mode: analysisMode,
-          timeframe,
-        }),
-      });
-      payloadStore.set(timeframe, payload);
-      payloadStore.set(payload.run_id, payload);
-      replaceTimeframeCard(target, timeframe, overviewCard(payload));
-    } catch (error) {
-      replaceTimeframeCard(target, timeframe, errorCard(timeframe, error));
-    }
-  });
-  await Promise.allSettled(requests);
-  setLoading(loadingSelector, false);
+  setAnalysisActive(true);
+  try {
+    const requests = singleTimeframes.map(async (timeframe) => {
+      try {
+        const payload = await api("/v1/analyze", {
+          method: "POST",
+          body: JSON.stringify({
+            symbol,
+            analysis_mode: analysisMode,
+            timeframe,
+          }),
+        });
+        payloadStore.set(timeframe, payload);
+        payloadStore.set(payload.run_id, payload);
+        replaceTimeframeCard(target, timeframe, overviewCard(payload));
+      } catch (error) {
+        replaceTimeframeCard(target, timeframe, errorCard(timeframe, error));
+      }
+    });
+    await Promise.allSettled(requests);
+    markRefreshed();
+  } finally {
+    setAnalysisActive(false);
+    setLoading(loadingSelector, false);
+  }
 }
 
 async function runSingleAnalysis(form) {
@@ -380,6 +496,7 @@ function renderStructuredDetail(payload, detailView) {
         ["Run ID", payload.run_id],
         ["Data source", display.data_source],
         ["Live data", display.is_live_data],
+        ["Persistence", payload.debug?.persistence_status || details.debug_lite?.persistence_status],
       ]),
     ]),
     section("Probability", [
@@ -412,7 +529,10 @@ function renderStructuredDetail(payload, detailView) {
       keyValueTable([
         ["Active provider", providerState.active_provider],
         ["Status", providerState.status],
-        ["Cross-provider state", display.data_source],
+        ["Cross-provider state", providerState.cross_provider_state],
+        ["Fallback to single provider", providerState.fallback_to_single_provider],
+        ["Disagreement bps", providerState.disagreement_bps],
+        ["Reason", providerState.cross_provider_reason],
       ]),
       objectTable(providerState.providers),
     ]),
@@ -443,6 +563,8 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
   loginPanel.classList.add("hidden");
   workspace.classList.remove("hidden");
   sessionStatus.textContent = "Ready";
+  updateRefreshButton();
+  await loadSystemStatus();
 });
 
 for (const button of document.querySelectorAll(".tab")) {
@@ -454,30 +576,46 @@ document.querySelector("#singleForm").addEventListener("submit", async (event) =
   await runSingleAnalysis(new FormData(event.currentTarget));
 });
 
-document.querySelector("#batchForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
+function batchRequestFromForm(form) {
+  const symbols = String(form.get("symbols"))
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  return {
+    symbols,
+    analysisMode: form.get("analysis_mode"),
+    timeframe: form.get("timeframe"),
+  };
+}
+
+async function runBatchAnalysis(batchRequest) {
   hideDetail();
   setLoading("#batchLoading", true);
+  setAnalysisActive(true);
   try {
-    const form = new FormData(event.currentTarget);
-    const symbols = String(form.get("symbols"))
-      .split(/\s+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    const requests = symbols.map((symbol) => ({
+    lastBatchRequest = batchRequest;
+    const requests = batchRequest.symbols.map((symbol) => ({
       symbol,
-      analysis_mode: form.get("analysis_mode"),
-      timeframe: form.get("timeframe"),
+      analysis_mode: batchRequest.analysisMode,
+      timeframe: batchRequest.timeframe,
     }));
     const payload = await api("/v1/analyze_batch", {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
     renderResults(document.querySelector("#batchResult"), payload.results, payload.errors);
+    updateStatusFromPayload(payload.results?.[0] || {});
+    markRefreshed();
   } finally {
+    setAnalysisActive(false);
     setLoading("#batchLoading", false);
   }
+}
+
+document.querySelector("#batchForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await runBatchAnalysis(batchRequestFromForm(new FormData(event.currentTarget)));
 });
 
 function readLocalWatchlist() {
@@ -495,10 +633,11 @@ function writeLocalWatchlist(symbols) {
 
 function setWatchlistStatus(status) {
   const target = document.querySelector("#watchlistStatus");
+  updatePersistenceStatus(status);
   const browserFallback = status !== "OK";
   target.textContent = browserFallback
     ? `Watchlist persistence: ${status}. Browser fallback is active.`
-    : "Watchlist persistence: OK.";
+    : "Watchlist persistence: OK";
 }
 
 function renderWatchlist(symbols, status) {
@@ -542,7 +681,7 @@ async function loadWatchlist() {
     renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
   } catch (error) {
     renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
-    document.querySelector("#watchlistStatus").textContent = `Watchlist unavailable: ${error.message}`;
+    document.querySelector("#watchlistStatus").title = error.message || "Watchlist unavailable";
   }
 }
 
@@ -572,6 +711,7 @@ async function removeWatchlistSymbol(symbol) {
 }
 
 async function openWatchlistSymbol(symbol) {
+  currentWatchlistSymbol = symbol;
   hideDetail();
   document.querySelector("#watchlistList").classList.add("hidden");
   document.querySelector("#watchlistView").classList.remove("hidden");
@@ -600,14 +740,55 @@ document.querySelector("#backToWatchlist").addEventListener("click", () => {
   document.querySelector("#watchlistList").classList.remove("hidden");
 });
 
+async function refreshCurrentView() {
+  if (analysisActive || Date.now() < refreshReadyAt) {
+    updateRefreshButton();
+    return;
+  }
+  const tab = activeTabName();
+  if (tab === "single") {
+    await runSingleAnalysis(new FormData(document.querySelector("#singleForm")));
+    return;
+  }
+  if (tab === "watchlist") {
+    if (!document.querySelector("#watchlistView").classList.contains("hidden") && currentWatchlistSymbol) {
+      await openWatchlistSymbol(currentWatchlistSymbol);
+    } else {
+      await loadWatchlist();
+      markRefreshed();
+    }
+    return;
+  }
+  if (tab === "batch") {
+    const request = lastBatchRequest || batchRequestFromForm(new FormData(document.querySelector("#batchForm")));
+    await runBatchAnalysis(request);
+    return;
+  }
+  await loadSystemStatus();
+  markRefreshed();
+}
+
+refreshButton.addEventListener("click", async () => {
+  try {
+    await refreshCurrentView();
+  } catch (error) {
+    sessionStatus.textContent = error.message || "Refresh failed";
+  }
+});
+
 document.querySelector("#devForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
-  await api("/v1/auth/dev", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-  document.querySelector("#devResult").textContent = "Dev Mode ready.";
+  try {
+    await api("/v1/auth/dev", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+    document.querySelector("#devResult").textContent = "Dev Mode ready.";
+  } catch (error) {
+    document.querySelector("#devResult").textContent =
+      devModeStatus.textContent || error.message || "Dev Mode unavailable.";
+  }
 });
 
 document.querySelector("#loadRuns").addEventListener("click", async () => {
@@ -627,3 +808,6 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
 });
 
 renderTimeframePlaceholders(singleResult);
+updatePersistenceStatus("UNKNOWN");
+updateDevModeUx({ enabled: false, configured: false });
+updateRefreshButton();

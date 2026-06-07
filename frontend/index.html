@@ -33,6 +33,14 @@
           <button class="tab" data-tab="dev">Dev Mode</button>
         </nav>
 
+        <section class="shell-status-bar" aria-label="Refresh and persistence status">
+          <div class="status-stack">
+            <span class="status-badge status-unknown" id="persistenceStatusBadge">Persistence: UNKNOWN</span>
+            <span class="muted" id="lastRefreshed">last refreshed: never</span>
+          </div>
+          <button id="refreshButton" type="button" disabled>Re-analyze</button>
+        </section>
+
         <section class="panel" id="singlePanel">
           <form id="singleForm" class="analysis-form">
             <label>
@@ -125,6 +133,7 @@
         </section>
 
         <section class="panel hidden" id="devPanel">
+          <p class="muted dev-mode-status" id="devModeStatus">Dev Mode is disabled in this deployment.</p>
           <form id="devForm" class="control-row">
             <label for="devCode">Dev Mode code</label>
             <input id="devCode" name="code" type="password" autocomplete="current-password" />

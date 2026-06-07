@@ -25,7 +25,7 @@ from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import NormalizedSymbol
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
-    assert_snapshots_coherent,
+    snapshot_coherence_report,
     validate_market_snapshot,
 )
 
@@ -158,21 +158,67 @@ def _live_selection(
             successes.append(snapshot)
 
     if len(successes) >= 2:
+        coherence_reports: list[dict] = []
         try:
             for snapshot in successes[1:]:
-                assert_snapshots_coherent(successes[0], snapshot)
+                report = snapshot_coherence_report(successes[0], snapshot)
+                coherence_reports.append(report)
+                if report["status"] != "OK":
+                    raise DataValidationError(ErrorCode.DATA_CONFLICT, report["reason"])
         except DataValidationError as exc:
-            warning = f"{exc.code.value}: {exc}"
+            conflict_report = coherence_reports[-1] if coherence_reports else {}
+            warning = _coherence_warning(exc, conflict_report)
             for state in states.values():
                 state.warnings.append(warning)
             data_quality = _failed_data_quality("DEGRADED", warning, failures)
             data_quality["status"] = "DATA_CONFLICT"
-            raise ProviderSelectionError(
-                code=ErrorCode.DATA_CONFLICT,
-                message="Live public providers disagree beyond tolerance.",
-                provider_state=_public_provider_state(states, status="DATA_CONFLICT"),
-                data_quality=data_quality,
-            ) from exc
+            data_quality["cross_provider_state"] = "DATA_CONFLICT"
+            data_quality["fallback_to_single_provider"] = False
+            if conflict_report.get("disagreement_bps") is not None:
+                data_quality["disagreement_bps"] = conflict_report["disagreement_bps"]
+            if settings.cross_provider_required:
+                raise ProviderSelectionError(
+                    code=ErrorCode.DATA_CONFLICT,
+                    message="Live public providers disagree beyond tolerance.",
+                    provider_state=_public_provider_state(
+                        states,
+                        status="DATA_CONFLICT",
+                        cross_provider_state="DATA_CONFLICT",
+                        fallback_to_single_provider=False,
+                        cross_provider_reason=warning,
+                        disagreement_bps=conflict_report.get("disagreement_bps"),
+                        cross_provider_checks=coherence_reports,
+                    ),
+                    data_quality=data_quality,
+                ) from exc
+            snapshot = successes[0]
+            fallback_warning = (
+                f"{warning}; using {snapshot.provider} public live data because "
+                "cross-provider confirmation is optional."
+            )
+            states[snapshot.provider].warnings.append("fallback_to_single_provider: true")
+            return ProviderSelectionResult(
+                snapshot=snapshot,
+                provider_state=_public_provider_state(
+                    states,
+                    status="DEGRADED",
+                    active_provider=snapshot.provider,
+                    cross_provider_state="DATA_CONFLICT",
+                    fallback_to_single_provider=True,
+                    cross_provider_reason=fallback_warning,
+                    disagreement_bps=conflict_report.get("disagreement_bps"),
+                    cross_provider_checks=coherence_reports,
+                ),
+                data_quality=_success_data_quality(
+                    snapshot,
+                    data_source=DATA_SOURCE_BY_PROVIDER.get(snapshot.provider, "DEGRADED"),
+                    warnings=[fallback_warning],
+                    failures=failures,
+                    cross_provider_state="DATA_CONFLICT",
+                    fallback_to_single_provider=True,
+                    disagreement_bps=conflict_report.get("disagreement_bps"),
+                ),
+            )
         snapshot = successes[0]
         return ProviderSelectionResult(
             snapshot=snapshot,
@@ -180,12 +226,17 @@ def _live_selection(
                 states,
                 status="OK",
                 active_provider="cross_provider",
+                cross_provider_state="COHERENT",
+                fallback_to_single_provider=False,
+                cross_provider_checks=coherence_reports,
             ),
             data_quality=_success_data_quality(
                 snapshot,
                 data_source="CROSS_PROVIDER",
                 warnings=[],
                 failures=failures,
+                cross_provider_state="COHERENT",
+                fallback_to_single_provider=False,
             ),
         )
 
@@ -197,7 +248,13 @@ def _live_selection(
             raise ProviderSelectionError(
                 code=ErrorCode.PROVIDER_DEGRADED,
                 message=warning,
-                provider_state=_public_provider_state(states, status="PROVIDER_DEGRADED"),
+                provider_state=_public_provider_state(
+                    states,
+                    status="PROVIDER_DEGRADED",
+                    cross_provider_state="UNAVAILABLE",
+                    fallback_to_single_provider=False,
+                    cross_provider_reason=warning,
+                ),
                 data_quality=data_quality,
             )
         warning = "single-source, cross-check unavailable"
@@ -207,12 +264,17 @@ def _live_selection(
                 states,
                 status="OK",
                 active_provider=snapshot.provider,
+                cross_provider_state="UNAVAILABLE",
+                fallback_to_single_provider=True,
+                cross_provider_reason=warning,
             ),
             data_quality=_success_data_quality(
                 snapshot,
                 data_source=DATA_SOURCE_BY_PROVIDER.get(snapshot.provider, "DEGRADED"),
                 warnings=[warning],
                 failures=failures,
+                cross_provider_state="UNAVAILABLE",
+                fallback_to_single_provider=True,
             ),
         )
 
@@ -253,12 +315,26 @@ def _public_provider_state(
     *,
     status: str,
     active_provider: str | None = None,
+    cross_provider_state: str = "NOT_REQUIRED",
+    fallback_to_single_provider: bool = False,
+    cross_provider_reason: str | None = None,
+    disagreement_bps: float | None = None,
+    cross_provider_checks: list[dict] | None = None,
 ) -> dict:
-    return {
+    provider_state = {
         "status": status,
         "active_provider": active_provider,
+        "cross_provider_state": cross_provider_state,
+        "fallback_to_single_provider": fallback_to_single_provider,
         "providers": {name: state.to_public_dict() for name, state in sorted(states.items())},
     }
+    if cross_provider_reason:
+        provider_state["cross_provider_reason"] = cross_provider_reason
+    if disagreement_bps is not None:
+        provider_state["disagreement_bps"] = disagreement_bps
+    if cross_provider_checks is not None:
+        provider_state["cross_provider_checks"] = cross_provider_checks
+    return provider_state
 
 
 def _success_data_quality(
@@ -267,12 +343,15 @@ def _success_data_quality(
     data_source: str,
     warnings: list[str],
     failures: dict[str, str],
+    cross_provider_state: str = "NOT_REQUIRED",
+    fallback_to_single_provider: bool = False,
+    disagreement_bps: float | None = None,
 ) -> dict:
     latest_age = max(
         0,
         int((snapshot.as_of_utc - snapshot.candles[-1].close_time_utc).total_seconds()),
     )
-    return {
+    data_quality = {
         "status": "OK",
         "warnings": warnings,
         "freshness_budget": "DEFAULT_PHASE1A",
@@ -280,7 +359,21 @@ def _success_data_quality(
         "data_source": data_source,
         "latest_candle_age_seconds": latest_age,
         "provider_failures": failures,
+        "cross_provider_state": cross_provider_state,
+        "fallback_to_single_provider": fallback_to_single_provider,
     }
+    if disagreement_bps is not None:
+        data_quality["disagreement_bps"] = disagreement_bps
+    return data_quality
+
+
+def _coherence_warning(exc: DataValidationError, report: dict) -> str:
+    parts = [f"{exc.code.value}: {exc}"]
+    if report.get("disagreement_bps") is not None:
+        parts.append(f"disagreement_bps={report['disagreement_bps']}")
+    if report.get("aligned_close_time_utc"):
+        parts.append(f"aligned_close_time_utc={report['aligned_close_time_utc']}")
+    return "; ".join(parts)
 
 
 def _failed_data_quality(data_source: str, warning: str, failures: dict[str, str]) -> dict:
