@@ -23,7 +23,6 @@ def compute_tail_cvar(candles: tuple[MarketCandle, ...]) -> dict:
         "status": "OK",
         "tail_method": DEFAULT_PHASE1A.tail_method,
         "tail_confidence_frac": DEFAULT_PHASE1A.tail_confidence_frac,
-        "cvar_loss_frac": max(cvar, 0.0),
+        "cvar_loss": max(cvar, 0.0),
         "evt_status": DEFAULT_PHASE1A.evt_status,
     }
-

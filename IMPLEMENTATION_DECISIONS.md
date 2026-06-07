@@ -37,3 +37,34 @@ Additional `DEFAULT_PHASE1A` config values from the Sprint 1 plan:
 - Sprint 1 limitation: `H_primary` and `H_extended` share the same directional split, with only extended-horizon confidence scaled. Full horizon-specific modeling is Sprint 2.
 - Sprint 1 limitation: liquidity/tail/execution hard gating is deterministic guardrail coverage only. Full hard-gating depth for these areas is a Sprint 2 item.
 - Sprint 2 first task: wire live public Binance/OKX adapters plus real `data_quality`; keep fixture/demo labeling until live data is actually verified.
+
+## `_frac` Field Audit
+
+Decision: `_frac` suffix is reserved for values that are bounded to `[0,1]` before they are emitted. Signed ratios and unbounded magnitudes must not use `_frac`.
+
+| Field | Classification | Kept/Renamed | Reason | Test coverage |
+|---|---|---|---|---|
+| `p_up_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Probability mass; invariant-validated. | Probability invariant tests; recursive response `_frac` test. |
+| `p_down_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Probability mass; invariant-validated. | Probability invariant tests; recursive response `_frac` test. |
+| `p_timeout_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Probability mass; invariant-validated and timeout is non-directional. | Probability invariant tests; recursive response `_frac` test. |
+| `p_up_user_norm_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | User-normalized directional probability. | Schema/model validation; recursive response `_frac` test. |
+| `p_down_user_norm_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | User-normalized directional probability. | Schema/model validation; recursive response `_frac` test. |
+| `confidence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Displayed model confidence placeholder. | Schema/model validation; recursive response `_frac` test. |
+| `news_confidence_adj_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Sprint 2 remains no-op at `0.0`. | Schema/model validation; recursive response `_frac` test. |
+| `spread_frac` | COST_OR_SPREAD_FRACTION_BOUNDED_BY_CONSTRUCTION | Kept | Order-book spread is emitted only when within `[0,1]`; otherwise liquidity degrades and value is `null`. | Wide-spread degradation test; recursive response `_frac` test. |
+| `taker_fee_frac` | COST_OR_SPREAD_FRACTION_BOUNDED_BY_CONSTRUCTION | Kept | Configured fee fraction. | Recursive response `_frac` test. |
+| `maker_fee_frac` | COST_OR_SPREAD_FRACTION_BOUNDED_BY_CONSTRUCTION | Kept | Configured fee fraction. | Recursive response `_frac` test. |
+| `slippage_frac` | COST_OR_SPREAD_FRACTION_BOUNDED_BY_CONSTRUCTION | Kept | Derived only from bounded spread; invalid spread degrades before emission. | Wide-spread degradation test; recursive response `_frac` test. |
+| `round_trip_cost_frac` | COST_OR_SPREAD_FRACTION_BOUNDED_BY_CONSTRUCTION | Kept | Fee plus bounded slippage remains within `[0,1]`; invalid spread degrades. | Wide-spread degradation test; recursive response `_frac` test. |
+| `tail_confidence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | CVaR confidence level, not loss magnitude. | Quant tests; recursive response `_frac` test. |
+| `cvar_loss_frac` / `cvar_loss` | UNBOUNDED_MAGNITUDE | Renamed to `cvar_loss` | Historical log-loss magnitude can exceed `1.0`. | High-volatility fixture test; recursive response `_frac` test. |
+| `realized_vol_frac` / `realized_vol` | UNBOUNDED_MAGNITUDE | Renamed to `realized_vol` | Realized volatility magnitude can exceed `1.0`. | High-volatility fixture test; live smoke. |
+| `risk_pressure_frac` / `risk_pressure` | UNBOUNDED_MAGNITUDE | Renamed to `risk_pressure` | Weighted risk pressure can exceed `1.0`. | High-volatility fixture test; live smoke. |
+| `primary_return` | SIGNED_RATIO_OR_SIGNAL | Kept non-`_frac` | Signed return can be negative. | Down-market fixture test. |
+| `extended_return` | SIGNED_RATIO_OR_SIGNAL | Kept non-`_frac` | Signed return can be negative. | Down-market fixture test. |
+| `alpha_signal` | SIGNED_RATIO_OR_SIGNAL | Kept non-`_frac` | Signed signal can be negative. | Down-market fixture test. |
+| `net_signal` | SIGNED_RATIO_OR_SIGNAL | Kept non-`_frac` | Signed net signal can be negative. | Down-market fixture test. |
+| `directional_edge` | SIGNED_RATIO_OR_SIGNAL | Kept non-`_frac` | Up/down edge can be negative. | Down-market fixture test. |
+| `news_evidence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Sprint 2 news evidence is no-op at `0.0`. | News contract tests; recursive response `_frac` test. |
+| `news_influence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Sprint 2 news influence is no-op at `0.0`. | News contract/frontend no-recompute tests; recursive response `_frac` test. |
+| `influence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Placeholder feature influence values are no-op at `0.0`. | Recursive response `_frac` test. |

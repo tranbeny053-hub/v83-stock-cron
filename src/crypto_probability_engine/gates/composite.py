@@ -25,7 +25,7 @@ def _risk_viability_blocks(
             blocks.append("LIQUIDITY_NOT_VIABLE")
 
     tail = tail_risk_state or {}
-    if tail and float(tail.get("cvar_loss_frac") or 0.0) > DEFAULT_PHASE1A.tail_cvar_breach_frac:
+    if tail and float(tail.get("cvar_loss") or 0.0) > DEFAULT_PHASE1A.tail_cvar_breach_frac:
         blocks.append("TAIL_RISK_BREACH")
 
     execution = execution_state or {}

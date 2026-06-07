@@ -75,6 +75,36 @@ def make_downtrend_candles(
     return tuple(candles)
 
 
+def make_high_volatility_candles(
+    *,
+    count: int = 210,
+    timeframe_seconds: int = 14_400,
+    as_of_utc: datetime = FIXED_NOW,
+) -> tuple[MarketCandle, ...]:
+    candles: list[MarketCandle] = []
+    start = as_of_utc - timedelta(seconds=count * timeframe_seconds)
+    prices = (100.0, 850.0, 120.0, 760.0)
+    for idx in range(count):
+        open_time = start + timedelta(seconds=idx * timeframe_seconds)
+        close_time = open_time + timedelta(seconds=timeframe_seconds)
+        open_price = prices[idx % len(prices)]
+        close_price = prices[(idx + 1) % len(prices)]
+        high = max(open_price, close_price) + 15.0
+        low = max(1.0, min(open_price, close_price) - 15.0)
+        candles.append(
+            MarketCandle(
+                open_time_utc=open_time,
+                close_time_utc=close_time,
+                open=open_price,
+                high=high,
+                low=low,
+                close=close_price,
+                volume=3_000.0 + (idx % 7) * 100.0,
+            )
+        )
+    return tuple(candles)
+
+
 def make_order_book(*, bid: float = 120.0, ask: float = 120.5) -> OrderBookSnapshot:
     return OrderBookSnapshot(
         bids=(OrderBookLevel(price=bid, size=2.0),),
@@ -97,6 +127,25 @@ def make_downtrend_snapshot(
         timeframe=timeframe,
         candles=candles,
         order_book=make_order_book(bid=last_close - 0.25, ask=last_close + 0.25),
+        as_of_utc=FIXED_NOW,
+        source_status=ProviderStatus.OK,
+    )
+
+
+def make_high_volatility_snapshot(
+    *,
+    provider: str = "fixture",
+    symbol: str = "BTC/USDT",
+    timeframe: str = "4H",
+) -> MarketSnapshot:
+    candles = make_high_volatility_candles()
+    last_close = candles[-1].close
+    return MarketSnapshot(
+        provider=provider,
+        normalized_symbol=symbol,
+        timeframe=timeframe,
+        candles=candles,
+        order_book=make_order_book(bid=last_close - 0.5, ask=last_close + 0.5),
         as_of_utc=FIXED_NOW,
         source_status=ProviderStatus.OK,
     )

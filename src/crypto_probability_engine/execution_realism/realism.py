@@ -11,6 +11,10 @@ def compute_execution_realism(liquidity_state: dict) -> dict:
         slippage_frac = 0.0
         status = "DEGRADED"
         warnings = ["Depth-aware slippage unavailable without order book."]
+    elif not 0.0 <= float(spread_frac) <= 1.0:
+        slippage_frac = 0.0
+        status = "DEGRADED"
+        warnings = ["Depth-aware slippage unavailable because spread is not bounded."]
     else:
         slippage_frac = max(float(spread_frac) / 2.0, 0.0)
         status = "OK"
@@ -26,4 +30,3 @@ def compute_execution_realism(liquidity_state: dict) -> dict:
         "net_of_cost_binding": True,
         "warnings": warnings,
     }
-

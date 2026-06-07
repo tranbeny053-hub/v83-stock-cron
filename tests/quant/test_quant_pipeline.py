@@ -7,7 +7,13 @@ from crypto_probability_engine.gates.composite import apply_composite_gates
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline
 from crypto_probability_engine.quant.tail_cvar import compute_tail_cvar
 from crypto_probability_engine.score_stack.score import ALLOWED_DISPOSITIONS, compute_score_stack
-from tests.fixtures.market_data import make_candles, make_downtrend_snapshot, make_snapshot
+from tests.fixtures.market_data import (
+    make_candles,
+    make_downtrend_snapshot,
+    make_high_volatility_snapshot,
+    make_order_book,
+    make_snapshot,
+)
 
 
 def test_probability_invariant_for_pipeline() -> None:
@@ -33,6 +39,21 @@ def test_down_market_fixture_allows_negative_signed_fields() -> None:
     assert not any(key.endswith("_return_frac") for key in trend)
     assert not any(key.endswith("_signal_frac") for key in risk)
     assert "directional_edge" + "_frac" not in score
+    horizon = result["probability_state"]["horizons"]["H_primary"]
+    assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
+
+
+def test_high_volatility_fixture_allows_unbounded_magnitudes_without_frac_suffix() -> None:
+    result = run_quant_pipeline(make_high_volatility_snapshot(), {"status": "OK"})
+    volatility = result["market_features"]["volatility"]
+    risk = result["risk_arbiter_state"]
+    tail = result["tail_risk_state"]
+    assert volatility["realized_vol"] > 1.0
+    assert risk["risk_pressure"] > 1.0
+    assert tail["cvar_loss"] > 1.0
+    serialized = str(result)
+    for old_name in ("realized_vol", "risk_pressure", "cvar_loss"):
+        assert old_name + "_frac" not in serialized
     horizon = result["probability_state"]["horizons"]["H_primary"]
     assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
 
@@ -63,7 +84,7 @@ def test_score_disposition_is_blueprint_allowed() -> None:
             }
         }
     }
-    score = compute_score_stack(probability, {"risk_pressure_frac": 0.0})
+    score = compute_score_stack(probability, {"risk_pressure": 0.0})
     assert score["disposition"] in ALLOWED_DISPOSITIONS
     assert score["disposition"] == "ELEVATED_RISK_AVOID"
 
@@ -82,7 +103,7 @@ def test_tail_cvar_baseline_is_historical_and_evt_disabled() -> None:
     state = compute_tail_cvar(make_candles())
     assert state["tail_method"] == "HISTORICAL_CVAR"
     assert state["evt_status"] == "DISABLED_PHASE1A"
-    assert state["cvar_loss_frac"] >= 0.0
+    assert state["cvar_loss"] >= 0.0
 
 
 def test_epistemic_void_aborts_pipeline() -> None:
@@ -146,9 +167,27 @@ def test_high_tail_forces_non_constructive() -> None:
         provider_state={"status": "OK"},
         score_state={"disposition": "CONSTRUCTIVE_CAUTIOUS", "total_score": 99},
         liquidity_state={"status": "OK", "spread_frac": 0.001, "top_depth_quote": 10_000.0},
-        tail_risk_state={"status": "OK", "cvar_loss_frac": 0.99},
+        tail_risk_state={"status": "OK", "cvar_loss": 0.99},
         execution_state={"status": "OK", "round_trip_cost_frac": 0.001},
     )
     assert gate["action"] == "NO_TRADE"
     assert gate["forced_score_disposition"] == "ELEVATED_RISK_AVOID"
     assert gate["action"] not in {"CONSTRUCTIVE", "CONSTRUCTIVE_CAUTIOUS"}
+
+
+def test_wide_spread_degrades_before_fraction_sentinel_violation() -> None:
+    snapshot = make_snapshot()
+    wide_book_snapshot = MarketSnapshot(
+        provider=snapshot.provider,
+        normalized_symbol=snapshot.normalized_symbol,
+        timeframe=snapshot.timeframe,
+        candles=snapshot.candles,
+        order_book=make_order_book(bid=1.0, ask=100.0),
+        as_of_utc=snapshot.as_of_utc,
+        source_status=snapshot.source_status,
+    )
+    result = run_quant_pipeline(wide_book_snapshot, {"status": "OK"})
+    assert result["liquidity_state"]["status"] == "DEGRADED"
+    assert result["liquidity_state"]["spread_frac"] is None
+    assert result["execution_realism"]["round_trip_cost_frac"] <= 1.0
+    assert result["gate_result"]["action"] == "NO_TRADE"

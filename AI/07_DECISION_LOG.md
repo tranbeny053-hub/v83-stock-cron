@@ -85,3 +85,11 @@ Decision: Apply Claude `APPROVE_WITH_TARGETED_FIXES` without redesigning Sprint 
 Rationale: Real live data can produce negative signed ratios; `_frac` is reserved for bounded `[0,1]` values and is enforced by sentinel validation. Non-coder deployment also needed a safe hash-generation path.
 
 Impact: Live smoke now passes for BTC and ETH in both modes with schema-valid `CROSS_PROVIDER` payloads. No quant math, provider architecture, trading capability, private provider call, live news fetch, merge, or deploy was added.
+
+## 2026-06-07 - Sprint 2 Final `_frac` Defect-Class Fix
+
+Decision: Close the remaining unbounded `_frac` defect class by renaming `realized_vol_frac` to `realized_vol`, `risk_pressure_frac` to `risk_pressure`, and `cvar_loss_frac` to `cvar_loss`; keep the strict `_frac` sentinel unchanged.
+
+Rationale: Realized volatility, risk pressure, and historical CVaR loss are unbounded magnitudes and can exceed `1.0` during volatile markets. The `_frac` suffix must only identify values that are guaranteed within `[0,1]`.
+
+Impact: High-volatility offline responses and volatile-symbol live smoke validate without sentinel failures. Remaining emitted `_frac` fields are recursively tested as numeric `[0,1]` values. No trading capability, private exchange calls, live news fetching, merge, or deploy was added.

@@ -6,7 +6,7 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 
 
 def compute_timeout_probability(volatility_state: dict, liquidity_state: dict) -> float:
-    vol = float(volatility_state.get("realized_vol_frac") or 0.0)
+    vol = float(volatility_state.get("realized_vol") or 0.0)
     spread = float(liquidity_state.get("spread_frac") or 0.0)
     raw = (
         DEFAULT_PHASE1A.timeout_base_frac

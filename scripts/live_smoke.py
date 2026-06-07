@@ -36,8 +36,9 @@ def main() -> int:
         print(f"FAIL: login failed with HTTP {login.status_code}")
         return 1
 
+    symbols = _smoke_symbols()
     summaries: list[str] = []
-    for symbol in SMOKE_SYMBOLS:
+    for symbol in symbols:
         for mode in SMOKE_MODES:
             payload = _analyze(client, symbol, mode)
             if payload is None:
@@ -75,7 +76,31 @@ def _analyze(client: TestClient, symbol: str, mode: str) -> dict | None:
     if payload["data_quality"]["is_live_data"] is not True:
         print(f"FAIL: {symbol} {mode} did not report is_live_data=true.")
         return None
+    for path, value in _iter_frac_fields(payload):
+        if not isinstance(value, int | float) or not 0.0 <= float(value) <= 1.0:
+            print(f"FAIL: {symbol} {mode} emitted invalid fraction at {path}.")
+            return None
     return payload
+
+
+def _smoke_symbols() -> tuple[str, ...]:
+    raw = os.environ.get("UCPE_LIVE_SMOKE_SYMBOLS")
+    if not raw:
+        return SMOKE_SYMBOLS
+    symbols = tuple(item.strip() for item in raw.split(",") if item.strip())
+    return symbols or SMOKE_SYMBOLS
+
+
+def _iter_frac_fields(value, path: str = "payload"):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            item_path = f"{path}.{key}"
+            if key.endswith("_frac"):
+                yield item_path, item
+            yield from _iter_frac_fields(item, item_path)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _iter_frac_fields(item, f"{path}[{index}]")
 
 
 if __name__ == "__main__":

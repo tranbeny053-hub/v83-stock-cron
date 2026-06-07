@@ -11,25 +11,27 @@ Updated: 2026-06-07
 
 ## Current Phase
 
-- Phase: Sprint 2 targeted fix pass after Claude review.
-- Claude verdict being addressed: `APPROVE_WITH_TARGETED_FIXES`.
-- Current status: FIX-S2-1 through FIX-S2-4 applied; verification pass is complete; commit and Claude re-review next.
+- Phase: Sprint 2 final targeted fix pass.
+- Claude verdict being addressed: latest `APPROVE_WITH_TARGETED_FIXES`.
+- Current status: FIX-S2-5 applied; offline checks and volatile-symbol live smoke pass; commit next.
 
-## Targeted Fixes Applied
+## Targeted Fix Applied
 
-- FIX-S2-1: renamed signed fields so negative live returns/signals are not rejected by `_frac` sentinel validation:
-  - `primary_return`, `extended_return`, `alpha_signal`, `net_signal`, `directional_edge`
-  - Values/math unchanged.
-- FIX-S2-2: added down-market candles/snapshot fixture plus pipeline and `/v1/analyze` coverage for negative signed fields, schema validation, and probability invariant.
-- FIX-S2-3: added `scripts/make_access_hash.py` for PBKDF2-HMAC-SHA256 access-code hash generation using local `UCPE_ACCESS_CODE_SALT`; docs now include non-coder deployment steps.
-- FIX-S2-4: Binance/OKX adapters now request `min_history_bars + 5` candles, capped at Binance 1000 and OKX 300, before dropping in-progress/unconfirmed rows.
+- FIX-S2-5: systematic `_frac` defect-class closure.
+- Renamed unbounded magnitude fields:
+  - `realized_vol_frac` -> `realized_vol`
+  - `risk_pressure_frac` -> `risk_pressure`
+  - `cvar_loss_frac` -> `cvar_loss`
+- Kept strict `_frac` sentinel validation unchanged.
+- Added high-volatility fixture and full-response recursive `_frac` bounds test.
+- Kept `spread_frac`, `slippage_frac`, and `round_trip_cost_frac` only with bounded emission; invalid wide spread degrades before unsafe fraction output.
 
 ## What Exists Now
 
 - Sprint 2 live public Binance/OKX market-data wiring remains in place.
-- Unit tests remain offline with socket guard.
-- Fixture mode remains explicit only through `UCPE_DATA_MODE=fixture`.
 - Live mode still does not silently substitute fixture data on failure.
+- Fixture mode remains explicit only through `UCPE_DATA_MODE=fixture`.
+- Unit tests remain offline with socket guard.
 - Frontend data honesty remains backend-driven through `is_live_data` and `data_source`.
 - No Binance/OKX API keys are required.
 - No trading/order/withdraw/transfer/leverage/autonomous capability exists.
@@ -38,26 +40,28 @@ Updated: 2026-06-07
 ## Checks Run / Attempted
 
 - `git branch --show-current`: PASS, `codex/sprint2-live-market-data`.
-- `git status --short --untracked-files=all -- .`: PASS before edits, clean; after edits, only targeted in-project files changed/untracked.
+- `git status --short --untracked-files=all -- .`: PASS before edits, clean.
 - `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/quant/test_quant_pipeline.py tests/api/test_analysis_live_data_wiring.py tests/scripts/test_make_access_hash.py -q`: PASS, 17 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 80 passed, 3 warnings.
-- `ruff check src tests scripts`: initially FAIL on two line-length issues in new/edited scripts; PASS after wrapping.
+- Required read-first docs/code scan: PASS.
+- `PYTHONPATH=src python3 -m pytest tests/quant/test_quant_pipeline.py tests/api/test_analysis_live_data_wiring.py -q`: PASS, 18 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 83 passed, 3 warnings.
+- `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `grep -R "primary_return_frac\|extended_return_frac\|alpha_signal_frac\|net_signal_frac\|directional_edge_frac" src schemas tests || true`: PASS, no output.
-- `grep -R "_frac" src/crypto_probability_engine schemas tests`: REVIEWED; remaining `_frac` fields are bounded fraction/probability/confidence/cost/risk fields.
+- `grep -R "realized_vol_frac\|risk_pressure_frac" src schemas tests || true`: PASS, no output.
+- `grep -R "_frac" src/crypto_probability_engine schemas tests`: REVIEWED; remaining emitted `_frac` fields are true `[0,1]` fractions with tests.
+- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`: PASS, no output.
+- `grep -R "apiKey\|api_key\|secretKey\|private endpoint\|signed endpoint" src/crypto_probability_engine/adapters tests || true`: PASS, no output.
 - `grep -R "hashlib.sha256" src scripts tests || true`: PASS_WITH_NOTE; hits are analysis hash and session HMAC signing, not access-code hashing.
-- `grep -R "APP_ACCESS_CODE_HASH\|DEV_MODE_CODE_HASH\|UCPE_ACCESS_CODE_SALT\|SESSION_SIGNING_KEY" README.md DEPLOYMENT_CHECKLIST.md RELEASE_GATE.md AI || true`: PASS, deployment docs mention required HF secrets.
-- `UCPE_LIVE_SMOKE_ENABLED=true PYTHONPATH=src python3 scripts/live_smoke.py`: PASS; BTC/ETH, `METRICS_ONLY`/`NEWS_ADDON`, all `CROSS_PROVIDER`.
+- `UCPE_LIVE_SMOKE_ENABLED=true UCPE_LIVE_SMOKE_SYMBOLS=BTC/USDT,ETH/USDT,SOL/USDT PYTHONPATH=src python3 scripts/live_smoke.py`: PASS; BTC/ETH/SOL, `METRICS_ONLY`/`NEWS_ADDON`, all `CROSS_PROVIDER`.
 
 ## Live Smoke Status
 
 - Flag: `UCPE_LIVE_SMOKE_ENABLED=true`
-- Symbols/modes: BTC `METRICS_ONLY`, BTC `NEWS_ADDON`, ETH `METRICS_ONLY`, ETH `NEWS_ADDON`
+- Symbols/modes: BTC/USDT, ETH/USDT, SOL/USDT; `METRICS_ONLY` and `NEWS_ADDON`
 - Result: PASS
 - `is_live_data`: true in all smoke responses
 - `data_source`: `CROSS_PROVIDER` in all smoke responses
@@ -68,6 +72,7 @@ Updated: 2026-06-07
 
 ## Files Changed
 
+- `IMPLEMENTATION_DECISIONS.md`
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
 - `AI/06_TEST_COMMANDS.md`
@@ -75,31 +80,32 @@ Updated: 2026-06-07
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
 - `DEPLOYMENT_CHECKLIST.md`
-- `README.md`
 - `RELEASE_GATE.md`
 - `scripts/live_smoke.py`
-- `scripts/make_access_hash.py`
-- `src/crypto_probability_engine/adapters/public_market.py`
-- `src/crypto_probability_engine/features/trend_mtf.py`
-- `src/crypto_probability_engine/quant/pipeline.py`
-- `src/crypto_probability_engine/quant/probability_three_state.py`
+- `src/crypto_probability_engine/execution_realism/realism.py`
+- `src/crypto_probability_engine/features/liquidity_depth.py`
+- `src/crypto_probability_engine/features/regime_2state.py`
+- `src/crypto_probability_engine/features/volatility.py`
+- `src/crypto_probability_engine/gates/composite.py`
+- `src/crypto_probability_engine/quant/horizon_timeout.py`
 - `src/crypto_probability_engine/quant/risk_arbiter.py`
+- `src/crypto_probability_engine/quant/tail_cvar.py`
 - `src/crypto_probability_engine/score_stack/score.py`
 - `tests/api/test_analysis_live_data_wiring.py`
 - `tests/fixtures/market_data.py`
 - `tests/quant/test_quant_pipeline.py`
-- `tests/scripts/test_make_access_hash.py`
 
 ## Current Blockers / Unknowns
 
-- No targeted-fix blocker remains.
-- Claude re-review is still required before merge/deploy.
+- No final fix blocker remains.
+- Merge still requires user/Claude approval.
+- Deployment still requires pre-deploy checklist execution.
 - External provider availability/rate limits remain an operational risk.
 - Local interpreter is Python 3.14.3; Docker target remains Python 3.11.
 - `jsonschema.RefResolver` deprecation warning remains non-blocking.
 
 ## Next Steps
 
-1. Commit targeted fixes on `codex/sprint2-live-market-data`.
-2. Hand to Claude for re-review of signed schema fix, down-market coverage, live smoke pass, access hash helper, and HF variable/secret table.
-3. Only after approval, discuss merge/deploy path separately.
+1. Commit FIX-S2-5 on `codex/sprint2-live-market-data`.
+2. Request user/Claude approval to merge.
+3. If approved, run the pre-deploy checklist before any Hugging Face deploy.

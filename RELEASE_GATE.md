@@ -79,8 +79,11 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Frontend hides demo/degraded banner only when backend `is_live_data` is true.
 - [x] Manual live smoke script exists and skips unless `UCPE_LIVE_SMOKE_ENABLED=true`.
 - [x] Signed return/signal/edge fields no longer use `_frac` names.
+- [x] Unbounded volatility/risk-pressure/CVaR-loss magnitude fields no longer use `_frac` names.
 - [x] Down-market fixture covers negative signed fields and schema validation.
+- [x] High-volatility fixture covers unbounded magnitudes and recursive `_frac` bounds.
 - [x] Manual real-network live smoke run completed by Codex for BTC and ETH in `METRICS_ONLY` and `NEWS_ADDON`.
+- [x] Manual volatile-symbol live smoke run completed for BTC/ETH plus SOL before deploy.
 - [ ] Claude final review completed for provider integration.
 - [ ] Claude final review completed for data honesty.
 - [ ] Claude final review completed for no-network unit tests.

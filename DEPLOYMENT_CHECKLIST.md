@@ -46,6 +46,7 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 - [ ] `/v1/system_status` returns runtime/system/provider/news-source/shelter state after session auth.
 - [ ] `BTC` with `METRICS_ONLY` returns schema-valid payload and no news fetch.
 - [ ] `BTC` with `NEWS_ADDON` returns schema-valid payload; if sources are not configured, `news_addon_state.status = UNAVAILABLE` and metrics are unaffected.
+- [ ] Volatile-symbol live smoke, for example `BTC/USDT,ETH/USDT,SOL/USDT`, returns schema-valid payloads and no `_frac` sentinel failures.
 - [ ] Detail endpoint returns correct recent `run_id` detail or `RUN_NOT_FOUND`.
 - [ ] Dev Mode requires re-auth and exports sanitized debug pack.
 - [ ] No response/log/export contains secrets, full env dump, or full article body.

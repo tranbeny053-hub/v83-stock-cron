@@ -14,11 +14,10 @@ def compute_realized_volatility(candles: tuple[MarketCandle, ...]) -> dict:
         if prev.close > 0 and cur.close > 0:
             returns.append(log(cur.close / prev.close))
     if not returns:
-        return {"status": "DEGRADED", "realized_vol_frac": 0.0, "sample_size": 0}
+        return {"status": "DEGRADED", "realized_vol": 0.0, "sample_size": 0}
     vol = pstdev(returns) * sqrt(len(returns))
     return {
         "status": "OK",
-        "realized_vol_frac": vol,
+        "realized_vol": vol,
         "sample_size": len(returns),
     }
-

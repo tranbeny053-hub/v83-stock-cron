@@ -22,7 +22,7 @@ ALLOWED_DISPOSITIONS = frozenset(
 def compute_score_stack(probability_state: dict, risk_arbiter_state: dict) -> dict:
     horizon = probability_state["horizons"]["H_primary"]
     directional_edge = horizon["p_up_frac"] - horizon["p_down_frac"]
-    risk_pressure = float(risk_arbiter_state.get("risk_pressure_frac") or 0.0)
+    risk_pressure = float(risk_arbiter_state.get("risk_pressure") or 0.0)
     raw_score = (
         DEFAULT_PHASE1A.score_base
         + (directional_edge * DEFAULT_PHASE1A.score_directional_edge_multiplier)

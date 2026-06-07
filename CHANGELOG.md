@@ -148,3 +148,21 @@ Notes:
 - No deploy and no merge performed.
 - No Binance/OKX API keys, private exchange calls, live news fetching, or trading capability were added.
 - Claude re-review is required before merge/deploy.
+
+## 2026-06-07 - Sprint 2 Final `_frac` Defect-Class Fix
+
+Blueprint version: `v1.2.2`
+schema_version: `1.1-crypto-probability`
+app_version: `0.1.0`
+
+Changed:
+- Renamed unbounded magnitude fields from `realized_vol_frac`, `risk_pressure_frac`, and `cvar_loss_frac` to `realized_vol`, `risk_pressure`, and `cvar_loss`.
+- Kept `_frac` sentinel validation strict and unchanged.
+- Added high-volatility offline fixture coverage proving unbounded magnitudes can exceed `1.0` without schema failure.
+- Added recursive full-response test that every emitted `_frac` field is numeric and within `[0,1]`.
+- Extended live smoke to support `UCPE_LIVE_SMOKE_SYMBOLS`.
+- Documented the systematic `_frac` field audit in `IMPLEMENTATION_DECISIONS.md`.
+
+Notes:
+- No deploy and no merge performed.
+- No Binance/OKX API keys, private exchange calls, live news fetching, or trading capability were added.
