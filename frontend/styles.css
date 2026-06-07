@@ -10,6 +10,7 @@
   --magenta: #ff3df2;
   --warning: #ffd166;
   --danger: #ff4d4d;
+  --gold: #c8a96a;
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }
 
@@ -184,15 +185,21 @@ h2 {
 }
 
 .result-card {
-  --heat-color: #404040;
+  --heat-main: #374151;
+  --heat-border: #374151;
   padding: 16px;
 }
 
 .timeframe-card {
   min-height: 274px;
-  border-color: color-mix(in srgb, var(--heat-color) 70%, var(--line));
+  border-color: color-mix(in srgb, var(--heat-border) 68%, var(--line));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--heat-color) 34%, transparent), transparent 58%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--heat-main) 28%, transparent) 0%,
+      rgba(17, 24, 39, 0.92) 55%,
+      rgba(6, 10, 18, 0.96) 100%
+    ),
     rgba(13, 17, 23, 0.94);
   cursor: pointer;
   transition:
@@ -203,8 +210,38 @@ h2 {
 
 .timeframe-card:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--heat-color) 92%, var(--cyan));
-  box-shadow: 0 0 22px color-mix(in srgb, var(--heat-color) 42%, transparent);
+  border-color: color-mix(in srgb, var(--heat-border) 88%, var(--cyan));
+  box-shadow: 0 0 22px color-mix(in srgb, var(--heat-main) 30%, transparent);
+}
+
+.heat-extreme {
+  --heat-main: #ff1a1a;
+  --heat-border: #ff1a1a;
+}
+
+.heat-very-hot {
+  --heat-main: #f43f3f;
+  --heat-border: #f43f3f;
+}
+
+.heat-hot {
+  --heat-main: #dc2626;
+  --heat-border: #dc2626;
+}
+
+.heat-warm {
+  --heat-main: #9f3a3a;
+  --heat-border: #9f3a3a;
+}
+
+.heat-low {
+  --heat-main: #5a4545;
+  --heat-border: #5a4545;
+}
+
+.heat-cold {
+  --heat-main: #374151;
+  --heat-border: #374151;
 }
 
 .loading-card,
@@ -354,6 +391,19 @@ pre {
   border-radius: 8px;
   padding: 12px;
   background: #05080b;
+}
+
+.site-signature {
+  margin-top: 28px;
+  border-top: 1px solid rgba(200, 169, 106, 0.28);
+  padding: 18px 0 2px;
+  color: color-mix(in srgb, var(--gold) 72%, var(--muted));
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 0 14px rgba(200, 169, 106, 0.16);
 }
 
 .hidden {

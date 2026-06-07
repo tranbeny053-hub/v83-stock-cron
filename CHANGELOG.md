@@ -185,3 +185,16 @@ Changed:
 Notes:
 - No deploy and no merge performed.
 - No auth/security, Docker, provider HTTP client internals, scoring/gate/probability/news math, private exchange calls, live news fetching, or trading capability were added.
+
+## 2026-06-07 - Deployed Frontend Polish Hotfix
+
+Changed:
+- Replaced continuous red/grey card heat styling with six discrete backend-score heat bands.
+- Fixed Batch Analysis cards so Detail opens the same structured Detail Analysis renderer used by Single Analysis.
+- Added a site-wide footer signature: `Copyright © 2026 by Kha`.
+- Added frontend static tests for heat bands, batch detail wiring, collapsed raw JSON, no-recompute boundary, and signature visibility.
+
+Notes:
+- Frontend-only hotfix.
+- No backend quant/scoring/gates/news/auth/deploy/provider logic was changed.
+- No deploy or Hugging Face push was performed.

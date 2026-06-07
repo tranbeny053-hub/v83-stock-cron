@@ -74,6 +74,55 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
     assert "News analysis disabled for this run." in js
 
 
+def test_score_heat_uses_six_discrete_backend_score_bands() -> None:
+    js = read_frontend("app.js")
+    css = read_frontend("styles.css")
+    for threshold in ("86", "71", "56", "41", "21"):
+        assert threshold in js
+    for color in ("#FF1A1A", "#F43F3F", "#DC2626", "#9F3A3A", "#5A4545", "#374151"):
+        assert color in js
+    for class_name in (
+        "heat-extreme",
+        "heat-very-hot",
+        "heat-hot",
+        "heat-warm",
+        "heat-low",
+        "heat-cold",
+    ):
+        assert class_name in js
+        assert f".{class_name}" in css
+    assert "getScoreHeatBand" in js
+    assert "display.total_score" in js
+
+
+def test_batch_cards_reuse_structured_detail_renderer() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    single_section = html.split('id="singlePanel"', maxsplit=1)[1].split(
+        'id="batchPanel"', maxsplit=1
+    )[0]
+    assert 'id="detailPanel"' not in single_section
+    assert (
+        "renderResults(document.querySelector(\"#batchResult\"), payload.results, payload.errors)"
+        in js
+    )
+    assert "target.append(overviewCard(payload))" in js
+    assert "openDetail(payload)" in js
+    assert "/v1/analyze/detail/" in js
+    assert "payload.detail_view" in js
+    assert "renderStructuredDetail(payload, detailView)" in js
+    assert "Detail Analysis is unavailable for this result." in js
+
+
+def test_site_signature_is_visible_and_in_normal_flow() -> None:
+    html = read_frontend("index.html")
+    css = read_frontend("styles.css")
+    assert "Copyright © 2026 by Kha" in html
+    assert "site-signature" in html
+    assert "font-family: Georgia" in css
+    assert "position: fixed" not in css
+
+
 def test_no_secret_markers_in_frontend() -> None:
     combined = "\n".join(
         [

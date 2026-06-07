@@ -7,6 +7,20 @@ const detailPanel = document.querySelector("#detailPanel");
 const heatLegend = "Signal heat — not risk";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const singlePayloads = new Map();
+const scoreHeatBands = [
+  {
+    min: 86,
+    max: 100,
+    level: "Extreme / Burning",
+    mainColor: "#FF1A1A",
+    className: "heat-extreme",
+  },
+  { min: 71, max: 85, level: "Very Hot", mainColor: "#F43F3F", className: "heat-very-hot" },
+  { min: 56, max: 70, level: "Hot", mainColor: "#DC2626", className: "heat-hot" },
+  { min: 41, max: 55, level: "Warm", mainColor: "#9F3A3A", className: "heat-warm" },
+  { min: 21, max: 40, level: "Low", mainColor: "#5A4545", className: "heat-low" },
+  { min: 0, max: 20, level: "Cold / Neutral", mainColor: "#374151", className: "heat-cold" },
+];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -28,6 +42,7 @@ function showPanel(name) {
   for (const panel of ["single", "batch", "dev"]) {
     document.querySelector(`#${panel}Panel`).classList.toggle("hidden", panel !== name);
   }
+  hideDetail();
 }
 
 function setLoading(id, active) {
@@ -77,12 +92,13 @@ function formatValue(value) {
   return String(value);
 }
 
-function heatColor(totalScore) {
-  const raw = typeof totalScore === "number" ? totalScore : 0;
-  const intensity = Math.max(0, Math.min(1, raw / 100));
-  const red = Math.round(64 + (255 - 64) * intensity);
-  const other = Math.round(64 * (1 - intensity));
-  return `rgb(${red}, ${other}, ${other})`;
+function getScoreHeatBand(score) {
+  const value = typeof score === "number" && Number.isFinite(score) ? score : 0;
+  const safeScore = Math.max(0, Math.min(100, value));
+  return (
+    scoreHeatBands.find((band) => safeScore >= band.min && safeScore <= band.max) ||
+    scoreHeatBands[scoreHeatBands.length - 1]
+  );
 }
 
 function firstReason(payload) {
@@ -100,9 +116,12 @@ function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
   const timeframe = payload.timeframes?.primary || "n/a";
+  const heatBand = getScoreHeatBand(display.total_score);
   node.classList.add("timeframe-card");
+  node.classList.add(heatBand.className);
   node.dataset.timeframeCard = timeframe;
-  node.style.setProperty("--heat-color", heatColor(display.total_score));
+  node.style.setProperty("--heat-main", heatBand.mainColor);
+  node.style.setProperty("--heat-border", heatBand.mainColor);
   node.querySelector("h2").textContent = `${timeframe} ${payload.normalized_symbol}`;
   const demoBanner = document.createElement("p");
   demoBanner.className = "demo-banner";
@@ -117,6 +136,7 @@ function overviewCard(payload) {
     ["Data", display.is_live_data ? "LIVE" : display.data_source],
     ["Source", display.data_source],
     ["Gate", firstReason(payload)],
+    ["Heat", heatBand.level],
   ];
   appendDefinitionRows(node.querySelector("dl"), values);
   const note = node.querySelector(".news-note");
@@ -200,7 +220,7 @@ function replaceTimeframeCard(timeframe, node) {
 
 function renderSinglePlaceholders() {
   singleResult.replaceChildren(...singleTimeframes.map((timeframe) => loadingCard(timeframe)));
-  detailPanel.classList.add("hidden");
+  hideDetail();
 }
 
 async function runSingleAnalysis(form) {
@@ -231,13 +251,45 @@ async function runSingleAnalysis(form) {
 }
 
 async function openDetail(payload) {
-  let detailView = payload.detail_view || {};
-  try {
-    detailView = await api(`/v1/analyze/detail/${payload.run_id}`);
-  } catch {
-    detailView = payload.detail_view || {};
+  let detailView = null;
+  if (payload.run_id && payload.frontend_display?.detail_available !== false) {
+    try {
+      detailView = await api(`/v1/analyze/detail/${payload.run_id}`);
+    } catch {
+      detailView = null;
+    }
+  }
+  if (!detailView && payload.detail_view && Object.keys(payload.detail_view).length > 0) {
+    detailView = payload.detail_view;
+  }
+  if (!detailView) {
+    renderDetailUnavailable(payload);
+    return;
   }
   renderStructuredDetail(payload, detailView);
+  detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function hideDetail() {
+  detailPanel.replaceChildren();
+  detailPanel.classList.add("hidden");
+}
+
+function renderDetailUnavailable(payload) {
+  const message = document.createElement("p");
+  message.className = "muted";
+  message.textContent = "Detail Analysis is unavailable for this result.";
+  detailPanel.replaceChildren(
+    section("Detail Analysis", [
+      keyValueTable([
+        ["Symbol", payload?.normalized_symbol],
+        ["Run ID", payload?.run_id],
+        ["Status", "Unavailable"],
+      ]),
+      message,
+    ]),
+  );
+  detailPanel.classList.remove("hidden");
   detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -391,6 +443,7 @@ document.querySelector("#singleForm").addEventListener("submit", async (event) =
 
 document.querySelector("#batchForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  hideDetail();
   setLoading("#batchLoading", true);
   try {
     const form = new FormData(event.currentTarget);
