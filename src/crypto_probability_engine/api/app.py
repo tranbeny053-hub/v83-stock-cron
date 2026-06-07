@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, Request, Response
+from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from crypto_probability_engine.api.analysis_service import analyze_request
+from crypto_probability_engine.api.analysis_service import (
+    analyze_request,
+    current_persistence_status,
+    schedule_best_effort_persist,
+)
 from crypto_probability_engine.api.auth import (
     DEV_SESSION_COOKIE,
     SESSION_COOKIE,
@@ -39,10 +44,24 @@ WATCHLIST_LIMIT = 20
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
-    app = FastAPI(title=app_settings.app_name, version=app_settings.app_version)
     run_store = InMemoryRunStore(limit=app_settings.recent_run_limit)
     persistence_repository = build_persistence_repository(app_settings)
     telemetry = TelemetrySink()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        try:
+            yield
+        finally:
+            close = getattr(persistence_repository, "close", None)
+            if callable(close):
+                close()
+
+    app = FastAPI(
+        title=app_settings.app_name,
+        version=app_settings.app_version,
+        lifespan=lifespan,
+    )
     app.state.run_store = run_store
     app.state.persistence_repository = persistence_repository
     app.state.telemetry = telemetry
@@ -106,34 +125,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/analyze")
     def analyze(
         body: AnalysisRequest,
+        background_tasks: BackgroundTasks,
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
+        repository = app.state.persistence_repository
         result = analyze_request(
             body,
             settings=app_settings,
             run_store=run_store,
-            persistence_repository=app.state.persistence_repository,
+            persistence_status=current_persistence_status(repository),
         )
+        schedule_best_effort_persist(background_tasks, repository, result)
         telemetry.record("analysis_completed", {"run_id": result["run_id"]})
         return result
 
     @app.post("/v1/analyze_batch")
     def analyze_batch(
         body: BatchAnalysisRequest,
+        background_tasks: BackgroundTasks,
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         results: list[dict] = []
         errors: list[dict] = []
+        repository = app.state.persistence_repository
         for index, item in enumerate(body.requests):
             try:
-                results.append(
-                    analyze_request(
-                        item,
-                        settings=app_settings,
-                        run_store=run_store,
-                        persistence_repository=app.state.persistence_repository,
-                    )
+                result = analyze_request(
+                    item,
+                    settings=app_settings,
+                    run_store=run_store,
+                    persistence_status=current_persistence_status(repository),
                 )
+                schedule_best_effort_persist(background_tasks, repository, result)
+                results.append(result)
             except Exception as exc:
                 if hasattr(exc, "detail"):
                     errors.append({"index": index, "detail": exc.detail})

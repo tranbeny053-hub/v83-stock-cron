@@ -120,6 +120,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Frontend Watchlist tab calls backend endpoints only and never references Supabase directly.
 - [x] Frontend Watchlist symbol view reuses six timeframe cards and structured detail.
 - [x] Unit tests do not require real database or network.
+- [x] Analyze persistence writes are scheduled off the response path.
+- [x] Supabase repository has a cooldown circuit breaker and small connection pool.
+- [x] Failure-path tests prove analysis returns 200 under persistence failure.
 - [ ] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy.
 
 ## Hugging Face Variables and Secrets Required

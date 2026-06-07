@@ -215,3 +215,19 @@ Notes:
 - No backend quant/scoring/gates/news math was changed.
 - No provider adapter behavior, Binance/OKX keys, private exchange calls, live news fetching, or trading capability was added.
 - No deploy or Hugging Face push was performed.
+
+## 2026-06-07 - Wave 1 Targeted Persistence Fixes
+
+Changed:
+- Moved analysis persistence writes out of the HTTP response path.
+- Added FastAPI background scheduling that submits compact persistence work to a bounded worker pool.
+- Added Supabase repository circuit breaker with cooldown and fast skip while unavailable.
+- Replaced connect-per-operation behavior with a small `psycopg_pool.ConnectionPool`.
+- Added defensive persistence wrapper behavior for unexpected repository exceptions.
+- Added tests for non-blocking analyze response, raising repository failure path, circuit breaker transitions, and degraded watchlist behavior.
+- Updated requirements to `psycopg[binary,pool]>=3,<4`.
+
+Notes:
+- No quant/scoring/probability/gates/news math changed.
+- No Binance/OKX provider logic, private exchange calls, live news fetching, or trading capability was added.
+- No deploy, merge, or Hugging Face push was performed.

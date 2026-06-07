@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
 
 
 def make_client() -> TestClient:
@@ -58,3 +59,25 @@ def test_watchlist_rejects_invalid_symbol() -> None:
     response = client.post("/v1/watchlist", json={"symbol": "NOPE"})
     assert response.status_code == 400
     assert response.json()["detail"]["error"]["code"] == "INVALID_SYMBOL"
+
+
+def test_watchlist_degrades_to_in_memory_repository_quickly() -> None:
+    class DegradedRepository(InMemoryPersistenceRepository):
+        def persistence_status(self) -> str:
+            return "UNAVAILABLE"
+
+        def add_watchlist(self, symbol: str, operator_id: str = "operator") -> str:
+            super().add_watchlist(symbol, operator_id)
+            return "UNAVAILABLE"
+
+        def remove_watchlist(self, symbol: str, operator_id: str = "operator") -> str:
+            super().remove_watchlist(symbol, operator_id)
+            return "UNAVAILABLE"
+
+    client = make_client()
+    client.app.state.persistence_repository = DegradedRepository()
+    login(client)
+    response = client.post("/v1/watchlist", json={"symbol": "BTC"})
+    assert response.status_code == 200
+    assert response.json()["symbols"] == ["BTC/USDT"]
+    assert response.json()["persistence_status"] == "UNAVAILABLE"

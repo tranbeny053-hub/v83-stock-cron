@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from fastapi.testclient import TestClient
 
@@ -52,7 +53,7 @@ def test_analyze_metrics_only_returns_schema_valid_payload() -> None:
 def test_persistence_failure_does_not_break_analysis() -> None:
     class BrokenRepository:
         def persistence_status(self) -> str:
-            return "OK"
+            return "UNAVAILABLE"
 
         def save_run(self, summary: dict) -> str:
             raise RuntimeError("simulated persistence outage")
@@ -66,11 +67,41 @@ def test_persistence_failure_does_not_break_analysis() -> None:
     client = make_client()
     client.app.state.persistence_repository = BrokenRepository()
     login(client)
+    started = time.perf_counter()
     response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+    elapsed = time.perf_counter() - started
     assert response.status_code == 200
     payload = response.json()
     validate_analysis_response(payload)
     assert payload["debug"]["persistence_status"] == "UNAVAILABLE"
+    assert "simulated persistence outage" not in response.text
+    assert elapsed < 0.5
+
+
+def test_slow_persistence_is_scheduled_without_blocking_response() -> None:
+    class SlowRepository:
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def save_run(self, summary: dict) -> str:
+            time.sleep(0.75)
+            return "UNAVAILABLE"
+
+        def save_timeframe_result(self, row: dict) -> str:
+            return "UNAVAILABLE"
+
+        def save_provider_observation(self, row: dict) -> str:
+            return "UNAVAILABLE"
+
+    client = make_client()
+    client.app.state.persistence_repository = SlowRepository()
+    login(client)
+    started = time.perf_counter()
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+    elapsed = time.perf_counter() - started
+    assert response.status_code == 200
+    validate_analysis_response(response.json())
+    assert elapsed < 0.5
 
 
 def test_analyze_monthly_timeframe_returns_schema_valid_payload() -> None:

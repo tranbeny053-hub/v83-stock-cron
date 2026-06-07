@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from uuid import uuid4
+
+from fastapi import BackgroundTasks
 
 from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
@@ -25,13 +29,22 @@ from crypto_probability_engine.persistence.repository import PersistenceReposito
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 
+_PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
+
+
+@dataclass(frozen=True)
+class PersistenceWork:
+    run_summary: dict
+    timeframe_result: dict
+    provider_observations: tuple[dict, ...]
+
 
 def analyze_request(
     request: AnalysisRequest,
     *,
     settings: Settings,
     run_store: InMemoryRunStore,
-    persistence_repository: PersistenceRepository | None = None,
+    persistence_status: str = "STATELESS",
 ) -> dict:
     if request.asset_class == AssetClass.CRYPTO_PERP and not settings.enable_derivatives:
         raise api_error(
@@ -130,14 +143,12 @@ def analyze_request(
             "warnings": list(data_quality.get("warnings", [])),
             "news_influence": news_blocks["news_influence"],
             "analysis_hash_source": "backend_only",
-            "persistence_status": "STATELESS",
+            "persistence_status": persistence_status,
         },
         "analysis_hash": "",
     }
     response["analysis_hash"] = stable_hash(response)
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
-    persistence_status = _best_effort_persist(validated, persistence_repository)
-    validated["debug"]["persistence_status"] = persistence_status
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
@@ -151,27 +162,72 @@ def _status_for_selection_error(code: ErrorCode) -> int:
     return 503
 
 
-def _best_effort_persist(
+def current_persistence_status(repository: PersistenceRepository | None) -> str:
+    if repository is None:
+        return "STATELESS"
+    try:
+        return repository.persistence_status()
+    except Exception:
+        mark_unavailable = getattr(repository, "mark_unavailable", None)
+        if callable(mark_unavailable):
+            mark_unavailable()
+        return "UNAVAILABLE"
+
+
+def schedule_best_effort_persist(
+    background_tasks: BackgroundTasks,
+    repository: PersistenceRepository | None,
     payload: dict,
+) -> str:
+    status = current_persistence_status(repository)
+    if repository is None:
+        return status
+    work = _persistence_work(payload, status)
+    background_tasks.add_task(_submit_persistence_work, repository, work)
+    return status
+
+
+def _submit_persistence_work(repository: PersistenceRepository, work: PersistenceWork) -> None:
+    try:
+        _PERSISTENCE_EXECUTOR.submit(_best_effort_persist, work, repository)
+    except Exception:
+        mark_unavailable = getattr(repository, "mark_unavailable", None)
+        if callable(mark_unavailable):
+            mark_unavailable()
+
+
+def _best_effort_persist(
+    work: PersistenceWork,
     repository: PersistenceRepository | None,
 ) -> str:
     if repository is None:
         return "STATELESS"
     try:
-        run_summary = _run_summary(payload)
-        run_summary["persistence_status"] = repository.persistence_status()
         statuses = [
-            repository.save_run(run_summary),
-            repository.save_timeframe_result(_timeframe_result(payload)),
+            repository.save_run(work.run_summary),
+            repository.save_timeframe_result(work.timeframe_result),
         ]
         statuses.extend(
-            repository.save_provider_observation(row) for row in _provider_observations(payload)
+            repository.save_provider_observation(row) for row in work.provider_observations
         )
     except Exception:
+        mark_unavailable = getattr(repository, "mark_unavailable", None)
+        if callable(mark_unavailable):
+            mark_unavailable()
         return "UNAVAILABLE"
     if any(status == "UNAVAILABLE" for status in statuses):
         return "UNAVAILABLE"
     return repository.persistence_status()
+
+
+def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork:
+    run_summary = _run_summary(payload)
+    run_summary["persistence_status"] = persistence_status
+    return PersistenceWork(
+        run_summary=run_summary,
+        timeframe_result=_timeframe_result(payload),
+        provider_observations=tuple(_provider_observations(payload)),
+    )
 
 
 def _run_summary(payload: dict) -> dict:

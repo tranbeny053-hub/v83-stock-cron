@@ -12,94 +12,79 @@ Updated: 2026-06-07
 
 ## Current Phase
 
-- Phase: Wave 1 Supabase persistence and watchlist foundation.
-- Current status: implemented locally and offline checks pass; commit pending.
-- Scope: optional backend persistence, idempotent migration, watchlist API/UI, docs, and tests.
+- Phase: Wave 1 targeted fixes after Claude `APPROVE_WITH_TARGETED_FIXES`.
+- Current status: fixes implemented locally and checks pass; commit pending.
+- Scope: non-blocking persistence scheduling, Supabase circuit breaker/pool, defensive failure-path tests, docs/memory.
 
 ## What Changed
 
-- Added optional backend Supabase Postgres settings for `SUPABASE_DB_URL`, `SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`; all are repr/log safe.
-- Added `migrations/0001_init.sql` with idempotent tables for watchlist, analysis run summaries, timeframe summaries, provider observations, and app events.
-- Added `scripts/apply_migrations.py`; it requires the database URL from local env and never prints it.
-- Added backend persistence repository layer:
-  - `STATELESS` when no database URL is configured.
-  - `OK` when configured database writes succeed.
-  - `UNAVAILABLE` when database operations fail.
-- Analysis now best-effort persists compact run/timeframe/provider summaries and still returns normally if persistence fails.
-- Added `persistence_status` in debug-safe response data and detail debug-lite data.
-- Added session-gated watchlist endpoints:
-  - `GET /v1/watchlist`
-  - `POST /v1/watchlist`
-  - `DELETE /v1/watchlist/{symbol}`
-- Added Watchlist frontend tab with add/remove/list, six-timeframe symbol view, structured Detail support, and browser storage fallback when persistence is not OK.
-- Added `psycopg[binary]>=3,<4` to `requirements.txt`.
-- Updated docs, release gate, deployment checklist, source matrix, changelog, memory, and test commands.
+- Analysis no longer performs DB writes inline.
+- `POST /v1/analyze` and `POST /v1/analyze_batch` inject `BackgroundTasks`.
+- Background task only submits compact `PersistenceWork` to a bounded `ThreadPoolExecutor`; it does not carry the full analysis payload.
+- In-memory detail/run store remains immediate, so Detail endpoints work right after analysis.
+- `SupabasePersistenceRepository` now uses a small `psycopg_pool.ConnectionPool`.
+- Supabase repository circuit behavior:
+  - first DB failure marks `UNAVAILABLE`;
+  - circuit opens for 60 seconds;
+  - calls during cooldown skip DB immediately and use fallback;
+  - after cooldown one trial is allowed;
+  - trial success closes circuit and status becomes `OK`; trial failure reopens it.
+- Watchlist reads/writes update in-memory fallback and degrade quickly when the circuit is open.
+- Added tests for non-blocking analyze, defensive persistence wrapper, circuit breaker transitions, and degraded watchlist response.
+- Updated requirement to `psycopg[binary,pool]>=3,<4`.
 
 ## What Was Not Changed
 
 - No quant/scoring/gates/probability/news math changed.
-- No provider adapter or public market-data behavior changed.
-- No auth/session logic changed beyond adding session-gated watchlist routes.
-- No Dockerfile/deployment logic changed.
+- No Binance/OKX provider adapter logic changed.
 - No frontend Supabase calls or Supabase values were added.
+- No auth/session logic changed beyond existing watchlist session gating.
+- No Dockerfile/deployment logic changed.
 - No secrets, env files, API keys, or access values added.
 - No trading/order/withdraw/transfer/leverage/autonomous capability added.
 
 ## Checks Run / Attempted
 
 - `git branch --show-current`: PASS, `codex/wave1-supabase-watchlist`.
-- `git status --short --untracked-files=all -- .`: PASS, only Wave 1 app-root files modified/untracked before commit.
+- `git status --short --untracked-files=all -- .`: PASS before edits, clean.
 - `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/api/test_analysis_endpoints.py tests/api/test_watchlist_endpoints.py tests/persistence/test_persistence_foundation.py tests/frontend/test_frontend_static.py -q`: PASS, 25 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 102 passed, 3 warnings.
-- `ruff check src tests scripts`: PASS.
-- First `PYTHONPATH=src python3 scripts/check_no_secrets.py`: FAIL, checker flagged safe `os.environ.get(...)` settings reads; checker updated to allow env reads while still denying real assignments.
-- Second `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
+- `PYTHONPATH=src python3 -m pytest tests/persistence -q`: PASS, 4 passed.
+- `PYTHONPATH=src python3 -m pytest tests/api/test_analysis_endpoints.py -q`: PASS, 9 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 106 passed, 3 warnings.
+- `ruff check src tests scripts`: PASS after import-format fixes.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
+- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
 - `grep -R "SUPABASE_SERVICE_ROLE_KEY\|SUPABASE_DB_URL\|SUPABASE_URL" frontend || true`: PASS, no output.
 - `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`: PASS, no output.
+- `grep -R "psycopg_pool\|ConnectionPool\|circuit" src tests requirements.txt || true`: PASS, source/test hits confirm pool and circuit code; generated ignored `__pycache__` binary matches also appeared.
 
 ## Files Changed
 
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
-- `AI/06_TEST_COMMANDS.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
-- `DEPLOYMENT_CHECKLIST.md`
-- `IMPLEMENTATION_DECISIONS.md`
-- `README.md`
 - `RELEASE_GATE.md`
-- `docs/source_verification_matrix.md`
-- `frontend/index.html`
-- `frontend/app.js`
-- `frontend/styles.css`
-- `migrations/0001_init.sql`
 - `requirements.txt`
-- `scripts/apply_migrations.py`
-- `scripts/check_no_secrets.py`
-- `src/crypto_probability_engine/api/analysis_service.py`
 - `src/crypto_probability_engine/api/app.py`
-- `src/crypto_probability_engine/api/schemas.py`
-- `src/crypto_probability_engine/config/settings.py`
+- `src/crypto_probability_engine/api/analysis_service.py`
 - `src/crypto_probability_engine/persistence/repository.py`
 - `tests/api/test_analysis_endpoints.py`
 - `tests/api/test_watchlist_endpoints.py`
-- `tests/frontend/test_frontend_static.py`
 - `tests/persistence/test_persistence_foundation.py`
 
 ## Current Blockers / Unknowns
 
 - No implementation blocker remains.
-- Supabase migration was not applied because no real database operation was requested.
-- Supabase connectivity was not live-tested; unit tests use in-memory/mocked paths only.
+- Supabase live connectivity was not tested.
+- Browser visual smoke for Watchlist was not run.
 - Claude/User review is still required before merge/deploy.
 
 ## Next Steps
 
-1. Commit Wave 1 on `codex/wave1-supabase-watchlist`.
-2. Claude/User reviews the persistence/watchlist foundation.
-3. If approved, apply migrations in Supabase and then merge/deploy through the normal release gate.
+1. Commit targeted fixes on `codex/wave1-supabase-watchlist`.
+2. Claude/User reviews; if approved, apply migrations in Supabase.
+3. Proceed through merge/deploy release gate only after approval.

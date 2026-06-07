@@ -5,6 +5,6 @@ pydantic>=2,<3
 orjson
 numpy
 jsonschema
-psycopg[binary]>=3,<4
+psycopg[binary,pool]>=3,<4
 pytest
 ruff
