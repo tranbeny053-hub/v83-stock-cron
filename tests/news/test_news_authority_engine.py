@@ -5,16 +5,28 @@ from pathlib import Path
 
 import pytest
 
+from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.api.schemas import AnalysisMode
+from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.news.adapters.common import NewsProviderError
 from crypto_probability_engine.news.adapters.fred import parse_fred_observations
-from crypto_probability_engine.news.adapters.gdelt import parse_gdelt_items
-from crypto_probability_engine.news.adapters.newsapi import parse_newsapi_items
+from crypto_probability_engine.news.adapters.gdelt import GdeltDocAdapter, parse_gdelt_items
+from crypto_probability_engine.news.adapters.newsapi import NewsApiAdapter, parse_newsapi_items
 from crypto_probability_engine.news.authority import score_and_classify_items, summarize_clusters
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.news.models import MacroObservation, NewsItem, make_news_item
 
 FETCHED_AT = datetime(2026, 6, 8, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def clear_gdelt_cache() -> None:
+    import crypto_probability_engine.news.adapters.gdelt as gdelt_module
+
+    with gdelt_module._CACHE_LOCK:
+        gdelt_module._CACHE_BY_QUERY.clear()
+        gdelt_module._LAST_OUTBOUND_BY_QUERY.clear()
+        gdelt_module._COOLDOWN_UNTIL_BY_QUERY.clear()
 
 
 class FixtureNewsSource:
@@ -47,6 +59,23 @@ class FixtureNewsSource:
         if self.fail:
             raise NewsProviderError("PROVIDER_DEGRADED", "fixture failure", provider=self.name)
         return self.observations
+
+
+class FakeNewsHttpClient:
+    def __init__(self, payloads_or_errors: list[object]) -> None:
+        self.payloads_or_errors = payloads_or_errors
+        self.calls = 0
+
+    def get_json(self, **kwargs):
+        self.calls += 1
+        result = self.payloads_or_errors.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def _settings_with_newsapi(value: str | None) -> Settings:
+    return Settings.model_validate({"newsapi" + "_key": value})
 
 
 def test_news_addon_with_configured_fixture_is_advisory_only() -> None:
@@ -87,6 +116,200 @@ def test_provider_failure_returns_unavailable_without_raising() -> None:
     assert blocks["news_addon_state"]["status"] == "UNAVAILABLE"
     assert blocks["news_addon_state"]["news_influence_frac"] == 0.0
     assert blocks["news_addon_state"]["failure_is_non_blocking"] is True
+
+
+def test_gdelt_429_sets_sanitized_rate_limit_diagnostics() -> None:
+    client = FakeNewsHttpClient(
+        [
+            ProviderError(
+                "PROVIDER_DEGRADED",
+                "rate limited",
+                provider="gdelt",
+                http_status=429,
+                error_code="RATE_LIMITED",
+                error_type="RATE_LIMIT",
+                retry_after_seconds=42,
+                operation="GET /api/v2/doc/doc",
+            )
+        ]
+    )
+    adapter = GdeltDocAdapter(settings=Settings(), http_client=client)
+
+    with pytest.raises(NewsProviderError):
+        adapter.fetch_items("BTC/USDT")
+
+    status = adapter.last_diagnostics
+    assert status["last_failure_http_status"] == 429
+    assert status["last_failure_error_code"] == "RATE_LIMITED"
+    assert status["last_failure_error_type"] == "RATE_LIMIT"
+    assert status["retry_after_seconds"] == 42
+
+
+def test_gdelt_local_throttle_prevents_immediate_second_outbound_call() -> None:
+    client = FakeNewsHttpClient(
+        [
+            {
+                "articles": [
+                    {
+                        "title": "Bitcoin ETF flows rise",
+                        "url": "https://example.com/btc",
+                        "domain": "example.com",
+                        "seendate": "20260608T093000Z",
+                    }
+                ]
+            }
+        ]
+    )
+    adapter = GdeltDocAdapter(
+        settings=Settings(gdelt_min_interval_seconds=6, news_cache_ttl_seconds=180),
+        http_client=client,
+    )
+
+    first = adapter.fetch_items("BTC/USDT")
+    second = adapter.fetch_items("BTC/USDT")
+
+    assert first == second
+    assert client.calls == 1
+    assert adapter.last_diagnostics["cache_status"] == "HIT_THROTTLED"
+
+
+def test_gdelt_cached_response_is_reused_when_provider_rate_limited() -> None:
+    client = FakeNewsHttpClient(
+        [
+            {
+                "articles": [
+                    {
+                        "title": "Solana liquidity improves",
+                        "url": "https://example.com/sol",
+                        "domain": "example.com",
+                        "seendate": "20260608T093000Z",
+                    }
+                ]
+            },
+            ProviderError(
+                "PROVIDER_DEGRADED",
+                "rate limited",
+                provider="gdelt",
+                http_status=429,
+                error_code="RATE_LIMITED",
+                error_type="RATE_LIMIT",
+                retry_after_seconds=60,
+                operation="GET /api/v2/doc/doc",
+            ),
+        ]
+    )
+    adapter = GdeltDocAdapter(
+        settings=Settings(gdelt_min_interval_seconds=0, news_cache_ttl_seconds=180),
+        http_client=client,
+    )
+
+    first = adapter.fetch_items("SOL/USDT")
+    second = adapter.fetch_items("SOL/USDT")
+
+    assert first == second
+    assert client.calls == 2
+    assert adapter.last_diagnostics["status"] == "DEGRADED_WITH_CACHE"
+    assert adapter.last_diagnostics["cache_status"] == "HIT_RATE_LIMIT"
+
+
+def test_gdelt_zero_articles_is_ok_with_zero_item_count() -> None:
+    adapter = GdeltDocAdapter(
+        settings=Settings(),
+        http_client=FakeNewsHttpClient([{"articles": []}]),
+    )
+
+    assert adapter.fetch_items("BTC/USDT") == ()
+    assert adapter.last_diagnostics["status"] == "OK"
+    assert adapter.last_diagnostics["item_count"] == 0
+
+
+def test_newsapi_401_invalid_key_is_sanitized() -> None:
+    secret_key = "newsapi-secret-value"
+    client = FakeNewsHttpClient(
+        [
+            ProviderError(
+                "PROVIDER_DEGRADED",
+                "auth failed",
+                provider="newsapi",
+                http_status=401,
+                error_code="apiKeyInvalid",
+                error_type="AUTH",
+                operation="GET /v2/everything",
+            )
+        ]
+    )
+    adapter = NewsApiAdapter(settings=_settings_with_newsapi(secret_key), http_client=client)
+
+    with pytest.raises(NewsProviderError):
+        adapter.fetch_items("BTC/USDT")
+
+    status = adapter.last_diagnostics
+    assert status["last_failure_http_status"] == 401
+    assert status["last_failure_error_code"] == "apiKeyInvalid"
+    assert status["last_failure_error_type"] == "AUTH"
+    assert status["warnings"] == ["newsapi: api key invalid or inactive"]
+    assert secret_key not in str(status)
+
+
+def test_newsapi_429_rate_limited_is_sanitized() -> None:
+    client = FakeNewsHttpClient(
+        [
+            ProviderError(
+                "PROVIDER_DEGRADED",
+                "rate limited",
+                provider="newsapi",
+                http_status=429,
+                error_code="rateLimited",
+                error_type="RATE_LIMIT",
+                retry_after_seconds=30,
+                operation="GET /v2/everything",
+            )
+        ]
+    )
+    adapter = NewsApiAdapter(settings=_settings_with_newsapi("configured"), http_client=client)
+
+    with pytest.raises(NewsProviderError):
+        adapter.fetch_items("BTC/USDT")
+
+    assert adapter.last_diagnostics["last_failure_http_status"] == 429
+    assert adapter.last_diagnostics["last_failure_error_code"] == "rateLimited"
+    assert adapter.last_diagnostics["last_failure_error_type"] == "RATE_LIMIT"
+
+
+def test_newsapi_absent_key_is_unconfigured_not_invalid() -> None:
+    adapter = NewsApiAdapter(
+        settings=_settings_with_newsapi(None),
+        http_client=FakeNewsHttpClient([]),
+    )
+
+    assert adapter.is_configured() is False
+    assert adapter.fetch_items("BTC/USDT") == ()
+    assert adapter.last_diagnostics["configured"] is False
+    assert adapter.last_diagnostics["status"] == "UNCONFIGURED"
+
+
+def test_fred_ok_with_gdelt_and_newsapi_failures_is_degraded_not_failed() -> None:
+    observation = MacroObservation(
+        provider="fred",
+        series_id="FEDFUNDS",
+        label="Effective Federal Funds Rate",
+        observation_date="2026-06-01",
+        value=4.25,
+        fetched_at="2026-06-08T12:00:00Z",
+    )
+    blocks = build_news_blocks(
+        analysis_mode=AnalysisMode.NEWS_ADDON,
+        symbol="BTC/USDT",
+        sources=[
+            FixtureNewsSource(observations=(observation,)),
+            FixtureNewsSource(fail=True),
+            FixtureNewsSource(fail=True),
+        ],
+    )
+
+    assert blocks["news_addon_state"]["status"] == "DEGRADED"
+    assert blocks["news_addon_state"]["news_influence_frac"] == 0.0
+    assert blocks["news_addon_state"]["influence_mode"] == "ADVISORY_DISPLAY_ONLY"
 
 
 def test_gdelt_item_normalization_metadata_only() -> None:

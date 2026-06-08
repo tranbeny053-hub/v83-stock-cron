@@ -31,6 +31,19 @@ def main() -> int:
         "PASS: news smoke completed "
         f"status={addon['status']} providers={addon['configured_source_count']}"
     )
+    for status in addon.get("provider_status", []):
+        print(
+            "provider_status "
+            f"provider={status.get('provider')} "
+            f"configured={status.get('configured')} "
+            f"status={status.get('status')} "
+            f"http_status={status.get('last_failure_http_status')} "
+            f"error_code={status.get('last_failure_error_code')} "
+            f"item_count={status.get('item_count')} "
+            f"macro_observation_count={status.get('macro_observation_count')} "
+            f"cache_status={status.get('cache_status')} "
+            f"retry_after_seconds={status.get('retry_after_seconds')}"
+        )
     return 0
 
 

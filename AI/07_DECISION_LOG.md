@@ -101,3 +101,11 @@ Decision: Add a live news authority foundation that is advisory/display-only: `n
 Rationale: The user already configured optional FRED and NewsAPI Hugging Face secrets, and GDELT is public/no-key. Wave 3A needs visible macro/micro context without creating decision authority, body scraping, arbitrary URL fetching, or secret exposure.
 
 Impact: GDELT, FRED, and optional NewsAPI are implemented as metadata-only providers behind fixed host allow-lists. Compact news metadata persistence is added with `migrations/0002_news.sql`. Detail Analysis can display `News Authority / Macro & Micro Context`; `METRICS_ONLY` still fetches no news and `NEWS_ADDON` remains unavailable/degraded when providers are absent or unhealthy. No full article body, scoring/probability/gate/news influence change, trading capability, merge, deploy, or Hugging Face push was added.
+
+## 2026-06-08 - Wave 3A News Provider Diagnostics Hotfix
+
+Decision: Keep Wave 3A advisory-only while adding GDELT rate-limit protection, shared in-process news metadata cache, and sanitized provider-specific diagnostics for GDELT/FRED/NewsAPI.
+
+Rationale: Live probes showed GDELT returning 429 rate limits and NewsAPI returning 401 `apiKeyInvalid`; collapsing these into generic unavailable made operator diagnosis unnecessarily opaque.
+
+Impact: GDELT outbound requests are throttled per query and cached for repeated timeframe calls. NewsAPI invalid-key/rate-limit/parameter errors are reported as safe provider status fields. `NEWS_ADDON` can be `DEGRADED` when FRED is OK and other providers fail. `news_influence_frac` remains `0.0`, no score/probability/gate/disposition path changed, and no secrets/full article bodies are exposed.

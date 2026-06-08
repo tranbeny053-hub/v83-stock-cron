@@ -47,6 +47,8 @@ Status: Wave 3A build exists locally. No deployment has been performed by Codex.
 - [ ] Binance/OKX API keys are absent; Wave 2A public REST market data requires no Binance/OKX secrets.
 - [ ] Set `UCPE_NEWS_ITEM_LIMIT=12` unless intentionally tuning advisory display volume.
 - [ ] Set `UCPE_NEWS_TIMEOUT_SECONDS=6` unless intentionally tuning bounded news waits.
+- [ ] Set `UCPE_GDELT_MIN_INTERVAL_SECONDS=6` to respect GDELT rate-limit guidance.
+- [ ] Set `UCPE_NEWS_CACHE_TTL_SECONDS=180` so repeated timeframe requests can reuse advisory metadata.
 - [ ] Keep `UCPE_NEWS_LIVE_SMOKE_ENABLED=false` except for explicit manual smoke.
 - [ ] Optional `FRED_API_KEY` is set only in Hugging Face Secrets if FRED macro context is desired.
 - [ ] Optional `NEWSAPI_KEY` is set only in Hugging Face Secrets if NewsAPI metadata is desired.

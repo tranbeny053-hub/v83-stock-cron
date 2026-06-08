@@ -98,8 +98,24 @@ class ProviderState:
 class ProviderError(RuntimeError):
     """Typed provider failure with a stable, API-facing code."""
 
-    def __init__(self, code: str, message: str, *, provider: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        provider: str,
+        http_status: int | None = None,
+        error_code: str | None = None,
+        error_type: str | None = None,
+        retry_after_seconds: float | None = None,
+        operation: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.provider = provider
         self.message = message
+        self.http_status = http_status
+        self.error_code = error_code
+        self.error_type = error_type
+        self.retry_after_seconds = retry_after_seconds
+        self.operation = operation

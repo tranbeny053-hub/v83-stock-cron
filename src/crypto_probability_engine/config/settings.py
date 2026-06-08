@@ -50,6 +50,8 @@ class Settings(BaseModel):
     provider_trade_limit: int = DEFAULT_PHASE1A.provider_trade_limit
     news_item_limit: int = DEFAULT_PHASE1A.news_item_limit
     news_timeout_seconds: float = DEFAULT_PHASE1A.news_timeout_seconds
+    news_cache_ttl_seconds: int = DEFAULT_PHASE1A.news_cache_ttl_seconds
+    gdelt_min_interval_seconds: float = DEFAULT_PHASE1A.gdelt_min_interval_seconds
     news_live_smoke_enabled: bool = DEFAULT_PHASE1A.news_live_smoke_enabled
     cross_provider_required: bool = DEFAULT_PHASE1A.cross_provider_required
     live_smoke_enabled: bool = DEFAULT_PHASE1A.live_smoke_enabled
@@ -133,6 +135,18 @@ class Settings(BaseModel):
                 os.environ.get(
                     "UCPE_NEWS_TIMEOUT_SECONDS",
                     str(DEFAULT_PHASE1A.news_timeout_seconds),
+                )
+            ),
+            news_cache_ttl_seconds=int(
+                os.environ.get(
+                    "UCPE_NEWS_CACHE_TTL_SECONDS",
+                    str(DEFAULT_PHASE1A.news_cache_ttl_seconds),
+                )
+            ),
+            gdelt_min_interval_seconds=float(
+                os.environ.get(
+                    "UCPE_GDELT_MIN_INTERVAL_SECONDS",
+                    str(DEFAULT_PHASE1A.gdelt_min_interval_seconds),
                 )
             ),
             news_live_smoke_enabled=parse_bool(

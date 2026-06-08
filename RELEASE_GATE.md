@@ -203,6 +203,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Variable | `UCPE_PROVIDER_TRADE_LIMIT` | `50` | Public recent-trades limit | yes | Public REST only. |
 | Variable | `UCPE_NEWS_ITEM_LIMIT` | `12` | Maximum metadata news items per provider call | yes | Advisory display only. |
 | Variable | `UCPE_NEWS_TIMEOUT_SECONDS` | `6` | News provider HTTP timeout | yes | Keeps news fetch bounded. |
+| Variable | `UCPE_GDELT_MIN_INTERVAL_SECONDS` | `6` | Minimum seconds between GDELT outbound requests per query | yes | Avoids hammering GDELT under six-card analysis. |
+| Variable | `UCPE_NEWS_CACHE_TTL_SECONDS` | `180` | Advisory news metadata cache TTL | yes | Reuses metadata across repeated timeframe calls. |
 | Variable | `UCPE_NEWS_LIVE_SMOKE_ENABLED` | `false` | Keep live news smoke manual/off by default | yes | Never enable in CI. |
 | Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow single validated provider with warning | yes | |
 | Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep live smoke manual/off by default | yes | Never enable in CI. |

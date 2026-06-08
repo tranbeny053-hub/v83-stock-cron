@@ -224,6 +224,122 @@ def test_advisory_news_fixture_does_not_change_score_or_disposition(monkeypatch)
     assert metrics_payload["gate_result"] == addon_payload["gate_result"]
 
 
+def test_news_provider_degradation_keeps_analysis_200(monkeypatch) -> None:
+    from crypto_probability_engine.news.adapters.common import NewsProviderError
+    from crypto_probability_engine.news.models import MacroObservation
+
+    class FredOkSource:
+        name = "fred"
+
+        def is_configured(self) -> bool:
+            return True
+
+        def fetch_items(self, symbol: str):
+            return ()
+
+        def fetch_macro_observations(self):
+            return (
+                MacroObservation(
+                    provider="fred",
+                    series_id="FEDFUNDS",
+                    label="Effective Federal Funds Rate",
+                    observation_date="2026-06-01",
+                    value=4.25,
+                    fetched_at="2026-06-08T12:00:00Z",
+                ),
+            )
+
+    class BrokenGdeltSource:
+        name = "gdelt"
+        last_diagnostics = {
+            "provider": "gdelt",
+            "configured": True,
+            "healthy": False,
+            "status": "UNAVAILABLE",
+            "item_count": 0,
+            "macro_observation_count": 0,
+            "last_failure_http_status": 429,
+            "last_failure_error_code": "RATE_LIMITED",
+            "last_failure_error_type": "RATE_LIMIT",
+            "last_failure_operation": "GET /api/v2/doc/doc",
+            "retry_after_seconds": 60,
+            "cache_status": "MISS_RATE_LIMIT",
+            "warnings": ["gdelt: rate limited"],
+        }
+
+        def is_configured(self) -> bool:
+            return True
+
+        def fetch_items(self, symbol: str):
+            raise NewsProviderError(
+                "RATE_LIMITED",
+                "gdelt: rate limited",
+                provider="gdelt",
+                http_status=429,
+                error_code="RATE_LIMITED",
+                error_type="RATE_LIMIT",
+            )
+
+        def fetch_macro_observations(self):
+            return ()
+
+    class BrokenNewsApiSource:
+        name = "newsapi"
+        last_diagnostics = {
+            "provider": "newsapi",
+            "configured": True,
+            "healthy": False,
+            "status": "UNAVAILABLE",
+            "item_count": 0,
+            "macro_observation_count": 0,
+            "last_failure_http_status": 401,
+            "last_failure_error_code": "apiKeyInvalid",
+            "last_failure_error_type": "AUTH",
+            "last_failure_operation": "GET /v2/everything",
+            "cache_status": "BYPASS",
+            "warnings": ["newsapi: api key invalid or inactive"],
+        }
+
+        def is_configured(self) -> bool:
+            return True
+
+        def fetch_items(self, symbol: str):
+            raise NewsProviderError(
+                "PROVIDER_DEGRADED",
+                "newsapi: api key invalid or inactive",
+                provider="newsapi",
+                http_status=401,
+                error_code="apiKeyInvalid",
+                error_type="AUTH",
+            )
+
+        def fetch_macro_observations(self):
+            return ()
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.news.contract.build_live_news_sources",
+        lambda settings: [FredOkSource(), BrokenGdeltSource(), BrokenNewsApiSource()],
+    )
+    client = make_client()
+    login(client)
+
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "NEWS_ADDON"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    assert payload["news_addon_state"]["status"] == "DEGRADED"
+    assert payload["news_addon_state"]["news_influence_frac"] == 0.0
+    statuses = {
+        status["provider"]: status for status in payload["news_addon_state"]["provider_status"]
+    }
+    assert statuses["fred"]["status"] == "OK"
+    assert statuses["gdelt"]["last_failure_http_status"] == 429
+    assert statuses["newsapi"]["last_failure_error_code"] == "apiKeyInvalid"
+    assert "api key invalid" in response.text
+    assert "NEWSAPI_KEY" not in response.text
+
+
 def test_batch_partial_failure_is_isolated() -> None:
     client = make_client()
     login(client)

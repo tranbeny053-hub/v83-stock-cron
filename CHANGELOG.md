@@ -301,3 +301,18 @@ Notes:
 - No full article text is stored, rendered, exported, scraped, or fetched from article URLs.
 - GDELT requires no key. `FRED_API_KEY` and `NEWSAPI_KEY` are optional backend-only Hugging Face Secrets.
 - No calibration, WebSocket, News Authority scoring influence, private exchange endpoints, exchange API keys, deployment, merge, or Hugging Face push was performed.
+
+## 2026-06-08 - Wave 3A News Provider Hotfix
+
+Changed:
+- Added provider-level GDELT throttling with `UCPE_GDELT_MIN_INTERVAL_SECONDS=6` default.
+- Added in-process advisory-news metadata cache with `UCPE_NEWS_CACHE_TTL_SECONDS=180` default.
+- Added GDELT 429 diagnostics with `last_failure_http_status=429`, `last_failure_error_code=RATE_LIMITED`, retry/cooldown metadata, and cached-headline fallback when available.
+- Added NewsAPI 401/429/400 diagnostics for invalid key, rate limit, and bad parameter cases without exposing keys or headers.
+- Added sanitized provider-status fields for configured, healthy, status, item counts, macro observation counts, failure code/type/operation/time, retry, cache status, and latency.
+- Updated gated news live smoke output to print sanitized provider statuses only.
+- Added regression tests for GDELT cache/throttle/rate limit, NewsAPI invalid-key/rate-limit/unconfigured behavior, and FRED-OK mixed-provider degraded analysis.
+
+Notes:
+- `news_influence_frac` remains `0.0` and `influence_mode` remains `ADVISORY_DISPLAY_ONLY`.
+- No scoring/probability/gates/disposition logic, full article body fetch/storage, scraping, trading capability, deploy, merge, or Hugging Face push was added.

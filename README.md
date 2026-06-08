@@ -69,6 +69,8 @@ Apply `migrations/0002_news.sql` in Supabase SQL Editor before expecting durable
 | Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep manual live smoke disabled by default | yes | Do not enable in CI. |
 | Variable | `UCPE_NEWS_ITEM_LIMIT` | `12` | Advisory news item cap per provider call | yes | Display-only; tune cautiously. |
 | Variable | `UCPE_NEWS_TIMEOUT_SECONDS` | `6` | News provider timeout | yes | Bounded best-effort news fetch. |
+| Variable | `UCPE_GDELT_MIN_INTERVAL_SECONDS` | `6` | Minimum seconds between GDELT outbound requests per query | yes | Protects against GDELT one-request-per-five-seconds rate limit. |
+| Variable | `UCPE_NEWS_CACHE_TTL_SECONDS` | `180` | In-process advisory news metadata cache TTL | yes | Lets repeated timeframe calls reuse metadata safely. |
 | Variable | `UCPE_NEWS_LIVE_SMOKE_ENABLED` | `false` | Optional live news smoke gate | yes | Do not enable in CI. |
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | Use `false` only for local HTTP smoke. |
 | Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | Enable only if Dev Mode secret is configured. |

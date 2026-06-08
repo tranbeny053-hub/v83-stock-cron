@@ -81,26 +81,28 @@ class PublicHttpClient:
                 if attempt >= self.max_retries:
                     raise last_error from exc
             else:
-                if response.status_code in {400, 404}:
+                if response.status_code in {400, 404} and provider not in {
+                    "gdelt",
+                    "fred",
+                    "newsapi",
+                }:
                     raise ProviderError(
                         "INVALID_SYMBOL",
                         "Provider rejected symbol.",
                         provider=provider,
+                        http_status=response.status_code,
+                        error_code="INVALID_SYMBOL",
+                        error_type="REQUEST",
+                        operation=f"GET {path}",
                     )
-                if response.status_code in {418, 429} or response.status_code >= 500:
-                    last_error = ProviderError(
-                        "PROVIDER_DEGRADED",
-                        f"Provider throttled or degraded: HTTP {response.status_code}.",
+                if response.status_code >= 400:
+                    last_error = _provider_error_from_response(
+                        response,
                         provider=provider,
+                        operation=f"GET {path}",
                     )
                     if attempt >= self.max_retries:
                         raise last_error
-                elif response.status_code >= 400:
-                    raise ProviderError(
-                        "PROVIDER_DEGRADED",
-                        f"Provider public request failed: HTTP {response.status_code}.",
-                        provider=provider,
-                    )
                 else:
                     try:
                         return response.json()
@@ -109,6 +111,10 @@ class PublicHttpClient:
                             "SCHEMA_VALIDATION_FAILED",
                             "Provider returned malformed JSON.",
                             provider=provider,
+                            http_status=response.status_code,
+                            error_code="MALFORMED_JSON",
+                            error_type="SCHEMA",
+                            operation=f"GET {path}",
                         ) from exc
             self.sleep_func(0.25 * (attempt + 1))
         if last_error is not None:
@@ -166,3 +172,76 @@ class PublicHttpClient:
                 provider=provider,
             )
         hits.append(now)
+
+
+def _provider_error_from_response(
+    response: httpx.Response,
+    *,
+    provider: str,
+    operation: str,
+) -> ProviderError:
+    status = response.status_code
+    provider_code = _extract_provider_error_code(response)
+    if status in {418, 429}:
+        return ProviderError(
+            "PROVIDER_DEGRADED",
+            "Provider rate limited the public request.",
+            provider=provider,
+            http_status=status,
+            error_code=provider_code or "RATE_LIMITED",
+            error_type="RATE_LIMIT",
+            retry_after_seconds=_retry_after_seconds(response),
+            operation=operation,
+        )
+    if status in {401, 403}:
+        return ProviderError(
+            "PROVIDER_DEGRADED",
+            "Provider authentication failed.",
+            provider=provider,
+            http_status=status,
+            error_code=provider_code or "AUTH_FAILED",
+            error_type="AUTH",
+            operation=operation,
+        )
+    if status == 400:
+        return ProviderError(
+            "PROVIDER_DEGRADED",
+            "Provider rejected request parameters.",
+            provider=provider,
+            http_status=status,
+            error_code=provider_code or "PARAMETER_INVALID",
+            error_type="REQUEST",
+            operation=operation,
+        )
+    return ProviderError(
+        "PROVIDER_DEGRADED",
+        f"Provider public request failed: HTTP {status}.",
+        provider=provider,
+        http_status=status,
+        error_code=provider_code or "HTTP_ERROR",
+        error_type="PROVIDER",
+        operation=operation,
+    )
+
+
+def _extract_provider_error_code(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    code = payload.get("code")
+    if isinstance(code, str) and code.strip():
+        return code.strip()
+    return None
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    raw = response.headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return None
