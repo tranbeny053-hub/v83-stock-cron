@@ -7,13 +7,13 @@ Codex
 User / Claude
 
 ## Current Goal
-Wave 1.2 Supabase runtime connectivity hotfix: make Hugging Face persistence use backend-only Supabase REST/PostgREST over HTTPS when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured. Do not merge, deploy, or push to Hugging Face from Codex.
+Wave 2A Symbol Universe and Official Market Data v2: expand public Binance/OKX REST market-data collection and provider observability. Do not merge, deploy, or push to Hugging Face from Codex.
 
 ## Current Branch / Worktree
-`codex/wave1-2-supabase-rest-runtime` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
+`codex/wave2a-market-data-v2` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
 
 ## Risk Level
-R2/R3 persistence/runtime connectivity. Scoring, probability, gates, news authority, market-data provider behavior, frontend Supabase exposure, Docker, and deployment automation were not changed.
+R2/R3 public market-data and observability expansion. Scoring, probability, gates, news authority, calibration, WebSocket, private provider calls, Docker, and deployment automation were not changed.
 
 ## Files Changed
 - `AI/03_CURRENT_STATE.md`
@@ -22,73 +22,91 @@ R2/R3 persistence/runtime connectivity. Scoring, probability, gates, news author
 - `CHANGELOG.md`
 - `DEPLOYMENT_CHECKLIST.md`
 - `IMPLEMENTATION_DECISIONS.md`
-- `README.md`
 - `RELEASE_GATE.md`
 - `docs/source_verification_matrix.md`
-- `src/crypto_probability_engine/api/health.py`
+- `frontend/app.js`
+- `src/crypto_probability_engine/adapters/market_metrics.py`
+- `src/crypto_probability_engine/adapters/mappers.py`
+- `src/crypto_probability_engine/adapters/provider_selection.py`
+- `src/crypto_probability_engine/adapters/public_market.py`
+- `src/crypto_probability_engine/adapters/symbol_universe.py`
+- `src/crypto_probability_engine/adapters/types.py`
+- `src/crypto_probability_engine/api/app.py`
+- `src/crypto_probability_engine/config/defaults.py`
 - `src/crypto_probability_engine/config/settings.py`
-- `src/crypto_probability_engine/persistence/repository.py`
+- `src/crypto_probability_engine/detail/builder.py`
+- `src/crypto_probability_engine/normalizers/symbols.py`
+- `tests/adapters/test_market_data_v2_metrics.py`
+- `tests/adapters/test_provider_selection.py`
+- `tests/adapters/test_public_market_adapters.py`
+- `tests/adapters/test_symbol_normalization.py`
 - `tests/api/test_analysis_endpoints.py`
-- `tests/api/test_auth_health.py`
-- `tests/persistence/test_persistence_foundation.py`
+- `tests/api/test_analysis_live_data_wiring.py`
+- `tests/api/test_watchlist_endpoints.py`
+- `tests/frontend/test_frontend_static.py`
 
 ## Files Read But Not Changed
-- `src/crypto_probability_engine/api/app.py`
-- `frontend/app.js`
-- `tests/api/test_watchlist_endpoints.py`
+- `AI/08_IMPLEMENTATION_MEMORY.md`
+- `AI/03_CURRENT_STATE.md`
+- `IMPLEMENTATION_DECISIONS.md`
+- `RELEASE_GATE.md`
+- `CHANGELOG.md`
+- `DEPLOYMENT_CHECKLIST.md`
+- `docs/source_verification_matrix.md`
+- `src/crypto_probability_engine/api/analysis_service.py`
+- `src/crypto_probability_engine/api/schemas.py`
+- `src/crypto_probability_engine/persistence/repository.py`
 - `tests/conftest.py`
-- `scripts/check_no_secrets.py`
+- Binance official market-data-only docs
+- OKX official API v5 public market-data docs
 
 ## Commands Run
-- `git checkout -b codex/wave1-2-supabase-rest-runtime`: PASS, branch created from `dev`.
-- `git branch --show-current`: PASS, `codex/wave1-2-supabase-rest-runtime`.
-- `git status --short --untracked-files=all -- .`: PASS, only expected Wave 1.2 modified files.
-- `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/persistence -q`: PASS, 9 passed.
-- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 28 passed, 2 warnings.
+- `git checkout -b codex/wave2a-market-data-v2`: PASS, branch created from `dev`.
+- `PYTHONPATH=src python3 -m pytest tests/adapters -q`: PASS, 37 passed.
+- `PYTHONPATH=src python3 -m pytest tests/validation -q`: PASS, 12 passed.
+- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 29 passed, 2 warnings.
 - `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 14 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 119 passed, 4 warnings.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 130 passed, 4 warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: initially FAIL on fake test `supabase_*` keyword assignments; after test-only syntax fix, PASS.
+- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
-- `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with existing `jsonschema.RefResolver` warning.
+- `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `grep -R "SUPABASE_SERVICE_ROLE_KEY\|SUPABASE_DB_URL\|SUPABASE_URL" frontend || true`: PASS, no output.
-- `grep -R "service_role\|apikey\|Authorization" frontend || true`: PASS, no output.
-- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`: PASS, no output.
-- `grep -R --exclude-dir=__pycache__ "SUPABASE_REST\|SupabaseRestRepository\|repository_type" src tests docs frontend || true`: PASS, expected backend/test/doc references only.
+- Targeted private/signed/API-key grep over adapters and tests: PASS, no hits.
+- Targeted forbidden-capability grep over implementation/test/schema paths: PASS, no hits.
 
 ## What Works Now
-- Runtime selects `SUPABASE_REST` first when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present.
-- Runtime falls back to `SUPABASE_POSTGRES` only when REST secrets are absent and `SUPABASE_DB_URL` exists.
-- Runtime falls back to `IN_MEMORY` when no persistence config exists.
-- Supabase REST persistence uses backend-only `apikey` and `Authorization` headers.
-- REST repository supports compact analysis run, timeframe result, provider observation, watchlist, recent-run, and get-run methods.
-- REST failures return `UNAVAILABLE`, open the circuit, and analysis still returns normally.
-- `/v1/system_status` reports repository type and persistence status without showing URL/key/DB details.
-- Unit tests mock `httpx`; no real Supabase network/DB is required.
+- `SOL`, `SOLUSDT`, `SOL/USDT`, `SOL-USDT`, and other valid USDT aliases normalize to canonical `BASE/USDT`.
+- Live provider selection validates symbols against cached Binance/OKX public symbol universes.
+- Availability is visible as `BOTH_PROVIDERS`, `BINANCE_ONLY`, `OKX_ONLY`, `UNSUPPORTED`, or `TO_VERIFY`.
+- Provider-only symbols can analyze only when `UCPE_CROSS_PROVIDER_REQUIRED=false`, with explicit warning.
+- Unsupported live symbols return a clear invalid-symbol error instead of crashing.
+- Binance public adapter collects klines, depth, ticker, recent trades, and exchangeInfo.
+- OKX public adapter collects candles, books, ticker, trades, and instruments.
+- Data quality/detail now expose provider resources, latency, freshness, derived metrics, symbol availability, and cross-provider state.
+- Derived metrics are advisory metadata only and do not affect score/probability/gates/news.
+- Existing best-effort provider-observation persistence path remains non-blocking.
 
 ## What Is Still Broken / Unknown
-- Full required offline check suite passed locally.
-- Hugging Face runtime persistence still needs live smoke after secrets are configured.
-- Supabase project API/RLS/table permissions can still affect live REST calls.
+- Final required offline safety command suite passed.
+- Live deployed smoke for arbitrary symbols and provider observability was not run by Codex.
+- Public provider availability/rate limits and symbol-list freshness remain operational risks.
 - No merge/deploy/push was performed.
 
 ## Next 3 Steps
-1. Review and commit the Wave 1.2 diff when ready.
-2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Hugging Face Secrets.
-3. Redeploy/smoke only after approval; confirm `Persistence: OK`.
+1. User/Claude reviews the `codex/wave2a-market-data-v2` branch before merge/deploy.
+2. After approval, merge from the app root worktree only.
+3. Deploy only after approval, from the app root `v8-crypto-api-clean/`, not the parent repo.
 
 ## Do Not Change
 - Do not touch sibling folders outside `v8-crypto-api-clean/`.
 - Do not commit `.env`, salts, access codes, real hashes, signing keys, database URLs, service role keys, API keys, or full env dumps.
 - Do not add trading, order, withdrawal, transfer, leverage-changing, or autonomous execution capability.
-- Do not add Binance/OKX private/authenticated calls or live news fetching.
+- Do not add Binance/OKX private/authenticated calls, signed endpoints, API keys, WebSocket, or live news fetching.
 - Do not silently fall back from live mode to fixture mode.
-- Do not expose Supabase values to frontend/status/debug/logs.
-- Do not change backend quant/scoring/gates/news math as part of Wave 1.2.
+- Do not change backend quant/scoring/gates/news math as part of Wave 2A.
 - Do not deploy or push to Hugging Face without explicit approval.
 
 ## Notes for Non-Coder User
-Fix này đổi đường lưu dữ liệu trên Hugging Face sang Supabase REST qua HTTPS, vì Hugging Face có thể không cho app gọi trực tiếp cổng Postgres `5432/6543`. Bạn sẽ cần đặt `SUPABASE_URL` và `SUPABASE_SERVICE_ROLE_KEY` trong Hugging Face Secrets. App vẫn không có chức năng giao dịch, và frontend không nhìn thấy key Supabase.
+Wave 2A mở rộng dữ liệu thị trường chính thức: app có thể nhận nhiều mã USDT hơn, kiểm tra mã đó có trên Binance/OKX hay không, và hiển thị thêm chất lượng dữ liệu như độ sâu sổ lệnh, ticker, giao dịch gần đây, độ trễ, độ tươi, và spread. Đây chỉ là dữ liệu quan sát; app vẫn không có chức năng giao dịch và không dùng API key sàn.

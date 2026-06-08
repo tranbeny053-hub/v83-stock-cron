@@ -1,6 +1,6 @@
 # Deployment Checklist
 
-Status: Sprint 2 build exists locally. No deployment has been performed. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
+Status: Wave 2A build exists locally. No deployment has been performed by Codex. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
 
 ## Pre-Deploy Review
 
@@ -41,7 +41,10 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 - [ ] Keep the Supabase service role key backend-only; never enter it in frontend code, browser console, chat, logs, or debug exports.
 - [ ] Use `SUPABASE_DB_URL` for local migration/direct Postgres admin only, or for non-Hugging-Face runtimes where outbound Postgres is allowed.
 - [ ] Supabase migrations applied before expecting durable watchlist/run summaries.
-- [ ] Binance/OKX API keys are absent; Sprint 2 public market data requires no Binance/OKX secrets.
+- [ ] Set `UCPE_SYMBOL_UNIVERSE_CACHE_TTL_SECONDS=3600` unless intentionally tuning public symbol cache freshness.
+- [ ] Set `UCPE_PROVIDER_DEPTH_LIMIT=100` unless intentionally tuning public order-book depth.
+- [ ] Set `UCPE_PROVIDER_TRADE_LIMIT=50` unless intentionally tuning public recent-trades sampling.
+- [ ] Binance/OKX API keys are absent; Wave 2A public REST market data requires no Binance/OKX secrets.
 - [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
 - [ ] Private exchange keys, if used later, are read-only only.
 - [ ] Secret presence in health/debug is masked as `set (****)`.
@@ -50,6 +53,7 @@ Clarifications:
 - Type the plain access code into the UI login, not `APP_ACCESS_CODE_HASH`.
 - `UCPE_ACCESS_CODE_SALT`, `SESSION_SIGNING_KEY`, and any Hugging Face upload token are not the app login code.
 - No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
+- Wave 2A remains REST-only; WebSocket is not enabled in this deployment checklist.
 
 ## Optional Supabase Persistence Setup
 

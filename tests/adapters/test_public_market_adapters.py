@@ -10,7 +10,9 @@ from crypto_probability_engine.adapters.http_client import PublicHttpClient
 from crypto_probability_engine.adapters.mappers import (
     map_interval,
     parse_binance_candles,
+    parse_binance_symbol_universe,
     parse_okx_candles,
+    parse_okx_symbol_universe,
 )
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
 from crypto_probability_engine.adapters.types import ProviderError
@@ -133,6 +135,34 @@ def test_binance_public_adapter_fetches_keyless_public_snapshot() -> None:
                     "asks": [["120.5", "2.5"]],
                 },
             )
+        if request.url.path == "/api/v3/ticker/24hr":
+            assert request.url.params["symbol"] == "BTCUSDT"
+            return httpx.Response(
+                200,
+                json={
+                    "lastPrice": "120.25",
+                    "bidPrice": "120.0",
+                    "askPrice": "120.5",
+                    "volume": "10000",
+                    "quoteVolume": "1200000",
+                },
+            )
+        if request.url.path == "/api/v3/trades":
+            assert request.url.params["symbol"] == "BTCUSDT"
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 1,
+                        "price": "120.2",
+                        "qty": "0.4",
+                        "quoteQty": "48.08",
+                        "time": epoch_millis(datetime.now(UTC)),
+                        "isBuyerMaker": False,
+                        "isBestMatch": True,
+                    }
+                ],
+            )
         return httpx.Response(404)
 
     adapter = BinancePublicAdapter(
@@ -144,7 +174,16 @@ def test_binance_public_adapter_fetches_keyless_public_snapshot() -> None:
 
     assert snapshot.provider == "binance"
     assert snapshot.normalized_symbol == "BTC/USDT"
-    assert seen_paths == ["/api/v3/klines", "/api/v3/depth"]
+    assert seen_paths == [
+        "/api/v3/klines",
+        "/api/v3/depth",
+        "/api/v3/ticker/24hr",
+        "/api/v3/trades",
+    ]
+    assert snapshot.resource_statuses["ticker"]["status"] == "OK"
+    assert snapshot.resource_statuses["trades"]["status"] == "OK"
+    assert snapshot.derived_metrics["spread_bps"]["status"] == "OK"
+    assert snapshot.derived_metrics["recent_trade_buy_sell_pressure"]["status"] == "OK"
 
 
 def test_okx_public_adapter_fetches_keyless_public_snapshot() -> None:
@@ -173,6 +212,43 @@ def test_okx_public_adapter_fetches_keyless_public_snapshot() -> None:
                     ],
                 },
             )
+        if request.url.path == "/api/v5/market/ticker":
+            assert request.url.params["instId"] == "BTC-USDT"
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "instId": "BTC-USDT",
+                            "last": "120.25",
+                            "bidPx": "120.0",
+                            "askPx": "120.5",
+                            "vol24h": "10000",
+                            "volCcy24h": "1200000",
+                            "ts": str(epoch_millis(datetime.now(UTC))),
+                        }
+                    ],
+                },
+            )
+        if request.url.path == "/api/v5/market/trades":
+            assert request.url.params["instId"] == "BTC-USDT"
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "instId": "BTC-USDT",
+                            "tradeId": "1",
+                            "px": "120.2",
+                            "sz": "0.4",
+                            "side": "buy",
+                            "ts": str(epoch_millis(datetime.now(UTC))),
+                        }
+                    ],
+                },
+            )
         return httpx.Response(404)
 
     adapter = OkxPublicAdapter(
@@ -184,7 +260,16 @@ def test_okx_public_adapter_fetches_keyless_public_snapshot() -> None:
 
     assert snapshot.provider == "okx"
     assert snapshot.normalized_symbol == "BTC/USDT"
-    assert seen_paths == ["/api/v5/market/candles", "/api/v5/market/books"]
+    assert seen_paths == [
+        "/api/v5/market/candles",
+        "/api/v5/market/books",
+        "/api/v5/market/ticker",
+        "/api/v5/market/trades",
+    ]
+    assert snapshot.resource_statuses["ticker"]["status"] == "OK"
+    assert snapshot.resource_statuses["trades"]["status"] == "OK"
+    assert snapshot.derived_metrics["spread_bps"]["status"] == "OK"
+    assert snapshot.derived_metrics["recent_trade_buy_sell_pressure"]["status"] == "OK"
 
 
 def test_monthly_public_adapter_limits_use_per_timeframe_history() -> None:
@@ -258,6 +343,54 @@ def test_public_client_maps_429_to_typed_provider_error() -> None:
             provider="binance",
         )
     assert excinfo.value.code == "PROVIDER_DEGRADED"
+
+
+def test_symbol_universe_mappers_keep_only_live_spot_usdt_pairs() -> None:
+    binance = parse_binance_symbol_universe(
+        {
+            "symbols": [
+                {
+                    "symbol": "SOLUSDT",
+                    "baseAsset": "SOL",
+                    "quoteAsset": "USDT",
+                    "status": "TRADING",
+                },
+                {"symbol": "SOLEUR", "baseAsset": "SOL", "quoteAsset": "EUR", "status": "TRADING"},
+                {"symbol": "OLDUSDT", "baseAsset": "OLD", "quoteAsset": "USDT", "status": "BREAK"},
+            ]
+        }
+    )
+    okx = parse_okx_symbol_universe(
+        {
+            "code": "0",
+            "data": [
+                {
+                    "instType": "SPOT",
+                    "instId": "SOL-USDT",
+                    "baseCcy": "SOL",
+                    "quoteCcy": "USDT",
+                    "state": "live",
+                },
+                {
+                    "instType": "SPOT",
+                    "instId": "SOL-EUR",
+                    "baseCcy": "SOL",
+                    "quoteCcy": "EUR",
+                    "state": "live",
+                },
+                {
+                    "instType": "SWAP",
+                    "instId": "SOL-USDT-SWAP",
+                    "baseCcy": "SOL",
+                    "quoteCcy": "USDT",
+                    "state": "live",
+                },
+            ],
+        }
+    )
+
+    assert binance == frozenset({"SOL/USDT"})
+    assert okx == frozenset({"SOL/USDT"})
 
 
 def test_public_client_maps_timeout_to_typed_provider_error() -> None:

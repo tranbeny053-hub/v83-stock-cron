@@ -6,12 +6,19 @@ import time
 from dataclasses import dataclass
 
 from crypto_probability_engine.adapters.fixtures import build_fixture_snapshot
+from crypto_probability_engine.adapters.market_metrics import (
+    cross_provider_price_disagreement_metric,
+)
 from crypto_probability_engine.adapters.public_market import (
     BinancePublicAdapter,
     FixturePublicAdapter,
     OkxPublicAdapter,
     ProviderRouter,
     PublicMarketAdapter,
+)
+from crypto_probability_engine.adapters.symbol_universe import (
+    clear_symbol_universe_cache,
+    resolve_symbol_availability,
 )
 from crypto_probability_engine.adapters.types import (
     MarketSnapshot,
@@ -64,6 +71,7 @@ _SNAPSHOT_CACHE: dict[tuple[str, str, str], _CachedSnapshot] = {}
 
 def clear_provider_cache() -> None:
     _SNAPSHOT_CACHE.clear()
+    clear_symbol_universe_cache()
 
 
 def select_market_data(
@@ -134,9 +142,24 @@ def _live_selection(
     settings: Settings,
     providers: list[PublicMarketAdapter],
 ) -> ProviderSelectionResult:
+    symbol_resolution = resolve_symbol_availability(
+        symbol,
+        providers,
+        ttl_seconds=settings.symbol_universe_cache_ttl_seconds,
+    )
+    providers = _providers_for_symbol_resolution(
+        providers,
+        symbol_resolution=symbol_resolution,
+        settings=settings,
+    )
     states = {provider.name: ProviderState(name=provider.name) for provider in providers}
     successes: list[MarketSnapshot] = []
     failures: dict[str, str] = {}
+    symbol_warnings = list(symbol_resolution.warnings)
+    if symbol_resolution.availability in {"BINANCE_ONLY", "OKX_ONLY"}:
+        symbol_warnings.append(
+            "Single-provider live data; cross-provider confirmation unavailable."
+        )
     for provider in providers:
         try:
             snapshot = _fetch_with_cache(
@@ -155,6 +178,9 @@ def _live_selection(
             states[provider.name].warnings.append(message)
         else:
             states[provider.name].status = ProviderStatus.OK
+            states[provider.name].warnings.extend(snapshot.warnings)
+            states[provider.name].resources = dict(snapshot.resource_statuses)
+            states[provider.name].derived_metrics = dict(snapshot.derived_metrics)
             successes.append(snapshot)
 
     if len(successes) >= 2:
@@ -174,6 +200,12 @@ def _live_selection(
             data_quality["status"] = "DATA_CONFLICT"
             data_quality["cross_provider_state"] = "DATA_CONFLICT"
             data_quality["fallback_to_single_provider"] = False
+            data_quality["symbol_availability"] = symbol_resolution.availability
+            data_quality["provider_resources"] = _provider_resources(successes)
+            data_quality["derived_market_metrics"] = _combined_derived_metrics(
+                successes,
+                coherence_reports,
+            )
             if conflict_report.get("disagreement_bps") is not None:
                 data_quality["disagreement_bps"] = conflict_report["disagreement_bps"]
             if settings.cross_provider_required:
@@ -188,6 +220,7 @@ def _live_selection(
                         cross_provider_reason=warning,
                         disagreement_bps=conflict_report.get("disagreement_bps"),
                         cross_provider_checks=coherence_reports,
+                        symbol_availability=symbol_resolution.availability,
                     ),
                     data_quality=data_quality,
                 ) from exc
@@ -208,15 +241,19 @@ def _live_selection(
                     cross_provider_reason=fallback_warning,
                     disagreement_bps=conflict_report.get("disagreement_bps"),
                     cross_provider_checks=coherence_reports,
+                    symbol_availability=symbol_resolution.availability,
                 ),
                 data_quality=_success_data_quality(
                     snapshot,
                     data_source=DATA_SOURCE_BY_PROVIDER.get(snapshot.provider, "DEGRADED"),
-                    warnings=[fallback_warning],
+                    warnings=[*symbol_warnings, fallback_warning],
                     failures=failures,
                     cross_provider_state="DATA_CONFLICT",
                     fallback_to_single_provider=True,
                     disagreement_bps=conflict_report.get("disagreement_bps"),
+                    symbol_availability=symbol_resolution.availability,
+                    successes=successes,
+                    coherence_reports=coherence_reports,
                 ),
             )
         snapshot = successes[0]
@@ -229,14 +266,18 @@ def _live_selection(
                 cross_provider_state="COHERENT",
                 fallback_to_single_provider=False,
                 cross_provider_checks=coherence_reports,
+                symbol_availability=symbol_resolution.availability,
             ),
             data_quality=_success_data_quality(
                 snapshot,
                 data_source="CROSS_PROVIDER",
-                warnings=[],
+                warnings=symbol_warnings,
                 failures=failures,
                 cross_provider_state="COHERENT",
                 fallback_to_single_provider=False,
+                symbol_availability=symbol_resolution.availability,
+                successes=successes,
+                coherence_reports=coherence_reports,
             ),
         )
 
@@ -257,7 +298,7 @@ def _live_selection(
                 ),
                 data_quality=data_quality,
             )
-        warning = "single-source, cross-check unavailable"
+        warning = "Single-provider live data; cross-provider confirmation unavailable."
         return ProviderSelectionResult(
             snapshot=snapshot,
             provider_state=_public_provider_state(
@@ -267,14 +308,17 @@ def _live_selection(
                 cross_provider_state="UNAVAILABLE",
                 fallback_to_single_provider=True,
                 cross_provider_reason=warning,
+                symbol_availability=symbol_resolution.availability,
             ),
             data_quality=_success_data_quality(
                 snapshot,
                 data_source=DATA_SOURCE_BY_PROVIDER.get(snapshot.provider, "DEGRADED"),
-                warnings=[warning],
+                warnings=[*symbol_warnings, warning],
                 failures=failures,
                 cross_provider_state="UNAVAILABLE",
                 fallback_to_single_provider=True,
+                symbol_availability=symbol_resolution.availability,
+                successes=successes,
             ),
         )
 
@@ -288,8 +332,70 @@ def _live_selection(
         code=code,
         message=warning,
         provider_state=_public_provider_state(states, status="PROVIDER_DEGRADED"),
-        data_quality=_failed_data_quality("UNAVAILABLE", warning, failures),
+        data_quality=_failed_data_quality(
+            "UNAVAILABLE",
+            warning,
+            failures,
+            symbol_availability=symbol_resolution.availability,
+        ),
     )
+
+
+def _providers_for_symbol_resolution(
+    providers: list[PublicMarketAdapter],
+    *,
+    symbol_resolution,
+    settings: Settings,
+) -> list[PublicMarketAdapter]:
+    if symbol_resolution.availability in {"TO_VERIFY", "BOTH_PROVIDERS"}:
+        return providers
+    if symbol_resolution.availability == "UNSUPPORTED":
+        failures = {
+            getattr(provider, "name", "unknown"): "INVALID_SYMBOL: unsupported spot USDT symbol"
+            for provider in providers
+        }
+        raise ProviderSelectionError(
+            code=ErrorCode.INVALID_SYMBOL,
+            message="Unsupported spot USDT symbol.",
+            provider_state={
+                "status": "INVALID_SYMBOL",
+                "active_provider": None,
+                "cross_provider_state": "UNSUPPORTED",
+                "fallback_to_single_provider": False,
+                "symbol_availability": "UNSUPPORTED",
+                "providers": {},
+            },
+            data_quality=_failed_data_quality(
+                "UNAVAILABLE",
+                "Unsupported spot USDT symbol.",
+                failures,
+                symbol_availability="UNSUPPORTED",
+            ),
+        )
+    if settings.cross_provider_required:
+        required_message = (
+            "Cross-provider confirmation required but symbol is available on only one provider."
+        )
+        raise ProviderSelectionError(
+            code=ErrorCode.PROVIDER_DEGRADED,
+            message=required_message,
+            provider_state={
+                "status": "PROVIDER_DEGRADED",
+                "active_provider": None,
+                "cross_provider_state": "UNAVAILABLE",
+                "fallback_to_single_provider": False,
+                "symbol_availability": symbol_resolution.availability,
+                "providers": {},
+            },
+            data_quality=_failed_data_quality(
+                "DEGRADED",
+                required_message,
+                {},
+                symbol_availability=symbol_resolution.availability,
+            ),
+        )
+    allowed = set(symbol_resolution.providers)
+    return [provider for provider in providers if provider.name in allowed]
 
 
 def _fetch_with_cache(
@@ -320,6 +426,7 @@ def _public_provider_state(
     cross_provider_reason: str | None = None,
     disagreement_bps: float | None = None,
     cross_provider_checks: list[dict] | None = None,
+    symbol_availability: str | None = None,
 ) -> dict:
     provider_state = {
         "status": status,
@@ -334,6 +441,8 @@ def _public_provider_state(
         provider_state["disagreement_bps"] = disagreement_bps
     if cross_provider_checks is not None:
         provider_state["cross_provider_checks"] = cross_provider_checks
+    if symbol_availability is not None:
+        provider_state["symbol_availability"] = symbol_availability
     return provider_state
 
 
@@ -346,6 +455,9 @@ def _success_data_quality(
     cross_provider_state: str = "NOT_REQUIRED",
     fallback_to_single_provider: bool = False,
     disagreement_bps: float | None = None,
+    symbol_availability: str | None = None,
+    successes: list[MarketSnapshot] | None = None,
+    coherence_reports: list[dict] | None = None,
 ) -> dict:
     latest_age = max(
         0,
@@ -361,6 +473,12 @@ def _success_data_quality(
         "provider_failures": failures,
         "cross_provider_state": cross_provider_state,
         "fallback_to_single_provider": fallback_to_single_provider,
+        "symbol_availability": symbol_availability,
+        "provider_resources": _provider_resources(successes or [snapshot]),
+        "derived_market_metrics": _combined_derived_metrics(
+            successes or [snapshot],
+            coherence_reports or [],
+        ),
     }
     if disagreement_bps is not None:
         data_quality["disagreement_bps"] = disagreement_bps
@@ -376,7 +494,13 @@ def _coherence_warning(exc: DataValidationError, report: dict) -> str:
     return "; ".join(parts)
 
 
-def _failed_data_quality(data_source: str, warning: str, failures: dict[str, str]) -> dict:
+def _failed_data_quality(
+    data_source: str,
+    warning: str,
+    failures: dict[str, str],
+    *,
+    symbol_availability: str | None = None,
+) -> dict:
     return {
         "status": "UNAVAILABLE" if data_source == "UNAVAILABLE" else "DEGRADED",
         "warnings": [warning],
@@ -385,6 +509,9 @@ def _failed_data_quality(data_source: str, warning: str, failures: dict[str, str
         "data_source": data_source,
         "latest_candle_age_seconds": None,
         "provider_failures": failures,
+        "symbol_availability": symbol_availability,
+        "provider_resources": {},
+        "derived_market_metrics": {},
     }
 
 
@@ -392,3 +519,19 @@ def _all_failures_are_invalid(failures: dict[str, str]) -> bool:
     return bool(failures) and all(
         message.startswith("INVALID_SYMBOL") for message in failures.values()
     )
+
+
+def _provider_resources(snapshots: list[MarketSnapshot]) -> dict[str, dict]:
+    return {snapshot.provider: dict(snapshot.resource_statuses) for snapshot in snapshots}
+
+
+def _combined_derived_metrics(
+    snapshots: list[MarketSnapshot],
+    coherence_reports: list[dict],
+) -> dict:
+    metrics = {snapshot.provider: dict(snapshot.derived_metrics) for snapshot in snapshots}
+    if len(snapshots) >= 2 or coherence_reports:
+        metrics["cross_provider_price_disagreement_bps"] = cross_provider_price_disagreement_metric(
+            coherence_reports
+        )
+    return metrics

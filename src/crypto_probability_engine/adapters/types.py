@@ -40,6 +40,26 @@ class OrderBookSnapshot:
 
 
 @dataclass(frozen=True)
+class MarketTicker:
+    provider: str
+    last_price: float
+    bid_price: float | None
+    ask_price: float | None
+    base_volume_24h: float | None
+    quote_volume_24h: float | None
+    as_of_utc: datetime
+
+
+@dataclass(frozen=True)
+class RecentTrade:
+    provider: str
+    price: float
+    size: float
+    side: str | None
+    timestamp_utc: datetime
+
+
+@dataclass(frozen=True)
 class MarketSnapshot:
     provider: str
     normalized_symbol: str
@@ -49,6 +69,10 @@ class MarketSnapshot:
     as_of_utc: datetime
     source_status: ProviderStatus = ProviderStatus.TO_VERIFY
     warnings: tuple[str, ...] = ()
+    ticker: MarketTicker | None = None
+    recent_trades: tuple[RecentTrade, ...] = ()
+    resource_statuses: dict[str, dict] = field(default_factory=dict)
+    derived_metrics: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -57,6 +81,8 @@ class ProviderState:
     status: ProviderStatus = ProviderStatus.TO_VERIFY
     quarantine_reason: str | None = None
     warnings: list[str] = field(default_factory=list)
+    resources: dict[str, dict] = field(default_factory=dict)
+    derived_metrics: dict[str, dict] = field(default_factory=dict)
 
     def to_public_dict(self) -> dict:
         return {
@@ -64,6 +90,8 @@ class ProviderState:
             "status": self.status.value,
             "quarantine_reason": self.quarantine_reason,
             "warnings": list(self.warnings),
+            "resources": dict(self.resources),
+            "derived_metrics": dict(self.derived_metrics),
         }
 
 
@@ -75,4 +103,3 @@ class ProviderError(RuntimeError):
         self.code = code
         self.provider = provider
         self.message = message
-

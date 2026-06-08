@@ -7,6 +7,7 @@ from crypto_probability_engine.adapters.provider_selection import (
     clear_provider_cache,
     select_market_data,
 )
+from crypto_probability_engine.adapters.symbol_universe import ProviderSymbolUniverse
 from crypto_probability_engine.adapters.types import MarketSnapshot, ProviderError
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
@@ -20,11 +21,14 @@ class FakeAdapter:
         snapshot: MarketSnapshot | None = None,
         *,
         fail_code: str | None = None,
+        universe: frozenset[str] | None = None,
     ) -> None:
         self.name = name
         self.snapshot = snapshot
         self.fail_code = fail_code
         self.calls = 0
+        self.universe_calls = 0
+        self.universe = universe or frozenset({"BTC/USDT", "ETH/USDT"})
 
     def fetch_market_snapshot(self, symbol, timeframe: str) -> MarketSnapshot:
         self.calls += 1
@@ -32,6 +36,10 @@ class FakeAdapter:
             raise ProviderError(self.fail_code, "fake provider failure", provider=self.name)
         assert self.snapshot is not None
         return self.snapshot
+
+    def fetch_symbol_universe(self) -> ProviderSymbolUniverse:
+        self.universe_calls += 1
+        return ProviderSymbolUniverse(provider=self.name, symbols=self.universe)
 
 
 def live_settings(
@@ -81,7 +89,7 @@ def test_single_provider_ok_returns_live_with_warning() -> None:
 
     assert result.data_quality["data_source"] == "BINANCE_PUBLIC"
     assert result.data_quality["is_live_data"] is True
-    assert "single-source" in result.data_quality["warnings"][0]
+    assert "Single-provider live data" in result.data_quality["warnings"][0]
     assert "okx" in result.data_quality["provider_failures"]
 
 
@@ -123,7 +131,10 @@ def test_provider_disagreement_uses_single_live_provider_when_optional() -> None
     assert result.provider_state["status"] == "DEGRADED"
     assert result.provider_state["active_provider"] == "binance"
     assert result.provider_state["fallback_to_single_provider"] is True
-    assert "cross-provider confirmation is optional" in result.data_quality["warnings"][0]
+    assert any(
+        "cross-provider confirmation is optional" in warning
+        for warning in result.data_quality["warnings"]
+    )
 
 
 def test_provider_disagreement_blocks_when_cross_provider_required() -> None:
@@ -172,3 +183,119 @@ def test_live_cache_reuses_provider_snapshot_within_ttl() -> None:
 
     assert first.snapshot == second.snapshot
     assert adapter.calls == 1
+
+
+def test_symbol_universe_allows_sol_when_both_providers_support_it() -> None:
+    clear_provider_cache()
+    symbol = normalize_symbol("SOLUSDT")
+    universe = frozenset({"BTC/USDT", "SOL/USDT"})
+    result = select_market_data(
+        symbol,
+        "4H",
+        settings=live_settings(),
+        providers=[
+            FakeAdapter(
+                "binance",
+                make_snapshot(provider="binance", symbol="SOL/USDT"),
+                universe=universe,
+            ),
+            FakeAdapter(
+                "okx",
+                make_snapshot(provider="okx", symbol="SOL/USDT"),
+                universe=universe,
+            ),
+        ],
+    )
+
+    assert result.data_quality["symbol_availability"] == "BOTH_PROVIDERS"
+    assert result.data_quality["data_source"] == "CROSS_PROVIDER"
+
+
+def test_provider_only_symbol_allowed_when_cross_provider_optional() -> None:
+    clear_provider_cache()
+    symbol = normalize_symbol("SUI/USDT")
+    result = select_market_data(
+        symbol,
+        "4H",
+        settings=live_settings(cross_provider_required=False),
+        providers=[
+            FakeAdapter(
+                "binance",
+                make_snapshot(provider="binance", symbol="SUI/USDT"),
+                universe=frozenset({"SUI/USDT"}),
+            ),
+            FakeAdapter("okx", make_snapshot(provider="okx"), universe=frozenset({"BTC/USDT"})),
+        ],
+    )
+
+    assert result.snapshot.provider == "binance"
+    assert result.data_quality["symbol_availability"] == "BINANCE_ONLY"
+    assert result.data_quality["data_source"] == "BINANCE_PUBLIC"
+    assert any(
+        "Single-provider live data" in warning for warning in result.data_quality["warnings"]
+    )
+
+
+def test_provider_only_symbol_blocks_when_cross_provider_required() -> None:
+    clear_provider_cache()
+    symbol = normalize_symbol("SUI/USDT")
+    with pytest.raises(ProviderSelectionError) as excinfo:
+        select_market_data(
+            symbol,
+            "4H",
+            settings=live_settings(cross_provider_required=True),
+            providers=[
+                FakeAdapter(
+                    "binance",
+                    make_snapshot(provider="binance", symbol="SUI/USDT"),
+                    universe=frozenset({"SUI/USDT"}),
+                ),
+                FakeAdapter(
+                    "okx",
+                    make_snapshot(provider="okx"),
+                    universe=frozenset({"BTC/USDT"}),
+                ),
+            ],
+        )
+
+    assert excinfo.value.data_quality["symbol_availability"] == "BINANCE_ONLY"
+    assert excinfo.value.provider_state["fallback_to_single_provider"] is False
+
+
+def test_unsupported_symbol_rejected_by_universe() -> None:
+    clear_provider_cache()
+    with pytest.raises(ProviderSelectionError) as excinfo:
+        select_market_data(
+            normalize_symbol("NOPE/USDT"),
+            "4H",
+            settings=live_settings(),
+            providers=[
+                FakeAdapter("binance", make_snapshot(provider="binance"), universe=frozenset()),
+                FakeAdapter("okx", make_snapshot(provider="okx"), universe=frozenset()),
+            ],
+        )
+
+    assert excinfo.value.code.value == "INVALID_SYMBOL"
+    assert excinfo.value.data_quality["symbol_availability"] == "UNSUPPORTED"
+
+
+def test_symbol_universe_cache_prevents_repeated_provider_calls() -> None:
+    clear_provider_cache()
+    symbol = normalize_symbol("SOL")
+    adapter = FakeAdapter(
+        "binance",
+        make_snapshot(provider="binance", symbol="SOL/USDT"),
+        universe=frozenset({"SOL/USDT"}),
+    )
+    settings = Settings(
+        data_mode="live",
+        provider_priority=("binance",),
+        candle_cache_ttl_seconds=0,
+        symbol_universe_cache_ttl_seconds=60,
+    )
+
+    select_market_data(symbol, "4H", settings=settings, providers=[adapter])
+    select_market_data(symbol, "4H", settings=settings, providers=[adapter])
+
+    assert adapter.universe_calls == 1
+    assert adapter.calls == 2

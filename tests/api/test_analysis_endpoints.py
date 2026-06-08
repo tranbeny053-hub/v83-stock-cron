@@ -168,7 +168,7 @@ def test_batch_partial_failure_is_isolated() -> None:
         json={
             "requests": [
                 {"symbol": "BTC", "analysis_mode": "METRICS_ONLY"},
-                {"symbol": "NOPE", "analysis_mode": "METRICS_ONLY"},
+                    {"symbol": "$NOPE", "analysis_mode": "METRICS_ONLY"},
             ]
         },
     )

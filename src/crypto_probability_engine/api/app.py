@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
+from crypto_probability_engine.adapters.symbol_universe import resolve_symbol_availability
 from crypto_probability_engine.api.analysis_service import (
     analyze_request,
     current_persistence_status,
@@ -193,7 +195,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         repository = app.state.persistence_repository
         operator_id = session.get("sub", "operator")
-        symbol = _normalize_watchlist_symbol(body.symbol)
+        symbol = _normalize_watchlist_symbol(body.symbol, app_settings)
         symbols = repository.list_watchlist(operator_id=operator_id)
         if symbol not in symbols and len(symbols) >= WATCHLIST_LIMIT:
             raise api_error(400, ErrorCode.BATCH_LIMIT_EXCEEDED, "Watchlist limit is 20 symbols.")
@@ -210,7 +212,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         repository = app.state.persistence_repository
         operator_id = session.get("sub", "operator")
-        normalized = _normalize_watchlist_symbol(symbol)
+        normalized = _normalize_watchlist_symbol(symbol, app_settings, validate_live_support=False)
         repository.remove_watchlist(normalized, operator_id=operator_id)
         return {
             "symbols": repository.list_watchlist(operator_id=operator_id),
@@ -271,11 +273,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 app = create_app()
 
 
-def _normalize_watchlist_symbol(raw_symbol: str) -> str:
+def _normalize_watchlist_symbol(
+    raw_symbol: str,
+    settings: Settings,
+    *,
+    validate_live_support: bool = True,
+) -> str:
     try:
-        return normalize_symbol(raw_symbol).display
+        symbol = normalize_symbol(raw_symbol)
     except SymbolNormalizationError as exc:
         raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc
+    if validate_live_support and settings.data_mode == "live":
+        providers = [
+            provider
+            for provider in (
+                BinancePublicAdapter(settings=settings),
+                OkxPublicAdapter(settings=settings),
+            )
+            if provider.name in settings.provider_priority
+        ]
+        resolution = resolve_symbol_availability(
+            symbol,
+            providers,
+            ttl_seconds=settings.symbol_universe_cache_ttl_seconds,
+        )
+        if resolution.availability == "UNSUPPORTED":
+            raise api_error(400, ErrorCode.INVALID_SYMBOL, "Unsupported spot USDT symbol.")
+        if settings.cross_provider_required and resolution.availability in {
+            "BINANCE_ONLY",
+            "OKX_ONLY",
+        }:
+            message = (
+                "Cross-provider confirmation required but symbol is available on only one provider."
+            )
+            raise api_error(
+                400,
+                ErrorCode.PROVIDER_DEGRADED,
+                message,
+            )
+    return symbol.display
 
 
 def _persistence_diagnostic(repository) -> dict:

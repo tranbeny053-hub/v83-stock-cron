@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from crypto_probability_engine.adapters.symbol_universe import SymbolResolution
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.config.settings import Settings
@@ -56,7 +57,7 @@ def test_watchlist_crud_uses_in_memory_fallback_and_normalizer() -> None:
 def test_watchlist_rejects_invalid_symbol() -> None:
     client = make_client()
     login(client)
-    response = client.post("/v1/watchlist", json={"symbol": "NOPE"})
+    response = client.post("/v1/watchlist", json={"symbol": "$NOPE"})
     assert response.status_code == 400
     assert response.json()["detail"]["error"]["code"] == "INVALID_SYMBOL"
 
@@ -81,3 +82,36 @@ def test_watchlist_degrades_to_in_memory_repository_quickly() -> None:
     assert response.status_code == 200
     assert response.json()["symbols"] == ["BTC/USDT"]
     assert response.json()["persistence_status"] == "UNAVAILABLE"
+
+
+def test_live_watchlist_uses_symbol_universe_validation(monkeypatch) -> None:
+    session_limiter.reset()
+    dev_limiter.reset()
+    settings = Settings(
+        access_code_hash=hash_code("operator-test-code"),
+        session_signing_key="test-signing-key",
+        session_cookie_secure=False,
+        data_mode="live",
+    )
+
+    def fake_resolve(symbol, providers, *, ttl_seconds):
+        return SymbolResolution(
+            symbol=symbol,
+            availability="BOTH_PROVIDERS" if symbol.base == "SOL" else "UNSUPPORTED",
+            providers=("binance", "okx") if symbol.base == "SOL" else (),
+        )
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.app.resolve_symbol_availability",
+        fake_resolve,
+    )
+    client = TestClient(create_app(settings))
+    login(client)
+
+    accepted = client.post("/v1/watchlist", json={"symbol": "SOLUSDT"})
+    rejected = client.post("/v1/watchlist", json={"symbol": "NOPE"})
+
+    assert accepted.status_code == 200
+    assert accepted.json()["symbols"] == ["SOL/USDT"]
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"]["error"]["code"] == "INVALID_SYMBOL"

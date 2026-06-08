@@ -53,6 +53,22 @@ def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
                 "data_source": "BINANCE_PUBLIC",
                 "latest_candle_age_seconds": 120,
                 "provider_failures": {"okx": "PROVIDER_DEGRADED: timeout"},
+                "symbol_availability": "BINANCE_ONLY",
+                "provider_resources": {
+                    "binance": {
+                        "candles": {"status": "OK", "latency_ms": 10.0},
+                        "depth": {"status": "OK", "latency_ms": 11.0},
+                    }
+                },
+                "derived_market_metrics": {
+                    "binance": {
+                        "spread_bps": {
+                            "status": "OK",
+                            "value": 4.2,
+                            "formula": "(best_ask - best_bid) / mid_price * 10000",
+                        }
+                    }
+                },
             },
         )
 
@@ -72,6 +88,8 @@ def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
     assert payload["frontend_display"]["is_live_data"] is True
     assert payload["frontend_display"]["data_source"] == "BINANCE_PUBLIC"
     assert payload["frontend_display"]["data_quality_warnings"]
+    assert payload["detail_view"]["market_data_v2_detail"]["symbol_availability"] == "BINANCE_ONLY"
+    assert "binance" in payload["detail_view"]["market_data_v2_detail"]["provider_resources"]
 
 
 def test_down_market_live_response_validates_with_signed_negative_fields(monkeypatch) -> None:

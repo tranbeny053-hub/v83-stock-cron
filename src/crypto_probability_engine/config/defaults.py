@@ -60,6 +60,9 @@ class Phase1ADefaults:
     provider_max_retries: int = 1
     provider_rate_limit_per_min: int = 60
     candle_cache_ttl_seconds: int = 300
+    symbol_universe_cache_ttl_seconds: int = 3_600
+    provider_depth_limit: int = 100
+    provider_trade_limit: int = 50
     cross_provider_required: bool = False
     live_smoke_enabled: bool = False
 

@@ -20,7 +20,6 @@ class SymbolNormalizationError(ValueError):
 
 
 SUPPORTED_QUOTES = ("USDT",)
-SUPPORTED_BASES = {"BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE"}
 SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,12}([/-]?[A-Z0-9]{2,12})?$")
 
 
@@ -45,7 +44,7 @@ def normalize_symbol(raw_symbol: str, *, default_quote: str = "USDT") -> Normali
             base = cleaned
             quote = default_quote
 
-    if quote not in SUPPORTED_QUOTES or base not in SUPPORTED_BASES or base == quote:
+    if quote not in SUPPORTED_QUOTES or base == quote:
         raise SymbolNormalizationError("Unsupported crypto symbol.")
 
     display = f"{base}/{quote}"

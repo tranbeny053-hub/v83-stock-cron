@@ -45,6 +45,9 @@ class Settings(BaseModel):
     provider_max_retries: int = DEFAULT_PHASE1A.provider_max_retries
     provider_rate_limit_per_min: int = DEFAULT_PHASE1A.provider_rate_limit_per_min
     candle_cache_ttl_seconds: int = DEFAULT_PHASE1A.candle_cache_ttl_seconds
+    symbol_universe_cache_ttl_seconds: int = DEFAULT_PHASE1A.symbol_universe_cache_ttl_seconds
+    provider_depth_limit: int = DEFAULT_PHASE1A.provider_depth_limit
+    provider_trade_limit: int = DEFAULT_PHASE1A.provider_trade_limit
     cross_provider_required: bool = DEFAULT_PHASE1A.cross_provider_required
     live_smoke_enabled: bool = DEFAULT_PHASE1A.live_smoke_enabled
     access_code_hash: str | None = Field(default=None, repr=False)
@@ -98,6 +101,24 @@ class Settings(BaseModel):
                 os.environ.get(
                     "UCPE_CANDLE_CACHE_TTL_SECONDS",
                     str(DEFAULT_PHASE1A.candle_cache_ttl_seconds),
+                )
+            ),
+            symbol_universe_cache_ttl_seconds=int(
+                os.environ.get(
+                    "UCPE_SYMBOL_UNIVERSE_CACHE_TTL_SECONDS",
+                    str(DEFAULT_PHASE1A.symbol_universe_cache_ttl_seconds),
+                )
+            ),
+            provider_depth_limit=int(
+                os.environ.get(
+                    "UCPE_PROVIDER_DEPTH_LIMIT",
+                    str(DEFAULT_PHASE1A.provider_depth_limit),
+                )
+            ),
+            provider_trade_limit=int(
+                os.environ.get(
+                    "UCPE_PROVIDER_TRADE_LIMIT",
+                    str(DEFAULT_PHASE1A.provider_trade_limit),
                 )
             ),
             cross_provider_required=parse_bool(

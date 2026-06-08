@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 1.1 stabilization hotfix applied locally. Claude/User review is required before merge/deploy.
+Status: Wave 2A public market-data observability implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -151,6 +151,24 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] No provider-private endpoint, secret, scoring/gate/probability/news, deployment, or trading capability change.
 - [ ] Manual deployed UI smoke completed after merge/deploy.
 
+## Wave 2A Symbol Universe / Market Data v2 Gate
+
+- [x] Binance symbol universe uses public `GET /api/v3/exchangeInfo` only.
+- [x] OKX symbol universe uses public `GET /api/v5/public/instruments?instType=SPOT` only.
+- [x] Symbol availability is labeled as `BOTH_PROVIDERS`, `BINANCE_ONLY`, `OKX_ONLY`, `UNSUPPORTED`, or `TO_VERIFY`.
+- [x] Arbitrary valid USDT spot aliases normalize to canonical `BASE/USDT` and provider symbols.
+- [x] Unsupported live symbols fail clearly through symbol-universe validation.
+- [x] Single-provider live symbols are allowed only when `UCPE_CROSS_PROVIDER_REQUIRED=false` and are labeled with a warning.
+- [x] Binance adapter expands public REST resources to ticker and recent trades without keys.
+- [x] OKX adapter expands public REST resources to ticker and recent trades without keys.
+- [x] Derived metrics are formulaic/advisory metadata and do not feed score/probability/gates/news.
+- [x] Provider resources expose candles/depth/ticker/trades availability, latency, and freshness where available.
+- [x] Detail view exposes `Market Data v2 / Provider Observability`.
+- [x] Compact provider observations remain best-effort/non-blocking through existing persistence.
+- [x] Unit tests mock all provider responses; no real network or DB is required.
+- [x] No WebSocket, private/signed endpoint, API key, News Authority, calibration, or trading capability was added.
+- [ ] Claude/User review completed before merge/deploy.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |
@@ -161,6 +179,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Variable | `UCPE_PROVIDER_MAX_RETRIES` | `1` | Bounded retry/backoff | yes | |
 | Variable | `UCPE_PROVIDER_RATE_LIMIT_PER_MIN` | `60` | Local request throttle | yes | |
 | Variable | `UCPE_CANDLE_CACHE_TTL_SECONDS` | `300` | Candle cache TTL | yes | |
+| Variable | `UCPE_SYMBOL_UNIVERSE_CACHE_TTL_SECONDS` | `3600` | Public symbol universe cache TTL | yes | Avoids exchangeInfo/instruments fetch on every analysis. |
+| Variable | `UCPE_PROVIDER_DEPTH_LIMIT` | `100` | Public order-book depth levels | yes | Public REST only. |
+| Variable | `UCPE_PROVIDER_TRADE_LIMIT` | `50` | Public recent-trades limit | yes | Public REST only. |
 | Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow single validated provider with warning | yes | |
 | Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep live smoke manual/off by default | yes | Never enable in CI. |
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | |

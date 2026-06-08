@@ -24,6 +24,7 @@ def build_detail_view(
             "RISK",
             "LIQUIDITY_EXECUTION",
             "DATA_QUALITY",
+            "MARKET_DATA_V2",
             "NEWS",
             "DEBUG_LITE",
         ],
@@ -46,6 +47,15 @@ def build_detail_view(
             "data_quality": data_quality,
             "epistemic_sufficiency": quant_result["epistemic_sufficiency_state"],
         },
+        "market_data_v2_detail": {
+            "provider_resources": data_quality.get("provider_resources", {}),
+            "derived_market_metrics": data_quality.get("derived_market_metrics", {}),
+            "symbol_availability": data_quality.get("symbol_availability"),
+            "cross_provider_state": data_quality.get("cross_provider_state"),
+            "fallback_to_single_provider": data_quality.get("fallback_to_single_provider"),
+            "disagreement_bps": data_quality.get("disagreement_bps"),
+            "warnings": data_quality.get("warnings", []),
+        },
         "invalidation_detail": quant_result["gate_result"],
         "news_detail": {
             "news_addon_state": news_blocks["news_addon_state"],
@@ -58,4 +68,3 @@ def build_detail_view(
             "calibration_state": quant_result["calibration_state"],
         },
     }
-

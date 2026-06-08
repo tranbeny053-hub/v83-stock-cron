@@ -89,6 +89,19 @@ Status: Wave 1.2 hotfix only. It does not change market data, news authority, ca
 | Service role key handling | Backend-only secret | WAVE1_2_HOTFIX | Never exposed to frontend, status, debug export, logs, or docs as a value. |
 | REST persistence failure | `persistence_status=UNAVAILABLE`, analysis still returns | WAVE1_2_HOTFIX | Same best-effort/circuit-breaker behavior as direct Postgres path. |
 
+## Wave 2A Symbol Universe and Market Data v2 Decisions
+
+Status: Wave 2A implements public REST market-data observability only. It does not change scoring, probability, gates, news math, calibration, private provider calls, WebSocket behavior, deployment automation, or trading capability.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Symbol universe | Public Binance `exchangeInfo` and OKX `public/instruments` for USDT spot pairs | WAVE2A_IMPLEMENTED | Cached by `UCPE_SYMBOL_UNIVERSE_CACHE_TTL_SECONDS`; no private keys; no per-analysis universe fetch while cache is fresh. |
+| Symbol availability labels | `BOTH_PROVIDERS`, `BINANCE_ONLY`, `OKX_ONLY`, `UNSUPPORTED`, `TO_VERIFY` | WAVE2A_IMPLEMENTED | Single-provider symbols are allowed only when `UCPE_CROSS_PROVIDER_REQUIRED=false`; otherwise blocked. |
+| Public resource expansion | Candles/depth remain required; ticker/trades are optional advisory resources | WAVE2A_IMPLEMENTED | Optional ticker/trade failures are visible in provider resources and do not fabricate values. |
+| Derived market metrics | `spread_bps`, `mid_price`, `depth_imbalance`, shallow slippage estimate, recent trade pressure, freshness, cross-provider disagreement | WAVE2A_IMPLEMENTED | Formulaic evidence only; advisory unless explicitly wired in a later reviewed phase. |
+| Frontend/detail behavior | Display backend `market_data_v2_detail`; recompute nothing | WAVE2A_IMPLEMENTED | Frontend remains a thin renderer. |
+| WebSocket | Not implemented | OUT_OF_SCOPE_WAVE2A | REST-first only for this wave. |
+
 ## `_frac` Field Audit
 
 Decision: `_frac` suffix is reserved for values that are bounded to `[0,1]` before they are emitted. Signed ratios and unbounded magnitudes must not use `_frac`.

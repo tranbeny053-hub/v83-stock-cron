@@ -265,3 +265,20 @@ Notes:
 - No market-data provider behavior, private exchange calls, live news fetching, or trading capability was added.
 - No Supabase values are exposed to frontend/status/debug; only secret names are documented.
 - No deploy, merge, or Hugging Face push was performed.
+
+## 2026-06-08 - Wave 2A Symbol Universe and Market Data v2
+
+Changed:
+- Added public symbol-universe resolution from Binance `exchangeInfo` and OKX `public/instruments` for spot USDT pairs.
+- Relaxed static symbol normalization so valid `BASE/USDT`, `BASE-USDT`, and `BASEUSDT` aliases can be resolved by provider universe instead of a hardcoded base list.
+- Expanded Binance public REST collection to include ticker and recent trades alongside existing klines/depth.
+- Expanded OKX public REST collection to include ticker and recent trades alongside existing candles/books.
+- Added compact provider resource observability: candles/depth/ticker/trades availability, latency, freshness, and warnings.
+- Added advisory derived market metrics from real public data only: spread bps, mid price, depth imbalance, shallow slippage estimate, recent trade pressure, freshness, and cross-provider disagreement.
+- Added `Market Data v2 / Provider Observability` to structured Detail Analysis.
+- Added tests for symbol aliases/universe availability, provider-only fallback/blocking, unsupported symbols, universe cache, resource parsers, derived metrics, detail payload, and frontend render hooks.
+
+Notes:
+- Derived market metrics are formulaic metadata only and do not affect scoring, probability, gates, or news influence.
+- No WebSocket, News Authority Engine, calibration, private/signed exchange endpoints, Binance/OKX API keys, deployment, or trading capability was added.
+- No deploy, merge, or Hugging Face push was performed.

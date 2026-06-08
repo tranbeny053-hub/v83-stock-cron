@@ -12,6 +12,8 @@ from crypto_probability_engine.normalizers.symbols import SymbolNormalizationErr
         ("BTCUSDT", "BTC/USDT", "BTCUSDT", "BTC-USDT"),
         ("ETH-USDT", "ETH/USDT", "ETHUSDT", "ETH-USDT"),
         ("eth-usdt", "ETH/USDT", "ETHUSDT", "ETH-USDT"),
+        ("SOLUSDT", "SOL/USDT", "SOLUSDT", "SOL-USDT"),
+        ("SUI/USDT", "SUI/USDT", "SUIUSDT", "SUI-USDT"),
     ],
 )
 def test_normalize_supported_symbols(raw: str, display: str, binance: str, okx: str) -> None:
@@ -21,8 +23,7 @@ def test_normalize_supported_symbols(raw: str, display: str, binance: str, okx: 
     assert normalized.provider_symbols["okx"] == okx
 
 
-@pytest.mark.parametrize("raw", ["", "BTC/EUR", "UNKNOWN", "BTC-"])
+@pytest.mark.parametrize("raw", ["", "BTC/EUR", "BTC-", "$BTC"])
 def test_invalid_symbols_fail_closed(raw: str) -> None:
     with pytest.raises(SymbolNormalizationError):
         normalize_symbol(raw)
-

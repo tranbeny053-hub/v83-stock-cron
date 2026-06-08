@@ -536,6 +536,15 @@ function renderStructuredDetail(payload, detailView) {
       ]),
       objectTable(providerState.providers),
     ]),
+    section("Market Data v2 / Provider Observability", [
+      keyValueTable([
+        ["Symbol availability", dataQuality.symbol_availability],
+        ["Cross-provider state", dataQuality.cross_provider_state],
+        ["Fallback to single provider", dataQuality.fallback_to_single_provider],
+        ["Disagreement bps", dataQuality.disagreement_bps],
+      ]),
+      objectTable(details.market_data_v2_detail || dataQuality.derived_market_metrics),
+    ]),
     section("Quant Signals", [
       objectTable(details.metrics_detail),
       objectTable(details.liquidity_execution_detail),

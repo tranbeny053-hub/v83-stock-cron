@@ -68,6 +68,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         "Risk / Gates",
         "Market Data Quality",
         "Provider State",
+        "Market Data v2 / Provider Observability",
         "Quant Signals",
         "News Add-on",
         "Debug / Raw JSON",
