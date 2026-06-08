@@ -68,6 +68,36 @@ def test_system_status_with_session() -> None:
     assert "test-signing-key" not in response.text
 
 
+def test_system_status_reports_supabase_rest_without_secret_values() -> None:
+    session_limiter.reset()
+    dev_limiter.reset()
+    settings = Settings(
+        access_code_hash=hash_code("operator-test-code"),
+        session_signing_key="test-signing-key",
+        session_cookie_secure=False,
+        **{
+            "supabase_url": "https://project.example.supabase.co",
+            "supabase_service_role_key": "test-service-role-key",
+            "supabase_db_url": "postgresql://example.invalid/db",
+        },
+    )
+    client = TestClient(create_app(settings))
+    login_response = client.post("/v1/auth/login", json={"code": "operator-test-code"})
+
+    response = client.get(
+        "/v1/system_status",
+        cookies={SESSION_COOKIE: login_response.cookies[SESSION_COOKIE]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["system"]["repository_type"] == "SUPABASE_REST"
+    assert payload["system"]["persistence_status"] == "OK"
+    assert "test-service-role-key" not in response.text
+    assert "project.example" not in response.text
+    assert "postgresql://" not in response.text
+
+
 def test_bad_login_does_not_set_session_cookie() -> None:
     client = make_client()
     response = client.post("/v1/auth/login", json={"code": "bad-code"})

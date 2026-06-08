@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
+
 from crypto_probability_engine.api.analysis_service import PersistenceWork, _best_effort_persist
+from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import (
     InMemoryPersistenceRepository,
     SupabasePersistenceRepository,
+    SupabaseRestRepository,
+    build_persistence_repository,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -166,3 +171,158 @@ def test_supabase_circuit_breaker_skips_attempts_until_cooldown() -> None:
     assert repo.persistence_status() == "OK"
     repo.close()
     assert pool.closed is True
+
+
+def rest_client(handler) -> httpx.Client:
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_runtime_selection_prefers_supabase_rest_over_postgres_url() -> None:
+    repo = build_persistence_repository(
+        Settings(
+            **{
+                "supabase_url": "https://project.example.supabase.co",
+                "supabase_service_role_key": "test-service-role-key",
+                "supabase_db_url": "postgresql://example.invalid/db",
+            }
+        )
+    )
+
+    assert isinstance(repo, SupabaseRestRepository)
+    assert repo.repository_type() == "SUPABASE_REST"
+    repo.close()
+
+
+def test_runtime_selection_keeps_direct_postgres_when_rest_is_absent() -> None:
+    repo = build_persistence_repository(
+        Settings(**{"supabase_db_url": "postgresql://example.invalid/db"})
+    )
+
+    assert isinstance(repo, SupabasePersistenceRepository)
+    assert repo.repository_type() == "SUPABASE_POSTGRES"
+
+
+def test_supabase_rest_writes_compact_rows_with_backend_only_headers() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        assert request.url.host == "project.example.supabase.co"
+        assert request.headers["apikey"] == "test-service-role-key"
+        assert request.headers["authorization"] == "Bearer test-service-role-key"
+        return httpx.Response(201, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.save_run(_sample_run_summary()) == "OK"
+    assert repo.save_timeframe_result(_sample_timeframe_result()) == "OK"
+    assert repo.save_provider_observation(_sample_provider_observation()) == "OK"
+    assert [request.url.path for request in seen] == [
+        "/rest/v1/analysis_runs",
+        "/rest/v1/analysis_timeframe_results",
+        "/rest/v1/provider_observations",
+    ]
+    assert "test-service-role-key" not in repo.repository_type()
+    assert repo.persistence_status() == "OK"
+
+
+def test_supabase_rest_watchlist_crud_uses_mocked_https() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        if request.method == "GET":
+            return httpx.Response(200, json=[{"display_symbol": "BTC/USDT"}])
+        return httpx.Response(201 if request.method == "POST" else 204)
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.add_watchlist("BTC/USDT") == "OK"
+    assert repo.list_watchlist() == ["BTC/USDT"]
+    assert repo.remove_watchlist("BTC/USDT") == "OK"
+    assert seen == [
+        ("POST", "/rest/v1/watchlist"),
+        ("GET", "/rest/v1/watchlist"),
+        ("DELETE", "/rest/v1/watchlist"),
+    ]
+
+
+def test_supabase_rest_failure_opens_circuit_and_uses_fallback() -> None:
+    clock = FakeClock()
+    attempts = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(503, json={"message": "database unavailable"})
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+        circuit_cooldown_seconds=60.0,
+        clock=clock,
+    )
+
+    assert repo.save_run(_sample_run_summary()) == "UNAVAILABLE"
+    assert repo.persistence_status() == "UNAVAILABLE"
+    assert repo.circuit_state() == "OPEN"
+    assert attempts == 1
+
+    assert repo.save_timeframe_result(_sample_timeframe_result()) == "UNAVAILABLE"
+    assert attempts == 1
+    assert repo.get_run("run_rest")["run_id"] == "run_rest"
+
+
+def _sample_run_summary() -> dict:
+    return {
+        "run_id": "run_rest",
+        "operator_id": "operator",
+        "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
+        "analysis_mode": "METRICS_ONLY",
+        "asset_class": "CRYPTO_SPOT",
+        "primary_timeframe": "4H",
+        "disposition": "NO_TRADE",
+        "total_score": 50.0,
+        "data_source": "FIXTURE_DEMO",
+        "is_live_data": False,
+        "persistence_status": "OK",
+        "analysis_hash": "hash",
+        "as_of_utc": "2026-06-07T00:00:00Z",
+    }
+
+
+def _sample_timeframe_result() -> dict:
+    return {
+        "run_id": "run_rest",
+        "timeframe": "4H",
+        "disposition": "NO_TRADE",
+        "total_score": 50.0,
+        "prob_up_pct": 40.0,
+        "prob_down_pct": 40.0,
+        "prob_timeout_pct": 20.0,
+        "gate_action": "NO_TRADE",
+        "data_source": "FIXTURE_DEMO",
+        "is_live_data": False,
+    }
+
+
+def _sample_provider_observation() -> dict:
+    return {
+        "run_id": "run_rest",
+        "provider": "fixture",
+        "provider_status": "OK",
+        "active_provider": "fixture",
+        "data_source": "FIXTURE_DEMO",
+        "is_live_data": False,
+        "warning_count": 0,
+    }

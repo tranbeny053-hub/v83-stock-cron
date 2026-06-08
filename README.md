@@ -41,7 +41,9 @@ If live providers fail or disagree, the app must show degraded/unavailable data 
 
 ## Wave 1 Persistence and Watchlist
 
-Wave 1 adds an optional Supabase Postgres persistence foundation for compact run summaries, timeframe result summaries, provider observations, app events, and the operator watchlist. If `SUPABASE_DB_URL` is absent or unavailable, analysis still returns normally and the app reports stateless or unavailable persistence. The frontend never talks to Supabase directly; it uses backend watchlist endpoints and browser storage fallback when persistence is not OK.
+Wave 1 adds an optional Supabase persistence foundation for compact run summaries, timeframe result summaries, provider observations, app events, and the operator watchlist. On Hugging Face, runtime persistence should use `SUPABASE_URL` plus `SUPABASE_SERVICE_ROLE_KEY` through backend-only HTTPS REST on port `443`. Direct Postgres via `SUPABASE_DB_URL` remains supported for local migrations or non-Hugging-Face deployments, but Hugging Face may block outbound Postgres ports `5432`/`6543`.
+
+If Supabase runtime persistence is absent or unavailable, analysis still returns normally and the app reports stateless or unavailable persistence. The frontend never talks to Supabase directly; it uses backend watchlist endpoints and browser storage fallback when persistence is not OK.
 
 Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set in the local environment. The script never prints the database URL.
 
@@ -64,9 +66,9 @@ Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src p
 | Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode re-auth code hash | later | Required only if `UCPE_DEV_MODE_ENABLED=true`; use `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH`. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Sign session cookies | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Per-deploy PBKDF2 salt | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
-| Secret | `SUPABASE_DB_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional direct Postgres persistence URL | later | Required only for durable watchlist/run summaries. Never expose to frontend. |
-| Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional Supabase project URL placeholder | later | Unused by Wave 1 backend. |
-| Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional future server-side Supabase key placeholder | later | Unused by Wave 1; never expose to frontend. |
+| Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase project URL for backend REST persistence | yes, for durable HF persistence | Backend-only. Do not expose to frontend. |
+| Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase REST authorization for backend persistence | yes, for durable HF persistence | Service role key is backend-only. Never expose to frontend, logs, or debug exports. |
+| Secret | `SUPABASE_DB_URL` | `<SET_LOCALLY_OR_IN_NON_HF_RUNTIME_ONLY>` | Direct Postgres migration/local admin URL | optional | Use for `scripts/apply_migrations.py` locally or non-HF deployments; not preferred for HF runtime. |
 | Secret | Binance/OKX API keys | not required | Public market data only | no | No Binance/OKX secrets required for Sprint 2. |
 
 ## Login Code vs Deployment Secrets

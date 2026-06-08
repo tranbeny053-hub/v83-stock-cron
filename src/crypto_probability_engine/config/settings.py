@@ -124,7 +124,13 @@ class Settings(BaseModel):
             supabase_db_url=os.environ.get("SUPABASE_DB_URL"),
             supabase_url=os.environ.get("SUPABASE_URL"),
             supabase_service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
-            external_store_configured=bool(os.environ.get("SUPABASE_DB_URL")),
+            external_store_configured=bool(
+                os.environ.get("SUPABASE_DB_URL")
+                or (
+                    os.environ.get("SUPABASE_URL")
+                    and os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+                )
+            ),
         )
 
 

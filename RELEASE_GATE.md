@@ -125,6 +125,18 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Failure-path tests prove analysis returns 200 under persistence failure.
 - [ ] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy.
 
+## Wave 1.2 Supabase Runtime Gate
+
+- [x] Runtime repository priority is `SUPABASE_REST` > `SUPABASE_POSTGRES` > `IN_MEMORY`.
+- [x] Hugging Face runtime persistence can use `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` over HTTPS `443`.
+- [x] Direct Postgres via `SUPABASE_DB_URL` remains available for migrations/local direct DB or non-HF runtimes.
+- [x] `/v1/system_status` can report `SUPABASE_REST`, `SUPABASE_POSTGRES`, or `IN_MEMORY` without URLs, hosts, usernames, passwords, or keys.
+- [x] REST persistence has best-effort writes, short timeout, and circuit-breaker degradation.
+- [x] REST watchlist CRUD is covered by mocked `httpx` tests; no real DB/network in unit tests.
+- [x] REST failure returns `UNAVAILABLE` and analysis still returns 200.
+- [x] Frontend contains no Supabase URL/key references and never calls Supabase directly.
+- [ ] Hugging Face runtime smoke confirms `Persistence: OK` after secrets are configured.
+
 ## Wave 1.1 Stabilization Gate
 
 - [x] Daily/weekly OKX public candle mappings use UTC variants: `1Dutc`, `1Wutc`.
@@ -158,9 +170,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode access hash | later | Generate with `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH` if Dev Mode is enabled. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Session signing | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
 | Secret | `UCPE_ACCESS_CODE_SALT` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | PBKDF2 salt | yes | `python3 -c 'import secrets; print(secrets.token_urlsafe(24))'`. |
-| Secret | `SUPABASE_DB_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional durable persistence | later | Required only for durable watchlist/run summaries. |
-| Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Optional future Supabase backend setting | later | Unused in Wave 1. |
-| Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional future server-side Supabase key | later | Unused in Wave 1; never expose to frontend. |
+| Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase project URL for backend REST persistence | yes, for durable HF persistence | Backend-only. Do not expose to frontend. |
+| Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase REST authorization for backend persistence | yes, for durable HF persistence | Service role key is backend-only. Never expose to frontend, logs, or debug exports. |
+| Secret | `SUPABASE_DB_URL` | `<SET_LOCALLY_OR_IN_NON_HF_RUNTIME_ONLY>` | Direct Postgres migration/local admin URL | optional | Use for local migration script or non-HF deployments; not preferred for HF runtime. |
 | Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required for Sprint 2. |
 
 ## Required Evidence

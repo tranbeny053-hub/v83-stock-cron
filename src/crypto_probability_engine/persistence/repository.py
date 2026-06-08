@@ -8,6 +8,8 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from typing import Any, Literal, Protocol
 
+import httpx
+
 from crypto_probability_engine.config.settings import Settings
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
@@ -129,7 +131,7 @@ class SupabasePersistenceRepository:
             return self._last_status
 
     def repository_type(self) -> str:
-        return "SUPABASE"
+        return "SUPABASE_POSTGRES"
 
     def circuit_state(self) -> str:
         with self._lock:
@@ -366,6 +368,251 @@ class SupabasePersistenceRepository:
         }
 
 
+class SupabaseRestRepository:
+    """Supabase PostgREST persistence adapter for HTTPS-only runtimes."""
+
+    def __init__(
+        self,
+        supabase_url: str,
+        service_role_key: str,
+        *,
+        timeout_seconds: float = 3.0,
+        circuit_cooldown_seconds: float = 60.0,
+        client: httpx.Client | None = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._base_url = f"{supabase_url.rstrip('/')}/rest/v1"
+        self._service_role_key = service_role_key
+        self._timeout_seconds = timeout_seconds
+        self._circuit_cooldown_seconds = circuit_cooldown_seconds
+        self._client = client or httpx.Client(timeout=timeout_seconds)
+        self._owns_client = client is None
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._last_status: PersistenceStatus = "OK"
+        self._circuit_open_until = 0.0
+        self._trial_in_progress = False
+        self._fallback = InMemoryPersistenceRepository()
+
+    def persistence_status(self) -> PersistenceStatus:
+        with self._lock:
+            if self._last_status == "UNAVAILABLE" and self._clock() < self._circuit_open_until:
+                return "UNAVAILABLE"
+            return self._last_status
+
+    def repository_type(self) -> str:
+        return "SUPABASE_REST"
+
+    def circuit_state(self) -> str:
+        with self._lock:
+            now = self._clock()
+            if self._last_status != "UNAVAILABLE":
+                return "CLOSED"
+            if now < self._circuit_open_until:
+                return "OPEN"
+            return "HALF_OPEN"
+
+    def maybe_can_attempt(self) -> bool:
+        with self._lock:
+            now = self._clock()
+            if self._last_status != "UNAVAILABLE":
+                return True
+            if now < self._circuit_open_until:
+                return False
+            if self._trial_in_progress:
+                return False
+            self._trial_in_progress = True
+            return True
+
+    def mark_unavailable(self) -> PersistenceStatus:
+        with self._lock:
+            self._last_status = "UNAVAILABLE"
+            self._circuit_open_until = self._clock() + self._circuit_cooldown_seconds
+            self._trial_in_progress = False
+        return self._last_status
+
+    def _mark_ok(self) -> PersistenceStatus:
+        with self._lock:
+            self._last_status = "OK"
+            self._circuit_open_until = 0.0
+            self._trial_in_progress = False
+        return self._last_status
+
+    def close(self) -> None:
+        if self._owns_client:
+            self._client.close()
+
+    def save_run(self, summary: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_run(summary)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "analysis_runs",
+                json=dict(summary),
+                params={"on_conflict": "run_id"},
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        )
+        return status
+
+    def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_timeframe_result(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "analysis_timeframe_results",
+                json=dict(row),
+                prefer="return=minimal",
+            )
+        )
+        return status
+
+    def save_provider_observation(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_provider_observation(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "provider_observations",
+                json=dict(row),
+                prefer="return=minimal",
+            )
+        )
+        return status
+
+    def list_watchlist(self, operator_id: str = "operator") -> list[str]:
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "watchlist",
+                params={
+                    "select": "display_symbol",
+                    "operator_id": f"eq.{operator_id}",
+                    "order": "created_at.asc",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            return self._fallback.list_watchlist(operator_id)
+        return [str(row["display_symbol"]) for row in rows if "display_symbol" in row]
+
+    def add_watchlist(self, symbol: str, operator_id: str = "operator") -> PersistenceStatus:
+        self._fallback.add_watchlist(symbol, operator_id)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "watchlist",
+                json={
+                    "operator_id": operator_id,
+                    "normalized_symbol": symbol,
+                    "display_symbol": symbol,
+                },
+                params={"on_conflict": "operator_id,normalized_symbol"},
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        )
+        return status
+
+    def remove_watchlist(self, symbol: str, operator_id: str = "operator") -> PersistenceStatus:
+        self._fallback.remove_watchlist(symbol, operator_id)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "DELETE",
+                "watchlist",
+                params={
+                    "operator_id": f"eq.{operator_id}",
+                    "normalized_symbol": f"eq.{symbol}",
+                },
+                prefer="return=minimal",
+            )
+        )
+        return status
+
+    def recent_runs(self, limit: int) -> list[dict]:
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "analysis_runs",
+                params={
+                    "select": (
+                        "run_id,symbol,normalized_symbol,analysis_mode,primary_timeframe,"
+                        "disposition,total_score,data_source,is_live_data,analysis_hash,"
+                        "as_of_utc,created_at"
+                    ),
+                    "order": "created_at.desc",
+                    "limit": str(limit),
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            return self._fallback.recent_runs(limit)
+        return [dict(row) for row in rows]
+
+    def get_run(self, run_id: str) -> dict | None:
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "analysis_runs",
+                params={
+                    "select": (
+                        "run_id,symbol,normalized_symbol,analysis_mode,primary_timeframe,"
+                        "disposition,total_score,data_source,is_live_data,analysis_hash,"
+                        "as_of_utc,created_at"
+                    ),
+                    "run_id": f"eq.{run_id}",
+                    "limit": "1",
+                },
+            )
+        )
+        if status == "UNAVAILABLE":
+            return self._fallback.get_run(run_id)
+        if not isinstance(rows, list) or not rows:
+            return None
+        return dict(rows[0])
+
+    def _run_rest(self, operation):
+        if not self.maybe_can_attempt():
+            return "UNAVAILABLE", None
+        try:
+            result = operation()
+        except Exception:
+            return self.mark_unavailable(), None
+        return self._mark_ok(), result
+
+    def _request(
+        self,
+        method: str,
+        table: str,
+        *,
+        json: Mapping[str, Any] | None = None,
+        params: Mapping[str, str] | None = None,
+        prefer: str | None = None,
+    ):
+        headers = self._headers(prefer=prefer)
+        response = self._client.request(
+            method,
+            f"{self._base_url}/{table}",
+            headers=headers,
+            params=dict(params or {}),
+            json=dict(json) if json is not None else None,
+            timeout=self._timeout_seconds,
+        )
+        if response.status_code not in {200, 201, 204}:
+            raise RuntimeError("Supabase REST persistence request failed.")
+        if response.status_code == 204 or not response.content:
+            return None
+        return response.json()
+
+    def _headers(self, *, prefer: str | None = None) -> dict[str, str]:
+        headers = {
+            "apikey": self._service_role_key,
+            "Authorization": f"Bearer {self._service_role_key}",
+            "Content-Type": "application/json",
+        }
+        if prefer:
+            headers["Prefer"] = prefer
+        return headers
+
+
 def _fetch_watchlist_rows(cursor, operator_id: str):
     cursor.execute(
         """
@@ -409,6 +656,11 @@ def _fetch_run(cursor, run_id: str):
 
 
 def build_persistence_repository(settings: Settings) -> PersistenceRepository:
+    if settings.supabase_url and settings.supabase_service_role_key:
+        return SupabaseRestRepository(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
     if settings.supabase_db_url:
         return SupabasePersistenceRepository(settings.supabase_db_url)
     return InMemoryPersistenceRepository()

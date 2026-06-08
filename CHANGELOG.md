@@ -249,3 +249,19 @@ Notes:
 - Live mode still never falls back to fixture data.
 - No quant/scoring/probability/gates/news math, private provider endpoints, secrets, deployment logic, or trading capability changed.
 - No deploy, merge, or Hugging Face push was performed.
+
+## 2026-06-08 - Wave 1.2 Supabase REST Runtime Hotfix
+
+Changed:
+- Added backend-only `SupabaseRestRepository` using Supabase PostgREST over HTTPS for Hugging Face runtime persistence.
+- Runtime repository priority is now `SUPABASE_REST` when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` exist, then `SUPABASE_POSTGRES` via `SUPABASE_DB_URL`, then `IN_MEMORY`.
+- Kept direct Postgres support for local migrations/direct DB or non-Hugging-Face runtimes.
+- Added REST persistence support for compact run, timeframe, provider-observation, recent-run, get-run, and watchlist methods.
+- Added mocked `httpx` tests for REST writes, watchlist CRUD, circuit breaker failure, runtime selection priority, status diagnostics, and analysis continuing under REST outage.
+- Updated deployment docs to clarify that Hugging Face should use REST secrets and that Postgres ports `5432`/`6543` may be blocked.
+
+Notes:
+- No quant/scoring/probability/gates/news math changed.
+- No market-data provider behavior, private exchange calls, live news fetching, or trading capability was added.
+- No Supabase values are exposed to frontend/status/debug; only secret names are documented.
+- No deploy, merge, or Hugging Face push was performed.

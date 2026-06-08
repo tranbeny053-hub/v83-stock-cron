@@ -35,9 +35,11 @@ Status: Sprint 2 build exists locally. No deployment has been performed. This ch
 - [ ] Access-code hash configured in secrets.
 - [ ] Dev Mode code hash configured separately if Dev Mode is enabled.
 - [ ] `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` matches the helper iteration count.
-- [ ] Optional persistence secret configured only if external store is used.
-- [ ] If durable watchlist/run summaries are wanted, set `SUPABASE_DB_URL` in Hugging Face Secrets only.
-- [ ] Optional `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` remain server-side only and are unused in Wave 1.
+- [ ] Optional persistence secrets configured only if external store is used.
+- [ ] For Hugging Face durable persistence, set `SUPABASE_URL` in Hugging Face Secrets only.
+- [ ] For Hugging Face durable persistence, set `SUPABASE_SERVICE_ROLE_KEY` in Hugging Face Secrets only.
+- [ ] Keep the Supabase service role key backend-only; never enter it in frontend code, browser console, chat, logs, or debug exports.
+- [ ] Use `SUPABASE_DB_URL` for local migration/direct Postgres admin only, or for non-Hugging-Face runtimes where outbound Postgres is allowed.
 - [ ] Supabase migrations applied before expecting durable watchlist/run summaries.
 - [ ] Binance/OKX API keys are absent; Sprint 2 public market data requires no Binance/OKX secrets.
 - [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
@@ -54,8 +56,10 @@ Clarifications:
 - [ ] Create or select a Supabase Postgres project.
 - [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
 - [ ] Confirm tables exist: `watchlist`, `analysis_runs`, `analysis_timeframe_results`, `provider_observations`, and `app_events`.
-- [ ] Set `SUPABASE_DB_URL` in Hugging Face Secrets if durable persistence is required.
-- [ ] Leave `SUPABASE_DB_URL` absent to run in stateless mode; analysis should still work and the watchlist UI uses browser fallback.
+- [ ] For Hugging Face runtime, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Hugging Face Secrets so the backend uses HTTPS REST on port `443`.
+- [ ] Use `SUPABASE_DB_URL` only for local migration/admin or non-Hugging-Face direct Postgres runtime.
+- [ ] Leave all Supabase secrets absent to run in stateless mode; analysis should still work and the watchlist UI uses browser fallback.
+- [ ] If `Persistence: UNAVAILABLE` appears on Hugging Face with only `SUPABASE_DB_URL`, configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; Hugging Face may block outbound Postgres ports `5432`/`6543`.
 - [ ] Do not enter Supabase values in the frontend, README, debug export, logs, or code.
 
 ## Smoke Tests

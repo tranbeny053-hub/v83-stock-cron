@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import time
 
+import httpx
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.api.schemas import validate_analysis_response
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.repository import SupabaseRestRepository
 
 
 def make_client() -> TestClient:
@@ -76,6 +78,30 @@ def test_persistence_failure_does_not_break_analysis() -> None:
     assert payload["debug"]["persistence_status"] == "UNAVAILABLE"
     assert "simulated persistence outage" not in response.text
     assert elapsed < 0.5
+
+
+def test_supabase_rest_unavailable_does_not_break_analysis() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"message": "database unavailable"})
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    assert repo.save_run({"run_id": "probe"}) == "UNAVAILABLE"
+
+    client = make_client()
+    client.app.state.persistence_repository = repo
+    login(client)
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    assert payload["debug"]["persistence_status"] == "UNAVAILABLE"
+    assert "test-service-role-key" not in response.text
+    assert "project.example" not in response.text
 
 
 def test_slow_persistence_is_scheduled_without_blocking_response() -> None:

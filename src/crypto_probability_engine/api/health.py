@@ -24,9 +24,16 @@ def runtime_health(settings: Settings) -> dict:
 
 
 def system_status(settings: Settings, *, persistence: dict | None = None) -> dict:
+    configured_repository = (
+        "SUPABASE_REST"
+        if settings.supabase_url and settings.supabase_service_role_key
+        else "SUPABASE_POSTGRES"
+        if settings.external_store_configured
+        else "IN_MEMORY"
+    )
     persistence_status = persistence or {
         "persistence_status": "OK" if settings.external_store_configured else "STATELESS",
-        "repository_type": "SUPABASE" if settings.external_store_configured else "IN_MEMORY",
+        "repository_type": configured_repository,
         "circuit_state": "CLOSED" if settings.external_store_configured else "STATELESS",
     }
     return {

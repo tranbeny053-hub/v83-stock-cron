@@ -14,7 +14,7 @@ Defaults must be visible config, never silent hardcoding. R4 behavior remains su
 | News source set | Provider-agnostic adapters; none mandatory | DEFAULT_PROPOSED | Configure at least one reliable source to enable live `NEWS_ADDON`; otherwise return `UNAVAILABLE`. Specific sources remain `TO_VERIFY`. |
 | News freshness budgets | `freshness budget = 1.5x timeframe interval` for Sprint 1 market-data freshness | DEFAULT_PHASE1A | Claude-approved Sprint 1 default; future news-specific category budgets remain `TO_VERIFY`. |
 | News snippet policy | Short, sanitized, attributed, linked | DEFAULT_PROPOSED | Never store or display full copyrighted bodies; store title/url hash plus metadata. |
-| Persistence backend | Supabase Postgres direct database URL, optional | WAVE1_IMPLEMENTED | Compact summaries only. If absent, run `STATELESS`; if failing, report `UNAVAILABLE` and keep analysis working. |
+| Persistence backend | Supabase REST for Hugging Face runtime; direct Postgres for local migrations/non-HF runtime | WAVE1_2_HOTFIX | Compact summaries only. If absent, run `STATELESS`; if failing, report `UNAVAILABLE` and keep analysis working. |
 | Detail-view delivery | Embed in single mode; fetch-on-click in batch | DEFAULT_PROPOSED | Follow the blueprint detail delivery contract; frontend still recomputes nothing. |
 | Access-code storage | PBKDF2-HMAC-SHA256 hash in env/secret with env-configurable iterations and per-deploy salt | DEFAULT_PHASE1A | Claude final-review fix; no plaintext production passcode in frontend or repo. |
 | Perp venue | OKX swaps + Binance USD-M candidates | DEFAULT_PROPOSED | Phase 3 only, gated behind `CRYPTO_PERP`; venue/source details remain `TO_VERIFY`. |
@@ -76,6 +76,18 @@ Status: Wave 1 implemented as persistence foundation only. It does not change ma
 | DB operation failure | `persistence_status=UNAVAILABLE` | WAVE1_IMPLEMENTED | Persistence errors are caught and never raised into the analysis hot path. |
 | Stored analysis data | Compact run/timeframe/provider summaries only | WAVE1_IMPLEMENTED | Full analysis payloads and full article bodies are not stored. |
 | Watchlist limit | `20` symbols per operator | WAVE1_IMPLEMENTED | Symbols are validated through the existing normalizer. |
+
+## Wave 1.2 Supabase Runtime Connectivity Decision
+
+Status: Wave 1.2 hotfix only. It does not change market data, news authority, calibration, scoring, probability, gates, provider behavior, or deployment automation.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Hugging Face runtime persistence | Prefer `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` via backend HTTPS REST | WAVE1_2_HOTFIX | Hugging Face may block outbound Postgres ports `5432`/`6543`; Supabase REST/PostgREST uses HTTPS `443`. |
+| Direct Postgres persistence | Keep `SUPABASE_DB_URL` support for migrations/local direct DB or non-HF runtime | WAVE1_2_HOTFIX | `scripts/apply_migrations.py` still uses `SUPABASE_DB_URL` and never prints it. |
+| Repository priority | `SUPABASE_REST` > `SUPABASE_POSTGRES` > `IN_MEMORY` | WAVE1_2_HOTFIX | If both REST and DB URL secrets exist, runtime uses REST. |
+| Service role key handling | Backend-only secret | WAVE1_2_HOTFIX | Never exposed to frontend, status, debug export, logs, or docs as a value. |
+| REST persistence failure | `persistence_status=UNAVAILABLE`, analysis still returns | WAVE1_2_HOTFIX | Same best-effort/circuit-breaker behavior as direct Postgres path. |
 
 ## `_frac` Field Audit
 
