@@ -1,18 +1,10 @@
-"""News source adapter stubs for Sprint 1."""
+"""News source adapter protocols and test helpers."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Protocol
 
-
-@dataclass(frozen=True)
-class NewsItem:
-    title: str
-    url: str
-    source: str
-    published_at_utc: str
-    snippet: str | None = None
+from crypto_probability_engine.news.models import MacroObservation, NewsItem
 
 
 class NewsSourceAdapter(Protocol):
@@ -22,7 +14,10 @@ class NewsSourceAdapter(Protocol):
         """Return whether the source has been explicitly configured."""
 
     def fetch_items(self, symbol: str) -> tuple[NewsItem, ...]:
-        """Fetch sanitized metadata only; live fetching is not enabled in Sprint 1."""
+        """Fetch sanitized metadata only."""
+
+    def fetch_macro_observations(self) -> tuple[MacroObservation, ...]:
+        """Fetch compact macro observations when supported."""
 
 
 class UnconfiguredNewsSource:
@@ -32,6 +27,9 @@ class UnconfiguredNewsSource:
         return False
 
     def fetch_items(self, symbol: str) -> tuple[NewsItem, ...]:
+        return ()
+
+    def fetch_macro_observations(self) -> tuple[MacroObservation, ...]:
         return ()
 
 
@@ -50,3 +48,5 @@ class CountingNewsSource:
         self.fetch_count += 1
         return ()
 
+    def fetch_macro_observations(self) -> tuple[MacroObservation, ...]:
+        return ()

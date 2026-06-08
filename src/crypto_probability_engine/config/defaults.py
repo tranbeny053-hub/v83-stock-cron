@@ -63,6 +63,9 @@ class Phase1ADefaults:
     symbol_universe_cache_ttl_seconds: int = 3_600
     provider_depth_limit: int = 100
     provider_trade_limit: int = 50
+    news_item_limit: int = 12
+    news_timeout_seconds: float = 6.0
+    news_live_smoke_enabled: bool = False
     cross_provider_required: bool = False
     live_smoke_enabled: bool = False
 

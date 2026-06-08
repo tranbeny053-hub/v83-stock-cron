@@ -102,6 +102,21 @@ Status: Wave 2A implements public REST market-data observability only. It does n
 | Frontend/detail behavior | Display backend `market_data_v2_detail`; recompute nothing | WAVE2A_IMPLEMENTED | Frontend remains a thin renderer. |
 | WebSocket | Not implemented | OUT_OF_SCOPE_WAVE2A | REST-first only for this wave. |
 
+## Wave 3A Advisory News Authority Foundation Decisions
+
+Status: Wave 3A implements advisory/display-only metadata collection. It does not change scoring, probability, gates, disposition, calibration, trading capability, provider-private calls, or deployment automation.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| News authority mode | `influence_mode = ADVISORY_DISPLAY_ONLY` | WAVE3A_IMPLEMENTED | News context is displayed and persisted as metadata only. |
+| News influence | `news_influence_frac = 0.0` | WAVE3A_IMPLEMENTED | No score/probability/gate/disposition influence in Wave 3A. |
+| GDELT | Public DOC 2.0 JSON article-list metadata | WAVE3A_IMPLEMENTED | Tier 0, no key, fixed allow-listed host, no article URL fetch. |
+| FRED | Public `series/observations` JSON macro observations | WAVE3A_IMPLEMENTED | Optional backend-only `FRED_API_KEY`; compact observations only. |
+| NewsAPI | `/v2/everything` title/description metadata | WAVE3A_IMPLEMENTED | Optional backend-only `NEWSAPI_KEY`; provider text fields are ignored. |
+| Dedup/entity/source authority | Deterministic title hash, conservative asset aliases, source-domain tier map | WAVE3A_IMPLEMENTED | Advisory scores use `_score` suffix and are bounded `[0,1]`; no sentiment-only action. |
+| Persistence | `migrations/0002_news.sql` news metadata tables | WAVE3A_IMPLEMENTED | Compact metadata only; no full article text, no raw provider payloads, no secrets. |
+| Live smoke | `UCPE_NEWS_LIVE_SMOKE_ENABLED=false` by default | WAVE3A_IMPLEMENTED | Optional manual script; never run in unit tests/CI by default. |
+
 ## `_frac` Field Audit
 
 Decision: `_frac` suffix is reserved for values that are bounded to `[0,1]` before they are emitted. Signed ratios and unbounded magnitudes must not use `_frac`.

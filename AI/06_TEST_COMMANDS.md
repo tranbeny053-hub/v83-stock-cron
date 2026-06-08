@@ -118,6 +118,28 @@ Status: Sprint 1 local commands finalized. Use `python3` locally unless a virtua
 - `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`
 - Optional migration application only after user approval and only with local secret env configured: `PYTHONPATH=src python3 scripts/apply_migrations.py`.
 
+## Wave 3A Required Checks
+
+- `git branch --show-current`
+- `git status --short --untracked-files=all -- .`
+- `python3 --version`
+- `PYTHONPATH=src python3 -m pytest tests/news -q`
+- `PYTHONPATH=src python3 -m pytest tests/api -q`
+- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`
+- `PYTHONPATH=src python3 -m pytest -q`
+- `ruff check src tests scripts`
+- `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`
+- `PYTHONPATH=src python3 scripts/check_no_secrets.py`
+- `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`
+- `PYTHONPATH=src python3 scripts/validate_schemas.py`
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`
+- `PYTHONPATH=src python3 scripts/news_live_smoke.py` (expected SKIP unless `UCPE_NEWS_LIVE_SMOKE_ENABLED=true`; never run in CI by default)
+- `git diff --stat dev..HEAD -- src/crypto_probability_engine/quant src/crypto_probability_engine/score_stack src/crypto_probability_engine/gates`
+- `grep -R "FRED_API_KEY\|NEWSAPI_KEY" frontend || true`
+- `grep -R "content\|body\|article_body\|full_text" src/crypto_probability_engine/news tests/news frontend || true` (review generic `body` false positives; authoritative check is `check_no_full_article_body.py`)
+- `grep -R "news_influence_frac" src tests schemas frontend || true`
+- `grep -R "place_order\|create_order\|submit_order\|cancel_order\|withdraw\|transfer_funds\|leverage_set\|auto_trade" src tests schemas .github || true`
+
 ## Definition of Done
 
 A task is complete only when relevant commands were run or attempted, results were recorded in `AI/03_CURRENT_STATE.md` and `AI/05_HANDOFF.md`, risks are listed, and the user receives a non-technical summary.

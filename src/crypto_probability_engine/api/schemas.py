@@ -160,6 +160,7 @@ class AnalysisResponse(BaseModel):
     macro_context: JsonObject
     micro_news_context: JsonObject
     news_addon_state: JsonObject
+    news_evidence: JsonObject
     news_materiality_state: JsonObject
     event_horizon_state: JsonObject
     narrative_state: JsonObject

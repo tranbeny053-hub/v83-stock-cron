@@ -230,6 +230,32 @@ def test_supabase_rest_writes_compact_rows_with_backend_only_headers() -> None:
     assert repo.persistence_status() == "OK"
 
 
+def test_supabase_rest_writes_compact_news_metadata_rows() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        body = request.read().decode("utf-8")
+        assert "article_body" not in body
+        assert "full_text" not in body
+        return httpx.Response(201, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.save_news_item(_sample_news_item()) == "OK"
+    assert repo.save_news_cluster(_sample_news_cluster()) == "OK"
+    assert repo.save_news_evidence_link(_sample_news_link()) == "OK"
+    assert [request.url.path for request in seen] == [
+        "/rest/v1/news_items",
+        "/rest/v1/news_clusters",
+        "/rest/v1/news_evidence_links",
+    ]
+
+
 def test_supabase_rest_watchlist_crud_uses_mocked_https() -> None:
     seen: list[tuple[str, str]] = []
 
@@ -325,4 +351,55 @@ def _sample_provider_observation() -> dict:
         "data_source": "FIXTURE_DEMO",
         "is_live_data": False,
         "warning_count": 0,
+    }
+
+
+def _sample_news_item() -> dict:
+    return {
+        "item_id": "urlhash",
+        "run_id": "run_rest",
+        "normalized_symbol": "BTC/USDT",
+        "provider": "gdelt",
+        "source_name": "Example",
+        "domain": "example.com",
+        "title": "Bitcoin ETF metadata item",
+        "snippet": "Metadata summary only.",
+        "url": "https://example.com/news",
+        "url_hash": "urlhash",
+        "title_hash": "titlehash",
+        "published_at": "2026-06-08T10:00:00Z",
+        "fetched_at": "2026-06-08T12:00:00Z",
+        "language": "en",
+        "macro_or_micro": "MICRO",
+        "event_class": "ASSET_SPECIFIC",
+        "relevance_score": 0.8,
+        "freshness_score": 1.0,
+        "source_authority_score": 0.7,
+        "confidence_score": 0.8,
+        "cluster_id": "cluster_1",
+    }
+
+
+def _sample_news_cluster() -> dict:
+    return {
+        "cluster_id": "cluster_1",
+        "run_id": "run_rest",
+        "normalized_symbol": "BTC/USDT",
+        "representative_title": "Bitcoin ETF metadata item",
+        "macro_or_micro": "MICRO",
+        "event_class": "ASSET_SPECIFIC",
+        "source_count": 1,
+        "item_count": 1,
+        "dropped_count": 0,
+        "max_relevance_score": 0.8,
+    }
+
+
+def _sample_news_link() -> dict:
+    return {
+        "run_id": "run_rest",
+        "cluster_id": "cluster_1",
+        "item_id": "urlhash",
+        "evidence_type": "ADVISORY_NEWS_METADATA",
+        "relevance_score": 0.8,
     }

@@ -14,7 +14,15 @@ import httpx
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.config.settings import Settings
 
-ALLOWED_PUBLIC_HOSTS = frozenset({"data-api.binance.vision", "www.okx.com"})
+ALLOWED_PUBLIC_HOSTS = frozenset(
+    {
+        "data-api.binance.vision",
+        "www.okx.com",
+        "api.gdeltproject.org",
+        "api.stlouisfed.org",
+        "newsapi.org",
+    }
+)
 
 
 @dataclass
@@ -43,6 +51,7 @@ class PublicHttpClient:
         path: str,
         params: Mapping[str, Any],
         provider: str,
+        headers: Mapping[str, str] | None = None,
     ) -> Any:
         url = self._build_url(base_url, path)
         host = urlparse(url).netloc
@@ -50,7 +59,11 @@ class PublicHttpClient:
         for attempt in range(self.max_retries + 1):
             self._check_rate_limit(host, provider)
             try:
-                response = self._client().get(url, params=dict(params))
+                response = self._client().get(
+                    url,
+                    params=dict(params),
+                    headers=dict(headers or {}),
+                )
             except httpx.TimeoutException as exc:
                 last_error = ProviderError(
                     "PROVIDER_DEGRADED",

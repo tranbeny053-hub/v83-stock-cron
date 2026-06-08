@@ -258,6 +258,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "detail_view": sanitized["detail_view"],
             "news_addon_pack": {
                 "news_addon_state": sanitized["news_addon_state"],
+                "news_evidence": sanitized["news_evidence"],
                 "micro_news_context": sanitized["micro_news_context"],
                 "macro_context": sanitized["macro_context"],
             },

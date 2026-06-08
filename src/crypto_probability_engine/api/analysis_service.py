@@ -37,6 +37,9 @@ class PersistenceWork:
     run_summary: dict
     timeframe_result: dict
     provider_observations: tuple[dict, ...]
+    news_items: tuple[dict, ...] = ()
+    news_clusters: tuple[dict, ...] = ()
+    news_evidence_links: tuple[dict, ...] = ()
 
 
 def analyze_request(
@@ -81,6 +84,7 @@ def analyze_request(
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
+        settings=settings,
     )
     run_id = f"run_{uuid4().hex}"
     frontend_display = build_frontend_display(
@@ -127,6 +131,7 @@ def analyze_request(
         "macro_context": news_blocks["macro_context"],
         "micro_news_context": news_blocks["micro_news_context"],
         "news_addon_state": news_blocks["news_addon_state"],
+        "news_evidence": news_blocks["news_evidence"],
         "news_materiality_state": news_blocks["news_materiality_state"],
         "event_horizon_state": news_blocks["event_horizon_state"],
         "narrative_state": news_blocks["narrative_state"],
@@ -210,6 +215,11 @@ def _best_effort_persist(
         statuses.extend(
             repository.save_provider_observation(row) for row in work.provider_observations
         )
+        statuses.extend(repository.save_news_item(row) for row in work.news_items)
+        statuses.extend(repository.save_news_cluster(row) for row in work.news_clusters)
+        statuses.extend(
+            repository.save_news_evidence_link(row) for row in work.news_evidence_links
+        )
     except Exception:
         mark_unavailable = getattr(repository, "mark_unavailable", None)
         if callable(mark_unavailable):
@@ -227,6 +237,9 @@ def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),
         provider_observations=tuple(_provider_observations(payload)),
+        news_items=tuple(_news_item_rows(payload)),
+        news_clusters=tuple(_news_cluster_rows(payload)),
+        news_evidence_links=tuple(_news_evidence_link_rows(payload)),
     )
 
 
@@ -298,3 +311,95 @@ def _provider_observations(payload: dict) -> list[dict]:
             }
         )
     return rows
+
+
+def _news_item_rows(payload: dict) -> list[dict]:
+    run_id = payload.get("run_id")
+    normalized_symbol = payload.get("normalized_symbol")
+    contexts = (
+        payload.get("macro_context", {}).get("items", []),
+        payload.get("micro_news_context", {}).get("items", []),
+    )
+    rows: list[dict] = []
+    for items in contexts:
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            rows.append(
+                {
+                    "item_id": item.get("url_hash") or item.get("title_hash"),
+                    "run_id": run_id,
+                    "normalized_symbol": normalized_symbol,
+                    "provider": item.get("provider"),
+                    "source_name": item.get("source_name"),
+                    "domain": item.get("domain"),
+                    "title": item.get("title"),
+                    "snippet": item.get("snippet"),
+                    "url": item.get("url"),
+                    "url_hash": item.get("url_hash"),
+                    "title_hash": item.get("title_hash"),
+                    "published_at": item.get("published_at"),
+                    "fetched_at": item.get("fetched_at"),
+                    "language": item.get("language"),
+                    "macro_or_micro": item.get("macro_or_micro"),
+                    "event_class": item.get("event_class"),
+                    "relevance_score": item.get("relevance_score"),
+                    "freshness_score": item.get("freshness_score"),
+                    "source_authority_score": item.get("source_authority_score"),
+                    "confidence_score": item.get("confidence_score"),
+                    "cluster_id": item.get("cluster_id"),
+                }
+            )
+    return [row for row in rows if row.get("item_id") and row.get("title") and row.get("url")]
+
+
+def _news_cluster_rows(payload: dict) -> list[dict]:
+    run_id = payload.get("run_id")
+    normalized_symbol = payload.get("normalized_symbol")
+    clusters = payload.get("news_evidence", {}).get("clusters", [])
+    rows: list[dict] = []
+    if not isinstance(clusters, list):
+        return rows
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        rows.append(
+            {
+                "cluster_id": cluster.get("cluster_id"),
+                "run_id": run_id,
+                "normalized_symbol": normalized_symbol,
+                "representative_title": cluster.get("representative_title"),
+                "macro_or_micro": cluster.get("macro_or_micro"),
+                "event_class": cluster.get("event_class"),
+                "source_count": cluster.get("source_count"),
+                "item_count": cluster.get("item_count"),
+                "dropped_count": cluster.get("dropped_count"),
+                "max_relevance_score": cluster.get("max_relevance_score"),
+            }
+        )
+    return [row for row in rows if row.get("cluster_id") and row.get("representative_title")]
+
+
+def _news_evidence_link_rows(payload: dict) -> list[dict]:
+    run_id = payload.get("run_id")
+    links = payload.get("news_evidence", {}).get("links", [])
+    rows: list[dict] = []
+    if not isinstance(links, list):
+        return rows
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        rows.append(
+            {
+                "run_id": run_id,
+                "cluster_id": link.get("cluster_id"),
+                "item_id": link.get("url_hash") or link.get("title_hash"),
+                "evidence_type": "ADVISORY_NEWS_METADATA",
+                "relevance_score": link.get("relevance_score"),
+            }
+        )
+    return [
+        row for row in rows if row.get("run_id") and row.get("cluster_id") and row.get("item_id")
+    ]

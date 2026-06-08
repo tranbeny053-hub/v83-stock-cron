@@ -557,6 +557,16 @@ function renderStructuredDetail(payload, detailView) {
       ]),
       objectTable(details.news_detail),
     ]),
+    section("News Authority / Macro & Micro Context", [
+      keyValueTable([
+        ["Influence mode", payload.news_addon_state?.influence_mode],
+        ["Influence", "0.0 advisory display only"],
+        ["Provider status", payload.news_addon_state?.provider_status],
+      ]),
+      objectTable(details.news_detail?.news_evidence || payload.news_evidence),
+      objectTable(details.news_detail?.macro_context || payload.macro_context),
+      objectTable(payload.micro_news_context),
+    ]),
     section("Debug / Raw JSON", [rawJson]),
   );
   detailPanel.classList.remove("hidden");

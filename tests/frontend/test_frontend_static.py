@@ -71,6 +71,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         "Market Data v2 / Provider Observability",
         "Quant Signals",
         "News Add-on",
+        "News Authority / Macro & Micro Context",
         "Debug / Raw JSON",
     ):
         assert heading in js
@@ -195,6 +196,8 @@ def test_no_secret_markers_in_frontend() -> None:
         "APP_ACCESS_CODE_HASH",
         "DEV_MODE_CODE_HASH",
         "SESSION_SIGNING_KEY",
+        "FRED_API_KEY",
+        "NEWSAPI_KEY",
         "API_KEY",
         "PASSWORD",
         "PRIVATE_KEY",

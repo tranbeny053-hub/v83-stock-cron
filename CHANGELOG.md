@@ -282,3 +282,22 @@ Notes:
 - Derived market metrics are formulaic metadata only and do not affect scoring, probability, gates, or news influence.
 - No WebSocket, News Authority Engine, calibration, private/signed exchange endpoints, Binance/OKX API keys, deployment, or trading capability was added.
 - No deploy, merge, or Hugging Face push was performed.
+
+## 2026-06-08 - Wave 3A Advisory News Authority Foundation
+
+Changed:
+- Added metadata-only advisory news adapters for GDELT DOC 2.0, FRED macro observations, and optional NewsAPI.
+- Added fixed host allow-list coverage for `api.gdeltproject.org`, `api.stlouisfed.org`, and `newsapi.org`.
+- Added deterministic news item normalization, title/url hashing, conservative entity relevance, source authority scoring, freshness scoring, and simple clustering.
+- Added `news_evidence`, provider status, macro observations, and `influence_mode=ADVISORY_DISPLAY_ONLY` to `NEWS_ADDON` responses.
+- Kept `news_influence_frac=0.0`; advisory news does not change score, probability, gates, or disposition.
+- Added `migrations/0002_news.sql` for compact news metadata persistence: `news_items`, `news_clusters`, and `news_evidence_links`.
+- Extended persistence adapters with best-effort news metadata writes through existing non-blocking persistence path.
+- Added `News Authority / Macro & Micro Context` to structured Detail Analysis.
+- Added optional gated `scripts/news_live_smoke.py`; it skips unless `UCPE_NEWS_LIVE_SMOKE_ENABLED=true`.
+- Added offline tests for provider normalization, provider failure, no-fetch `METRICS_ONLY`, advisory-only invariants, entity relevance, clustering, persistence rows, frontend rendering, and no secret/frontend exposure.
+
+Notes:
+- No full article text is stored, rendered, exported, scraped, or fetched from article URLs.
+- GDELT requires no key. `FRED_API_KEY` and `NEWSAPI_KEY` are optional backend-only Hugging Face Secrets.
+- No calibration, WebSocket, News Authority scoring influence, private exchange endpoints, exchange API keys, deployment, merge, or Hugging Face push was performed.

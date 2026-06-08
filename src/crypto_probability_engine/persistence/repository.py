@@ -28,6 +28,15 @@ class PersistenceRepository(Protocol):
     def save_provider_observation(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist compact provider observation."""
 
+    def save_news_item(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist compact news metadata item."""
+
+    def save_news_cluster(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist compact news cluster summary."""
+
+    def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist compact run-to-news evidence link."""
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         """List normalized watchlist symbols for an operator."""
 
@@ -51,6 +60,9 @@ class InMemoryPersistenceRepository:
         self._runs: OrderedDict[str, dict] = OrderedDict()
         self._timeframe_results: list[dict] = []
         self._provider_observations: list[dict] = []
+        self._news_items: list[dict] = []
+        self._news_clusters: list[dict] = []
+        self._news_evidence_links: list[dict] = []
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
 
     def persistence_status(self) -> PersistenceStatus:
@@ -75,6 +87,18 @@ class InMemoryPersistenceRepository:
 
     def save_provider_observation(self, row: Mapping[str, Any]) -> PersistenceStatus:
         self._provider_observations.append(dict(row))
+        return self.persistence_status()
+
+    def save_news_item(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._news_items.append(dict(row))
+        return self.persistence_status()
+
+    def save_news_cluster(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._news_clusters.append(dict(row))
+        return self.persistence_status()
+
+    def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._news_evidence_links.append(dict(row))
         return self.persistence_status()
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
@@ -291,6 +315,89 @@ class SupabasePersistenceRepository:
         )
         return status
 
+    def save_news_item(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_item(row)
+        status, _ = self._run_db(
+            lambda cursor: cursor.execute(
+                """
+                INSERT INTO news_items (
+                  item_id, run_id, normalized_symbol, provider, source_name, domain,
+                  title, snippet, url, url_hash, title_hash, published_at, fetched_at,
+                  language, macro_or_micro, event_class, relevance_score, freshness_score,
+                  source_authority_score, confidence_score, cluster_id
+                )
+                VALUES (
+                  %(item_id)s, %(run_id)s, %(normalized_symbol)s, %(provider)s,
+                  %(source_name)s, %(domain)s, %(title)s, %(snippet)s, %(url)s,
+                  %(url_hash)s, %(title_hash)s, %(published_at)s, %(fetched_at)s,
+                  %(language)s, %(macro_or_micro)s, %(event_class)s, %(relevance_score)s,
+                  %(freshness_score)s, %(source_authority_score)s, %(confidence_score)s,
+                  %(cluster_id)s
+                )
+                ON CONFLICT (item_id) DO UPDATE SET
+                  run_id = EXCLUDED.run_id,
+                  normalized_symbol = EXCLUDED.normalized_symbol,
+                  relevance_score = EXCLUDED.relevance_score,
+                  freshness_score = EXCLUDED.freshness_score,
+                  source_authority_score = EXCLUDED.source_authority_score,
+                  confidence_score = EXCLUDED.confidence_score,
+                  cluster_id = EXCLUDED.cluster_id
+                """,
+                dict(row),
+            )
+        )
+        return status
+
+    def save_news_cluster(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_cluster(row)
+        status, _ = self._run_db(
+            lambda cursor: cursor.execute(
+                """
+                INSERT INTO news_clusters (
+                  cluster_id, run_id, normalized_symbol, representative_title,
+                  macro_or_micro, event_class, source_count, item_count,
+                  dropped_count, max_relevance_score
+                )
+                VALUES (
+                  %(cluster_id)s, %(run_id)s, %(normalized_symbol)s,
+                  %(representative_title)s, %(macro_or_micro)s, %(event_class)s,
+                  %(source_count)s, %(item_count)s, %(dropped_count)s,
+                  %(max_relevance_score)s
+                )
+                ON CONFLICT (cluster_id) DO UPDATE SET
+                  run_id = EXCLUDED.run_id,
+                  normalized_symbol = EXCLUDED.normalized_symbol,
+                  source_count = EXCLUDED.source_count,
+                  item_count = EXCLUDED.item_count,
+                  dropped_count = EXCLUDED.dropped_count,
+                  max_relevance_score = EXCLUDED.max_relevance_score
+                """,
+                dict(row),
+            )
+        )
+        return status
+
+    def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_evidence_link(row)
+        status, _ = self._run_db(
+            lambda cursor: cursor.execute(
+                """
+                INSERT INTO news_evidence_links (
+                  run_id, cluster_id, item_id, evidence_type, relevance_score
+                )
+                VALUES (
+                  %(run_id)s, %(cluster_id)s, %(item_id)s, %(evidence_type)s,
+                  %(relevance_score)s
+                )
+                ON CONFLICT (run_id, cluster_id, item_id) DO UPDATE SET
+                  evidence_type = EXCLUDED.evidence_type,
+                  relevance_score = EXCLUDED.relevance_score
+                """,
+                dict(row),
+            )
+        )
+        return status
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
         if status == "UNAVAILABLE" or rows is None:
@@ -475,6 +582,45 @@ class SupabaseRestRepository:
                 "provider_observations",
                 json=dict(row),
                 prefer="return=minimal",
+            )
+        )
+        return status
+
+    def save_news_item(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_item(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "news_items",
+                json=dict(row),
+                params={"on_conflict": "item_id"},
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        )
+        return status
+
+    def save_news_cluster(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_cluster(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "news_clusters",
+                json=dict(row),
+                params={"on_conflict": "cluster_id"},
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        )
+        return status
+
+    def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_news_evidence_link(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "news_evidence_links",
+                json=dict(row),
+                params={"on_conflict": "run_id,cluster_id,item_id"},
+                prefer="resolution=merge-duplicates,return=minimal",
             )
         )
         return status

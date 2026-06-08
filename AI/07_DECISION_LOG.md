@@ -93,3 +93,11 @@ Decision: Close the remaining unbounded `_frac` defect class by renaming `realiz
 Rationale: Realized volatility, risk pressure, and historical CVaR loss are unbounded magnitudes and can exceed `1.0` during volatile markets. The `_frac` suffix must only identify values that are guaranteed within `[0,1]`.
 
 Impact: High-volatility offline responses and volatile-symbol live smoke validate without sentinel failures. Remaining emitted `_frac` fields are recursively tested as numeric `[0,1]` values. No trading capability, private exchange calls, live news fetching, merge, or deploy was added.
+
+## 2026-06-08 - Wave 3A Advisory News Authority Foundation
+
+Decision: Add a live news authority foundation that is advisory/display-only: `news_influence_frac=0.0`, `influence_mode=ADVISORY_DISPLAY_ONLY`, and no news path feeds score, probability, gates, disposition, or hard warnings.
+
+Rationale: The user already configured optional FRED and NewsAPI Hugging Face secrets, and GDELT is public/no-key. Wave 3A needs visible macro/micro context without creating decision authority, body scraping, arbitrary URL fetching, or secret exposure.
+
+Impact: GDELT, FRED, and optional NewsAPI are implemented as metadata-only providers behind fixed host allow-lists. Compact news metadata persistence is added with `migrations/0002_news.sql`. Detail Analysis can display `News Authority / Macro & Micro Context`; `METRICS_ONLY` still fetches no news and `NEWS_ADDON` remains unavailable/degraded when providers are absent or unhealthy. No full article body, scoring/probability/gate/news influence change, trading capability, merge, deploy, or Hugging Face push was added.

@@ -1,6 +1,6 @@
 # Deployment Checklist
 
-Status: Wave 2A build exists locally. No deployment has been performed by Codex. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
+Status: Wave 3A build exists locally. No deployment has been performed by Codex. This checklist is derived from Blueprint v1.2.2 and platform details remain `TO_VERIFY` against current official docs.
 
 ## Pre-Deploy Review
 
@@ -45,7 +45,11 @@ Status: Wave 2A build exists locally. No deployment has been performed by Codex.
 - [ ] Set `UCPE_PROVIDER_DEPTH_LIMIT=100` unless intentionally tuning public order-book depth.
 - [ ] Set `UCPE_PROVIDER_TRADE_LIMIT=50` unless intentionally tuning public recent-trades sampling.
 - [ ] Binance/OKX API keys are absent; Wave 2A public REST market data requires no Binance/OKX secrets.
-- [ ] Optional provider/news keys are absent or read-only/source-appropriate if introduced in a later reviewed phase.
+- [ ] Set `UCPE_NEWS_ITEM_LIMIT=12` unless intentionally tuning advisory display volume.
+- [ ] Set `UCPE_NEWS_TIMEOUT_SECONDS=6` unless intentionally tuning bounded news waits.
+- [ ] Keep `UCPE_NEWS_LIVE_SMOKE_ENABLED=false` except for explicit manual smoke.
+- [ ] Optional `FRED_API_KEY` is set only in Hugging Face Secrets if FRED macro context is desired.
+- [ ] Optional `NEWSAPI_KEY` is set only in Hugging Face Secrets if NewsAPI metadata is desired.
 - [ ] Private exchange keys, if used later, are read-only only.
 - [ ] Secret presence in health/debug is masked as `set (****)`.
 
@@ -54,12 +58,16 @@ Clarifications:
 - `UCPE_ACCESS_CODE_SALT`, `SESSION_SIGNING_KEY`, and any Hugging Face upload token are not the app login code.
 - No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
 - Wave 2A remains REST-only; WebSocket is not enabled in this deployment checklist.
+- GDELT requires no key. FRED and NewsAPI are optional and backend-only.
+- Wave 3A news is advisory display only; `news_influence_frac` remains `0.0`.
 
 ## Optional Supabase Persistence Setup
 
 - [ ] Create or select a Supabase Postgres project.
 - [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
+- [ ] Apply `migrations/0002_news.sql` in the Supabase SQL Editor before expecting durable news metadata.
 - [ ] Confirm tables exist: `watchlist`, `analysis_runs`, `analysis_timeframe_results`, `provider_observations`, and `app_events`.
+- [ ] Confirm news tables exist if Wave 3A metadata persistence is enabled: `news_items`, `news_clusters`, and `news_evidence_links`.
 - [ ] For Hugging Face runtime, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Hugging Face Secrets so the backend uses HTTPS REST on port `443`.
 - [ ] Use `SUPABASE_DB_URL` only for local migration/admin or non-Hugging-Face direct Postgres runtime.
 - [ ] Leave all Supabase secrets absent to run in stateless mode; analysis should still work and the watchlist UI uses browser fallback.
@@ -72,6 +80,7 @@ Clarifications:
 - [ ] `/v1/system_status` returns runtime/system/provider/news-source/shelter state after session auth.
 - [ ] `BTC` with `METRICS_ONLY` returns schema-valid payload and no news fetch.
 - [ ] `BTC` with `NEWS_ADDON` returns schema-valid payload; if sources are not configured, `news_addon_state.status = UNAVAILABLE` and metrics are unaffected.
+- [ ] `BTC` with `NEWS_ADDON` shows `influence_mode=ADVISORY_DISPLAY_ONLY` and `news_influence_frac=0.0`.
 - [ ] Volatile-symbol live smoke, for example `BTC/USDT,ETH/USDT,SOL/USDT`, returns schema-valid payloads and no `_frac` sentinel failures.
 - [ ] Detail endpoint returns correct recent `run_id` detail or `RUN_NOT_FOUND`.
 - [ ] Dev Mode requires re-auth and exports sanitized debug pack.

@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 2A public market-data observability implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 3A advisory news authority foundation implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -169,6 +169,25 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] No WebSocket, private/signed endpoint, API key, News Authority, calibration, or trading capability was added.
 - [ ] Claude/User review completed before merge/deploy.
 
+## Wave 3A Advisory News Authority Gate
+
+- [x] `METRICS_ONLY` fetches no news.
+- [x] `NEWS_ADDON` remains non-blocking when providers are absent or failing.
+- [x] `influence_mode = ADVISORY_DISPLAY_ONLY`.
+- [x] `news_influence_frac = 0.0`.
+- [x] Score, probability, gates, and disposition are unchanged with advisory news fixtures.
+- [x] GDELT uses fixed public DOC 2.0 API path on `api.gdeltproject.org`.
+- [x] FRED uses fixed public `series/observations` path on `api.stlouisfed.org`.
+- [x] NewsAPI uses fixed `/v2/everything` path on `newsapi.org`.
+- [x] No arbitrary article URL fetch or article-page scraping exists.
+- [x] No full article text is stored, rendered, or exported.
+- [x] Frontend contains no `FRED_API_KEY` or `NEWSAPI_KEY` references.
+- [x] News metadata persistence is compact and best-effort through existing persistence path.
+- [x] `migrations/0002_news.sql` is idempotent and non-destructive.
+- [x] Optional live news smoke is gated by `UCPE_NEWS_LIVE_SMOKE_ENABLED=false`.
+- [ ] Apply `migrations/0002_news.sql` before expecting durable news metadata.
+- [ ] Claude/User review completed before merge/deploy.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |
@@ -182,6 +201,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Variable | `UCPE_SYMBOL_UNIVERSE_CACHE_TTL_SECONDS` | `3600` | Public symbol universe cache TTL | yes | Avoids exchangeInfo/instruments fetch on every analysis. |
 | Variable | `UCPE_PROVIDER_DEPTH_LIMIT` | `100` | Public order-book depth levels | yes | Public REST only. |
 | Variable | `UCPE_PROVIDER_TRADE_LIMIT` | `50` | Public recent-trades limit | yes | Public REST only. |
+| Variable | `UCPE_NEWS_ITEM_LIMIT` | `12` | Maximum metadata news items per provider call | yes | Advisory display only. |
+| Variable | `UCPE_NEWS_TIMEOUT_SECONDS` | `6` | News provider HTTP timeout | yes | Keeps news fetch bounded. |
+| Variable | `UCPE_NEWS_LIVE_SMOKE_ENABLED` | `false` | Keep live news smoke manual/off by default | yes | Never enable in CI. |
 | Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow single validated provider with warning | yes | |
 | Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep live smoke manual/off by default | yes | Never enable in CI. |
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | |
@@ -194,6 +216,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase project URL for backend REST persistence | yes, for durable HF persistence | Backend-only. Do not expose to frontend. |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase REST authorization for backend persistence | yes, for durable HF persistence | Service role key is backend-only. Never expose to frontend, logs, or debug exports. |
 | Secret | `SUPABASE_DB_URL` | `<SET_LOCALLY_OR_IN_NON_HF_RUNTIME_ONLY>` | Direct Postgres migration/local admin URL | optional | Use for local migration script or non-HF deployments; not preferred for HF runtime. |
+| Secret | `FRED_API_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional FRED macro observations | optional | Backend-only. Leave absent to disable FRED. |
+| Secret | `NEWSAPI_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional NewsAPI metadata provider | optional | Backend-only. Leave absent to disable NewsAPI. |
 | Secret | Binance/OKX API keys | not required | Public endpoints need no key | no | No Binance/OKX secrets required for Sprint 2. |
 
 ## Required Evidence

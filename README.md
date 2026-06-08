@@ -47,6 +47,14 @@ If Supabase runtime persistence is absent or unavailable, analysis still returns
 
 Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set in the local environment. The script never prints the database URL.
 
+## Wave 3A Advisory News Authority
+
+Wave 3A adds metadata-only news and macro context for `NEWS_ADDON`. It is advisory/display-only: `influence_mode=ADVISORY_DISPLAY_ONLY` and `news_influence_frac=0.0`. News does not change score, probability, gates, disposition, warnings, or any trading-like recommendation.
+
+GDELT uses a public no-key API. FRED and NewsAPI are optional backend-only providers enabled only when `FRED_API_KEY` or `NEWSAPI_KEY` is set in Hugging Face Secrets. The app stores and renders titles, snippets/descriptions, source/domain, URLs, hashes, timestamps, and compact scores only. It never stores full article text, scrapes article pages, or fetches arbitrary article URLs.
+
+Apply `migrations/0002_news.sql` in Supabase SQL Editor before expecting durable news metadata.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |
@@ -59,6 +67,9 @@ Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src p
 | Variable | `UCPE_CANDLE_CACHE_TTL_SECONDS` | `300` | Avoid repeated provider hits | yes | Must stay within freshness budgets. |
 | Variable | `UCPE_CROSS_PROVIDER_REQUIRED` | `false` | Allow one validated provider with warning | yes | Set `true` only after review. |
 | Variable | `UCPE_LIVE_SMOKE_ENABLED` | `false` | Keep manual live smoke disabled by default | yes | Do not enable in CI. |
+| Variable | `UCPE_NEWS_ITEM_LIMIT` | `12` | Advisory news item cap per provider call | yes | Display-only; tune cautiously. |
+| Variable | `UCPE_NEWS_TIMEOUT_SECONDS` | `6` | News provider timeout | yes | Bounded best-effort news fetch. |
+| Variable | `UCPE_NEWS_LIVE_SMOKE_ENABLED` | `false` | Optional live news smoke gate | yes | Do not enable in CI. |
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | Use `false` only for local HTTP smoke. |
 | Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | Enable only if Dev Mode secret is configured. |
 | Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | Access-code KDF work factor | yes | Must match hash generation. |
@@ -69,6 +80,8 @@ Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src p
 | Secret | `SUPABASE_URL` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase project URL for backend REST persistence | yes, for durable HF persistence | Backend-only. Do not expose to frontend. |
 | Secret | `SUPABASE_SERVICE_ROLE_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Supabase REST authorization for backend persistence | yes, for durable HF persistence | Service role key is backend-only. Never expose to frontend, logs, or debug exports. |
 | Secret | `SUPABASE_DB_URL` | `<SET_LOCALLY_OR_IN_NON_HF_RUNTIME_ONLY>` | Direct Postgres migration/local admin URL | optional | Use for `scripts/apply_migrations.py` locally or non-HF deployments; not preferred for HF runtime. |
+| Secret | `FRED_API_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional FRED macro observations | optional | Backend-only. Never expose to frontend. |
+| Secret | `NEWSAPI_KEY` | `<SET_IN_HF_SECRETS_ONLY>` | Optional NewsAPI metadata provider | optional | Backend-only. Never expose to frontend. |
 | Secret | Binance/OKX API keys | not required | Public market data only | no | No Binance/OKX secrets required for Sprint 2. |
 
 ## Login Code vs Deployment Secrets
@@ -79,3 +92,4 @@ Apply `migrations/0001_init.sql` in Supabase SQL Editor or run `PYTHONPATH=src p
 - `SESSION_SIGNING_KEY` signs sessions, not the login code.
 - A Hugging Face token, if used for repository upload outside this app, is not the app login code.
 - No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
+- GDELT requires no key; FRED and NewsAPI keys are optional backend-only secrets.

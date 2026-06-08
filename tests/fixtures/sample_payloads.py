@@ -61,6 +61,7 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
         "macro_context": {"status": news_status},
         "micro_news_context": {"status": news_status, "items": []},
         "news_addon_state": {"status": news_status, "mode": analysis_mode},
+        "news_evidence": {"status": news_status, "clusters": [], "links": []},
         "news_materiality_state": {"status": news_status, "top_material_items": []},
         "event_horizon_state": {"status": news_status},
         "narrative_state": {"status": news_status},
@@ -106,4 +107,3 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
         "analysis_hash": "sha256:schema-fixture",
     }
     return deepcopy(payload)
-

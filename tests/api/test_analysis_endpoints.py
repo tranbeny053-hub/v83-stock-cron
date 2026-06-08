@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import UTC, datetime
 
 import httpx
 from fastapi.testclient import TestClient
@@ -158,6 +159,69 @@ def test_news_addon_unavailable_and_metrics_unaffected() -> None:
     assert addon_payload["news_addon_state"]["status"] == "UNAVAILABLE"
     assert metrics_payload["probability_state"] == addon_payload["probability_state"]
     assert metrics_payload["score_stack"] == addon_payload["score_stack"]
+
+
+def test_advisory_news_fixture_does_not_change_score_or_disposition(monkeypatch) -> None:
+    from crypto_probability_engine.news.contract import build_news_blocks as real_build_news_blocks
+    from crypto_probability_engine.news.models import make_news_item
+
+    item = make_news_item(
+        provider="gdelt",
+        source_name="Reuters",
+        domain="reuters.com",
+        title="Bitcoin ETF flows rise as macro liquidity improves",
+        snippet="Metadata-only advisory news fixture.",
+        url="https://example.com/btc-advisory",
+        published_at="2026-06-08T10:00:00Z",
+        fetched_at=datetime(2026, 6, 8, 12, 0, tzinfo=UTC),
+    )
+
+    class FixtureSource:
+        name = "fixture_news"
+
+        def is_configured(self) -> bool:
+            return True
+
+        def fetch_items(self, symbol: str):
+            return (item,)
+
+        def fetch_macro_observations(self):
+            return ()
+
+    def fixture_news_blocks(*, analysis_mode, symbol, sources=None, settings=None):
+        if analysis_mode.value == "NEWS_ADDON":
+            return real_build_news_blocks(
+                analysis_mode=analysis_mode,
+                symbol=symbol,
+                sources=[FixtureSource()],
+            )
+        return real_build_news_blocks(
+            analysis_mode=analysis_mode,
+            symbol=symbol,
+            sources=sources,
+            settings=settings,
+        )
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.analysis_service.build_news_blocks",
+        fixture_news_blocks,
+    )
+    client = make_client()
+    login(client)
+
+    metrics = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+    addon = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "NEWS_ADDON"})
+
+    assert metrics.status_code == 200
+    assert addon.status_code == 200
+    metrics_payload = metrics.json()
+    addon_payload = addon.json()
+    assert addon_payload["news_addon_state"]["status"] in {"OK", "DEGRADED"}
+    assert addon_payload["news_addon_state"]["influence_mode"] == "ADVISORY_DISPLAY_ONLY"
+    assert addon_payload["news_addon_state"]["news_influence_frac"] == 0.0
+    assert metrics_payload["probability_state"] == addon_payload["probability_state"]
+    assert metrics_payload["score_stack"] == addon_payload["score_stack"]
+    assert metrics_payload["gate_result"] == addon_payload["gate_result"]
 
 
 def test_batch_partial_failure_is_isolated() -> None:

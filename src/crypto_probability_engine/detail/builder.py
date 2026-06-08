@@ -60,6 +60,9 @@ def build_detail_view(
         "news_detail": {
             "news_addon_state": news_blocks["news_addon_state"],
             "micro_news_context": news_blocks["micro_news_context"],
+            "macro_context": news_blocks["macro_context"],
+            "news_evidence": news_blocks["news_evidence"],
+            "provider_status": news_blocks["news_addon_state"].get("provider_status", []),
             "news_influence": news_blocks["news_influence"],
         },
         "macro_detail": news_blocks["macro_context"],

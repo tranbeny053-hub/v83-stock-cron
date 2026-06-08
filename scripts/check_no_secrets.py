@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", ".venv", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
 SECRET_ASSIGNMENT = re.compile(
-    r"(?i)\b(API_KEY|SECRET|PASSWORD|PASS_PHRASE|PRIVATE_KEY|SUPABASE_DB_URL|SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY)\s*=\s*([^\s#]+)"
+    r"(?i)\b(API_KEY|SECRET|PASSWORD|PASS_PHRASE|PRIVATE_KEY|SUPABASE_DB_URL|SUPABASE_URL|SUPABASE_SERVICE_ROLE_KEY|FRED_API_KEY|NEWSAPI_KEY)\s*=\s*([^\s#]+)"
 )
 ALLOWED_VALUES = {"set", "set (****)", "****", "<redacted>", "TBD", "None", "null"}
 ALLOWED_VALUE_PREFIXES = ("<", "os.environ.get(")

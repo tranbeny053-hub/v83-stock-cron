@@ -48,6 +48,9 @@ class Settings(BaseModel):
     symbol_universe_cache_ttl_seconds: int = DEFAULT_PHASE1A.symbol_universe_cache_ttl_seconds
     provider_depth_limit: int = DEFAULT_PHASE1A.provider_depth_limit
     provider_trade_limit: int = DEFAULT_PHASE1A.provider_trade_limit
+    news_item_limit: int = DEFAULT_PHASE1A.news_item_limit
+    news_timeout_seconds: float = DEFAULT_PHASE1A.news_timeout_seconds
+    news_live_smoke_enabled: bool = DEFAULT_PHASE1A.news_live_smoke_enabled
     cross_provider_required: bool = DEFAULT_PHASE1A.cross_provider_required
     live_smoke_enabled: bool = DEFAULT_PHASE1A.live_smoke_enabled
     access_code_hash: str | None = Field(default=None, repr=False)
@@ -58,6 +61,8 @@ class Settings(BaseModel):
     supabase_db_url: str | None = Field(default=None, repr=False)
     supabase_url: str | None = Field(default=None, repr=False)
     supabase_service_role_key: str | None = Field(default=None, repr=False)
+    fred_api_key: str | None = Field(default=None, repr=False)
+    newsapi_key: str | None = Field(default=None, repr=False)
     external_store_configured: bool = False
 
     @classmethod
@@ -121,6 +126,19 @@ class Settings(BaseModel):
                     str(DEFAULT_PHASE1A.provider_trade_limit),
                 )
             ),
+            news_item_limit=int(
+                os.environ.get("UCPE_NEWS_ITEM_LIMIT", str(DEFAULT_PHASE1A.news_item_limit))
+            ),
+            news_timeout_seconds=float(
+                os.environ.get(
+                    "UCPE_NEWS_TIMEOUT_SECONDS",
+                    str(DEFAULT_PHASE1A.news_timeout_seconds),
+                )
+            ),
+            news_live_smoke_enabled=parse_bool(
+                os.environ.get("UCPE_NEWS_LIVE_SMOKE_ENABLED"),
+                default=DEFAULT_PHASE1A.news_live_smoke_enabled,
+            ),
             cross_provider_required=parse_bool(
                 os.environ.get("UCPE_CROSS_PROVIDER_REQUIRED"),
                 default=DEFAULT_PHASE1A.cross_provider_required,
@@ -145,6 +163,8 @@ class Settings(BaseModel):
             supabase_db_url=os.environ.get("SUPABASE_DB_URL"),
             supabase_url=os.environ.get("SUPABASE_URL"),
             supabase_service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+            fred_api_key=os.environ.get("FRED_API_KEY"),
+            newsapi_key=os.environ.get("NEWSAPI_KEY"),
             external_store_configured=bool(
                 os.environ.get("SUPABASE_DB_URL")
                 or (
