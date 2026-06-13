@@ -41,9 +41,14 @@
           <button id="refreshButton" type="button" disabled>Re-analyze</button>
         </section>
 
-        <section class="honesty-banner" id="heuristicBanner" aria-label="Model readiness warning">
-          ⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates over a
-          multi-bar horizon, not validated forecasts. Not financial advice. No profitability claim.
+        <section
+          class="honesty-banner global-probability-legend"
+          id="heuristicBanner"
+          aria-label="Model readiness warning"
+        >
+          ⚠️ Uncalibrated heuristic. Up/Down/Timeout are momentum-based estimates over the
+          next ~6 bars of each timeframe — not validated forecasts, not financial advice, no
+          profitability claim. Open Detail for the full breakdown.
         </section>
 
         <section class="panel" id="singlePanel">
@@ -65,11 +70,6 @@
             <span>Normalizing</span><span>Validating</span><span>Computing</span><span>Rendering</span>
           </div>
           <p class="heat-label">Signal heat — not risk</p>
-          <p class="probability-explainer">
-            Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars of this
-            timeframe. Timeout means no decisive directional resolution. Not a forecast, not
-            expected return, and not a trade recommendation.
-          </p>
           <div id="singleResult" class="timeframe-card-grid" aria-label="Single Analysis timeframe cards"></div>
         </section>
 
@@ -133,11 +133,6 @@
               <span>Loading six timeframes</span><span>Keeping detail links</span>
             </div>
             <p class="heat-label">Signal heat — not risk</p>
-            <p class="probability-explainer">
-              Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars of this
-              timeframe. Timeout means no decisive directional resolution. Not a forecast, not
-              expected return, and not a trade recommendation.
-            </p>
             <div
               id="watchlistResult"
               class="timeframe-card-grid"

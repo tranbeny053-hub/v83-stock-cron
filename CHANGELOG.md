@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4A.1 Frontend Honesty Declutter Hotfix
+
+Changed:
+- Removed the repeated per-card yellow Up/Down/Timeout explanatory note.
+- Replaced precise overview-card Up/Down/Timeout percentages with qualitative uncalibrated card text.
+- Kept full Up/Down/Timeout percentages in the structured Detail panel.
+- Kept Download JSON and Decision Brief rendering intact.
+
+Notes:
+- Frontend/display-layer hotfix only.
+- No quant, probability, score, gates, tail risk, volatility/trend, config defaults, or news logic changed.
+- Deferred to later reviewed work: tanh gain saturation, timeout cap behavior, realized-volatility scaling, broad tail CVaR breach behavior, and score ceiling/collapse artifacts.
+- No migrations, dependencies, deploy, merge, or Hugging Face push were performed.
+
 ## 2026-06-14 - Wave 4A Honesty and Decision Clarity
 
 Changed:

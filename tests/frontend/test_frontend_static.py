@@ -86,8 +86,8 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
     css = read_frontend("styles.css")
     assert "Uncalibrated heuristic" in html
     assert "not validated forecasts" in html
-    assert "Up/Down/Timeout are uncalibrated heuristic estimates" in html
-    assert "Timeout means no decisive directional resolution" in html
+    assert "Up/Down/Timeout are momentum-based estimates" in html
+    assert "Open Detail for the full breakdown." in html
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
     assert "application/json" in js
@@ -95,7 +95,26 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
     assert "model readiness" in js.lower()
     assert "horizon_approx_label" in js
     assert ".honesty-banner" in css
-    assert ".probability-explainer" in css
+    assert ".global-probability-legend" in css
+
+
+def test_wave4a1_cards_are_decluttered_and_hide_uncalibrated_percentages() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert html.count("Up/Down/Timeout are momentum-based estimates") == 1
+    assert "probability-explainer compact" not in js
+    assert "qualitativeCardLean" in js
+    assert "uncalibrated — see Detail" in js
+    assert "Open Detail for full probability breakdown." in js
+    overview_chunk = js.split("function overviewCard", maxsplit=1)[1].split(
+        "function loadingCard", maxsplit=1
+    )[0]
+    assert "prob_up_pct" not in overview_chunk
+    assert "prob_down_pct" not in overview_chunk
+    assert "prob_timeout_pct" not in overview_chunk
+    assert "[\"Up\", formatPct(display.prob_up_pct)]" in js
+    assert "[\"Down\", formatPct(display.prob_down_pct)]" in js
+    assert "[\"Timeout\", formatPct(display.prob_timeout_pct)]" in js
 
 
 def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:

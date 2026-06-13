@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4A honesty and decision clarity implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4A.1 frontend honesty declutter hotfix implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -45,6 +45,19 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Download JSON uses the already-received in-memory analysis payload.
 - [x] No scoring, probability, gates, execution realism, global risk, or news-influence math changed.
 - [x] No migrations, dependencies, deployment, trading capability, or secret exposure added.
+- [ ] Claude/User review completed before merge/deploy.
+
+## Wave 4A.1 Frontend Honesty Declutter Gate
+
+- [x] Repeated per-card Up/Down/Timeout explanatory note removed.
+- [x] Exactly one global uncalibrated-heuristic legend is visible in the app shell.
+- [x] Overview cards hide precise Up/Down/Timeout percentages while results are uncalibrated.
+- [x] Overview cards show qualitative uncalibrated status and point users to Detail.
+- [x] Detail panel keeps full Up/Down/Timeout percentages and explanation.
+- [x] Download JSON remains available.
+- [x] Decision Brief rendering remains available.
+- [x] No quant/probability/score/gate/news/features/defaults paths changed.
+- [x] Deferred math concerns are documented for later review rather than changed in this branch.
 - [ ] Claude/User review completed before merge/deploy.
 
 ## Sprint 1 Gate

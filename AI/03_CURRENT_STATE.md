@@ -4,7 +4,7 @@ Updated: 2026-06-14
 
 ## Branch / Worktree
 
-- Branch: `codex/wave4a-honesty-decision-clarity`
+- Branch: `codex/wave4a1-honesty-declutter`
 - Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
@@ -12,50 +12,55 @@ Updated: 2026-06-14
 
 ## Current Phase
 
-- Phase: Wave 4A Honesty & Decision Clarity.
-- Current status: implementation and offline verification completed locally; Claude/User review required before merge/deploy.
-- Scope: presentation and response-contract clarity only. No scoring, probability, gate, execution-realism, global-risk, or news-influence math changed.
+- Phase: Wave 4A.1 / Wave 4.2A Frontend Display Hotfix.
+- Current status: frontend declutter hotfix implemented and offline verification completed locally; Claude/User review required before merge/deploy.
+- Scope: frontend/display-layer only. No scoring, probability, gate, tail-risk, horizon-timeout, volatility/trend, config/defaults, or news-influence logic changed.
 
 ## What Changed
 
-- Added horizon-explicit backend labels for each timeframe, for example `4H setup / ~24H horizon`.
-- Added user-visible Up/Down/Timeout explanation and persistent uncalibrated heuristic banner.
-- Added backend-built `decision_brief` with constrained actions: `NO_TRADE`, `WATCHLIST`, `SPOT_WATCH`.
-- Declared `decision_brief` in Pydantic response models and JSON Schema to satisfy `extra="forbid"`.
-- Mirrored `decision_brief` into Detail Analysis and rendered it as structured frontend copy.
-- Stopped presenting placeholder `confidence_frac` as real user-facing confidence; UI now says model readiness is heuristic/uncalibrated.
-- Added a frontend `Download JSON` button that serializes the current in-memory analysis payload.
-- Added API/schema/frontend regression tests for Wave 4A honesty fields.
+- Removed the repeated per-card Up/Down/Timeout explanatory block.
+- Replaced card-level precise Up/Down/Timeout percentages with qualitative uncalibrated copy derived from existing `decision_brief.action`.
+- Added one compact global legend near the app shell/header explaining uncalibrated Up/Down/Timeout behavior and pointing users to Detail.
+- Kept full Up/Down/Timeout percentages in the structured Detail panel.
+- Kept Download JSON and Decision Brief rendering intact.
+- Updated frontend static tests to assert card declutter behavior, exactly one global legend, Detail-only percentages, and preserved export/brief hooks.
+- Documented deferred math concerns for later reviewed work: tanh gain saturation, timeout cap behavior, realized-volatility scaling, tail CVaR broad breach behavior, and score ceiling/collapse artifacts.
 
 ## What Was Not Changed
 
-- No scoring, probability, gates, execution realism, global risk, or news-influence logic changed.
-- No News Authority behavior changed; `news_influence_frac` remains `0.0`.
+- No quant/probability math changed.
+- No score stack changed.
+- No gates changed.
+- No news logic or `news_influence_frac` changed.
+- No features formulas changed.
+- No `src/crypto_probability_engine/config/defaults.py` constants changed.
 - No migrations, dependencies, provider endpoints, auth/session behavior, Docker/deployment behavior, or database schema changed.
 - No trading/order/withdraw/transfer/leverage/autonomous capability added.
 - No secrets or full article bodies were added.
 
 ## Checks Run / Attempted
 
-- `git branch --show-current`: PASS, `codex/wave4a-honesty-decision-clarity`.
-- `git status --short --untracked-files=all -- .`: PASS, only intended Wave 4A files before commit.
+- `git checkout dev`: PASS.
+- `git status --short --untracked-files=all -- .`: PASS, clean before branch creation.
+- `git checkout -b codex/wave4a1-honesty-declutter`: PASS.
+- `git branch --show-current`: PASS, `codex/wave4a1-honesty-declutter`.
 - `python3 --version`: PASS, Python 3.14.3.
+- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 17 passed.
 - `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 32 passed, 2 warnings.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 16 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 154 passed, 4 warnings.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 155 passed, 4 warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `git diff --stat dev -- src/crypto_probability_engine/quant src/crypto_probability_engine/score_stack src/crypto_probability_engine/gates src/crypto_probability_engine/news`: PASS, empty.
+- `git diff --stat dev -- src/crypto_probability_engine/quant src/crypto_probability_engine/score_stack src/crypto_probability_engine/gates src/crypto_probability_engine/news src/crypto_probability_engine/features src/crypto_probability_engine/config/defaults.py`: PASS, empty.
 - `grep -rniE "LONG_SETUP|SHORT_SETUP|REAL_LONG|REAL_SHORT" src frontend tests schemas || true`: PASS, no hits.
-- `grep -rniE "place_order|create_order|submit_order|cancel_order|withdraw|transfer_funds|leverage|auto_trade|autonomous" src tests schemas frontend || true`: PASS with expected negative-scope UI copy: "No account actions or autonomous execution."
+- Forbidden capability grep: PASS with expected negative-scope UI copy: "No account actions or autonomous execution."
 - Secret-name grep: PASS with expected backend-only settings/adapter/test references; no frontend secret exposure and no real secret values.
 - Full-body grep: PASS with expected sanitizer/news-contract/tests references; dedicated checker passed.
-- Confidence/model-readiness grep: PASS; frontend shows model readiness and does not reference `confidence_frac`.
-- `git diff --check -- .`: PASS.
+- Old per-card note grep: PASS with expected fixture/detail payload references only; no frontend hits.
+- Probability display grep: PASS with Detail-only Up/Down/Timeout percentage rows and static tests proving `overviewCard` does not render precise probability triplets while uncalibrated.
 
 ## Files Changed
 
@@ -63,19 +68,11 @@ Updated: 2026-06-14
 - `AI/05_HANDOFF.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
+- `IMPLEMENTATION_DECISIONS.md`
 - `RELEASE_GATE.md`
 - `frontend/app.js`
 - `frontend/index.html`
 - `frontend/styles.css`
-- `schemas/detail_view.schema.json`
-- `schemas/response.schema.json`
-- `src/crypto_probability_engine/api/analysis_service.py`
-- `src/crypto_probability_engine/api/schemas.py`
-- `src/crypto_probability_engine/detail/builder.py`
-- `src/crypto_probability_engine/detail/decision_brief.py`
-- `src/crypto_probability_engine/detail/frontend_display.py`
-- `tests/api/test_analysis_endpoints.py`
-- `tests/fixtures/sample_payloads.py`
 - `tests/frontend/test_frontend_static.py`
 
 ## Current Blockers / Unknowns
@@ -86,6 +83,6 @@ Updated: 2026-06-14
 
 ## Next Steps
 
-1. Send this Wave 4A report to Claude/light review.
-2. After approval, merge `codex/wave4a-honesty-decision-clarity` into `dev`.
-3. Deploy/push only after the normal pre-deploy checklist is rerun and approved.
+1. Send this Wave 4A.1 report to Claude final review.
+2. After approval, merge `codex/wave4a1-honesty-declutter` into `dev`.
+3. Rerun pre-deploy checks before any Hugging Face push.

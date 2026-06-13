@@ -228,6 +228,44 @@ function firstReason(payload) {
   return candidates.find(Boolean) || "OK";
 }
 
+function isUncalibratedPayload(payload = {}) {
+  const brief = payload.decision_brief || {};
+  const calibration = payload.calibration_state || {};
+  return (
+    brief.model_readiness === "HEURISTIC_UNCALIBRATED" ||
+    calibration.calibration_status === "DEFAULT_PHASE1A" ||
+    calibration.reliability_status === "INSUFFICIENT_SAMPLE"
+  );
+}
+
+function qualitativeCardLean(payload = {}) {
+  const action = payload.decision_brief?.action;
+  if (action === "NO_TRADE") {
+    return "No trade · uncalibrated — see Detail";
+  }
+  if (action === "WATCHLIST") {
+    return "Watchlist · uncalibrated — see Detail";
+  }
+  if (action === "SPOT_WATCH") {
+    return "Spot watch · uncalibrated — see Detail";
+  }
+  return "No clear direction · uncalibrated — see Detail";
+}
+
+function cardProbabilityRows(payload, display) {
+  if (isUncalibratedPayload(payload)) {
+    return [
+      ["Probability", qualitativeCardLean(payload)],
+      ["Breakdown", "Open Detail for full probability breakdown."],
+    ];
+  }
+  return [
+    ["Up", formatPct(display.prob_up_pct)],
+    ["Down", formatPct(display.prob_down_pct)],
+    ["Timeout", formatPct(display.prob_timeout_pct)],
+  ];
+}
+
 function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
@@ -250,9 +288,7 @@ function overviewCard(payload) {
     ["Score", display.total_score],
     ["Setup", display.timeframe_label || timeframe],
     ["Horizon", display.horizon_label || "multi-bar horizon"],
-    ["Up", formatPct(display.prob_up_pct)],
-    ["Down", formatPct(display.prob_down_pct)],
-    ["Timeout", formatPct(display.prob_timeout_pct)],
+    ...cardProbabilityRows(payload, display),
     ["Model readiness", display.model_readiness_label || modelReadinessCopy],
     ["Data", display.is_live_data ? "LIVE" : display.data_source],
     ["Source", display.data_source],
@@ -265,12 +301,6 @@ function overviewCard(payload) {
     payload.analysis_mode === "METRICS_ONLY"
       ? "News disabled in METRICS_ONLY."
       : payload.news_addon_state.status;
-  const probabilityNote = document.createElement("p");
-  probabilityNote.className = "probability-explainer compact";
-  probabilityNote.textContent =
-    display.probability_explanation ||
-    "Up/Down/Timeout are uncalibrated heuristic estimates over a multi-bar horizon.";
-  node.append(probabilityNote);
   node.querySelector(".detail-button").addEventListener("click", () => openDetail(payload));
   node.addEventListener("click", (event) => {
     if (event.target.closest("button")) {

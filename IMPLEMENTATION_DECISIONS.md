@@ -64,6 +64,17 @@ Status: Wave 1.1 hotfix only. It does not change Market Data v2, News Authority,
 | Persistence visibility | Shell badge plus watchlist/detail/system status | WAVE1_1_HOTFIX | Shows `STATELESS`, `OK`, or `UNAVAILABLE`; no DB URL, host, username, password, or Supabase key. |
 | Dev Mode disabled UX | Show clear disabled copy and disable re-auth controls | WAVE1_1_HOTFIX | Security semantics unchanged. |
 
+## Wave 4A.1 Frontend Display Decisions
+
+Status: frontend/display-layer hotfix only. It does not change scoring, probability, gates, tail risk, horizon timeout, volatility/trend formulas, config defaults, news influence, or provider behavior.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Overview-card probability display while uncalibrated | Hide precise Up/Down/Timeout percentages | WAVE4A_1_HOTFIX | Cards show qualitative status from existing `decision_brief.action` and direct users to Detail. |
+| Detail probability display | Keep full percentages | WAVE4A_1_HOTFIX | Detail remains the place for full numeric inspection and raw/debug JSON. |
+| Explanatory copy placement | One global legend | WAVE4A_1_HOTFIX | Removes repeated per-card yellow note to reduce visual noise. |
+| Deferred math concerns | Do not change in Wave 4A.1 | DEFERRED | Tanh gain saturation, timeout cap behavior, realized-volatility scaling, tail CVaR universal breach behavior, and score ceiling/collapse artifacts require a later Claude-reviewed quant/calibration wave. |
+
 ## Wave 1 Persistence Decisions
 
 Status: Wave 1 implemented as persistence foundation only. It does not change market data, news authority, calibration, scoring, probability, gates, provider behavior, or deployment.
