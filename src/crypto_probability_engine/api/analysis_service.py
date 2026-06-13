@@ -22,6 +22,10 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail.builder import build_detail_view
+from crypto_probability_engine.detail.decision_brief import (
+    build_decision_brief,
+    build_horizon_context,
+)
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
@@ -87,11 +91,20 @@ def analyze_request(
         settings=settings,
     )
     run_id = f"run_{uuid4().hex}"
+    horizon_context = build_horizon_context(request.timeframe)
     frontend_display = build_frontend_display(
         quant_result,
         news_blocks,
         request.analysis_mode.value,
         data_quality,
+        horizon_context,
+    )
+    decision_brief = build_decision_brief(
+        symbol=request.symbol,
+        normalized_symbol=symbol.display,
+        timeframe=request.timeframe,
+        quant_result=quant_result,
+        data_quality=data_quality,
     )
     detail_view = build_detail_view(
         symbol=symbol.display,
@@ -101,6 +114,7 @@ def analyze_request(
         news_blocks=news_blocks,
         provider_state=provider_state,
         data_quality=data_quality,
+        decision_brief=decision_brief,
     )
     response = {
         "schema_version": settings.schema_version,
@@ -114,6 +128,7 @@ def analyze_request(
             "trend": list(DEFAULT_PHASE1A.trend_timeframes),
             "H_primary_bars": DEFAULT_PHASE1A.h_primary_bars,
             "H_extended_bars": DEFAULT_PHASE1A.h_extended_bars,
+            **horizon_context,
         },
         "as_of_utc": snapshot.as_of_utc.isoformat().replace("+00:00", "Z"),
         "provider_state": provider_state,
@@ -141,6 +156,7 @@ def analyze_request(
         "catalyst_state": news_blocks["catalyst_state"],
         "score_stack": quant_result["score_stack"],
         "trend_summary": quant_result["trend_summary"],
+        "decision_brief": decision_brief,
         "frontend_display": frontend_display,
         "detail_view": detail_view,
         "gate_result": quant_result["gate_result"],

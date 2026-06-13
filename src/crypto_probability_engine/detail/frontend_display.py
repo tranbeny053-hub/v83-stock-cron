@@ -8,6 +8,7 @@ def build_frontend_display(
     news_blocks: dict,
     analysis_mode: str,
     data_quality: dict,
+    horizon_context: dict,
 ) -> dict:
     horizon = quant_result["probability_state"]["horizons"]["H_primary"]
     score = quant_result["score_stack"]
@@ -28,6 +29,13 @@ def build_frontend_display(
         "execution_warnings": list(quant_result["execution_realism"].get("warnings", [])),
         "news_warnings": list(news_blocks["news_addon_state"].get("warnings", [])),
         "heat_legend": "Signal heat — not risk",
+        "timeframe_label": horizon_context["timeframe_label"],
+        "horizon_label": horizon_context["horizon_label"],
+        "horizon_bars": horizon_context["horizon_bars"],
+        "horizon_approx_label": horizon_context["horizon_approx_label"],
+        "probability_explanation": horizon_context["probability_explanation"],
+        "uncalibrated_banner": horizon_context["uncalibrated_banner"],
+        "model_readiness_label": horizon_context["model_readiness_label"],
         "is_live_data": bool(data_quality.get("is_live_data", False)),
         "data_source": data_quality.get("data_source", "FIXTURE_DEMO"),
     }

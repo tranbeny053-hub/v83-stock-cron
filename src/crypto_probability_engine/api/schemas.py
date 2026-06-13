@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -129,9 +129,42 @@ class DetailView(BaseModel):
     liquidity_execution_detail: JsonObject = Field(default_factory=dict)
     data_quality_detail: JsonObject = Field(default_factory=dict)
     invalidation_detail: JsonObject = Field(default_factory=dict)
+    decision_brief: JsonObject = Field(default_factory=dict)
     news_detail: JsonObject = Field(default_factory=dict)
     macro_detail: JsonObject = Field(default_factory=dict)
     debug_lite: JsonObject = Field(default_factory=dict)
+
+
+class VolatilityReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
+    realized_vol: float | None = None
+    note: str
+
+
+class DecisionBrief(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["NO_TRADE", "WATCHLIST", "SPOT_WATCH"]
+    symbol: str
+    normalized_symbol: str
+    timeframe_label: str
+    horizon_label: str
+    horizon_bars: int
+    probability_type: Literal["UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"]
+    model_readiness: str
+    calibration_status: str
+    reliability_status: str
+    profitability_claim: Literal[False]
+    state_summary: str
+    key_reasons: list[str]
+    hard_blockers: list[str]
+    watchlist_triggers: list[str]
+    invalidation_conditions: list[str]
+    volatility_reference: VolatilityReference
+    risk_note: str
+    disclaimer: str
 
 
 class AnalysisResponse(BaseModel):
@@ -170,6 +203,7 @@ class AnalysisResponse(BaseModel):
     catalyst_state: JsonObject
     score_stack: JsonObject
     trend_summary: JsonObject
+    decision_brief: DecisionBrief
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject

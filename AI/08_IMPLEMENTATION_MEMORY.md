@@ -1,90 +1,86 @@
 # Implementation Memory
 
 ## Context-Resume Summary
-The app is on branch `codex/wave3a-news-provider-hotfix`, based on `dev`.
+The app is on branch `codex/wave4a-honesty-decision-clarity`, based on `dev`.
 Worktree scope is `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`; do not touch sibling folders.
-Wave 3A advisory news foundation is already present on `dev`.
-This hotfix improves GDELT rate-limit/cache behavior and NewsAPI invalid-key diagnostics.
-News remains advisory-only: `news_influence_frac=0.0`, `influence_mode=ADVISORY_DISPLAY_ONLY`, and no score/probability/gate/disposition path changes.
-No deploy, merge, push, full article body fetch/storage, scraping, trading capability, or secret exposure was performed by Codex.
+Wave 4A adds honesty and decision-clarity presentation over existing backend outputs.
+No analysis math changed: scoring, probability, gates, execution realism, global risk, and news influence are untouched.
+`news_influence_frac` remains `0.0`; news stays advisory-only.
+No migrations, dependencies, merge, deploy, or Hugging Face push were performed by Codex.
 
 ## Latest App State
-GDELT has per-query shared in-process throttle and cache.
-Default `UCPE_GDELT_MIN_INTERVAL_SECONDS=6`; default `UCPE_NEWS_CACHE_TTL_SECONDS=180`.
-GDELT 429 is reported as `RATE_LIMITED` with HTTP status, retry/cooldown, operation, cache status, and safe warning.
-NewsAPI absent key is `UNCONFIGURED`; invalid key is reported as `apiKeyInvalid` / `AUTH` without exposing the key.
-FRED OK plus GDELT/NewsAPI failures yields `NEWS_ADDON` `DEGRADED`, not generic failed/unavailable.
-Gated live news smoke prints sanitized provider diagnostics only.
+Backend analysis responses now include horizon labels and a schema-declared `decision_brief`.
+Frontend cards show setup timeframe plus approximate multi-bar horizon.
+The main UI shows an uncalibrated heuristic banner and Up/Down/Timeout explanation.
+Detail Analysis renders `decision_brief` near the top and keeps raw JSON collapsed/debug-only.
+The UI labels model readiness instead of presenting placeholder `confidence_frac` as true confidence.
+Download JSON exports the already-received in-memory analysis payload.
 
 ## Implemented Components
-- config: GDELT min interval and news cache TTL settings/env parsing.
-- HTTP/provider errors: optional safe fields for HTTP status, provider error code, type, retry-after, operation.
-- GDELT adapter: shared cache, local throttle, 429 cooldown, cached degraded fallback.
-- NewsAPI adapter: invalid-key/rate-limit/parameter diagnostics and unconfigured state.
-- FRED adapter: safe provider status shape.
-- news contract: provider_status includes configured/unconfigured sources and sanitized failure/cache/latency fields.
-- tests: GDELT 429/cache/throttle/zero-item OK, NewsAPI 401/429/unconfigured, mixed FRED-OK degraded analysis 200.
-- docs: changelog, release/deploy/readme env rows, decision log, current state, handoff, test command notes.
+- backend/detail: `build_horizon_context` and `build_decision_brief`.
+- api/schema: `decision_brief` declared in Pydantic models and JSON Schema.
+- detail: `decision_brief` mirrored into detail view sections.
+- frontend: horizon labels, heuristic banner, probability explanation, structured decision brief renderer, Download JSON button.
+- tests: API/schema checks for decision brief and frontend static checks for Wave 4A copy/export/no-confidence-display.
+- docs: changelog, release gate, current state, handoff, implementation memory.
 
 ## Files Changed By Area
-- config: `src/crypto_probability_engine/config/defaults.py`, `settings.py`
-- provider/http: `src/crypto_probability_engine/adapters/types.py`, `adapters/http_client.py`
-- news: `src/crypto_probability_engine/news/adapters/common.py`, `fred.py`, `gdelt.py`, `newsapi.py`, `news/contract.py`
-- scripts: `scripts/news_live_smoke.py`
-- docs: `README.md`, `DEPLOYMENT_CHECKLIST.md`, `RELEASE_GATE.md`, `CHANGELOG.md`, `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, `AI/06_TEST_COMMANDS.md`, `AI/07_DECISION_LOG.md`, `AI/08_IMPLEMENTATION_MEMORY.md`
-- tests: `tests/news/test_news_authority_engine.py`, `tests/api/test_analysis_endpoints.py`
+- api/schema: `src/crypto_probability_engine/api/analysis_service.py`, `src/crypto_probability_engine/api/schemas.py`, `schemas/response.schema.json`, `schemas/detail_view.schema.json`
+- detail/frontend display: `src/crypto_probability_engine/detail/decision_brief.py`, `builder.py`, `frontend_display.py`
+- frontend: `frontend/index.html`, `frontend/app.js`, `frontend/styles.css`
+- tests: `tests/api/test_analysis_endpoints.py`, `tests/fixtures/sample_payloads.py`, `tests/frontend/test_frontend_static.py`
+- docs: `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, `AI/08_IMPLEMENTATION_MEMORY.md`, `CHANGELOG.md`, `RELEASE_GATE.md`
 
 ## Important Decisions
-Do not hide provider-specific failures as generic unavailable when safe diagnostics are available.
-Do not expose API keys, request headers, URLs containing secrets, or raw provider response bodies.
-GDELT rate-limit handling must avoid immediate retry loops and should reuse cached metadata if available.
-NewsAPI `apiKeyInvalid` is an operator configuration issue and should be shown safely as `AUTH`.
-Unconfigured NewsAPI is `UNCONFIGURED`, not invalid.
-News provider diagnostics remain display/observability metadata only and do not influence scoring.
+Wave 4A is display/clarity only; no score/probability/gate/news math changes.
+`decision_brief.action` may only be `NO_TRADE`, `WATCHLIST`, or `SPOT_WATCH`.
+`decision_brief.profitability_claim` is constrained to `false`.
+The UI must not present `confidence_frac` as measured confidence while reliability is not measured.
+Download JSON uses the current in-memory payload and does not create a new backend endpoint.
+Raw JSON remains available only as collapsed/debug-only detail.
 
 ## Commands Run And Results
-- `git checkout -b codex/wave3a-news-provider-hotfix`: PASS, branch created from clean `dev`.
-- `git branch --show-current`: PASS, `codex/wave3a-news-provider-hotfix`.
-- `git status --short --untracked-files=all -- .`: PASS, only intended hotfix files before commit.
+- `git branch --show-current`: PASS, `codex/wave4a-honesty-decision-clarity`.
+- `git log --oneline --decorate -8`: PASS before branch creation; `dev` HEAD was `f53b9bb merge: wave3a news provider rate-limit diagnostics`.
+- `git status --short --untracked-files=all -- .`: PASS, clean before branch creation; later only intended Wave 4A files before commit.
+- `git checkout -b codex/wave4a-honesty-decision-clarity`: PASS, branch created from `dev`.
 - `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/news -q`: PASS, 23 passed.
-- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 31 passed, 2 warnings.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 14 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 151 passed, 4 warnings.
+- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 32 passed, 2 warnings.
+- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 16 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 154 passed, 4 warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `PYTHONPATH=src python3 scripts/news_live_smoke.py`: SKIP, expected because `UCPE_NEWS_LIVE_SMOKE_ENABLED` is not set.
-- Targeted quant/score/gates diff: PASS, no working-tree changes in those paths.
-- Targeted frontend `FRED_API_KEY` / `NEWSAPI_KEY` grep: PASS, no hits.
-- Targeted full-body pattern grep: PASS with expected HTML/JS/test false positives; dedicated checker passed.
-- Targeted `news_influence_frac` grep: PASS, value remains fixed at `0.0`.
-- Targeted forbidden-capability grep: PASS, no hits.
+- `git diff --stat dev -- src/crypto_probability_engine/quant src/crypto_probability_engine/score_stack src/crypto_probability_engine/gates src/crypto_probability_engine/news`: PASS, empty.
+- Targeted forbidden setup grep: PASS, no hits.
+- Targeted forbidden capability grep: PASS with expected negative UI copy: "No account actions or autonomous execution."
+- Targeted secret-name grep: PASS with expected backend-only config/adapter/test references; no frontend secret exposure or real values.
+- Targeted full-body grep: PASS with expected sanitizer/news-contract/test references; dedicated checker passed.
+- Targeted confidence/model-readiness grep: PASS; frontend uses model readiness copy and does not reference `confidence_frac`.
 - `git diff --check -- .`: PASS.
 
 ## Known Blockers
-No local implementation blocker is known after final offline verification.
+No local implementation blocker is known after offline verification.
 No merge/deploy/push has been performed.
+Manual browser UI smoke was not run in this Codex turn.
 
 ## Open Risks
-The actual NewsAPI key may still be invalid/inactive until the operator replaces it.
-GDELT can still rate-limit live traffic; the app now throttles/caches and reports it.
-Live news smoke was not run locally because it is intentionally gated.
-Provider quotas/outages remain operational risks.
+Wave 4A changes the response contract by adding `decision_brief`, so consumers should be reviewed before merge.
+The existing warning set remains: `jsonschema.RefResolver` and Starlette TestClient cookie deprecations.
+The app remains heuristic and uncalibrated; Wave 4A clarifies that but does not add calibration.
 
 ## Next Recommended Steps
-1. User/Claude reviews the hotfix branch.
-2. Merge/deploy only after approval from the app root.
-3. Confirm HF variables `UCPE_GDELT_MIN_INTERVAL_SECONDS=6`, `UCPE_NEWS_CACHE_TTL_SECONDS=180`; replace NewsAPI key if diagnostics still show `apiKeyInvalid`.
+1. Send this Wave 4A report to Claude/light review.
+2. After approval, merge `codex/wave4a-honesty-decision-clarity` into `dev`.
+3. Rerun pre-deploy checks before any Hugging Face push.
 
 ## Do Not Change
 Do not touch sibling folders outside `v8-crypto-api-clean/`.
 Do not commit `.env`, salts, access codes, real hashes, signing keys, database URLs, service role keys, FRED/NewsAPI keys, exchange API keys, or full env dumps.
 Do not add trading, order, withdrawal, transfer, leverage-changing, or autonomous execution capability.
-Do not add Binance/OKX private/authenticated calls, signed endpoints, API keys, WebSocket, or provider-keyed exchange access.
+Do not change scoring, probability, gates, execution realism, global risk, or news influence without Claude-approved spec.
 Do not store, render, scrape, or fetch full article bodies.
-Do not let news affect score, probability, gates, disposition, or hard warnings.
 Do not deploy or push to Hugging Face without explicit approval.

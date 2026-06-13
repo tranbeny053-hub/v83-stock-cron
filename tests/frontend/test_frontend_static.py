@@ -69,6 +69,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         "Market Data Quality",
         "Provider State",
         "Market Data v2 / Provider Observability",
+        "Decision Brief",
         "Quant Signals",
         "News Add-on",
         "News Authority / Macro & Micro Context",
@@ -77,6 +78,33 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         assert heading in js
     assert "raw-json" in js
     assert "News analysis disabled for this run." in js
+
+
+def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    css = read_frontend("styles.css")
+    assert "Uncalibrated heuristic" in html
+    assert "not validated forecasts" in html
+    assert "Up/Down/Timeout are uncalibrated heuristic estimates" in html
+    assert "Timeout means no decisive directional resolution" in html
+    assert "Download JSON" in js
+    assert "downloadPayloadJson" in js
+    assert "application/json" in js
+    assert "decision_brief" in js
+    assert "model readiness" in js.lower()
+    assert "horizon_approx_label" in js
+    assert ".honesty-banner" in css
+    assert ".probability-explainer" in css
+
+
+def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:
+    js = read_frontend("app.js")
+    html = read_frontend("index.html")
+    assert "Confidence" not in js
+    assert "confidence_frac" not in js
+    assert "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured." in js
+    assert "Model readiness" not in html or "Confidence" not in html
 
 
 def test_score_heat_uses_six_discrete_backend_score_bands() -> None:

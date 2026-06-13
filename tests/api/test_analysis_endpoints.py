@@ -53,6 +53,42 @@ def test_analyze_metrics_only_returns_schema_valid_payload() -> None:
     assert payload["debug"]["persistence_status"] == "STATELESS"
 
 
+def test_decision_brief_is_schema_valid_and_honesty_bounded() -> None:
+    client = make_client()
+    login(client)
+    response = client.post(
+        "/v1/analyze",
+        json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY", "timeframe": "4H"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    brief = payload["decision_brief"]
+    assert brief["action"] in {"NO_TRADE", "WATCHLIST", "SPOT_WATCH"}
+    assert brief["probability_type"] == "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
+    assert brief["model_readiness"] == "HEURISTIC_UNCALIBRATED"
+    assert brief["reliability_status"] == "INSUFFICIENT_SAMPLE"
+    assert brief["profitability_claim"] is False
+    assert brief["horizon_bars"] == 6
+    assert brief["timeframe_label"] == "4H setup"
+    assert brief["horizon_label"] == "~24H horizon"
+    forbidden = {
+        "LONG" + "_SETUP",
+        "SHORT" + "_SETUP",
+        "REAL" + "_LONG" + "_SIGNAL",
+        "REAL" + "_SHORT" + "_SIGNAL",
+        "BUY",
+        "SELL",
+        "SHORT",
+    }
+    serialized = json.dumps(brief)
+    assert not any(item in serialized for item in forbidden)
+    assert payload["detail_view"]["decision_brief"]["action"] == brief["action"]
+    assert payload["timeframes"]["horizon_approx_label"] == "4H setup / ~24H horizon"
+    assert payload["frontend_display"]["model_readiness_label"].startswith("Model readiness")
+
+
 def test_persistence_failure_does_not_break_analysis() -> None:
     class BrokenRepository:
         def persistence_status(self) -> str:

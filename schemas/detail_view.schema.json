@@ -15,6 +15,7 @@
     "liquidity_execution_detail": { "type": "object" },
     "data_quality_detail": { "type": "object" },
     "invalidation_detail": { "type": "object" },
+    "decision_brief": { "type": "object" },
     "news_detail": { "type": "object" },
     "macro_detail": { "type": "object" },
     "debug_lite": { "type": "object" }

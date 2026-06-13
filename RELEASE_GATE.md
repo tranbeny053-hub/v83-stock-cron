@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 3A advisory news authority foundation implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4A honesty and decision clarity implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -31,6 +31,21 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Deployment | Cold start, both-mode smoke, no secret/body leak, restart drill | Yes |
 | Rollback | Last-known-good identified; revert drill documented | Yes |
 | Non-Coder Verification | Operator can follow report/runbook without reading code | Yes |
+
+## Wave 4A Honesty / Decision Clarity Gate
+
+- [x] Timeframe labels explicitly state setup timeframe and approximate multi-bar horizon.
+- [x] Up/Down/Timeout copy states percentages are uncalibrated heuristic estimates over the next ~6 bars.
+- [x] Persistent UI banner states the model is uncalibrated, not financial advice, and makes no profitability claim.
+- [x] Placeholder `confidence_frac` is not presented as true user-facing confidence.
+- [x] Backend response includes schema-declared `decision_brief`.
+- [x] `decision_brief.action` is constrained to `NO_TRADE`, `WATCHLIST`, or `SPOT_WATCH`.
+- [x] `decision_brief.profitability_claim` is constrained to `false`.
+- [x] Detail UI renders `decision_brief` as structured copy before raw JSON.
+- [x] Download JSON uses the already-received in-memory analysis payload.
+- [x] No scoring, probability, gates, execution realism, global risk, or news-influence math changed.
+- [x] No migrations, dependencies, deployment, trading capability, or secret exposure added.
+- [ ] Claude/User review completed before merge/deploy.
 
 ## Sprint 1 Gate
 

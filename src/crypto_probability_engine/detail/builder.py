@@ -12,6 +12,7 @@ def build_detail_view(
     news_blocks: dict,
     provider_state: dict,
     data_quality: dict,
+    decision_brief: dict,
 ) -> dict:
     return {
         "symbol": symbol,
@@ -19,6 +20,7 @@ def build_detail_view(
         "analysis_mode": analysis_mode,
         "sections": [
             "SUMMARY",
+            "DECISION_BRIEF",
             "PROBABILITY",
             "SCORE",
             "RISK",
@@ -28,6 +30,7 @@ def build_detail_view(
             "NEWS",
             "DEBUG_LITE",
         ],
+        "decision_brief": decision_brief,
         "metrics_detail": {
             "market_features": quant_result["market_features"],
             "trend_summary": quant_result["trend_summary"],

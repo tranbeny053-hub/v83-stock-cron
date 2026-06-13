@@ -7,98 +7,98 @@ Codex
 User / Claude
 
 ## Current Goal
-Wave 3A News Provider Hotfix: improve GDELT rate-limit/cache behavior and NewsAPI invalid-key diagnostics while keeping news advisory-only. Do not merge, deploy, or push to Hugging Face from Codex.
+Wave 4A Honesty & Decision Clarity: make existing analysis outputs clearer without changing analysis math. Do not merge, deploy, or push to Hugging Face from Codex.
 
 ## Current Branch / Worktree
-`codex/wave3a-news-provider-hotfix` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
+`codex/wave4a-honesty-decision-clarity` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
 
 ## Risk Level
-R2/R3 provider-connectivity hotfix. No score, probability, gates, disposition, trading, deployment, or article-body behavior changed.
+R1/R2 presentation and response-contract change. `decision_brief` is backend-built but display-only. No score, probability, gates, disposition, news influence, provider, auth, persistence, deployment, or migration behavior changed.
 
 ## Files Changed
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
-- `AI/06_TEST_COMMANDS.md`
-- `AI/07_DECISION_LOG.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
-- `DEPLOYMENT_CHECKLIST.md`
-- `README.md`
 - `RELEASE_GATE.md`
-- `scripts/news_live_smoke.py`
-- `src/crypto_probability_engine/adapters/http_client.py`
-- `src/crypto_probability_engine/adapters/types.py`
-- `src/crypto_probability_engine/config/defaults.py`
-- `src/crypto_probability_engine/config/settings.py`
-- `src/crypto_probability_engine/news/adapters/common.py`
-- `src/crypto_probability_engine/news/adapters/fred.py`
-- `src/crypto_probability_engine/news/adapters/gdelt.py`
-- `src/crypto_probability_engine/news/adapters/newsapi.py`
-- `src/crypto_probability_engine/news/contract.py`
-- `tests/api/test_analysis_endpoints.py`
-- `tests/news/test_news_authority_engine.py`
-
-## Files Read But Not Changed
+- `frontend/app.js`
+- `frontend/index.html`
+- `frontend/styles.css`
+- `schemas/detail_view.schema.json`
+- `schemas/response.schema.json`
 - `src/crypto_probability_engine/api/analysis_service.py`
 - `src/crypto_probability_engine/api/schemas.py`
 - `src/crypto_probability_engine/detail/builder.py`
-- `frontend/app.js`
+- `src/crypto_probability_engine/detail/decision_brief.py`
+- `src/crypto_probability_engine/detail/frontend_display.py`
+- `tests/api/test_analysis_endpoints.py`
+- `tests/fixtures/sample_payloads.py`
 - `tests/frontend/test_frontend_static.py`
+
+## Files Read But Not Changed
+- `AI/00_PROJECT_RULES.md`
+- `IMPLEMENTATION_DECISIONS.md`
+- `README.md`
+- `DEPLOYMENT_CHECKLIST.md`
+- `src/crypto_probability_engine/config/defaults.py`
+- `src/crypto_probability_engine/quant/probability_three_state.py`
+- `src/crypto_probability_engine/quant/calibration_metrics.py`
+- `src/crypto_probability_engine/score_stack/score.py`
+- `scripts/check_no_forbidden_scope.py`
 - `scripts/check_no_secrets.py`
 - `scripts/check_no_full_article_body.py`
+- `scripts/validate_schemas.py`
+- `scripts/manual_smoke.py`
 
 ## Commands Run
-- `git checkout -b codex/wave3a-news-provider-hotfix`: PASS, branch created from `dev`.
-- `git branch --show-current`: PASS, `codex/wave3a-news-provider-hotfix`.
-- `git status --short --untracked-files=all -- .`: PASS, only intended hotfix files before commit.
+- `git branch --show-current`: PASS, `codex/wave4a-honesty-decision-clarity`.
+- `git log --oneline --decorate -8`: PASS before branch creation; `dev` HEAD was `f53b9bb merge: wave3a news provider rate-limit diagnostics`.
+- `git status --short --untracked-files=all -- .`: PASS, clean before branch creation; later only intended Wave 4A files before commit.
+- `git checkout -b codex/wave4a-honesty-decision-clarity`: PASS, branch created from `dev`.
 - `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/news -q`: PASS, 23 passed.
-- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 31 passed, 2 warnings.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 14 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 151 passed, 4 warnings.
+- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 32 passed, 2 warnings.
+- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 16 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 154 passed, 4 warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- `PYTHONPATH=src python3 scripts/news_live_smoke.py`: SKIP, expected because `UCPE_NEWS_LIVE_SMOKE_ENABLED` is not set.
-- Targeted quant/score/gates diff: PASS, no working-tree changes in those paths.
-- Targeted frontend `FRED_API_KEY` / `NEWSAPI_KEY` grep: PASS, no hits.
-- Targeted full-body pattern grep: PASS with expected false positives from HTML/JS generic `body` usage and tests that assert forbidden body fields are absent; dedicated checker passed.
-- Targeted `news_influence_frac` grep: PASS, implementation/tests keep the value fixed at `0.0`.
-- Targeted forbidden-capability grep: PASS, no hits.
+- `git diff --stat dev -- src/crypto_probability_engine/quant src/crypto_probability_engine/score_stack src/crypto_probability_engine/gates src/crypto_probability_engine/news`: PASS, empty.
+- Targeted forbidden setup grep: PASS, no hits.
+- Targeted forbidden capability grep: PASS with expected negative UI copy: "No account actions or autonomous execution."
+- Targeted secret-name grep: PASS with expected backend-only config/adapter/test references; no frontend secret exposure or real values.
+- Targeted full-body grep: PASS with expected sanitizer/news-contract/test references; dedicated checker passed.
+- Targeted confidence/model-readiness grep: PASS; frontend uses model readiness copy and does not reference `confidence_frac`.
 - `git diff --check -- .`: PASS.
 
 ## What Works Now
-- GDELT outbound calls are throttled per normalized query with default 6 seconds.
-- GDELT successful metadata responses are cached for default 180 seconds.
-- GDELT 429 now reports HTTP 429, `RATE_LIMITED`, retry/cooldown, operation, cache status, and safe warning.
-- If GDELT is rate-limited and cached metadata exists, the adapter returns cached headlines with degraded-with-cache diagnostics instead of hammering the provider.
-- NewsAPI missing key is `UNCONFIGURED`, not invalid.
-- NewsAPI invalid key is visible as `apiKeyInvalid` / `AUTH` with safe copy: `newsapi: api key invalid or inactive`.
-- NewsAPI 429 and bad parameter cases have sanitized error-code/type diagnostics.
-- FRED OK plus GDELT/NewsAPI failures yields `NEWS_ADDON` `DEGRADED` while analysis remains 200.
-- Gated live news smoke prints sanitized provider status fields only.
+- Analysis responses include schema-declared `decision_brief`.
+- Detail view mirrors and renders `decision_brief`.
+- Timeframe cards show setup timeframe plus approximate multi-bar horizon.
+- The main UI shows an uncalibrated heuristic warning and Up/Down/Timeout explanation.
+- The UI no longer presents placeholder `confidence_frac` as real confidence.
+- Download JSON exports the current in-memory payload without a new backend endpoint.
+- `decision_brief` actions are limited to `NO_TRADE`, `WATCHLIST`, and `SPOT_WATCH`.
 
 ## What Is Still Broken / Unknown
-- The actual NewsAPI key may still be invalid/inactive; this hotfix makes the problem visible and safe.
-- GDELT can still rate-limit live traffic; the app now throttles/caches and reports it.
-- Live news smoke was not run locally because it is gated and should only be enabled intentionally.
-- No merge/deploy/push was performed.
+- No browser/manual UI smoke was run in this turn.
+- Claude/User review is still required before merge/deploy.
+- The existing warning set remains: `jsonschema.RefResolver` deprecation and Starlette TestClient cookie deprecation warnings.
 
 ## Next 3 Steps
-1. User/Claude reviews `codex/wave3a-news-provider-hotfix`.
-2. After approval, merge and deploy from the app root only.
-3. Confirm HF variables `UCPE_GDELT_MIN_INTERVAL_SECONDS=6`, `UCPE_NEWS_CACHE_TTL_SECONDS=180`; replace the NewsAPI key if provider status reports `apiKeyInvalid`.
+1. User sends this report to Claude/light review.
+2. After approval, merge the branch into `dev`.
+3. Rerun pre-deploy checks before any Hugging Face push.
 
 ## Do Not Change
 - Do not touch sibling folders outside `v8-crypto-api-clean/`.
-- Do not commit `.env`, real API keys, service role keys, access codes, database URLs, or full env dumps.
+- Do not commit `.env`, salts, access codes, hashes, signing keys, database URLs, service role keys, FRED/NewsAPI keys, exchange API keys, or full env dumps.
 - Do not add trading, order, withdrawal, transfer, leverage-changing, or autonomous execution capability.
+- Do not change scoring, probability, gates, execution realism, global risk, or news influence without Claude-approved spec.
 - Do not store, render, scrape, or fetch full article bodies.
-- Do not let news affect score, probability, gates, disposition, or hard warnings.
 - Do not deploy or push to Hugging Face without explicit approval.
 
 ## Notes for Non-Coder User
-Hotfix này không làm app “tin tức quyết định giao dịch”. Nó chỉ giúp app nói rõ hơn: GDELT đang bị giới hạn tốc độ, NewsAPI key bị sai/hết hiệu lực, hoặc provider nào đang OK. Nếu FRED vẫn OK thì phần News Add-on chỉ bị DEGRADED, app vẫn phân tích bình thường và điểm/xác suất không đổi.
+Wave 4A giúp app nói rõ hơn rằng phần trăm hiện tại là ước lượng heuristic chưa hiệu chuẩn trong khoảng nhiều nến, không phải dự báo chắc chắn hay khuyến nghị giao dịch. App cũng có phần Decision Brief dễ đọc và nút tải JSON của kết quả hiện tại.

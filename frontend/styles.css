@@ -109,6 +109,29 @@ textarea {
   background: rgba(255, 209, 102, 0.08);
 }
 
+.honesty-banner,
+.probability-explainer {
+  border: 1px solid rgba(255, 209, 102, 0.42);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--warning);
+  background: rgba(255, 209, 102, 0.08);
+  line-height: 1.45;
+}
+
+.honesty-banner {
+  margin-top: 12px;
+}
+
+.probability-explainer {
+  margin-top: 10px;
+  color: color-mix(in srgb, var(--warning) 78%, var(--text));
+}
+
+.probability-explainer.compact {
+  font-size: 12px;
+}
+
 h1,
 h2,
 p {
@@ -409,6 +432,26 @@ dd {
   margin: 0 0 12px;
   color: var(--cyan);
   font-size: 16px;
+}
+
+.brief-list-group {
+  margin-top: 12px;
+}
+
+.brief-list-group h4 {
+  margin: 0 0 8px;
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text);
+}
+
+.download-json-button {
+  margin-bottom: 12px;
 }
 
 .detail-kv {

@@ -10,6 +10,7 @@ const persistenceStatusBadge = document.querySelector("#persistenceStatusBadge")
 const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
+const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const singlePayloads = new Map();
 const watchlistPayloads = new Map();
@@ -237,7 +238,9 @@ function overviewCard(payload) {
   node.dataset.timeframeCard = timeframe;
   node.style.setProperty("--heat-main", heatBand.mainColor);
   node.style.setProperty("--heat-border", heatBand.mainColor);
-  node.querySelector("h2").textContent = `${timeframe} ${payload.normalized_symbol}`;
+  node.querySelector("h2").textContent = `${payload.normalized_symbol} · ${
+    display.horizon_approx_label || timeframe
+  }`;
   const demoBanner = document.createElement("p");
   demoBanner.className = "demo-banner";
   demoBanner.textContent = dataBannerText(display);
@@ -245,9 +248,12 @@ function overviewCard(payload) {
   const values = [
     ["Disposition", display.disposition],
     ["Score", display.total_score],
+    ["Setup", display.timeframe_label || timeframe],
+    ["Horizon", display.horizon_label || "multi-bar horizon"],
     ["Up", formatPct(display.prob_up_pct)],
     ["Down", formatPct(display.prob_down_pct)],
     ["Timeout", formatPct(display.prob_timeout_pct)],
+    ["Model readiness", display.model_readiness_label || modelReadinessCopy],
     ["Data", display.is_live_data ? "LIVE" : display.data_source],
     ["Source", display.data_source],
     ["Gate", firstReason(payload)],
@@ -259,6 +265,12 @@ function overviewCard(payload) {
     payload.analysis_mode === "METRICS_ONLY"
       ? "News disabled in METRICS_ONLY."
       : payload.news_addon_state.status;
+  const probabilityNote = document.createElement("p");
+  probabilityNote.className = "probability-explainer compact";
+  probabilityNote.textContent =
+    display.probability_explanation ||
+    "Up/Down/Timeout are uncalibrated heuristic estimates over a multi-bar horizon.";
+  node.append(probabilityNote);
   node.querySelector(".detail-button").addEventListener("click", () => openDetail(payload));
   node.addEventListener("click", (event) => {
     if (event.target.closest("button")) {
@@ -465,12 +477,91 @@ function objectTable(value) {
   return table;
 }
 
+function listBlock(items = []) {
+  const list = document.createElement("ul");
+  list.className = "detail-list";
+  for (const item of items || []) {
+    const entry = document.createElement("li");
+    entry.textContent = String(item);
+    list.append(entry);
+  }
+  if (!list.children.length) {
+    const entry = document.createElement("li");
+    entry.textContent = "none";
+    list.append(entry);
+  }
+  return list;
+}
+
+function jsonFilename(payload) {
+  const symbol = String(payload.normalized_symbol || payload.symbol || "symbol")
+    .replaceAll("/", "-")
+    .replace(/[^\w.-]+/g, "-");
+  const timeframe = payload.timeframes?.primary ? `${payload.timeframes.primary}_` : "";
+  const runId = payload.run_id || "run";
+  return `ucpe_${symbol}_${timeframe}${runId}.json`;
+}
+
+function downloadPayloadJson(payload) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = jsonFilename(payload);
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadJsonButton(payload) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "download-json-button";
+  button.textContent = "Download JSON";
+  button.addEventListener("click", () => downloadPayloadJson(payload));
+  return button;
+}
+
+function briefListGroup(title, items) {
+  const group = document.createElement("div");
+  group.className = "brief-list-group";
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  group.append(heading, listBlock(items));
+  return group;
+}
+
+function renderDecisionBrief(brief = {}) {
+  return section("Decision Brief", [
+    keyValueTable([
+      ["Action", brief.action],
+      ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
+      ["Model readiness", modelReadinessCopy],
+      ["Calibration", brief.calibration_status],
+      ["Reliability", brief.reliability_status],
+      ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
+      ["State summary", brief.state_summary],
+      ["Volatility reference", brief.volatility_reference?.note],
+      ["Risk note", brief.risk_note],
+      ["Disclaimer", brief.disclaimer],
+    ]),
+    briefListGroup("Key Reasons", brief.key_reasons),
+    briefListGroup("Hard Blockers", brief.hard_blockers),
+    briefListGroup("Watchlist Triggers", brief.watchlist_triggers),
+    briefListGroup("Invalidation Conditions", brief.invalidation_conditions),
+  ]);
+}
+
 function renderStructuredDetail(payload, detailView) {
   const display = payload.frontend_display || {};
   const dataQuality = payload.data_quality || {};
   const providerState = payload.provider_state || {};
   const gate = payload.gate_result || {};
   const details = detailView || {};
+  const decisionBrief = payload.decision_brief || details.decision_brief || {};
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
@@ -486,9 +577,11 @@ function renderStructuredDetail(payload, detailView) {
 
   detailPanel.replaceChildren(
     section("Overview", [
+      downloadJsonButton(payload),
       keyValueTable([
         ["Symbol", payload.normalized_symbol],
-        ["Timeframe", payload.timeframes?.primary],
+        ["Timeframe", payload.timeframes?.timeframe_label || payload.timeframes?.primary],
+        ["Horizon", payload.timeframes?.horizon_label],
         ["Analysis mode", payload.analysis_mode],
         ["Disposition", display.disposition],
         ["Score", display.total_score],
@@ -499,12 +592,15 @@ function renderStructuredDetail(payload, detailView) {
         ["Persistence", payload.debug?.persistence_status || details.debug_lite?.persistence_status],
       ]),
     ]),
+    renderDecisionBrief(decisionBrief),
     section("Probability", [
       keyValueTable([
+        ["Type", decisionBrief.probability_type],
         ["Up", formatPct(display.prob_up_pct)],
         ["Down", formatPct(display.prob_down_pct)],
         ["Timeout", formatPct(display.prob_timeout_pct)],
-        ["Confidence", formatValue(details.probability_detail?.horizons?.H_primary?.confidence_frac)],
+        ["Model readiness", display.model_readiness_label || modelReadinessCopy],
+        ["Explanation", display.probability_explanation],
       ]),
     ]),
     section("Risk / Gates", [

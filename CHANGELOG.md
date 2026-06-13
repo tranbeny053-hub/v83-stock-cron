@@ -2,6 +2,21 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4A Honesty and Decision Clarity
+
+Changed:
+- Added horizon-explicit timeframe labels such as `4H setup / ~24H horizon` to backend responses and frontend cards.
+- Added persistent uncalibrated-heuristic copy and Up/Down/Timeout explanation in the main analysis UI.
+- Added backend-built `decision_brief` with constrained actions: `NO_TRADE`, `WATCHLIST`, and `SPOT_WATCH`.
+- Added structured Detail rendering for `decision_brief` and relabeled placeholder confidence as model readiness instead of true confidence.
+- Added a frontend `Download JSON` button that exports the current in-memory analysis payload.
+- Extended response/detail schemas and regression tests for the new presentation-only honesty fields.
+
+Notes:
+- No scoring, probability, gates, execution realism, global risk, or news-influence math changed.
+- `news_influence_frac` remains `0.0`; news remains advisory-only.
+- No migrations, dependencies, deploy, merge, or Hugging Face push were performed.
+
 ## 2026-06-06 - Blueprint v1.2.2 Phase 0 Artifact Extraction
 
 Blueprint version: `v1.2.2`

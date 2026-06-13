@@ -16,7 +16,29 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
         "normalized_symbol": "BTC/USDT",
         "asset_class": "CRYPTO_SPOT",
         "analysis_mode": analysis_mode,
-        "timeframes": {"primary": "4H", "trend": ["1H", "4H", "1D"]},
+        "timeframes": {
+            "primary": "4H",
+            "trend": ["1H", "4H", "1D"],
+            "H_primary_bars": 6,
+            "H_extended_bars": 24,
+            "timeframe_label": "4H setup",
+            "horizon_bars": 6,
+            "horizon_label": "~24H horizon",
+            "horizon_approx_label": "4H setup / ~24H horizon",
+            "probability_explanation": (
+                "Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars "
+                "of this timeframe. Timeout means no decisive directional resolution. Not a "
+                "forecast, not expected return, and not a trade recommendation."
+            ),
+            "uncalibrated_banner": (
+                "⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates "
+                "over a multi-bar horizon, not validated forecasts. Not financial advice. "
+                "No profitability claim."
+            ),
+            "model_readiness_label": (
+                "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured."
+            ),
+        },
         "as_of_utc": "2026-06-06T00:00:00Z",
         "provider_state": {"status": "OK", "active_provider": "fixture"},
         "data_quality": {"status": "OK", "warnings": []},
@@ -57,7 +79,11 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
         "horizon_timeout_state": {"status": "OK"},
         "risk_arbiter_state": {"status": "OK"},
         "tail_risk_state": {"evt_status": "DISABLED_PHASE1A"},
-        "calibration_state": {"reliability_status": "INSUFFICIENT_SAMPLE"},
+        "calibration_state": {
+            "calibration_status": "DEFAULT_PHASE1A",
+            "reliability_status": "INSUFFICIENT_SAMPLE",
+            "profitability_claim": False,
+        },
         "macro_context": {"status": news_status},
         "micro_news_context": {"status": news_status, "items": []},
         "news_addon_state": {"status": news_status, "mode": analysis_mode},
@@ -71,6 +97,37 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
         "catalyst_state": {"status": news_status},
         "score_stack": {"total_score": 50},
         "trend_summary": {"label": "SIDEWAY", "magnitude_pct": 0.0},
+        "decision_brief": {
+            "action": "WATCHLIST",
+            "symbol": "BTC",
+            "normalized_symbol": "BTC/USDT",
+            "timeframe_label": "4H setup",
+            "horizon_label": "~24H horizon",
+            "horizon_bars": 6,
+            "probability_type": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+            "model_readiness": "HEURISTIC_UNCALIBRATED",
+            "calibration_status": "DEFAULT_PHASE1A",
+            "reliability_status": "INSUFFICIENT_SAMPLE",
+            "profitability_claim": False,
+            "state_summary": (
+                "BTC/USDT is classified as WATCHLIST for 4H setup / ~24H horizon using "
+                "an uncalibrated heuristic."
+            ),
+            "key_reasons": ["Gate action: WATCH."],
+            "hard_blockers": [],
+            "watchlist_triggers": ["Re-check only with fresh backend data."],
+            "invalidation_conditions": ["Any hard gate fails."],
+            "volatility_reference": {
+                "status": "UNAVAILABLE",
+                "realized_vol": None,
+                "note": "Volatility reference only — not a stop/target recommendation.",
+            },
+            "risk_note": "Display-only decision brief.",
+            "disclaimer": (
+                "Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, "
+                "or financial advice. No profitability claim."
+            ),
+        },
         "frontend_display": {
             "prob_up_pct": 45.0,
             "prob_down_pct": 35.0,
@@ -85,6 +142,23 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
             "data_quality_warnings": [],
             "execution_warnings": [],
             "news_warnings": [],
+            "timeframe_label": "4H setup",
+            "horizon_label": "~24H horizon",
+            "horizon_bars": 6,
+            "horizon_approx_label": "4H setup / ~24H horizon",
+            "probability_explanation": (
+                "Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars "
+                "of this timeframe. Timeout means no decisive directional resolution. Not a "
+                "forecast, not expected return, and not a trade recommendation."
+            ),
+            "uncalibrated_banner": (
+                "⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates "
+                "over a multi-bar horizon, not validated forecasts. Not financial advice. "
+                "No profitability claim."
+            ),
+            "model_readiness_label": (
+                "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured."
+            ),
         },
         "detail_view": {
             "symbol": "BTC",
@@ -98,6 +172,10 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
             "liquidity_execution_detail": {},
             "data_quality_detail": {},
             "invalidation_detail": {},
+            "decision_brief": {
+                "action": "WATCHLIST",
+                "probability_type": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+            },
             "news_detail": {"status": news_status},
             "macro_detail": {"status": news_status},
             "debug_lite": {},
