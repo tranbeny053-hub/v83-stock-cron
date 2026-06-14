@@ -4,7 +4,7 @@ Updated: 2026-06-14
 
 ## Branch / Worktree
 
-- Branch: `codex/wave4a2-restore-card-probabilities`
+- Branch: `codex/wave4a2-deploy-cachebust`
 - Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
@@ -12,36 +12,36 @@ Updated: 2026-06-14
 
 ## Current Phase
 
-- Phase: Wave 4A.2 Restore Card Probability Display.
-- Current status: frontend display correction implemented and offline verification completed locally.
-- Scope: frontend/display-layer only. No scoring, probability, gate, features, config/defaults, or news logic changed.
+- Phase: Wave 4A.2 Frontend Deploy/Cache Correctness.
+- Current status: cache-bust and served-asset guard implemented and offline verification completed locally.
+- Root cause: live browser/CDN/Hugging Face was serving a stale frontend bundle, not stale backend JSON.
 
 ## What Changed
 
-- Restored overview-card `Up`, `Down`, and `Timeout` percentage rows from backend `frontend_display`.
-- Removed the Wave 4A.1 qualitative replacement rows: `Probability: ... uncalibrated — see Detail` and `Breakdown: Open Detail for full probability breakdown`.
-- Kept the repeated per-card yellow explanatory note removed.
-- Kept exactly one global uncalibrated legend.
-- Kept model readiness label, Detail full probability breakdown, Download JSON, and Decision Brief unchanged.
-- Updated frontend static tests for restored card percentages and no qualitative replacement rows.
+- Added version query strings: `/styles.css?v=wave4a2-b9137ee` and `/app.js?v=wave4a2-b9137ee`.
+- Added harmless frontend build marker: `UCPE_FRONTEND_BUILD = "wave4a2-cachebust"`.
+- Strengthened frontend static tests for versioned assets, card probability rows, and absence of stale hidden-probability copy.
+- Strengthened `scripts/manual_smoke.py` to GET `/`, parse the served app.js URL, fetch that URL including query string, and verify served app.js contents.
+- Kept overview cards rendering `Up`, `Down`, and `Timeout` from backend `frontend_display`.
+- Kept one global uncalibrated legend and no repeated per-card yellow note.
 
 ## Checks Run / Attempted
 
 - `git checkout dev`: PASS.
-- `git checkout -b codex/wave4a2-restore-card-probabilities`: PASS.
-- `git branch --show-current`: PASS, `codex/wave4a2-restore-card-probabilities`.
+- `git checkout -b codex/wave4a2-deploy-cachebust`: PASS.
+- `git branch --show-current`: PASS, `codex/wave4a2-deploy-cachebust`.
 - `git status --short --untracked-files=all -- .`: PASS before edits.
-- `python3 --version`: PASS, Python 3.14.3.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 17 passed.
-- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 32 passed, 2 warnings.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 155 passed, 4 warnings.
+- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 18 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 156 passed, 4 warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
-- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS, served frontend bundle verified at `/app.js?v=wave4a2-b9137ee`.
 - Protected path diff: PASS, empty for quant, score_stack, gates, news, features, and `config/defaults.py`.
+- Stale-string grep: PASS, no hits for the exact stale strings in frontend/tests/scripts after source cleanup.
+- Probability-marker grep: PASS, markers present in `frontend/app.js`, frontend static tests, and manual smoke.
 
 ## Files Changed
 
@@ -51,16 +51,17 @@ Updated: 2026-06-14
 - `CHANGELOG.md`
 - `RELEASE_GATE.md`
 - `frontend/app.js`
+- `frontend/index.html`
+- `scripts/manual_smoke.py`
 - `tests/frontend/test_frontend_static.py`
 
 ## Current Blockers / Unknowns
 
 - No local implementation blocker is known after offline verification.
-- Manual browser UI smoke was not run in this Codex turn.
-- Claude/User review is still required before merge/deploy.
+- Live Hugging Face deployment/browser hard-refresh verification still needs to be performed after merge/deploy.
 
 ## Next Steps
 
-1. Send this Wave 4A.2 report to Claude final review.
-2. After approval, merge `codex/wave4a2-restore-card-probabilities` into `dev`.
-3. Rerun pre-deploy checks before any Hugging Face push.
+1. Send this cache-bust report for review.
+2. After approval, merge into `dev` and deploy from the app root.
+3. In live HF, use hard refresh/incognito and confirm cards show `Up`, `Down`, and `Timeout`.

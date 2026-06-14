@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4A.2 restore card probability display implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4A.2 frontend deploy cache bust implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -70,6 +70,18 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Detail panel still keeps full probability breakdown.
 - [x] No protected backend/math/news/features/defaults paths changed.
 - [ ] Claude/User review completed before merge/deploy.
+
+## Wave 4A.2 Frontend Deploy Cache-Bust Gate
+
+- [x] `frontend/index.html` references `/styles.css?v=wave4a2-b9137ee`.
+- [x] `frontend/index.html` references `/app.js?v=wave4a2-b9137ee`.
+- [x] `frontend/app.js` includes harmless build marker `UCPE_FRONTEND_BUILD = "wave4a2-cachebust"`.
+- [x] Frontend static tests fail if the old hidden-probability copy returns.
+- [x] `scripts/manual_smoke.py` fetches served `/`, follows the served app.js URL including query string, and verifies the served bundle.
+- [x] Served app.js guard confirms `prob_up_pct`, `prob_down_pct`, and `prob_timeout_pct` are present.
+- [x] Served app.js guard rejects stale `uncalibrated — see Detail` and `Open Detail for full probability breakdown` strings.
+- [x] No protected backend/math/news/features/defaults paths changed.
+- [ ] Live post-deploy browser check completed with hard refresh/incognito confirming cards show `Up`, `Down`, and `Timeout`.
 
 ## Sprint 1 Gate
 

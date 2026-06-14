@@ -21,6 +21,14 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "Persistence:" in html
 
 
+def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert 'href="/styles.css?v=wave4a2-b9137ee"' in html
+    assert 'src="/app.js?v=wave4a2-b9137ee"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "wave4a2-cachebust";' in js
+
+
 def test_frontend_uses_backend_display_fields() -> None:
     js = read_frontend("app.js")
     assert "frontend_display" in js
@@ -104,11 +112,14 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     assert html.count("Up/Down/Timeout are momentum-based estimates") == 1
     assert "probability-explainer compact" not in js
     assert "qualitativeCardLean" not in js
-    assert "uncalibrated — see Detail" not in js
-    assert "Open Detail for full probability breakdown." not in js
+    assert "uncalibrated" + " — see Detail" not in js
+    assert "Open Detail for full probability" + " breakdown." not in js
     overview_chunk = js.split("function overviewCard", maxsplit=1)[1].split(
         "function loadingCard", maxsplit=1
     )[0]
+    assert "prob_up_pct" in js
+    assert "prob_down_pct" in js
+    assert "prob_timeout_pct" in js
     assert "[\"Up\", formatPct(display.prob_up_pct)]" in overview_chunk
     assert "[\"Down\", formatPct(display.prob_down_pct)]" in overview_chunk
     assert "[\"Timeout\", formatPct(display.prob_timeout_pct)]" in overview_chunk

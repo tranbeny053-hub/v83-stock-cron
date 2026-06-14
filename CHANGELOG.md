@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4A.2 Frontend Deploy Cache Bust
+
+Changed:
+- Added version query strings to `styles.css` and `app.js` references in `frontend/index.html`.
+- Added harmless frontend build marker `UCPE_FRONTEND_BUILD = "wave4a2-cachebust"`.
+- Strengthened frontend static tests to require versioned assets and restored card probability markers.
+- Strengthened `scripts/manual_smoke.py` to fetch served `/` HTML, follow the served `app.js` URL including query string, and reject stale hidden-probability bundle text.
+
+Notes:
+- Root cause: live Hugging Face/browser/CDN was serving stale frontend assets after the card probability restore.
+- Live verification after deploy should use hard refresh/incognito and confirm overview cards show `Up`, `Down`, and `Timeout`.
+- No quant, probability, score, gates, features, news, config defaults, schemas, migrations, dependencies, merge, deploy, or Hugging Face push were performed.
+
 ## 2026-06-14 - Wave 4A.2 Restore Card Probability Display
 
 Changed:

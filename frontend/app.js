@@ -11,6 +11,7 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
+const UCPE_FRONTEND_BUILD = "wave4a2-cachebust";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const singlePayloads = new Map();
 const watchlistPayloads = new Map();
