@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import BackgroundTasks
@@ -19,7 +21,12 @@ from crypto_probability_engine.api.schemas import (
     AssetClass,
     ErrorCode,
 )
-from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
+from crypto_probability_engine.config.defaults import (
+    DEFAULT_PHASE1A,
+    METHODOLOGY_VERSION,
+    MODEL_VERSION,
+    TIMEFRAME_SECONDS,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
@@ -34,6 +41,8 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
+_PENDING_PREDICTION_ROWS: dict[str, dict] = {}
+_PENDING_PREDICTION_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -44,6 +53,7 @@ class PersistenceWork:
     news_items: tuple[dict, ...] = ()
     news_clusters: tuple[dict, ...] = ()
     news_evidence_links: tuple[dict, ...] = ()
+    prediction_rows: tuple[dict, ...] = ()
 
 
 def analyze_request(
@@ -169,7 +179,19 @@ def analyze_request(
         "analysis_hash": "",
     }
     response["analysis_hash"] = stable_hash(response)
+    prediction_row = _prediction_row(
+        run_id=run_id,
+        request_symbol=request.symbol,
+        normalized_symbol=symbol.display,
+        timeframe=request.timeframe,
+        snapshot=snapshot,
+        quant_result=quant_result,
+        data_quality=data_quality,
+        provider_state=provider_state,
+    )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
+    if prediction_row is not None:
+        _remember_prediction_row(run_id, prediction_row)
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
@@ -236,6 +258,7 @@ def _best_effort_persist(
         statuses.extend(
             repository.save_news_evidence_link(row) for row in work.news_evidence_links
         )
+        statuses.extend(repository.save_prediction(row) for row in work.prediction_rows)
     except Exception:
         mark_unavailable = getattr(repository, "mark_unavailable", None)
         if callable(mark_unavailable):
@@ -244,6 +267,104 @@ def _best_effort_persist(
     if any(status == "UNAVAILABLE" for status in statuses):
         return "UNAVAILABLE"
     return repository.persistence_status()
+
+
+def _remember_prediction_row(run_id: str, row: dict) -> None:
+    with _PENDING_PREDICTION_LOCK:
+        _PENDING_PREDICTION_ROWS[run_id] = dict(row)
+
+
+def _pop_prediction_rows(payload: dict) -> list[dict]:
+    run_id = str(payload.get("run_id") or "")
+    if not run_id:
+        return []
+    with _PENDING_PREDICTION_LOCK:
+        row = _PENDING_PREDICTION_ROWS.pop(run_id, None)
+    return [row] if row is not None else []
+
+
+def _prediction_row(
+    *,
+    run_id: str,
+    request_symbol: str,
+    normalized_symbol: str,
+    timeframe: str,
+    snapshot,
+    quant_result: dict,
+    data_quality: dict,
+    provider_state: dict,
+) -> dict | None:
+    if not data_quality.get("is_live_data"):
+        return None
+    if timeframe not in TIMEFRAME_SECONDS:
+        return None
+    candles = tuple(getattr(snapshot, "candles", ()) or ())
+    if not candles:
+        return None
+    reference_candle = candles[-1]
+    reference_close_utc = _coerce_utc_datetime(reference_candle.close_time_utc)
+    predicted_at_utc = _coerce_utc_datetime(snapshot.as_of_utc)
+    reference_price = float(reference_candle.close)
+    if reference_price <= 0.0 or reference_close_utc > predicted_at_utc:
+        return None
+    horizon_bars = int(DEFAULT_PHASE1A.h_primary_bars)
+    horizon_end_utc = reference_close_utc + timedelta(
+        seconds=horizon_bars * TIMEFRAME_SECONDS[timeframe]
+    )
+    horizon = quant_result.get("probability_state", {}).get("horizons", {}).get("H_primary", {})
+    try:
+        p_up_frac = float(horizon["p_up_frac"])
+        p_down_frac = float(horizon["p_down_frac"])
+        p_timeout_frac = float(horizon["p_timeout_frac"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    calibration = quant_result.get("calibration_state", {})
+    epistemic = quant_result.get("epistemic_sufficiency_state", {})
+    return {
+        "prediction_id": f"{run_id}:{timeframe}",
+        "run_id": run_id,
+        "operator_id": "operator",
+        "symbol": request_symbol,
+        "normalized_symbol": normalized_symbol,
+        "timeframe": timeframe,
+        "horizon_bars": horizon_bars,
+        "predicted_at_utc": _iso_utc(predicted_at_utc),
+        "reference_close_utc": _iso_utc(reference_close_utc),
+        "reference_price": reference_price,
+        "horizon_end_utc": _iso_utc(horizon_end_utc),
+        "p_up_frac": p_up_frac,
+        "p_down_frac": p_down_frac,
+        "p_timeout_frac": p_timeout_frac,
+        "decision_band_frac": quant_result.get("execution_realism", {}).get(
+            "round_trip_cost_frac"
+        ),
+        "model_version": MODEL_VERSION,
+        "methodology_version": METHODOLOGY_VERSION,
+        "calibration_status": calibration.get(
+            "calibration_status",
+            DEFAULT_PHASE1A.calibration_status,
+        ),
+        "reliability_status": calibration.get(
+            "reliability_status",
+            DEFAULT_PHASE1A.reliability_status,
+        ),
+        "epistemic_sufficiency": epistemic.get("sufficiency_level"),
+        "gate_action": quant_result.get("gate_result", {}).get("action"),
+        "data_source": data_quality.get("data_source"),
+        "is_live_data": True,
+        "cross_provider_state": data_quality.get("cross_provider_state")
+        or provider_state.get("cross_provider_state"),
+    }
+
+
+def _coerce_utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _iso_utc(value: datetime) -> str:
+    return _coerce_utc_datetime(value).isoformat().replace("+00:00", "Z")
 
 
 def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork:
@@ -256,6 +377,7 @@ def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork
         news_items=tuple(_news_item_rows(payload)),
         news_clusters=tuple(_news_cluster_rows(payload)),
         news_evidence_links=tuple(_news_evidence_link_rows(payload)),
+        prediction_rows=tuple(_pop_prediction_rows(payload)),
     )
 
 

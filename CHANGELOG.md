@@ -2,6 +2,21 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4B.1 Prediction Ledger Foundation
+
+Changed:
+- Added idempotent `migrations/0003_prediction_ledger.sql` for immutable prediction rows.
+- Added explicit `MODEL_VERSION` and `METHODOLOGY_VERSION` constants.
+- Added `save_prediction(row)` to in-memory, Supabase Postgres, and Supabase REST persistence adapters.
+- Wired live analysis to enqueue a compact prediction ledger row through the existing best-effort background persistence path.
+- Added tests for migration safety, repository idempotency/immutability, live ledger row content, non-live skip, missing-anchor skip, and persistence failure isolation.
+
+Notes:
+- No resolver, calibration metrics, UI, endpoint, response schema, quant/probability/score/gate/news, frontend, provider, auth, dependency, merge, deploy, or Hugging Face push was performed.
+- Prediction rows are written only for live data with a valid closed-candle reference time and reference price.
+- `calibration_status` remains `DEFAULT_PHASE1A`, `reliability_status` remains `INSUFFICIENT_SAMPLE`, `profitability_claim` remains `false`, and `news_influence_frac` remains `0.0`.
+- Migration was created but not run by Codex.
+
 ## 2026-06-14 - Wave 4B0 Long-Timeframe Methodology Patch
 
 Changed:

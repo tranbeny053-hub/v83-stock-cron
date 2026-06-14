@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4A.2 frontend deploy cache bust implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4B.1 prediction ledger foundation implemented locally. Claude/User review is required before merge/deploy or migration application.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -254,6 +254,26 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `news_influence_frac` remains `0.0`.
 - [ ] Claude R4 methodology review completed before merge/deploy.
 - [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy.
+
+## Wave 4B.1 Prediction Ledger Gate
+
+- [x] `migrations/0003_prediction_ledger.sql` creates `predictions` idempotently.
+- [x] Migration contains no destructive SQL, secrets, or full article/body columns.
+- [x] Prediction identity is immutable by `prediction_id`.
+- [x] Postgres path uses `ON CONFLICT (prediction_id) DO NOTHING`.
+- [x] Supabase REST path uses `resolution=ignore-duplicates`.
+- [x] In-memory path preserves the first row for a `prediction_id`.
+- [x] Ledger rows are generated only for live data with a valid closed-candle reference time and price.
+- [x] Fixture/non-live and missing-anchor cases skip ledger writes safely.
+- [x] Prediction persistence uses existing best-effort background persistence and cannot break `/v1/analyze`.
+- [x] API response schema/contract is unchanged.
+- [x] No resolver, calibration metrics, UI, endpoint, quant/probability/score/gate/news, frontend, provider, auth, dependency, or deployment change was added.
+- [x] `calibration_status` remains `DEFAULT_PHASE1A`.
+- [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
+- [x] `profitability_claim` remains `false`.
+- [x] `news_influence_frac` remains `0.0`.
+- [ ] Apply `migrations/0003_prediction_ledger.sql` only after review/approval.
+- [ ] Claude/User review completed before merge/deploy.
 
 ## Hugging Face Variables and Secrets Required
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import time
+from dataclasses import replace
 
 from fastapi.testclient import TestClient
 
@@ -8,9 +10,11 @@ from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
     ProviderSelectionResult,
 )
+from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import hash_code, session_limiter
 from crypto_probability_engine.api.schemas import ErrorCode, validate_analysis_response
+from crypto_probability_engine.config.defaults import METHODOLOGY_VERSION, MODEL_VERSION
 from crypto_probability_engine.config.settings import Settings
 from tests.fixtures.market_data import (
     make_downtrend_snapshot,
@@ -34,6 +38,52 @@ def make_live_client(monkeypatch) -> TestClient:
 def login(client: TestClient) -> None:
     response = client.post("/v1/auth/login", json={"code": "operator-test-code"})
     assert response.status_code == 200
+
+
+class RecordingRepository:
+    def __init__(self, *, raise_on_prediction: bool = False) -> None:
+        self.raise_on_prediction = raise_on_prediction
+        self.predictions: list[dict] = []
+        self.marked_unavailable = False
+
+    def persistence_status(self) -> str:
+        return "OK"
+
+    def mark_unavailable(self) -> str:
+        self.marked_unavailable = True
+        return "UNAVAILABLE"
+
+    def save_run(self, summary: dict) -> str:
+        return "OK"
+
+    def save_timeframe_result(self, row: dict) -> str:
+        return "OK"
+
+    def save_provider_observation(self, row: dict) -> str:
+        return "OK"
+
+    def save_news_item(self, row: dict) -> str:
+        return "OK"
+
+    def save_news_cluster(self, row: dict) -> str:
+        return "OK"
+
+    def save_news_evidence_link(self, row: dict) -> str:
+        return "OK"
+
+    def save_prediction(self, row: dict) -> str:
+        if self.raise_on_prediction:
+            raise RuntimeError("prediction ledger unavailable")
+        self.predictions.append(dict(row))
+        return "OK"
+
+
+def _run_background_synchronously(monkeypatch) -> None:
+    monkeypatch.setattr(
+        analysis_service,
+        "_submit_persistence_work",
+        lambda repository, work: analysis_service._best_effort_persist(work, repository),
+    )
 
 
 def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
@@ -90,6 +140,147 @@ def test_live_selection_data_quality_reaches_response(monkeypatch) -> None:
     assert payload["frontend_display"]["data_quality_warnings"]
     assert payload["detail_view"]["market_data_v2_detail"]["symbol_availability"] == "BINANCE_ONLY"
     assert "binance" in payload["detail_view"]["market_data_v2_detail"]["provider_resources"]
+
+
+def test_live_analysis_schedules_immutable_prediction_row(monkeypatch) -> None:
+    _run_background_synchronously(monkeypatch)
+
+    def fake_select(symbol, timeframe, *, settings):
+        return ProviderSelectionResult(
+            snapshot=make_snapshot(provider="binance", symbol=symbol.display, timeframe=timeframe),
+            provider_state={
+                "status": "OK",
+                "active_provider": "binance",
+                "cross_provider_state": "UNAVAILABLE",
+                "providers": {"binance": {"status": "OK"}},
+            },
+            data_quality={
+                "status": "OK",
+                "warnings": ["single-source, cross-check unavailable"],
+                "freshness_budget": "DEFAULT_PHASE1A",
+                "is_live_data": True,
+                "data_source": "BINANCE_PUBLIC",
+                "latest_candle_age_seconds": 0,
+                "provider_failures": {},
+                "cross_provider_state": "UNAVAILABLE",
+            },
+        )
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.analysis_service.select_market_data",
+        fake_select,
+    )
+    repo = RecordingRepository()
+    client = make_live_client(monkeypatch)
+    client.app.state.persistence_repository = repo
+    login(client)
+
+    response = client.post(
+        "/v1/analyze",
+        json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY", "timeframe": "4H"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    validate_analysis_response(payload)
+    assert "prediction" not in payload
+    assert len(repo.predictions) == 1
+    row = repo.predictions[0]
+    horizon = payload["probability_state"]["horizons"]["H_primary"]
+    assert row["prediction_id"] == f"{payload['run_id']}:4H"
+    assert row["run_id"] == payload["run_id"]
+    assert row["normalized_symbol"] == "BTC/USDT"
+    assert row["timeframe"] == "4H"
+    assert row["horizon_bars"] == 6
+    assert row["reference_close_utc"] == payload["as_of_utc"]
+    assert row["horizon_end_utc"] > row["reference_close_utc"]
+    assert row["reference_price"] > 0.0
+    assert row["p_up_frac"] == horizon["p_up_frac"]
+    assert row["p_down_frac"] == horizon["p_down_frac"]
+    assert row["p_timeout_frac"] == horizon["p_timeout_frac"]
+    assert row["model_version"] == MODEL_VERSION
+    assert row["methodology_version"] == METHODOLOGY_VERSION
+    assert row["calibration_status"] == "DEFAULT_PHASE1A"
+    assert row["reliability_status"] == "INSUFFICIENT_SAMPLE"
+    assert row["is_live_data"] is True
+
+
+def test_prediction_write_failure_does_not_break_live_analysis(monkeypatch) -> None:
+    _run_background_synchronously(monkeypatch)
+
+    def fake_select(symbol, timeframe, *, settings):
+        return ProviderSelectionResult(
+            snapshot=make_snapshot(provider="binance", symbol=symbol.display, timeframe=timeframe),
+            provider_state={
+                "status": "OK",
+                "active_provider": "binance",
+                "providers": {"binance": {"status": "OK"}},
+            },
+            data_quality={
+                "status": "OK",
+                "warnings": [],
+                "freshness_budget": "DEFAULT_PHASE1A",
+                "is_live_data": True,
+                "data_source": "BINANCE_PUBLIC",
+                "latest_candle_age_seconds": 0,
+                "provider_failures": {},
+            },
+        )
+
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.analysis_service.select_market_data",
+        fake_select,
+    )
+    repo = RecordingRepository(raise_on_prediction=True)
+    client = make_live_client(monkeypatch)
+    client.app.state.persistence_repository = repo
+    login(client)
+    started = time.perf_counter()
+
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+
+    assert response.status_code == 200
+    validate_analysis_response(response.json())
+    assert time.perf_counter() - started < 0.5
+    assert repo.marked_unavailable is True
+    assert "prediction ledger unavailable" not in response.text
+
+
+def test_non_live_analysis_skips_prediction_ledger(monkeypatch) -> None:
+    _run_background_synchronously(monkeypatch)
+    settings = Settings(
+        access_code_hash=hash_code("operator-test-code"),
+        session_signing_key="test-signing-key",
+        session_cookie_secure=False,
+        data_mode="fixture",
+    )
+    repo = RecordingRepository()
+    client = TestClient(create_app(settings))
+    client.app.state.persistence_repository = repo
+    login(client)
+
+    response = client.post("/v1/analyze", json={"symbol": "BTC", "analysis_mode": "METRICS_ONLY"})
+
+    assert response.status_code == 200
+    validate_analysis_response(response.json())
+    assert repo.predictions == []
+
+
+def test_missing_reference_anchor_skips_prediction_row() -> None:
+    snapshot = make_snapshot(provider="binance")
+    assert (
+        analysis_service._prediction_row(
+            run_id="run_missing_anchor",
+            request_symbol="BTC",
+            normalized_symbol="BTC/USDT",
+            timeframe="4H",
+            snapshot=replace(snapshot, candles=()),
+            quant_result={},
+            data_quality={"is_live_data": True},
+            provider_state={},
+        )
+        is None
+    )
 
 
 def test_down_market_live_response_validates_with_signed_negative_fields(monkeypatch) -> None:

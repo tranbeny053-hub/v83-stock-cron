@@ -116,6 +116,40 @@ def test_initial_migration_is_idempotent_and_contains_no_secret_values() -> None
         assert marker not in sql
 
 
+def test_prediction_ledger_migration_is_idempotent_and_compact() -> None:
+    sql = (ROOT / "migrations" / "0003_prediction_ledger.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS predictions" in sql
+    assert "prediction_id TEXT PRIMARY KEY" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_predictions_horizon_end" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_predictions_symbol_timeframe_predicted" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_predictions_model_timeframe" in sql
+    assert "ALTER TABLE" not in sql
+    assert "DROP TABLE" not in sql
+    for marker in (
+        "SUPABASE_DB_URL",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "article_body",
+        "full_text",
+        "full_article",
+    ):
+        assert marker not in sql
+
+
+def test_in_memory_prediction_rows_are_immutable_by_prediction_id() -> None:
+    repo = InMemoryPersistenceRepository()
+    first = _sample_prediction()
+    second = {**first, "reference_price": 999_999.0, "p_up_frac": 0.99}
+
+    assert repo.save_prediction(first) == "STATELESS"
+    assert repo.save_prediction(second) == "STATELESS"
+
+    stored = repo._predictions[first["prediction_id"]]  # noqa: SLF001 - compact test probe
+    assert len(repo._predictions) == 1
+    assert stored["reference_price"] == first["reference_price"]
+    assert stored["p_up_frac"] == first["p_up_frac"]
+
+
 def test_best_effort_persist_defensively_marks_unavailable() -> None:
     class RaisingRepository:
         def __init__(self) -> None:
@@ -171,6 +205,30 @@ def test_supabase_circuit_breaker_skips_attempts_until_cooldown() -> None:
     assert repo.persistence_status() == "OK"
     repo.close()
     assert pool.closed is True
+
+
+def test_supabase_postgres_prediction_write_is_do_nothing_on_conflict() -> None:
+    cursor = FakeCursor()
+
+    class StaticPool:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        def connection(self, timeout=None):
+            self.attempts += 1
+            return FakeConnection(cursor)
+
+    pool = StaticPool()
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: pool,
+    )
+
+    assert repo.save_prediction(_sample_prediction()) == "OK"
+    statements = "\n".join(cursor.statements)
+    assert "INSERT INTO predictions" in statements
+    assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
+    assert pool.attempts == 1
 
 
 def rest_client(handler) -> httpx.Client:
@@ -254,6 +312,28 @@ def test_supabase_rest_writes_compact_news_metadata_rows() -> None:
         "/rest/v1/news_clusters",
         "/rest/v1/news_evidence_links",
     ]
+
+
+def test_supabase_rest_prediction_write_uses_ignore_duplicates() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        body = request.read().decode("utf-8")
+        assert "prediction_id" in body
+        assert "article_body" not in body
+        assert request.url.params["on_conflict"] == "prediction_id"
+        assert request.headers["prefer"] == "resolution=ignore-duplicates,return=minimal"
+        return httpx.Response(201, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.save_prediction(_sample_prediction()) == "OK"
+    assert [request.url.path for request in seen] == ["/rest/v1/predictions"]
 
 
 def test_supabase_rest_watchlist_crud_uses_mocked_https() -> None:
@@ -351,6 +431,35 @@ def _sample_provider_observation() -> dict:
         "data_source": "FIXTURE_DEMO",
         "is_live_data": False,
         "warning_count": 0,
+    }
+
+
+def _sample_prediction() -> dict:
+    return {
+        "prediction_id": "run_rest:4H",
+        "run_id": "run_rest",
+        "operator_id": "operator",
+        "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
+        "timeframe": "4H",
+        "horizon_bars": 6,
+        "predicted_at_utc": "2026-06-07T00:00:00Z",
+        "reference_close_utc": "2026-06-07T00:00:00Z",
+        "reference_price": 100.0,
+        "horizon_end_utc": "2026-06-08T00:00:00Z",
+        "p_up_frac": 0.40,
+        "p_down_frac": 0.35,
+        "p_timeout_frac": 0.25,
+        "decision_band_frac": 0.003,
+        "model_version": "phase1a-wave4b0",
+        "methodology_version": "heuristic-v1-wave4b0",
+        "calibration_status": "DEFAULT_PHASE1A",
+        "reliability_status": "INSUFFICIENT_SAMPLE",
+        "epistemic_sufficiency": "SUFFICIENT",
+        "gate_action": "WATCH",
+        "data_source": "BINANCE_PUBLIC",
+        "is_live_data": True,
+        "cross_provider_state": "UNAVAILABLE",
     }
 
 

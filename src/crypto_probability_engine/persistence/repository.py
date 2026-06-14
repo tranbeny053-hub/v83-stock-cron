@@ -37,6 +37,9 @@ class PersistenceRepository(Protocol):
     def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist compact run-to-news evidence link."""
 
+    def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist immutable prediction ledger row."""
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         """List normalized watchlist symbols for an operator."""
 
@@ -63,6 +66,7 @@ class InMemoryPersistenceRepository:
         self._news_items: list[dict] = []
         self._news_clusters: list[dict] = []
         self._news_evidence_links: list[dict] = []
+        self._predictions: OrderedDict[str, dict] = OrderedDict()
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
 
     def persistence_status(self) -> PersistenceStatus:
@@ -99,6 +103,12 @@ class InMemoryPersistenceRepository:
 
     def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
         self._news_evidence_links.append(dict(row))
+        return self.persistence_status()
+
+    def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        prediction_id = str(row.get("prediction_id", ""))
+        if prediction_id and prediction_id not in self._predictions:
+            self._predictions[prediction_id] = dict(row)
         return self.persistence_status()
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
@@ -398,6 +408,36 @@ class SupabasePersistenceRepository:
         )
         return status
 
+    def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_prediction(row)
+        status, _ = self._run_db(
+            lambda cursor: cursor.execute(
+                """
+                INSERT INTO predictions (
+                  prediction_id, run_id, operator_id, symbol, normalized_symbol,
+                  timeframe, horizon_bars, predicted_at_utc, reference_close_utc,
+                  reference_price, horizon_end_utc, p_up_frac, p_down_frac,
+                  p_timeout_frac, decision_band_frac, model_version, methodology_version,
+                  calibration_status, reliability_status, epistemic_sufficiency,
+                  gate_action, data_source, is_live_data, cross_provider_state
+                )
+                VALUES (
+                  %(prediction_id)s, %(run_id)s, %(operator_id)s, %(symbol)s,
+                  %(normalized_symbol)s, %(timeframe)s, %(horizon_bars)s,
+                  %(predicted_at_utc)s, %(reference_close_utc)s, %(reference_price)s,
+                  %(horizon_end_utc)s, %(p_up_frac)s, %(p_down_frac)s,
+                  %(p_timeout_frac)s, %(decision_band_frac)s, %(model_version)s,
+                  %(methodology_version)s, %(calibration_status)s,
+                  %(reliability_status)s, %(epistemic_sufficiency)s, %(gate_action)s,
+                  %(data_source)s, %(is_live_data)s, %(cross_provider_state)s
+                )
+                ON CONFLICT (prediction_id) DO NOTHING
+                """,
+                dict(row),
+            )
+        )
+        return status
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
         if status == "UNAVAILABLE" or rows is None:
@@ -621,6 +661,19 @@ class SupabaseRestRepository:
                 json=dict(row),
                 params={"on_conflict": "run_id,cluster_id,item_id"},
                 prefer="resolution=merge-duplicates,return=minimal",
+            )
+        )
+        return status
+
+    def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_prediction(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "predictions",
+                json=dict(row),
+                params={"on_conflict": "prediction_id"},
+                prefer="resolution=ignore-duplicates,return=minimal",
             )
         )
         return status

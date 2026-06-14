@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from math import sqrt
 from types import MappingProxyType
 
+MODEL_VERSION = "phase1a-wave4b0"
+METHODOLOGY_VERSION = "heuristic-v1-wave4b0"
+
 
 @dataclass(frozen=True)
 class Phase1ADefaults:

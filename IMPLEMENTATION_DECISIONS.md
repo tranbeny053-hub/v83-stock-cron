@@ -171,3 +171,18 @@ Status: Wave 4B0 is an R4 methodology patch. It does not change frontend display
 | Tail CVaR gate | Threshold scales from 4H baseline by `sqrt(timeframe_seconds / 4H_seconds)` | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Uses existing `0.05` 4H baseline; extreme tails still hard-block. |
 | Monthly sufficiency | Run minimum remains `24`; reliability threshold is `60` | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | `1M` below 60 bars returns `LOW_SAMPLE` with `action=ALLOW`; it is not presented as fully sufficient. |
 | Score stack | No direct score formula change | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Score changes only through corrected volatility/probability inputs and existing gates. |
+
+## Wave 4B.1 Prediction Ledger Foundation Decisions
+
+Status: Wave 4B.1 adds immutable prediction ledger writes only. It does not implement outcome resolution, calibration metrics, UI, API response changes, quant/probability/score/gate/news changes, or deployment automation.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Prediction ledger table | `predictions` via `migrations/0003_prediction_ledger.sql` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Idempotent `CREATE TABLE IF NOT EXISTS`; migration was not run by Codex. |
+| Prediction identity | `prediction_id = "{run_id}:{timeframe}"` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | One immutable prediction per analysis run/timeframe. |
+| Immutability | Ignore duplicate `prediction_id` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Postgres `ON CONFLICT DO NOTHING`; REST `resolution=ignore-duplicates`; in-memory preserves first row. |
+| Ledger write eligibility | Live data only with valid closed-candle reference time and price | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Fixture/non-live/missing-anchor rows are skipped safely. |
+| Reference anchor | Last closed candle close time and close price from selected snapshot | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | No open-candle, fabricated, or response-derived price anchor. |
+| Horizon endpoint | `reference_close_utc + H_primary_bars * TIMEFRAME_SECONDS[timeframe]` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | No resolver/outcome lookup in this wave. |
+| Model/methodology versions | `phase1a-wave4b0`, `heuristic-v1-wave4b0` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Explicit constants; no calibration/reliability promotion. |
+| API response contract | Unchanged | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Ledger row is internal persistence work only. |
