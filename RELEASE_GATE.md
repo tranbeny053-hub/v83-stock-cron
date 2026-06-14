@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4A.1 frontend honesty declutter hotfix implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4A.2 restore card probability display implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -58,6 +58,17 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Decision Brief rendering remains available.
 - [x] No quant/probability/score/gate/news/features/defaults paths changed.
 - [x] Deferred math concerns are documented for later review rather than changed in this branch.
+- [ ] Claude/User review completed before merge/deploy.
+
+## Wave 4A.2 Restore Card Probability Display Gate
+
+- [x] Overview cards render backend-provided `Up`, `Down`, and `Timeout` percentage rows again.
+- [x] Overview cards no longer render `Probability: ... uncalibrated — see Detail`.
+- [x] Overview cards no longer render `Breakdown: Open Detail for full probability breakdown`.
+- [x] Repeated per-card yellow explanatory note remains removed.
+- [x] Exactly one global uncalibrated legend remains visible.
+- [x] Detail panel still keeps full probability breakdown.
+- [x] No protected backend/math/news/features/defaults paths changed.
 - [ ] Claude/User review completed before merge/deploy.
 
 ## Sprint 1 Gate

@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4A.2 Restore Card Probability Display
+
+Changed:
+- Restored overview-card Up/Down/Timeout percentage rows from backend `frontend_display` values.
+- Removed the qualitative replacement rows from Wave 4A.1.
+- Kept the repeated per-card yellow explanatory note removed.
+- Kept one global uncalibrated legend and preserved Detail percentages, Decision Brief, and Download JSON.
+
+Notes:
+- Frontend/display-layer correction only.
+- No quant, probability, score, gates, features, news, config defaults, schemas, migrations, dependencies, merge, deploy, or Hugging Face push were performed.
+
 ## 2026-06-14 - Wave 4A.1 Frontend Honesty Declutter Hotfix
 
 Changed:
