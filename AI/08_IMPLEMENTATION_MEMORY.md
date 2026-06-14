@@ -16,6 +16,8 @@ The resolver now also skips stale-window overshoots when the first available can
 The operator resolver now prefers `SUPABASE_DB_URL` direct Postgres when both direct DB and Supabase REST settings are present.
 The Supabase Postgres due fetch now matches the verified unresolved-row SQL and surfaces sanitized DB failures instead of fake empty `due=0`.
 The Supabase Postgres due fetch now uses direct psycopg connection rather than the pooled `_run_db` wrapper, matching the standalone operator probe path.
+Postgres `SET LOCAL statement_timeout` now uses an internal integer literal instead of bound parameters, fixing the SyntaxError before due SELECT.
+Supabase Postgres outcome writes now use direct psycopg with `ON CONFLICT (prediction_id) DO NOTHING`, avoiding `psycopg_pool` dependency for operator outcome writes.
 Outcome writes are best-effort through the selected repository and immutable by `prediction_id`.
 Calibration/reliability/profitability/news influence remain unchanged.
 
@@ -27,6 +29,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - operator wiring: resolver-specific repository builder prefers direct Postgres for operator runs; generic app builder remains unchanged.
 - Postgres due query: `public.predictions` left join `public.prediction_outcomes`, mapping/tuple row conversion, and operator-visible DB failure.
 - Postgres due wrapper: direct psycopg connection for due rows; `_run_db` callback behavior remains tested for other DB paths.
+- Postgres timeout/outcome fix: no bind params for `SET LOCAL statement_timeout`; direct psycopg outcome write path with sanitized phase errors.
 - tests: migration safety, due-query filtering, immutable/idempotent outcome writes, REST/Postgres non-overwrite semantics, no-lookahead, unfinished-horizon skip, stale-window skip, UP/DOWN/TIMEOUT labels, failure isolation, and API isolation.
 
 ## Files Changed By Area
@@ -48,6 +51,8 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - Resolver CLI output includes safe repository type and limit diagnostics only.
 - Supabase Postgres due-query errors raise a sanitized `SUPABASE_POSTGRES due query failed or unavailable.` error instead of falling back to empty in-memory due rows.
 - Supabase Postgres due fetch avoids `psycopg_pool`; this matches the operator's working standalone psycopg probe and prevents pool-wrapper failure from becoming fake `due=0`.
+- Postgres statement timeout is set with an internal integer literal because PostgreSQL rejects bound parameters for `SET LOCAL`.
+- Postgres outcome writes use direct psycopg and first-write-wins `ON CONFLICT DO NOTHING`; failures are surfaced with sanitized `connect` / `set_timeout` / `write` phase labels.
 - `terminal_return_frac = (outcome_close - reference_price) / reference_price`.
 - Outcome label uses frozen `decision_band_frac`; if absent, fallback is `2 * DEFAULT_PHASE1A.taker_fee_frac`.
 - `RESOLVER_VERSION` is `resolver-v1-wave4b2`.
@@ -63,10 +68,12 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 196 passed with 4 existing warnings after timeout-bind/outcome-write fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.

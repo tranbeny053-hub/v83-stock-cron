@@ -38,10 +38,12 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 196 passed with 4 existing warnings after timeout-bind/outcome-write fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -63,6 +65,8 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - CLI output includes safe `repository=...` and `limit=...` diagnostics without printing secrets.
 - Supabase Postgres due fetch now matches the verified unresolved-row SQL and raises a sanitized failure instead of silently returning fallback empty rows.
 - Supabase Postgres due fetch now uses direct psycopg connection instead of the pooled `_run_db` wrapper, matching the standalone operator probe path.
+- Postgres `SET LOCAL statement_timeout` uses an internal integer literal instead of bound parameters, fixing the SyntaxError before due SELECT.
+- Supabase Postgres outcome writes use a direct psycopg path with `ON CONFLICT (prediction_id) DO NOTHING`, avoiding `psycopg_pool` dependency in the operator resolver path.
 - Outcome labels use frozen `decision_band_frac`, or fallback `2 * taker_fee_frac`.
 
 ## What Is Still Unknown

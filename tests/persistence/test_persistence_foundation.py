@@ -29,9 +29,10 @@ class FakeClock:
 
 
 class FakeCursor:
-    def __init__(self, rows=None, row=None) -> None:
+    def __init__(self, rows=None, row=None, *, reject_set_params: bool = False) -> None:
         self.rows = rows or []
         self.row = row
+        self.reject_set_params = reject_set_params
         self.statements: list[str] = []
         self.params: list[object] = []
 
@@ -42,6 +43,12 @@ class FakeCursor:
         return False
 
     def execute(self, statement, params=None) -> None:
+        if (
+            self.reject_set_params
+            and str(statement).strip().upper().startswith("SET LOCAL STATEMENT_TIMEOUT")
+            and params is not None
+        ):
+            raise SyntaxError("SET LOCAL statement_timeout does not accept bind params")
         self.statements.append(str(statement))
         self.params.append(params)
 
@@ -288,8 +295,8 @@ def test_supabase_postgres_prediction_write_is_do_nothing_on_conflict() -> None:
     assert pool.attempts == 1
 
 
-def test_supabase_run_db_returns_callback_fetchall_rows() -> None:
-    cursor = FakeCursor(rows=[("ok",)])
+def test_supabase_run_db_sets_timeout_without_bind_and_returns_callback_rows() -> None:
+    cursor = FakeCursor(rows=[("ok",)], reject_set_params=True)
 
     class StaticPool:
         def connection(self, timeout=None):
@@ -309,11 +316,14 @@ def test_supabase_run_db_returns_callback_fetchall_rows() -> None:
 
     assert status == "OK"
     assert rows == [("ok",)]
+    assert cursor.statements[0] == "SET LOCAL statement_timeout = 3000"
+    assert cursor.params[0] is None
 
 
 def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
-    cursor = FakeCursor(rows=[_sample_prediction_db_row()])
-    outcome_cursor = FakeCursor()
+    cursor = FakeCursor(rows=[_sample_prediction_db_row()], reject_set_params=True)
+    outcome_cursor = FakeCursor(reject_set_params=True)
+    direct_connections = iter((FakeConnection(cursor), FakeConnection(outcome_cursor)))
 
     class StaticPool:
         def __init__(self) -> None:
@@ -321,16 +331,18 @@ def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
 
         def connection(self, timeout=None):
             self.attempts += 1
-            return FakeConnection(outcome_cursor)
+            raise AssertionError("pool wrapper should not be used for outcome resolver paths")
 
     repo = SupabasePersistenceRepository(
         "postgresql://example.invalid/db",
         pool_factory=lambda: StaticPool(),
-        direct_connection_factory=lambda: FakeConnection(cursor),
+        direct_connection_factory=lambda: next(direct_connections),
     )
 
     rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
     assert rows[0]["prediction_id"] == "run_rest:4H"
+    assert cursor.statements[0] == "SET LOCAL statement_timeout = 3000"
+    assert cursor.params[0] is None
     query = "\n".join(cursor.statements)
     assert "FROM public.predictions p" in query
     assert "LEFT JOIN public.prediction_outcomes o" in query
@@ -343,13 +355,15 @@ def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
     assert {"now_utc": "2026-06-08T00:00:01Z", "limit": 5} in cursor.params
 
     assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
+    assert outcome_cursor.statements[0] == "SET LOCAL statement_timeout = 3000"
+    assert outcome_cursor.params[0] is None
     statements = "\n".join(outcome_cursor.statements)
-    assert "INSERT INTO prediction_outcomes" in statements
+    assert "INSERT INTO public.prediction_outcomes" in statements
     assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
 
 
 def test_supabase_postgres_due_query_converts_mapping_rows() -> None:
-    cursor = FakeCursor(rows=[_sample_prediction()])
+    cursor = FakeCursor(rows=[_sample_prediction()], reject_set_params=True)
 
     class StaticPool:
         def connection(self, timeout=None):
@@ -371,7 +385,10 @@ def test_supabase_postgres_due_query_converts_mapping_rows() -> None:
 
 
 def test_supabase_postgres_due_query_uses_direct_connection_not_pool_wrapper() -> None:
-    cursor = FakeCursor(rows=[_sample_prediction_db_row(), _sample_prediction_db_row()])
+    cursor = FakeCursor(
+        rows=[_sample_prediction_db_row(), _sample_prediction_db_row()],
+        reject_set_params=True,
+    )
 
     class ExplodingPool:
         def connection(self, timeout=None):
@@ -389,6 +406,27 @@ def test_supabase_postgres_due_query_uses_direct_connection_not_pool_wrapper() -
     assert rows[0]["prediction_id"] == "run_rest:4H"
 
 
+def test_supabase_postgres_outcome_write_uses_direct_connection_not_pool_wrapper() -> None:
+    cursor = FakeCursor(reject_set_params=True)
+
+    class ExplodingPool:
+        def connection(self, timeout=None):
+            raise AssertionError("pool wrapper should not be used for outcome write")
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: ExplodingPool(),
+        direct_connection_factory=lambda: FakeConnection(cursor),
+    )
+
+    assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
+    assert cursor.statements[0] == "SET LOCAL statement_timeout = 3000"
+    assert cursor.params[0] is None
+    statements = "\n".join(cursor.statements)
+    assert "INSERT INTO public.prediction_outcomes" in statements
+    assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
+
+
 def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
     repo = SupabasePersistenceRepository(
         "postgresql://example.invalid/db",
@@ -404,8 +442,31 @@ def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
     else:  # pragma: no cover - documents the expected non-fallback behavior
         raise AssertionError(f"expected due query failure, got rows={rows!r}")
 
-    assert message == "SUPABASE_POSTGRES due query failed: RuntimeError"
+    assert (
+        message
+        == "SUPABASE_POSTGRES due query failed: RuntimeError [connect] database unavailable"
+    )
     assert "postgresql://example.invalid/db" not in message
+
+
+def test_supabase_postgres_outcome_write_failure_is_sanitized() -> None:
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        direct_connection_factory=lambda: (_ for _ in ()).throw(
+            RuntimeError("postgresql://user:credential@example.invalid/db auth failure")
+        ),
+    )
+
+    try:
+        status = repo.save_prediction_outcome(_sample_outcome())
+    except RuntimeError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - documents the expected non-fallback behavior
+        raise AssertionError(f"expected outcome write failure, got status={status!r}")
+
+    assert message.startswith("SUPABASE_POSTGRES outcome write failed: RuntimeError [connect]")
+    assert "postgresql://user:credential@example.invalid/db" not in message
+    assert "credential" not in message
 
 
 def rest_client(handler) -> httpx.Client:

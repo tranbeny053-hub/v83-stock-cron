@@ -287,11 +287,13 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Resolver filters out candles with `close_time_utc <= reference_close_utc` before all outcome calculations.
 - [x] Unfinished horizons skip outcome writes when no candle exists at or after `horizon_end_utc`.
 - [x] Stale-window overshoot guard skips outcomes when the first available candle is more than one timeframe after `horizon_end_utc`.
+- [x] Postgres `SET LOCAL statement_timeout` uses an internal integer literal, not bound parameters.
 - [x] Operator resolver prefers `SUPABASE_DB_URL` / direct Postgres over Supabase REST when both are configured.
 - [x] Resolver CLI output includes safe repository type and limit diagnostics without printing secrets.
 - [x] Supabase Postgres due query uses `public.predictions` left joined to `public.prediction_outcomes` with unresolved/live/due filters.
 - [x] Supabase Postgres due-query failures are operator-visible and cannot report fake successful `due=0`.
 - [x] Supabase Postgres due fetch uses direct psycopg connection and does not depend on the pooled `_run_db` wrapper.
+- [x] Supabase Postgres outcome writes use direct psycopg connection and do not depend on `psycopg_pool`.
 - [x] Outcome labels are limited to `UP`, `DOWN`, and `TIMEOUT`.
 - [x] Resolver is standalone and not imported by `api/**`.
 - [x] `/v1/analyze` does not call the resolver.

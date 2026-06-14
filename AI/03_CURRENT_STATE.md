@@ -30,6 +30,8 @@ Updated: 2026-06-15
 - Resolver CLI output now includes safe diagnostics: `repository=...` and `limit=...`; it does not print connection strings or keys.
 - Added Postgres due-query bugfix: direct Postgres due fetch now uses the verified `public.predictions` left join `public.prediction_outcomes` query, supports mapping/tuple rows, and surfaces sanitized DB failure instead of fake empty `due=0`.
 - Added final repository wrapper bugfix: Postgres due fetch now uses a direct psycopg connection instead of the `psycopg_pool`-backed `_run_db` wrapper, matching the standalone operator probe path.
+- Added final timeout-bind bugfix: Postgres `SET LOCAL statement_timeout` now uses an internal integer literal instead of bound parameters in both `_run_db` and resolver due-fetch paths.
+- Added direct outcome-write bugfix: `SupabasePersistenceRepository.save_prediction_outcome` now uses direct psycopg with `ON CONFLICT (prediction_id) DO NOTHING` and sanitized phase-labelled failures instead of relying on `psycopg_pool`.
 - Added offline tests for due query behavior, no-lookahead filtering, unfinished-horizon skip, UP/DOWN/TIMEOUT labeling, immutable writes, REST/Postgres non-overwrite semantics, failure isolation, and API isolation.
 
 ## Checks Run / Attempted
@@ -42,10 +44,12 @@ Updated: 2026-06-15
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 196 passed with 4 existing warnings after timeout-bind/outcome-write fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.

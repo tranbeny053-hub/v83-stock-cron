@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -274,10 +275,7 @@ class SupabasePersistenceRepository:
         try:
             with self._connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SET LOCAL statement_timeout = %s",
-                        (self._statement_timeout_ms,),
-                    )
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
                     result = operation(cursor)
         except Exception:
             return self.mark_unavailable(), None
@@ -478,47 +476,63 @@ class SupabasePersistenceRepository:
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         if not self.maybe_can_attempt():
-            raise RuntimeError("SUPABASE_POSTGRES due query failed: CircuitOpen")
+            raise RuntimeError(
+                "SUPABASE_POSTGRES due query failed: RuntimeError [circuit] CircuitOpen"
+            )
+        phase = "connect"
         try:
             with self._direct_connection() as conn:
                 with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SET LOCAL statement_timeout = %s",
-                        (self._statement_timeout_ms,),
-                    )
-                    rows = _fetch_due_prediction_rows(cursor, now_utc, max(0, int(limit)))
+                    phase = "set_timeout"
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    phase = "query"
+                    _execute_due_prediction_query(cursor, now_utc, max(0, int(limit)))
+                    phase = "fetch"
+                    rows = cursor.fetchall()
+                    phase = "convert"
+                    converted = [_prediction_row_from_db(row) for row in rows]
         except Exception as exc:
             self.mark_unavailable()
-            raise RuntimeError(
-                f"SUPABASE_POSTGRES due query failed: {type(exc).__name__}"
-            ) from None
+            raise RuntimeError(_postgres_error_message("due query", phase, exc)) from None
         self._mark_ok()
-        return [_prediction_row_from_db(row) for row in rows]
+        return converted
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._fallback.save_prediction_outcome(row)
-        status, _ = self._run_db(
-            lambda cursor: cursor.execute(
-                """
-                INSERT INTO prediction_outcomes (
-                  prediction_id, resolved_at_utc, outcome_close_utc,
-                  outcome_reference_price, terminal_return_frac, realized_label,
-                  decision_band_frac, max_favorable_frac, max_adverse_frac,
-                  candles_observed, resolver_version, data_source, is_live_data
-                )
-                VALUES (
-                  %(prediction_id)s, %(resolved_at_utc)s, %(outcome_close_utc)s,
-                  %(outcome_reference_price)s, %(terminal_return_frac)s,
-                  %(realized_label)s, %(decision_band_frac)s, %(max_favorable_frac)s,
-                  %(max_adverse_frac)s, %(candles_observed)s, %(resolver_version)s,
-                  %(data_source)s, %(is_live_data)s
-                )
-                ON CONFLICT (prediction_id) DO NOTHING
-                """,
-                dict(row),
+        if not self.maybe_can_attempt():
+            raise RuntimeError(
+                "SUPABASE_POSTGRES outcome write failed: RuntimeError [circuit] CircuitOpen"
             )
-        )
-        return status
+        phase = "connect"
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    phase = "set_timeout"
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    phase = "write"
+                    cursor.execute(
+                        """
+                        INSERT INTO public.prediction_outcomes (
+                          prediction_id, resolved_at_utc, outcome_close_utc,
+                          outcome_reference_price, terminal_return_frac, realized_label,
+                          decision_band_frac, max_favorable_frac, max_adverse_frac,
+                          candles_observed, resolver_version, data_source, is_live_data
+                        )
+                        VALUES (
+                          %(prediction_id)s, %(resolved_at_utc)s, %(outcome_close_utc)s,
+                          %(outcome_reference_price)s, %(terminal_return_frac)s,
+                          %(realized_label)s, %(decision_band_frac)s, %(max_favorable_frac)s,
+                          %(max_adverse_frac)s, %(candles_observed)s, %(resolver_version)s,
+                          %(data_source)s, %(is_live_data)s
+                        )
+                        ON CONFLICT (prediction_id) DO NOTHING
+                        """,
+                        dict(row),
+                    )
+        except Exception as exc:
+            self.mark_unavailable()
+            raise RuntimeError(_postgres_error_message("outcome write", phase, exc)) from None
+        self._mark_ok()
+        return self.persistence_status()
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
@@ -994,7 +1008,11 @@ def _fetch_run(cursor, run_id: str):
     return cursor.fetchone()
 
 
-def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
+def _set_local_statement_timeout(cursor, timeout_ms: int) -> None:
+    cursor.execute(f"SET LOCAL statement_timeout = {int(timeout_ms)}")
+
+
+def _execute_due_prediction_query(cursor, now_utc: Any, limit: int) -> None:
     cursor.execute(
         """
         SELECT p.prediction_id, p.run_id, p.operator_id, p.symbol, p.normalized_symbol,
@@ -1015,6 +1033,10 @@ def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
         """,
         {"now_utc": now_utc, "limit": limit},
     )
+
+
+def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
+    _execute_due_prediction_query(cursor, now_utc, limit)
     return cursor.fetchall()
 
 
@@ -1054,6 +1076,22 @@ def _prediction_row_from_db(row) -> dict:
         key: value.isoformat() if hasattr(value, "isoformat") else value
         for key, value in zip(keys, row, strict=True)
     }
+
+
+def _postgres_error_message(operation: str, phase: str, exc: Exception) -> str:
+    message = _sanitize_postgres_error(str(exc))
+    return f"SUPABASE_POSTGRES {operation} failed: {type(exc).__name__} [{phase}] {message}"
+
+
+def _sanitize_postgres_error(message: str) -> str:
+    compact = " ".join(str(message).split())
+    compact = re.sub(r"(?i)\b(?:postgresql|postgres)://\S+", "<redacted-postgres-url>", compact)
+    compact = re.sub(
+        r"(?i)\b(password|apikey|authorization|bearer)\b\s*[:=]\s*\S+",
+        r"\1=<redacted>",
+        compact,
+    )
+    return (compact or "no detail")[:200]
 
 
 def _iso_for_query(value: Any) -> str:

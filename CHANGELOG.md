@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.2 Postgres Timeout Bind and Outcome Write Fix
+
+Changed:
+- Replaced bound `SET LOCAL statement_timeout = %s` calls with an internal integer literal in the shared Postgres wrapper and resolver due-fetch path.
+- Changed `SupabasePersistenceRepository.save_prediction_outcome` to use a pool-free direct psycopg path with `ON CONFLICT (prediction_id) DO NOTHING`.
+- Added sanitized phase-labelled error messages for Postgres due-fetch and outcome-write failures.
+- Added regression tests proving `SET LOCAL` is executed without bind parameters and outcome writes do not depend on `psycopg_pool`.
+
+Notes:
+- Root cause: Supabase/Postgres accepted the verified due SELECT, but rejected bound parameters for `SET LOCAL statement_timeout` before the SELECT could run.
+- No migrations, API, frontend, quant/probability/score/gate/news, calibration, deploy, merge, or Hugging Face push was performed.
+
 ## 2026-06-15 - Wave 4B.2 Direct Postgres Due-Fetch Wrapper Bugfix
 
 Changed:
