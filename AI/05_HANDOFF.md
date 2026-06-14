@@ -7,13 +7,13 @@ Codex
 User / Claude
 
 ## Current Goal
-Wave 4B.1 Prediction Ledger Foundation: write immutable live-analysis prediction rows at analysis time for future outcome resolution, without implementing resolver, calibration metrics, UI, endpoint, schema-response, or quant/news changes.
+Wave 4B.2 Outcome Resolver: resolve due immutable prediction-ledger rows into immutable `UP` / `DOWN` / `TIMEOUT` outcome rows using post-prediction closed candles only, without API, UI, calibration metric, schema-response, quant, gate, score, or news changes.
 
 ## Current Branch / Worktree
-`codex/wave4b1-prediction-ledger` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
+`codex/wave4b2-outcome-resolver` / `v8-crypto-api-clean/` inside parent Git repo `/Users/kha/Documents/New project`.
 
 ## Risk Level
-Persistence foundation. Review before merge/deploy and before applying migration.
+Standalone persistence/resolver foundation. Review before merge/deploy and before applying migration.
 
 ## Files Changed
 - `AI/03_CURRENT_STATE.md`
@@ -22,47 +22,49 @@ Persistence foundation. Review before merge/deploy and before applying migration
 - `CHANGELOG.md`
 - `IMPLEMENTATION_DECISIONS.md`
 - `RELEASE_GATE.md`
-- `migrations/0003_prediction_ledger.sql`
-- `src/crypto_probability_engine/api/analysis_service.py`
+- `migrations/0004_prediction_outcomes.sql`
+- `scripts/resolve_outcomes.py`
 - `src/crypto_probability_engine/config/defaults.py`
 - `src/crypto_probability_engine/persistence/repository.py`
-- `tests/api/test_analysis_live_data_wiring.py`
 - `tests/persistence/test_persistence_foundation.py`
+- `tests/resolver/test_resolve_outcomes.py`
 
 ## Commands Run
 - `git checkout dev`: PASS.
 - `git status --short --untracked-files=all -- .`: PASS before branch creation, clean.
-- `git checkout -b codex/wave4b1-prediction-ledger`: PASS.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/api -q`: PASS, 50 passed, 2 existing warnings.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 170 passed, 4 existing warnings.
-- `ruff check src tests scripts`: PASS after import-order cleanup.
+- `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 27 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 183 passed, 4 existing warnings.
+- `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
-- Protected working-tree diff for quant, score stack, gates, news, frontend, and `api/schemas.py`: PASS, empty.
+- Protected working-tree diff for API, quant, score stack, gates, news, frontend, and `api/schemas.py`: PASS, empty.
+- Targeted greps: PASS; resolver/API import grep empty; destructive prediction mutation grep has only migration test assertions; secret/full-body/forbidden capability greps show existing backend/test/checker names only and no new unsafe implementation.
 
 ## What Works Now
-- `migrations/0003_prediction_ledger.sql` creates `predictions` idempotently with no destructive SQL.
-- Live analysis with a valid closed-candle anchor builds a compact prediction row.
-- Fixture/non-live analysis skips prediction ledger writes.
-- Missing reference anchor skips prediction ledger writes.
-- `save_prediction` is immutable/idempotent by `prediction_id` across in-memory, Postgres, and REST repositories.
-- Prediction writes run through existing best-effort background persistence and do not change the response contract.
-- Prediction write failure is caught by the persistence failure wrapper and does not break `/v1/analyze`.
+- `migrations/0004_prediction_outcomes.sql` creates `prediction_outcomes` idempotently with no destructive SQL.
+- Repositories can fetch due live predictions with no existing outcome row.
+- Repositories can save immutable prediction outcomes without overwriting existing outcomes.
+- `scripts/resolve_outcomes.py` resolves due predictions in a standalone batch, isolates per-prediction failures, and never runs in `/v1/analyze`.
+- Resolver filters out all candles with `close_time_utc <= reference_close_utc` before terminal return, max favorable, or max adverse calculations.
+- Resolver skips unfinished horizons when no closed candle exists at or after `horizon_end_utc`.
+- Outcome labels use frozen `decision_band_frac`, or fallback `2 * taker_fee_frac`.
 
 ## What Is Still Unknown
 - Migration has not been applied.
-- Future Wave 4B.2 outcome resolver and calibration metrics are not implemented.
+- Outcome scheduling/cron, calibration metrics, UI/API display, and `/v1/calibration` are intentionally not implemented.
 
 ## Next 3 Steps
-1. Commit `feat: add prediction ledger foundation`.
-2. Send to Claude for review before merge/deploy.
-3. Apply `0003_prediction_ledger.sql` only after review and operator approval.
+1. Commit `feat: add no-lookahead outcome resolver`.
+2. Send to Claude for R3 review before merge/deploy.
+3. Apply `0004_prediction_outcomes.sql` only after review and operator approval.
 
 ## Do Not Change
-- Do not touch frontend, API response schemas, quant/probability/score/gates/news logic, providers, auth, dependencies, or migrations beyond `0003_prediction_ledger.sql`.
+- Do not touch API routes, response schemas, frontend, quant/probability/score/gates/news logic, providers, auth, dependencies, or migrations beyond `0004_prediction_outcomes.sql`.
 - Do not run migrations from Codex.
+- Do not add calibration metrics, resolver UI, `/v1/calibration`, or prediction mutation.
 - Do not add trading, order, withdrawal, transfer, leverage-changing, or autonomous execution capability.
 - Do not claim measured reliability, calibration, accuracy, or profitability.

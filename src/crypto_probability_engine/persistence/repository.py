@@ -6,6 +6,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
 import httpx
@@ -40,6 +41,12 @@ class PersistenceRepository(Protocol):
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction ledger row."""
 
+    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+        """Fetch due live predictions with no immutable outcome row yet."""
+
+    def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist immutable prediction outcome row."""
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         """List normalized watchlist symbols for an operator."""
 
@@ -67,6 +74,7 @@ class InMemoryPersistenceRepository:
         self._news_clusters: list[dict] = []
         self._news_evidence_links: list[dict] = []
         self._predictions: OrderedDict[str, dict] = OrderedDict()
+        self._prediction_outcomes: OrderedDict[str, dict] = OrderedDict()
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
 
     def persistence_status(self) -> PersistenceStatus:
@@ -109,6 +117,23 @@ class InMemoryPersistenceRepository:
         prediction_id = str(row.get("prediction_id", ""))
         if prediction_id and prediction_id not in self._predictions:
             self._predictions[prediction_id] = dict(row)
+        return self.persistence_status()
+
+    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+        due = [
+            dict(row)
+            for row in self._predictions.values()
+            if row.get("is_live_data") is True
+            and str(row.get("prediction_id", "")) not in self._prediction_outcomes
+            and _timestamp_before(row.get("horizon_end_utc"), now_utc)
+        ]
+        due.sort(key=lambda row: str(row.get("horizon_end_utc", "")))
+        return due[: max(0, int(limit))]
+
+    def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        prediction_id = str(row.get("prediction_id", ""))
+        if prediction_id and prediction_id not in self._prediction_outcomes:
+            self._prediction_outcomes[prediction_id] = dict(row)
         return self.persistence_status()
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
@@ -438,6 +463,39 @@ class SupabasePersistenceRepository:
         )
         return status
 
+    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+        status, rows = self._run_db(
+            lambda cursor: _fetch_due_prediction_rows(cursor, now_utc, limit)
+        )
+        if status == "UNAVAILABLE" or rows is None:
+            return self._fallback.fetch_due_unresolved_predictions(now_utc, limit)
+        return [_prediction_row_from_db(row) for row in rows]
+
+    def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_prediction_outcome(row)
+        status, _ = self._run_db(
+            lambda cursor: cursor.execute(
+                """
+                INSERT INTO prediction_outcomes (
+                  prediction_id, resolved_at_utc, outcome_close_utc,
+                  outcome_reference_price, terminal_return_frac, realized_label,
+                  decision_band_frac, max_favorable_frac, max_adverse_frac,
+                  candles_observed, resolver_version, data_source, is_live_data
+                )
+                VALUES (
+                  %(prediction_id)s, %(resolved_at_utc)s, %(outcome_close_utc)s,
+                  %(outcome_reference_price)s, %(terminal_return_frac)s,
+                  %(realized_label)s, %(decision_band_frac)s, %(max_favorable_frac)s,
+                  %(max_adverse_frac)s, %(candles_observed)s, %(resolver_version)s,
+                  %(data_source)s, %(is_live_data)s
+                )
+                ON CONFLICT (prediction_id) DO NOTHING
+                """,
+                dict(row),
+            )
+        )
+        return status
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
         if status == "UNAVAILABLE" or rows is None:
@@ -678,6 +736,46 @@ class SupabaseRestRepository:
         )
         return status
 
+    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "predictions",
+                params={
+                    "select": (
+                        "prediction_id,run_id,operator_id,symbol,normalized_symbol,timeframe,"
+                        "horizon_bars,predicted_at_utc,reference_close_utc,reference_price,"
+                        "horizon_end_utc,p_up_frac,p_down_frac,p_timeout_frac,"
+                        "decision_band_frac,model_version,methodology_version,"
+                        "calibration_status,reliability_status,epistemic_sufficiency,"
+                        "gate_action,data_source,is_live_data,cross_provider_state"
+                    ),
+                    "horizon_end_utc": f"lt.{_iso_for_query(now_utc)}",
+                    "is_live_data": "eq.true",
+                    "order": "horizon_end_utc.asc",
+                    "limit": str(limit),
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            return self._fallback.fetch_due_unresolved_predictions(now_utc, limit)
+        prediction_ids = [str(row.get("prediction_id", "")) for row in rows]
+        existing = self._fetch_existing_outcome_ids(prediction_ids)
+        return [dict(row) for row in rows if str(row.get("prediction_id", "")) not in existing]
+
+    def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        self._fallback.save_prediction_outcome(row)
+        status, _ = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "prediction_outcomes",
+                json=dict(row),
+                params={"on_conflict": "prediction_id"},
+                prefer="resolution=ignore-duplicates,return=minimal",
+            )
+        )
+        return status
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_rest(
             lambda: self._request(
@@ -801,6 +899,24 @@ class SupabaseRestRepository:
             return None
         return response.json()
 
+    def _fetch_existing_outcome_ids(self, prediction_ids: list[str]) -> set[str]:
+        prediction_ids = [prediction_id for prediction_id in prediction_ids if prediction_id]
+        if not prediction_ids:
+            return set()
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "prediction_outcomes",
+                params={
+                    "select": "prediction_id",
+                    "prediction_id": f"in.({_postgrest_csv(prediction_ids)})",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            return set()
+        return {str(row.get("prediction_id")) for row in rows if row.get("prediction_id")}
+
     def _headers(self, *, prefer: str | None = None) -> dict[str, str]:
         headers = {
             "apikey": self._service_role_key,
@@ -852,6 +968,92 @@ def _fetch_run(cursor, run_id: str):
         (run_id,),
     )
     return cursor.fetchone()
+
+
+def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
+    cursor.execute(
+        """
+        SELECT p.prediction_id, p.run_id, p.operator_id, p.symbol, p.normalized_symbol,
+               p.timeframe, p.horizon_bars, p.predicted_at_utc, p.reference_close_utc,
+               p.reference_price, p.horizon_end_utc, p.p_up_frac, p.p_down_frac,
+               p.p_timeout_frac, p.decision_band_frac, p.model_version,
+               p.methodology_version, p.calibration_status, p.reliability_status,
+               p.epistemic_sufficiency, p.gate_action, p.data_source, p.is_live_data,
+               p.cross_provider_state
+        FROM predictions p
+        WHERE p.horizon_end_utc < %s
+          AND p.is_live_data = true
+          AND NOT EXISTS (
+            SELECT 1
+            FROM prediction_outcomes o
+            WHERE o.prediction_id = p.prediction_id
+          )
+        ORDER BY p.horizon_end_utc ASC
+        LIMIT %s
+        """,
+        (now_utc, limit),
+    )
+    return cursor.fetchall()
+
+
+def _prediction_row_from_db(row) -> dict:
+    keys = (
+        "prediction_id",
+        "run_id",
+        "operator_id",
+        "symbol",
+        "normalized_symbol",
+        "timeframe",
+        "horizon_bars",
+        "predicted_at_utc",
+        "reference_close_utc",
+        "reference_price",
+        "horizon_end_utc",
+        "p_up_frac",
+        "p_down_frac",
+        "p_timeout_frac",
+        "decision_band_frac",
+        "model_version",
+        "methodology_version",
+        "calibration_status",
+        "reliability_status",
+        "epistemic_sufficiency",
+        "gate_action",
+        "data_source",
+        "is_live_data",
+        "cross_provider_state",
+    )
+    return {
+        key: value.isoformat() if hasattr(value, "isoformat") else value
+        for key, value in zip(keys, row, strict=True)
+    }
+
+
+def _iso_for_query(value: Any) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _timestamp_before(left: Any, right: Any) -> bool:
+    try:
+        return _to_utc_datetime(left) < _to_utc_datetime(right)
+    except (TypeError, ValueError):
+        return False
+
+
+def _to_utc_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        raise TypeError("Unsupported timestamp value.")
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _postgrest_csv(values: list[str]) -> str:
+    return ",".join(f'"{value}"' for value in values)
 
 
 def build_persistence_repository(settings: Settings) -> PersistenceRepository:

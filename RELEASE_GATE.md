@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4B.1 prediction ledger foundation implemented locally. Claude/User review is required before merge/deploy or migration application.
+Status: Wave 4B.2 outcome resolver implemented locally. Claude/User review is required before merge/deploy or migration application.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -274,6 +274,29 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `news_influence_frac` remains `0.0`.
 - [ ] Apply `migrations/0003_prediction_ledger.sql` only after review/approval.
 - [ ] Claude/User review completed before merge/deploy.
+
+## Wave 4B.2 Outcome Resolver Gate
+
+- [x] `migrations/0004_prediction_outcomes.sql` creates `prediction_outcomes` idempotently.
+- [x] Migration contains no destructive SQL, secrets, or full article/body columns.
+- [x] Outcome identity is immutable by `prediction_id`.
+- [x] Due query selects only live predictions with `horizon_end_utc < now_utc` and no existing outcome.
+- [x] Postgres outcome path uses `ON CONFLICT (prediction_id) DO NOTHING`.
+- [x] Supabase REST outcome path uses `resolution=ignore-duplicates`.
+- [x] In-memory outcome path preserves the first row for a `prediction_id`.
+- [x] Resolver filters out candles with `close_time_utc <= reference_close_utc` before all outcome calculations.
+- [x] Unfinished horizons skip outcome writes when no candle exists at or after `horizon_end_utc`.
+- [x] Outcome labels are limited to `UP`, `DOWN`, and `TIMEOUT`.
+- [x] Resolver is standalone and not imported by `api/**`.
+- [x] `/v1/analyze` does not call the resolver.
+- [x] Predictions are never updated, deleted, mutated, or relabeled.
+- [x] No calibration metrics, UI, endpoint, API response schema, quant/probability/score/gate/news, frontend, provider, auth, dependency, or deployment change was added.
+- [x] `calibration_status` remains `DEFAULT_PHASE1A`.
+- [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
+- [x] `profitability_claim` remains `false`.
+- [x] `news_influence_frac` remains `0.0`.
+- [ ] Apply `migrations/0004_prediction_outcomes.sql` only after review/approval.
+- [ ] Claude/User R3 review completed before merge/deploy.
 
 ## Hugging Face Variables and Secrets Required
 

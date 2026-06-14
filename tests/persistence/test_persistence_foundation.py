@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -136,6 +137,25 @@ def test_prediction_ledger_migration_is_idempotent_and_compact() -> None:
         assert marker not in sql
 
 
+def test_prediction_outcome_migration_is_idempotent_and_compact() -> None:
+    sql = (ROOT / "migrations" / "0004_prediction_outcomes.sql").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS prediction_outcomes" in sql
+    assert "prediction_id TEXT PRIMARY KEY" in sql
+    assert "CHECK (realized_label IN ('UP','DOWN','TIMEOUT'))" in sql
+    assert "CREATE INDEX IF NOT EXISTS idx_prediction_outcomes_realized_label" in sql
+    assert "ALTER TABLE" not in sql
+    assert "DROP TABLE" not in sql
+    for marker in (
+        "SUPABASE_DB_URL",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "article_body",
+        "full_text",
+        "full_article",
+    ):
+        assert marker not in sql
+
+
 def test_in_memory_prediction_rows_are_immutable_by_prediction_id() -> None:
     repo = InMemoryPersistenceRepository()
     first = _sample_prediction()
@@ -148,6 +168,41 @@ def test_in_memory_prediction_rows_are_immutable_by_prediction_id() -> None:
     assert len(repo._predictions) == 1
     assert stored["reference_price"] == first["reference_price"]
     assert stored["p_up_frac"] == first["p_up_frac"]
+
+
+def test_in_memory_due_predictions_exclude_non_live_future_and_resolved() -> None:
+    repo = InMemoryPersistenceRepository()
+    due = _sample_prediction()
+    future = {**_sample_prediction(), "prediction_id": "future:4H"}
+    future["horizon_end_utc"] = "2026-06-09T00:00:00Z"
+    non_live = {**_sample_prediction(), "prediction_id": "fixture:4H", "is_live_data": False}
+    resolved = {**_sample_prediction(), "prediction_id": "resolved:4H"}
+    repo.save_prediction(future)
+    repo.save_prediction(non_live)
+    repo.save_prediction(resolved)
+    repo.save_prediction(due)
+    repo.save_prediction_outcome({**_sample_outcome(), "prediction_id": "resolved:4H"})
+
+    rows = repo.fetch_due_unresolved_predictions(
+        datetime(2026, 6, 8, 0, 0, 1, tzinfo=UTC),
+        limit=10,
+    )
+
+    assert [row["prediction_id"] for row in rows] == [due["prediction_id"]]
+
+
+def test_in_memory_prediction_outcomes_are_immutable_by_prediction_id() -> None:
+    repo = InMemoryPersistenceRepository()
+    first = _sample_outcome()
+    second = {**first, "realized_label": "DOWN", "terminal_return_frac": -0.10}
+
+    assert repo.save_prediction_outcome(first) == "STATELESS"
+    assert repo.save_prediction_outcome(second) == "STATELESS"
+
+    stored = repo._prediction_outcomes[first["prediction_id"]]  # noqa: SLF001
+    assert len(repo._prediction_outcomes) == 1
+    assert stored["realized_label"] == "UP"
+    assert stored["terminal_return_frac"] == first["terminal_return_frac"]
 
 
 def test_best_effort_persist_defensively_marks_unavailable() -> None:
@@ -229,6 +284,32 @@ def test_supabase_postgres_prediction_write_is_do_nothing_on_conflict() -> None:
     assert "INSERT INTO predictions" in statements
     assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
     assert pool.attempts == 1
+
+
+def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
+    cursor = FakeCursor(rows=[_sample_prediction_db_row()])
+
+    class StaticPool:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        def connection(self, timeout=None):
+            self.attempts += 1
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
+    assert rows[0]["prediction_id"] == "run_rest:4H"
+    assert "NOT EXISTS" in "\n".join(cursor.statements)
+
+    assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
+    statements = "\n".join(cursor.statements)
+    assert "INSERT INTO prediction_outcomes" in statements
+    assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
 
 
 def rest_client(handler) -> httpx.Client:
@@ -334,6 +415,37 @@ def test_supabase_rest_prediction_write_uses_ignore_duplicates() -> None:
 
     assert repo.save_prediction(_sample_prediction()) == "OK"
     assert [request.url.path for request in seen] == ["/rest/v1/predictions"]
+
+
+def test_supabase_rest_due_query_filters_existing_outcomes_and_writes_immutably() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.method == "GET" and request.url.path.endswith("/predictions"):
+            return httpx.Response(200, json=[_sample_prediction()])
+        if request.method == "GET" and request.url.path.endswith("/prediction_outcomes"):
+            return httpx.Response(200, json=[])
+        body = request.read().decode("utf-8")
+        assert "prediction_id" in body
+        assert request.url.params["on_conflict"] == "prediction_id"
+        assert request.headers["prefer"] == "resolution=ignore-duplicates,return=minimal"
+        return httpx.Response(201, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
+    assert [row["prediction_id"] for row in rows] == ["run_rest:4H"]
+    assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
+    assert [request.url.path for request in seen] == [
+        "/rest/v1/predictions",
+        "/rest/v1/prediction_outcomes",
+        "/rest/v1/prediction_outcomes",
+    ]
 
 
 def test_supabase_rest_watchlist_crud_uses_mocked_https() -> None:
@@ -460,6 +572,54 @@ def _sample_prediction() -> dict:
         "data_source": "BINANCE_PUBLIC",
         "is_live_data": True,
         "cross_provider_state": "UNAVAILABLE",
+    }
+
+
+def _sample_prediction_db_row() -> tuple:
+    row = _sample_prediction()
+    return (
+        row["prediction_id"],
+        row["run_id"],
+        row["operator_id"],
+        row["symbol"],
+        row["normalized_symbol"],
+        row["timeframe"],
+        row["horizon_bars"],
+        row["predicted_at_utc"],
+        row["reference_close_utc"],
+        row["reference_price"],
+        row["horizon_end_utc"],
+        row["p_up_frac"],
+        row["p_down_frac"],
+        row["p_timeout_frac"],
+        row["decision_band_frac"],
+        row["model_version"],
+        row["methodology_version"],
+        row["calibration_status"],
+        row["reliability_status"],
+        row["epistemic_sufficiency"],
+        row["gate_action"],
+        row["data_source"],
+        row["is_live_data"],
+        row["cross_provider_state"],
+    )
+
+
+def _sample_outcome() -> dict:
+    return {
+        "prediction_id": "run_rest:4H",
+        "resolved_at_utc": "2026-06-08T00:05:00Z",
+        "outcome_close_utc": "2026-06-08T00:00:00Z",
+        "outcome_reference_price": 101.0,
+        "terminal_return_frac": 0.01,
+        "realized_label": "UP",
+        "decision_band_frac": 0.003,
+        "max_favorable_frac": 0.015,
+        "max_adverse_frac": -0.002,
+        "candles_observed": 6,
+        "resolver_version": "resolver-v1-wave4b2",
+        "data_source": "BINANCE_PUBLIC",
+        "is_live_data": True,
     }
 
 

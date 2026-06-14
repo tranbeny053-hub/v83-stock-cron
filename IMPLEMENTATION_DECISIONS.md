@@ -186,3 +186,19 @@ Status: Wave 4B.1 adds immutable prediction ledger writes only. It does not impl
 | Horizon endpoint | `reference_close_utc + H_primary_bars * TIMEFRAME_SECONDS[timeframe]` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | No resolver/outcome lookup in this wave. |
 | Model/methodology versions | `phase1a-wave4b0`, `heuristic-v1-wave4b0` | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Explicit constants; no calibration/reliability promotion. |
 | API response contract | Unchanged | WAVE4B1_IMPLEMENTED_REVIEW_REQUIRED | Ledger row is internal persistence work only. |
+
+## Wave 4B.2 Outcome Resolver Decisions
+
+Status: Wave 4B.2 adds an offline no-lookahead outcome resolver only. It does not implement calibration metrics, UI, API endpoints, API response changes, quant/probability/score/gate/news changes, or deployment automation.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Outcome table | `prediction_outcomes` via `migrations/0004_prediction_outcomes.sql` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Idempotent `CREATE TABLE IF NOT EXISTS`; migration was not run by Codex. |
+| Outcome identity | `prediction_id` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | One immutable outcome per immutable prediction. |
+| Due query | Live predictions where `horizon_end_utc < now_utc` and no existing outcome | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Ordered by `horizon_end_utc ASC`, limited by operator/script input. |
+| Immutability | Ignore duplicate `prediction_id` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Postgres `ON CONFLICT DO NOTHING`; REST `resolution=ignore-duplicates`; in-memory preserves first row. |
+| No-lookahead filter | Ignore all candles with `close_time_utc <= reference_close_utc` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Terminal and favorable/adverse calculations use post-anchor candles only. |
+| Terminal candle | First closed candle with `close_time_utc >= horizon_end_utc` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | If absent, skip and write no outcome. |
+| Labeling | `UP` if terminal return is above band, `DOWN` below negative band, else `TIMEOUT` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Uses frozen `decision_band_frac`; fallback is `2 * taker_fee_frac`. |
+| Resolver version | `resolver-v1-wave4b2` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Explicit constant; no calibration/reliability promotion. |
+| Runtime integration | Standalone script only | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Not imported by `api/**`; not called by `/v1/analyze`. |
