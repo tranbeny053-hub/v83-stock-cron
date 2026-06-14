@@ -2,6 +2,21 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-14 - Wave 4B0 Long-Timeframe Methodology Patch
+
+Changed:
+- Replaced sample-count-scaled realized volatility with per-bar log-return volatility.
+- Changed three-state directional probability to use bounded volatility-normalized signal input.
+- Made timeout volatility contribution timeframe-aware.
+- Made tail CVaR breach threshold scale from the 4H baseline by timeframe duration.
+- Marked monthly runs below 60 bars as `LOW_SAMPLE` while retaining the 24-bar minimum run threshold.
+- Added golden tests for direction desaturation, probability invariant, short-timeframe stability, volatility duplication invariance, timeout, tail gate, and monthly low-sample sufficiency.
+
+Notes:
+- This is an R4 methodology patch and needs Claude review before merge/deploy.
+- `calibration_status` remains `DEFAULT_PHASE1A`, `reliability_status` remains `INSUFFICIENT_SAMPLE`, and `profitability_claim` remains `false`.
+- `news_influence_frac` remains `0.0`; no frontend, provider, auth, news, migration, dependency, deployment, or trading capability changes were made.
+
 ## 2026-06-14 - Wave 4A.2 Frontend Deploy Cache Bust
 
 Changed:

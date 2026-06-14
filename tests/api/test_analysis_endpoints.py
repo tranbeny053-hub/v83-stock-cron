@@ -181,6 +181,10 @@ def test_analyze_monthly_timeframe_returns_schema_valid_payload() -> None:
     horizon = payload["probability_state"]["horizons"]["H_primary"]
     assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
     assert payload["epistemic_sufficiency_state"]["min_history_bars"] == 24
+    assert payload["epistemic_sufficiency_state"]["sufficiency_level"] in {
+        "LOW_SAMPLE",
+        "SUFFICIENT",
+    }
 
 
 def test_news_addon_unavailable_and_metrics_unaffected() -> None:

@@ -4,7 +4,9 @@ from dataclasses import replace
 
 from crypto_probability_engine.adapters.types import MarketSnapshot
 from crypto_probability_engine.gates.composite import apply_composite_gates
+from crypto_probability_engine.quant.horizon_timeout import compute_timeout_probability
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline
+from crypto_probability_engine.quant.probability_three_state import compute_probability_state
 from crypto_probability_engine.quant.tail_cvar import compute_tail_cvar
 from crypto_probability_engine.score_stack.score import ALLOWED_DISPOSITIONS, compute_score_stack
 from tests.fixtures.market_data import (
@@ -24,6 +26,50 @@ def test_probability_invariant_for_pipeline() -> None:
         assert 0.0 <= horizon["p_up_frac"] <= 1.0
         assert 0.0 <= horizon["p_down_frac"] <= 1.0
         assert 0.0 <= horizon["p_timeout_frac"] <= 1.0
+
+
+def test_long_timeframe_direction_probability_is_vol_normalized_not_saturated() -> None:
+    probability = compute_probability_state(
+        net_signal=-0.80,
+        timeout_frac=0.25,
+        epistemic_state={"sufficiency_level": "SUFFICIENT", "action": "ALLOW"},
+        volatility_state={"realized_vol": 0.10},
+    )
+    horizon = probability["horizons"]["H_primary"]
+    assert horizon["p_up_frac"] > 0.05
+    assert horizon["p_down_frac"] < 0.70
+    assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
+
+
+def test_short_timeframe_fixture_probability_stays_close_to_prior_baseline() -> None:
+    for timeframe in ("15m", "1H"):
+        result = run_quant_pipeline(make_snapshot(timeframe=timeframe), {"status": "OK"})
+        horizon = result["probability_state"]["horizons"]["H_primary"]
+        assert 0.38 <= horizon["p_up_frac"] <= 0.41
+        assert 0.37 <= horizon["p_down_frac"] <= 0.40
+        assert 0.20 <= horizon["p_timeout_frac"] <= 0.24
+
+
+def test_long_timeframe_timeout_is_horizon_aware_not_universal_pin() -> None:
+    timeout_values = {
+        "1D": compute_timeout_probability(
+            {"realized_vol": 0.12},
+            {"spread_frac": 0.0},
+            timeframe="1D",
+        ),
+        "1W": compute_timeout_probability(
+            {"realized_vol": 0.25},
+            {"spread_frac": 0.0},
+            timeframe="1W",
+        ),
+        "1M": compute_timeout_probability(
+            {"realized_vol": 0.40},
+            {"spread_frac": 0.0},
+            timeframe="1M",
+        ),
+    }
+    assert all(value < 0.50 for value in timeout_values.values())
+    assert len({round(value, 4) for value in timeout_values.values()}) > 1
 
 
 def test_down_market_fixture_allows_negative_signed_fields() -> None:
@@ -123,10 +169,12 @@ def test_epistemic_void_aborts_pipeline() -> None:
     assert result["probability_state"]["null_reason"] == "INSUFFICIENT_DATA"
 
 
-def test_monthly_epistemic_uses_timeframe_specific_min_history() -> None:
-    result = run_quant_pipeline(make_snapshot(timeframe="1M", count=24), {"status": "OK"})
-    assert result["epistemic_sufficiency_state"]["sufficiency_level"] == "SUFFICIENT"
+def test_monthly_epistemic_uses_timeframe_specific_min_history_and_low_sample_band() -> None:
+    result = run_quant_pipeline(make_snapshot(timeframe="1M", count=28), {"status": "OK"})
+    assert result["epistemic_sufficiency_state"]["sufficiency_level"] == "LOW_SAMPLE"
+    assert result["epistemic_sufficiency_state"]["action"] == "ALLOW"
     assert result["epistemic_sufficiency_state"]["min_history_bars"] == 24
+    assert result["epistemic_sufficiency_state"]["minimum_reliable_bars"] == 60
 
     short_result = run_quant_pipeline(make_snapshot(timeframe="1M", count=23), {"status": "OK"})
     assert short_result["epistemic_sufficiency_state"]["sufficiency_level"] == "VOID"

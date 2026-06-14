@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import sqrt
 from types import MappingProxyType
 
 
@@ -34,6 +35,9 @@ class Phase1ADefaults:
     analysis_mode_default: str = "METRICS_ONLY"
     asset_class_default: str = "CRYPTO_SPOT"
     probability_signal_sensitivity: float = 25.0
+    probability_normalized_signal_sensitivity: float = 0.25
+    probability_signal_vol_floor: float = 0.02
+    probability_normalized_signal_cap: float = 2.0
     probability_tilt_midpoint: float = 0.5
     probability_tilt_scale: float = 0.5
     probability_extended_confidence_multiplier: float = 0.9
@@ -51,7 +55,9 @@ class Phase1ADefaults:
     liquidity_max_spread_frac: float = 0.01
     liquidity_min_top_depth_quote: float = 100.0
     tail_cvar_breach_frac: float = 0.05
+    tail_cvar_threshold_reference_timeframe: str = "4H"
     execution_cost_hard_gate_frac: float = 0.02
+    monthly_reliable_history_bars: int = 60
     access_code_pbkdf2_iterations: int = 210_000
     access_code_local_salt: str = "ucpe-local-dev-salt-change-per-deploy"
     data_mode_default: str = "live"
@@ -76,6 +82,25 @@ DEFAULT_PHASE1A = Phase1ADefaults()
 
 MIN_HISTORY_BARS_BY_TIMEFRAME = MappingProxyType({"1M": 24})
 
+LOW_SAMPLE_BARS_BY_TIMEFRAME = MappingProxyType(
+    {
+        # Monthly bars can run with a small sample for display, but remain explicitly
+        # low-sample until roughly five years of history are present.
+        "1M": DEFAULT_PHASE1A.monthly_reliable_history_bars,
+    }
+)
+
+TIMEFRAME_TIMEOUT_VOL_REFERENCE = MappingProxyType(
+    {
+        "15m": 0.02,
+        "1H": 0.035,
+        "4H": 0.06,
+        "1D": 0.18,
+        "1W": 0.45,
+        "1M": 0.80,
+    }
+)
+
 TIMEFRAME_SECONDS = MappingProxyType(
     {
         "15m": 15 * 60,
@@ -91,3 +116,22 @@ TIMEFRAME_SECONDS = MappingProxyType(
 
 def min_history_for(timeframe: str) -> int:
     return MIN_HISTORY_BARS_BY_TIMEFRAME.get(timeframe, DEFAULT_PHASE1A.min_history_bars)
+
+
+def low_sample_threshold_for(timeframe: str) -> int | None:
+    return LOW_SAMPLE_BARS_BY_TIMEFRAME.get(timeframe)
+
+
+def timeout_vol_reference_for(timeframe: str) -> float:
+    return TIMEFRAME_TIMEOUT_VOL_REFERENCE.get(
+        timeframe,
+        TIMEFRAME_TIMEOUT_VOL_REFERENCE[DEFAULT_PHASE1A.primary_timeframe],
+    )
+
+
+def tail_cvar_breach_threshold_for(timeframe: str) -> float:
+    """Scale the 4H CVaR breach threshold to the candle duration being evaluated."""
+
+    reference_seconds = TIMEFRAME_SECONDS[DEFAULT_PHASE1A.tail_cvar_threshold_reference_timeframe]
+    timeframe_seconds = TIMEFRAME_SECONDS.get(timeframe, reference_seconds)
+    return DEFAULT_PHASE1A.tail_cvar_breach_frac * sqrt(timeframe_seconds / reference_seconds)

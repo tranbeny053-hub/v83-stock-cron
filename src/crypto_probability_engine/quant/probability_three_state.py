@@ -8,9 +8,25 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 from crypto_probability_engine.utils.invariants import validate_probability_triplet
 
 
-def _directional_split(net_signal: float, timeout_frac: float) -> tuple[float, float]:
+def _bounded(value: float, limit: float) -> float:
+    return min(max(value, -limit), limit)
+
+
+def _directional_split(
+    net_signal: float,
+    timeout_frac: float,
+    volatility_state: dict | None,
+) -> tuple[float, float]:
     directional_mass = max(0.0, 1.0 - timeout_frac)
-    tilt = tanh(net_signal * DEFAULT_PHASE1A.probability_signal_sensitivity)
+    realized_vol = float((volatility_state or {}).get("realized_vol") or 0.0)
+    vol_reference = max(realized_vol, DEFAULT_PHASE1A.probability_signal_vol_floor)
+    normalized_signal = _bounded(
+        net_signal / vol_reference,
+        DEFAULT_PHASE1A.probability_normalized_signal_cap,
+    )
+    tilt = tanh(
+        normalized_signal * DEFAULT_PHASE1A.probability_normalized_signal_sensitivity
+    )
     up = directional_mass * (
         DEFAULT_PHASE1A.probability_tilt_midpoint
         + DEFAULT_PHASE1A.probability_tilt_scale * tilt
@@ -31,12 +47,13 @@ def compute_probability_state(
     net_signal: float,
     timeout_frac: float,
     epistemic_state: dict,
+    volatility_state: dict | None = None,
 ) -> dict:
     p_timeout = min(
         max(timeout_frac, DEFAULT_PHASE1A.timeout_min_frac),
         DEFAULT_PHASE1A.timeout_max_frac,
     )
-    up, down = _directional_split(net_signal, p_timeout)
+    up, down = _directional_split(net_signal, p_timeout, volatility_state)
     if epistemic_state.get("sufficiency_level") != "SUFFICIENT":
         directional = 1.0 - p_timeout
         up = directional / 2.0

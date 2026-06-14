@@ -158,3 +158,16 @@ Decision: `_frac` suffix is reserved for values that are bounded to `[0,1]` befo
 | `news_evidence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Sprint 2 news evidence is no-op at `0.0`. | News contract tests; recursive response `_frac` test. |
 | `news_influence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Sprint 2 news influence is no-op at `0.0`. | News contract/frontend no-recompute tests; recursive response `_frac` test. |
 | `influence_frac` | TRUE_FRACTION_BOUNDED_0_1 | Kept | Placeholder feature influence values are no-op at `0.0`. | Recursive response `_frac` test. |
+
+## Wave 4B0 Long-Timeframe Methodology Decisions
+
+Status: Wave 4B0 is an R4 methodology patch. It does not change frontend display, providers, auth, news, migrations, dependencies, trading capability, calibration claims, reliability claims, or profitability claims.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Direction probability input | Bounded volatility-normalized signal before `tanh` | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Uses `net_signal / max(realized_vol, 0.02)`, cap `+/-2.0`, sensitivity `0.25`; probability invariant remains enforced. |
+| Realized volatility | Per-bar log-return population standard deviation | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Removed sample-count multiplier so duplicating the same return distribution does not inflate `realized_vol`. |
+| Timeout volatility term | Timeframe-aware vol reference | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | References: `15m=0.02`, `1H=0.035`, `4H=0.06`, `1D=0.18`, `1W=0.45`, `1M=0.80`; timeout remains non-directional. |
+| Tail CVaR gate | Threshold scales from 4H baseline by `sqrt(timeframe_seconds / 4H_seconds)` | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Uses existing `0.05` 4H baseline; extreme tails still hard-block. |
+| Monthly sufficiency | Run minimum remains `24`; reliability threshold is `60` | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | `1M` below 60 bars returns `LOW_SAMPLE` with `action=ALLOW`; it is not presented as fully sufficient. |
+| Score stack | No direct score formula change | WAVE4B0_IMPLEMENTED_REVIEW_REQUIRED | Score changes only through corrected volatility/probability inputs and existing gates. |

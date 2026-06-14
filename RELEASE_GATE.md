@@ -239,6 +239,22 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] Apply `migrations/0002_news.sql` before expecting durable news metadata.
 - [ ] Claude/User review completed before merge/deploy.
 
+## Wave 4B0 Long-Timeframe Methodology Gate
+
+- [x] Realized volatility uses per-bar log-return population standard deviation, not sample-count scaling.
+- [x] Directional probability uses bounded volatility-normalized signal input and still enforces `p_up+p_down+p_timeout=1`.
+- [x] Timeout volatility contribution is timeframe-aware and remains non-directional.
+- [x] Tail CVaR gate uses emitted timeframe-scaled threshold; extreme tails still hard-block.
+- [x] `1M` runs below 60 bars are explicitly `LOW_SAMPLE` while the minimum run threshold remains 24 bars.
+- [x] Short-timeframe fixture probability behavior remains within the prior baseline band.
+- [x] Golden tests cover long-timeframe desaturation, timeout, tail pass/breach, volatility duplication invariance, and monthly low-sample sufficiency.
+- [x] `calibration_status` remains `DEFAULT_PHASE1A`.
+- [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
+- [x] `profitability_claim` remains `false`.
+- [x] `news_influence_frac` remains `0.0`.
+- [ ] Claude R4 methodology review completed before merge/deploy.
+- [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |

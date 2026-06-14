@@ -4,7 +4,7 @@ Updated: 2026-06-14
 
 ## Branch / Worktree
 
-- Branch: `codex/wave4a2-deploy-cachebust`
+- Branch: `codex/wave4b0-longtf-methodology`
 - Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
@@ -12,36 +12,33 @@ Updated: 2026-06-14
 
 ## Current Phase
 
-- Phase: Wave 4A.2 Frontend Deploy/Cache Correctness.
-- Current status: cache-bust and served-asset guard implemented and offline verification completed locally.
-- Root cause: live browser/CDN/Hugging Face was serving a stale frontend bundle, not stale backend JSON.
+- Phase: Wave 4B0 Long-Timeframe Methodology Patch.
+- Risk: R4 methodology change requiring Claude review before merge/deploy.
+- Current status: methodology patch implemented locally; full offline verification passes.
 
 ## What Changed
 
-- Added version query strings: `/styles.css?v=wave4a2-b9137ee` and `/app.js?v=wave4a2-b9137ee`.
-- Added harmless frontend build marker: `UCPE_FRONTEND_BUILD = "wave4a2-cachebust"`.
-- Strengthened frontend static tests for versioned assets, card probability rows, and absence of stale hidden-probability copy.
-- Strengthened `scripts/manual_smoke.py` to GET `/`, parse the served app.js URL, fetch that URL including query string, and verify served app.js contents.
-- Kept overview cards rendering `Up`, `Down`, and `Timeout` from backend `frontend_display`.
-- Kept one global uncalibrated legend and no repeated per-card yellow note.
+- Replaced sample-count-scaled realized volatility with per-bar log-return population standard deviation.
+- Changed three-state directional probability input from raw `net_signal * 25` to bounded volatility-normalized signal input.
+- Made timeout volatility contribution timeframe-aware through explicit volatility reference constants.
+- Added timeframe-scaled tail CVaR breach thresholds and wired gates to use the emitted threshold.
+- Marked monthly runs below `60` candles as `LOW_SAMPLE` while retaining the `24`-bar minimum run threshold.
+- Added golden tests for direction desaturation, probability invariant, short-timeframe stability, volatility sample-duplication invariance, horizon-aware timeout, horizon-aware tail gate pass/breach, and monthly low-sample sufficiency.
 
 ## Checks Run / Attempted
 
-- `git checkout dev`: PASS.
-- `git checkout -b codex/wave4a2-deploy-cachebust`: PASS.
-- `git branch --show-current`: PASS, `codex/wave4a2-deploy-cachebust`.
-- `git status --short --untracked-files=all -- .`: PASS before edits.
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`: PASS, 18 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 156 passed, 4 warnings.
+- `git branch --show-current`: PASS, `codex/wave4b0-longtf-methodology`.
+- `git status --short --untracked-files=all -- .`: PASS, showed only Wave 4B0 changed files before docs.
+- `python3 --version`: PASS, Python 3.14.3.
+- `PYTHONPATH=src python3 -m pytest tests/quant tests/features tests/gates -q`: PASS, 20 passed.
+- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 32 passed, 2 existing warnings.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 162 passed, 4 existing warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
-- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS, served frontend bundle verified at `/app.js?v=wave4a2-b9137ee`.
-- Protected path diff: PASS, empty for quant, score_stack, gates, news, features, and `config/defaults.py`.
-- Stale-string grep: PASS, no hits for the exact stale strings in frontend/tests/scripts after source cleanup.
-- Probability-marker grep: PASS, markers present in `frontend/app.js`, frontend static tests, and manual smoke.
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS, offline smoke succeeded and served frontend bundle verified.
 
 ## Files Changed
 
@@ -49,19 +46,29 @@ Updated: 2026-06-14
 - `AI/05_HANDOFF.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
 - `CHANGELOG.md`
+- `IMPLEMENTATION_DECISIONS.md`
 - `RELEASE_GATE.md`
-- `frontend/app.js`
-- `frontend/index.html`
-- `scripts/manual_smoke.py`
-- `tests/frontend/test_frontend_static.py`
+- `src/crypto_probability_engine/config/defaults.py`
+- `src/crypto_probability_engine/features/volatility.py`
+- `src/crypto_probability_engine/gates/composite.py`
+- `src/crypto_probability_engine/quant/epistemic_sufficiency.py`
+- `src/crypto_probability_engine/quant/horizon_timeout.py`
+- `src/crypto_probability_engine/quant/pipeline.py`
+- `src/crypto_probability_engine/quant/probability_three_state.py`
+- `src/crypto_probability_engine/quant/tail_cvar.py`
+- `tests/api/test_analysis_endpoints.py`
+- `tests/features/test_volatility_methodology.py`
+- `tests/gates/test_long_timeframe_tail_gate.py`
+- `tests/quant/test_quant_pipeline.py`
 
 ## Current Blockers / Unknowns
 
 - No local implementation blocker is known after offline verification.
-- Live Hugging Face deployment/browser hard-refresh verification still needs to be performed after merge/deploy.
+- This is an R4 methodology patch and needs Claude review before merge/deploy.
+- Live BTC/SOL long-timeframe behavior should be re-smoked after Claude approval and merge/deploy.
 
 ## Next Steps
 
-1. Send this cache-bust report for review.
-2. After approval, merge into `dev` and deploy from the app root.
-3. In live HF, use hard refresh/incognito and confirm cards show `Up`, `Down`, and `Timeout`.
+1. Send this report and commit to Claude for R4 methodology review.
+2. After approval, merge to `dev` and deploy from the app root only.
+3. Re-smoke live BTC/SOL 1D/1W/1M cards and verify no profitability/accuracy claims are introduced.

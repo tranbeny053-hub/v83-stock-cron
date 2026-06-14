@@ -42,14 +42,15 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
     volume = compute_volume_anomaly(snapshot.candles)
     execution = compute_execution_realism(liquidity)
     risk_arbiter = compute_risk_arbiter(trend, volatility, liquidity, execution)
-    timeout_frac = compute_timeout_probability(volatility, liquidity)
+    timeout_frac = compute_timeout_probability(volatility, liquidity, timeframe=snapshot.timeframe)
     probability = compute_probability_state(
         net_signal=risk_arbiter["net_signal"],
         timeout_frac=timeout_frac,
         epistemic_state=epistemic,
+        volatility_state=volatility,
     )
     score = compute_score_stack(probability, risk_arbiter)
-    tail_risk = compute_tail_cvar(snapshot.candles)
+    tail_risk = compute_tail_cvar(snapshot.candles, timeframe=snapshot.timeframe)
     risk_flags = global_risk_state()
     gate = apply_composite_gates(
         epistemic_state=epistemic,
@@ -97,7 +98,7 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
         "quant_compute_state": quant_state,
         "epistemic_sufficiency_state": epistemic,
         "probability_state": probability,
-        "horizon_timeout_state": horizon_timeout_state(timeout_frac),
+        "horizon_timeout_state": horizon_timeout_state(timeout_frac, timeframe=snapshot.timeframe),
         "risk_arbiter_state": risk_arbiter,
         "tail_risk_state": tail_risk,
         "calibration_state": calibration_state(),
