@@ -1,6 +1,6 @@
 # Current State
 
-Updated: 2026-06-14
+Updated: 2026-06-15
 
 ## Branch / Worktree
 
@@ -26,6 +26,8 @@ Updated: 2026-06-14
 - Added standalone `scripts/resolve_outcomes.py`; it is not imported by `api/**` and is not called by `/v1/analyze`.
 - Resolver labels due predictions as `UP`, `DOWN`, or `TIMEOUT` from post-anchor closed candles only, using frozen `decision_band_frac` or fallback `2 * taker_fee_frac`.
 - Added Claude targeted-fix stale-window guard: if the first available outcome candle is more than one timeframe after `horizon_end_utc`, the resolver skips and writes no outcome.
+- Added operator-wiring bugfix: `scripts/resolve_outcomes.py` now uses a resolver-specific repository builder that prefers `SUPABASE_DB_URL` / direct Postgres over Supabase REST when both are configured.
+- Resolver CLI output now includes safe diagnostics: `repository=...` and `limit=...`; it does not print connection strings or keys.
 - Added offline tests for due query behavior, no-lookahead filtering, unfinished-horizon skip, UP/DOWN/TIMEOUT labeling, immutable writes, REST/Postgres non-overwrite semantics, failure isolation, and API isolation.
 
 ## Checks Run / Attempted
@@ -35,7 +37,9 @@ Updated: 2026-06-14
 - `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
 - `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -69,6 +73,6 @@ Updated: 2026-06-14
 
 ## Next Steps
 
-1. Commit `fix: guard stale outcome resolution`.
-2. Send to Claude for targeted re-review before merge/deploy.
+1. Commit `fix: prefer database repository for outcome resolver`.
+2. Run the operator resolver locally with `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10`.
 3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.

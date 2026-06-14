@@ -204,3 +204,4 @@ Status: Wave 4B.2 adds an offline no-lookahead outcome resolver only. It does no
 | Resolver version | `resolver-v1-wave4b2` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Explicit constant; no calibration/reliability promotion. |
 | Runtime integration | Standalone script only | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Not imported by `api/**`; not called by `/v1/analyze`. |
 | Bounded historical fetch | Deferred | WAVE4B2_FUTURE_IMPROVEMENT | The stale-window guard is the targeted safety fix; bounded provider fetch can be added later without widening this hotfix. |
+| Operator repository selection | Prefer `SUPABASE_DB_URL` direct Postgres for resolver script | WAVE4B2_TARGETED_FIX_IMPLEMENTED | Fixes local/operator mismatch where the generic app builder preferred Supabase REST while operator SQL probes used direct Postgres. Generic app builder remains REST-first. |

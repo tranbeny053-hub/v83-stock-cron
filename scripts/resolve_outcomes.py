@@ -25,11 +25,26 @@ from crypto_probability_engine.config.defaults import (
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.persistence.repository import (
+    InMemoryPersistenceRepository,
     PersistenceRepository,
-    build_persistence_repository,
+    SupabasePersistenceRepository,
+    SupabaseRestRepository,
 )
 
 FetchCandles = Callable[[dict, Settings], tuple[Sequence[MarketCandle], str]]
+
+
+def build_resolver_repository(settings: Settings) -> PersistenceRepository:
+    """Build the operator resolver repository, preferring direct DB access when present."""
+
+    if settings.supabase_db_url:
+        return SupabasePersistenceRepository(settings.supabase_db_url)
+    if settings.supabase_url and settings.supabase_service_role_key:
+        return SupabaseRestRepository(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+    return InMemoryPersistenceRepository()
 
 
 def resolve_due_predictions(
@@ -242,10 +257,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=100)
     args = parser.parse_args(argv)
     settings = Settings.from_env()
-    repository = build_persistence_repository(settings)
+    repository = build_resolver_repository(settings)
     stats = resolve_due_predictions(repository, settings=settings, limit=args.limit)
+    repository_type = repository.repository_type()
     print(
         "resolved_outcomes "
+        f"repository={repository_type} limit={args.limit} "
         f"due={stats['due']} resolved={stats['resolved']} "
         f"skipped={stats['skipped']} failed={stats['failed']}"
     )

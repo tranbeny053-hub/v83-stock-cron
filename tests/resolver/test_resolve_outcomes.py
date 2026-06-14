@@ -9,10 +9,85 @@ import pytest
 from crypto_probability_engine.adapters.types import MarketCandle
 from crypto_probability_engine.config.defaults import RESOLVER_VERSION
 from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
+from crypto_probability_engine.persistence.repository import (
+    InMemoryPersistenceRepository,
+    SupabasePersistenceRepository,
+    SupabaseRestRepository,
+)
 from scripts import resolve_outcomes
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_resolver_repository_prefers_db_url_over_rest_when_both_configured() -> None:
+    repo = resolve_outcomes.build_resolver_repository(
+        Settings(
+            **{
+                "supabase_db_url": "postgresql://operator-db.example.invalid/db",
+                "supabase_url": "https://project.example.invalid",
+                "supabase_service_role_key": "test-service-role-key",
+            }
+        )
+    )
+
+    try:
+        assert isinstance(repo, SupabasePersistenceRepository)
+        assert repo.repository_type() == "SUPABASE_POSTGRES"
+    finally:
+        close = getattr(repo, "close", None)
+        if callable(close):
+            close()
+
+
+def test_resolver_repository_falls_back_to_rest_when_db_url_absent() -> None:
+    repo = resolve_outcomes.build_resolver_repository(
+        Settings(
+            **{
+                "supabase_url": "https://project.example.invalid",
+                "supabase_service_role_key": "test-service-role-key",
+            }
+        )
+    )
+
+    try:
+        assert isinstance(repo, SupabaseRestRepository)
+        assert repo.repository_type() == "SUPABASE_REST"
+    finally:
+        close = getattr(repo, "close", None)
+        if callable(close):
+            close()
+
+
+def test_resolver_repository_uses_memory_without_external_store() -> None:
+    repo = resolve_outcomes.build_resolver_repository(Settings())
+
+    assert isinstance(repo, InMemoryPersistenceRepository)
+    assert repo.repository_type() == "IN_MEMORY"
+
+
+def test_main_output_includes_safe_repository_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_resolve_due_predictions(repository, **kwargs):
+        assert repository.repository_type() == "SUPABASE_POSTGRES"
+        assert kwargs["limit"] == 7
+        return {"due": 4, "resolved": 1, "skipped": 2, "failed": 1}
+
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://operator-db.example.invalid/db")
+    monkeypatch.setenv("SUPABASE_URL", "https://project.example.invalid")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+    monkeypatch.setattr(resolve_outcomes, "resolve_due_predictions", fake_resolve_due_predictions)
+
+    result = resolve_outcomes.main(["--limit", "7"])
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "resolved_outcomes repository=SUPABASE_POSTGRES limit=7" in output
+    assert "due=4 resolved=1 skipped=2 failed=1" in output
+    assert "operator-db.example.invalid" not in output
+    assert "project.example.invalid" not in output
+    assert "test-service-role-key" not in output
 
 
 def test_no_lookahead_candles_at_or_before_reference_do_not_influence_outcome() -> None:

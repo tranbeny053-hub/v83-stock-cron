@@ -13,6 +13,7 @@ Full local verification passes.
 Outcome resolution is offline/standalone through `scripts/resolve_outcomes.py`.
 The resolver fetches keyless public candles, filters strictly after `reference_close_utc`, and skips unfinished horizons.
 The resolver now also skips stale-window overshoots when the first available candle is more than one timeframe after `horizon_end_utc`.
+The operator resolver now prefers `SUPABASE_DB_URL` direct Postgres when both direct DB and Supabase REST settings are present.
 Outcome writes are best-effort through the selected repository and immutable by `prediction_id`.
 Calibration/reliability/profitability/news influence remain unchanged.
 
@@ -21,6 +22,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - config: `RESOLVER_VERSION = "resolver-v1-wave4b2"`.
 - persistence: `fetch_due_unresolved_predictions(now_utc, limit)` and `save_prediction_outcome(row)` added to protocol, in-memory, direct Postgres, and Supabase REST repositories.
 - resolver: `scripts/resolve_outcomes.py` standalone batch script with injectable candle fetcher for tests.
+- operator wiring: resolver-specific repository builder prefers direct Postgres for operator runs; generic app builder remains unchanged.
 - tests: migration safety, due-query filtering, immutable/idempotent outcome writes, REST/Postgres non-overwrite semantics, no-lookahead, unfinished-horizon skip, stale-window skip, UP/DOWN/TIMEOUT labels, failure isolation, and API isolation.
 
 ## Files Changed By Area
@@ -38,6 +40,8 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - No-lookahead rule: candles with `close_time_utc <= reference_close_utc` are filtered before any outcome calculation.
 - The terminal candle is the first post-anchor closed candle with `close_time_utc >= horizon_end_utc`.
 - If that terminal candle is more than one timeframe after `horizon_end_utc`, the resolver treats the window as stale/unresolvable and writes no outcome.
+- Resolver repository selection is DB-first for operator runs: `SUPABASE_DB_URL` -> `SUPABASE_POSTGRES`, else Supabase REST, else in-memory.
+- Resolver CLI output includes safe repository type and limit diagnostics only.
 - `terminal_return_frac = (outcome_close - reference_price) / reference_price`.
 - Outcome label uses frozen `decision_band_frac`; if absent, fallback is `2 * DEFAULT_PHASE1A.taker_fee_frac`.
 - `RESOLVER_VERSION` is `resolver-v1-wave4b2`.
@@ -50,7 +54,9 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
 - `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -71,8 +77,8 @@ Bounded historical provider fetch is deferred; the stale-window guard is the tar
 Calibration metrics and outcome UI/API display are intentionally not implemented in Wave 4B.2.
 
 ## Next Recommended Steps
-1. Commit `fix: guard stale outcome resolution`.
-2. Send to Claude for targeted re-review before merge/deploy.
+1. Commit `fix: prefer database repository for outcome resolver`.
+2. Run `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10` with local operator env.
 3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.
 
 ## Do Not Change

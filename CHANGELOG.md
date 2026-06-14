@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.2 Resolver Operator Wiring Bugfix
+
+Changed:
+- Added a resolver-specific repository builder so `scripts/resolve_outcomes.py` prefers `SUPABASE_DB_URL` / direct Postgres when both direct DB and Supabase REST settings are present.
+- Kept generic app persistence selection unchanged; runtime API can still prefer Supabase REST.
+- Added safe resolver summary diagnostics: `repository=...`, `limit=...`, `due=...`, `resolved=...`, `skipped=...`, `failed=...`.
+- Added tests for DB-first resolver selection, REST fallback, in-memory fallback, and sanitized output.
+
+Notes:
+- Root cause: the operator resolver used the generic app builder, which is REST-first and could query a different/empty path than the operator's direct Postgres due-query.
+- No migrations, API, frontend, quant/probability/score/gate/news, calibration, deploy, merge, or Hugging Face push was performed.
+
 ## 2026-06-14 - Wave 4B.2 Outcome Resolver
 
 Changed:

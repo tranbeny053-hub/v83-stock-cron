@@ -287,6 +287,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Resolver filters out candles with `close_time_utc <= reference_close_utc` before all outcome calculations.
 - [x] Unfinished horizons skip outcome writes when no candle exists at or after `horizon_end_utc`.
 - [x] Stale-window overshoot guard skips outcomes when the first available candle is more than one timeframe after `horizon_end_utc`.
+- [x] Operator resolver prefers `SUPABASE_DB_URL` / direct Postgres over Supabase REST when both are configured.
+- [x] Resolver CLI output includes safe repository type and limit diagnostics without printing secrets.
 - [x] Outcome labels are limited to `UP`, `DOWN`, and `TIMEOUT`.
 - [x] Resolver is standalone and not imported by `api/**`.
 - [x] `/v1/analyze` does not call the resolver.
