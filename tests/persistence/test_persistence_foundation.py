@@ -288,8 +288,32 @@ def test_supabase_postgres_prediction_write_is_do_nothing_on_conflict() -> None:
     assert pool.attempts == 1
 
 
+def test_supabase_run_db_returns_callback_fetchall_rows() -> None:
+    cursor = FakeCursor(rows=[("ok",)])
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    status, rows = repo._run_db(  # noqa: SLF001 - wrapper regression test
+        lambda db_cursor: (
+            db_cursor.execute("SELECT 1"),
+            db_cursor.fetchall(),
+        )[1]
+    )
+
+    assert status == "OK"
+    assert rows == [("ok",)]
+
+
 def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
     cursor = FakeCursor(rows=[_sample_prediction_db_row()])
+    outcome_cursor = FakeCursor()
 
     class StaticPool:
         def __init__(self) -> None:
@@ -297,11 +321,12 @@ def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
 
         def connection(self, timeout=None):
             self.attempts += 1
-            return FakeConnection(cursor)
+            return FakeConnection(outcome_cursor)
 
     repo = SupabasePersistenceRepository(
         "postgresql://example.invalid/db",
         pool_factory=lambda: StaticPool(),
+        direct_connection_factory=lambda: FakeConnection(cursor),
     )
 
     rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
@@ -318,7 +343,7 @@ def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
     assert {"now_utc": "2026-06-08T00:00:01Z", "limit": 5} in cursor.params
 
     assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
-    statements = "\n".join(cursor.statements)
+    statements = "\n".join(outcome_cursor.statements)
     assert "INSERT INTO prediction_outcomes" in statements
     assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
 
@@ -332,7 +357,7 @@ def test_supabase_postgres_due_query_converts_mapping_rows() -> None:
 
     repo = SupabasePersistenceRepository(
         "postgresql://example.invalid/db",
-        pool_factory=lambda: StaticPool(),
+        direct_connection_factory=lambda: FakeConnection(cursor),
     )
 
     rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
@@ -345,11 +370,31 @@ def test_supabase_postgres_due_query_converts_mapping_rows() -> None:
     assert rows[0]["is_live_data"] is True
 
 
-def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
-    pool = FakePool()
+def test_supabase_postgres_due_query_uses_direct_connection_not_pool_wrapper() -> None:
+    cursor = FakeCursor(rows=[_sample_prediction_db_row(), _sample_prediction_db_row()])
+
+    class ExplodingPool:
+        def connection(self, timeout=None):
+            raise AssertionError("pool wrapper should not be used for due fetch")
+
     repo = SupabasePersistenceRepository(
         "postgresql://example.invalid/db",
-        pool_factory=lambda: pool,
+        pool_factory=lambda: ExplodingPool(),
+        direct_connection_factory=lambda: FakeConnection(cursor),
+    )
+
+    rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 10)
+
+    assert len(rows) == 2
+    assert rows[0]["prediction_id"] == "run_rest:4H"
+
+
+def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        direct_connection_factory=lambda: (_ for _ in ()).throw(
+            RuntimeError("database unavailable")
+        ),
     )
 
     try:
@@ -359,7 +404,7 @@ def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
     else:  # pragma: no cover - documents the expected non-fallback behavior
         raise AssertionError(f"expected due query failure, got rows={rows!r}")
 
-    assert "SUPABASE_POSTGRES due query failed or unavailable." == message
+    assert message == "SUPABASE_POSTGRES due query failed: RuntimeError"
     assert "postgresql://example.invalid/db" not in message
 
 

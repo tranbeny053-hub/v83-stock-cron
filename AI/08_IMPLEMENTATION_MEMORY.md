@@ -15,6 +15,7 @@ The resolver fetches keyless public candles, filters strictly after `reference_c
 The resolver now also skips stale-window overshoots when the first available candle is more than one timeframe after `horizon_end_utc`.
 The operator resolver now prefers `SUPABASE_DB_URL` direct Postgres when both direct DB and Supabase REST settings are present.
 The Supabase Postgres due fetch now matches the verified unresolved-row SQL and surfaces sanitized DB failures instead of fake empty `due=0`.
+The Supabase Postgres due fetch now uses direct psycopg connection rather than the pooled `_run_db` wrapper, matching the standalone operator probe path.
 Outcome writes are best-effort through the selected repository and immutable by `prediction_id`.
 Calibration/reliability/profitability/news influence remain unchanged.
 
@@ -25,6 +26,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - resolver: `scripts/resolve_outcomes.py` standalone batch script with injectable candle fetcher for tests.
 - operator wiring: resolver-specific repository builder prefers direct Postgres for operator runs; generic app builder remains unchanged.
 - Postgres due query: `public.predictions` left join `public.prediction_outcomes`, mapping/tuple row conversion, and operator-visible DB failure.
+- Postgres due wrapper: direct psycopg connection for due rows; `_run_db` callback behavior remains tested for other DB paths.
 - tests: migration safety, due-query filtering, immutable/idempotent outcome writes, REST/Postgres non-overwrite semantics, no-lookahead, unfinished-horizon skip, stale-window skip, UP/DOWN/TIMEOUT labels, failure isolation, and API isolation.
 
 ## Files Changed By Area
@@ -45,6 +47,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - Resolver repository selection is DB-first for operator runs: `SUPABASE_DB_URL` -> `SUPABASE_POSTGRES`, else Supabase REST, else in-memory.
 - Resolver CLI output includes safe repository type and limit diagnostics only.
 - Supabase Postgres due-query errors raise a sanitized `SUPABASE_POSTGRES due query failed or unavailable.` error instead of falling back to empty in-memory due rows.
+- Supabase Postgres due fetch avoids `psycopg_pool`; this matches the operator's working standalone psycopg probe and prevents pool-wrapper failure from becoming fake `due=0`.
 - `terminal_return_frac = (outcome_close - reference_price) / reference_price`.
 - Outcome label uses frozen `decision_band_frac`; if absent, fallback is `2 * DEFAULT_PHASE1A.taker_fee_frac`.
 - `RESOLVER_VERSION` is `resolver-v1-wave4b2`.
@@ -59,9 +62,11 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -82,7 +87,7 @@ Bounded historical provider fetch is deferred; the stale-window guard is the tar
 Calibration metrics and outcome UI/API display are intentionally not implemented in Wave 4B.2.
 
 ## Next Recommended Steps
-1. Commit `fix: return due predictions from postgres resolver repository`.
+1. Commit `fix: fetch due rows correctly from postgres repository`.
 2. Run `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10` with local operator env.
 3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.
 

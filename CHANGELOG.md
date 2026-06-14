@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.2 Direct Postgres Due-Fetch Wrapper Bugfix
+
+Changed:
+- Changed `SupabasePersistenceRepository.fetch_due_unresolved_predictions` to use a direct psycopg connection for operator due-fetch instead of the pooled `_run_db` wrapper.
+- Kept the verified unresolved-row SQL and explicit `fetchall()` behavior.
+- Kept tuple and mapping row conversion support.
+- Added regression tests proving the due fetch does not depend on the pool wrapper and that `_run_db` still returns callback rows for other DB paths.
+
+Notes:
+- Root cause: the standalone psycopg query worked, but the repository due fetch still depended on the `psycopg_pool` wrapper; when that wrapper was unavailable/failing, due fetch never reached the verified SQL.
+- No migrations, API, frontend, quant/probability/score/gate/news, calibration, deploy, merge, or Hugging Face push was performed.
+
 ## 2026-06-15 - Wave 4B.2 Postgres Due-Query Bugfix
 
 Changed:

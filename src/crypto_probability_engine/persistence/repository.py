@@ -167,6 +167,7 @@ class SupabasePersistenceRepository:
         operation_timeout_seconds: float = 3.0,
         circuit_cooldown_seconds: float = 60.0,
         pool_factory: Callable[[], Any] | None = None,
+        direct_connection_factory: Callable[[], Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._db_url = db_url
@@ -175,6 +176,7 @@ class SupabasePersistenceRepository:
         self._statement_timeout_ms = max(1000, int(operation_timeout_seconds * 1000))
         self._circuit_cooldown_seconds = circuit_cooldown_seconds
         self._pool_factory = pool_factory
+        self._direct_connection_factory = direct_connection_factory
         self._clock = clock
         self._pool: Any | None = None
         self._lock = threading.Lock()
@@ -254,6 +256,17 @@ class SupabasePersistenceRepository:
 
     def _connection(self):
         return self._get_pool().connection(timeout=self._operation_timeout_seconds)
+
+    def _direct_connection(self):
+        if self._direct_connection_factory is not None:
+            return self._direct_connection_factory()
+        import psycopg
+
+        return psycopg.connect(
+            self._db_url,
+            connect_timeout=self._connect_timeout_seconds,
+            prepare_threshold=None,
+        )
 
     def _run_db(self, operation):
         if not self.maybe_can_attempt():
@@ -464,11 +477,22 @@ class SupabasePersistenceRepository:
         return status
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
-        status, rows = self._run_db(
-            lambda cursor: _fetch_due_prediction_rows(cursor, now_utc, limit)
-        )
-        if status == "UNAVAILABLE" or rows is None:
-            raise RuntimeError("SUPABASE_POSTGRES due query failed or unavailable.")
+        if not self.maybe_can_attempt():
+            raise RuntimeError("SUPABASE_POSTGRES due query failed: CircuitOpen")
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SET LOCAL statement_timeout = %s",
+                        (self._statement_timeout_ms,),
+                    )
+                    rows = _fetch_due_prediction_rows(cursor, now_utc, max(0, int(limit)))
+        except Exception as exc:
+            self.mark_unavailable()
+            raise RuntimeError(
+                f"SUPABASE_POSTGRES due query failed: {type(exc).__name__}"
+            ) from None
+        self._mark_ok()
         return [_prediction_row_from_db(row) for row in rows]
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:

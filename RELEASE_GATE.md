@@ -291,6 +291,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Resolver CLI output includes safe repository type and limit diagnostics without printing secrets.
 - [x] Supabase Postgres due query uses `public.predictions` left joined to `public.prediction_outcomes` with unresolved/live/due filters.
 - [x] Supabase Postgres due-query failures are operator-visible and cannot report fake successful `due=0`.
+- [x] Supabase Postgres due fetch uses direct psycopg connection and does not depend on the pooled `_run_db` wrapper.
 - [x] Outcome labels are limited to `UP`, `DOWN`, and `TIMEOUT`.
 - [x] Resolver is standalone and not imported by `api/**`.
 - [x] `/v1/analyze` does not call the resolver.

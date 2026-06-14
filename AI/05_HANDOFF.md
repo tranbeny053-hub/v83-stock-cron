@@ -37,9 +37,11 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -60,6 +62,7 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - Operator resolver now prefers `SUPABASE_DB_URL` direct Postgres when both direct DB and Supabase REST settings are present.
 - CLI output includes safe `repository=...` and `limit=...` diagnostics without printing secrets.
 - Supabase Postgres due fetch now matches the verified unresolved-row SQL and raises a sanitized failure instead of silently returning fallback empty rows.
+- Supabase Postgres due fetch now uses direct psycopg connection instead of the pooled `_run_db` wrapper, matching the standalone operator probe path.
 - Outcome labels use frozen `decision_band_frac`, or fallback `2 * taker_fee_frac`.
 
 ## What Is Still Unknown
@@ -68,7 +71,7 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - Outcome scheduling/cron, calibration metrics, UI/API display, and `/v1/calibration` are intentionally not implemented.
 
 ## Next 3 Steps
-1. Commit `fix: return due predictions from postgres resolver repository`.
+1. Commit `fix: fetch due rows correctly from postgres repository`.
 2. Run `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10` with local operator env.
 3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.
 
