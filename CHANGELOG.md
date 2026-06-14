@@ -9,11 +9,13 @@ Changed:
 - Added explicit `RESOLVER_VERSION`.
 - Added due-prediction fetch and immutable outcome-save methods to in-memory, Supabase Postgres, and Supabase REST persistence adapters.
 - Added standalone `scripts/resolve_outcomes.py` for offline no-lookahead outcome resolution.
+- Added a stale-window overshoot guard so missing true horizon candles are skipped rather than mislabeled.
 - Added tests for migration safety, due-query filtering, no-lookahead behavior, unfinished-horizon skip, UP/DOWN/TIMEOUT labeling, repository idempotency/immutability, REST/Postgres non-overwrite semantics, failure isolation, and API isolation.
 
 Notes:
 - Resolver never runs inside `/v1/analyze` and is not imported by `api/**`.
 - Predictions are never updated, deleted, or relabeled.
+- Bounded historical candle fetching is deferred; the resolver currently protects old predictions with the stale-window skip guard.
 - No calibration metrics, UI, endpoint, response schema, quant/probability/score/gate/news, frontend, provider, auth, dependency, merge, deploy, or Hugging Face push was performed.
 - `calibration_status` remains `DEFAULT_PHASE1A`, `reliability_status` remains `INSUFFICIENT_SAMPLE`, `profitability_claim` remains `false`, and `news_influence_frac` remains `0.0`.
 - Migration was created but not run by Codex.

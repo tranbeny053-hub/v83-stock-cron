@@ -199,6 +199,8 @@ Status: Wave 4B.2 adds an offline no-lookahead outcome resolver only. It does no
 | Immutability | Ignore duplicate `prediction_id` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Postgres `ON CONFLICT DO NOTHING`; REST `resolution=ignore-duplicates`; in-memory preserves first row. |
 | No-lookahead filter | Ignore all candles with `close_time_utc <= reference_close_utc` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Terminal and favorable/adverse calculations use post-anchor candles only. |
 | Terminal candle | First closed candle with `close_time_utc >= horizon_end_utc` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | If absent, skip and write no outcome. |
+| Stale-window guard | Skip if terminal candle overshoots horizon by more than one timeframe | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Prevents immutable mislabels when the true horizon candle has scrolled out of the fetched provider window. |
 | Labeling | `UP` if terminal return is above band, `DOWN` below negative band, else `TIMEOUT` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Uses frozen `decision_band_frac`; fallback is `2 * taker_fee_frac`. |
 | Resolver version | `resolver-v1-wave4b2` | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Explicit constant; no calibration/reliability promotion. |
 | Runtime integration | Standalone script only | WAVE4B2_IMPLEMENTED_REVIEW_REQUIRED | Not imported by `api/**`; not called by `/v1/analyze`. |
+| Bounded historical fetch | Deferred | WAVE4B2_FUTURE_IMPROVEMENT | The stale-window guard is the targeted safety fix; bounded provider fetch can be added later without widening this hotfix. |

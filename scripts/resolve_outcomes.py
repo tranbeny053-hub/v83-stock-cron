@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from crypto_probability_engine.adapters.http_client import PublicHttpClient
@@ -17,7 +17,11 @@ from crypto_probability_engine.adapters.mappers import (
     provider_symbol,
 )
 from crypto_probability_engine.adapters.types import MarketCandle, ProviderError
-from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, RESOLVER_VERSION
+from crypto_probability_engine.config.defaults import (
+    DEFAULT_PHASE1A,
+    RESOLVER_VERSION,
+    TIMEFRAME_SECONDS,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.persistence.repository import (
@@ -90,6 +94,12 @@ def build_outcome_row(
     if outcome_candle is None:
         return None
     outcome_close_utc = _coerce_utc(outcome_candle.close_time_utc)
+    if _is_unresolvable_stale_window(
+        outcome_close_utc=outcome_close_utc,
+        horizon_end_utc=horizon_end_utc,
+        timeframe=str(prediction["timeframe"]),
+    ):
+        return None
     observed = [
         candle
         for candle in post_anchor
@@ -193,6 +203,22 @@ def _realized_label(terminal_return_frac: float, decision_band_frac: float) -> s
     if terminal_return_frac < -decision_band_frac:
         return "DOWN"
     return "TIMEOUT"
+
+
+def _is_unresolvable_stale_window(
+    *,
+    outcome_close_utc: datetime,
+    horizon_end_utc: datetime,
+    timeframe: str,
+) -> bool:
+    """Return true when the true horizon candle is missing from the fetched window."""
+
+    timeframe_seconds = TIMEFRAME_SECONDS.get(timeframe)
+    if timeframe_seconds is None:
+        return True
+    overshoot = outcome_close_utc - horizon_end_utc
+    # UNRESOLVABLE_STALE: the first available candle is too far after the horizon.
+    return overshoot > timedelta(seconds=timeframe_seconds)
 
 
 def _parse_utc(value: Any) -> datetime:

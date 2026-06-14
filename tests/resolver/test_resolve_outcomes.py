@@ -58,6 +58,42 @@ def test_unfinished_horizon_writes_no_outcome() -> None:
     assert row is None
 
 
+def test_stale_window_overshoot_skips_outcome_and_writes_nothing() -> None:
+    repo = InMemoryPersistenceRepository()
+    prediction = _prediction()
+    repo.save_prediction(prediction)
+    stale_candles = (
+        _candle(_dt("2026-06-09T00:00:01Z"), close=110.0),
+        _candle(_dt("2026-06-09T04:00:01Z"), close=111.0),
+    )
+
+    stats = resolve_outcomes.resolve_due_predictions(
+        repo,
+        settings=Settings(),
+        now_utc=_dt("2026-06-10T00:00:00Z"),
+        fetch_candles=lambda _prediction, _settings: (stale_candles, "BINANCE_PUBLIC"),
+    )
+
+    assert stats == {"due": 1, "resolved": 0, "skipped": 1, "failed": 0}
+    assert repo._prediction_outcomes == {}  # noqa: SLF001
+
+
+def test_fresh_horizon_within_one_timeframe_buffer_still_resolves() -> None:
+    row = resolve_outcomes.build_outcome_row(
+        _prediction(),
+        now_utc=_dt("2026-06-08T04:05:00Z"),
+        settings=Settings(),
+        fetch_candles=lambda _prediction, _settings: (
+            (_candle(_dt("2026-06-08T04:00:00Z"), close=101.0),),
+            "BINANCE_PUBLIC",
+        ),
+    )
+
+    assert row is not None
+    assert row["outcome_close_utc"] == "2026-06-08T04:00:00Z"
+    assert row["realized_label"] == "UP"
+
+
 def test_up_down_timeout_label_fixtures() -> None:
     assert _label_for_close(101.0) == "UP"
     assert _label_for_close(99.0) == "DOWN"

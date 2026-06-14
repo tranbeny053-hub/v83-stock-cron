@@ -286,6 +286,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] In-memory outcome path preserves the first row for a `prediction_id`.
 - [x] Resolver filters out candles with `close_time_utc <= reference_close_utc` before all outcome calculations.
 - [x] Unfinished horizons skip outcome writes when no candle exists at or after `horizon_end_utc`.
+- [x] Stale-window overshoot guard skips outcomes when the first available candle is more than one timeframe after `horizon_end_utc`.
 - [x] Outcome labels are limited to `UP`, `DOWN`, and `TIMEOUT`.
 - [x] Resolver is standalone and not imported by `api/**`.
 - [x] `/v1/analyze` does not call the resolver.

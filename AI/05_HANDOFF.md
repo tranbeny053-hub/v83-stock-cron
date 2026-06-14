@@ -33,8 +33,9 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - `git checkout dev`: PASS.
 - `git status --short --untracked-files=all -- .`: PASS before branch creation, clean.
 - `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 27 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 183 passed, 4 existing warnings.
+- `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -51,16 +52,18 @@ Standalone persistence/resolver foundation. Review before merge/deploy and befor
 - `scripts/resolve_outcomes.py` resolves due predictions in a standalone batch, isolates per-prediction failures, and never runs in `/v1/analyze`.
 - Resolver filters out all candles with `close_time_utc <= reference_close_utc` before terminal return, max favorable, or max adverse calculations.
 - Resolver skips unfinished horizons when no closed candle exists at or after `horizon_end_utc`.
+- Resolver skips stale-window overshoots when the first available outcome candle is more than one timeframe after `horizon_end_utc`.
 - Outcome labels use frozen `decision_band_frac`, or fallback `2 * taker_fee_frac`.
 
 ## What Is Still Unknown
 - Migration has not been applied.
+- Bounded historical provider fetch was deferred to avoid widening the targeted fix; stale-window skip prevents wrong immutable labels.
 - Outcome scheduling/cron, calibration metrics, UI/API display, and `/v1/calibration` are intentionally not implemented.
 
 ## Next 3 Steps
-1. Commit `feat: add no-lookahead outcome resolver`.
-2. Send to Claude for R3 review before merge/deploy.
-3. Apply `0004_prediction_outcomes.sql` only after review and operator approval.
+1. Commit `fix: guard stale outcome resolution`.
+2. Send to Claude for targeted re-review before merge/deploy.
+3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.
 
 ## Do Not Change
 - Do not touch API routes, response schemas, frontend, quant/probability/score/gates/news logic, providers, auth, dependencies, or migrations beyond `0004_prediction_outcomes.sql`.
