@@ -33,6 +33,7 @@ class FakeCursor:
         self.rows = rows or []
         self.row = row
         self.statements: list[str] = []
+        self.params: list[object] = []
 
     def __enter__(self):
         return self
@@ -42,6 +43,7 @@ class FakeCursor:
 
     def execute(self, statement, params=None) -> None:
         self.statements.append(str(statement))
+        self.params.append(params)
 
     def fetchall(self):
         return self.rows
@@ -304,12 +306,61 @@ def test_supabase_postgres_due_query_and_outcome_write_are_immutable() -> None:
 
     rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
     assert rows[0]["prediction_id"] == "run_rest:4H"
-    assert "NOT EXISTS" in "\n".join(cursor.statements)
+    query = "\n".join(cursor.statements)
+    assert "FROM public.predictions p" in query
+    assert "LEFT JOIN public.prediction_outcomes o" in query
+    assert "ON o.prediction_id = p.prediction_id" in query
+    assert "WHERE o.prediction_id IS NULL" in query
+    assert "AND p.is_live_data = true" in query
+    assert "AND p.horizon_end_utc < %(now_utc)s" in query
+    assert "ORDER BY p.horizon_end_utc ASC" in query
+    assert "LIMIT %(limit)s" in query
+    assert {"now_utc": "2026-06-08T00:00:01Z", "limit": 5} in cursor.params
 
     assert repo.save_prediction_outcome(_sample_outcome()) == "OK"
     statements = "\n".join(cursor.statements)
     assert "INSERT INTO prediction_outcomes" in statements
     assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
+
+
+def test_supabase_postgres_due_query_converts_mapping_rows() -> None:
+    cursor = FakeCursor(rows=[_sample_prediction()])
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
+
+    assert len(rows) == 1
+    assert rows[0]["prediction_id"] == "run_rest:4H"
+    assert rows[0]["normalized_symbol"] == "BTC/USDT"
+    assert rows[0]["timeframe"] == "4H"
+    assert rows[0]["horizon_end_utc"] == "2026-06-08T00:00:00Z"
+    assert rows[0]["is_live_data"] is True
+
+
+def test_supabase_postgres_due_query_failure_is_not_fake_empty() -> None:
+    pool = FakePool()
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: pool,
+    )
+
+    try:
+        rows = repo.fetch_due_unresolved_predictions("2026-06-08T00:00:01Z", 5)
+    except RuntimeError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - documents the expected non-fallback behavior
+        raise AssertionError(f"expected due query failure, got rows={rows!r}")
+
+    assert "SUPABASE_POSTGRES due query failed or unavailable." == message
+    assert "postgresql://example.invalid/db" not in message
 
 
 def rest_client(handler) -> httpx.Client:

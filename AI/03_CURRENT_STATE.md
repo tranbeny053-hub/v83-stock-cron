@@ -28,6 +28,7 @@ Updated: 2026-06-15
 - Added Claude targeted-fix stale-window guard: if the first available outcome candle is more than one timeframe after `horizon_end_utc`, the resolver skips and writes no outcome.
 - Added operator-wiring bugfix: `scripts/resolve_outcomes.py` now uses a resolver-specific repository builder that prefers `SUPABASE_DB_URL` / direct Postgres over Supabase REST when both are configured.
 - Resolver CLI output now includes safe diagnostics: `repository=...` and `limit=...`; it does not print connection strings or keys.
+- Added Postgres due-query bugfix: direct Postgres due fetch now uses the verified `public.predictions` left join `public.prediction_outcomes` query, supports mapping/tuple rows, and surfaces sanitized DB failure instead of fake empty `due=0`.
 - Added offline tests for due query behavior, no-lookahead filtering, unfinished-horizon skip, UP/DOWN/TIMEOUT labeling, immutable writes, REST/Postgres non-overwrite semantics, failure isolation, and API isolation.
 
 ## Checks Run / Attempted
@@ -38,8 +39,10 @@ Updated: 2026-06-15
 - `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
+- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -73,6 +76,6 @@ Updated: 2026-06-15
 
 ## Next Steps
 
-1. Commit `fix: prefer database repository for outcome resolver`.
+1. Commit `fix: return due predictions from postgres resolver repository`.
 2. Run the operator resolver locally with `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10`.
 3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.

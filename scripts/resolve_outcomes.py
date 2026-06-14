@@ -258,8 +258,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     settings = Settings.from_env()
     repository = build_resolver_repository(settings)
-    stats = resolve_due_predictions(repository, settings=settings, limit=args.limit)
     repository_type = repository.repository_type()
+    try:
+        stats = resolve_due_predictions(repository, settings=settings, limit=args.limit)
+    except Exception as exc:
+        print(
+            "resolved_outcomes "
+            f"repository={repository_type} limit={args.limit} "
+            "due=0 resolved=0 skipped=0 failed=1 "
+            f"error={type(exc).__name__}: {exc}"
+        )
+        close = getattr(repository, "close", None)
+        if callable(close):
+            close()
+        return 1
     print(
         "resolved_outcomes "
         f"repository={repository_type} limit={args.limit} "

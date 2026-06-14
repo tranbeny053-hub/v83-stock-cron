@@ -468,7 +468,7 @@ class SupabasePersistenceRepository:
             lambda cursor: _fetch_due_prediction_rows(cursor, now_utc, limit)
         )
         if status == "UNAVAILABLE" or rows is None:
-            return self._fallback.fetch_due_unresolved_predictions(now_utc, limit)
+            raise RuntimeError("SUPABASE_POSTGRES due query failed or unavailable.")
         return [_prediction_row_from_db(row) for row in rows]
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
@@ -980,18 +980,16 @@ def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
                p.methodology_version, p.calibration_status, p.reliability_status,
                p.epistemic_sufficiency, p.gate_action, p.data_source, p.is_live_data,
                p.cross_provider_state
-        FROM predictions p
-        WHERE p.horizon_end_utc < %s
+        FROM public.predictions p
+        LEFT JOIN public.prediction_outcomes o
+          ON o.prediction_id = p.prediction_id
+        WHERE o.prediction_id IS NULL
           AND p.is_live_data = true
-          AND NOT EXISTS (
-            SELECT 1
-            FROM prediction_outcomes o
-            WHERE o.prediction_id = p.prediction_id
-          )
+          AND p.horizon_end_utc < %(now_utc)s
         ORDER BY p.horizon_end_utc ASC
-        LIMIT %s
+        LIMIT %(limit)s
         """,
-        (now_utc, limit),
+        {"now_utc": now_utc, "limit": limit},
     )
     return cursor.fetchall()
 
@@ -1023,6 +1021,11 @@ def _prediction_row_from_db(row) -> dict:
         "is_live_data",
         "cross_provider_state",
     )
+    if isinstance(row, Mapping):
+        return {
+            key: value.isoformat() if hasattr(value, "isoformat") else value
+            for key, value in row.items()
+        }
     return {
         key: value.isoformat() if hasattr(value, "isoformat") else value
         for key, value in zip(keys, row, strict=True)

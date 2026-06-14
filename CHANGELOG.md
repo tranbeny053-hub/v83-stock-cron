@@ -2,6 +2,18 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.2 Postgres Due-Query Bugfix
+
+Changed:
+- Reworked `SupabasePersistenceRepository.fetch_due_unresolved_predictions` to use the verified `public.predictions` to `public.prediction_outcomes` unresolved-row join.
+- Added mapping-row handling for Postgres due prediction rows while preserving tuple-row handling.
+- Changed Postgres due-query failures from silent empty fallback to sanitized operator-visible failure.
+- Added resolver CLI failure output so DB due-query errors return nonzero and do not print fake `due=0` success.
+- Added tests for Postgres due-query SQL shape, tuple/mapping row conversion, and sanitized failure behavior.
+
+Notes:
+- No migrations, API, frontend, quant/probability/score/gate/news, calibration, deploy, merge, or Hugging Face push was performed.
+
 ## 2026-06-15 - Wave 4B.2 Resolver Operator Wiring Bugfix
 
 Changed:

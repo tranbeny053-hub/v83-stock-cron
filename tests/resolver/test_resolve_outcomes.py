@@ -90,6 +90,35 @@ def test_main_output_includes_safe_repository_diagnostics(
     assert "test-service-role-key" not in output
 
 
+def test_main_db_fetch_failure_is_visible_without_secret_leak(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FailingRepository(InMemoryPersistenceRepository):
+        def repository_type(self) -> str:
+            return "SUPABASE_POSTGRES"
+
+        def fetch_due_unresolved_predictions(self, now_utc, limit):  # noqa: ANN001
+            raise RuntimeError("SUPABASE_POSTGRES due query failed or unavailable.")
+
+    monkeypatch.setattr(
+        resolve_outcomes,
+        "build_resolver_repository",
+        lambda settings: FailingRepository(),
+    )
+
+    result = resolve_outcomes.main(["--limit", "10"])
+    output = capsys.readouterr().out
+
+    assert result == 1
+    assert "resolved_outcomes repository=SUPABASE_POSTGRES limit=10" in output
+    assert "due=0 resolved=0 skipped=0 failed=1" in output
+    assert "SUPABASE_POSTGRES due query failed or unavailable." in output
+    assert "SUPABASE_DB_URL" not in output
+    assert "SUPABASE_SERVICE_ROLE_KEY" not in output
+    assert "Authorization" not in output
+
+
 def test_no_lookahead_candles_at_or_before_reference_do_not_influence_outcome() -> None:
     prediction = _prediction()
     reference = _dt("2026-06-07T00:00:00Z")
