@@ -145,7 +145,7 @@ def _summarize_bucket(label: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     count = len(rows)
     avg_predicted = _mean([row["top_probability"] for row in rows])
     empirical = _mean([1.0 if row["hit"] else 0.0 for row in rows])
-    gap = None if avg_predicted is None or empirical is None else abs(avg_predicted - empirical)
+    gap = None if avg_predicted is None or empirical is None else avg_predicted - empirical
     return {
         "bucket": label,
         "bucket_count": count,

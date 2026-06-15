@@ -14,6 +14,8 @@ The repository calibration method is SELECT-only and joins `public.predictions` 
 Metrics include Brier score, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution, directional-subset hit rate, and terminal-return diagnostics.
 Sample gates are diagnostic only: `NO_SAMPLES`, `INSUFFICIENT_SAMPLE`, `WARMING_UP`, `PRELIMINARY_MEASURED`, and `MEASURED`.
 Version-mix warnings and versions-present metadata are included when reports pool multiple model or methodology versions.
+Calibration service/CLI use DB-first operator repository selection when `SUPABASE_DB_URL` exists, even if Supabase REST secrets also exist.
+Reliability-bucket `calibration_gap` is signed as `avg_predicted_max_prob - empirical_hit_rate`.
 Calibration/reliability/profitability/news influence remain unchanged and are not written back.
 
 ## Implemented Components
@@ -33,6 +35,7 @@ Calibration/reliability/profitability/news influence remain unchanged and are no
 - Calibration reads default to `p.is_live_data = true`, `o.is_live_data = true`, and `realized_label IN ('UP','DOWN','TIMEOUT')`.
 - Direct Postgres calibration reads use the existing direct connection and literal `SET LOCAL statement_timeout` helper; no fake fallback is used.
 - Supabase REST calibration read is intentionally not implemented for Wave 4B.3.
+- Operator/reporting repository selection is DB-first: `SUPABASE_DB_URL` -> `SUPABASE_POSTGRES`, else Supabase REST, else in-memory.
 - Probability rows are invalid if missing, non-finite, out of `[0,1]`, sum <= 0, or label is outside `UP/DOWN/TIMEOUT`.
 - Valid probabilities are normalized only for diagnostic metric calculation.
 - Top-label tie-break is deterministic: `UP > DOWN > TIMEOUT`.
@@ -53,8 +56,8 @@ Calibration/reliability/profitability/news influence remain unchanged and are no
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 61 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 217 passed with 4 existing warnings.
+- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 66 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 222 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 10`: PASS, JSON `NO_SAMPLES` diagnostic from `IN_MEMORY`.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
@@ -63,7 +66,7 @@ Calibration/reliability/profitability/news influence remain unchanged and are no
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
 - Protected working-tree diff for frontend, API, `api/schemas.py`, quant, score stack, gates, news, and migrations: PASS, empty.
-- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; statement-timeout grep shows existing safe literal helper.
+- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; no REST-first calibration builder usage; no absolute calibration gap; statement-timeout grep shows existing safe literal helper.
 
 ## Known Blockers
 No implementation blocker is known.

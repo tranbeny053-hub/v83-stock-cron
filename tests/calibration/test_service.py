@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from crypto_probability_engine.calibration import service as service_module
 from crypto_probability_engine.calibration.service import build_calibration_report, sample_gate_for
+from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
 
 
@@ -65,6 +67,37 @@ def test_no_samples_report_shape() -> None:
     assert report["metrics"]["brier_score"] is None
 
 
+def test_service_default_uses_operator_repository_builder(monkeypatch) -> None:
+    settings = Settings(
+        **{
+            "supabase_db_url": "postgresql://example.invalid/db",
+            "supabase_url": "https://project.example.supabase.co",
+            "supabase_service_role_key": "test-service-role-key",
+        }
+    )
+    selected: dict[str, object] = {}
+
+    class FakeOperatorRepository(InMemoryPersistenceRepository):
+        def repository_type(self) -> str:
+            return "SUPABASE_POSTGRES"
+
+    def fake_from_env() -> Settings:
+        return settings
+
+    def fake_builder(builder_settings: Settings):
+        selected["settings"] = builder_settings
+        return FakeOperatorRepository()
+
+    monkeypatch.setattr(service_module.Settings, "from_env", fake_from_env)
+    monkeypatch.setattr(service_module, "build_operator_repository", fake_builder)
+
+    report = service_module.build_calibration_report(timeframe="15m")
+
+    assert selected["settings"] is settings
+    assert report["repository"] == "SUPABASE_POSTGRES"
+    assert report["sample_gate"] == "NO_SAMPLES"
+
+
 def _save_pair(
     repo: InMemoryPersistenceRepository,
     prediction_id: str,
@@ -120,4 +153,3 @@ def _save_pair(
             "is_live_data": True,
         }
     )
-

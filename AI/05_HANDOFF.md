@@ -44,8 +44,8 @@ Diagnostic read-only service/CLI plus one SELECT-only persistence read method. R
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 61 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 217 passed with 4 existing warnings.
+- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 66 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 222 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 10`: PASS, JSON `NO_SAMPLES` diagnostic from `IN_MEMORY`.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
@@ -54,7 +54,7 @@ Diagnostic read-only service/CLI plus one SELECT-only persistence read method. R
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
 - Protected working-tree diff for frontend, API, `api/schemas.py`, quant, score stack, gates, news, and migrations: PASS, empty.
-- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; statement-timeout grep shows existing safe literal helper.
+- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; no REST-first calibration builder usage; no absolute calibration gap; statement-timeout grep shows existing safe literal helper.
 
 ## What Works Now
 - Calibration metrics are computed from already-resolved prediction/outcome rows only.
@@ -64,6 +64,8 @@ Diagnostic read-only service/CLI plus one SELECT-only persistence read method. R
 - Metrics include Brier score, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution, directional subset hit rate, and terminal-return diagnostics.
 - Sample gates are per requested report scope and never write back to model status fields.
 - Version-mix warnings and versions-present metadata are reported when pooled rows cross model or methodology versions.
+- Calibration service/CLI use DB-first operator repository selection when `SUPABASE_DB_URL` exists, even if Supabase REST secrets also exist.
+- Reliability-bucket `calibration_gap` is signed: positive means overconfident, negative means underconfident.
 
 ## What Is Still Unknown
 - Calibration API/UI exposure and `/v1/calibration` are intentionally not implemented.

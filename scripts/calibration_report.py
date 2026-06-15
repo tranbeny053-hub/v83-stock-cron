@@ -8,7 +8,7 @@ from collections.abc import Sequence
 
 from crypto_probability_engine.calibration.service import build_calibration_report
 from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.persistence.repository import build_persistence_repository
+from crypto_probability_engine.persistence.repository import build_operator_repository
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -23,8 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--format", choices=("json", "text"), default="json")
     args = parser.parse_args(argv)
 
-    settings = Settings.from_env()
-    repository = build_persistence_repository(settings)
+    repository = build_operator_repository(Settings.from_env())
     try:
         report = build_calibration_report(
             repository,

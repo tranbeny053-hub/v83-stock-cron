@@ -10,6 +10,8 @@ Changed:
 - Added a SELECT-only repository method to join immutable `predictions` with immutable `prediction_outcomes` for calibration diagnostics.
 - Added `scripts/calibration_report.py` for CLI-first JSON/text reports.
 - Added offline tests for metrics, sample gates, version-mix warnings, repository filters, SELECT-only SQL, and CLI behavior.
+- Added targeted review fix so calibration reporting uses direct Postgres first when `SUPABASE_DB_URL` exists, even if Supabase REST secrets also exist.
+- Changed reliability-bucket `calibration_gap` to signed `avg_predicted_max_prob - empirical_hit_rate`.
 
 Notes:
 - Calibration diagnostics do not mutate predictions or outcomes and do not write back `calibration_status`, `reliability_status`, or `profitability_claim`.

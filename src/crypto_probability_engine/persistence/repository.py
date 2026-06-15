@@ -1422,3 +1422,16 @@ def build_persistence_repository(settings: Settings) -> PersistenceRepository:
     if settings.supabase_db_url:
         return SupabasePersistenceRepository(settings.supabase_db_url)
     return InMemoryPersistenceRepository()
+
+
+def build_operator_repository(settings: Settings) -> PersistenceRepository:
+    """Build repository for operator/reporting jobs, preferring direct Postgres."""
+
+    if settings.supabase_db_url:
+        return SupabasePersistenceRepository(settings.supabase_db_url)
+    if settings.supabase_url and settings.supabase_service_role_key:
+        return SupabaseRestRepository(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+    return InMemoryPersistenceRepository()

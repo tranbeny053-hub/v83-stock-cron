@@ -9,7 +9,7 @@ from crypto_probability_engine.calibration.schemas import CalibrationReport, Sam
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import (
     PersistenceRepository,
-    build_persistence_repository,
+    build_operator_repository,
 )
 
 
@@ -40,7 +40,7 @@ def build_calibration_report(
 ) -> CalibrationReport:
     """Build a JSON-safe diagnostic calibration report without mutating state."""
 
-    repository = repository or build_persistence_repository(settings or Settings.from_env())
+    repository = repository or build_operator_repository(settings or Settings.from_env())
     rows = repository.fetch_resolved_prediction_outcomes_for_calibration(
         timeframe=timeframe,
         symbol=symbol,
@@ -109,4 +109,3 @@ def _repository_type(repository: PersistenceRepository) -> str:
     if callable(repo_type):
         return str(repo_type())
     return type(repository).__name__
-

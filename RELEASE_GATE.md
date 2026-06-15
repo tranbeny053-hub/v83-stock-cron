@@ -39,6 +39,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Sample gates are diagnostic only and do not write back `calibration_status`, `reliability_status`, or `profitability_claim`.
 - [x] Metrics include Brier score, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution, directional subset hit rate, and terminal-return diagnostics labelled not trade EV.
 - [x] Version-mix warnings and versions-present metadata are included.
+- [x] Calibration CLI/service use DB-first operator repository selection when `SUPABASE_DB_URL` exists.
+- [x] Reliability-bucket `calibration_gap` is signed: positive overconfident, negative underconfident.
 - [x] CLI report exists and defaults to JSON.
 - [x] No API, UI, migration, quant/probability/score/gate/news, resolver-labeling, or schema-response paths changed.
 - [ ] Claude/User review completed before merge/deploy.

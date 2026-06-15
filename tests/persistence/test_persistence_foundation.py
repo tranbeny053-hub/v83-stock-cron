@@ -11,6 +11,7 @@ from crypto_probability_engine.persistence.repository import (
     InMemoryPersistenceRepository,
     SupabasePersistenceRepository,
     SupabaseRestRepository,
+    build_operator_repository,
     build_persistence_repository,
 )
 
@@ -644,6 +645,36 @@ def test_runtime_selection_prefers_supabase_rest_over_postgres_url() -> None:
                 "supabase_url": "https://project.example.supabase.co",
                 "supabase_service_role_key": "test-service-role-key",
                 "supabase_db_url": "postgresql://example.invalid/db",
+            }
+        )
+    )
+
+    assert isinstance(repo, SupabaseRestRepository)
+    assert repo.repository_type() == "SUPABASE_REST"
+    repo.close()
+
+
+def test_operator_selection_prefers_postgres_over_supabase_rest() -> None:
+    repo = build_operator_repository(
+        Settings(
+            **{
+                "supabase_url": "https://project.example.supabase.co",
+                "supabase_service_role_key": "test-service-role-key",
+                "supabase_db_url": "postgresql://example.invalid/db",
+            }
+        )
+    )
+
+    assert isinstance(repo, SupabasePersistenceRepository)
+    assert repo.repository_type() == "SUPABASE_POSTGRES"
+
+
+def test_operator_selection_falls_back_to_rest_when_postgres_absent() -> None:
+    repo = build_operator_repository(
+        Settings(
+            **{
+                "supabase_url": "https://project.example.supabase.co",
+                "supabase_service_role_key": "test-service-role-key",
             }
         )
     )

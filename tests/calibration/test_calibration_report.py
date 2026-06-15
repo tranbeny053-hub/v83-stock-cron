@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence import repository as repository_module
 from scripts import calibration_report
 
 
@@ -31,3 +33,46 @@ def test_calibration_report_operational_error_returns_nonzero(monkeypatch, capsy
     assert payload == {"error_type": "RuntimeError", "status": "ERROR"}
     assert "database unavailable" not in output
 
+
+def test_calibration_report_prefers_postgres_when_rest_secrets_also_exist(
+    monkeypatch,
+    capsys,
+) -> None:
+    class FakePostgresRepository:
+        def __init__(self, db_url: str) -> None:
+            self.db_url = db_url
+
+        def repository_type(self) -> str:
+            return "SUPABASE_POSTGRES"
+
+        def fetch_resolved_prediction_outcomes_for_calibration(self, **kwargs) -> list[dict]:
+            return []
+
+        def close(self) -> None:
+            pass
+
+    class ExplodingRestRepository:
+        def __init__(self, *args, **kwargs) -> None:
+            raise AssertionError("REST repository must not be selected when DB URL exists")
+
+    monkeypatch.setattr(repository_module, "SupabasePersistenceRepository", FakePostgresRepository)
+    monkeypatch.setattr(repository_module, "SupabaseRestRepository", ExplodingRestRepository)
+    monkeypatch.setattr(
+        calibration_report.Settings,
+        "from_env",
+        lambda: Settings(
+            **{
+                "supabase_db_url": "postgresql://example.invalid/db",
+                "supabase_url": "https://project.example.supabase.co",
+                "supabase_service_role_key": "test-service-role-key",
+            }
+        ),
+    )
+
+    result = calibration_report.main(["--timeframe", "15m", "--limit", "10"])
+    output = capsys.readouterr().out
+    payload = json.loads(output)
+
+    assert result == 0
+    assert payload["repository"] == "SUPABASE_POSTGRES"
+    assert payload["sample_gate"] == "NO_SAMPLES"

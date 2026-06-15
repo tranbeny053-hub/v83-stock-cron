@@ -25,6 +25,8 @@ Updated: 2026-06-15
 - Added `fetch_resolved_prediction_outcomes_for_calibration(...)` as a SELECT-only repository read method joining immutable predictions to immutable outcomes.
 - Added `scripts/calibration_report.py` with JSON default output and text output option.
 - Added offline tests for metrics, sample gates, per-timeframe isolation, version-mix warnings, SELECT-only SQL, literal statement timeout, CLI behavior, and operational error handling.
+- Added Claude targeted fix: calibration service/CLI use DB-first operator repository selection when `SUPABASE_DB_URL` exists, even if Supabase REST secrets also exist.
+- Added Claude targeted fix: reliability-bucket `calibration_gap` is signed as `avg_predicted_max_prob - empirical_hit_rate`.
 - Calibration diagnostics do not mutate predictions/outcomes and do not write back reliability, calibration, confidence, or profitability status.
 
 ## Checks Run / Attempted
@@ -39,8 +41,8 @@ Updated: 2026-06-15
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 61 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 217 passed with 4 existing warnings.
+- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 66 passed after targeted fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 222 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 10`: PASS, JSON `NO_SAMPLES` diagnostic from `IN_MEMORY`.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
@@ -49,7 +51,7 @@ Updated: 2026-06-15
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
 - Protected working-tree diff for frontend, API, `api/schemas.py`, quant, score stack, gates, news, and migrations: PASS, empty.
-- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; statement-timeout grep shows existing safe literal helper.
+- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; no REST-first calibration builder usage; no absolute calibration gap; statement-timeout grep shows existing safe literal helper.
 
 ## Files Changed
 
@@ -74,7 +76,7 @@ Updated: 2026-06-15
 
 - No local implementation blocker is known.
 - Calibration API/UI exposure is intentionally not implemented.
-- Supabase REST calibration read is intentionally not implemented; CLI/operator diagnostics should use direct Postgres repository when configured.
+- Supabase REST calibration read is intentionally not implemented; CLI/operator diagnostics now prefer direct Postgres repository when `SUPABASE_DB_URL` is configured.
 - Calibration metrics are diagnostic only and do not promote reliability, confidence, or profitability.
 
 ## Next Steps

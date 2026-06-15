@@ -50,6 +50,30 @@ def test_reliability_bucket_boundaries_and_low_sample_status() -> None:
     assert buckets["0.90-1.00"]["bucket_sample_status"] == "LOW_BUCKET_SAMPLE"
 
 
+def test_reliability_bucket_calibration_gap_is_signed() -> None:
+    overconfident = compute_calibration_metrics(
+        [
+            _row("DOWN", p_up_frac=0.80, p_down_frac=0.10, p_timeout_frac=0.10),
+            _row("DOWN", p_up_frac=0.80, p_down_frac=0.10, p_timeout_frac=0.10),
+        ]
+    )
+    underconfident = compute_calibration_metrics(
+        [
+            _row("UP", p_up_frac=0.60, p_down_frac=0.20, p_timeout_frac=0.20),
+            _row("UP", p_up_frac=0.60, p_down_frac=0.20, p_timeout_frac=0.20),
+        ]
+    )
+    over_bucket = {
+        bucket["bucket"]: bucket for bucket in overconfident["reliability_buckets"]
+    }["0.80-0.90"]
+    under_bucket = {
+        bucket["bucket"]: bucket for bucket in underconfident["reliability_buckets"]
+    }["0.60-0.70"]
+
+    assert over_bucket["calibration_gap"] == pytest.approx(0.80)
+    assert under_bucket["calibration_gap"] == pytest.approx(-0.40)
+
+
 def test_outcome_distribution_and_directional_subset_excludes_timeout() -> None:
     report = compute_calibration_metrics(
         [

@@ -234,3 +234,5 @@ Status: Wave 4B.3 adds read-only diagnostics over resolved prediction/outcome pa
 | Terminal returns | Diagnostic summary only | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Explicitly labelled not trade EV. |
 | Runtime surface | CLI/service first | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | No API route, frontend view, schema-response field, migration, or deployment change. |
 | Status writeback | None | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Does not mutate `calibration_status`, `reliability_status`, `profitability_claim`, predictions, or outcomes. |
+| Operator repository selection | Prefer direct Postgres via `SUPABASE_DB_URL` | WAVE4B3_TARGETED_FIX_IMPLEMENTED | Avoids REST-first runtime selection for calibration reports when REST secrets also exist. |
+| Calibration gap | `avg_predicted_max_prob - empirical_hit_rate` | WAVE4B3_TARGETED_FIX_IMPLEMENTED | Signed gap: positive means overconfident, negative means underconfident. |
