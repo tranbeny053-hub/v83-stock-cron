@@ -4,40 +4,28 @@ Updated: 2026-06-15
 
 ## Branch / Worktree
 
-- Branch: `codex/wave4b2a-github-resolver-cron`
+- Branch: `codex/wave4b3-calibration-metrics`
 - Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
 - Merge/deploy status: no merge, no deploy/push to Hugging Face
-- Migration status: `migrations/0004_prediction_outcomes.sql` created but not run by Codex
+- Migration status: no migrations added or run in Wave 4B.3
 
 ## Current Phase
 
-- Phase: Wave 4B.2A GitHub Actions Resolver Automation.
-- Risk: scheduler/workflow wrapper only; no app logic, API route, UI, schema-response, calibration metric, or quant/news change.
+- Phase: Wave 4B.3 Read-Only Calibration Metrics and Sample Gates.
+- Risk: diagnostic-only service/CLI plus one SELECT-only persistence read method; no API route, UI, schema-response, migration, quant/news, or resolver-labeling change.
 - Current status: implementation complete, full local verification passed, not merged/deployed.
 
 ## What Changed
 
-- Added idempotent `prediction_outcomes` migration with immutable `prediction_id` primary key and outcome lookup index.
-- Added `RESOLVER_VERSION = "resolver-v1-wave4b2"`.
-- Added `fetch_due_unresolved_predictions(now_utc, limit)` and `save_prediction_outcome(row)` to in-memory, direct Postgres, and Supabase REST repositories.
-- Outcome writes are immutable/idempotent: in-memory does not overwrite, Postgres uses `ON CONFLICT (prediction_id) DO NOTHING`, REST uses `resolution=ignore-duplicates`.
-- Added standalone `scripts/resolve_outcomes.py`; it is not imported by `api/**` and is not called by `/v1/analyze`.
-- Resolver labels due predictions as `UP`, `DOWN`, or `TIMEOUT` from post-anchor closed candles only, using frozen `decision_band_frac` or fallback `2 * taker_fee_frac`.
-- Added Claude targeted-fix stale-window guard: if the first available outcome candle is more than one timeframe after `horizon_end_utc`, the resolver skips and writes no outcome.
-- Added operator-wiring bugfix: `scripts/resolve_outcomes.py` now uses a resolver-specific repository builder that prefers `SUPABASE_DB_URL` / direct Postgres over Supabase REST when both are configured.
-- Resolver CLI output now includes safe diagnostics: `repository=...` and `limit=...`; it does not print connection strings or keys.
-- Added Postgres due-query bugfix: direct Postgres due fetch now uses the verified `public.predictions` left join `public.prediction_outcomes` query, supports mapping/tuple rows, and surfaces sanitized DB failure instead of fake empty `due=0`.
-- Added final repository wrapper bugfix: Postgres due fetch now uses a direct psycopg connection instead of the `psycopg_pool`-backed `_run_db` wrapper, matching the standalone operator probe path.
-- Added final timeout-bind bugfix: Postgres `SET LOCAL statement_timeout` now uses an internal integer literal instead of bound parameters in both `_run_db` and resolver due-fetch paths.
-- Added direct outcome-write bugfix: `SupabasePersistenceRepository.save_prediction_outcome` now uses direct psycopg with `ON CONFLICT (prediction_id) DO NOTHING` and sanitized phase-labelled failures instead of relying on `psycopg_pool`.
-- Added GitHub Actions resolver automation workflow at `.github/workflows/resolve-outcomes.yml`.
-- Workflow runs hourly at minute 17 UTC and supports manual dispatch with `limit` default `50`.
-- Workflow requires GitHub repository secret `SUPABASE_DB_URL`; optional repository variable `RESOLVER_LIMIT` controls scheduled-run limit.
-- Workflow runs only `scripts/resolve_outcomes.py` and fails on missing secret, resolver nonzero exit, or summary output with `failed > 0`.
-- `scripts/resolve_outcomes.py` now exits nonzero when `stats["failed"] > 0`.
-- Added offline tests for due query behavior, no-lookahead filtering, unfinished-horizon skip, UP/DOWN/TIMEOUT labeling, immutable writes, REST/Postgres non-overwrite semantics, failure isolation, and API isolation.
+- Added `src/crypto_probability_engine/calibration/` package with pure metric functions, report schemas, and service orchestration.
+- Added Brier score, multiclass log loss, deterministic top-label hit rate, reliability buckets, outcome distribution, directional-subset hit rate, and terminal-return diagnostics.
+- Added sample gates: `NO_SAMPLES`, `INSUFFICIENT_SAMPLE`, `WARMING_UP`, `PRELIMINARY_MEASURED`, and `MEASURED`.
+- Added `fetch_resolved_prediction_outcomes_for_calibration(...)` as a SELECT-only repository read method joining immutable predictions to immutable outcomes.
+- Added `scripts/calibration_report.py` with JSON default output and text output option.
+- Added offline tests for metrics, sample gates, per-timeframe isolation, version-mix warnings, SELECT-only SQL, literal statement timeout, CLI behavior, and operational error handling.
+- Calibration diagnostics do not mutate predictions/outcomes and do not write back reliability, calibration, confidence, or profitability status.
 
 ## Checks Run / Attempted
 
@@ -51,48 +39,46 @@ Updated: 2026-06-15
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 42 passed after 4B.2A workflow/script-exit update.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 196 passed with 4 existing warnings after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 198 passed with 4 existing warnings after 4B.2A workflow/script-exit update.
+- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 61 passed.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 217 passed with 4 existing warnings.
+- `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 10`: PASS, JSON `NO_SAMPLES` diagnostic from `IN_MEMORY`.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
 - `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
 - `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
-- Protected working-tree diff for API, quant, score stack, gates, news, frontend, and `api/schemas.py`: PASS, empty.
-- Targeted greps: PASS; resolver/API import grep empty; destructive prediction mutation grep has only migration test assertions; secret/full-body/forbidden capability greps show existing backend/test/checker names only and no new unsafe implementation.
+- Protected working-tree diff for frontend, API, `api/schemas.py`, quant, score stack, gates, news, and migrations: PASS, empty.
+- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; statement-timeout grep shows existing safe literal helper.
 
 ## Files Changed
 
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
 - `AI/08_IMPLEMENTATION_MEMORY.md`
-- `.github/workflows/resolve-outcomes.yml`
 - `CHANGELOG.md`
 - `IMPLEMENTATION_DECISIONS.md`
 - `RELEASE_GATE.md`
-- `migrations/0004_prediction_outcomes.sql`
-- `scripts/resolve_outcomes.py`
-- `src/crypto_probability_engine/config/defaults.py`
+- `scripts/calibration_report.py`
+- `src/crypto_probability_engine/calibration/__init__.py`
+- `src/crypto_probability_engine/calibration/metrics.py`
+- `src/crypto_probability_engine/calibration/schemas.py`
+- `src/crypto_probability_engine/calibration/service.py`
 - `src/crypto_probability_engine/persistence/repository.py`
+- `tests/calibration/test_calibration_report.py`
+- `tests/calibration/test_metrics.py`
+- `tests/calibration/test_service.py`
 - `tests/persistence/test_persistence_foundation.py`
-- `tests/resolver/test_resolve_outcomes.py`
 
 ## Current Blockers / Unknowns
 
 - No local implementation blocker is known.
-- Bounded historical provider fetch was deferred to avoid widening the targeted fix; stale-window skip prevents wrong immutable labels.
-- Migration was created but not applied.
-- Wave 4B calibration metrics and UI/API display are intentionally not implemented.
-- GitHub repository secret `SUPABASE_DB_URL` must be configured before scheduled resolver runs can work.
+- Calibration API/UI exposure is intentionally not implemented.
+- Supabase REST calibration read is intentionally not implemented; CLI/operator diagnostics should use direct Postgres repository when configured.
+- Calibration metrics are diagnostic only and do not promote reliability, confidence, or profitability.
 
 ## Next Steps
 
-1. Review/merge this branch after approval.
-2. Configure GitHub repository secret `SUPABASE_DB_URL`.
-3. Optionally configure GitHub repository variable `RESOLVER_LIMIT=50`.
+1. Send this branch/report to Claude for Wave 4B.3 review.
+2. If approved, merge normally; no migration or deployment step is part of this branch.
+3. Run `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 100 --format json` in an operator environment with direct DB access when a real report is needed.

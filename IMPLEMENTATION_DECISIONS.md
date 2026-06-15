@@ -219,3 +219,18 @@ Status: Wave 4B.2 adds an offline no-lookahead outcome resolver only. It does no
 | Secret | GitHub repository secret `SUPABASE_DB_URL` | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | Secret is passed only as environment variable to the resolver step and is not printed. |
 | Failure semantics | Nonzero if resolver output has `failed > 0` | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | Script now exits nonzero on prediction failures; workflow also greps summary output. |
 | Scope | Resolver script only | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | No migrations, deployment, API, frontend, quant, score, gate, news, calibration, or trading path. |
+
+## Wave 4B.3 Calibration Metrics Decisions
+
+Status: Wave 4B.3 adds read-only diagnostics over resolved prediction/outcome pairs. It does not implement API/UI exposure, migrations, score/probability/gate/news changes, resolver labeling changes, or any writeback to model status fields.
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Data source | SELECT-only join from `predictions` to `prediction_outcomes` | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Defaults to live prediction rows and live outcome rows with labels `UP`, `DOWN`, or `TIMEOUT`. |
+| Metrics | Brier, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Probabilities are validated as finite `[0,1]` values and normalized only for diagnostics. |
+| Tie-break | `UP > DOWN > TIMEOUT` | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Deterministic top-label hit-rate behavior. |
+| Sample gates | `NO_SAMPLES`, `INSUFFICIENT_SAMPLE`, `WARMING_UP`, `PRELIMINARY_MEASURED`, `MEASURED` | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Gates are per requested timeframe/model/methodology scope and are diagnostic only. |
+| Version warnings | `version_mix_warning` with `versions_present` | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Pooled reports disclose mixed model or methodology versions. |
+| Terminal returns | Diagnostic summary only | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Explicitly labelled not trade EV. |
+| Runtime surface | CLI/service first | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | No API route, frontend view, schema-response field, migration, or deployment change. |
+| Status writeback | None | WAVE4B3_IMPLEMENTED_REVIEW_REQUIRED | Does not mutate `calibration_status`, `reliability_status`, `profitability_claim`, predictions, or outcomes. |

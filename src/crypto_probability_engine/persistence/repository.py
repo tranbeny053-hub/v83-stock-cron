@@ -48,6 +48,20 @@ class PersistenceRepository(Protocol):
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction outcome row."""
 
+    def fetch_resolved_prediction_outcomes_for_calibration(
+        self,
+        *,
+        timeframe: str | None = None,
+        symbol: str | None = None,
+        normalized_symbol: str | None = None,
+        model_version: str | None = None,
+        methodology_version: str | None = None,
+        since: Any | None = None,
+        until: Any | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """Fetch resolved live prediction/outcome rows for read-only calibration."""
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         """List normalized watchlist symbols for an operator."""
 
@@ -136,6 +150,40 @@ class InMemoryPersistenceRepository:
         if prediction_id and prediction_id not in self._prediction_outcomes:
             self._prediction_outcomes[prediction_id] = dict(row)
         return self.persistence_status()
+
+    def fetch_resolved_prediction_outcomes_for_calibration(
+        self,
+        *,
+        timeframe: str | None = None,
+        symbol: str | None = None,
+        normalized_symbol: str | None = None,
+        model_version: str | None = None,
+        methodology_version: str | None = None,
+        since: Any | None = None,
+        until: Any | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = []
+        for prediction_id, prediction in self._predictions.items():
+            outcome = self._prediction_outcomes.get(prediction_id)
+            if not outcome:
+                continue
+            row = _calibration_row_from_parts(prediction, outcome)
+            if _calibration_row_matches(
+                row,
+                timeframe=timeframe,
+                symbol=symbol,
+                normalized_symbol=normalized_symbol,
+                model_version=model_version,
+                methodology_version=methodology_version,
+                since=since,
+                until=until,
+            ):
+                rows.append(row)
+        rows.sort(key=lambda row: str(row.get("outcome_close_utc", "")))
+        if limit is not None:
+            return rows[: max(0, int(limit))]
+        return rows
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         return list(self._watchlists.get(operator_id, OrderedDict()).keys())
@@ -534,6 +582,50 @@ class SupabasePersistenceRepository:
         self._mark_ok()
         return self.persistence_status()
 
+    def fetch_resolved_prediction_outcomes_for_calibration(
+        self,
+        *,
+        timeframe: str | None = None,
+        symbol: str | None = None,
+        normalized_symbol: str | None = None,
+        model_version: str | None = None,
+        methodology_version: str | None = None,
+        since: Any | None = None,
+        until: Any | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        if not self.maybe_can_attempt():
+            raise RuntimeError(
+                "SUPABASE_POSTGRES calibration read failed: RuntimeError [circuit] CircuitOpen"
+            )
+        phase = "connect"
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    phase = "set_timeout"
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    phase = "query"
+                    _execute_calibration_query(
+                        cursor,
+                        timeframe=timeframe,
+                        symbol=symbol,
+                        normalized_symbol=normalized_symbol,
+                        model_version=model_version,
+                        methodology_version=methodology_version,
+                        since=since,
+                        until=until,
+                        limit=limit,
+                    )
+                    phase = "fetch"
+                    rows = cursor.fetchall()
+                    phase = "convert"
+                    converted = [_calibration_row_from_db(row) for row in rows]
+        except Exception as exc:
+            self.mark_unavailable()
+            raise RuntimeError(_postgres_error_message("calibration read", phase, exc)) from None
+        self._mark_ok()
+        return converted
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
         if status == "UNAVAILABLE" or rows is None:
@@ -814,6 +906,20 @@ class SupabaseRestRepository:
         )
         return status
 
+    def fetch_resolved_prediction_outcomes_for_calibration(
+        self,
+        *,
+        timeframe: str | None = None,
+        symbol: str | None = None,
+        normalized_symbol: str | None = None,
+        model_version: str | None = None,
+        methodology_version: str | None = None,
+        since: Any | None = None,
+        until: Any | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        raise NotImplementedError("Supabase REST calibration read is not implemented.")
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_rest(
             lambda: self._request(
@@ -1076,6 +1182,192 @@ def _prediction_row_from_db(row) -> dict:
         key: value.isoformat() if hasattr(value, "isoformat") else value
         for key, value in zip(keys, row, strict=True)
     }
+
+
+def _execute_calibration_query(
+    cursor,
+    *,
+    timeframe: str | None,
+    symbol: str | None,
+    normalized_symbol: str | None,
+    model_version: str | None,
+    methodology_version: str | None,
+    since: Any | None,
+    until: Any | None,
+    limit: int | None,
+) -> None:
+    clauses = [
+        "p.is_live_data = true",
+        "o.is_live_data = true",
+        "o.realized_label IN ('UP', 'DOWN', 'TIMEOUT')",
+    ]
+    params: dict[str, Any] = {}
+    for key, value, column in (
+        ("timeframe", timeframe, "p.timeframe"),
+        ("symbol", symbol, "p.symbol"),
+        ("normalized_symbol", normalized_symbol, "p.normalized_symbol"),
+        ("model_version", model_version, "p.model_version"),
+        ("methodology_version", methodology_version, "p.methodology_version"),
+    ):
+        if value is not None:
+            clauses.append(f"{column} = %({key})s")
+            params[key] = value
+    if since is not None:
+        clauses.append("o.outcome_close_utc >= %(since)s")
+        params["since"] = since
+    if until is not None:
+        clauses.append("o.outcome_close_utc <= %(until)s")
+        params["until"] = until
+    limit_clause = ""
+    if limit is not None:
+        limit_clause = "\n        LIMIT %(limit)s"
+        params["limit"] = max(0, int(limit))
+    cursor.execute(
+        f"""
+        SELECT p.prediction_id, p.run_id, p.operator_id, p.symbol, p.normalized_symbol,
+               p.timeframe, p.horizon_bars, p.predicted_at_utc, p.reference_close_utc,
+               p.reference_price, p.horizon_end_utc, p.p_up_frac, p.p_down_frac,
+               p.p_timeout_frac, p.decision_band_frac, p.model_version,
+               p.methodology_version, p.calibration_status, p.reliability_status,
+               p.epistemic_sufficiency, p.gate_action, p.data_source, p.is_live_data,
+               p.cross_provider_state, o.resolved_at_utc, o.outcome_close_utc,
+               o.outcome_reference_price, o.terminal_return_frac, o.realized_label,
+               o.max_favorable_frac, o.max_adverse_frac, o.candles_observed,
+               o.resolver_version, o.data_source, o.is_live_data
+        FROM public.predictions p
+        JOIN public.prediction_outcomes o
+          ON o.prediction_id = p.prediction_id
+        WHERE {" AND ".join(clauses)}
+        ORDER BY o.outcome_close_utc ASC{limit_clause}
+        """,
+        params,
+    )
+
+
+def _calibration_row_from_db(row) -> dict:
+    keys = _calibration_row_keys()
+    if isinstance(row, Mapping):
+        return {
+            key: value.isoformat() if hasattr(value, "isoformat") else value
+            for key, value in row.items()
+        }
+    return {
+        key: value.isoformat() if hasattr(value, "isoformat") else value
+        for key, value in zip(keys, row, strict=True)
+    }
+
+
+def _calibration_row_from_parts(prediction: Mapping[str, Any], outcome: Mapping[str, Any]) -> dict:
+    return {
+        "prediction_id": prediction.get("prediction_id"),
+        "run_id": prediction.get("run_id"),
+        "operator_id": prediction.get("operator_id"),
+        "symbol": prediction.get("symbol"),
+        "normalized_symbol": prediction.get("normalized_symbol"),
+        "timeframe": prediction.get("timeframe"),
+        "horizon_bars": prediction.get("horizon_bars"),
+        "predicted_at_utc": prediction.get("predicted_at_utc"),
+        "reference_close_utc": prediction.get("reference_close_utc"),
+        "reference_price": prediction.get("reference_price"),
+        "horizon_end_utc": prediction.get("horizon_end_utc"),
+        "p_up_frac": prediction.get("p_up_frac"),
+        "p_down_frac": prediction.get("p_down_frac"),
+        "p_timeout_frac": prediction.get("p_timeout_frac"),
+        "decision_band_frac": prediction.get("decision_band_frac"),
+        "model_version": prediction.get("model_version"),
+        "methodology_version": prediction.get("methodology_version"),
+        "calibration_status": prediction.get("calibration_status"),
+        "reliability_status": prediction.get("reliability_status"),
+        "epistemic_sufficiency": prediction.get("epistemic_sufficiency"),
+        "gate_action": prediction.get("gate_action"),
+        "prediction_data_source": prediction.get("data_source"),
+        "prediction_is_live_data": prediction.get("is_live_data"),
+        "cross_provider_state": prediction.get("cross_provider_state"),
+        "resolved_at_utc": outcome.get("resolved_at_utc"),
+        "outcome_close_utc": outcome.get("outcome_close_utc"),
+        "outcome_reference_price": outcome.get("outcome_reference_price"),
+        "terminal_return_frac": outcome.get("terminal_return_frac"),
+        "realized_label": outcome.get("realized_label"),
+        "max_favorable_frac": outcome.get("max_favorable_frac"),
+        "max_adverse_frac": outcome.get("max_adverse_frac"),
+        "candles_observed": outcome.get("candles_observed"),
+        "resolver_version": outcome.get("resolver_version"),
+        "outcome_data_source": outcome.get("data_source"),
+        "outcome_is_live_data": outcome.get("is_live_data"),
+    }
+
+
+def _calibration_row_keys() -> tuple[str, ...]:
+    return (
+        "prediction_id",
+        "run_id",
+        "operator_id",
+        "symbol",
+        "normalized_symbol",
+        "timeframe",
+        "horizon_bars",
+        "predicted_at_utc",
+        "reference_close_utc",
+        "reference_price",
+        "horizon_end_utc",
+        "p_up_frac",
+        "p_down_frac",
+        "p_timeout_frac",
+        "decision_band_frac",
+        "model_version",
+        "methodology_version",
+        "calibration_status",
+        "reliability_status",
+        "epistemic_sufficiency",
+        "gate_action",
+        "prediction_data_source",
+        "prediction_is_live_data",
+        "cross_provider_state",
+        "resolved_at_utc",
+        "outcome_close_utc",
+        "outcome_reference_price",
+        "terminal_return_frac",
+        "realized_label",
+        "max_favorable_frac",
+        "max_adverse_frac",
+        "candles_observed",
+        "resolver_version",
+        "outcome_data_source",
+        "outcome_is_live_data",
+    )
+
+
+def _calibration_row_matches(
+    row: Mapping[str, Any],
+    *,
+    timeframe: str | None,
+    symbol: str | None,
+    normalized_symbol: str | None,
+    model_version: str | None,
+    methodology_version: str | None,
+    since: Any | None,
+    until: Any | None,
+) -> bool:
+    if row.get("prediction_is_live_data") is not True:
+        return False
+    if row.get("outcome_is_live_data") is not True:
+        return False
+    if row.get("realized_label") not in {"UP", "DOWN", "TIMEOUT"}:
+        return False
+    for expected, key in (
+        (timeframe, "timeframe"),
+        (symbol, "symbol"),
+        (normalized_symbol, "normalized_symbol"),
+        (model_version, "model_version"),
+        (methodology_version, "methodology_version"),
+    ):
+        if expected is not None and row.get(key) != expected:
+            return False
+    if since is not None and _timestamp_before(row.get("outcome_close_utc"), since):
+        return False
+    if until is not None and _timestamp_before(until, row.get("outcome_close_utc")):
+        return False
+    return True
 
 
 def _postgres_error_message(operation: str, phase: str, exc: Exception) -> str:

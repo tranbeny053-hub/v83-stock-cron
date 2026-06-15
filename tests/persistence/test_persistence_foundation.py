@@ -214,6 +214,60 @@ def test_in_memory_prediction_outcomes_are_immutable_by_prediction_id() -> None:
     assert stored["terminal_return_frac"] == first["terminal_return_frac"]
 
 
+def test_in_memory_calibration_read_filters_live_rows_labels_and_options() -> None:
+    repo = InMemoryPersistenceRepository()
+    due = _sample_prediction()
+    due_outcome = _sample_outcome()
+    non_live_prediction = {
+        **_sample_prediction(),
+        "prediction_id": "non_live_prediction:4H",
+        "is_live_data": False,
+    }
+    non_live_outcome = {**_sample_outcome(), "prediction_id": "non_live_prediction:4H"}
+    non_live_outcome_row = {
+        **_sample_prediction(),
+        "prediction_id": "non_live_outcome:4H",
+    }
+    non_live_result = {
+        **_sample_outcome(),
+        "prediction_id": "non_live_outcome:4H",
+        "is_live_data": False,
+    }
+    invalid_label_prediction = {
+        **_sample_prediction(),
+        "prediction_id": "invalid_label:4H",
+    }
+    invalid_label_outcome = {
+        **_sample_outcome(),
+        "prediction_id": "invalid_label:4H",
+        "realized_label": "BAD",
+    }
+    for prediction, outcome in (
+        (due, due_outcome),
+        (non_live_prediction, non_live_outcome),
+        (non_live_outcome_row, non_live_result),
+        (invalid_label_prediction, invalid_label_outcome),
+    ):
+        repo.save_prediction(prediction)
+        repo.save_prediction_outcome(outcome)
+
+    rows = repo.fetch_resolved_prediction_outcomes_for_calibration(
+        timeframe="4H",
+        normalized_symbol="BTC/USDT",
+        model_version="phase1a-wave4b0",
+        methodology_version="heuristic-v1-wave4b0",
+        since="2026-06-08T00:00:00Z",
+        until="2026-06-08T00:00:00Z",
+        limit=10,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["prediction_id"] == due["prediction_id"]
+    assert rows[0]["realized_label"] == "UP"
+    assert rows[0]["prediction_is_live_data"] is True
+    assert rows[0]["outcome_is_live_data"] is True
+
+
 def test_best_effort_persist_defensively_marks_unavailable() -> None:
     class RaisingRepository:
         def __init__(self) -> None:
@@ -467,6 +521,116 @@ def test_supabase_postgres_outcome_write_failure_is_sanitized() -> None:
     assert message.startswith("SUPABASE_POSTGRES outcome write failed: RuntimeError [connect]")
     assert "postgresql://user:credential@example.invalid/db" not in message
     assert "credential" not in message
+
+
+def test_supabase_postgres_calibration_read_is_select_only_and_uses_literal_timeout() -> None:
+    cursor = FakeCursor(rows=[_sample_calibration_db_row()], reject_set_params=True)
+
+    class ExplodingPool:
+        def connection(self, timeout=None):
+            raise AssertionError("pool wrapper should not be used for calibration reads")
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: ExplodingPool(),
+        direct_connection_factory=lambda: FakeConnection(cursor),
+    )
+
+    rows = repo.fetch_resolved_prediction_outcomes_for_calibration(
+        timeframe="4H",
+        symbol="BTC",
+        normalized_symbol="BTC/USDT",
+        model_version="phase1a-wave4b0",
+        methodology_version="heuristic-v1-wave4b0",
+        since="2026-06-08T00:00:00Z",
+        until="2026-06-08T01:00:00Z",
+        limit=25,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["prediction_id"] == "run_rest:4H"
+    assert rows[0]["normalized_symbol"] == "BTC/USDT"
+    assert rows[0]["timeframe"] == "4H"
+    assert rows[0]["outcome_close_utc"] == "2026-06-08T00:00:00Z"
+    assert rows[0]["outcome_is_live_data"] is True
+    assert cursor.statements[0] == "SET LOCAL statement_timeout = 3000"
+    assert cursor.params[0] is None
+    query = "\n".join(cursor.statements[1:])
+    query_upper = query.upper()
+    assert "SELECT P.PREDICTION_ID" in query_upper
+    assert "FROM PUBLIC.PREDICTIONS P" in query_upper
+    assert "JOIN PUBLIC.PREDICTION_OUTCOMES O" in query_upper
+    assert "ON O.PREDICTION_ID = P.PREDICTION_ID" in query_upper
+    assert "P.IS_LIVE_DATA = TRUE" in query_upper
+    assert "O.IS_LIVE_DATA = TRUE" in query_upper
+    assert "O.REALIZED_LABEL IN ('UP', 'DOWN', 'TIMEOUT')" in query_upper
+    assert "ORDER BY O.OUTCOME_CLOSE_UTC ASC" in query_upper
+    assert "LIMIT %(LIMIT)S" in query_upper
+    assert "INSERT" not in query_upper
+    assert "UPDATE" not in query_upper
+    assert "DELETE" not in query_upper
+    assert cursor.params[1] == {
+        "timeframe": "4H",
+        "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
+        "model_version": "phase1a-wave4b0",
+        "methodology_version": "heuristic-v1-wave4b0",
+        "since": "2026-06-08T00:00:00Z",
+        "until": "2026-06-08T01:00:00Z",
+        "limit": 25,
+    }
+
+
+def test_supabase_postgres_calibration_read_converts_mapping_rows() -> None:
+    cursor = FakeCursor(rows=[_sample_calibration_mapping_row()], reject_set_params=True)
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        direct_connection_factory=lambda: FakeConnection(cursor),
+    )
+
+    rows = repo.fetch_resolved_prediction_outcomes_for_calibration(limit=1)
+
+    assert len(rows) == 1
+    assert rows[0]["prediction_id"] == "run_rest:4H"
+    assert rows[0]["realized_label"] == "UP"
+    assert rows[0]["prediction_is_live_data"] is True
+
+
+def test_supabase_postgres_calibration_read_failure_is_not_fake_empty() -> None:
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        direct_connection_factory=lambda: (_ for _ in ()).throw(
+            RuntimeError("postgresql://user:credential@example.invalid/db read failure")
+        ),
+    )
+
+    try:
+        rows = repo.fetch_resolved_prediction_outcomes_for_calibration(limit=5)
+    except RuntimeError as exc:
+        message = str(exc)
+    else:  # pragma: no cover - documents the expected non-fallback behavior
+        raise AssertionError(f"expected calibration read failure, got rows={rows!r}")
+
+    assert message.startswith("SUPABASE_POSTGRES calibration read failed: RuntimeError [connect]")
+    assert "postgresql://user:credential@example.invalid/db" not in message
+    assert "credential" not in message
+
+
+def test_supabase_rest_calibration_read_is_explicitly_not_implemented() -> None:
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(lambda request: httpx.Response(200, json=[])),
+    )
+
+    try:
+        rows = repo.fetch_resolved_prediction_outcomes_for_calibration()
+    except NotImplementedError as exc:
+        message = str(exc)
+    else:  # pragma: no cover
+        raise AssertionError(f"expected REST calibration read to be unavailable, got {rows!r}")
+
+    assert message == "Supabase REST calibration read is not implemented."
 
 
 def rest_client(handler) -> httpx.Client:
@@ -778,6 +942,89 @@ def _sample_outcome() -> dict:
         "data_source": "BINANCE_PUBLIC",
         "is_live_data": True,
     }
+
+
+def _sample_calibration_db_row() -> tuple:
+    prediction = _sample_prediction()
+    outcome = _sample_outcome()
+    return (
+        prediction["prediction_id"],
+        prediction["run_id"],
+        prediction["operator_id"],
+        prediction["symbol"],
+        prediction["normalized_symbol"],
+        prediction["timeframe"],
+        prediction["horizon_bars"],
+        prediction["predicted_at_utc"],
+        prediction["reference_close_utc"],
+        prediction["reference_price"],
+        prediction["horizon_end_utc"],
+        prediction["p_up_frac"],
+        prediction["p_down_frac"],
+        prediction["p_timeout_frac"],
+        prediction["decision_band_frac"],
+        prediction["model_version"],
+        prediction["methodology_version"],
+        prediction["calibration_status"],
+        prediction["reliability_status"],
+        prediction["epistemic_sufficiency"],
+        prediction["gate_action"],
+        prediction["data_source"],
+        prediction["is_live_data"],
+        prediction["cross_provider_state"],
+        outcome["resolved_at_utc"],
+        outcome["outcome_close_utc"],
+        outcome["outcome_reference_price"],
+        outcome["terminal_return_frac"],
+        outcome["realized_label"],
+        outcome["max_favorable_frac"],
+        outcome["max_adverse_frac"],
+        outcome["candles_observed"],
+        outcome["resolver_version"],
+        outcome["data_source"],
+        outcome["is_live_data"],
+    )
+
+
+def _sample_calibration_mapping_row() -> dict:
+    keys = (
+        "prediction_id",
+        "run_id",
+        "operator_id",
+        "symbol",
+        "normalized_symbol",
+        "timeframe",
+        "horizon_bars",
+        "predicted_at_utc",
+        "reference_close_utc",
+        "reference_price",
+        "horizon_end_utc",
+        "p_up_frac",
+        "p_down_frac",
+        "p_timeout_frac",
+        "decision_band_frac",
+        "model_version",
+        "methodology_version",
+        "calibration_status",
+        "reliability_status",
+        "epistemic_sufficiency",
+        "gate_action",
+        "prediction_data_source",
+        "prediction_is_live_data",
+        "cross_provider_state",
+        "resolved_at_utc",
+        "outcome_close_utc",
+        "outcome_reference_price",
+        "terminal_return_frac",
+        "realized_label",
+        "max_favorable_frac",
+        "max_adverse_frac",
+        "candles_observed",
+        "resolver_version",
+        "outcome_data_source",
+        "outcome_is_live_data",
+    )
+    return dict(zip(keys, _sample_calibration_db_row(), strict=True))
 
 
 def _sample_news_item() -> dict:

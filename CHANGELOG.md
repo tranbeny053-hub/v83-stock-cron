@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.3 Read-Only Calibration Metrics
+
+Changed:
+- Added a read-only calibration package with Brier score, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution, directional-subset hit rate, and terminal-return diagnostics.
+- Added sample gates for resolved prediction/outcome counts: `NO_SAMPLES`, `INSUFFICIENT_SAMPLE`, `WARMING_UP`, `PRELIMINARY_MEASURED`, and `MEASURED`.
+- Added a SELECT-only repository method to join immutable `predictions` with immutable `prediction_outcomes` for calibration diagnostics.
+- Added `scripts/calibration_report.py` for CLI-first JSON/text reports.
+- Added offline tests for metrics, sample gates, version-mix warnings, repository filters, SELECT-only SQL, and CLI behavior.
+
+Notes:
+- Calibration diagnostics do not mutate predictions or outcomes and do not write back `calibration_status`, `reliability_status`, or `profitability_claim`.
+- No API, UI, migration, quant/probability/score/gate/news, resolver-labeling, deploy, merge, or Hugging Face push was performed.
+
 ## 2026-06-15 - Wave 4B.2A GitHub Resolver Cron
 
 Changed:

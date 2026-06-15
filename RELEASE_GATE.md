@@ -1,6 +1,6 @@
 # Release Gate
 
-Status: Wave 4B.2 outcome resolver implemented locally. Claude/User review is required before merge/deploy or migration application.
+Status: Wave 4B.3 read-only calibration metrics implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -31,6 +31,17 @@ No phase is releasable because an agent says so. Release requires evidence.
 | Deployment | Cold start, both-mode smoke, no secret/body leak, restart drill | Yes |
 | Rollback | Last-known-good identified; revert drill documented | Yes |
 | Non-Coder Verification | Operator can follow report/runbook without reading code | Yes |
+
+## Wave 4B.3 Calibration Metrics Gate
+
+- [x] Calibration metrics read only from resolved immutable prediction/outcome pairs.
+- [x] Repository calibration method is SELECT-only and does not mutate predictions or outcomes.
+- [x] Sample gates are diagnostic only and do not write back `calibration_status`, `reliability_status`, or `profitability_claim`.
+- [x] Metrics include Brier score, multiclass log loss, top-label hit rate, reliability buckets, outcome distribution, directional subset hit rate, and terminal-return diagnostics labelled not trade EV.
+- [x] Version-mix warnings and versions-present metadata are included.
+- [x] CLI report exists and defaults to JSON.
+- [x] No API, UI, migration, quant/probability/score/gate/news, resolver-labeling, or schema-response paths changed.
+- [ ] Claude/User review completed before merge/deploy.
 
 ## Wave 4A Honesty / Decision Clarity Gate
 
