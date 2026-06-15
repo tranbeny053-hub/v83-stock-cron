@@ -7,7 +7,9 @@ from crypto_probability_engine.persistence import repository as repository_modul
 from scripts import calibration_report
 
 
-def test_calibration_report_cli_json_smoke(capsys) -> None:
+def test_calibration_report_cli_json_smoke(monkeypatch, capsys) -> None:
+    _clear_repository_env(monkeypatch)
+
     result = calibration_report.main(["--timeframe", "15m", "--limit", "10"])
     output = capsys.readouterr().out
     payload = json.loads(output)
@@ -76,3 +78,8 @@ def test_calibration_report_prefers_postgres_when_rest_secrets_also_exist(
     assert result == 0
     assert payload["repository"] == "SUPABASE_POSTGRES"
     assert payload["sample_gate"] == "NO_SAMPLES"
+
+
+def _clear_repository_env(monkeypatch) -> None:
+    for name in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
