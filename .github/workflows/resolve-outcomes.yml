@@ -1,0 +1,68 @@
+name: Resolve Prediction Outcomes
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Maximum due predictions to resolve"
+        required: false
+        default: "50"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resolve-outcomes
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: src
+      RESOLVER_LIMIT: ${{ github.event.inputs.limit || vars.RESOLVER_LIMIT || '50' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate resolver configuration
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL}" ]; then
+            echo "SUPABASE_DB_URL repository secret is required."
+            exit 1
+          fi
+          case "${RESOLVER_LIMIT}" in
+            ''|*[!0-9]*)
+              echo "RESOLVER_LIMIT must be a positive integer."
+              exit 1
+              ;;
+          esac
+          if [ "${RESOLVER_LIMIT}" -le 0 ]; then
+            echo "RESOLVER_LIMIT must be a positive integer."
+            exit 1
+          fi
+
+      - name: Run outcome resolver
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          python scripts/resolve_outcomes.py --limit "${RESOLVER_LIMIT}" | tee resolver-output.txt
+          if grep -Eq "failed=[1-9][0-9]*" resolver-output.txt; then
+            echo "Resolver reported failed outcomes."
+            exit 1
+          fi

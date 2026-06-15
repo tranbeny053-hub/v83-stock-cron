@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-15 - Wave 4B.2A GitHub Resolver Cron
+
+Changed:
+- Added `.github/workflows/resolve-outcomes.yml` to run the standalone outcome resolver hourly at minute 17 UTC and by manual dispatch.
+- Added manual `limit` input and optional repository variable `RESOLVER_LIMIT`, defaulting to `50`.
+- Required the GitHub repository secret `SUPABASE_DB_URL` and kept the workflow from printing it.
+- Changed `scripts/resolve_outcomes.py` to exit non-zero when any prediction resolution fails.
+- Added resolver tests for zero-failure and nonzero-failure script exit behavior.
+
+Notes:
+- This workflow runs only `scripts/resolve_outcomes.py`; it does not run migrations or deploy anything.
+- The app remains analysis-only; no API, frontend, quant/probability/score/gate/news, calibration, or trading capability changes were made.
+
 ## 2026-06-15 - Wave 4B.2 Postgres Timeout Bind and Outcome Write Fix
 
 Changed:

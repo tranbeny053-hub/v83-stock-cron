@@ -72,7 +72,7 @@ def test_main_output_includes_safe_repository_diagnostics(
     def fake_resolve_due_predictions(repository, **kwargs):
         assert repository.repository_type() == "SUPABASE_POSTGRES"
         assert kwargs["limit"] == 7
-        return {"due": 4, "resolved": 1, "skipped": 2, "failed": 1}
+        return {"due": 4, "resolved": 2, "skipped": 2, "failed": 0}
 
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://operator-db.example.invalid/db")
     monkeypatch.setenv("SUPABASE_URL", "https://project.example.invalid")
@@ -84,10 +84,56 @@ def test_main_output_includes_safe_repository_diagnostics(
 
     assert result == 0
     assert "resolved_outcomes repository=SUPABASE_POSTGRES limit=7" in output
-    assert "due=4 resolved=1 skipped=2 failed=1" in output
+    assert "due=4 resolved=2 skipped=2 failed=0" in output
     assert "operator-db.example.invalid" not in output
     assert "project.example.invalid" not in output
     assert "test-service-role-key" not in output
+
+
+def test_main_returns_zero_when_no_prediction_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        resolve_outcomes,
+        "build_resolver_repository",
+        lambda settings: InMemoryPersistenceRepository(),
+    )
+    monkeypatch.setattr(
+        resolve_outcomes,
+        "resolve_due_predictions",
+        lambda repository, **kwargs: {"due": 2, "resolved": 2, "skipped": 0, "failed": 0},
+    )
+
+    result = resolve_outcomes.main(["--limit", "2"])
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "resolved_outcomes repository=IN_MEMORY limit=2" in output
+    assert "due=2 resolved=2 skipped=0 failed=0" in output
+
+
+def test_main_returns_nonzero_when_prediction_failures_occur(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        resolve_outcomes,
+        "build_resolver_repository",
+        lambda settings: InMemoryPersistenceRepository(),
+    )
+    monkeypatch.setattr(
+        resolve_outcomes,
+        "resolve_due_predictions",
+        lambda repository, **kwargs: {"due": 3, "resolved": 2, "skipped": 0, "failed": 1},
+    )
+
+    result = resolve_outcomes.main(["--limit", "3"])
+    output = capsys.readouterr().out
+
+    assert result == 1
+    assert "resolved_outcomes repository=IN_MEMORY limit=3" in output
+    assert "due=3 resolved=2 skipped=0 failed=1" in output
 
 
 def test_main_db_fetch_failure_is_visible_without_secret_leak(

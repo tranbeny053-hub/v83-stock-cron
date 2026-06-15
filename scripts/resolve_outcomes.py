@@ -281,7 +281,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     close = getattr(repository, "close", None)
     if callable(close):
         close()
-    return 0
+    return 1 if stats["failed"] > 0 else 0
 
 
 if __name__ == "__main__":

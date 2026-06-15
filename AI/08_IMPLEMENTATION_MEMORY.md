@@ -1,11 +1,12 @@
 # Implementation Memory
 
 ## Context-Resume Summary
-The app is on branch `codex/wave4b2-outcome-resolver`, based on `dev`.
+The app is on branch `codex/wave4b2a-github-resolver-cron`, based on `dev`.
 Worktree scope is `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`; do not touch sibling folders.
 Wave 4B.2 adds a standalone no-lookahead outcome resolver for immutable prediction-ledger rows.
 The resolver writes immutable `prediction_outcomes` rows only; it does not mutate `predictions`.
 No API route, frontend, schema-response, calibration metric, quant/probability/score/gate/news/provider/auth/dependency changes were made.
+Wave 4B.2A adds a GitHub Actions workflow wrapper for the existing resolver only.
 `migrations/0004_prediction_outcomes.sql` exists but was not run by Codex.
 
 ## Latest App State
@@ -19,6 +20,9 @@ The Supabase Postgres due fetch now uses direct psycopg connection rather than t
 Postgres `SET LOCAL statement_timeout` now uses an internal integer literal instead of bound parameters, fixing the SyntaxError before due SELECT.
 Supabase Postgres outcome writes now use direct psycopg with `ON CONFLICT (prediction_id) DO NOTHING`, avoiding `psycopg_pool` dependency for operator outcome writes.
 Outcome writes are best-effort through the selected repository and immutable by `prediction_id`.
+GitHub Actions workflow `.github/workflows/resolve-outcomes.yml` runs the resolver hourly at minute 17 UTC and by manual dispatch.
+The workflow requires repository secret `SUPABASE_DB_URL` and optional variable `RESOLVER_LIMIT`.
+`scripts/resolve_outcomes.py` now exits nonzero if any prediction resolution fails.
 Calibration/reliability/profitability/news influence remain unchanged.
 
 ## Implemented Components
@@ -30,6 +34,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - Postgres due query: `public.predictions` left join `public.prediction_outcomes`, mapping/tuple row conversion, and operator-visible DB failure.
 - Postgres due wrapper: direct psycopg connection for due rows; `_run_db` callback behavior remains tested for other DB paths.
 - Postgres timeout/outcome fix: no bind params for `SET LOCAL statement_timeout`; direct psycopg outcome write path with sanitized phase errors.
+- workflow: `.github/workflows/resolve-outcomes.yml` scheduled/manual resolver automation.
 - tests: migration safety, due-query filtering, immutable/idempotent outcome writes, REST/Postgres non-overwrite semantics, no-lookahead, unfinished-horizon skip, stale-window skip, UP/DOWN/TIMEOUT labels, failure isolation, and API isolation.
 
 ## Files Changed By Area
@@ -37,6 +42,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - config: `src/crypto_probability_engine/config/defaults.py`
 - migrations: `migrations/0004_prediction_outcomes.sql`
 - scripts: `scripts/resolve_outcomes.py`
+- workflow: `.github/workflows/resolve-outcomes.yml`
 - tests: `tests/persistence/test_persistence_foundation.py`, `tests/resolver/test_resolve_outcomes.py`
 - docs: `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, `AI/08_IMPLEMENTATION_MEMORY.md`, `IMPLEMENTATION_DECISIONS.md`, `CHANGELOG.md`, `RELEASE_GATE.md`
 
@@ -53,6 +59,8 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - Supabase Postgres due fetch avoids `psycopg_pool`; this matches the operator's working standalone psycopg probe and prevents pool-wrapper failure from becoming fake `due=0`.
 - Postgres statement timeout is set with an internal integer literal because PostgreSQL rejects bound parameters for `SET LOCAL`.
 - Postgres outcome writes use direct psycopg and first-write-wins `ON CONFLICT DO NOTHING`; failures are surfaced with sanitized `connect` / `set_timeout` / `write` phase labels.
+- Workflow uses minimal `contents: read` permissions, `resolve-outcomes` concurrency, 15-minute timeout, and never prints `SUPABASE_DB_URL`.
+- Workflow does not run migrations and does not deploy anything.
 - `terminal_return_frac = (outcome_close - reference_price) / reference_price`.
 - Outcome label uses frozen `decision_band_frac`; if absent, fallback is `2 * DEFAULT_PHASE1A.taker_fee_frac`.
 - `RESOLVER_VERSION` is `resolver-v1-wave4b2`.
@@ -62,6 +70,7 @@ Calibration/reliability/profitability/news influence remain unchanged.
 ## Commands Run And Results
 - `git checkout dev`: PASS.
 - `git status --short --untracked-files=all -- .`: PASS before branch creation, clean.
+- `git checkout -b codex/wave4b2a-github-resolver-cron`: PASS.
 - `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
 - `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
@@ -69,11 +78,13 @@ Calibration/reliability/profitability/news influence remain unchanged.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
+- `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 42 passed after 4B.2A workflow/script-exit update.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 185 passed with 4 existing warnings after targeted fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 189 passed with 4 existing warnings after operator-wiring fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 192 passed with 4 existing warnings after Postgres due-query fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 194 passed with 4 existing warnings after direct Postgres due-fetch wrapper fix.
 - `PYTHONPATH=src python3 -m pytest -q`: PASS, 196 passed with 4 existing warnings after timeout-bind/outcome-write fix.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 198 passed with 4 existing warnings after 4B.2A workflow/script-exit update.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
@@ -85,18 +96,17 @@ Calibration/reliability/profitability/news influence remain unchanged.
 
 ## Known Blockers
 No implementation blocker is known.
-Final commit is pending.
 
 ## Open Risks
 Migration must be reviewed/applied separately by the user/operator.
-The standalone resolver needs an operator/cron invocation outside the app; scheduling is intentionally not implemented here.
+GitHub repository secret `SUPABASE_DB_URL` must be configured before scheduled resolver runs can work.
 Bounded historical provider fetch is deferred; the stale-window guard is the targeted safety fix.
 Calibration metrics and outcome UI/API display are intentionally not implemented in Wave 4B.2.
 
 ## Next Recommended Steps
-1. Commit `fix: fetch due rows correctly from postgres repository`.
-2. Run `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit 10` with local operator env.
-3. Apply `migrations/0004_prediction_outcomes.sql` only after approval.
+1. Review/merge this branch after approval.
+2. Configure GitHub repository secret `SUPABASE_DB_URL`.
+3. Optionally configure repository variable `RESOLVER_LIMIT=50`.
 
 ## Do Not Change
 Do not touch sibling folders outside `v8-crypto-api-clean/`.

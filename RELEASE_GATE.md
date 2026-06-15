@@ -306,6 +306,19 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] Apply `migrations/0004_prediction_outcomes.sql` only after review/approval.
 - [ ] Claude/User R3 review completed before merge/deploy.
 
+## Wave 4B.2A GitHub Resolver Cron Gate
+
+- [x] Workflow `.github/workflows/resolve-outcomes.yml` runs hourly at minute 17 UTC.
+- [x] Workflow supports manual `workflow_dispatch` with `limit` input defaulting to `50`.
+- [x] Workflow uses minimal `contents: read` permissions and `resolve-outcomes` concurrency.
+- [x] Workflow uses GitHub repository secret `SUPABASE_DB_URL` without printing it.
+- [x] Optional repository variable `RESOLVER_LIMIT` can set the scheduled-run limit.
+- [x] Workflow runs only `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit <limit>`.
+- [x] Workflow fails if `SUPABASE_DB_URL` is missing, resolver exits nonzero, or output reports `failed > 0`.
+- [x] No migration, Hugging Face deployment, API, frontend, quant/probability/score/gate/news, calibration, or trading change was added.
+- [ ] User configures GitHub secret `SUPABASE_DB_URL` in `tranbeny053-hub/v83-stock-cron`.
+- [ ] User optionally configures GitHub variable `RESOLVER_LIMIT=50`.
+
 ## Hugging Face Variables and Secrets Required
 
 | Type | Name | Value | Purpose | Required now? | Notes |

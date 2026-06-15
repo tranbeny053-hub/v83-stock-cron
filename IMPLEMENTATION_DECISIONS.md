@@ -209,3 +209,13 @@ Status: Wave 4B.2 adds an offline no-lookahead outcome resolver only. It does no
 | Postgres due-fetch wrapper | Direct psycopg connection for operator due fetch | WAVE4B2_TARGETED_FIX_IMPLEMENTED | Avoids `psycopg_pool` wrapper dependency for due rows; pooled `_run_db` remains available for existing best-effort write paths. |
 | Postgres statement timeout | Internal integer literal for `SET LOCAL statement_timeout` | WAVE4B2_TARGETED_FIX_IMPLEMENTED | Fixes PostgreSQL syntax errors near `$1` caused by binding parameters into `SET LOCAL`. |
 | Postgres outcome write path | Direct psycopg connection with `ON CONFLICT DO NOTHING` | WAVE4B2_TARGETED_FIX_IMPLEMENTED | Avoids `psycopg_pool` dependency for operator outcome writes while preserving immutable first-write-wins behavior. |
+
+## Wave 4B.2A Resolver Automation Decisions
+
+| Decision | Default | Status | Notes |
+|---|---|---|---|
+| Scheduler | GitHub Actions schedule, minute 17 hourly UTC | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | HF Free background scheduling is not relied on. |
+| Manual run | `workflow_dispatch` with `limit` default `50` | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | Allows operator-triggered resolver runs without code changes. |
+| Secret | GitHub repository secret `SUPABASE_DB_URL` | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | Secret is passed only as environment variable to the resolver step and is not printed. |
+| Failure semantics | Nonzero if resolver output has `failed > 0` | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | Script now exits nonzero on prediction failures; workflow also greps summary output. |
+| Scope | Resolver script only | WAVE4B2A_IMPLEMENTED_REVIEW_REQUIRED | No migrations, deployment, API, frontend, quant, score, gate, news, calibration, or trading path. |
