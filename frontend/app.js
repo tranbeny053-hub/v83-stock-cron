@@ -11,8 +11,42 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-2-decision-section";
+const UCPE_FRONTEND_BUILD = "ui-d1-3-tactical-matrix";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
+const tacticalTimeframes = ["15m", "1H", "4H"];
+const regimeTimeframes = ["1D", "1W", "1M"];
+const fallbackTimeframeRoles = {
+  "15m": {
+    role: "TACTICAL_TIMING",
+    tactical: true,
+    rawProbabilityHidden: false,
+  },
+  "1H": {
+    role: "TACTICAL_SWING_BRIDGE",
+    tactical: true,
+    rawProbabilityHidden: false,
+  },
+  "4H": {
+    role: "SETUP_QUALITY",
+    tactical: true,
+    rawProbabilityHidden: false,
+  },
+  "1D": {
+    role: "SWING_CONTEXT",
+    tactical: false,
+    rawProbabilityHidden: false,
+  },
+  "1W": {
+    role: "REGIME_CONTEXT",
+    tactical: false,
+    rawProbabilityHidden: true,
+  },
+  "1M": {
+    role: "MACRO_BACKDROP",
+    tactical: false,
+    rawProbabilityHidden: true,
+  },
+};
 const decisionLabelCopy = {
   AVOID: "Avoid",
   NO_TRADE: "No trade",
@@ -323,6 +357,296 @@ function errorCard(timeframe, error) {
   return node;
 }
 
+function timeframeRoleFor(payload, timeframe) {
+  const backendRole = payload?.decision_synthesis?.timeframe_role || {};
+  const fallback = fallbackTimeframeRoles[timeframe] || {
+    role: "ROLE_UNAVAILABLE",
+    tactical: tacticalTimeframes.includes(timeframe),
+    rawProbabilityHidden: regimeTimeframes.includes(timeframe),
+  };
+  return {
+    role: backendText(backendRole.role) || fallback.role,
+    tactical:
+      typeof backendRole.tactical === "boolean" ? backendRole.tactical : fallback.tactical,
+    rawProbabilityHidden:
+      typeof backendRole.raw_probability_hidden_by_default === "boolean"
+        ? backendRole.raw_probability_hidden_by_default
+        : fallback.rawProbabilityHidden,
+    plainEnglish:
+      backendText(backendRole.plain_english) || "Backend timeframe role description unavailable.",
+  };
+}
+
+function timeframeGroupFor(payload, timeframe) {
+  return timeframeRoleFor(payload, timeframe).tactical ? "tactical" : "regime";
+}
+
+function displayRole(role) {
+  return backendText(role)?.replaceAll("_", " ").toLowerCase() || "role unavailable";
+}
+
+function matrixBlockingItem(stack) {
+  return orderedActionability(stack).find((item) => item.status === "BLOCK") || null;
+}
+
+function matrixConcernItem(stack) {
+  const ordered = orderedActionability(stack);
+  return (
+    ordered.find((item) => item.status === "BLOCK") ||
+    ordered.find((item) => item.status === "WARN") ||
+    null
+  );
+}
+
+function matrixRawProbability(probability = {}) {
+  return keyValueTable([
+    ["Up", formatFractionPct(probability.p_up)],
+    ["Down", formatFractionPct(probability.p_down)],
+    ["Timeout", formatFractionPct(probability.p_timeout)],
+  ]);
+}
+
+function matrixProbabilityBlock(probability = {}, role = {}) {
+  const block = document.createElement("div");
+  block.className = "matrix-probability";
+  if (probability.informational_only === true) {
+    block.classList.add("matrix-probability-muted");
+    block.append(decisionBadge("Informational only", "warn"));
+  }
+  if (role.rawProbabilityHidden) {
+    const advanced = document.createElement("details");
+    advanced.className = "matrix-advanced-context";
+    advanced.append(textBlock("summary", "Advanced (uncalibrated context)"));
+    advanced.append(
+      textBlock(
+        "p",
+        "Uncalibrated context. Treat these values as informational only.",
+        "matrix-context-warning",
+      ),
+    );
+    advanced.append(matrixRawProbability(probability));
+    block.append(advanced);
+  } else {
+    block.append(matrixRawProbability(probability));
+  }
+  if (backendText(probability.reliability_warning)) {
+    block.append(textBlock("p", probability.reliability_warning, "matrix-reliability-note"));
+  }
+  return block;
+}
+
+function horizonCard(payload) {
+  const node = document.createElement("article");
+  const display = payload.frontend_display || {};
+  const timeframe = payload.timeframes?.primary || "n/a";
+  const synthesis = payload.decision_synthesis || {};
+  const decision = synthesis.decision_synthesis || {};
+  const permission = synthesis.action_permission || {};
+  const probability = synthesis.probability_interpretation || {};
+  const quality = synthesis.model_quality_summary || {};
+  const role = timeframeRoleFor(payload, timeframe);
+  const blocking = matrixBlockingItem(synthesis.actionability_stack);
+  const concern = matrixConcernItem(synthesis.actionability_stack);
+  const heatBand = getScoreHeatBand(display.total_score);
+
+  node.className = `result-card timeframe-card horizon-card ${
+    role.tactical ? "tactical-horizon-card" : "regime-horizon-card"
+  }`;
+  node.dataset.timeframeCard = timeframe;
+  node.style.setProperty("--heat-main", heatBand.mainColor);
+  node.style.setProperty("--heat-border", heatBand.mainColor);
+
+  if (blocking) {
+    const blockBanner = document.createElement("div");
+    blockBanner.className = "matrix-block-banner";
+    blockBanner.append(decisionBadge("BLOCK", "block"));
+    blockBanner.append(
+      textBlock(
+        "span",
+        backendText(blocking.plain_english) || backendText(blocking.label) || "Blocked",
+      ),
+    );
+    node.append(blockBanner);
+  }
+
+  const header = document.createElement("header");
+  const headingGroup = document.createElement("div");
+  headingGroup.append(textBlock("p", displayRole(role.role), "matrix-role"));
+  headingGroup.append(textBlock("h2", timeframe));
+  headingGroup.append(textBlock("p", payload.normalized_symbol || payload.symbol, "muted"));
+  const detailButton = document.createElement("button");
+  detailButton.type = "button";
+  detailButton.className = "detail-button";
+  detailButton.textContent = "Detail";
+  header.append(headingGroup, detailButton);
+  node.append(header);
+
+  node.append(
+    textBlock(
+      "p",
+      decisionLabelCopy[decision.label] || "Decision unavailable",
+      `matrix-decision-label matrix-decision-${decisionLabelTone(decision.label)}`,
+    ),
+  );
+  node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));
+
+  const permissions = renderPermissionRow(permission);
+  permissions.classList.add("matrix-permissions");
+  node.append(permissions);
+
+  if (concern && !blocking && backendText(concern.plain_english)) {
+    node.append(textBlock("p", concern.plain_english, "matrix-concern-note"));
+  }
+  node.append(
+    keyValueTable([
+      ["Interpretation", probability.interpretation_label],
+      ["Directional edge", formatFractionPct(probability.directional_edge)],
+      ["Reliability", quality.reliability_status],
+    ]),
+  );
+  if (quality.not_win_rate === true) {
+    node.append(textBlock("p", "Historical outcome-rate metric: Not established.", "muted"));
+  }
+  node.append(matrixProbabilityBlock(probability, role));
+
+  const demoBanner = textBlock("p", dataBannerText(display), "demo-banner");
+  node.append(demoBanner);
+  detailButton.addEventListener("click", () => openDetail(payload));
+  node.addEventListener("click", (event) => {
+    if (event.target.closest("button, details")) {
+      return;
+    }
+    openDetail(payload);
+  });
+  return node;
+}
+
+function tacticalPayloads(payloadStore) {
+  return tacticalTimeframes
+    .map((timeframe) => ({ timeframe, payload: payloadStore.get(timeframe) }))
+    .filter(
+      ({ timeframe, payload }) =>
+        payload && timeframeRoleFor(payload, timeframe).tactical === true,
+    )
+    .map(({ payload }) => payload);
+}
+
+function tacticalAlignmentState(payloadStore) {
+  const payloads = tacticalPayloads(payloadStore);
+  if (payloads.length < tacticalTimeframes.length) {
+    return "unavailable";
+  }
+  if (
+    payloads.some((payload) =>
+      orderedActionability(payload.decision_synthesis?.actionability_stack).some(
+        (item) => item.status === "BLOCK",
+      ),
+    )
+  ) {
+    return "blocked";
+  }
+  if (
+    payloads.some((payload) => {
+      const quality = payload.decision_synthesis?.model_quality_summary || {};
+      const status = backendText(quality.reliability_status) || "";
+      return (
+        quality.reliability_available === false ||
+        ["INSUFFICIENT_SAMPLE", "NO_SAMPLES", "LOW_SAMPLE", "WARMING_UP"].includes(status)
+      );
+    })
+  ) {
+    return "insufficient";
+  }
+
+  const labels = payloads.map(
+    (payload) => payload.decision_synthesis?.decision_synthesis?.label,
+  );
+  if (labels.some((label) => !backendText(label))) {
+    return "insufficient";
+  }
+  const sameLabel = labels.every((label) => label === labels[0]);
+  const compatibleNonDirectional = labels.every((label) => ["WAIT", "WATCH"].includes(label));
+  return sameLabel || compatibleNonDirectional ? "aligned" : "mixed";
+}
+
+function tacticalAlignmentCopy(state) {
+  return state === "unavailable" ? "Tactical alignment unavailable" : `Tactical horizons: ${state}`;
+}
+
+function updateTacticalAlignment(target, payloadStore) {
+  const alignment = target.querySelector("[data-tactical-alignment]");
+  if (!alignment) {
+    return;
+  }
+  const state = tacticalAlignmentState(payloadStore);
+  alignment.dataset.alignmentState = state;
+  alignment.querySelector("strong").textContent = tacticalAlignmentCopy(state);
+}
+
+function horizonGroupSection(group, payloadStore) {
+  const wrapper = document.createElement("section");
+  wrapper.className = `horizon-group horizon-group-${group.key}`;
+  wrapper.dataset.horizonGroupSection = group.key;
+  const header = document.createElement("div");
+  header.className = "horizon-group-header";
+  const heading = document.createElement("div");
+  heading.append(textBlock("p", group.kicker, "eyebrow"));
+  heading.append(textBlock("h2", group.title));
+  heading.append(textBlock("p", group.description, "muted"));
+  header.append(heading);
+  if (group.key === "tactical") {
+    const alignment = document.createElement("div");
+    alignment.className = "tactical-alignment";
+    alignment.dataset.tacticalAlignment = "";
+    alignment.dataset.alignmentState = "unavailable";
+    alignment.append(textBlock("strong", "Tactical alignment unavailable"));
+    alignment.append(
+      textBlock(
+        "span",
+        "Display-only summary of currently shown backend labels.",
+        "muted",
+      ),
+    );
+    header.append(alignment);
+  }
+  const grid = document.createElement("div");
+  grid.className = "timeframe-group-grid";
+  grid.dataset.horizonGroup = group.key;
+  for (const timeframe of group.timeframes) {
+    grid.append(loadingCard(timeframe));
+  }
+  wrapper.append(header, grid);
+  if (group.key === "tactical") {
+    updateTacticalAlignment(wrapper, payloadStore);
+  }
+  return wrapper;
+}
+
+function horizonGroups(payloadStore) {
+  return [
+    horizonGroupSection(
+      {
+        key: "tactical",
+        kicker: "15m · 1H · 4H",
+        title: "Tactical Horizon Matrix",
+        description: "Backend timing and setup views.",
+        timeframes: tacticalTimeframes,
+      },
+      payloadStore,
+    ),
+    horizonGroupSection(
+      {
+        key: "regime",
+        kicker: "1D · 1W · 1M",
+        title: "Regime Context",
+        description: "Higher-horizon context, not an equal tactical forecast.",
+        timeframes: regimeTimeframes,
+      },
+      payloadStore,
+    ),
+  ];
+}
+
 function appendDefinitionRows(dl, values) {
   for (const [label, value] of values) {
     const dt = document.createElement("dt");
@@ -346,23 +670,34 @@ function renderResults(target, payloads, errors = []) {
   }
 }
 
-function replaceTimeframeCard(target, timeframe, node) {
+function replaceTimeframeCard(target, timeframe, node, groupKey) {
   const current = target.querySelector(`[data-timeframe-card="${timeframe}"]`);
-  if (current) {
+  const group = target.querySelector(`[data-horizon-group="${groupKey}"]`);
+  if (current && current.parentElement === group) {
     current.replaceWith(node);
-  } else {
-    target.append(node);
+    return;
   }
+  current?.remove();
+  if (!group) {
+    target.append(node);
+    return;
+  }
+  const order = groupKey === "tactical" ? tacticalTimeframes : regimeTimeframes;
+  const position = order.indexOf(timeframe);
+  const next = [...group.querySelectorAll("[data-timeframe-card]")].find(
+    (item) => order.indexOf(item.dataset.timeframeCard) > position,
+  );
+  group.insertBefore(node, next || null);
 }
 
-function renderTimeframePlaceholders(target) {
-  target.replaceChildren(...singleTimeframes.map((timeframe) => loadingCard(timeframe)));
+function renderTimeframePlaceholders(target, payloadStore = new Map()) {
+  target.replaceChildren(...horizonGroups(payloadStore));
   hideDetail();
 }
 
 async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, payloadStore }) {
   payloadStore.clear();
-  renderTimeframePlaceholders(target);
+  renderTimeframePlaceholders(target, payloadStore);
   setLoading(loadingSelector, true);
   setAnalysisActive(true);
   try {
@@ -378,12 +713,25 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
         });
         payloadStore.set(timeframe, payload);
         payloadStore.set(payload.run_id, payload);
-        replaceTimeframeCard(target, timeframe, overviewCard(payload));
+        replaceTimeframeCard(
+          target,
+          timeframe,
+          horizonCard(payload),
+          timeframeGroupFor(payload, timeframe),
+        );
+        updateTacticalAlignment(target, payloadStore);
       } catch (error) {
-        replaceTimeframeCard(target, timeframe, errorCard(timeframe, error));
+        replaceTimeframeCard(
+          target,
+          timeframe,
+          errorCard(timeframe, error),
+          tacticalTimeframes.includes(timeframe) ? "tactical" : "regime",
+        );
+        updateTacticalAlignment(target, payloadStore);
       }
     });
     await Promise.allSettled(requests);
+    updateTacticalAlignment(target, payloadStore);
     markRefreshed();
   } finally {
     setAnalysisActive(false);
@@ -1348,7 +1696,7 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
   }
 });
 
-renderTimeframePlaceholders(singleResult);
+renderTimeframePlaceholders(singleResult, singlePayloads);
 updatePersistenceStatus("UNKNOWN");
 updateDevModeUx({ enabled: false, configured: false });
 updateRefreshButton();

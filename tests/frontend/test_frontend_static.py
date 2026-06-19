@@ -25,9 +25,9 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert 'href="/styles.css?v=ui-d1-2-decision-section"' in html
-    assert 'src="/app.js?v=ui-d1-2-decision-section"' in html
-    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-2-decision-section";' in js
+    assert 'href="/styles.css?v=ui-d1-3-tactical-matrix"' in html
+    assert 'src="/app.js?v=ui-d1-3-tactical-matrix"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-3-tactical-matrix";' in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -51,9 +51,112 @@ def test_single_analysis_has_six_timeframe_cards_not_primary_dropdown() -> None:
         'id="batchPanel"', maxsplit=1
     )[0]
     assert 'name="timeframe"' not in single_section
-    assert "timeframe-card-grid" in single_section
+    assert "horizon-results" in single_section
     for timeframe in ("15m", "1H", "4H", "1D", "1W", "1M"):
         assert f'"{timeframe}"' in js
+
+
+def test_ui_d1_3_groups_tactical_and_regime_timeframes_in_order() -> None:
+    js = read_frontend("app.js")
+    assert 'const tacticalTimeframes = ["15m", "1H", "4H"]' in js
+    assert 'const regimeTimeframes = ["1D", "1W", "1M"]' in js
+    assert "Tactical Horizon Matrix" in js
+    assert "Regime Context" in js
+    groups = js.split("function horizonGroups", maxsplit=1)[1].split(
+        "function appendDefinitionRows", maxsplit=1
+    )[0]
+    assert groups.index('key: "tactical"') < groups.index('key: "regime"')
+    assert groups.index("timeframes: tacticalTimeframes") < groups.index(
+        "timeframes: regimeTimeframes"
+    )
+
+
+def test_ui_d1_3_uses_backend_timeframe_role_with_safe_fallback() -> None:
+    js = read_frontend("app.js")
+    role_chunk = js.split("function timeframeRoleFor", maxsplit=1)[1].split(
+        "function timeframeGroupFor", maxsplit=1
+    )[0]
+    assert "decision_synthesis?.timeframe_role" in role_chunk
+    assert "backendRole.tactical" in role_chunk
+    assert "backendRole.raw_probability_hidden_by_default" in role_chunk
+    assert "backendRole.plain_english" in role_chunk
+    assert "fallbackTimeframeRoles" in role_chunk
+
+
+def test_ui_d1_3_hides_long_horizon_raw_probability_in_collapsed_context() -> None:
+    js = read_frontend("app.js")
+    assert "role.rawProbabilityHidden" in js
+    assert 'document.createElement("details")' in js
+    assert "Advanced (uncalibrated context)" in js
+    assert "Uncalibrated context. Treat these values as informational only." in js
+    assert '"1W"' in js and "rawProbabilityHidden: true" in js
+    assert '"1M"' in js and "rawProbabilityHidden: true" in js
+
+
+def test_ui_d1_3_hard_gate_dominates_muted_probability() -> None:
+    js = read_frontend("app.js")
+    css = read_frontend("styles.css")
+    assert 'item.status === "BLOCK"' in js
+    assert "matrix-block-banner" in js
+    assert 'decisionBadge("BLOCK", "block")' in js
+    assert "probability.informational_only === true" in js
+    assert "Informational only" in js
+    assert ".matrix-block-banner" in css
+    assert ".matrix-probability-muted" in css
+
+
+def test_ui_d1_3_tactical_alignment_is_label_and_status_derived_only() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("function tacticalAlignmentState", maxsplit=1)[1].split(
+        "function tacticalAlignmentCopy", maxsplit=1
+    )[0]
+    assert "decision_synthesis?.decision_synthesis?.label" in chunk
+    assert "actionability_stack" in chunk
+    assert 'item.status === "BLOCK"' in chunk
+    assert "model_quality_summary" in chunk
+    for probability_name in (
+        "p_" "up",
+        "p_" "down",
+        "prob_" "up",
+        "prob_" "down",
+        "directional_" "edge",
+    ):
+        assert probability_name not in chunk
+    for state in ("blocked", "aligned", "mixed", "insufficient", "unavailable"):
+        assert f'"{state}"' in chunk or f'"{state}"' in js
+    assert "Display-only summary of currently shown backend labels." in js
+
+
+def test_ui_d1_3_missing_timeframe_keeps_card_and_alignment_unavailable() -> None:
+    js = read_frontend("app.js")
+    assert "errorCard(timeframe, error)" in js
+    assert "payloads.length < tacticalTimeframes.length" in js
+    assert 'return "unavailable"' in js
+    assert "Tactical alignment unavailable" in js
+    assert "updateTacticalAlignment(target, payloadStore)" in js
+
+
+def test_ui_d1_3_matrix_has_no_permission_label_or_zone_inference() -> None:
+    js = read_frontend("app.js")
+    alignment_chunk = js.split("function tacticalAlignmentState", maxsplit=1)[1].split(
+        "function tacticalAlignmentCopy", maxsplit=1
+    )[0]
+    assert "can_enter_now = true" not in js
+    assert "canEnterNow = true" not in js
+    assert "> probability.p_" not in alignment_chunk
+    assert "> display.prob_" not in alignment_chunk
+    assert "decisionLabelCopy[decision.label]" in js
+    for zone_field in (
+        "preferred_entry_zone",
+        "acceptable_entry_zone",
+        "chase_zone",
+        "breakout_trigger",
+        "pullback_trigger",
+        "stop_invalidation",
+        "take_profit_plan",
+        "risk_reward_summary",
+    ):
+        assert zone_field not in js
 
 
 def test_batch_timeframe_dropdown_includes_monthly() -> None:
@@ -298,7 +401,7 @@ def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
     assert 'id="watchlistPanel"' in html
     assert "Back to Watchlist" in html
     assert 'id="watchlistResult"' in html
-    assert "timeframe-card-grid" in html
+    assert "horizon-results" in html
     assert "openWatchlistSymbol(symbol)" in js
     assert "runTimeframeSet" in js
     assert "watchlistPayloads" in js
