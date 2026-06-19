@@ -11,8 +11,16 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
-const UCPE_FRONTEND_BUILD = "wave4a2-cachebust";
+const UCPE_FRONTEND_BUILD = "ui-d1-2-decision-section";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
+const decisionLabelCopy = {
+  AVOID: "Avoid",
+  NO_TRADE: "No trade",
+  WAIT: "Wait",
+  WATCH: "Watch",
+  LONG_CANDIDATE: "Long candidate (plan only)",
+  SHORT_CANDIDATE: "Short candidate (plan only)",
+};
 const singlePayloads = new Map();
 const watchlistPayloads = new Map();
 const refreshCooldownMs = 15000;
@@ -188,6 +196,13 @@ function formatNumber(value, digits = 2) {
 
 function formatPct(value) {
   return `${formatNumber(value)}%`;
+}
+
+function formatFractionPct(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return formatPct(value * 100);
 }
 
 function formatValue(value) {
@@ -529,6 +544,421 @@ function briefListGroup(title, items) {
   return group;
 }
 
+function backendText(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function textBlock(tagName, text, className = "") {
+  const node = document.createElement(tagName);
+  node.textContent = text;
+  if (className) {
+    node.className = className;
+  }
+  return node;
+}
+
+function decisionBadge(text, tone = "neutral") {
+  const badge = textBlock("span", text, `decision-badge decision-badge-${tone}`);
+  return badge;
+}
+
+function orderedActionability(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return [...items]
+    .filter((item) => item && typeof item === "object")
+    .sort((left, right) => {
+      const leftPriority = Number.isFinite(left.priority) ? left.priority : 999;
+      const rightPriority = Number.isFinite(right.priority) ? right.priority : 999;
+      return leftPriority - rightPriority;
+    });
+}
+
+function decisionStatusTone(status) {
+  return {
+    BLOCK: "block",
+    WARN: "warn",
+    PASS: "pass",
+    INFO: "info",
+    UNKNOWN: "unknown",
+  }[status] || "unknown";
+}
+
+function decisionLabelTone(label) {
+  return {
+    AVOID: "block",
+    NO_TRADE: "block",
+    WAIT: "warn",
+    WATCH: "info",
+    LONG_CANDIDATE: "candidate",
+    SHORT_CANDIDATE: "candidate",
+  }[label] || "unknown";
+}
+
+function permissionNo(value) {
+  return value === false ? "No" : "Unavailable";
+}
+
+function permissionPlan(permission = {}) {
+  if (permission.can_plan_trade === true) {
+    return "Plan only";
+  }
+  if (permission.observe_only === true) {
+    return "Observe only";
+  }
+  return "Unavailable";
+}
+
+function renderPermissionRow(permission = {}) {
+  const row = document.createElement("div");
+  row.className = "decision-permissions";
+  for (const [label, value] of [
+    ["Enter now", permissionNo(permission.can_enter_now)],
+    ["Plan", permissionPlan(permission)],
+    ["Chase", permissionNo(permission.can_chase)],
+  ]) {
+    const item = document.createElement("div");
+    item.className = "decision-permission";
+    item.append(textBlock("span", label, "decision-permission-label"));
+    item.append(textBlock("strong", value));
+    row.append(item);
+  }
+  return row;
+}
+
+function primaryDecisionReason(stack, decision = {}) {
+  const blocking = stack.find((item) => item.status === "BLOCK");
+  const warning = stack.find((item) => item.status === "WARN");
+  return (
+    backendText(blocking?.plain_english) ||
+    backendText(warning?.plain_english) ||
+    backendText(decision.source_gate_action) ||
+    backendText(decision.source_disposition) ||
+    "Reason unavailable"
+  );
+}
+
+function renderFinalDecisionCard(synthesis = {}) {
+  const decision = synthesis.decision_synthesis || {};
+  const permission = synthesis.action_permission || {};
+  const stack = orderedActionability(synthesis.actionability_stack);
+  const changes = Array.isArray(synthesis.what_would_change_decision)
+    ? synthesis.what_would_change_decision
+    : [];
+  const labelText = decisionLabelCopy[decision.label] || "Decision unavailable";
+  const card = document.createElement("article");
+  card.className = `final-decision-card final-decision-${decisionLabelTone(decision.label)}`;
+
+  const header = document.createElement("header");
+  const headingGroup = document.createElement("div");
+  headingGroup.append(textBlock("p", "Backend final decision", "decision-eyebrow"));
+  headingGroup.append(textBlock("h4", labelText, "decision-title"));
+  header.append(headingGroup);
+  header.append(
+    decisionBadge(
+      backendText(decision.decision_strength) || "Strength unavailable",
+      decisionLabelTone(decision.label),
+    ),
+  );
+  card.append(header);
+
+  if (backendText(decision.plain_english)) {
+    card.append(textBlock("p", decision.plain_english, "decision-lead"));
+  }
+  card.append(renderPermissionRow(permission));
+
+  const reasonGrid = document.createElement("div");
+  reasonGrid.className = "decision-reason-grid";
+  const reason = document.createElement("div");
+  reason.append(textBlock("span", "Primary reason", "decision-field-label"));
+  reason.append(textBlock("p", primaryDecisionReason(stack, decision)));
+  const nextAction = document.createElement("div");
+  nextAction.append(textBlock("span", "Next action", "decision-field-label"));
+  const relevantChange =
+    changes.find(
+      (item) => item?.currently_relevant === true && backendText(item?.plain_english),
+    ) || changes.find((item) => backendText(item?.plain_english));
+  const nextActionParts = [
+    backendText(permission.plain_english),
+    backendText(relevantChange?.plain_english),
+  ].filter(Boolean);
+  nextAction.append(
+    textBlock("p", nextActionParts.length ? nextActionParts.join(" ") : "Next action unavailable"),
+  );
+  reasonGrid.append(reason, nextAction);
+  card.append(reasonGrid);
+
+  if (decision.candidate_is_not_entry_permission === true) {
+    card.append(
+      textBlock(
+        "p",
+        "Candidate labels are planning context only and do not grant entry permission.",
+        "decision-safety-note",
+      ),
+    );
+  }
+  return card;
+}
+
+function renderActionabilityRow(item = {}) {
+  const status = backendText(item.status) || "UNKNOWN";
+  const row = document.createElement("article");
+  row.className = `actionability-row actionability-${decisionStatusTone(status)}`;
+  const header = document.createElement("div");
+  header.className = "actionability-row-header";
+  header.append(decisionBadge(status, decisionStatusTone(status)));
+  header.append(textBlock("strong", backendText(item.label) || backendText(item.key) || "Check"));
+  if (Number.isFinite(item.priority)) {
+    header.append(textBlock("span", `#${item.priority}`, "actionability-priority"));
+  }
+  row.append(header);
+  if (backendText(item.plain_english)) {
+    row.append(textBlock("p", item.plain_english));
+  }
+  const evidence = Array.isArray(item.evidence_refs) ? item.evidence_refs.filter(Boolean) : [];
+  if (evidence.length) {
+    row.append(textBlock("p", `Evidence: ${evidence.join(", ")}`, "actionability-evidence"));
+  }
+  return row;
+}
+
+function renderActionabilityStack(items) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "decision-subsection";
+  wrapper.append(textBlock("h4", "Actionability stack"));
+  const stack = document.createElement("div");
+  stack.className = "actionability-stack";
+  const ordered = orderedActionability(items);
+  for (const item of ordered) {
+    stack.append(renderActionabilityRow(item));
+  }
+  if (!ordered.length) {
+    stack.append(textBlock("p", "Actionability detail unavailable.", "muted"));
+  }
+  wrapper.append(stack);
+  return wrapper;
+}
+
+function probabilityValues(probability = {}) {
+  return [
+    ["Up", formatFractionPct(probability.p_up)],
+    ["Down", formatFractionPct(probability.p_down)],
+    ["Timeout", formatFractionPct(probability.p_timeout)],
+    ["Directional edge", formatFractionPct(probability.directional_edge)],
+    ["Resolution probability", formatFractionPct(probability.resolution_probability)],
+    ["Directional balance", formatFractionPct(probability.directional_balance)],
+  ];
+}
+
+function renderProbabilityInterpretation(probability = {}, timeframeRole = {}) {
+  const card = document.createElement("article");
+  card.className = "decision-context-card probability-interpretation";
+  if (probability.informational_only === true) {
+    card.classList.add("probability-informational");
+  }
+  const heading = document.createElement("div");
+  heading.className = "decision-context-heading";
+  heading.append(textBlock("h4", "Probability interpretation"));
+  if (probability.informational_only === true) {
+    heading.append(decisionBadge("Informational only", "warn"));
+  }
+  card.append(heading);
+  if (backendText(probability.interpretation_label)) {
+    card.append(decisionBadge(probability.interpretation_label, "info"));
+  }
+  if (backendText(probability.plain_english)) {
+    card.append(textBlock("p", probability.plain_english, "decision-context-copy"));
+  }
+
+  const rawValues = keyValueTable(probabilityValues(probability));
+  if (timeframeRole.raw_probability_hidden_by_default === true) {
+    const advanced = document.createElement("details");
+    advanced.className = "decision-advanced-probability";
+    advanced.append(textBlock("summary", "Advanced heuristic probability"));
+    advanced.append(rawValues);
+    card.append(advanced);
+  } else {
+    card.append(rawValues);
+  }
+
+  if (backendText(probability.reliability_warning)) {
+    card.append(textBlock("p", probability.reliability_warning, "decision-warning"));
+  }
+  if (backendText(timeframeRole.plain_english)) {
+    card.append(textBlock("p", timeframeRole.plain_english, "muted"));
+  }
+  card.append(
+    keyValueTable([
+      ["Timeframe role", timeframeRole.role],
+      ["Tactical", timeframeRole.tactical],
+      ["Raw probability secondary", timeframeRole.raw_probability_hidden_by_default],
+    ]),
+  );
+  return card;
+}
+
+function renderRiskSummary(items) {
+  const card = document.createElement("article");
+  card.className = "decision-context-card decision-risk-summary";
+  card.append(textBlock("h4", "Risk summary"));
+  const stack = orderedActionability(items);
+  const risks = stack.filter(
+    (item) => item.key === "tail_risk" || (item.key === "hard_gates" && item.status === "BLOCK"),
+  );
+  for (const item of risks) {
+    card.append(renderActionabilityRow(item));
+  }
+  if (!risks.length) {
+    card.append(textBlock("p", "Risk detail unavailable.", "muted"));
+  }
+  return card;
+}
+
+function renderAdvisorExplanations(explanations = {}, changes = []) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "decision-subsection";
+  wrapper.append(textBlock("h4", "Advisor explanation"));
+  const items = [
+    ["Why this decision", explanations.why_this_decision],
+    ["Why not enter now", explanations.why_not_enter_now],
+    ["Why probability is muted", explanations.why_probability_is_muted],
+    ["Why timeframe matters", explanations.why_timeframe_matters],
+    ["Why reliability is insufficient", explanations.why_reliability_is_insufficient],
+  ].filter(([, value]) => backendText(value));
+  if (items.length) {
+    wrapper.append(keyValueTable(items));
+  } else {
+    wrapper.append(textBlock("p", "Advisor explanation unavailable.", "muted"));
+  }
+
+  const backendChanges = Array.isArray(changes)
+    ? changes.map((item) => backendText(item?.plain_english)).filter(Boolean)
+    : [];
+  if (backendChanges.length) {
+    const group = document.createElement("div");
+    group.className = "decision-change-list";
+    group.append(textBlock("h5", "What could change the decision"));
+    group.append(listBlock(backendChanges));
+    wrapper.append(group);
+  }
+  return wrapper;
+}
+
+function renderModelQuality(quality = {}) {
+  const card = document.createElement("article");
+  card.className = "decision-context-card decision-model-quality";
+  card.append(textBlock("h4", "Reliability summary"));
+  const explanation = backendText(quality.plain_english) || backendText(quality.warning);
+  if (explanation) {
+    card.append(textBlock("p", explanation, "decision-context-copy"));
+  }
+  const values = [
+    ["Calibration", quality.calibration_status],
+    ["Reliability", quality.reliability_status],
+    ["Reliability available", quality.reliability_available],
+  ];
+  if (quality.sample_count !== null && quality.sample_count !== undefined) {
+    values.push(["Sample count", quality.sample_count]);
+  }
+  if (quality.sample_gate !== null && quality.sample_gate !== undefined) {
+    values.push(["Sample gate", quality.sample_gate]);
+  }
+  card.append(keyValueTable(values));
+  if (quality.not_win_rate === true) {
+    card.append(textBlock("p", "Historical outcome-rate metric: Not established.", "muted"));
+  }
+  card.append(textBlock("p", "Profitability evidence: Not established.", "muted"));
+  return card;
+}
+
+function renderTradePlanSkeleton(plan = {}, permission = {}, decision = {}) {
+  const card = document.createElement("article");
+  card.className = "decision-context-card decision-trade-plan";
+  card.append(textBlock("h4", "Trade plan skeleton"));
+  card.append(
+    keyValueTable([
+      ["Status", plan.status],
+      ["Plan permission", permissionPlan(permission)],
+    ]),
+  );
+  if (backendText(plan.disabled_reason)) {
+    card.append(textBlock("p", plan.disabled_reason, "decision-context-copy"));
+  }
+  card.append(textBlock("p", "Numeric plan not available / disabled.", "decision-warning"));
+  if (
+    permission.can_plan_trade === true &&
+    decision.candidate_is_not_entry_permission === true
+  ) {
+    card.append(
+      textBlock("p", "Candidate plan only — not an entry instruction.", "decision-safety-note"),
+    );
+  }
+  return card;
+}
+
+function renderFutureQuantHooks(hooks = {}) {
+  const advanced = document.createElement("details");
+  advanced.className = "decision-future-hooks";
+  advanced.append(textBlock("summary", "Advanced context · Future Quant V2"));
+  advanced.append(
+    keyValueTable([
+      ["Influence mode", hooks.influence_mode],
+      ["Decision influence", formatFractionPct(hooks.decision_influence_frac)],
+    ]),
+  );
+  if (backendText(hooks.plain_english)) {
+    advanced.append(textBlock("p", hooks.plain_english, "muted"));
+  }
+  return advanced;
+}
+
+function renderDecisionSynthesis(synthesis, decisionBrief = {}) {
+  const available =
+    synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
+  if (!available) {
+    return section("Decision", [
+      textBlock("p", "Decision synthesis unavailable for this run.", "decision-warning"),
+      keyValueTable([
+        ["Existing brief action", decisionBrief.action],
+        ["Existing brief summary", decisionBrief.state_summary],
+        ["Existing brief risk note", decisionBrief.risk_note],
+      ]),
+    ]);
+  }
+
+  const decision = synthesis.decision_synthesis || {};
+  const permission = synthesis.action_permission || {};
+  const contextGrid = document.createElement("div");
+  contextGrid.className = "decision-context-grid";
+  contextGrid.append(
+    renderRiskSummary(synthesis.actionability_stack),
+    renderProbabilityInterpretation(
+      synthesis.probability_interpretation || {},
+      synthesis.timeframe_role || {},
+    ),
+  );
+
+  const supportGrid = document.createElement("div");
+  supportGrid.className = "decision-context-grid";
+  supportGrid.append(
+    renderModelQuality(synthesis.model_quality_summary || {}),
+    renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}, permission, decision),
+  );
+
+  return section("Decision", [
+    renderFinalDecisionCard(synthesis),
+    contextGrid,
+    renderActionabilityStack(synthesis.actionability_stack),
+    renderAdvisorExplanations(
+      synthesis.advisor_explanations || {},
+      synthesis.what_would_change_decision,
+    ),
+    supportGrid,
+    renderFutureQuantHooks(synthesis.future_quant_v2_hooks || {}),
+  ]);
+}
+
 function renderDecisionBrief(brief = {}) {
   return section("Decision Brief", [
     keyValueTable([
@@ -571,6 +1001,7 @@ function renderStructuredDetail(payload, detailView) {
   rawJson.append(summary, pre);
 
   detailPanel.replaceChildren(
+    renderDecisionSynthesis(payload.decision_synthesis, decisionBrief),
     section("Overview", [
       downloadJsonButton(payload),
       keyValueTable([

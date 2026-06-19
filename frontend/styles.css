@@ -428,6 +428,249 @@ dd {
   font-size: 16px;
 }
 
+.final-decision-card {
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 10px;
+  padding: 18px;
+  background:
+    linear-gradient(120deg, rgba(0, 240, 255, 0.08), transparent 48%),
+    rgba(5, 8, 11, 0.94);
+}
+
+.final-decision-card header,
+.decision-context-heading,
+.actionability-row-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.final-decision-block {
+  border-color: var(--danger);
+  box-shadow: 0 0 26px rgba(255, 77, 77, 0.12);
+}
+
+.final-decision-warn {
+  border-color: var(--warning);
+}
+
+.final-decision-info {
+  border-color: var(--cyan);
+}
+
+.final-decision-candidate {
+  border-color: var(--green);
+  box-shadow: 0 0 24px rgba(138, 255, 128, 0.09);
+}
+
+.decision-eyebrow,
+.decision-field-label,
+.decision-permission-label {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.decision-title {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: clamp(22px, 4vw, 34px);
+  letter-spacing: -0.03em;
+}
+
+.decision-lead,
+.decision-context-copy {
+  margin-top: 12px;
+  line-height: 1.55;
+}
+
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--muted);
+  background: rgba(142, 164, 177, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.decision-badge-block {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(255, 77, 77, 0.1);
+}
+
+.decision-badge-warn {
+  border-color: var(--warning);
+  color: var(--warning);
+  background: rgba(255, 209, 102, 0.08);
+}
+
+.decision-badge-pass,
+.decision-badge-candidate {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(138, 255, 128, 0.08);
+}
+
+.decision-badge-info {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.decision-permissions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.decision-permission {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 7px;
+  padding: 10px;
+  background: rgba(0, 240, 255, 0.035);
+}
+
+.decision-permission strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.decision-reason-grid,
+.decision-context-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.decision-reason-grid > div {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.decision-reason-grid p {
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.decision-safety-note,
+.decision-warning {
+  margin-top: 12px;
+  border: 1px solid rgba(255, 209, 102, 0.34);
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--warning);
+  background: rgba(255, 209, 102, 0.06);
+  line-height: 1.45;
+}
+
+.decision-context-card,
+.decision-subsection,
+.decision-future-hooks {
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(0, 240, 255, 0.025);
+}
+
+.decision-context-card h4,
+.decision-subsection h4 {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.probability-informational {
+  border-color: rgba(255, 209, 102, 0.32);
+  background: rgba(255, 209, 102, 0.025);
+}
+
+.decision-advanced-probability,
+.decision-future-hooks {
+  margin-top: 12px;
+}
+
+.decision-advanced-probability summary,
+.decision-future-hooks summary {
+  cursor: pointer;
+  color: var(--warning);
+}
+
+.actionability-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.actionability-row {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px;
+  background: rgba(5, 8, 11, 0.72);
+}
+
+.actionability-row p {
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.actionability-block {
+  grid-column: 1 / -1;
+  border-width: 2px;
+  border-color: var(--danger);
+  background: rgba(255, 77, 77, 0.08);
+  box-shadow: 0 0 24px rgba(255, 77, 77, 0.12);
+}
+
+.actionability-warn {
+  border-color: rgba(255, 209, 102, 0.56);
+}
+
+.actionability-pass {
+  border-color: rgba(138, 255, 128, 0.28);
+}
+
+.actionability-info {
+  border-color: rgba(0, 240, 255, 0.26);
+}
+
+.actionability-priority,
+.actionability-evidence {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.actionability-row-header strong {
+  flex: 1;
+}
+
+.decision-change-list {
+  margin-top: 14px;
+}
+
+.decision-change-list h5 {
+  margin: 0 0 8px;
+  color: var(--warning);
+  font-size: 12px;
+}
+
+.decision-future-hooks {
+  color: var(--muted);
+}
+
 .brief-list-group {
   margin-top: 12px;
 }
@@ -561,6 +804,17 @@ pre {
 
   .detail-kv {
     grid-template-columns: 1fr;
+  }
+
+  .decision-permissions,
+  .decision-reason-grid,
+  .decision-context-grid,
+  .actionability-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .actionability-block {
+    grid-column: auto;
   }
 
   dd {

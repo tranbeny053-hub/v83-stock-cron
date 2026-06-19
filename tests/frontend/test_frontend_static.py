@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,9 +25,9 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert 'href="/styles.css?v=wave4a2-b9137ee"' in html
-    assert 'src="/app.js?v=wave4a2-b9137ee"' in html
-    assert 'const UCPE_FRONTEND_BUILD = "wave4a2-cachebust";' in js
+    assert 'href="/styles.css?v=ui-d1-2-decision-section"' in html
+    assert 'src="/app.js?v=ui-d1-2-decision-section"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-2-decision-section";' in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -86,6 +87,119 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         assert heading in js
     assert "raw-json" in js
     assert "News analysis disabled for this run." in js
+
+
+def test_decision_section_reads_backend_contract_and_renders_first() -> None:
+    js = read_frontend("app.js")
+    html = read_frontend("index.html")
+    for marker in (
+        "decision_synthesis",
+        "action_permission",
+        "actionability_stack",
+        "model_quality_summary",
+        "trade_plan_skeleton",
+        "advisor_explanations",
+        "probability_interpretation",
+    ):
+        assert marker in js
+    detail_chunk = js.split("function renderStructuredDetail", maxsplit=1)[1]
+    replacement = detail_chunk.split("detailPanel.replaceChildren(", maxsplit=1)[1]
+    assert replacement.index("renderDecisionSynthesis") < replacement.index('section("Overview"')
+    assert 'data-tab="decision"' not in html
+
+
+def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> None:
+    js = read_frontend("app.js")
+    inference_patterns = (
+        r"probability\.p_up\s*>\s*probability\.p_down",
+        r"can_enter_now\s*=\s*true",
+        r"canEnterNow\s*=\s*true",
+        r"label\s*=\s*['\"](?:LONG|SHORT)['\"]",
+    )
+    assert not any(re.search(pattern, js, flags=re.IGNORECASE) for pattern in inference_patterns)
+    for zone_field in (
+        "preferred_entry_zone",
+        "acceptable_entry_zone",
+        "chase_zone",
+        "breakout_trigger",
+        "pullback_trigger",
+        "stop_invalidation",
+        "take_profit_plan",
+        "risk_reward_summary",
+    ):
+        assert zone_field not in js
+
+
+def test_decision_renderer_uses_safe_candidate_and_probability_copy() -> None:
+    js = read_frontend("app.js")
+    assert "Long candidate (plan only)" in js
+    assert "Short candidate (plan only)" in js
+    assert "Candidate plan only — not an entry instruction." in js
+    assert "Informational only" in js
+    assert "probability.informational_only" in js
+    candidate_copy = js.split("const decisionLabelCopy", maxsplit=1)[1].split("};", maxsplit=1)[0]
+    assert '"Buy"' not in candidate_copy
+    assert '"Sell"' not in candidate_copy
+
+
+def test_frontend_contains_no_unsafe_decision_wording() -> None:
+    combined = "\n".join(
+        read_frontend(name).lower() for name in ("app.js", "index.html", "styles.css")
+    )
+    forbidden = (
+        "buy " "now",
+        "sell " "now",
+        "guaran" "teed",
+        "safe " "trade",
+        "sure " "long",
+        "sure " "short",
+        "will " "pump",
+        "will " "dump",
+        "win " "rate",
+        "profit" "able",
+        "confidence is " "high",
+        "accuracy " "proven",
+        "guaran" "teed " "profit",
+    )
+    assert not any(phrase in combined for phrase in forbidden)
+
+
+def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() -> None:
+    js = read_frontend("app.js")
+    assert "Decision synthesis unavailable for this run." in js
+    assert "decisionBrief.action" in js
+    assert "decisionBrief.state_summary" in js
+    assert "Numeric plan not available / disabled." in js
+    assert "renderTradePlanSkeleton" in js
+    assert "formatValue(null)" not in js
+
+
+def test_decision_renderer_prioritizes_backend_blocks_and_advanced_context() -> None:
+    js = read_frontend("app.js")
+    css = read_frontend("styles.css")
+    assert 'stack.find((item) => item.status === "BLOCK")' in js
+    assert 'stack.find((item) => item.status === "WARN")' in js
+    assert 'item.key === "hard_gates" && item.status === "BLOCK"' in js
+    assert 'item.key === "tail_risk"' in js
+    assert "raw_probability_hidden_by_default" in js
+    assert "decision-advanced-probability" in js
+    assert "future_quant_v2_hooks" in js
+    assert "influence_mode" in js
+    assert "decision_influence_frac" in js
+    assert ".actionability-block" in css
+    assert "grid-column: 1 / -1" in css
+
+
+def test_decision_reliability_uses_backend_summary_and_optional_samples() -> None:
+    js = read_frontend("app.js")
+    assert "quality.plain_english" in js
+    assert "quality.warning" in js
+    assert "quality.calibration_status" in js
+    assert "quality.reliability_status" in js
+    assert "quality.reliability_available" in js
+    assert "quality.not_win_rate" in js
+    assert "quality.sample_count !== null" in js
+    assert "quality.sample_gate !== null" in js
 
 
 def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
