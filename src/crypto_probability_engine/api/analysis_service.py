@@ -33,6 +33,7 @@ from crypto_probability_engine.detail.decision_brief import (
     build_decision_brief,
     build_horizon_context,
 )
+from crypto_probability_engine.detail.decision_synthesis import build_decision_synthesis
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
@@ -116,6 +117,13 @@ def analyze_request(
         quant_result=quant_result,
         data_quality=data_quality,
     )
+    decision_synthesis = build_decision_synthesis(
+        timeframe=request.timeframe,
+        quant_result=quant_result,
+        data_quality=data_quality,
+        provider_state=provider_state,
+        decision_brief=decision_brief,
+    )
     detail_view = build_detail_view(
         symbol=symbol.display,
         run_id=run_id,
@@ -167,6 +175,7 @@ def analyze_request(
         "score_stack": quant_result["score_stack"],
         "trend_summary": quant_result["trend_summary"],
         "decision_brief": decision_brief,
+        "decision_synthesis": decision_synthesis,
         "frontend_display": frontend_display,
         "detail_view": detail_view,
         "gate_result": quant_result["gate_result"],

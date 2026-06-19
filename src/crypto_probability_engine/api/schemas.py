@@ -204,6 +204,7 @@ class AnalysisResponse(BaseModel):
     score_stack: JsonObject
     trend_summary: JsonObject
     decision_brief: DecisionBrief
+    decision_synthesis: JsonObject = Field(default_factory=dict)
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject

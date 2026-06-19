@@ -1,86 +1,96 @@
 # Current State
 
-Updated: 2026-06-15
+Updated: 2026-06-20
 
 ## Branch / Worktree
 
-- Branch: `codex/wave4b3-calibration-metrics`
+- Branch: `codex/ui-d1-1-decision-synthesis`
 - Base branch: `dev`
 - Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
 - Scope rule: inspect/edit only files inside `v8-crypto-api-clean/`
-- Merge/deploy status: no merge, no deploy/push to Hugging Face
-- Migration status: no migrations added or run in Wave 4B.3
+- Merge/deploy/push status: none performed
+- Migration status: no migration added or run
 
 ## Current Phase
 
-- Phase: Wave 4B.3 Read-Only Calibration Metrics and Sample Gates.
-- Risk: diagnostic-only service/CLI plus one SELECT-only persistence read method; no API route, UI, schema-response, migration, quant/news, or resolver-labeling change.
-- Current status: implementation complete, full local verification passed, not merged/deployed.
+- Phase: UI-D1.1 backend decision-synthesis contract.
+- Risk: additive, read-only response interpretation; no scoring, probability, gate,
+  calibration, resolver, news-influence, persistence, endpoint, or frontend changes.
+- Current status: implementation and local verification complete; not merged or deployed.
 
 ## What Changed
 
-- Added `src/crypto_probability_engine/calibration/` package with pure metric functions, report schemas, and service orchestration.
-- Added Brier score, multiclass log loss, deterministic top-label hit rate, reliability buckets, outcome distribution, directional-subset hit rate, and terminal-return diagnostics.
-- Added sample gates: `NO_SAMPLES`, `INSUFFICIENT_SAMPLE`, `WARMING_UP`, `PRELIMINARY_MEASURED`, and `MEASURED`.
-- Added `fetch_resolved_prediction_outcomes_for_calibration(...)` as a SELECT-only repository read method joining immutable predictions to immutable outcomes.
-- Added `scripts/calibration_report.py` with JSON default output and text output option.
-- Added offline tests for metrics, sample gates, per-timeframe isolation, version-mix warnings, SELECT-only SQL, literal statement timeout, CLI behavior, and operational error handling.
-- Added Claude targeted fix: calibration service/CLI use DB-first operator repository selection when `SUPABASE_DB_URL` exists, even if Supabase REST secrets also exist.
-- Added Claude targeted fix: reliability-bucket `calibration_gap` is signed as `avg_predicted_max_prob - empirical_hit_rate`.
-- Calibration diagnostics do not mutate predictions/outcomes and do not write back reliability, calibration, confidence, or profitability status.
+- Added a pure `build_decision_synthesis(...)` builder derived only from existing
+  analysis output.
+- Added the top-level `decision_synthesis` response block with decision label,
+  probability interpretation, timeframe role, permissions, 12-step actionability
+  stack, model-quality honesty, informational change conditions, advisor copy,
+  disabled trade-plan skeleton, and shadow-only future hooks.
+- Attached the block in `/v1/analyze`, declared it in `AnalysisResponse`, and added
+  a strict JSON Schema shape.
+- Added focused builder, invariant, wording, probability-math, timeframe, schema,
+  purity, and API response tests.
 
-## Checks Run / Attempted
+## Hard Invariants
 
-- `git checkout dev`: PASS.
-- `git status --short --untracked-files=all -- .`: PASS before branch creation, clean.
-- `git checkout -b codex/wave4b2a-github-resolver-cron`: PASS.
-- `git checkout -b codex/wave4b2-outcome-resolver`: PASS.
-- `PYTHONPATH=src python3 -m pytest tests/resolver -q`: PASS, 10 passed after targeted fix.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 29 passed after targeted fix.
-- `PYTHONPATH=src python3 -m pytest tests/resolver tests/persistence -q`: PASS, 33 passed after operator-wiring fix.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 36 passed after Postgres due-query fix.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 38 passed after direct Postgres due-fetch wrapper fix.
-- `PYTHONPATH=src python3 -m pytest tests/persistence tests/resolver -q`: PASS, 40 passed after timeout-bind/outcome-write fix.
-- `PYTHONPATH=src python3 -m pytest tests/calibration tests/persistence tests/resolver -q`: PASS, 66 passed after targeted fix.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 222 passed with 4 existing warnings after targeted fix.
-- `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 10`: PASS, JSON `NO_SAMPLES` diagnostic from `IN_MEMORY`.
+- `can_enter_now=false` and `can_chase=false` in every emitted synthesis.
+- Entry, stop, target, trigger, chase, and risk/reward plan fields are always `null`.
+- Candidate labels mean planning context only and never entry permission.
+- Probability is informational-only under a hard gate or without measured reliability.
+- Decision strength cannot exceed `MODERATE` unless in-payload reliability is `MEASURED`.
+- `future_quant_v2_hooks` is `SHADOW_ONLY` with zero decision influence.
+- Existing `profitability_claim=false` and `news_influence_frac=0.0` remain unchanged.
+- No database read, write, endpoint, migration, frontend, or protected methodology change.
+
+## Checks Run
+
+- `PYTHONPATH=src python3 -m pytest tests/detail/test_decision_synthesis.py -q`:
+  PASS, 19 passed with 2 existing-style `RefResolver` deprecation warnings.
+- `PYTHONPATH=src python3 -m pytest tests/api -q`: PASS, 36 passed with 2 existing
+  Starlette cookie deprecation warnings.
+- `PYTHONPATH=src python3 -m pytest -q`: PASS, 241 passed with 6 deprecation warnings.
 - `ruff check src tests scripts`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
 - `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
-- `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS, existing `jsonschema.RefResolver` deprecation warning.
-- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS; offline smoke and served frontend bundle guard passed.
-- Protected working-tree diff for frontend, API, `api/schemas.py`, quant, score stack, gates, news, and migrations: PASS, empty.
-- Targeted greps: PASS; calibration package has no writes/status writebacks/trading verbs; no REST-first calibration builder usage; no absolute calibration gap; statement-timeout grep shows existing safe literal helper.
+- `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with the existing
+  `RefResolver` deprecation warning.
+- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
+- Protected working-tree diff: PASS, empty.
+- Targeted greps: PASS; no forbidden-wording or mutation/news-influence hit exists,
+  and every `can_enter_now` occurrence is false or a false assertion.
 
 ## Files Changed
 
 - `AI/03_CURRENT_STATE.md`
 - `AI/05_HANDOFF.md`
-- `AI/08_IMPLEMENTATION_MEMORY.md`
-- `CHANGELOG.md`
-- `IMPLEMENTATION_DECISIONS.md`
-- `RELEASE_GATE.md`
-- `scripts/calibration_report.py`
-- `src/crypto_probability_engine/calibration/__init__.py`
-- `src/crypto_probability_engine/calibration/metrics.py`
-- `src/crypto_probability_engine/calibration/schemas.py`
-- `src/crypto_probability_engine/calibration/service.py`
-- `src/crypto_probability_engine/persistence/repository.py`
-- `tests/calibration/test_calibration_report.py`
-- `tests/calibration/test_metrics.py`
-- `tests/calibration/test_service.py`
-- `tests/persistence/test_persistence_foundation.py`
+- `schemas/response.schema.json`
+- `src/crypto_probability_engine/api/analysis_service.py`
+- `src/crypto_probability_engine/api/schemas.py`
+- `src/crypto_probability_engine/detail/decision_synthesis.py`
+- `tests/api/test_analysis_endpoints.py`
+- `tests/detail/test_decision_synthesis.py`
 
-## Current Blockers / Unknowns
+## Files Read but Not Changed
 
-- No local implementation blocker is known.
-- Calibration API/UI exposure is intentionally not implemented.
-- Supabase REST calibration read is intentionally not implemented; CLI/operator diagnostics now prefer direct Postgres repository when `SUPABASE_DB_URL` is configured.
-- Calibration metrics are diagnostic only and do not promote reliability, confidence, or profitability.
+- `AGENTS.md`
+- `AI/00_PROJECT_RULES.md`
+- `AI/01_BLUEPRINT_SUMMARY.md`
+- `AI/04_TASK_BOARD.md`
+- `AI/06_TEST_COMMANDS.md`
+- `IMPLEMENTATION_SPEC.md`
+- Existing detail, quant, feature, gate, score, schema-test, and fixture files used
+  to map current response shapes and safety authority.
+
+## Risks / Unknowns
+
+- Current probabilities remain heuristic and uncalibrated; resolved-sample reliability
+  is still insufficient.
+- UI-D1.1 intentionally provides no numeric entry, invalidation, or target geometry.
+- Frontend rendering of this backend block is intentionally deferred.
 
 ## Next Steps
 
-1. Send this branch/report to Claude for Wave 4B.3 review.
-2. If approved, merge normally; no migration or deployment step is part of this branch.
-3. Run `PYTHONPATH=src python3 scripts/calibration_report.py --timeframe 15m --limit 100 --format json` in an operator environment with direct DB access when a real report is needed.
+1. Send the single commit and verification evidence to Claude for review.
+2. After approval, merge normally; no deployment or migration is part of this task.
+3. Scope a separate frontend task to render backend truth without recomputation.

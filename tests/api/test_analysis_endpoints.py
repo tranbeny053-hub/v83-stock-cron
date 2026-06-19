@@ -51,6 +51,12 @@ def test_analyze_metrics_only_returns_schema_valid_payload() -> None:
     assert payload["data_quality"]["data_source"] == "FIXTURE_DEMO"
     assert payload["frontend_display"]["data_source"] == "FIXTURE_DEMO"
     assert payload["debug"]["persistence_status"] == "STATELESS"
+    synthesis = payload["decision_synthesis"]
+    assert synthesis["action_permission"]["can_enter_now"] is False
+    assert synthesis["action_permission"]["can_chase"] is False
+    assert synthesis["trade_plan_skeleton"]["disabled_reason"]
+    assert payload["score_stack"]["news_influence_frac"] == 0.0
+    assert payload["calibration_state"]["profitability_claim"] is False
 
 
 def test_decision_brief_is_schema_valid_and_honesty_bounded() -> None:

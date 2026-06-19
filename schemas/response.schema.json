@@ -133,10 +133,283 @@
         "disclaimer": { "type": "string" }
       }
     },
+    "decision_synthesis": { "$ref": "#/$defs/decisionSynthesis" },
     "frontend_display": { "type": "object" },
     "detail_view": { "$ref": "detail_view.schema.json" },
     "gate_result": { "type": "object" },
     "debug": { "type": "object" },
     "analysis_hash": { "type": "string" }
+  },
+  "$defs": {
+    "decisionSynthesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "decision_synthesis",
+        "probability_interpretation",
+        "timeframe_role",
+        "action_permission",
+        "actionability_stack",
+        "model_quality_summary",
+        "what_would_change_decision",
+        "advisor_explanations",
+        "trade_plan_skeleton",
+        "future_quant_v2_hooks"
+      ],
+      "properties": {
+        "schema_version": { "const": "1.0" },
+        "decision_synthesis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label",
+            "decision_strength",
+            "plain_english",
+            "source_disposition",
+            "source_gate_action",
+            "candidate_is_not_entry_permission"
+          ],
+          "properties": {
+            "label": {
+              "enum": [
+                "AVOID",
+                "NO_TRADE",
+                "WAIT",
+                "WATCH",
+                "LONG_CANDIDATE",
+                "SHORT_CANDIDATE"
+              ]
+            },
+            "decision_strength": { "enum": ["LOW", "MODERATE", "HIGH"] },
+            "plain_english": { "type": "string" },
+            "source_disposition": { "type": "string" },
+            "source_gate_action": { "type": "string" },
+            "candidate_is_not_entry_permission": { "const": true }
+          }
+        },
+        "probability_interpretation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "p_up",
+            "p_down",
+            "p_timeout",
+            "directional_edge",
+            "resolution_probability",
+            "directional_balance",
+            "interpretation_label",
+            "plain_english",
+            "reliability_warning",
+            "informational_only"
+          ],
+          "properties": {
+            "p_up": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "p_down": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "p_timeout": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "directional_edge": { "type": ["number", "null"], "minimum": -1, "maximum": 1 },
+            "resolution_probability": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "directional_balance": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 1
+            },
+            "interpretation_label": {
+              "enum": ["UP_LEAN", "DOWN_LEAN", "BALANCED", "UNAVAILABLE"]
+            },
+            "plain_english": { "type": "string" },
+            "reliability_warning": { "type": "string" },
+            "informational_only": { "type": "boolean" }
+          }
+        },
+        "timeframe_role": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timeframe",
+            "role",
+            "tactical",
+            "raw_probability_hidden_by_default",
+            "plain_english"
+          ],
+          "properties": {
+            "timeframe": { "type": "string" },
+            "role": {
+              "enum": [
+                "TACTICAL_TIMING",
+                "TACTICAL_SWING_BRIDGE",
+                "SETUP_QUALITY",
+                "SWING_CONTEXT",
+                "REGIME_CONTEXT",
+                "MACRO_BACKDROP",
+                "UNSPECIFIED_CONTEXT"
+              ]
+            },
+            "tactical": { "type": "boolean" },
+            "raw_probability_hidden_by_default": { "type": "boolean" },
+            "plain_english": { "type": "string" }
+          }
+        },
+        "action_permission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "can_plan_trade",
+            "can_enter_now",
+            "can_chase",
+            "observe_only",
+            "plain_english"
+          ],
+          "properties": {
+            "can_plan_trade": { "type": "boolean" },
+            "can_enter_now": { "const": false },
+            "can_chase": { "const": false },
+            "observe_only": { "type": "boolean" },
+            "plain_english": { "type": "string" }
+          }
+        },
+        "actionability_stack": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/actionabilityCheck" }
+        },
+        "model_quality_summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "calibration_status",
+            "reliability_status",
+            "sample_count",
+            "sample_gate",
+            "brier_score",
+            "log_loss",
+            "top_label_hit_rate",
+            "reliability_available",
+            "not_win_rate",
+            "warning"
+          ],
+          "properties": {
+            "calibration_status": { "type": "string" },
+            "reliability_status": { "type": "string" },
+            "sample_count": { "type": ["integer", "null"], "minimum": 0 },
+            "sample_gate": { "type": ["string", "null"] },
+            "brier_score": { "type": ["number", "null"] },
+            "log_loss": { "type": ["number", "null"] },
+            "top_label_hit_rate": { "type": ["number", "null"] },
+            "reliability_available": { "type": "boolean" },
+            "not_win_rate": { "const": true },
+            "warning": { "type": "string" }
+          }
+        },
+        "what_would_change_decision": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/decisionCondition" }
+        },
+        "advisor_explanations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "why_this_decision",
+            "why_not_enter_now",
+            "why_probability_is_muted",
+            "why_timeframe_matters",
+            "why_reliability_is_insufficient"
+          ],
+          "properties": {
+            "why_this_decision": { "type": "string" },
+            "why_not_enter_now": { "type": "string" },
+            "why_probability_is_muted": { "type": "string" },
+            "why_timeframe_matters": { "type": "string" },
+            "why_reliability_is_insufficient": { "type": "string" }
+          }
+        },
+        "trade_plan_skeleton": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "can_plan_trade",
+            "can_enter_now",
+            "can_chase",
+            "preferred_entry_zone",
+            "acceptable_entry_zone",
+            "chase_zone",
+            "breakout_trigger",
+            "pullback_trigger",
+            "stop_invalidation",
+            "take_profit_plan",
+            "risk_reward_summary",
+            "disabled_reason"
+          ],
+          "properties": {
+            "status": { "const": "STRUCTURAL_ONLY_D1_1" },
+            "can_plan_trade": { "type": "boolean" },
+            "can_enter_now": { "const": false },
+            "can_chase": { "const": false },
+            "preferred_entry_zone": { "type": "null" },
+            "acceptable_entry_zone": { "type": "null" },
+            "chase_zone": { "type": "null" },
+            "breakout_trigger": { "type": "null" },
+            "pullback_trigger": { "type": "null" },
+            "stop_invalidation": { "type": "null" },
+            "take_profit_plan": { "type": "null" },
+            "risk_reward_summary": { "type": "null" },
+            "disabled_reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        "future_quant_v2_hooks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "influence_mode",
+            "decision_influence_frac",
+            "plain_english"
+          ],
+          "properties": {
+            "status": { "const": "PLACEHOLDER" },
+            "influence_mode": { "const": "SHADOW_ONLY" },
+            "decision_influence_frac": { "const": 0.0 },
+            "plain_english": { "type": "string" }
+          }
+        }
+      }
+    },
+    "actionabilityCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "status", "label", "plain_english", "evidence_refs", "priority"],
+      "properties": {
+        "key": { "type": "string" },
+        "status": { "enum": ["PASS", "WARN", "BLOCK", "INFO", "UNKNOWN"] },
+        "label": { "type": "string" },
+        "plain_english": { "type": "string" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "priority": { "type": "integer", "minimum": 1, "maximum": 12 }
+      }
+    },
+    "decisionCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "currently_relevant",
+        "plain_english",
+        "evidence_refs",
+        "informational_only"
+      ],
+      "properties": {
+        "key": { "type": "string" },
+        "currently_relevant": { "type": "boolean" },
+        "plain_english": { "type": "string" },
+        "evidence_refs": { "type": "array", "items": { "type": "string" } },
+        "informational_only": { "const": true }
+      }
+    }
   }
 }
