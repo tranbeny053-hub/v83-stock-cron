@@ -35,6 +35,13 @@ _TRADE_PLAN_NULL_FIELDS = (
     "take_profit_plan",
     "risk_reward_summary",
 )
+# A 5% same-direction primary-horizon return is a conservative display-only extension flag.
+_MISSED_MOVE_RETURN_ABS_THRESHOLD = 0.05
+_TRADE_PLAN_SAFETY_COPY = (
+    "Candidate plan only — not a trade command.",
+    "Not financial advice.",
+    "Numeric entry/stop/target disabled until calibration is measured.",
+)
 
 
 def build_decision_synthesis(
@@ -69,6 +76,23 @@ def build_decision_synthesis(
     can_plan_trade = label in {"LONG_CANDIDATE", "SHORT_CANDIDATE"}
     timeframe_role = _timeframe_role(timeframe)
     model_quality = _model_quality_summary(calibration, reliability_status)
+    actionability_stack = _actionability_stack(
+        label=label,
+        gate=gate,
+        data_quality=data_quality,
+        provider_state=provider_state,
+        epistemic=epistemic,
+        probability=probability,
+        quant_result=quant_result,
+        reliability_status=reliability_status,
+    )
+    decision_conditions = _what_would_change_decision(
+        label=label,
+        gate=gate,
+        data_quality=data_quality,
+        provider_state=provider_state,
+        reliability_status=reliability_status,
+    )
 
     result = {
         "schema_version": SCHEMA_VERSION,
@@ -93,40 +117,24 @@ def build_decision_synthesis(
                 else "Observe only; current entry, chase, and numeric planning are disabled."
             ),
         },
-        "actionability_stack": _actionability_stack(
-            label=label,
-            gate=gate,
-            data_quality=data_quality,
-            provider_state=provider_state,
-            epistemic=epistemic,
-            probability=probability,
-            quant_result=quant_result,
-            reliability_status=reliability_status,
-        ),
+        "actionability_stack": actionability_stack,
         "model_quality_summary": model_quality,
-        "what_would_change_decision": _what_would_change_decision(
-            label=label,
-            gate=gate,
-            data_quality=data_quality,
-            provider_state=provider_state,
-            reliability_status=reliability_status,
-        ),
+        "what_would_change_decision": decision_conditions,
         "advisor_explanations": _advisor_explanations(
             label=label,
             hard_gate_active=hard_gate_active,
             reliability_status=reliability_status,
             timeframe_role=timeframe_role,
         ),
-        "trade_plan_skeleton": {
-            "status": "STRUCTURAL_ONLY_D1_1",
-            "can_plan_trade": can_plan_trade,
-            "can_enter_now": False,
-            "can_chase": False,
-            **{field: None for field in _TRADE_PLAN_NULL_FIELDS},
-            "disabled_reason": (
-                "UI-D1.1 exposes structure only; validated numeric planning is not available."
-            ),
-        },
+        "trade_plan_skeleton": _trade_plan_skeleton(
+            label=label,
+            gate=gate,
+            score=score,
+            epistemic=epistemic,
+            quant_result=quant_result,
+            actionability_stack=actionability_stack,
+            decision_conditions=decision_conditions,
+        ),
         "future_quant_v2_hooks": {
             "status": "PLACEHOLDER",
             "influence_mode": "SHADOW_ONLY",
@@ -135,6 +143,192 @@ def build_decision_synthesis(
         },
     }
     return result
+
+
+def _trade_plan_skeleton(
+    *,
+    label: str,
+    gate: dict,
+    score: dict,
+    epistemic: dict,
+    quant_result: dict,
+    actionability_stack: list[dict],
+    decision_conditions: list[dict],
+) -> dict:
+    setup_direction = {
+        "LONG_CANDIDATE": "LONG",
+        "SHORT_CANDIDATE": "SHORT",
+    }.get(label, "NEUTRAL")
+    hard_gate_active = _hard_gate_active(gate)
+    elevated_risk = str(score.get("disposition") or "") == "ELEVATED_RISK_AVOID"
+    insufficient_history = str(epistemic.get("sufficiency_level") or "") in {
+        "LOW_SAMPLE",
+        "VOID",
+    }
+    dominant_block = next(
+        (item for item in actionability_stack if item.get("status") == "BLOCK"),
+        None,
+    )
+    plan_disabled = bool(
+        hard_gate_active or elevated_risk or insufficient_history or dominant_block
+    )
+    conditional_candidate = (
+        not plan_disabled and label in {"LONG_CANDIDATE", "SHORT_CANDIDATE"}
+    )
+
+    if plan_disabled:
+        plan_status = "DISABLED"
+    elif conditional_candidate:
+        plan_status = "CONDITIONAL_CANDIDATE"
+    else:
+        plan_status = "OBSERVE_ONLY"
+
+    mode = "NO_ENTRY_NOW"
+    chase_warning = None
+    if conditional_candidate and _is_missed_move(
+        setup_direction=setup_direction,
+        quant_result=quant_result,
+    ):
+        mode = "MISSED_MOVE_DO_NOT_CHASE"
+        chase_warning = (
+            "The existing primary-horizon move is extended in the candidate direction; "
+            "chasing remains disabled."
+        )
+
+    confirmation_required = _plan_confirmation_requirements(
+        plan_status=plan_status,
+        insufficient_history=insufficient_history,
+    )
+    what_would_change_plan = _plan_change_requirements(
+        plan_status=plan_status,
+        mode=mode,
+        decision_conditions=decision_conditions,
+    )
+    disabled_reason = _plan_disabled_reason(
+        plan_status=plan_status,
+        elevated_risk=elevated_risk,
+        insufficient_history=insufficient_history,
+        dominant_block=dominant_block,
+    )
+    return {
+        "status": "STRUCTURAL_ONLY_D1_1",
+        "mode": mode,
+        "plan_status": plan_status,
+        "setup_direction": setup_direction,
+        "can_plan_trade": conditional_candidate,
+        "can_enter_now": False,
+        "can_chase": False,
+        **{field: None for field in _TRADE_PLAN_NULL_FIELDS},
+        "disabled_reason": disabled_reason,
+        "confirmation_required": confirmation_required,
+        "chase_warning": chase_warning,
+        "what_would_change_plan": what_would_change_plan,
+        "safety_copy": list(_TRADE_PLAN_SAFETY_COPY),
+        "not_trade_command": True,
+        "not_financial_advice": True,
+        "influence_mode": "DISPLAY_ONLY",
+    }
+
+
+def _is_missed_move(*, setup_direction: str, quant_result: dict) -> bool:
+    trend = (quant_result.get("market_features") or {}).get("trend_mtf") or {}
+    if trend.get("status") != "OK":
+        return False
+    primary_return = _optional_float(trend.get("primary_return"))
+    if primary_return is None:
+        return False
+    if setup_direction == "LONG":
+        return primary_return >= _MISSED_MOVE_RETURN_ABS_THRESHOLD
+    if setup_direction == "SHORT":
+        return primary_return <= -_MISSED_MOVE_RETURN_ABS_THRESHOLD
+    return False
+
+
+def _plan_confirmation_requirements(
+    *,
+    plan_status: str,
+    insufficient_history: bool,
+) -> list[str]:
+    if insufficient_history:
+        return [
+            "Sufficient history and data quality must be established.",
+            "All hard gates must remain clear.",
+        ]
+    if plan_status == "DISABLED":
+        return [
+            "All active hard gates and blocking conditions must clear.",
+            "Data, provider, liquidity, and execution states must be sufficient.",
+        ]
+    if plan_status == "CONDITIONAL_CANDIDATE":
+        return [
+            "Directional context must remain aligned in the existing backend evidence.",
+            "All hard gates must remain clear.",
+            "Calibration must be measured before numeric planning is enabled.",
+        ]
+    return [
+        "A directional candidate must be established by the backend.",
+        "Data and provider states must remain sufficient.",
+        "All hard gates must remain clear.",
+    ]
+
+
+def _plan_change_requirements(
+    *,
+    plan_status: str,
+    mode: str,
+    decision_conditions: list[dict],
+) -> list[str]:
+    active_conditions = [
+        str(condition.get("plain_english"))
+        for condition in decision_conditions
+        if condition.get("currently_relevant") is True and condition.get("plain_english")
+    ]
+    if plan_status == "CONDITIONAL_CANDIDATE":
+        active_conditions.append(
+            "Measured calibration and validated zone methodology are required for numeric planning."
+        )
+    elif plan_status == "OBSERVE_ONLY":
+        active_conditions.append(
+            "A backend directional candidate with sufficient confirmation would change this plan."
+        )
+    else:
+        active_conditions.append(
+            "Blocking conditions must clear before a conditional scenario is available."
+        )
+    if mode == "MISSED_MOVE_DO_NOT_CHASE":
+        active_conditions.append(
+            "A fresh backend candidate after the extended move normalizes would be required."
+        )
+    return _unique_strings(active_conditions)
+
+
+def _plan_disabled_reason(
+    *,
+    plan_status: str,
+    elevated_risk: bool,
+    insufficient_history: bool,
+    dominant_block: dict | None,
+) -> str:
+    if elevated_risk:
+        return "The elevated-risk disposition disables scenario planning."
+    if insufficient_history:
+        return "Insufficient history or data disables scenario planning."
+    if dominant_block:
+        return str(
+            dominant_block.get("plain_english")
+            or dominant_block.get("label")
+            or "A blocking condition disables scenario planning."
+        )
+    if plan_status == "CONDITIONAL_CANDIDATE":
+        return (
+            "Numeric planning remains disabled while calibration and zone methodology "
+            "are deferred."
+        )
+    return "Observe-only state; backend confirmation is insufficient for a conditional scenario."
+
+
+def _unique_strings(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(values))
 
 
 def _probability_interpretation(

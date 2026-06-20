@@ -333,6 +333,9 @@
           "additionalProperties": false,
           "required": [
             "status",
+            "mode",
+            "plan_status",
+            "setup_direction",
             "can_plan_trade",
             "can_enter_now",
             "can_chase",
@@ -344,10 +347,29 @@
             "stop_invalidation",
             "take_profit_plan",
             "risk_reward_summary",
-            "disabled_reason"
+            "disabled_reason",
+            "confirmation_required",
+            "chase_warning",
+            "what_would_change_plan",
+            "safety_copy",
+            "not_trade_command",
+            "not_financial_advice",
+            "influence_mode"
           ],
           "properties": {
             "status": { "const": "STRUCTURAL_ONLY_D1_1" },
+            "mode": {
+              "enum": [
+                "NO_ENTRY_NOW",
+                "PULLBACK_PATH",
+                "BREAKOUT_PATH",
+                "MISSED_MOVE_DO_NOT_CHASE"
+              ]
+            },
+            "plan_status": {
+              "enum": ["DISABLED", "OBSERVE_ONLY", "CONDITIONAL_CANDIDATE"]
+            },
+            "setup_direction": { "enum": ["LONG", "SHORT", "NEUTRAL"] },
             "can_plan_trade": { "type": "boolean" },
             "can_enter_now": { "const": false },
             "can_chase": { "const": false },
@@ -359,7 +381,31 @@
             "stop_invalidation": { "type": "null" },
             "take_profit_plan": { "type": "null" },
             "risk_reward_summary": { "type": "null" },
-            "disabled_reason": { "type": "string", "minLength": 1 }
+            "disabled_reason": { "type": "string", "minLength": 1 },
+            "confirmation_required": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "chase_warning": {
+              "oneOf": [
+                { "type": "null" },
+                { "type": "string", "minLength": 1 }
+              ]
+            },
+            "what_would_change_plan": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "safety_copy": {
+              "type": "array",
+              "minItems": 3,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "not_trade_command": { "const": true },
+            "not_financial_advice": { "const": true },
+            "influence_mode": { "const": "DISPLAY_ONLY" }
           }
         },
         "future_quant_v2_hooks": {

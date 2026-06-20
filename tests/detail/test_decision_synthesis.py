@@ -110,6 +110,17 @@ def _assert_plan_disabled(result: dict) -> None:
     assert plan["can_chase"] is False
     assert plan["disabled_reason"]
     assert all(plan[field] is None for field in TRADE_PLAN_NULL_FIELDS)
+    assert plan["not_trade_command"] is True
+    assert plan["not_financial_advice"] is True
+    assert plan["influence_mode"] == "DISPLAY_ONLY"
+    assert len(plan["safety_copy"]) >= 3
+    assert {
+        "Candidate plan only — not a trade command.",
+        "Not financial advice.",
+        "Numeric entry/stop/target disabled until calibration is measured.",
+    }.issubset(plan["safety_copy"])
+    assert plan["confirmation_required"]
+    assert plan["what_would_change_plan"]
 
 
 def _all_strings(value):
@@ -136,6 +147,11 @@ def test_hard_gate_active_is_avoid_and_probability_is_informational_only() -> No
 
     assert result["decision_synthesis"]["label"] in {"AVOID", "NO_TRADE"}
     assert result["probability_interpretation"]["informational_only"] is True
+    plan = result["trade_plan_skeleton"]
+    assert plan["mode"] == "NO_ENTRY_NOW"
+    assert plan["plan_status"] == "DISABLED"
+    assert plan["setup_direction"] == "NEUTRAL"
+    assert plan["can_plan_trade"] is False
     _assert_plan_disabled(result)
 
 
@@ -146,6 +162,12 @@ def test_elevated_risk_avoid_maps_to_no_trade() -> None:
     result = build_decision_synthesis(**inputs)
 
     assert result["decision_synthesis"]["label"] == "NO_TRADE"
+    plan = result["trade_plan_skeleton"]
+    assert plan["mode"] == "NO_ENTRY_NOW"
+    assert plan["plan_status"] == "DISABLED"
+    assert plan["can_plan_trade"] is False
+    assert "elevated-risk" in plan["disabled_reason"].lower()
+    _assert_plan_disabled(result)
 
 
 def test_watch_disposition_maps_to_watch() -> None:
@@ -156,6 +178,12 @@ def test_watch_disposition_maps_to_watch() -> None:
     result = build_decision_synthesis(**inputs)
 
     assert result["decision_synthesis"]["label"] == "WATCH"
+    plan = result["trade_plan_skeleton"]
+    assert plan["mode"] == "NO_ENTRY_NOW"
+    assert plan["plan_status"] == "OBSERVE_ONLY"
+    assert plan["setup_direction"] == "NEUTRAL"
+    assert plan["can_plan_trade"] is False
+    _assert_plan_disabled(result)
 
 
 def test_transient_low_sample_or_live_provider_degradation_maps_to_wait() -> None:
@@ -166,8 +194,16 @@ def test_transient_low_sample_or_live_provider_degradation_maps_to_wait() -> Non
     degraded = _inputs()
     degraded["provider_state"]["status"] = "DEGRADED"
 
-    assert build_decision_synthesis(**low_sample)["decision_synthesis"]["label"] == "WAIT"
-    assert build_decision_synthesis(**degraded)["decision_synthesis"]["label"] == "WAIT"
+    low_sample_result = build_decision_synthesis(**low_sample)
+    degraded_result = build_decision_synthesis(**degraded)
+
+    assert low_sample_result["decision_synthesis"]["label"] == "WAIT"
+    assert low_sample_result["trade_plan_skeleton"]["plan_status"] == "DISABLED"
+    assert "insufficient" in low_sample_result["trade_plan_skeleton"]["disabled_reason"].lower()
+    assert degraded_result["decision_synthesis"]["label"] == "WAIT"
+    assert degraded_result["trade_plan_skeleton"]["plan_status"] == "OBSERVE_ONLY"
+    _assert_plan_disabled(low_sample_result)
+    _assert_plan_disabled(degraded_result)
 
 
 def test_long_candidate_can_be_planned_but_never_entered_or_chased() -> None:
@@ -176,7 +212,12 @@ def test_long_candidate_can_be_planned_but_never_entered_or_chased() -> None:
     assert result["decision_synthesis"]["label"] == "LONG_CANDIDATE"
     assert result["decision_synthesis"]["decision_strength"] == "MODERATE"
     assert result["action_permission"]["can_plan_trade"] is True
-    assert result["trade_plan_skeleton"]["can_plan_trade"] is True
+    plan = result["trade_plan_skeleton"]
+    assert plan["mode"] == "NO_ENTRY_NOW"
+    assert plan["plan_status"] == "CONDITIONAL_CANDIDATE"
+    assert plan["setup_direction"] == "LONG"
+    assert plan["can_plan_trade"] is True
+    assert plan["confirmation_required"]
     _assert_plan_disabled(result)
 
 
@@ -185,7 +226,33 @@ def test_short_candidate_never_populates_numeric_plan() -> None:
 
     assert result["decision_synthesis"]["label"] == "SHORT_CANDIDATE"
     assert result["action_permission"]["can_plan_trade"] is True
+    assert result["trade_plan_skeleton"]["plan_status"] == "CONDITIONAL_CANDIDATE"
+    assert result["trade_plan_skeleton"]["setup_direction"] == "SHORT"
     _assert_plan_disabled(result)
+
+
+def test_missed_move_candidate_disables_chasing_without_numeric_plan() -> None:
+    inputs = _inputs(p_up=0.60, p_down=0.20, p_timeout=0.20)
+    inputs["quant_result"]["market_features"]["trend_mtf"]["primary_return"] = 0.08
+
+    result = build_decision_synthesis(**inputs)
+    plan = result["trade_plan_skeleton"]
+
+    assert result["decision_synthesis"]["label"] == "LONG_CANDIDATE"
+    assert plan["mode"] == "MISSED_MOVE_DO_NOT_CHASE"
+    assert plan["plan_status"] == "CONDITIONAL_CANDIDATE"
+    assert plan["chase_warning"]
+    assert plan["can_chase"] is False
+    _assert_plan_disabled(result)
+
+
+def test_missing_or_opposite_return_does_not_emit_missed_move_mode() -> None:
+    missing = _inputs(p_up=0.60, p_down=0.20, p_timeout=0.20)
+    opposite = _inputs(p_up=0.60, p_down=0.20, p_timeout=0.20)
+    opposite["quant_result"]["market_features"]["trend_mtf"]["primary_return"] = -0.08
+
+    assert build_decision_synthesis(**missing)["trade_plan_skeleton"]["mode"] == "NO_ENTRY_NOW"
+    assert build_decision_synthesis(**opposite)["trade_plan_skeleton"]["mode"] == "NO_ENTRY_NOW"
 
 
 def test_probability_math_and_zero_directional_denominator() -> None:
@@ -257,10 +324,32 @@ def test_builder_is_pure_and_preserves_profitability_and_news_inputs() -> None:
     assert inputs["quant_result"]["score_stack"]["news_influence_frac"] == 0.0
 
 
+def test_trade_plan_invariants_hold_across_decision_states() -> None:
+    fixtures = []
+    hard_gate = _inputs()
+    hard_gate["quant_result"]["gate_result"] = {
+        "action": "ABORT",
+        "hard_gate_passed": False,
+        "hard_blocks": ["TAIL_RISK_BREACH"],
+    }
+    fixtures.append(hard_gate)
+    watch = _inputs()
+    watch["quant_result"]["score_stack"]["disposition"] = "WATCH"
+    watch["quant_result"]["gate_result"]["action"] = "WATCH"
+    fixtures.append(watch)
+    fixtures.append(_inputs(p_up=0.60, p_down=0.20, p_timeout=0.20))
+    fixtures.append(_inputs(p_up=0.20, p_down=0.60, p_timeout=0.20))
+
+    for inputs in fixtures:
+        result = build_decision_synthesis(**inputs)
+        _assert_plan_disabled(result)
+
+
 def test_no_emitted_string_contains_forbidden_wording() -> None:
     forbidden = (
         "buy " "now",
         "sell " "now",
+        "enter " "now",
         "guaran" "teed",
         "safe " "trade",
         "sure " "long",
@@ -269,11 +358,25 @@ def test_no_emitted_string_contains_forbidden_wording() -> None:
         "will " "dump",
         "win " "rate",
         "profit" "able",
-        "confidence is " "high",
-        "accuracy " "proven",
-        "guaran" "teed " "profit",
+        "high " "confidence",
+        "accu" "racy",
+        "trade " "ev",
+        "lever" "age",
+        "position " "size",
+        "place" "_order",
+        "execute " "trade",
     )
-    emitted = "\n".join(_all_strings(_build())).lower()
+    fixtures = [_inputs(), _inputs(p_up=0.20, p_down=0.60, p_timeout=0.20)]
+    fixtures[0]["quant_result"]["gate_result"] = {
+        "action": "ABORT",
+        "hard_gate_passed": False,
+        "hard_blocks": ["LIQUIDITY_NOT_VIABLE"],
+    }
+    emitted = "\n".join(
+        text
+        for inputs in fixtures
+        for text in _all_strings(build_decision_synthesis(**inputs))
+    ).lower()
 
     assert not any(phrase in emitted for phrase in forbidden)
 
