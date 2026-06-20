@@ -2,76 +2,53 @@
 
 Updated: 2026-06-20
 
-## Branch / Worktree
+## Branch / Scope
 
-- Branch: `codex/ui-d1-3-tactical-matrix`
-- Base branch: `dev` at merged UI-D1.2 milestone `a5b0ddd`
-- Worktree: `v8-crypto-api-clean/` under parent Git repo `/Users/kha/Documents/New project`
-- Scope: frontend rendering and frontend static tests only, plus handoff docs
-- Merge/deploy/push status: none performed
-- Migration status: no migration added or run
+- Branch: `codex/ui-d1-4-fe-model-quality-polish`
+- Base: `dev` at merged UI-D1.3 milestone `85d72c2`
+- Scope: frontend rendering/static tests plus required handoff docs
+- Status: implemented and locally verified; not merged, deployed, or pushed
+- Migration status: none added or run
 
-## Current Phase
+## UI-D1.4-FE Implementation
 
-- Phase: UI-D1.3 Tactical Horizon Matrix and Regime Context.
-- Risk: frontend-only reorganization of stored six-timeframe payloads; no backend,
-  schema, endpoint, methodology, persistence, dependency, or Detail-flow change.
-- Current status: implementation and local verification complete; not merged or deployed.
-
-## What Changed
-
-- Reorganized single and watchlist six-timeframe results into an ordered Tactical
-  Horizon Matrix (`15m`, `1H`, `4H`) and quieter Regime Context (`1D`, `1W`, `1M`).
-- Group placement prefers backend `timeframe_role.tactical` and uses the approved
-  timeframe sets only as fallback.
-- Added horizon cards sourced from backend role, decision label, permissions,
-  probability interpretation, actionability, and model-quality fields.
-- Added prominent backend BLOCK banners and muted informational-only probability.
-- Added a neutral tactical alignment state derived only from backend labels,
-  actionability statuses, and reliability state.
-- Added safe missing/errored timeframe cards and unavailable alignment until all three
-  tactical payloads are resolved.
-- Kept 1W/1M raw probability collapsed under `Advanced (uncalibrated context)` and
-  kept Regime Context visually secondary.
-- Preserved click-to-Detail behavior and the D1.2 Decision-first Detail renderer.
-- Bumped frontend asset query versions to `ui-d1-3-tactical-matrix`.
+- Decision remains the first Detail section.
+- A dedicated Model Quality section now appears immediately after Decision and before
+  Overview/deep evidence.
+- Model Quality reads only `decision_synthesis.model_quality_summary` and
+  `probability_interpretation.reliability_warning` already present in the analyze payload.
+- Calibration/reliability status and availability render when present. Resolved sample
+  count, sample gate, Brier score, log loss, and top-label hit rate render only when the
+  corresponding payload value is non-null.
+- Missing metrics use honest not-measured/collecting-samples copy; no number is invented.
+- Added a compact collapsible education layer for heuristic probability, insufficient
+  samples, measured calibration, and the optional diagnostic metrics.
+- Added containment rules for horizon cards, Decision cards, actionability rows,
+  probability/model-quality blocks, key/value grids, tables, details, IDs, and long text.
+- Asset version is `ui-d1-4-model-quality-polish`.
 
 ## Safety Invariants
 
-- Frontend does not create or infer a decision label, enter-now permission, chase
-  permission, numeric risk, or trade-plan geometry.
-- Tactical alignment never reads or compares probability values.
-- Alignment states are limited to `blocked`, `aligned`, `mixed`, `insufficient`, and
-  `unavailable`; copy is display-only and non-actionable.
-- Entry-now/chase render `No` only for backend false; otherwise `Unavailable`.
-- Candidate labels remain plan-only.
-- Any backend BLOCK dominates the card; backend informational-only probability is muted.
-- 1W/1M raw values are collapsed by backend hide-by-default state or safe fallback.
-- Missing tactical payloads cannot borrow readiness from another timeframe.
-- Numeric entry, trigger, invalidation, target, chase, and risk/reward fields are never
-  read or rendered in matrix/regime cards.
+- Frontend-only; no backend, schema, endpoint, database, methodology, or migration change.
+- No calibration fetch or database client was added.
+- Model Quality never changes or overrides the backend decision or hard gates.
+- No decision, enter-now, chase, trade-zone, entry, stop, or target inference was added.
+- Candidates remain plan-only; hard-gate dominance and informational-only probability
+  remain unchanged.
+- Important user-facing text wraps rather than being clipped; raw JSON retains scrolling.
+- No reliability, correctness, profitability, or trading-edge claim is emitted.
 
-## Checks Run
+## Verification
 
-- `PYTHONPATH=src python3 -m pytest tests/frontend/test_frontend_static.py -q`:
-  PASS, 32 passed.
-- `PYTHONPATH=src python3 -m pytest -q`: PASS, 255 passed with 6 existing
-  deprecation warnings.
-- `ruff check src tests scripts`: PASS.
-- Bundled Node syntax parse of `frontend/app.js`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_forbidden_scope.py`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_secrets.py`: PASS.
-- `PYTHONPATH=src python3 scripts/check_no_full_article_body.py`: PASS.
-- `PYTHONPATH=src python3 scripts/validate_schemas.py`: PASS with the existing
-  `RefResolver` deprecation warning.
-- `PYTHONPATH=src python3 scripts/manual_smoke.py`: PASS.
-- Local visual QA normal fixture: PASS; ordered groups, six cards, six Detail buttons,
-  `insufficient` alignment, and two collapsed 1W/1M advanced contexts.
-- Local visual QA hard-gated fixture: PASS; `blocked` alignment, six BLOCK banners,
-  six muted probability blocks, `No` entry/chase on every card, and no raw null.
-- Protected working-tree diffs for `src`, `scripts`, `migrations`, and `schemas`: empty.
-- Targeted unsafe-wording and client-inference greps: empty.
-- Grouping/role/version grep: PASS with expected references.
+- Frontend static tests: PASS, 37 passed.
+- Full suite: PASS, 260 passed with 6 existing deprecation warnings.
+- Ruff: PASS.
+- Forbidden-scope, secret, full-article-body, schema, and manual smoke checks: PASS.
+- Manual smoke confirmed the versioned frontend bundle.
+- Targeted unsafe-wording and frontend calibration/DB greps: empty.
+- Protected backend/schema/script/migration diffs: empty.
+- Responsive containment is covered by deterministic CSS/static assertions. The attempted
+  synthetic in-app browser fixture was rejected by browser URL policy and was not bypassed.
 
 ## Files Changed
 
@@ -90,18 +67,10 @@ Updated: 2026-06-20
 - `AI/04_TASK_BOARD.md`
 - `AI/06_TEST_COMMANDS.md`
 - `IMPLEMENTATION_SPEC.md`
-- `src/crypto_probability_engine/detail/decision_synthesis.py`
 
-## Risks / Unknowns
+## Risks / Next Step
 
-- Current probabilities remain heuristic and uncalibrated; tactical and regime cards
-  render them as informational context only.
-- Current reliability is insufficient, so the normal fixture appropriately reports
-  tactical alignment as `insufficient` rather than promoting apparent agreement.
-- Numeric plan geometry remains intentionally unavailable in Detail.
-
-## Next Steps
-
-1. Send the single commit and verification evidence to Claude for review.
-2. After approval, merge normally; deployment and migrations are not part of this task.
-3. Keep future matrix logic label/status-derived and separately scoped.
+- Current probabilities remain heuristic and calibration reliability is not established.
+- Real per-timeframe calibration metrics still require a separately approved read-only
+  backend plan; this frontend does not fabricate or fetch them.
+- Next: Claude reviews the single commit; merge/deploy remain separate user-approved steps.

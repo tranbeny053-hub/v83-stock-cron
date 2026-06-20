@@ -66,8 +66,17 @@ textarea {
 
 .shell {
   width: min(1180px, calc(100vw - 32px));
+  max-width: 100%;
   margin: 0 auto;
   padding: 24px 0 48px;
+}
+
+.shell > *,
+.panel > *,
+.detail-panel > *,
+.detail-section > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .topbar,
@@ -300,6 +309,8 @@ input:disabled {
 }
 
 .horizon-group {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid rgba(0, 240, 255, 0.22);
   border-radius: 10px;
   padding: 14px;
@@ -313,6 +324,7 @@ input:disabled {
 
 .horizon-group-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   align-items: center;
@@ -334,10 +346,22 @@ input:disabled {
   gap: 12px;
 }
 
+.timeframe-group-grid > *,
+.horizon-group-header > *,
+.decision-permissions > *,
+.decision-reason-grid > *,
+.decision-context-grid > *,
+.actionability-stack > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .tactical-alignment {
   display: grid;
   gap: 4px;
-  min-width: min(340px, 100%);
+  min-width: 0;
+  width: min(340px, 100%);
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
@@ -414,6 +438,7 @@ input:disabled {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  max-width: 100%;
 }
 
 .regime-horizon-card {
@@ -431,6 +456,7 @@ input:disabled {
 
 .matrix-block-banner {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin: -4px -4px 12px;
@@ -456,6 +482,7 @@ input:disabled {
 
 .matrix-decision-label {
   width: fit-content;
+  max-width: 100%;
   margin-top: 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -598,9 +625,18 @@ input:disabled {
 
 .result-card header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   align-items: start;
+}
+
+.result-card header > *,
+.final-decision-card header > *,
+.decision-context-heading > *,
+.actionability-row-header > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .detail-button {
@@ -610,7 +646,7 @@ input:disabled {
 
 dl {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
   margin: 16px 0;
 }
@@ -619,15 +655,25 @@ dt {
   color: var(--muted);
 }
 
+dt,
 dd {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
-  text-align: right;
+  white-space: normal;
   overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+dd {
+  text-align: right;
 }
 
 .badge {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
+  max-width: 100%;
   min-height: 28px;
   border: 1px solid var(--cyan);
   border-radius: 999px;
@@ -650,6 +696,8 @@ dd {
 }
 
 .detail-section {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
@@ -676,6 +724,7 @@ dd {
 .decision-context-heading,
 .actionability-row-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
@@ -723,8 +772,10 @@ dd {
 
 .decision-badge {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   width: fit-content;
+  max-width: 100%;
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -770,6 +821,8 @@ dd {
 
 .decision-permission {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 5px;
   border: 1px solid rgba(0, 240, 255, 0.18);
   border-radius: 7px;
@@ -814,6 +867,8 @@ dd {
 .decision-context-card,
 .decision-subsection,
 .decision-future-hooks {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid rgba(0, 240, 255, 0.18);
   border-radius: 8px;
   padding: 14px;
@@ -834,6 +889,8 @@ dd {
 
 .decision-advanced-probability,
 .decision-future-hooks {
+  min-width: 0;
+  max-width: 100%;
   margin-top: 12px;
 }
 
@@ -850,6 +907,8 @@ dd {
 }
 
 .actionability-row {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 10px;
@@ -889,6 +948,50 @@ dd {
 
 .actionability-row-header strong {
   flex: 1;
+  min-width: 0;
+}
+
+.decision-context-copy,
+.decision-lead,
+.decision-safety-note,
+.decision-warning,
+.matrix-role-description,
+.matrix-concern-note,
+.matrix-context-warning,
+.matrix-reliability-note,
+.actionability-row p,
+.detail-list,
+.model-quality-probability-warning {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.model-quality-probability-warning {
+  margin-top: 12px;
+  border-left: 3px solid var(--warning);
+  padding-left: 10px;
+  color: var(--warning);
+  line-height: 1.5;
+}
+
+.model-quality-education {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 12px;
+  border: 1px solid rgba(0, 240, 255, 0.18);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 240, 255, 0.025);
+}
+
+.model-quality-education summary {
+  max-width: 100%;
+  cursor: pointer;
+  color: var(--warning);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .decision-change-list {
@@ -926,22 +1029,31 @@ dd {
 }
 
 .detail-kv {
-  grid-template-columns: minmax(160px, 0.7fr) minmax(180px, 1.3fr);
+  width: 100%;
+  max-width: 100%;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
   margin: 0;
 }
 
 .detail-table {
   width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
   margin-top: 10px;
   border-collapse: collapse;
 }
 
 .detail-table th,
 .detail-table td {
+  min-width: 0;
+  max-width: 100%;
   border-top: 1px solid var(--line);
   padding: 8px 0;
   vertical-align: top;
   text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-table th {
@@ -953,6 +1065,8 @@ dd {
 
 .detail-table details,
 .raw-json {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid rgba(0, 240, 255, 0.18);
   border-radius: 6px;
   padding: 8px 10px;
@@ -961,8 +1075,11 @@ dd {
 
 .detail-table summary,
 .raw-json summary {
+  max-width: 100%;
   cursor: pointer;
   color: var(--warning);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 pre {
@@ -1017,6 +1134,11 @@ pre {
 }
 
 @media (max-width: 760px) {
+  .shell {
+    width: min(100% - 20px, 1180px);
+    padding-top: 12px;
+  }
+
   .topbar,
   .shell-status-bar,
   .control-row,

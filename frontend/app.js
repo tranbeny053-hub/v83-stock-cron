@@ -11,7 +11,7 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-3-tactical-matrix";
+const UCPE_FRONTEND_BUILD = "ui-d1-4-model-quality-polish";
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const tacticalTimeframes = ["15m", "1H", "4H"];
 const regimeTimeframes = ["1D", "1W", "1M"];
@@ -1193,31 +1193,110 @@ function renderAdvisorExplanations(explanations = {}, changes = []) {
   return wrapper;
 }
 
-function renderModelQuality(quality = {}) {
+function hasPayloadValue(value) {
+  return value !== null && value !== undefined;
+}
+
+function renderModelQualityEducation() {
+  const education = document.createElement("details");
+  education.className = "model-quality-education";
+  education.append(textBlock("summary", "How to read model quality"));
+  education.append(
+    keyValueTable([
+      ["Heuristic probability", "An early estimate produced before measured calibration is established."],
+      ["Insufficient sample", "Too few resolved outcomes are available for a stable quality assessment."],
+      ["Measured calibration", "A comparison between forecast probabilities and resolved outcomes after the sample gate is met."],
+      ["Brier score", "Average squared probability error; interpret only with a comparable resolved sample."],
+      ["Log loss", "A probability error measure that weighs confidently wrong forecasts more heavily."],
+      ["Top-label hit rate", "How often the highest-probability label matched the resolved outcome; it is not a complete quality measure."],
+      ["Why correctness alone is incomplete", "Probability quality also depends on calibration, sample size, outcome mix, and evaluation context."],
+      ["Why this is not profitability evidence", "Forecast diagnostics do not include execution costs, sizing, or realized returns."],
+    ]),
+  );
+  return education;
+}
+
+function renderModelQuality(quality = {}, probability = {}) {
   const card = document.createElement("article");
   card.className = "decision-context-card decision-model-quality";
-  card.append(textBlock("h4", "Reliability summary"));
+  card.append(textBlock("h4", "Current status"));
   const explanation = backendText(quality.plain_english) || backendText(quality.warning);
-  if (explanation) {
-    card.append(textBlock("p", explanation, "decision-context-copy"));
-  }
+  card.append(
+    textBlock(
+      "p",
+      explanation || "Model quality: not measured yet.",
+      "decision-context-copy",
+    ),
+  );
   const values = [
-    ["Calibration", quality.calibration_status],
-    ["Reliability", quality.reliability_status],
-    ["Reliability available", quality.reliability_available],
+    ["Calibration status", quality.calibration_status || "Not measured yet"],
+    ["Reliability status", quality.reliability_status || "Not measured yet"],
   ];
-  if (quality.sample_count !== null && quality.sample_count !== undefined) {
-    values.push(["Sample count", quality.sample_count]);
+  if (hasPayloadValue(quality.reliability_available)) {
+    values.push(["Reliability available", quality.reliability_available]);
   }
-  if (quality.sample_gate !== null && quality.sample_gate !== undefined) {
+  if (hasPayloadValue(quality.sample_count)) {
+    values.push(["Resolved sample count", quality.sample_count]);
+  }
+  if (hasPayloadValue(quality.sample_gate)) {
     values.push(["Sample gate", quality.sample_gate]);
+  }
+  if (hasPayloadValue(quality.brier_score)) {
+    values.push(["Brier score", quality.brier_score]);
+  }
+  if (hasPayloadValue(quality.log_loss)) {
+    values.push(["Log loss", quality.log_loss]);
+  }
+  if (hasPayloadValue(quality.top_label_hit_rate)) {
+    values.push(["Top-label hit rate", quality.top_label_hit_rate]);
   }
   card.append(keyValueTable(values));
   if (quality.not_win_rate === true) {
     card.append(textBlock("p", "Historical outcome-rate metric: Not established.", "muted"));
   }
-  card.append(textBlock("p", "Profitability evidence: Not established.", "muted"));
+  if (backendText(probability.reliability_warning)) {
+    card.append(
+      textBlock("p", probability.reliability_warning, "model-quality-probability-warning"),
+    );
+  } else {
+    card.append(
+      textBlock(
+        "p",
+        "Probabilities are heuristic until enough resolved samples exist.",
+        "model-quality-probability-warning",
+      ),
+    );
+  }
+  const surfacedMetrics = [
+    quality.sample_count,
+    quality.sample_gate,
+    quality.brier_score,
+    quality.log_loss,
+    quality.top_label_hit_rate,
+  ].some(hasPayloadValue);
+  if (!surfacedMetrics) {
+    card.append(
+      textBlock("p", "Resolved-sample metrics are not surfaced in this view yet.", "muted"),
+    );
+  }
+  card.append(
+    textBlock(
+      "p",
+      "Keep collecting samples; do not treat this as reliability or profitability evidence.",
+      "muted",
+    ),
+  );
   return card;
+}
+
+function renderModelQualitySection(synthesis = {}) {
+  return section("Model Quality", [
+    renderModelQuality(
+      synthesis.model_quality_summary || {},
+      synthesis.probability_interpretation || {},
+    ),
+    renderModelQualityEducation(),
+  ]);
 }
 
 function renderTradePlanSkeleton(plan = {}, permission = {}, decision = {}) {
@@ -1290,7 +1369,6 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}) {
   const supportGrid = document.createElement("div");
   supportGrid.className = "decision-context-grid";
   supportGrid.append(
-    renderModelQuality(synthesis.model_quality_summary || {}),
     renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}, permission, decision),
   );
 
@@ -1350,6 +1428,7 @@ function renderStructuredDetail(payload, detailView) {
 
   detailPanel.replaceChildren(
     renderDecisionSynthesis(payload.decision_synthesis, decisionBrief),
+    renderModelQualitySection(payload.decision_synthesis || {}),
     section("Overview", [
       downloadJsonButton(payload),
       keyValueTable([

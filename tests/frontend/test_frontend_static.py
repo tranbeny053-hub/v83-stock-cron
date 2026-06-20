@@ -25,9 +25,9 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert 'href="/styles.css?v=ui-d1-3-tactical-matrix"' in html
-    assert 'src="/app.js?v=ui-d1-3-tactical-matrix"' in html
-    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-3-tactical-matrix";' in js
+    assert 'href="/styles.css?v=ui-d1-4-model-quality-polish"' in html
+    assert 'src="/app.js?v=ui-d1-4-model-quality-polish"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-4-model-quality-polish";' in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -208,6 +208,12 @@ def test_decision_section_reads_backend_contract_and_renders_first() -> None:
     detail_chunk = js.split("function renderStructuredDetail", maxsplit=1)[1]
     replacement = detail_chunk.split("detailPanel.replaceChildren(", maxsplit=1)[1]
     assert replacement.index("renderDecisionSynthesis") < replacement.index('section("Overview"')
+    assert replacement.index("renderDecisionSynthesis") < replacement.index(
+        "renderModelQualitySection"
+    )
+    assert replacement.index("renderModelQualitySection") < replacement.index(
+        'section("Overview"'
+    )
     assert 'data-tab="decision"' not in html
 
 
@@ -301,8 +307,88 @@ def test_decision_reliability_uses_backend_summary_and_optional_samples() -> Non
     assert "quality.reliability_status" in js
     assert "quality.reliability_available" in js
     assert "quality.not_win_rate" in js
-    assert "quality.sample_count !== null" in js
-    assert "quality.sample_gate !== null" in js
+    assert "hasPayloadValue(quality.sample_count)" in js
+    assert "hasPayloadValue(quality.sample_gate)" in js
+
+
+def test_ui_d1_4_text_containment_safeguards_are_present() -> None:
+    css = read_frontend("styles.css")
+    for safeguard in (
+        "overflow-wrap: anywhere",
+        "min-width: 0",
+        "minmax(0",
+        "white-space: normal",
+        "flex-wrap: wrap",
+    ):
+        assert safeguard in css
+    for selector in (
+        ".horizon-card",
+        ".decision-context-card",
+        ".actionability-row",
+        ".detail-kv",
+        ".detail-table",
+        ".model-quality-education",
+    ):
+        assert selector in css
+    assert "table-layout: fixed" in css
+
+
+def test_ui_d1_4_does_not_clip_user_facing_cards() -> None:
+    css = read_frontend("styles.css")
+    assert "overflow: hidden" not in css
+    assert "pre {" in css and "overflow: auto" in css
+
+
+def test_ui_d1_4_model_quality_uses_payload_fields_and_safe_fallbacks() -> None:
+    js = read_frontend("app.js")
+    for field in (
+        "model_quality_summary",
+        "reliability_status",
+        "reliability_available",
+        "not_win_rate",
+        "reliability_warning",
+        "sample_gate",
+    ):
+        assert field in js
+    for safe_copy in (
+        "Model quality: not measured yet.",
+        "Probabilities are heuristic until enough resolved samples exist.",
+        "Resolved-sample metrics are not surfaced in this view yet.",
+        "Keep collecting samples; do not treat this as reliability or profitability evidence.",
+    ):
+        assert safe_copy in js
+    assert "renderModelQualityEducation" in js
+    assert 'document.createElement("details")' in js
+
+
+def test_ui_d1_4_only_renders_non_null_calibration_metrics() -> None:
+    js = read_frontend("app.js")
+    for field in (
+        "sample_count",
+        "sample_gate",
+        "brier_score",
+        "log_loss",
+        "top_label_hit_rate",
+    ):
+        assert f"hasPayloadValue(quality.{field})" in js
+    for invented_fragment in (
+        '"15m": 37',
+        '"1H": 30',
+        '"4H": 8',
+        '"1D": 0',
+    ):
+        assert invented_fragment not in js
+
+
+def test_ui_d1_4_adds_no_calibration_fetch_or_database_dependency() -> None:
+    js = read_frontend("app.js").lower()
+    disallowed = (
+        "/v1/" + "calibration",
+        "supa" + "base",
+        "psyco" + "pg",
+        "db_" + "url",
+    )
+    assert not any(marker in js for marker in disallowed)
 
 
 def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
