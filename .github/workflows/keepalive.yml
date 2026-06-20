@@ -1,0 +1,33 @@
+name: Keepalive Ping
+
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Hugging Face Space root
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly URL="https://beny053-ultimate-crypto-probability-engine.hf.space/"
+          if [[ "${URL}" != "https://beny053-ultimate-crypto-probability-engine.hf.space/" ]]; then
+            exit 1
+          fi
+          case "${URL,,}" in
+            *"/v1/"*|*"analyze"*|*"auth"*|*"calibration"*) exit 1 ;;
+          esac
+          curl -fsS -L --request GET --retry 3 --retry-all-errors --retry-delay 10 \
+            --max-time 60 -o /dev/null -w "keepalive_http=%{http_code}\n" "${URL}" \
+            2>/dev/null
