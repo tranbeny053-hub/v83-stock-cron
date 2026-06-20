@@ -994,6 +994,167 @@ dd {
   overflow-wrap: anywhere;
 }
 
+.calibration-diagnostics-mount,
+.calibration-diagnostics,
+.calibration-grid,
+.calibration-timeframe-card,
+.calibration-timeframe-card > *,
+.calibration-version-context {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.calibration-diagnostics-mount {
+  margin-top: 12px;
+}
+
+.calibration-diagnostics {
+  border: 1px solid rgba(0, 240, 255, 0.22);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(0, 240, 255, 0.025);
+}
+
+.calibration-diagnostics h4 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.calibration-disclaimer,
+.calibration-gate-note,
+.calibration-item-warning,
+.calibration-unavailable {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.calibration-disclaimer {
+  border-left: 3px solid var(--warning);
+  padding-left: 10px;
+  color: var(--warning);
+  line-height: 1.5;
+}
+
+.calibration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.calibration-timeframe-card {
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(5, 8, 11, 0.72);
+}
+
+.calibration-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.calibration-card-header h5 {
+  min-width: 0;
+  margin: 0;
+  color: var(--cyan);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.calibration-gate-badge {
+  display: inline-flex;
+  max-width: 100%;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.calibration-gate-note {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.calibration-gate-none,
+.calibration-gate-unknown {
+  border-left-color: var(--muted);
+}
+
+.calibration-gate-badge-none,
+.calibration-gate-badge-unknown {
+  color: var(--muted);
+}
+
+.calibration-gate-insufficient,
+.calibration-gate-warming {
+  border-left-color: var(--warning);
+}
+
+.calibration-gate-badge-insufficient,
+.calibration-gate-badge-warming {
+  color: var(--warning);
+}
+
+.calibration-gate-preliminary {
+  border-left-color: var(--cyan);
+}
+
+.calibration-gate-badge-preliminary {
+  color: var(--cyan);
+}
+
+.calibration-gate-measured {
+  border-left-color: var(--green);
+}
+
+.calibration-gate-badge-measured {
+  color: var(--green);
+}
+
+.calibration-version-context {
+  margin-top: 10px;
+  border: 1px solid rgba(142, 164, 177, 0.22);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(142, 164, 177, 0.035);
+}
+
+.calibration-version-context summary {
+  cursor: pointer;
+  color: var(--muted);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.calibration-item-warning {
+  margin-top: 10px;
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.calibration-unavailable {
+  border: 1px solid rgba(255, 209, 102, 0.32);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 209, 102, 0.04);
+}
+
 .decision-change-list {
   margin-top: 14px;
 }

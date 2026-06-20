@@ -2,43 +2,45 @@
 
 ## Goal / Branch
 
-- Goal: UI-D1.4A session-guarded, cached, read-only calibration diagnostics endpoint.
-- Branch: `codex/ui-d1-4a-calibration-endpoint`
-- Base: `dev` at `3d30c8b`
-- Risk: backend read-only DB diagnostic; review before merge.
+- Goal: UI-D1.4B render real endpoint calibration diagnostics in Model Quality.
+- Branch: `codex/ui-d1-4b-calibration-metrics`
+- Base: `dev` at `e947ab3`
+- Risk: frontend render-only; review before merge.
 
-## Endpoint Contract
+## Implementation
 
-- `GET /v1/calibration`, protected by the existing app session guard.
-- Filters: timeframe, model version, methodology version, bounded limit, bucket opt-in.
-- No timeframe returns `15m`, `1H`, `4H`, `1D`, `1W`, `1M` in order.
-- Success returns strict sanitized per-timeframe sample gates, quality metrics, optional
-  buckets, outcome distribution, and version context from `build_calibration_report`.
-- Failure/non-Postgres source returns HTTP 200 `UNAVAILABLE`, empty timeframe data, one
-  safe warning, and exception class name only.
-- Cache: in-process, 60-second monotonic TTL; key includes every query input.
+- Calls `api("/v1/calibration")` once for all timeframes when Detail mounts.
+- Decision and the existing Model Quality summary render before the asynchronous request.
+- Full responses and safe failure states use a 60-second frontend cache; concurrent Detail
+  opens share one in-flight request.
+- `OK` renders one backend-driven card per returned timeframe with sample-gate dominance,
+  metrics, outcomes, optional valid count, version warning/context, and backend warning.
+- `UNAVAILABLE` or request failure renders: calibration diagnostics unavailable; keep using
+  heuristic status. Error class/message details are not displayed.
+- Null metrics render as an em dash, while backend numeric zero remains visible.
+- Asset query strings and app build stamp are `ui-d1-4b-calibration-metrics`.
 
 ## Boundaries Confirmed
 
-- Calibration service/metrics and persistence repository are unchanged.
-- No prediction/outcome mutation, resolver call, migration, frontend change, dependency,
-  endpoint expansion, or `/v1/analyze` read was added.
-- No connection string, environment value, exception message, SQL, or stack detail is
-  exposed.
-- `top_label_hit_rate` remains a diagnostic field and is not relabeled.
+- No backend/schema/calibration/math/score/probability/gate/resolver/persistence/frontend-
+  secret contract change and no new endpoint.
+- Calibration diagnostics do not affect Decision, hard gates, permissions, candidates,
+  probability, or cross-timeframe readiness.
+- No per-timeframe request fan-out, bucket request, sample pooling, direct database access,
+  embedded secret, or error-detail rendering.
+- Diagnostic top-label hit rate is not relabeled as accuracy.
 
 ## Verification
 
-- Endpoint tests: PASS, 10 passed.
-- Full pytest: PASS, 270 passed; 7 existing warnings.
-- Ruff and all requested safeguards/schema/manual-smoke commands: PASS.
-- Protected diff: empty.
-- Secret/unsafe/mutation greps: empty; diagnostic wording hits are safely negated.
-- Service/auth reuse grep: expected hits.
+- Frontend tests: PASS, 44 passed.
+- Full pytest: PASS, 277 passed; 7 existing warnings.
+- JavaScript syntax, Ruff, safeguards, schema validation, and manual smoke: PASS.
+- Protected backend/schema/script/migration diffs: empty.
+- Unsafe wording and direct database/secret greps: empty; expected fetch/field/version hits.
 
-## Operations / Next Step
+## Current Endpoint Display / Next Step
 
-- HF needs `SUPABASE_DB_URL` for live `SUPABASE_POSTGRES` diagnostics; never expose its
-  value. Missing/unavailable configuration safely yields `UNAVAILABLE`.
+- Current reported rows: 15m 93 insufficient; 1H 83 insufficient; 4H 72 insufficient;
+  1D 8 insufficient; 1W and 1M 0/no samples. Values are fetched, never hardcoded.
 - No merge, deploy, push, or migration performed.
-- Next: Claude review, then separately scoped UI-D1.4B frontend consumption.
+- Next: Claude review before the user separately approves merge/deployment.

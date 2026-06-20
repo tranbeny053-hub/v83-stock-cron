@@ -25,9 +25,9 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert 'href="/styles.css?v=ui-d1-4-model-quality-polish"' in html
-    assert 'src="/app.js?v=ui-d1-4-model-quality-polish"' in html
-    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-4-model-quality-polish";' in js
+    assert 'href="/styles.css?v=ui-d1-4b-calibration-metrics"' in html
+    assert 'src="/app.js?v=ui-d1-4b-calibration-metrics"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-4b-calibration-metrics";' in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -354,7 +354,7 @@ def test_ui_d1_4_model_quality_uses_payload_fields_and_safe_fallbacks() -> None:
         "Model quality: not measured yet.",
         "Probabilities are heuristic until enough resolved samples exist.",
         "Resolved-sample metrics are not surfaced in this view yet.",
-        "Keep collecting samples; do not treat this as reliability or profitability evidence.",
+        "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
     ):
         assert safe_copy in js
     assert "renderModelQualityEducation" in js
@@ -380,13 +380,150 @@ def test_ui_d1_4_only_renders_non_null_calibration_metrics() -> None:
         assert invented_fragment not in js
 
 
-def test_ui_d1_4_adds_no_calibration_fetch_or_database_dependency() -> None:
+def test_ui_d1_4b_fetches_all_calibration_diagnostics_once_with_cache() -> None:
+    js = read_frontend("app.js")
+    load_chunk = js.split("async function loadCalibrationDiagnostics", maxsplit=1)[1].split(
+        "function formatCalibrationMetric", maxsplit=1
+    )[0]
+    assert js.count('api("/v1/calibration")') == 1
+    assert js.count("/v1/calibration") == 1
+    assert "singleTimeframes" not in load_chunk
+    assert "include_buckets" not in load_chunk
+    assert "calibrationDiagnosticsCacheTtlMs = 60000" in js
+    assert "calibrationDiagnosticsCache" in load_chunk
+    assert "calibrationDiagnosticsRequest" in load_chunk
+
+
+def test_ui_d1_4b_reads_calibration_contract_fields() -> None:
+    js = read_frontend("app.js")
+    for field in (
+        "sample_gate",
+        "sample_count",
+        "valid_count",
+        "reliability_status",
+        "brier_score",
+        "log_loss",
+        "top_label_hit_rate",
+        "outcome_distribution",
+        "version_mix_warning",
+        "versions_present",
+    ):
+        assert field in js
+    assert "Top-label hit rate (diagnostic)" in js
+    assert "UP ${formatCalibrationCount" in js
+
+
+def test_ui_d1_4b_has_loading_unavailable_and_null_fallbacks() -> None:
+    js = read_frontend("app.js")
+    assert "Loading calibration diagnostics…" in js
+    assert "Calibration diagnostics unavailable. Keep using heuristic status." in js
+    assert 'return "—";' in js
+    assert "formatCalibrationMetric" in js
+    assert "formatCalibrationPercent" in js
+    assert "formatCalibrationCount" in js
+    assert "error_class" not in js
+
+
+def test_ui_d1_4b_calibration_render_is_non_blocking_and_diagnostic_only() -> None:
+    js = read_frontend("app.js")
+    detail_chunk = js.split("function renderStructuredDetail", maxsplit=1)[1]
+    assert detail_chunk.index("detailPanel.replaceChildren(") < detail_chunk.index(
+        "void hydrateCalibrationDiagnostics"
+    )
+    assert "await loadCalibrationDiagnostics()" in js
+    calibration_chunk = js.split(
+        "async function loadCalibrationDiagnostics", maxsplit=1
+    )[1].split("function renderModelQualityEducation", maxsplit=1)[0]
+    for field in (
+        "sample_gate",
+        "sample_count",
+        "brier_score",
+        "log_loss",
+        "top_label_hit_rate",
+    ):
+        assert field in calibration_chunk
+    for decision_target in (
+        "decision_label",
+        "can_enter_now",
+        "can_chase",
+        "candidate_is_not_entry_permission",
+        "gate_result",
+        "actionability_stack",
+    ):
+        assert decision_target not in calibration_chunk
+    assert ".reduce(" not in calibration_chunk
+
+
+def test_ui_d1_4b_calibration_wording_is_explicitly_safe() -> None:
+    js = read_frontend("app.js")
+    calibration_chunk = js.split(
+        "async function loadCalibrationDiagnostics", maxsplit=1
+    )[1].split("function renderModelQualityEducation", maxsplit=1)[0]
+    assert "Early diagnostic only — not accuracy, not profitability evidence, not trade EV." in js
+    assert "Top-label hit rate (diagnostic)" in calibration_chunk
+    unsafe = (
+        "win " + "rate",
+        "profit" + "able",
+        "reliable " + "signal",
+        "high " + "confidence",
+        "guaran" + "teed",
+        "safe " + "trade",
+        "buy " + "now",
+        "sell " + "now",
+    )
+    assert not any(phrase in calibration_chunk.lower() for phrase in unsafe)
+    for line in js.splitlines():
+        lowered = line.lower()
+        if "accuracy" in lowered:
+            assert "not accuracy" in lowered
+        if "profitability evidence" in lowered:
+            assert "not profitability evidence" in lowered
+        if "trade ev" in lowered:
+            assert "not trade ev" in lowered
+
+
+def test_ui_d1_4b_calibration_cards_preserve_containment() -> None:
+    css = read_frontend("styles.css")
+    for selector in (
+        ".calibration-diagnostics",
+        ".calibration-grid",
+        ".calibration-timeframe-card",
+        ".calibration-gate-badge",
+        ".calibration-disclaimer",
+    ):
+        assert selector in css
+    calibration_css = css.split(".calibration-diagnostics-mount", maxsplit=1)[1].split(
+        ".decision-change-list", maxsplit=1
+    )[0]
+    assert "min-width: 0" in calibration_css
+    assert "max-width: 100%" in calibration_css
+    assert "overflow-wrap: anywhere" in calibration_css
+    assert "flex-wrap: wrap" in calibration_css
+    assert "overflow: hidden" not in calibration_css
+
+
+def test_ui_d1_4b_does_not_hardcode_live_calibration_counts() -> None:
+    js = read_frontend("app.js")
+    for invented_fragment in (
+        '"15m": 93',
+        '"1H": 83',
+        '"4H": 72',
+        '"1D": 8',
+        '"1W": 0',
+        '"1M": 0',
+    ):
+        assert invented_fragment not in js
+
+
+def test_ui_d1_4b_uses_endpoint_without_database_dependency() -> None:
     js = read_frontend("app.js").lower()
+    assert "/v1/calibration" in js
     disallowed = (
-        "/v1/" + "calibration",
         "supa" + "base",
         "psyco" + "pg",
         "db_" + "url",
+        "post" + "gres://",
+        "service" + "_role",
     )
     assert not any(marker in js for marker in disallowed)
 
@@ -436,7 +573,10 @@ def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -
     html = read_frontend("index.html")
     assert "Confidence" not in js
     assert "confidence_frac" not in js
-    assert "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured." in js
+    assert (
+        "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured."
+        in js
+    )
     assert "Model readiness" not in html or "Confidence" not in html
 
 

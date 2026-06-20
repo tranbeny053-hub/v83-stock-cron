@@ -10,8 +10,10 @@ const persistenceStatusBadge = document.querySelector("#persistenceStatusBadge")
 const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
-const modelReadinessCopy = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-4-model-quality-polish";
+const modelReadinessCopy =
+  "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
+const UCPE_FRONTEND_BUILD = "ui-d1-4b-calibration-metrics";
+const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const tacticalTimeframes = ["15m", "1H", "4H"];
 const regimeTimeframes = ["1D", "1W", "1M"];
@@ -63,6 +65,9 @@ let refreshTimer = null;
 let analysisActive = false;
 let lastBatchRequest = null;
 let currentWatchlistSymbol = null;
+let calibrationDiagnosticsCache = null;
+let calibrationDiagnosticsCachedAt = 0;
+let calibrationDiagnosticsRequest = null;
 const scoreHeatBands = [
   {
     min: 86,
@@ -1197,6 +1202,231 @@ function hasPayloadValue(value) {
   return value !== null && value !== undefined;
 }
 
+async function loadCalibrationDiagnostics() {
+  const now = Date.now();
+  if (
+    calibrationDiagnosticsCache &&
+    now - calibrationDiagnosticsCachedAt < calibrationDiagnosticsCacheTtlMs
+  ) {
+    return calibrationDiagnosticsCache;
+  }
+  if (calibrationDiagnosticsRequest) {
+    return calibrationDiagnosticsRequest;
+  }
+
+  calibrationDiagnosticsRequest = api("/v1/calibration")
+    .catch(() => ({
+      status: "UNAVAILABLE",
+      timeframes: [],
+      warnings: ["Calibration diagnostics unavailable. Keep using heuristic status."],
+    }))
+    .then((payload) => {
+      calibrationDiagnosticsCache = payload;
+      calibrationDiagnosticsCachedAt = Date.now();
+      return payload;
+    })
+    .finally(() => {
+      calibrationDiagnosticsRequest = null;
+    });
+  return calibrationDiagnosticsRequest;
+}
+
+function formatCalibrationMetric(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function formatCalibrationPercent(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatCalibrationCount(value) {
+  return Number.isInteger(value) && value >= 0 ? String(value) : "—";
+}
+
+function calibrationGateLabel(gate) {
+  return (
+    {
+      NO_SAMPLES: "No samples",
+      INSUFFICIENT_SAMPLE: "Insufficient sample",
+      WARMING_UP: "Warming up",
+      PRELIMINARY_MEASURED: "Preliminary measured",
+      MEASURED: "Measured",
+    }[gate] || "Unavailable"
+  );
+}
+
+function calibrationGateClass(gate) {
+  return (
+    {
+      NO_SAMPLES: "none",
+      INSUFFICIENT_SAMPLE: "insufficient",
+      WARMING_UP: "warming",
+      PRELIMINARY_MEASURED: "preliminary",
+      MEASURED: "measured",
+    }[gate] || "unknown"
+  );
+}
+
+function calibrationGateNote(gate) {
+  return (
+    {
+      NO_SAMPLES: "No resolved samples yet.",
+      INSUFFICIENT_SAMPLE: "Early diagnostic — not measured yet.",
+      WARMING_UP: "Early diagnostic — reliability not established.",
+      PRELIMINARY_MEASURED: "Preliminary diagnostic — reliability remains limited.",
+      MEASURED: "Measured calibration diagnostic — not a guarantee.",
+    }[gate] || "Calibration status unavailable."
+  );
+}
+
+function formatOutcomeDistribution(distribution) {
+  if (!distribution || typeof distribution !== "object") {
+    return "—";
+  }
+  return `UP ${formatCalibrationCount(distribution.UP)} / DOWN ${formatCalibrationCount(
+    distribution.DOWN,
+  )} / TIMEOUT ${formatCalibrationCount(distribution.TIMEOUT)}`;
+}
+
+function renderCalibrationVersions(item = {}) {
+  const versions = item.versions_present || {};
+  const modelVersions = Array.isArray(versions.model_versions)
+    ? versions.model_versions.filter((value) => backendText(value))
+    : [];
+  const methodologyVersions = Array.isArray(versions.methodology_versions)
+    ? versions.methodology_versions.filter((value) => backendText(value))
+    : [];
+  if (!modelVersions.length && !methodologyVersions.length) {
+    return null;
+  }
+  const advanced = document.createElement("details");
+  advanced.className = "calibration-version-context";
+  advanced.append(textBlock("summary", "Version context"));
+  advanced.append(
+    keyValueTable([
+      ["Model versions", modelVersions.join(", ") || "—"],
+      ["Methodology versions", methodologyVersions.join(", ") || "—"],
+    ]),
+  );
+  return advanced;
+}
+
+function renderCalibrationTimeframe(item = {}) {
+  const gate = backendText(item.sample_gate) || "UNKNOWN";
+  const card = document.createElement("article");
+  card.className = `calibration-timeframe-card calibration-gate-${calibrationGateClass(gate)}`;
+  card.dataset.calibrationTimeframe = backendText(item.timeframe) || "unknown";
+
+  const header = document.createElement("header");
+  header.className = "calibration-card-header";
+  header.append(textBlock("h5", backendText(item.timeframe) || "Timeframe unavailable"));
+  header.append(
+    textBlock(
+      "span",
+      calibrationGateLabel(gate),
+      `calibration-gate-badge calibration-gate-badge-${calibrationGateClass(gate)}`,
+    ),
+  );
+  card.append(header);
+  card.append(textBlock("p", calibrationGateNote(gate), "calibration-gate-note"));
+
+  const values = [
+    ["Resolved sample count", formatCalibrationCount(item.sample_count)],
+    ["Reliability status", calibrationGateLabel(item.reliability_status)],
+    ["Brier score", formatCalibrationMetric(item.brier_score)],
+    ["Log loss", formatCalibrationMetric(item.log_loss)],
+    ["Top-label hit rate (diagnostic)", formatCalibrationPercent(item.top_label_hit_rate)],
+    ["Outcomes", formatOutcomeDistribution(item.outcome_distribution)],
+    [
+      "Version mix warning",
+      typeof item.version_mix_warning === "boolean"
+        ? item.version_mix_warning
+          ? "Yes"
+          : "No"
+        : "—",
+    ],
+  ];
+  if (
+    hasPayloadValue(item.valid_count) &&
+    item.valid_count !== item.sample_count
+  ) {
+    values.splice(1, 0, ["Valid resolved samples", formatCalibrationCount(item.valid_count)]);
+  }
+  card.append(keyValueTable(values));
+
+  const versions = renderCalibrationVersions(item);
+  if (versions) {
+    card.append(versions);
+  }
+  if (backendText(item.warning)) {
+    card.append(textBlock("p", item.warning, "calibration-item-warning"));
+  }
+  return card;
+}
+
+function renderCalibrationUnavailable() {
+  const fallback = document.createElement("div");
+  fallback.className = "calibration-unavailable";
+  fallback.append(
+    textBlock(
+      "p",
+      "Calibration diagnostics unavailable. Keep using heuristic status.",
+      "muted",
+    ),
+  );
+  return fallback;
+}
+
+function renderCalibrationDiagnostics(payload) {
+  if (
+    payload?.status !== "OK" ||
+    !Array.isArray(payload.timeframes) ||
+    payload.timeframes.length === 0
+  ) {
+    return renderCalibrationUnavailable();
+  }
+
+  const wrapper = document.createElement("section");
+  wrapper.className = "calibration-diagnostics";
+  wrapper.append(textBlock("h4", "Per-timeframe calibration diagnostics"));
+  wrapper.append(
+    textBlock(
+      "p",
+      "Early diagnostic only — not accuracy, not profitability evidence, not trade EV.",
+      "calibration-disclaimer",
+    ),
+  );
+  const grid = document.createElement("div");
+  grid.className = "calibration-grid";
+  for (const item of payload.timeframes) {
+    grid.append(renderCalibrationTimeframe(item || {}));
+  }
+  wrapper.append(grid);
+  return wrapper;
+}
+
+function calibrationDiagnosticsMount() {
+  const mount = document.createElement("div");
+  mount.className = "calibration-diagnostics-mount";
+  mount.dataset.calibrationDiagnostics = "";
+  mount.setAttribute("aria-live", "polite");
+  mount.append(textBlock("p", "Loading calibration diagnostics…", "muted"));
+  return mount;
+}
+
+async function hydrateCalibrationDiagnostics(mount) {
+  const payload = await loadCalibrationDiagnostics();
+  if (mount?.isConnected) {
+    mount.replaceChildren(renderCalibrationDiagnostics(payload));
+  }
+}
+
 function renderModelQualityEducation() {
   const education = document.createElement("details");
   education.className = "model-quality-education";
@@ -1282,7 +1512,7 @@ function renderModelQuality(quality = {}, probability = {}) {
   card.append(
     textBlock(
       "p",
-      "Keep collecting samples; do not treat this as reliability or profitability evidence.",
+      "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
       "muted",
     ),
   );
@@ -1295,6 +1525,7 @@ function renderModelQualitySection(synthesis = {}) {
       synthesis.model_quality_summary || {},
       synthesis.probability_interpretation || {},
     ),
+    calibrationDiagnosticsMount(),
     renderModelQualityEducation(),
   ]);
 }
@@ -1518,6 +1749,10 @@ function renderStructuredDetail(payload, detailView) {
     ]),
     section("Debug / Raw JSON", [rawJson]),
   );
+  const calibrationMount = detailPanel.querySelector("[data-calibration-diagnostics]");
+  if (calibrationMount) {
+    void hydrateCalibrationDiagnostics(calibrationMount);
+  }
   detailPanel.classList.remove("hidden");
 }
 
