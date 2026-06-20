@@ -1008,6 +1008,27 @@ dd {
   margin-top: 12px;
 }
 
+.calibration-diagnostics-mount > h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.calibration-read-only-label {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.calibration-diagnostics-content {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 10px;
+}
+
 .calibration-diagnostics {
   border: 1px solid rgba(0, 240, 255, 0.22);
   border-radius: 8px;

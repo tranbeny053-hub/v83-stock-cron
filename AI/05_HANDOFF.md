@@ -2,45 +2,54 @@
 
 ## Goal / Branch
 
-- Goal: UI-D1.4B render real endpoint calibration diagnostics in Model Quality.
-- Branch: `codex/ui-d1-4b-calibration-metrics`
-- Base: `dev` at `e947ab3`
-- Risk: frontend render-only; review before merge.
+- Goal: UI-D1.4B-FIX automatically mount and render calibration diagnostics in Model Quality.
+- Branch: `codex/ui-d1-4b-fix-calibration-render-trigger`
+- Base: `dev` at merged UI-D1.4B milestone `7a18795`
+- Risk: frontend render-trigger fix only; review before merge.
 
-## Implementation
+## Root Cause
 
-- Calls `api("/v1/calibration")` once for all timeframes when Detail mounts.
-- Decision and the existing Model Quality summary render before the asynchronous request.
-- Full responses and safe failure states use a 60-second frontend cache; concurrent Detail
-  opens share one in-flight request.
-- `OK` renders one backend-driven card per returned timeframe with sample-gate dominance,
-  metrics, outcomes, optional valid count, version warning/context, and backend warning.
-- `UNAVAILABLE` or request failure renders: calibration diagnostics unavailable; keep using
-  heuristic status. Error class/message details are not displayed.
-- Null metrics render as an em dash, while backend numeric zero remains visible.
-- Asset query strings and app build stamp are `ui-d1-4b-calibration-metrics`.
+- `renderModelQualitySection` created an anonymous loading mount but did not initiate its
+  own load.
+- The request was coupled to a later document-wide attribute lookup in
+  `renderStructuredDetail`, and replacement was gated on `mount.isConnected`.
+- This external selector/timing dependency allowed the visible Model Quality render path to
+  miss the automatic trigger even though the fetch/render helpers were present in bundle.
+- The prior asset stamp also needed a bump so browsers load the corrected module instance.
 
-## Boundaries Confirmed
+## Fix
 
-- No backend/schema/calibration/math/score/probability/gate/resolver/persistence/frontend-
-  secret contract change and no new endpoint.
-- Calibration diagnostics do not affect Decision, hard gates, permissions, candidates,
-  probability, or cross-timeframe readiness.
-- No per-timeframe request fan-out, bucket request, sample pooling, direct database access,
-  embedded secret, or error-detail rendering.
-- Diagnostic top-label hit rate is not relabeled as accuracy.
+- Model Quality now retains its own calibration mount/content references and directly calls
+  `loadCalibrationDiagnostics()` with a non-blocking promise during section construction.
+- The resolved payload replaces that exact retained content node with
+  `renderCalibrationDiagnostics(payload)`; no global DOM lookup or connectivity gate remains.
+- The outer section always includes `data-calibration-diagnostics`, the heading
+  `Live calibration diagnostics`, `Read-only diagnostic`, and the loading state.
+- Loading, `OK`, and safe unavailable states preserve the same outer QA hook and heading.
+- Existing 60-second cache, shared in-flight promise, single all-timeframe endpoint request,
+  safe failure copy, diagnostic cards, and decision isolation are unchanged.
+- Asset stamp is `ui-d1-4b-fix-calibration-render-trigger`.
 
-## Verification
+## Browser QA Expectations
 
-- Frontend tests: PASS, 44 passed.
-- Full pytest: PASS, 277 passed; 7 existing warnings.
+- Opening Detail should automatically issue one `GET /v1/calibration` request.
+- `[data-calibration-diagnostics]` count should be at least one.
+- Body text should include `Live calibration diagnostics` immediately and
+  `Top-label hit rate` after an `OK` response renders.
+- Reopening Detail within 60 seconds should use cache/shared in-flight state rather than
+  fan out requests.
+
+## Boundaries / Verification
+
+- Frontend-only; no backend, schema, endpoint, calibration, decision, permission, gate,
+  probability, migration, or database change.
+- No metric enters decision logic; hard gates remain authoritative.
+- Frontend tests: PASS, 45 passed.
+- Full pytest: PASS, 278 passed with 7 existing warnings.
 - JavaScript syntax, Ruff, safeguards, schema validation, and manual smoke: PASS.
 - Protected backend/schema/script/migration diffs: empty.
-- Unsafe wording and direct database/secret greps: empty; expected fetch/field/version hits.
-
-## Current Endpoint Display / Next Step
-
-- Current reported rows: 15m 93 insufficient; 1H 83 insufficient; 4H 72 insufficient;
-  1D 8 insufficient; 1W and 1M 0/no samples. Values are fetched, never hardcoded.
+- Unsafe wording and direct database/secret greps: empty; accuracy is explicitly negated.
+- `AI/03_CURRENT_STATE.md` was not edited because this fix's strict scope permits only
+  `AI/05_HANDOFF.md` / `AI/08*` / changelog documentation.
 - No merge, deploy, push, or migration performed.
-- Next: Claude review before the user separately approves merge/deployment.
+- Next: Claude review, then deployment and live DOM/Network QA as a separate approved step.

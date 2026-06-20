@@ -12,7 +12,7 @@ const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy =
   "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-4b-calibration-metrics";
+const UCPE_FRONTEND_BUILD = "ui-d1-4b-fix-calibration-render-trigger";
 const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const tacticalTimeframes = ["15m", "1H", "4H"];
@@ -1412,19 +1412,17 @@ function renderCalibrationDiagnostics(payload) {
 }
 
 function calibrationDiagnosticsMount() {
-  const mount = document.createElement("div");
+  const mount = document.createElement("section");
   mount.className = "calibration-diagnostics-mount";
-  mount.dataset.calibrationDiagnostics = "";
+  mount.setAttribute("data-calibration-diagnostics", "");
   mount.setAttribute("aria-live", "polite");
-  mount.append(textBlock("p", "Loading calibration diagnostics…", "muted"));
+  mount.append(textBlock("h4", "Live calibration diagnostics"));
+  mount.append(textBlock("p", "Read-only diagnostic", "calibration-read-only-label"));
+  const content = document.createElement("div");
+  content.className = "calibration-diagnostics-content";
+  content.append(textBlock("p", "Loading calibration diagnostics…", "muted"));
+  mount.append(content);
   return mount;
-}
-
-async function hydrateCalibrationDiagnostics(mount) {
-  const payload = await loadCalibrationDiagnostics();
-  if (mount?.isConnected) {
-    mount.replaceChildren(renderCalibrationDiagnostics(payload));
-  }
 }
 
 function renderModelQualityEducation() {
@@ -1520,12 +1518,19 @@ function renderModelQuality(quality = {}, probability = {}) {
 }
 
 function renderModelQualitySection(synthesis = {}) {
+  const calibrationMount = calibrationDiagnosticsMount();
+  const calibrationContent = calibrationMount.querySelector(
+    ".calibration-diagnostics-content",
+  );
+  void loadCalibrationDiagnostics().then((payload) => {
+    calibrationContent?.replaceChildren(renderCalibrationDiagnostics(payload));
+  });
   return section("Model Quality", [
     renderModelQuality(
       synthesis.model_quality_summary || {},
       synthesis.probability_interpretation || {},
     ),
-    calibrationDiagnosticsMount(),
+    calibrationMount,
     renderModelQualityEducation(),
   ]);
 }
@@ -1749,10 +1754,6 @@ function renderStructuredDetail(payload, detailView) {
     ]),
     section("Debug / Raw JSON", [rawJson]),
   );
-  const calibrationMount = detailPanel.querySelector("[data-calibration-diagnostics]");
-  if (calibrationMount) {
-    void hydrateCalibrationDiagnostics(calibrationMount);
-  }
   detailPanel.classList.remove("hidden");
 }
 

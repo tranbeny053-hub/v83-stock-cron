@@ -25,9 +25,10 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert 'href="/styles.css?v=ui-d1-4b-calibration-metrics"' in html
-    assert 'src="/app.js?v=ui-d1-4b-calibration-metrics"' in html
-    assert 'const UCPE_FRONTEND_BUILD = "ui-d1-4b-calibration-metrics";' in js
+    version = "ui-d1-4b-fix-calibration-render-trigger"
+    assert f'href="/styles.css?v={version}"' in html
+    assert f'src="/app.js?v={version}"' in html
+    assert f'const UCPE_FRONTEND_BUILD = "{version}";' in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -415,8 +416,10 @@ def test_ui_d1_4b_reads_calibration_contract_fields() -> None:
 
 def test_ui_d1_4b_has_loading_unavailable_and_null_fallbacks() -> None:
     js = read_frontend("app.js")
+    assert "Live calibration diagnostics" in js
     assert "Loading calibration diagnostics…" in js
     assert "Calibration diagnostics unavailable. Keep using heuristic status." in js
+    assert 'setAttribute("data-calibration-diagnostics", "")' in js
     assert 'return "—";' in js
     assert "formatCalibrationMetric" in js
     assert "formatCalibrationPercent" in js
@@ -426,11 +429,16 @@ def test_ui_d1_4b_has_loading_unavailable_and_null_fallbacks() -> None:
 
 def test_ui_d1_4b_calibration_render_is_non_blocking_and_diagnostic_only() -> None:
     js = read_frontend("app.js")
-    detail_chunk = js.split("function renderStructuredDetail", maxsplit=1)[1]
-    assert detail_chunk.index("detailPanel.replaceChildren(") < detail_chunk.index(
-        "void hydrateCalibrationDiagnostics"
-    )
-    assert "await loadCalibrationDiagnostics()" in js
+    model_quality_chunk = js.split("function renderModelQualitySection", maxsplit=1)[1].split(
+        "function renderTradePlanSkeleton", maxsplit=1
+    )[0]
+    assert "calibrationDiagnosticsMount()" in model_quality_chunk
+    assert "loadCalibrationDiagnostics()" in model_quality_chunk
+    assert ".then((payload)" in model_quality_chunk
+    assert "renderCalibrationDiagnostics(payload)" in model_quality_chunk
+    assert "calibrationContent?.replaceChildren" in model_quality_chunk
+    assert "await loadCalibrationDiagnostics()" not in model_quality_chunk
+    assert "hydrateCalibrationDiagnostics" not in js
     calibration_chunk = js.split(
         "async function loadCalibrationDiagnostics", maxsplit=1
     )[1].split("function renderModelQualityEducation", maxsplit=1)[0]
@@ -452,6 +460,18 @@ def test_ui_d1_4b_calibration_render_is_non_blocking_and_diagnostic_only() -> No
     ):
         assert decision_target not in calibration_chunk
     assert ".reduce(" not in calibration_chunk
+
+
+def test_ui_d1_4b_fix_exposes_persistent_browser_qa_hooks() -> None:
+    js = read_frontend("app.js")
+    assert "Live calibration diagnostics" in js
+    assert "Read-only diagnostic" in js
+    assert "data-calibration-diagnostics" in js
+    mount_chunk = js.split("function calibrationDiagnosticsMount", maxsplit=1)[1].split(
+        "function renderModelQualityEducation", maxsplit=1
+    )[0]
+    assert "Loading calibration diagnostics…" in mount_chunk
+    assert "calibration-diagnostics-content" in mount_chunk
 
 
 def test_ui_d1_4b_calibration_wording_is_explicitly_safe() -> None:
