@@ -882,6 +882,94 @@ dd {
   font-size: 14px;
 }
 
+.scenario-plan {
+  display: grid;
+  grid-column: 1 / -1;
+  min-width: 0;
+  max-width: 100%;
+  gap: 12px;
+  border-color: rgba(142, 164, 177, 0.34);
+  background: rgba(142, 164, 177, 0.035);
+}
+
+.scenario-plan > *,
+.scenario-plan-list,
+.scenario-plan-reason,
+.scenario-plan-warning,
+.scenario-plan-backend-text {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.scenario-plan h4,
+.scenario-plan h5,
+.scenario-plan p,
+.scenario-plan li,
+.scenario-plan-display-only {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.scenario-plan h4,
+.scenario-plan h5,
+.scenario-plan p {
+  margin: 0;
+}
+
+.scenario-plan h5 {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.scenario-plan-summary {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+  align-items: center;
+}
+
+.scenario-plan-display-only {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scenario-plan-reason,
+.scenario-plan-list,
+.scenario-plan-backend-text {
+  border-top: 1px solid rgba(142, 164, 177, 0.2);
+  padding-top: 10px;
+}
+
+.scenario-plan-warning,
+.scenario-plan-safety {
+  border: 1px solid rgba(255, 209, 102, 0.34);
+  border-radius: 7px;
+  padding: 10px;
+  color: var(--warning);
+  background: rgba(255, 209, 102, 0.055);
+}
+
+.scenario-plan-warning h5,
+.scenario-plan-safety h5 {
+  color: var(--warning);
+}
+
+.scenario-plan .detail-list {
+  display: grid;
+  gap: 6px;
+}
+
+.scenario-plan-unavailable {
+  border-color: rgba(255, 209, 102, 0.32);
+}
+
 .probability-informational {
   border-color: rgba(255, 209, 102, 0.32);
   background: rgba(255, 209, 102, 0.025);

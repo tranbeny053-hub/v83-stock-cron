@@ -2,54 +2,62 @@
 
 ## Goal / Branch
 
-- Goal: UI-D1.4B-FIX automatically mount and render calibration diagnostics in Model Quality.
-- Branch: `codex/ui-d1-4b-fix-calibration-render-trigger`
-- Base: `dev` at merged UI-D1.4B milestone `7a18795`
-- Risk: frontend render-trigger fix only; review before merge.
+- Goal: UI-D1.5B render the backend `trade_plan_skeleton` as a safe Scenario plan.
+- Branch: `codex/ui-d1-5b-trade-plan-render`
+- Base: `dev` at merged UI-D1.5A milestone `02b0bc0`.
+- Risk: frontend rendering only; review before merge.
 
-## Root Cause
+## Implementation
 
-- `renderModelQualitySection` created an anonymous loading mount but did not initiate its
-  own load.
-- The request was coupled to a later document-wide attribute lookup in
-  `renderStructuredDetail`, and replacement was gated on `mount.isConnected`.
-- This external selector/timing dependency allowed the visible Model Quality render path to
-  miss the automatic trigger even though the fetch/render helpers were present in bundle.
-- The prior asset stamp also needed a bump so browsers load the corrected module instance.
+- Upgraded `renderTradePlanSkeleton` to read the D1.5A mode, plan status, direction,
+  false-only immediate/chase permissions, disabled reason, confirmation list, chase warning,
+  plan-change conditions, and safety copy.
+- Added an always-present `data-trade-plan-skeleton` QA hook and visible `Scenario plan`
+  heading, including a compact missing-contract fallback.
+- Backend enum values are mapped only to neutral display copy; candidate status is display-only
+  and does not imply immediate action.
+- Numeric planning remains disabled. The eight known zone/trigger/stop/target/risk-reward fields
+  are accepted only when the backend provides non-empty text; numbers and objects are ignored,
+  and the frontend performs no calculation.
+- Added contained, mobile-safe, neutral Scenario plan styling below the core Decision,
+  Risk/Probability, Actionability, and Advisor information. Hard-gate visuals remain dominant.
+- Updated frontend asset/build stamp to `ui-d1-5b-trade-plan-render`.
 
-## Fix
+## Safety Boundaries
 
-- Model Quality now retains its own calibration mount/content references and directly calls
-  `loadCalibrationDiagnostics()` with a non-blocking promise during section construction.
-- The resolved payload replaces that exact retained content node with
-  `renderCalibrationDiagnostics(payload)`; no global DOM lookup or connectivity gate remains.
-- The outer section always includes `data-calibration-diagnostics`, the heading
-  `Live calibration diagnostics`, `Read-only diagnostic`, and the loading state.
-- Loading, `OK`, and safe unavailable states preserve the same outer QA hook and heading.
-- Existing 60-second cache, shared in-flight promise, single all-timeframe endpoint request,
-  safe failure copy, diagnostic cards, and decision isolation are unchanged.
-- Asset stamp is `ui-d1-4b-fix-calibration-render-trigger`.
+- No backend, schema, endpoint, database, calibration, score, probability, gate, resolver,
+  prediction, or migration change.
+- No new network request; the renderer uses the existing detail payload only.
+- No numeric entry, stop, target, or risk/reward generation.
+- Immediate action and chase are displayed as `No` only when the backend value is false;
+  unexpected values display as unavailable.
+- No direct database/service credential reference and no executable trading workflow.
 
-## Browser QA Expectations
+## Verification
 
-- Opening Detail should automatically issue one `GET /v1/calibration` request.
-- `[data-calibration-diagnostics]` count should be at least one.
-- Body text should include `Live calibration diagnostics` immediately and
-  `Top-label hit rate` after an `OK` response renders.
-- Reopening Detail within 60 seconds should use cache/shared in-flight state rather than
-  fan out requests.
-
-## Boundaries / Verification
-
-- Frontend-only; no backend, schema, endpoint, calibration, decision, permission, gate,
-  probability, migration, or database change.
-- No metric enters decision logic; hard gates remain authoritative.
-- Frontend tests: PASS, 45 passed.
-- Full pytest: PASS, 278 passed with 7 existing warnings.
-- JavaScript syntax, Ruff, safeguards, schema validation, and manual smoke: PASS.
+- Frontend static tests: PASS, 51 passed.
+- Full pytest: PASS, 287 passed with 7 existing deprecation warnings.
+- JavaScript syntax: PASS.
+- Ruff: PASS.
+- Forbidden-scope, secret, and full-article-body safeguards: PASS.
+- Schema validation: PASS.
+- Manual smoke: PASS; frontend asset stamp verified.
 - Protected backend/schema/script/migration diffs: empty.
-- Unsafe wording and direct database/secret greps: empty; accuracy is explicitly negated.
-- `AI/03_CURRENT_STATE.md` was not edited because this fix's strict scope permits only
-  `AI/05_HANDOFF.md` / `AI/08*` / changelog documentation.
-- No merge, deploy, push, or migration performed.
-- Next: Claude review, then deployment and live DOM/Network QA as a separate approved step.
+- Targeted plan-calculation, database, and trade/execution endpoint greps: empty.
+- Wording grep reports only required, explicitly negated D1.4 Model Quality copy.
+
+## Files
+
+- Changed: `frontend/app.js`, `frontend/styles.css`, `frontend/index.html`,
+  `tests/frontend/test_frontend_static.py`, `AI/05_HANDOFF.md`.
+- Read but unchanged: project instruction/current-state/test-command docs,
+  `src/crypto_probability_engine/detail/decision_synthesis.py`, and
+  `schemas/response.schema.json`.
+- `AI/03_CURRENT_STATE.md` was not edited because the task's strict allowlist permits only
+  `AI/05_HANDOFF.md`, `AI/08_IMPLEMENTATION_MEMORY.md`, and `CHANGELOG.md` documentation.
+
+## User Summary / Next Step
+
+The Detail view now explains the backend Scenario plan, why it is limited, what confirmation
+is missing, and the mandatory safety notes without inventing a tradable level or instruction.
+Next: Claude review, then deployment and browser DOM QA as a separate approved step.

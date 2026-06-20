@@ -25,7 +25,7 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    version = "ui-d1-4b-fix-calibration-render-trigger"
+    version = "ui-d1-5b-trade-plan-render"
     assert f'href="/styles.css?v={version}"' in html
     assert f'src="/app.js?v={version}"' in html
     assert f'const UCPE_FRONTEND_BUILD = "{version}";' in js
@@ -147,17 +147,10 @@ def test_ui_d1_3_matrix_has_no_permission_label_or_zone_inference() -> None:
     assert "> probability.p_" not in alignment_chunk
     assert "> display.prob_" not in alignment_chunk
     assert "decisionLabelCopy[decision.label]" in js
-    for zone_field in (
-        "preferred_entry_zone",
-        "acceptable_entry_zone",
-        "chase_zone",
-        "breakout_trigger",
-        "pullback_trigger",
-        "stop_invalidation",
-        "take_profit_plan",
-        "risk_reward_summary",
-    ):
-        assert zone_field not in js
+    matrix_chunk = js.split("function overviewCard", maxsplit=1)[1].split(
+        "function errorCard", maxsplit=1
+    )[0]
+    assert "scenarioPlanTextFields" not in matrix_chunk
 
 
 def test_batch_timeframe_dropdown_includes_monthly() -> None:
@@ -227,6 +220,9 @@ def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> No
         r"label\s*=\s*['\"](?:LONG|SHORT)['\"]",
     )
     assert not any(re.search(pattern, js, flags=re.IGNORECASE) for pattern in inference_patterns)
+    scenario_chunk = js.split("const scenarioPlanTextFields", maxsplit=1)[1].split(
+        "function renderFutureQuantHooks", maxsplit=1
+    )[0]
     for zone_field in (
         "preferred_entry_zone",
         "acceptable_entry_zone",
@@ -237,14 +233,16 @@ def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> No
         "take_profit_plan",
         "risk_reward_summary",
     ):
-        assert zone_field not in js
+        assert js.count(zone_field) == 1
+        assert zone_field in scenario_chunk
+    assert "backendText(plan[key])" in scenario_chunk
 
 
 def test_decision_renderer_uses_safe_candidate_and_probability_copy() -> None:
     js = read_frontend("app.js")
     assert "Long candidate (plan only)" in js
     assert "Short candidate (plan only)" in js
-    assert "Candidate plan only — not an entry instruction." in js
+    assert "Candidate plan only — not a trade command." in js
     assert "Informational only" in js
     assert "probability.informational_only" in js
     candidate_copy = js.split("const decisionLabelCopy", maxsplit=1)[1].split("};", maxsplit=1)[0]
@@ -279,9 +277,152 @@ def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() ->
     assert "Decision synthesis unavailable for this run." in js
     assert "decisionBrief.action" in js
     assert "decisionBrief.state_summary" in js
-    assert "Numeric plan not available / disabled." in js
+    assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
+    assert "Numeric entry, stop, target, and risk/reward are disabled for now." in js
     assert "renderTradePlanSkeleton" in js
     assert "formatValue(null)" not in js
+
+
+def test_ui_d1_5b_scenario_plan_renders_backend_contract_with_qa_hook() -> None:
+    js = read_frontend("app.js")
+    for marker in (
+        "data-trade-plan-skeleton",
+        "Scenario plan",
+        "Plan status",
+        "Direction context",
+        "Immediate action",
+        "Chase move",
+        "Why this is limited",
+        "Wait for confirmation",
+        "What would change the plan",
+        "Safety notes",
+    ):
+        assert marker in js
+    for field in (
+        "plan.mode",
+        "plan.plan_status",
+        "plan.setup_direction",
+        "plan.can_enter_now",
+        "plan.can_chase",
+        "plan.disabled_reason",
+        "plan.confirmation_required",
+        "plan.chase_warning",
+        "plan.what_would_change_plan",
+        "plan.safety_copy",
+    ):
+        assert field in js
+
+
+def test_ui_d1_5b_scenario_plan_has_safe_display_copy_and_fallbacks() -> None:
+    js = read_frontend("app.js")
+    for copy in (
+        "No action now",
+        "Missed move — do not chase",
+        "Conditional candidate",
+        "Long context",
+        "Short context",
+        "Candidate plan only — not a trade command.",
+        "Not financial advice.",
+        "Numeric entry, stop, and target are disabled until calibration is measured.",
+        "No actionable plan is available from the current evidence.",
+        "No confirmation path is available yet.",
+        "No plan-changing condition is available yet.",
+    ):
+        assert copy in js
+
+
+def test_ui_d1_5b_scenario_plan_does_not_invent_numeric_values_or_call_api() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("const scenarioModeCopy", maxsplit=1)[1].split(
+        "function renderFutureQuantHooks", maxsplit=1
+    )[0]
+    zone_fields = (
+        "preferred_entry_zone",
+        "acceptable_entry_zone",
+        "chase_zone",
+        "breakout_trigger",
+        "pullback_trigger",
+        "stop_invalidation",
+        "take_profit_plan",
+        "risk_reward_summary",
+    )
+    for field in zone_fields:
+        assert f'"{field}"' in chunk
+    assert "backendText(plan[key])" in chunk
+    for calculation_helper in ("formatNumber(", "formatPct(", "parseFloat(", "Number("):
+        assert calculation_helper not in chunk
+    assert not re.search(
+        r"(?:preferred_entry_zone|stop_invalidation|take_profit_plan|risk_reward_summary)"
+        r"[^\n]*(?:\+|-|\*|/)",
+        chunk,
+    )
+    assert "api(" not in chunk
+    assert "fetch(" not in chunk
+
+
+def test_ui_d1_5b_scenario_plan_is_isolated_from_decision_logic() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("function renderTradePlanSkeleton", maxsplit=1)[1].split(
+        "function renderFutureQuantHooks", maxsplit=1
+    )[0]
+    assert "plan = {}" in chunk
+    for foreign_source in (
+        "decision_label",
+        "probability_interpretation",
+        "actionability_stack",
+        "gate_result",
+        "model_quality_summary",
+        "action_permission",
+    ):
+        assert foreign_source not in chunk
+    assert "can_enter_now = true" not in chunk
+    assert "can_chase = true" not in chunk
+
+
+def test_ui_d1_5b_scenario_plan_avoids_actionable_wording() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("const scenarioModeCopy", maxsplit=1)[1].split(
+        "function renderFutureQuantHooks", maxsplit=1
+    )[0].lower()
+    forbidden = (
+        "buy " + "now",
+        "sell " + "now",
+        "enter " + "now",
+        "guaran" + "teed",
+        "safe " + "trade",
+        "sure " + "long",
+        "sure " + "short",
+        "will " + "pump",
+        "will " + "dump",
+        "profit" + "able",
+        "win " + "rate",
+        "high " + "confidence",
+        "accu" + "racy",
+        "trade " + "ev",
+        "lever" + "age",
+        "position " + "size",
+        "place " + "order",
+        "execute " + "trade",
+    )
+    assert not any(phrase in chunk for phrase in forbidden)
+
+
+def test_ui_d1_5b_scenario_plan_styles_preserve_containment_and_priority() -> None:
+    css = read_frontend("styles.css")
+    chunk = css.split(".scenario-plan {", maxsplit=1)[1].split(
+        ".probability-informational", maxsplit=1
+    )[0]
+    for marker in (
+        "grid-column: 1 / -1",
+        "min-width: 0",
+        "max-width: 100%",
+        "flex-wrap: wrap",
+        "overflow-wrap: anywhere",
+        "white-space: normal",
+    ):
+        assert marker in chunk
+    assert "overflow: hidden" not in chunk
+    assert "decision-badge-candidate" not in chunk
 
 
 def test_decision_renderer_prioritizes_backend_blocks_and_advanced_context() -> None:

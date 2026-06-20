@@ -12,7 +12,7 @@ const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy =
   "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-4b-fix-calibration-render-trigger";
+const UCPE_FRONTEND_BUILD = "ui-d1-5b-trade-plan-render";
 const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const tacticalTimeframes = ["15m", "1H", "4H"];
@@ -967,7 +967,7 @@ function renderPermissionRow(permission = {}) {
   const row = document.createElement("div");
   row.className = "decision-permissions";
   for (const [label, value] of [
-    ["Enter now", permissionNo(permission.can_enter_now)],
+    ["Immediate action", permissionNo(permission.can_enter_now)],
     ["Plan", permissionPlan(permission)],
     ["Chase", permissionNo(permission.can_chase)],
   ]) {
@@ -1174,7 +1174,7 @@ function renderAdvisorExplanations(explanations = {}, changes = []) {
   wrapper.append(textBlock("h4", "Advisor explanation"));
   const items = [
     ["Why this decision", explanations.why_this_decision],
-    ["Why not enter now", explanations.why_not_enter_now],
+    ["Why immediate action is unavailable", explanations.why_not_enter_now],
     ["Why probability is muted", explanations.why_probability_is_muted],
     ["Why timeframe matters", explanations.why_timeframe_matters],
     ["Why reliability is insufficient", explanations.why_reliability_is_insufficient],
@@ -1535,28 +1535,155 @@ function renderModelQualitySection(synthesis = {}) {
   ]);
 }
 
-function renderTradePlanSkeleton(plan = {}, permission = {}, decision = {}) {
+const scenarioModeCopy = {
+  NO_ENTRY_NOW: "No action now",
+  PULLBACK_PATH: "Pullback path",
+  BREAKOUT_PATH: "Breakout path",
+  MISSED_MOVE_DO_NOT_CHASE: "Missed move — do not chase",
+};
+
+const scenarioPlanStatusCopy = {
+  DISABLED: "Disabled",
+  OBSERVE_ONLY: "Observe only",
+  CONDITIONAL_CANDIDATE: "Conditional candidate",
+};
+
+const scenarioDirectionCopy = {
+  LONG: "Long context",
+  SHORT: "Short context",
+  NEUTRAL: "Neutral",
+};
+
+const scenarioSafetyFallback = [
+  "Candidate plan only — not a trade command.",
+  "Not financial advice.",
+  "Numeric entry, stop, and target are disabled until calibration is measured.",
+];
+
+const scenarioPlanTextFields = [
+  ["Preferred entry zone", "preferred_entry_zone"],
+  ["Acceptable entry zone", "acceptable_entry_zone"],
+  ["Chase zone", "chase_zone"],
+  ["Breakout trigger", "breakout_trigger"],
+  ["Pullback trigger", "pullback_trigger"],
+  ["Stop invalidation", "stop_invalidation"],
+  ["Take-profit plan", "take_profit_plan"],
+  ["Risk/reward summary", "risk_reward_summary"],
+];
+
+function backendStringList(value, fallback) {
+  const items = Array.isArray(value) ? value.map(backendText).filter(Boolean) : [];
+  return items.length ? items : Array.isArray(fallback) ? fallback : [fallback];
+}
+
+function renderScenarioList(label, values, fallback, className = "") {
+  const group = document.createElement("div");
+  group.className = `scenario-plan-list ${className}`.trim();
+  group.append(textBlock("h5", label));
+  group.append(listBlock(backendStringList(values, fallback)));
+  return group;
+}
+
+function renderTradePlanSkeleton(plan = {}) {
   const card = document.createElement("article");
-  card.className = "decision-context-card decision-trade-plan";
-  card.append(textBlock("h4", "Trade plan skeleton"));
+  card.className = "decision-context-card decision-trade-plan scenario-plan";
+  card.setAttribute("data-trade-plan-skeleton", "");
+  card.append(textBlock("h4", "Scenario plan"));
+
+  const available = plan && typeof plan === "object" && Object.keys(plan).length > 0;
+  if (!available) {
+    card.classList.add("scenario-plan-unavailable");
+    card.append(
+      textBlock(
+        "p",
+        "Scenario plan unavailable. Keep using the Decision summary and hard gates.",
+        "decision-warning",
+      ),
+    );
+    return card;
+  }
+
+  const planStatus = scenarioPlanStatusCopy[plan.plan_status] || "Unavailable";
+  const summary = document.createElement("div");
+  summary.className = "scenario-plan-summary";
+  summary.append(
+    decisionBadge(
+      planStatus,
+      plan.plan_status === "DISABLED" ? "warn" : "neutral",
+    ),
+    textBlock("span", "Display only", "scenario-plan-display-only"),
+  );
   card.append(
+    summary,
     keyValueTable([
-      ["Status", plan.status],
-      ["Plan permission", permissionPlan(permission)],
+      ["Scenario", scenarioModeCopy[plan.mode] || "No action now"],
+      ["Plan status", planStatus],
+      ["Direction context", scenarioDirectionCopy[plan.setup_direction] || "Neutral"],
+      ["Immediate action", permissionNo(plan.can_enter_now)],
+      ["Chase move", permissionNo(plan.can_chase)],
     ]),
   );
-  if (backendText(plan.disabled_reason)) {
-    card.append(textBlock("p", plan.disabled_reason, "decision-context-copy"));
+
+  const reason =
+    backendText(plan.disabled_reason) ||
+    "No actionable plan is available from the current evidence.";
+  const reasonBlock = document.createElement("div");
+  reasonBlock.className = "scenario-plan-reason";
+  reasonBlock.append(textBlock("h5", "Why this is limited"));
+  reasonBlock.append(textBlock("p", reason, "decision-context-copy"));
+  card.append(reasonBlock);
+
+  card.append(
+    renderScenarioList(
+      "Wait for confirmation",
+      plan.confirmation_required,
+      "No confirmation path is available yet.",
+    ),
+  );
+
+  if (backendText(plan.chase_warning)) {
+    const warning = document.createElement("div");
+    warning.className = "scenario-plan-warning";
+    warning.append(textBlock("h5", "Chase warning"));
+    warning.append(textBlock("p", plan.chase_warning));
+    card.append(warning);
   }
-  card.append(textBlock("p", "Numeric plan not available / disabled.", "decision-warning"));
-  if (
-    permission.can_plan_trade === true &&
-    decision.candidate_is_not_entry_permission === true
-  ) {
+
+  card.append(
+    renderScenarioList(
+      "What would change the plan",
+      plan.what_would_change_plan,
+      "No plan-changing condition is available yet.",
+    ),
+  );
+
+  const surfacedPlanText = scenarioPlanTextFields
+    .map(([label, key]) => [label, backendText(plan[key])])
+    .filter(([, value]) => value);
+  if (surfacedPlanText.length) {
+    const backendPlan = document.createElement("div");
+    backendPlan.className = "scenario-plan-backend-text";
+    backendPlan.append(textBlock("h5", "Backend plan context"));
+    backendPlan.append(keyValueTable(surfacedPlanText));
+    card.append(backendPlan);
+  } else {
     card.append(
-      textBlock("p", "Candidate plan only — not an entry instruction.", "decision-safety-note"),
+      textBlock(
+        "p",
+        "Numeric entry, stop, target, and risk/reward are disabled for now.",
+        "decision-warning",
+      ),
     );
   }
+
+  card.append(
+    renderScenarioList(
+      "Safety notes",
+      plan.safety_copy,
+      scenarioSafetyFallback,
+      "scenario-plan-safety",
+    ),
+  );
   return card;
 }
 
@@ -1587,6 +1714,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}) {
         ["Existing brief summary", decisionBrief.state_summary],
         ["Existing brief risk note", decisionBrief.risk_note],
       ]),
+      renderTradePlanSkeleton({}),
     ]);
   }
 
@@ -1604,9 +1732,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}) {
 
   const supportGrid = document.createElement("div");
   supportGrid.className = "decision-context-grid";
-  supportGrid.append(
-    renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}, permission, decision),
-  );
+  supportGrid.append(renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}));
 
   return section("Decision", [
     renderFinalDecisionCard(synthesis),
