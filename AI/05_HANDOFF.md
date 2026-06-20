@@ -2,38 +2,43 @@
 
 ## Goal / Branch
 
-- Goal: UI-D1.4-FE payload-only Model Quality status plus D1.3 text-containment polish.
-- Branch: `codex/ui-d1-4-fe-model-quality-polish`
-- Base: `dev` at `85d72c2`
-- Risk: frontend render-only; review before merge.
+- Goal: UI-D1.4A session-guarded, cached, read-only calibration diagnostics endpoint.
+- Branch: `codex/ui-d1-4a-calibration-endpoint`
+- Base: `dev` at `3d30c8b`
+- Risk: backend read-only DB diagnostic; review before merge.
 
-## Implementation
+## Endpoint Contract
 
-- Decision stays first; Model Quality is second in Detail.
-- Model Quality consumes only existing synthesis quality fields and probability reliability
-  warning, with honest fallbacks when fields are absent.
-- Optional sample count/gate/Brier/log-loss/top-label fields are gated by explicit non-null
-  checks. No calibration number is hard-coded.
-- Education is collapsed by default and explains diagnostics without presenting an edge.
-- Layout containment uses zero-minimum grid/flex children, bounded cards/details/tables,
-  wrapping chip/header rows, safe word wrapping, and mobile shell spacing.
-- User-facing text is not clipped; raw JSON/pre remains scrollable.
-- Frontend asset query strings are `ui-d1-4-model-quality-polish`.
+- `GET /v1/calibration`, protected by the existing app session guard.
+- Filters: timeframe, model version, methodology version, bounded limit, bucket opt-in.
+- No timeframe returns `15m`, `1H`, `4H`, `1D`, `1W`, `1M` in order.
+- Success returns strict sanitized per-timeframe sample gates, quality metrics, optional
+  buckets, outcome distribution, and version context from `build_calibration_report`.
+- Failure/non-Postgres source returns HTTP 200 `UNAVAILABLE`, empty timeframe data, one
+  safe warning, and exception class name only.
+- Cache: in-process, 60-second monotonic TTL; key includes every query input.
+
+## Boundaries Confirmed
+
+- Calibration service/metrics and persistence repository are unchanged.
+- No prediction/outcome mutation, resolver call, migration, frontend change, dependency,
+  endpoint expansion, or `/v1/analyze` read was added.
+- No connection string, environment value, exception message, SQL, or stack detail is
+  exposed.
+- `top_label_hit_rate` remains a diagnostic field and is not relabeled.
 
 ## Verification
 
-- `tests/frontend/test_frontend_static.py`: PASS, 37 passed.
-- Full pytest: PASS, 260 passed; 6 existing deprecation warnings.
-- Ruff and all requested repository safeguard/schema/manual-smoke commands: PASS.
-- Targeted wording and calibration-fetch/DB greps: empty.
-- Protected backend/schema/script/migration diffs: empty.
-- Synthetic browser fixture was blocked by browser URL policy; deterministic containment
-  assertions passed and the guardrail was not bypassed.
+- Endpoint tests: PASS, 10 passed.
+- Full pytest: PASS, 270 passed; 7 existing warnings.
+- Ruff and all requested safeguards/schema/manual-smoke commands: PASS.
+- Protected diff: empty.
+- Secret/unsafe/mutation greps: empty; diagnostic wording hits are safely negated.
+- Service/auth reuse grep: expected hits.
 
-## Boundaries / Next Step
+## Operations / Next Step
 
-- No backend, schema, endpoint, database read, migration, methodology, dependency,
-  decision inference, permission inference, or numeric trade-plan rendering.
+- HF needs `SUPABASE_DB_URL` for live `SUPABASE_POSTGRES` diagnostics; never expose its
+  value. Missing/unavailable configuration safely yields `UNAVAILABLE`.
 - No merge, deploy, push, or migration performed.
-- Next: Claude reviews the single commit; real calibration metrics remain a later backend
-  read-only planning task.
+- Next: Claude review, then separately scoped UI-D1.4B frontend consumption.

@@ -85,6 +85,55 @@ class WatchlistRequest(BaseModel):
     symbol: str
 
 
+CalibrationTimeframe = Literal["15m", "1H", "4H", "1D", "1W", "1M"]
+
+
+class CalibrationReliabilityBucket(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bucket: str
+    bucket_count: int = Field(ge=0)
+    avg_predicted_max_prob: float | None = None
+    empirical_hit_rate: float | None = None
+    calibration_gap: float | None = None
+    bucket_sample_status: str
+
+
+class CalibrationTimeframeItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    timeframe: CalibrationTimeframe
+    sample_count: int = Field(ge=0)
+    valid_count: int = Field(ge=0)
+    sample_gate: str
+    reliability_status: str
+    metrics_available: bool
+    brier_score: float | None = None
+    log_loss: float | None = None
+    top_label_hit_rate: float | None = None
+    reliability_buckets: list[CalibrationReliabilityBucket] | None = None
+    outcome_distribution: dict[str, int] = Field(default_factory=dict)
+    version_mix_warning: bool
+    versions_present: dict[str, list[str]] = Field(default_factory=dict)
+    warning: str
+
+
+class CalibrationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["OK", "UNAVAILABLE"]
+    repository: str
+    generated_at: str
+    source: Literal["CALIBRATION_SERVICE"] = "CALIBRATION_SERVICE"
+    influence_mode: Literal["READ_ONLY_DIAGNOSTIC"] = "READ_ONLY_DIAGNOSTIC"
+    not_win_rate: Literal[True] = True
+    not_profitability_evidence: Literal[True] = True
+    not_trade_ev: Literal[True] = True
+    timeframes: list[CalibrationTimeframeItem] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    error_class: str | None = None
+
+
 class HorizonProbability(BaseModel):
     model_config = ConfigDict(extra="allow")
 

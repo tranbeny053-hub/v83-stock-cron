@@ -26,6 +26,7 @@ from crypto_probability_engine.api.auth import (
     set_session_cookie,
     verify_session_token,
 )
+from crypto_probability_engine.api.calibration_endpoint import register_calibration_endpoint
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.health import runtime_health, system_status
 from crypto_probability_engine.api.schemas import (
@@ -126,6 +127,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/auth/dev")
     def dev_status(_session: dict = Depends(require_app_dev_session)) -> dict:  # noqa: B008
         return {"ok": True}
+
+    register_calibration_endpoint(
+        app,
+        require_app_session=require_app_session,
+        settings=app_settings,
+    )
 
     @app.post("/v1/analyze")
     def analyze(
