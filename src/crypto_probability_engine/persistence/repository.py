@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
 import httpx
 
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.feature_snapshot import (
+    FeatureSnapshotWriteStatus,
+)
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
 
@@ -41,6 +46,11 @@ class PersistenceRepository(Protocol):
 
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction ledger row."""
+
+    def save_feature_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> FeatureSnapshotWriteStatus:
+        """Persist immutable prediction-time Quant V2 evidence."""
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         """Fetch due live predictions with no immutable outcome row yet."""
@@ -89,6 +99,7 @@ class InMemoryPersistenceRepository:
         self._news_clusters: list[dict] = []
         self._news_evidence_links: list[dict] = []
         self._predictions: OrderedDict[str, dict] = OrderedDict()
+        self._feature_snapshots: OrderedDict[str, dict] = OrderedDict()
         self._prediction_outcomes: OrderedDict[str, dict] = OrderedDict()
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
 
@@ -133,6 +144,27 @@ class InMemoryPersistenceRepository:
         if prediction_id and prediction_id not in self._predictions:
             self._predictions[prediction_id] = dict(row)
         return self.persistence_status()
+
+    def save_feature_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> FeatureSnapshotWriteStatus:
+        prediction_id = str(row.get("prediction_id", ""))
+        snapshot_hash = str(row.get("snapshot_hash", ""))
+        if not prediction_id or not snapshot_hash:
+            return FeatureSnapshotWriteStatus.UNAVAILABLE
+        existing = self._feature_snapshots.get(prediction_id)
+        if existing is None:
+            self._feature_snapshots[prediction_id] = deepcopy(dict(row))
+            return FeatureSnapshotWriteStatus.INSERTED
+        if str(existing.get("snapshot_hash", "")) == snapshot_hash:
+            return FeatureSnapshotWriteStatus.IDENTICAL_DUPLICATE
+        return FeatureSnapshotWriteStatus.CONFLICT
+
+    def get_feature_snapshot(self, prediction_id: str) -> dict | None:
+        """Return an isolated snapshot copy for focused internal tests."""
+
+        row = self._feature_snapshots.get(prediction_id)
+        return deepcopy(row) if row is not None else None
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         due = [
@@ -522,6 +554,26 @@ class SupabasePersistenceRepository:
         )
         return status
 
+    def save_feature_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> FeatureSnapshotWriteStatus:
+        database_row = dict(row)
+        database_row["snapshot_payload"] = json.dumps(
+            row.get("snapshot_payload"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        status, result = self._run_db(
+            lambda cursor: _insert_feature_snapshot(cursor, database_row)
+        )
+        if status == "UNAVAILABLE" or not isinstance(
+            result, FeatureSnapshotWriteStatus
+        ):
+            return FeatureSnapshotWriteStatus.UNAVAILABLE
+        return result
+
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         if not self.maybe_can_attempt():
             raise RuntimeError(
@@ -866,6 +918,43 @@ class SupabaseRestRepository:
         )
         return status
 
+    def save_feature_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> FeatureSnapshotWriteStatus:
+        status, inserted = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "prediction_feature_snapshots",
+                json=dict(row),
+                params={"on_conflict": "prediction_id"},
+                prefer="resolution=ignore-duplicates,return=representation",
+            )
+        )
+        if status == "UNAVAILABLE":
+            return FeatureSnapshotWriteStatus.UNAVAILABLE
+        if _rest_returned_inserted_snapshot(inserted):
+            return FeatureSnapshotWriteStatus.INSERTED
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "prediction_feature_snapshots",
+                params={
+                    "select": "prediction_id,snapshot_hash",
+                    "prediction_id": f"eq.{row.get('prediction_id', '')}",
+                    "limit": "1",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list) or not rows:
+            return FeatureSnapshotWriteStatus.UNAVAILABLE
+        stored_hash = str(rows[0].get("snapshot_hash", ""))
+        incoming_hash = str(row.get("snapshot_hash", ""))
+        if stored_hash and stored_hash == incoming_hash:
+            return FeatureSnapshotWriteStatus.IDENTICAL_DUPLICATE
+        if stored_hash:
+            return FeatureSnapshotWriteStatus.CONFLICT
+        return FeatureSnapshotWriteStatus.UNAVAILABLE
+
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         status, rows = self._run_rest(
             lambda: self._request(
@@ -1116,6 +1205,71 @@ def _fetch_run(cursor, run_id: str):
 
 def _set_local_statement_timeout(cursor, timeout_ms: int) -> None:
     cursor.execute(f"SET LOCAL statement_timeout = {int(timeout_ms)}")
+
+
+def _insert_feature_snapshot(
+    cursor, row: Mapping[str, Any]
+) -> FeatureSnapshotWriteStatus:
+    cursor.execute(
+        """
+        INSERT INTO public.prediction_feature_snapshots (
+          prediction_id, run_id, symbol, normalized_symbol, timeframe,
+          prediction_as_of_utc, reference_close_utc, quant_v2_schema_version,
+          feature_methodology_version, influence_mode, no_lookahead_assertion,
+          block_status, feature_count, degraded_count, provider_signature,
+          snapshot_payload, snapshot_hash
+        )
+        VALUES (
+          %(prediction_id)s, %(run_id)s, %(symbol)s, %(normalized_symbol)s,
+          %(timeframe)s, %(prediction_as_of_utc)s, %(reference_close_utc)s,
+          %(quant_v2_schema_version)s, %(feature_methodology_version)s,
+          %(influence_mode)s, %(no_lookahead_assertion)s, %(block_status)s,
+          %(feature_count)s, %(degraded_count)s, %(provider_signature)s,
+          %(snapshot_payload)s::jsonb, %(snapshot_hash)s
+        )
+        ON CONFLICT (prediction_id) DO NOTHING
+        RETURNING snapshot_hash
+        """,
+        dict(row),
+    )
+    inserted = cursor.fetchone()
+    if inserted is not None:
+        return FeatureSnapshotWriteStatus.INSERTED
+    cursor.execute(
+        """
+        SELECT snapshot_hash
+        FROM public.prediction_feature_snapshots
+        WHERE prediction_id = %(prediction_id)s
+        """,
+        {"prediction_id": row.get("prediction_id")},
+    )
+    existing = cursor.fetchone()
+    stored_hash = _snapshot_hash_from_db_row(existing)
+    incoming_hash = str(row.get("snapshot_hash", ""))
+    if stored_hash and stored_hash == incoming_hash:
+        return FeatureSnapshotWriteStatus.IDENTICAL_DUPLICATE
+    if stored_hash:
+        return FeatureSnapshotWriteStatus.CONFLICT
+    return FeatureSnapshotWriteStatus.UNAVAILABLE
+
+
+def _snapshot_hash_from_db_row(row: Any) -> str:
+    if isinstance(row, Mapping):
+        return str(row.get("snapshot_hash", ""))
+    if isinstance(row, (tuple, list)) and row:
+        return str(row[0])
+    return ""
+
+
+def _rest_returned_inserted_snapshot(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return bool(value.get("snapshot_hash"))
+    return bool(
+        isinstance(value, list)
+        and value
+        and isinstance(value[0], Mapping)
+        and value[0].get("snapshot_hash")
+    )
 
 
 def _execute_due_prediction_query(cursor, now_utc: Any, limit: int) -> None:

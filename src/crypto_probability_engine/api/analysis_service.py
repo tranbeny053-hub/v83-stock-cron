@@ -38,6 +38,10 @@ from crypto_probability_engine.detail.decision_synthesis import build_decision_s
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.feature_snapshot import (
+    FeatureSnapshotWriteStatus,
+    build_feature_snapshot,
+)
 from crypto_probability_engine.persistence.repository import PersistenceRepository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
@@ -45,6 +49,7 @@ from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
+_PENDING_FEATURE_SNAPSHOT_ROWS: dict[str, dict | None] = {}
 _PENDING_PREDICTION_LOCK = threading.Lock()
 
 
@@ -57,6 +62,8 @@ class PersistenceWork:
     news_clusters: tuple[dict, ...] = ()
     news_evidence_links: tuple[dict, ...] = ()
     prediction_rows: tuple[dict, ...] = ()
+    feature_snapshot_rows: tuple[dict, ...] = ()
+    feature_snapshot_build_failed: bool = False
 
 
 def analyze_request(
@@ -209,9 +216,10 @@ def analyze_request(
         timeframe=request.timeframe,
         enabled=QUANT_V2_SHADOW_ENABLED,
     )
+    feature_snapshot_row = build_feature_snapshot(prediction_row, response["quant_v2"])
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     if prediction_row is not None:
-        _remember_prediction_row(run_id, prediction_row)
+        _remember_prediction_persistence(run_id, prediction_row, feature_snapshot_row)
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
@@ -278,7 +286,29 @@ def _best_effort_persist(
         statuses.extend(
             repository.save_news_evidence_link(row) for row in work.news_evidence_links
         )
-        statuses.extend(repository.save_prediction(row) for row in work.prediction_rows)
+        snapshot_rows = {
+            str(row.get("prediction_id", "")): row for row in work.feature_snapshot_rows
+        }
+        snapshot_issue = work.feature_snapshot_build_failed
+        for prediction_row in work.prediction_rows:
+            prediction_status = repository.save_prediction(prediction_row)
+            statuses.append(prediction_status)
+            if prediction_status == "UNAVAILABLE":
+                continue
+            prediction_id = str(prediction_row.get("prediction_id", ""))
+            snapshot_row = snapshot_rows.pop(prediction_id, None)
+            save_snapshot = getattr(repository, "save_feature_snapshot", None)
+            if snapshot_row is None or not callable(save_snapshot):
+                snapshot_issue = True
+                continue
+            snapshot_status = save_snapshot(snapshot_row)
+            if snapshot_status in {
+                FeatureSnapshotWriteStatus.CONFLICT,
+                FeatureSnapshotWriteStatus.UNAVAILABLE,
+            }:
+                snapshot_issue = True
+        if snapshot_rows:
+            snapshot_issue = True
     except Exception:
         mark_unavailable = getattr(repository, "mark_unavailable", None)
         if callable(mark_unavailable):
@@ -286,21 +316,42 @@ def _best_effort_persist(
         return "UNAVAILABLE"
     if any(status == "UNAVAILABLE" for status in statuses):
         return "UNAVAILABLE"
+    if snapshot_issue:
+        mark_unavailable = getattr(repository, "mark_unavailable", None)
+        if callable(mark_unavailable):
+            mark_unavailable()
+        return "UNAVAILABLE"
     return repository.persistence_status()
 
 
-def _remember_prediction_row(run_id: str, row: dict) -> None:
+def _remember_prediction_persistence(
+    run_id: str,
+    prediction_row: dict,
+    feature_snapshot_row: dict | None,
+) -> None:
     with _PENDING_PREDICTION_LOCK:
-        _PENDING_PREDICTION_ROWS[run_id] = dict(row)
+        _PENDING_PREDICTION_ROWS[run_id] = dict(prediction_row)
+        _PENDING_FEATURE_SNAPSHOT_ROWS[run_id] = (
+            dict(feature_snapshot_row) if feature_snapshot_row is not None else None
+        )
 
 
-def _pop_prediction_rows(payload: dict) -> list[dict]:
+def _pop_prediction_persistence(payload: dict) -> tuple[list[dict], list[dict], bool]:
     run_id = str(payload.get("run_id") or "")
     if not run_id:
-        return []
+        return [], [], False
     with _PENDING_PREDICTION_LOCK:
-        row = _PENDING_PREDICTION_ROWS.pop(run_id, None)
-    return [row] if row is not None else []
+        prediction_row = _PENDING_PREDICTION_ROWS.pop(run_id, None)
+        had_snapshot_marker = run_id in _PENDING_FEATURE_SNAPSHOT_ROWS
+        feature_snapshot_row = _PENDING_FEATURE_SNAPSHOT_ROWS.pop(run_id, None)
+    prediction_rows = [prediction_row] if prediction_row is not None else []
+    feature_snapshot_rows = (
+        [feature_snapshot_row] if feature_snapshot_row is not None else []
+    )
+    build_failed = prediction_row is not None and (
+        not had_snapshot_marker or feature_snapshot_row is None
+    )
+    return prediction_rows, feature_snapshot_rows, build_failed
 
 
 def _prediction_row(
@@ -390,6 +441,9 @@ def _iso_utc(value: datetime) -> str:
 def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork:
     run_summary = _run_summary(payload)
     run_summary["persistence_status"] = persistence_status
+    prediction_rows, feature_snapshot_rows, snapshot_build_failed = (
+        _pop_prediction_persistence(payload)
+    )
     return PersistenceWork(
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),
@@ -397,7 +451,9 @@ def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork
         news_items=tuple(_news_item_rows(payload)),
         news_clusters=tuple(_news_cluster_rows(payload)),
         news_evidence_links=tuple(_news_evidence_link_rows(payload)),
-        prediction_rows=tuple(_pop_prediction_rows(payload)),
+        prediction_rows=tuple(prediction_rows),
+        feature_snapshot_rows=tuple(feature_snapshot_rows),
+        feature_snapshot_build_failed=snapshot_build_failed,
     )
 
 

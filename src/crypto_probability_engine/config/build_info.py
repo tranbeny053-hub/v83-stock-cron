@@ -1,10 +1,10 @@
 """Source-controlled runtime build fingerprint."""
 
 SCHEMA_VERSION = "build-info.v1"
-RELEASE_ID = "UCPE-W4C1-KA1-20260621-A"
-RELEASE_LABEL = "Wave 4C.1 + Ops-KA.1 Runtime Fingerprint"
+RELEASE_ID = "UCPE-W4C2-SNAPSHOT-20260621-A"
+RELEASE_LABEL = "Wave 4C.2 Quant V2 Feature Snapshot Foundation"
 ENVIRONMENT = "HF_PRODUCTION"
-SOURCE_MILESTONE = "wave-4c1-quant-v2-shadow-contract"
+SOURCE_MILESTONE = "wave-4c2-feature-snapshot-foundation"
 
 SHORT_RELEASE_ID = RELEASE_ID.removeprefix("UCPE-")
 FINGERPRINT = f"UCPE LIVE BUILD · {SHORT_RELEASE_ID}"

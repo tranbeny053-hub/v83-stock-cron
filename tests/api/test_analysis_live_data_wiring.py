@@ -44,6 +44,7 @@ class RecordingRepository:
     def __init__(self, *, raise_on_prediction: bool = False) -> None:
         self.raise_on_prediction = raise_on_prediction
         self.predictions: list[dict] = []
+        self.feature_snapshots: list[dict] = []
         self.marked_unavailable = False
 
     def persistence_status(self) -> str:
@@ -76,6 +77,10 @@ class RecordingRepository:
             raise RuntimeError("prediction ledger unavailable")
         self.predictions.append(dict(row))
         return "OK"
+
+    def save_feature_snapshot(self, row: dict) -> str:
+        self.feature_snapshots.append(dict(row))
+        return "INSERTED"
 
 
 def _run_background_synchronously(monkeypatch) -> None:
@@ -203,6 +208,17 @@ def test_live_analysis_schedules_immutable_prediction_row(monkeypatch) -> None:
     assert row["calibration_status"] == "DEFAULT_PHASE1A"
     assert row["reliability_status"] == "INSUFFICIENT_SAMPLE"
     assert row["is_live_data"] is True
+    assert len(repo.feature_snapshots) == 1
+    feature_snapshot = repo.feature_snapshots[0]
+    assert feature_snapshot["prediction_id"] == row["prediction_id"]
+    assert feature_snapshot["influence_mode"] == "SHADOW_ONLY"
+    assert "plain_english" not in feature_snapshot["snapshot_payload"]
+    assert len(feature_snapshot["snapshot_payload"]["features"]) == 4
+    assert all(
+        "explanation_short" not in feature and "explanation_detail" not in feature
+        for feature in feature_snapshot["snapshot_payload"]["features"]
+    )
+    assert "feature_snapshot" not in payload
 
 
 def test_prediction_write_failure_does_not_break_live_analysis(monkeypatch) -> None:
@@ -243,6 +259,7 @@ def test_prediction_write_failure_does_not_break_live_analysis(monkeypatch) -> N
     validate_analysis_response(response.json())
     assert time.perf_counter() - started < 0.5
     assert repo.marked_unavailable is True
+    assert repo.feature_snapshots == []
     assert "prediction ledger unavailable" not in response.text
 
 
