@@ -38,6 +38,7 @@
     "score_stack",
     "trend_summary",
     "decision_brief",
+    "quant_v2",
     "frontend_display",
     "detail_view",
     "gate_result",
@@ -134,6 +135,9 @@
       }
     },
     "decision_synthesis": { "$ref": "#/$defs/decisionSynthesis" },
+    "quant_v2": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/response.schema.json#/$defs/quantV2"
+    },
     "frontend_display": { "type": "object" },
     "detail_view": { "$ref": "detail_view.schema.json" },
     "gate_result": { "type": "object" },
@@ -141,6 +145,212 @@
     "analysis_hash": { "type": "string" }
   },
   "$defs": {
+    "quantV2FeatureDataQuality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "upstream_status",
+        "provider_state_status",
+        "snapshot_source_status",
+        "timestamp_evidence_complete"
+      ],
+      "properties": {
+        "upstream_status": { "type": ["string", "null"] },
+        "provider_state_status": { "type": ["string", "null"] },
+        "snapshot_source_status": { "type": ["string", "null"] },
+        "timestamp_evidence_complete": { "type": "boolean" }
+      }
+    },
+    "quantV2Feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_name",
+        "feature_id",
+        "family",
+        "timeframe",
+        "symbol",
+        "source_provider",
+        "source_priority",
+        "lookback",
+        "candle_count",
+        "computed_at",
+        "input_start_time",
+        "input_end_time",
+        "input_staleness_seconds",
+        "status",
+        "reason_if_invalid",
+        "raw_value",
+        "normalized_value",
+        "bucket",
+        "direction_hint",
+        "confidence_hint",
+        "risk_hint",
+        "explanation_short",
+        "explanation_detail",
+        "influence_mode",
+        "methodology_version",
+        "data_quality",
+        "no_lookahead_assertion"
+      ],
+      "properties": {
+        "feature_name": { "type": "string", "minLength": 1 },
+        "feature_id": { "type": "string", "minLength": 1 },
+        "family": { "enum": ["VOLATILITY", "TREND", "VOLUME", "REGIME"] },
+        "timeframe": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 },
+        "source_provider": { "type": ["string", "null"] },
+        "source_priority": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "lookback": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "candle_count": { "type": "integer", "minimum": 0 },
+        "computed_at": { "type": ["string", "null"], "format": "date-time" },
+        "input_start_time": { "type": ["string", "null"], "format": "date-time" },
+        "input_end_time": { "type": ["string", "null"], "format": "date-time" },
+        "input_staleness_seconds": { "type": ["number", "null"], "minimum": 0 },
+        "status": {
+          "enum": [
+            "VALID",
+            "INSUFFICIENT_HISTORY",
+            "STALE_INPUT",
+            "PROVIDER_UNAVAILABLE",
+            "COMPUTE_ERROR",
+            "NOT_APPLICABLE",
+            "DEGRADED"
+          ]
+        },
+        "reason_if_invalid": { "type": ["string", "null"] },
+        "raw_value": { "type": ["number", "string", "null"] },
+        "normalized_value": { "type": "null" },
+        "bucket": { "type": "null" },
+        "direction_hint": {
+          "oneOf": [
+            { "enum": ["UP", "DOWN", "SIDEWAYS"] },
+            { "type": "null" }
+          ]
+        },
+        "confidence_hint": { "type": "null" },
+        "risk_hint": { "type": "null" },
+        "explanation_short": { "type": "string", "minLength": 1 },
+        "explanation_detail": { "type": "string", "minLength": 1 },
+        "influence_mode": { "const": "SHADOW_ONLY" },
+        "methodology_version": { "const": "quant-v2-shadow-v0" },
+        "data_quality": { "$ref": "#/$defs/quantV2FeatureDataQuality" },
+        "no_lookahead_assertion": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "VALID" } } },
+          "then": { "properties": { "reason_if_invalid": { "type": "null" } } },
+          "else": {
+            "properties": { "reason_if_invalid": { "type": "string", "minLength": 1 } }
+          }
+        }
+      ]
+    },
+    "quantV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "influence_mode",
+        "feature_methodology_version",
+        "computed_at_utc",
+        "symbol",
+        "normalized_symbol",
+        "timeframe",
+        "reference_close_utc",
+        "input_staleness_seconds",
+        "no_lookahead_assertion",
+        "feature_count",
+        "degraded_count",
+        "features",
+        "plain_english",
+        "not_trade_command",
+        "not_financial_advice"
+      ],
+      "properties": {
+        "schema_version": { "const": "quant_v2.0" },
+        "status": { "enum": ["ACTIVE", "DEGRADED", "DISABLED"] },
+        "influence_mode": { "const": "SHADOW_ONLY" },
+        "feature_methodology_version": { "const": "quant-v2-shadow-v0" },
+        "computed_at_utc": { "type": ["string", "null"], "format": "date-time" },
+        "symbol": { "type": "string", "minLength": 1 },
+        "normalized_symbol": { "type": "string", "minLength": 1 },
+        "timeframe": { "type": "string", "minLength": 1 },
+        "reference_close_utc": { "type": ["string", "null"], "format": "date-time" },
+        "input_staleness_seconds": { "type": ["number", "null"], "minimum": 0 },
+        "no_lookahead_assertion": { "type": "boolean" },
+        "feature_count": { "enum": [0, 4] },
+        "degraded_count": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "features": { "type": "array", "items": { "$ref": "#/$defs/quantV2Feature" } },
+        "plain_english": {
+          "const": "Shadow diagnostics — evidence only, not used in the decision yet. Not a trade command. Not financial advice. Not profitability evidence. Not accuracy."
+        },
+        "not_trade_command": { "const": true },
+        "not_financial_advice": { "const": true }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "DISABLED" } } },
+          "then": {
+            "properties": {
+              "feature_count": { "const": 0 },
+              "degraded_count": { "const": 0 },
+              "features": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "feature_count": { "const": 4 },
+              "features": { "minItems": 4, "maxItems": 4 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "ACTIVE" } } },
+          "then": {
+            "properties": {
+              "degraded_count": { "const": 0 },
+              "no_lookahead_assertion": { "const": true },
+              "features": {
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/quantV2Feature" },
+                    { "properties": { "status": { "const": "VALID" } } }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "DEGRADED" } } },
+          "then": {
+            "properties": {
+              "degraded_count": { "minimum": 1 },
+              "features": {
+                "contains": {
+                  "properties": { "status": { "not": { "const": "VALID" } } },
+                  "required": ["status"]
+                },
+                "minContains": 1
+              }
+            }
+          }
+        }
+      ]
+    },
     "decisionSynthesis": {
       "type": "object",
       "additionalProperties": false,

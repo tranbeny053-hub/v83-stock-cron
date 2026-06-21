@@ -128,6 +128,29 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
                 "or financial advice. No profitability claim."
             ),
         },
+        "quant_v2": {
+            "schema_version": "quant_v2.0",
+            "status": "DISABLED",
+            "influence_mode": "SHADOW_ONLY",
+            "feature_methodology_version": "quant-v2-shadow-v0",
+            "computed_at_utc": "2026-06-06T00:00:00Z",
+            "symbol": "BTC",
+            "normalized_symbol": "BTC/USDT",
+            "timeframe": "4H",
+            "reference_close_utc": None,
+            "input_staleness_seconds": None,
+            "no_lookahead_assertion": False,
+            "feature_count": 0,
+            "degraded_count": 0,
+            "features": [],
+            "plain_english": (
+                "Shadow diagnostics — evidence only, not used in the decision yet. "
+                "Not a trade command. Not financial advice. Not profitability evidence. "
+                "Not accuracy."
+            ),
+            "not_trade_command": True,
+            "not_financial_advice": True,
+        },
         "frontend_display": {
             "prob_up_pct": 45.0,
             "prob_down_pct": 35.0,

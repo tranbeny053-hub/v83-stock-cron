@@ -27,6 +27,7 @@ from crypto_probability_engine.config.defaults import (
     MODEL_VERSION,
     TIMEFRAME_SECONDS,
 )
+from crypto_probability_engine.config.env_flags import QUANT_V2_SHADOW_ENABLED
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
@@ -40,6 +41,7 @@ from crypto_probability_engine.normalizers.symbols import SymbolNormalizationErr
 from crypto_probability_engine.persistence.repository import PersistenceRepository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
+from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
@@ -197,6 +199,15 @@ def analyze_request(
         quant_result=quant_result,
         data_quality=data_quality,
         provider_state=provider_state,
+    )
+    response["quant_v2"] = build_quant_v2_shadow(
+        quant_result=quant_result,
+        snapshot=snapshot,
+        provider_state=provider_state,
+        symbol=request.symbol,
+        normalized_symbol=symbol.display,
+        timeframe=request.timeframe,
+        enabled=QUANT_V2_SHADOW_ENABLED,
     )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     if prediction_row is not None:

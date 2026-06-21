@@ -134,6 +134,123 @@ class CalibrationResponse(BaseModel):
     error_class: str | None = None
 
 
+class QuantV2Status(StrEnum):
+    ACTIVE = "ACTIVE"
+    DEGRADED = "DEGRADED"
+    DISABLED = "DISABLED"
+
+
+class QuantV2FeatureStatus(StrEnum):
+    VALID = "VALID"
+    INSUFFICIENT_HISTORY = "INSUFFICIENT_HISTORY"
+    STALE_INPUT = "STALE_INPUT"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    COMPUTE_ERROR = "COMPUTE_ERROR"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    DEGRADED = "DEGRADED"
+
+
+class QuantV2Family(StrEnum):
+    VOLATILITY = "VOLATILITY"
+    TREND = "TREND"
+    VOLUME = "VOLUME"
+    REGIME = "REGIME"
+
+
+class QuantV2FeatureDataQuality(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    upstream_status: str | None
+    provider_state_status: str | None
+    snapshot_source_status: str | None
+    timestamp_evidence_complete: bool
+
+
+class QuantV2Feature(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    feature_name: str
+    feature_id: str
+    family: QuantV2Family
+    timeframe: str
+    symbol: str
+    source_provider: str | None
+    source_priority: int | None = Field(ge=1)
+    lookback: int | None = Field(ge=1)
+    candle_count: int = Field(ge=0)
+    computed_at: datetime | None
+    input_start_time: datetime | None
+    input_end_time: datetime | None
+    input_staleness_seconds: float | None = Field(ge=0)
+    status: QuantV2FeatureStatus
+    reason_if_invalid: str | None
+    raw_value: float | str | None
+    normalized_value: None
+    bucket: None
+    direction_hint: Literal["UP", "DOWN", "SIDEWAYS"] | None
+    confidence_hint: None
+    risk_hint: None
+    explanation_short: str
+    explanation_detail: str
+    influence_mode: Literal["SHADOW_ONLY"]
+    methodology_version: Literal["quant-v2-shadow-v0"]
+    data_quality: QuantV2FeatureDataQuality
+    no_lookahead_assertion: bool
+
+    @model_validator(mode="after")
+    def validate_health_reason(self) -> QuantV2Feature:
+        if self.status == QuantV2FeatureStatus.VALID and self.reason_if_invalid is not None:
+            raise ValueError("VALID Quant V2 features must not include an invalid reason.")
+        if self.status != QuantV2FeatureStatus.VALID and not self.reason_if_invalid:
+            raise ValueError("Non-VALID Quant V2 features require an invalid reason.")
+        return self
+
+
+class QuantV2Block(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    schema_version: Literal["quant_v2.0"]
+    status: QuantV2Status
+    influence_mode: Literal["SHADOW_ONLY"]
+    feature_methodology_version: Literal["quant-v2-shadow-v0"]
+    computed_at_utc: datetime | None
+    symbol: str
+    normalized_symbol: str
+    timeframe: str
+    reference_close_utc: datetime | None
+    input_staleness_seconds: float | None = Field(ge=0)
+    no_lookahead_assertion: bool
+    feature_count: Literal[0, 4]
+    degraded_count: int = Field(ge=0, le=4)
+    features: list[QuantV2Feature]
+    plain_english: Literal[
+        "Shadow diagnostics — evidence only, not used in the decision yet. "
+        "Not a trade command. Not financial advice. Not profitability evidence. Not accuracy."
+    ]
+    not_trade_command: Literal[True]
+    not_financial_advice: Literal[True]
+
+    @model_validator(mode="after")
+    def validate_feature_counts(self) -> QuantV2Block:
+        actual_degraded_count = sum(
+            feature.status != QuantV2FeatureStatus.VALID for feature in self.features
+        )
+        if self.status == QuantV2Status.DISABLED:
+            if self.features or self.feature_count or self.degraded_count:
+                raise ValueError("DISABLED Quant V2 must contain no features.")
+        elif len(self.features) != 4 or self.feature_count != 4:
+            raise ValueError("Enabled Quant V2 must contain exactly four features.")
+        if self.status == QuantV2Status.ACTIVE and (
+            actual_degraded_count or self.degraded_count or not self.no_lookahead_assertion
+        ):
+            raise ValueError("ACTIVE Quant V2 requires valid no-lookahead feature evidence.")
+        if self.status == QuantV2Status.DEGRADED and (
+            not actual_degraded_count or self.degraded_count < 1
+        ):
+            raise ValueError("DEGRADED Quant V2 requires degraded feature evidence.")
+        return self
+
+
 class HorizonProbability(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -254,6 +371,7 @@ class AnalysisResponse(BaseModel):
     trend_summary: JsonObject
     decision_brief: DecisionBrief
     decision_synthesis: JsonObject = Field(default_factory=dict)
+    quant_v2: QuantV2Block
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject
