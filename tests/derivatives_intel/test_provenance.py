@@ -204,6 +204,78 @@ def test_malformed_or_nonfinite_values_become_compute_error(bad_value) -> None:
     assert metric["reason_if_invalid"]
 
 
+@pytest.mark.parametrize(
+    ("builder", "payload"),
+    [
+        (
+            build_binance_current_open_interest_metric,
+            {"openInterest": "-1", "time": _ms(AS_OF - timedelta(seconds=1))},
+        ),
+    ],
+)
+def test_negative_quantity_is_invalid_unit(builder, payload) -> None:
+    metric = builder(
+        payload,
+        _binance_resolution(),
+        fetched_at_utc=FETCHED,
+        prediction_as_of_utc=AS_OF,
+    )
+    assert metric["status"] == "INVALID_UNIT"
+    assert metric["raw_value"] is None
+    assert metric["no_lookahead_assertion"] is False
+
+
+def test_negative_okx_native_oi_fields_are_invalid_but_negative_funding_is_valid() -> None:
+    event = AS_OF - timedelta(seconds=1)
+    oi_metrics = build_okx_current_open_interest_metrics(
+        [{"oi": "-1", "oiCcy": "-2", "oiUsd": "-3", "ts": str(_ms(event))}],
+        _okx_resolution(),
+        fetched_at_utc=FETCHED,
+        prediction_as_of_utc=AS_OF,
+    )
+    funding = build_okx_current_funding_metric(
+        [{"fundingRate": "-0.0002", "ts": str(_ms(event))}],
+        _okx_resolution(),
+        fetched_at_utc=FETCHED,
+        prediction_as_of_utc=AS_OF,
+    )
+    assert all(metric["status"] == "INVALID_UNIT" for metric in oi_metrics)
+    assert funding["status"] == "VALID"
+    assert funding["raw_value"] == pytest.approx(-0.0002)
+
+
+def test_negative_binance_historical_quantity_and_notional_are_invalid() -> None:
+    metrics = build_binance_open_interest_history_metrics(
+        {
+            "sumOpenInterest": "-1",
+            "sumOpenInterestValue": "-2",
+            "timestamp": _ms(AS_OF - timedelta(minutes=5)),
+        },
+        _binance_resolution(),
+        period="5m",
+        fetched_at_utc=FETCHED,
+        prediction_as_of_utc=AS_OF,
+    )
+    assert {metric["unit"] for metric in metrics} == {
+        "PROVIDER_NATIVE_CONTRACT_QUANTITY",
+        "USDT_NOTIONAL",
+    }
+    assert all(metric["status"] == "INVALID_UNIT" for metric in metrics)
+    assert all(metric["raw_value"] is None for metric in metrics)
+
+
+@pytest.mark.parametrize("bad_value", ["nan", "inf", "-inf"])
+def test_nonfinite_open_interest_is_compute_error(bad_value: str) -> None:
+    metric = build_binance_current_open_interest_metric(
+        {"openInterest": bad_value, "time": _ms(AS_OF - timedelta(seconds=1))},
+        _binance_resolution(),
+        fetched_at_utc=FETCHED,
+        prediction_as_of_utc=AS_OF,
+    )
+    assert metric["status"] == "COMPUTE_ERROR"
+    assert metric["raw_value"] is None
+
+
 def test_timestamp_and_staleness_rules_are_deterministic() -> None:
     stale_event = AS_OF - timedelta(seconds=CURRENT_FUNDING_MAX_STALENESS_SECONDS + 1)
     args = (

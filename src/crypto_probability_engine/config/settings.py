@@ -33,6 +33,7 @@ class Settings(BaseModel):
     session_cookie_secure: bool = True
     dev_mode_enabled: bool = False
     enable_derivatives: bool = False
+    enable_derivatives_intel: bool = False
     strict_cors_origins: tuple[str, ...] = ()
     provider_mode: str = "public"
     recent_run_limit: int = 100
@@ -79,6 +80,10 @@ class Settings(BaseModel):
             session_cookie_secure=parse_bool(os.environ.get("UCPE_COOKIE_SECURE"), default=True),
             dev_mode_enabled=parse_bool(os.environ.get("UCPE_DEV_MODE_ENABLED"), default=False),
             enable_derivatives=parse_bool(os.environ.get("UCPE_ENABLE_DERIVATIVES"), default=False),
+            enable_derivatives_intel=parse_bool(
+                os.environ.get("UCPE_ENABLE_DERIVATIVES_INTEL"),
+                default=False,
+            ),
             strict_cors_origins=origins,
             provider_mode=os.environ.get("UCPE_PROVIDER_MODE", "public"),
             recent_run_limit=int(os.environ.get("UCPE_RECENT_RUN_LIMIT", "100")),

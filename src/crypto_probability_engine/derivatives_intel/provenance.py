@@ -289,6 +289,11 @@ def _build_current_metric(
         prediction_as_of_utc,
         max_staleness_seconds,
     )
+    if _negative_quantity(raw_value, unit):
+        status = DerivativesMetricStatus.INVALID_UNIT
+        reason = "Provider quantity or notional must not be negative."
+        raw_value = None
+        no_lookahead = False
     if invalid is not None:
         status, reason = invalid
         raw_value = None
@@ -381,6 +386,11 @@ def _build_historical_bucket_metric(
     status, reason, no_lookahead = _historical_status(
         raw_value, interval_end, fetched_at_utc, prediction_as_of_utc
     )
+    if _negative_quantity(raw_value, unit):
+        status = DerivativesMetricStatus.INVALID_UNIT
+        reason = "Provider quantity or notional must not be negative."
+        raw_value = None
+        no_lookahead = False
     interval_final = status == DerivativesMetricStatus.VALID
     if seconds is None:
         status = DerivativesMetricStatus.COMPUTE_ERROR
@@ -598,6 +608,14 @@ def _finite_value(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _negative_quantity(raw_value: float | None, unit: DerivativesUnit) -> bool:
+    return (
+        raw_value is not None
+        and raw_value < 0
+        and unit != DerivativesUnit.FRACTION_PER_INTERVAL
+    )
 
 
 def _millis_timestamp(value: Any) -> datetime | None:

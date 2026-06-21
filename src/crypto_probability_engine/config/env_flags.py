@@ -17,3 +17,8 @@ QUANT_V2_SHADOW_ENABLED = parse_bool(
     os.environ.get("UCPE_QUANT_V2_SHADOW_ENABLED"),
     default=True,
 )
+
+DERIVATIVES_INTEL_ENABLED = parse_bool(
+    os.environ.get("UCPE_ENABLE_DERIVATIVES_INTEL"),
+    default=False,
+)

@@ -1,5 +1,39 @@
 # Current State
 
+Updated: 2026-06-22
+
+## Wave 4D.2 Derivatives Intelligence Shadow Runtime
+
+- Branch: `codex/wave-4d2-derivatives-runtime`, based on `dev` at `87eb22c`.
+- A required, default-OFF `derivatives_intelligence` response block is attached only after
+  `analysis_hash`, prediction identity, and Quant V2 have been finalized.
+- The block is `SHADOW_ONLY` with `decision_influence_frac=0.0`; it cannot affect probability,
+  score, gates, decisions, permissions, Scenario Plan, persistence, resolver, or calibration.
+- Enabled acquisition uses only current Binance USD-M and OKX SWAP public funding/open-interest
+  resources. No historical or private resource is in the default runtime path.
+- Process-local raw evidence uses a six-hour/two-entry registry cache, a 60-second/256-entry LRU
+  symbol cache, and 64 fixed lock stripes for per-process single-flight.
+- The nine-second budget is a new-call start deadline, not a hard completion cap. With a
+  three-second request timeout and no retries, a cold path may finish near twelve seconds.
+- `core_prediction_as_of_utc` preserves the market-snapshot prediction timestamp;
+  `observation_as_of_utc` is captured honestly after derivatives fetching. Cached endpoint fetch
+  timestamps are retained and request-specific provenance is rebuilt for each observation.
+- Future 4D.3 work must retain both timestamps. Wave 4D.4 must not treat derivatives evidence as
+  observed at the earlier core prediction timestamp.
+
+## Wave 4D.2 Safety Boundary
+
+- Feature flag: `UCPE_ENABLE_DERIVATIVES_INTEL`, default `false`.
+- OFF returns before client construction, cache/lock access, registry lookup, or network activity.
+- Provider failures and malformed payloads degrade only the derivatives block; core analysis
+  remains valid.
+- Funding remains signed. Negative quantity, contract, base-asset, USD, or USDT notional values
+  become `INVALID_UNIT`; missing or non-finite values become `COMPUTE_ERROR`.
+- Provider-native units remain separate. No averaging, magnitude threshold, or directional
+  interpretation is introduced.
+
+---
+
 Updated: 2026-06-20
 
 ## Branch / Scope

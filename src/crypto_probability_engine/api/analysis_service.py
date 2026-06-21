@@ -29,6 +29,7 @@ from crypto_probability_engine.config.defaults import (
 )
 from crypto_probability_engine.config.env_flags import QUANT_V2_SHADOW_ENABLED
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.derivatives_intel.block import build_derivatives_intelligence
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
     build_decision_brief,
@@ -215,6 +216,12 @@ def analyze_request(
         normalized_symbol=symbol.display,
         timeframe=request.timeframe,
         enabled=QUANT_V2_SHADOW_ENABLED,
+    )
+    response["derivatives_intelligence"] = build_derivatives_intelligence(
+        normalized_symbol=symbol.display,
+        core_prediction_as_of_utc=snapshot.as_of_utc,
+        enabled=settings.enable_derivatives_intel,
+        rate_limit_per_min=settings.provider_rate_limit_per_min,
     )
     feature_snapshot_row = build_feature_snapshot(prediction_row, response["quant_v2"])
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")

@@ -1,5 +1,26 @@
 # Handoff Packet
 
+## Wave 4D.2 Review Handoff — 2026-06-22
+
+- Goal: add a default-OFF, public-only derivatives context block without changing any protected
+  analysis, identity, decision, or persistence artifact.
+- Branch: `codex/wave-4d2-derivatives-runtime`; base `dev` at `87eb22c`.
+- Runtime: current Binance USD-M and OKX SWAP funding/open-interest only, sequential and bounded;
+  no historical default calls.
+- Cache: immutable allowlisted raw payloads only; two registry entries for six hours, 256
+  provider/symbol entries for 60 seconds, and 64 fixed process-local lock stripes.
+- Timing: `core_prediction_as_of_utc` is the existing snapshot timestamp, while
+  `observation_as_of_utc` is the honest post-fetch derivatives cutoff. Original endpoint fetch
+  timestamps survive cache hits, and staleness/no-lookahead are rebuilt per request.
+- Deadline: no new request starts after nine seconds; an already-started three-second request may
+  place the cold-path completion near twelve seconds.
+- Governance: `SHADOW_ONLY`, decision influence zero, provider-native values only, no averaging.
+- Future boundary: 4D.3 must retain both timestamps; 4D.4 must not align later derivatives
+  evidence to the earlier core prediction timestamp.
+- Next gate: Claude merge-readiness review. Do not merge or deploy before review.
+
+---
+
 ## Goal / Branch
 
 - Goal: UI-D1.5B render the backend `trade_plan_skeleton` as a safe Scenario plan.

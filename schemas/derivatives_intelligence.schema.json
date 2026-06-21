@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "influence_mode",
+    "decision_influence_frac",
+    "methodology_version",
+    "normalized_symbol",
+    "core_prediction_as_of_utc",
+    "observation_as_of_utc",
+    "block_status",
+    "provider_summary",
+    "metrics",
+    "comparability",
+    "disagreement",
+    "warnings",
+    "not_trade_command",
+    "not_financial_advice",
+    "plain_english"
+  ],
+  "properties": {
+    "schema_version": { "const": "deriv-intel.v0" },
+    "influence_mode": { "const": "SHADOW_ONLY" },
+    "decision_influence_frac": { "const": 0.0 },
+    "methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "normalized_symbol": { "type": "string", "minLength": 1 },
+    "core_prediction_as_of_utc": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/timestamp"
+    },
+    "observation_as_of_utc": {
+      "oneOf": [
+        {
+          "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/timestamp"
+        },
+        { "type": "null" }
+      ]
+    },
+    "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE", "DISABLED"] },
+    "provider_summary": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/providerSummary"
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": { "$ref": "derivatives_metric.schema.json" }
+    },
+    "comparability": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/comparability"
+      }
+    },
+    "disagreement": { "type": "array", "maxItems": 0 },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "not_trade_command": { "const": true },
+    "not_financial_advice": { "const": true },
+    "plain_english": {
+      "const": "Derivatives context — observe only, not used in the decision."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "block_status": { "const": "DISABLED" } } },
+      "then": {
+        "properties": {
+          "observation_as_of_utc": { "type": "null" },
+          "provider_summary": { "maxItems": 0 },
+          "metrics": { "maxItems": 0 },
+          "comparability": { "maxItems": 0 }
+        }
+      },
+      "else": {
+        "properties": {
+          "observation_as_of_utc": {
+            "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/timestamp"
+          },
+          "provider_summary": { "minItems": 2, "maxItems": 2 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T.+(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "providerSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "status",
+        "valid_metric_count",
+        "total_metric_count",
+        "reason"
+      ],
+      "properties": {
+        "provider": { "enum": ["BINANCE_USDM", "OKX_SWAP"] },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "DEGRADED_PARTIAL",
+            "UNSUPPORTED_INSTRUMENT",
+            "INSTRUMENT_INACTIVE",
+            "PROVIDER_UNAVAILABLE",
+            "NO_VALID_METRIC"
+          ]
+        },
+        "valid_metric_count": { "type": "integer", "minimum": 0 },
+        "total_metric_count": { "type": "integer", "minimum": 0 },
+        "reason": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "AVAILABLE" } } },
+          "then": { "properties": { "reason": { "type": "null" } } },
+          "else": { "properties": { "reason": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "comparability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_class",
+        "left_provider",
+        "right_provider",
+        "comparable",
+        "reason"
+      ],
+      "properties": {
+        "semantic_class": { "enum": ["CURRENT_FUNDING", "CURRENT_OPEN_INTEREST"] },
+        "left_provider": { "const": "BINANCE_USDM" },
+        "right_provider": { "const": "OKX_SWAP" },
+        "comparable": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

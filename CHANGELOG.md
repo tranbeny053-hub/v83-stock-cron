@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-06-22 - Wave 4D.2 Derivatives Intelligence Shadow Runtime
+
+Changed:
+- Added a default-OFF, strict `derivatives_intelligence` response block with separate core
+  prediction and derivatives observation timestamps.
+- Added bounded current-state public acquisition for Binance USD-M and OKX SWAP funding and
+  open-interest evidence using raw-only LRU caches and fixed process-local lock stripes.
+- Added provider availability summaries and comparability diagnostics without averaging or
+  magnitude thresholds.
+- Hardened non-funding quantity/notional parsing so negative values are invalid rather than
+  silently accepted.
+- Updated the source-controlled runtime fingerprint for the Wave 4D.2 release.
+
+Notes:
+- The block remains `SHADOW_ONLY` with zero decision influence and no persistence.
+- The nine-second budget stops new calls; with a three-second request timeout, cold completion
+  may approach twelve seconds.
+- Future validation must retain both observation timestamps and must not backdate derivatives
+  evidence to the core snapshot timestamp.
+
 ## 2026-06-15 - Wave 4B.3 Read-Only Calibration Metrics
 
 Changed:

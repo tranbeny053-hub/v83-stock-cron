@@ -262,6 +262,200 @@ class QuantV2Block(BaseModel):
         return self
 
 
+class DerivativesProviderSummaryStatus(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    DEGRADED_PARTIAL = "DEGRADED_PARTIAL"
+    UNSUPPORTED_INSTRUMENT = "UNSUPPORTED_INSTRUMENT"
+    INSTRUMENT_INACTIVE = "INSTRUMENT_INACTIVE"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+    NO_VALID_METRIC = "NO_VALID_METRIC"
+
+
+class DerivativesProviderSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: Literal["BINANCE_USDM", "OKX_SWAP"]
+    status: DerivativesProviderSummaryStatus
+    valid_metric_count: int = Field(ge=0)
+    total_metric_count: int = Field(ge=0)
+    reason: str | None
+
+    @model_validator(mode="after")
+    def validate_reason_and_counts(self) -> DerivativesProviderSummary:
+        if self.valid_metric_count > self.total_metric_count:
+            raise ValueError("Valid derivatives metric count exceeds total count.")
+        if self.status == DerivativesProviderSummaryStatus.AVAILABLE and self.reason is not None:
+            raise ValueError("AVAILABLE derivatives provider summaries have no failure reason.")
+        if self.status != DerivativesProviderSummaryStatus.AVAILABLE and not self.reason:
+            raise ValueError("Non-AVAILABLE derivatives provider summaries require a reason.")
+        if self.status == DerivativesProviderSummaryStatus.AVAILABLE and (
+            self.total_metric_count == 0 or self.valid_metric_count != self.total_metric_count
+        ):
+            raise ValueError("AVAILABLE derivatives providers require all expected metrics valid.")
+        if self.status == DerivativesProviderSummaryStatus.DEGRADED_PARTIAL and not (
+            0 < self.valid_metric_count < self.total_metric_count
+        ):
+            raise ValueError("DEGRADED_PARTIAL requires mixed valid and invalid metrics.")
+        return self
+
+
+class DerivativesMetricResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    metric_id: Literal[
+        "binance.funding.current_estimate",
+        "binance.funding.settled",
+        "binance.open_interest.current",
+        "binance.open_interest.history.quantity",
+        "binance.open_interest.history.quote_value",
+        "okx.funding.current_estimate",
+        "okx.funding.settled",
+        "okx.open_interest.current.contracts",
+        "okx.open_interest.current.base",
+        "okx.open_interest.current.usd",
+    ]
+    family: Literal["FUNDING", "OPEN_INTEREST"]
+    provider: Literal["BINANCE_USDM", "OKX_SWAP"]
+    provider_endpoint: Literal[
+        "/fapi/v1/premiumIndex",
+        "/fapi/v1/fundingRate",
+        "/fapi/v1/openInterest",
+        "/futures/data/openInterestHist",
+        "/api/v5/public/funding-rate",
+        "/api/v5/public/funding-rate-history",
+        "/api/v5/public/open-interest",
+    ]
+    provider_instrument: str = Field(min_length=1)
+    normalized_symbol: str = Field(min_length=1)
+    contract_type: Literal["USDT_LINEAR_PERPETUAL", "CONTRACT_MISMATCH", "UNKNOWN"]
+    margin_asset: str = Field(min_length=1)
+    settlement_asset: str = Field(min_length=1)
+    timeframe_or_period: str | None
+    event_time: datetime | None
+    interval_start: datetime | None
+    interval_end: datetime | None
+    interval_final: bool
+    fetched_at_utc: datetime
+    prediction_as_of_utc: datetime
+    input_staleness_seconds: float | None = Field(ge=0)
+    status: Literal[
+        "VALID",
+        "INSUFFICIENT_HISTORY",
+        "STALE_INPUT",
+        "PROVIDER_UNAVAILABLE",
+        "UNSUPPORTED_INSTRUMENT",
+        "CONTRACT_MISMATCH",
+        "INSTRUMENT_INACTIVE",
+        "PARTIAL_INTERVAL",
+        "INVALID_UNIT",
+        "COMPUTE_ERROR",
+        "DEGRADED",
+    ]
+    reason_if_invalid: str | None
+    raw_value: float | None
+    normalized_value: None
+    bucket: None
+    direction_hint: None
+    confidence_hint: None
+    risk_hint: None
+    unit: Literal[
+        "FRACTION_PER_INTERVAL",
+        "PROVIDER_NATIVE_CONTRACT_QUANTITY",
+        "USDT_NOTIONAL",
+        "CONTRACTS",
+        "BASE_ASSET_QUANTITY",
+        "USD_NOTIONAL",
+    ]
+    source_count: int = Field(ge=0)
+    provider_priority: int = Field(ge=1)
+    influence_mode: Literal["SHADOW_ONLY"]
+    methodology_version: Literal["deriv-intel-shadow-v0"]
+    no_lookahead_assertion: bool
+
+    @field_validator(
+        "event_time",
+        "interval_start",
+        "interval_end",
+        "fetched_at_utc",
+        "prediction_as_of_utc",
+    )
+    @classmethod
+    def validate_metric_timestamps(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return ensure_utc_datetime(value, "derivatives metric timestamp")
+
+    @model_validator(mode="after")
+    def validate_metric_reason(self) -> DerivativesMetricResponse:
+        if self.status == "VALID" and self.reason_if_invalid is not None:
+            raise ValueError("VALID derivatives metrics have no invalid reason.")
+        if self.status != "VALID" and not self.reason_if_invalid:
+            raise ValueError("Non-VALID derivatives metrics require an invalid reason.")
+        return self
+
+
+class DerivativesComparability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    semantic_class: Literal["CURRENT_FUNDING", "CURRENT_OPEN_INTEREST"]
+    left_provider: Literal["BINANCE_USDM"]
+    right_provider: Literal["OKX_SWAP"]
+    comparable: bool
+    reason: str = Field(min_length=1)
+
+
+class DerivativesIntelligenceBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    schema_version: Literal["deriv-intel.v0"]
+    influence_mode: Literal["SHADOW_ONLY"]
+    decision_influence_frac: Literal[0.0]
+    methodology_version: Literal["deriv-intel-shadow-v0"]
+    normalized_symbol: str = Field(min_length=1)
+    core_prediction_as_of_utc: datetime
+    observation_as_of_utc: datetime | None
+    block_status: Literal["ACTIVE", "DEGRADED", "UNAVAILABLE", "DISABLED"]
+    provider_summary: list[DerivativesProviderSummary]
+    metrics: list[DerivativesMetricResponse]
+    comparability: list[DerivativesComparability]
+    disagreement: list[JsonObject] = Field(max_length=0)
+    warnings: list[str]
+    not_trade_command: Literal[True]
+    not_financial_advice: Literal[True]
+    plain_english: Literal["Derivatives context — observe only, not used in the decision."]
+
+    @field_validator("core_prediction_as_of_utc", "observation_as_of_utc")
+    @classmethod
+    def validate_block_timestamps(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return ensure_utc_datetime(value, "derivatives block timestamp")
+
+    @model_validator(mode="after")
+    def validate_block_state(self) -> DerivativesIntelligenceBlock:
+        available = sum(
+            item.status == DerivativesProviderSummaryStatus.AVAILABLE
+            for item in self.provider_summary
+        )
+        if self.block_status == "DISABLED":
+            if self.observation_as_of_utc is not None or self.provider_summary or self.metrics:
+                raise ValueError("DISABLED derivatives block contains no observation evidence.")
+        elif self.observation_as_of_utc is None:
+            raise ValueError("Enabled derivatives blocks require an observation timestamp.")
+        elif {item.provider for item in self.provider_summary} != {
+            "BINANCE_USDM",
+            "OKX_SWAP",
+        } or len(self.provider_summary) != 2:
+            raise ValueError("Enabled derivatives blocks require both provider summaries.")
+        if self.block_status == "ACTIVE" and available != len(self.provider_summary):
+            raise ValueError("ACTIVE derivatives block requires every provider available.")
+        if self.block_status == "DEGRADED" and not 0 < available < len(self.provider_summary):
+            raise ValueError("DEGRADED derivatives block requires mixed provider availability.")
+        if self.block_status == "UNAVAILABLE" and available:
+            raise ValueError("UNAVAILABLE derivatives block cannot have an available provider.")
+        return self
+
+
 class HorizonProbability(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -383,6 +577,7 @@ class AnalysisResponse(BaseModel):
     decision_brief: DecisionBrief
     decision_synthesis: JsonObject = Field(default_factory=dict)
     quant_v2: QuantV2Block
+    derivatives_intelligence: DerivativesIntelligenceBlock
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject

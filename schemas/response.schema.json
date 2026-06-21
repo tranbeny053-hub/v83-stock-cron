@@ -39,6 +39,7 @@
     "trend_summary",
     "decision_brief",
     "quant_v2",
+    "derivatives_intelligence",
     "frontend_display",
     "detail_view",
     "gate_result",
@@ -138,6 +139,9 @@
     "quant_v2": {
       "$ref": "https://ultimate-crypto-probability-engine.local/schemas/response.schema.json#/$defs/quantV2"
     },
+    "derivatives_intelligence": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/response.schema.json#/$defs/derivativesIntelligence"
+    },
     "frontend_display": { "type": "object" },
     "detail_view": { "$ref": "detail_view.schema.json" },
     "gate_result": { "type": "object" },
@@ -145,6 +149,179 @@
     "analysis_hash": { "type": "string" }
   },
   "$defs": {
+    "derivativesMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric_id", "family", "provider", "provider_endpoint", "provider_instrument",
+        "normalized_symbol", "contract_type", "margin_asset", "settlement_asset",
+        "timeframe_or_period", "event_time", "interval_start", "interval_end",
+        "interval_final", "fetched_at_utc", "prediction_as_of_utc",
+        "input_staleness_seconds", "status", "reason_if_invalid", "raw_value",
+        "normalized_value", "bucket", "direction_hint", "confidence_hint", "risk_hint",
+        "unit", "source_count", "provider_priority", "influence_mode",
+        "methodology_version", "no_lookahead_assertion"
+      ],
+      "properties": {
+        "metric_id": {
+          "enum": [
+            "binance.funding.current_estimate", "binance.funding.settled",
+            "binance.open_interest.current", "binance.open_interest.history.quantity",
+            "binance.open_interest.history.quote_value", "okx.funding.current_estimate",
+            "okx.funding.settled", "okx.open_interest.current.contracts",
+            "okx.open_interest.current.base", "okx.open_interest.current.usd"
+          ]
+        },
+        "family": { "enum": ["FUNDING", "OPEN_INTEREST"] },
+        "provider": { "enum": ["BINANCE_USDM", "OKX_SWAP"] },
+        "provider_endpoint": {
+          "enum": [
+            "/fapi/v1/premiumIndex", "/fapi/v1/fundingRate", "/fapi/v1/openInterest",
+            "/futures/data/openInterestHist", "/api/v5/public/funding-rate",
+            "/api/v5/public/funding-rate-history", "/api/v5/public/open-interest"
+          ]
+        },
+        "provider_instrument": { "type": "string", "minLength": 1 },
+        "normalized_symbol": { "type": "string", "minLength": 1 },
+        "contract_type": {
+          "enum": ["USDT_LINEAR_PERPETUAL", "CONTRACT_MISMATCH", "UNKNOWN"]
+        },
+        "margin_asset": { "type": "string", "minLength": 1 },
+        "settlement_asset": { "type": "string", "minLength": 1 },
+        "timeframe_or_period": { "type": ["string", "null"] },
+        "event_time": { "type": ["string", "null"], "format": "date-time" },
+        "interval_start": { "type": ["string", "null"], "format": "date-time" },
+        "interval_end": { "type": ["string", "null"], "format": "date-time" },
+        "interval_final": { "type": "boolean" },
+        "fetched_at_utc": { "type": "string", "format": "date-time" },
+        "prediction_as_of_utc": { "type": "string", "format": "date-time" },
+        "input_staleness_seconds": { "type": ["number", "null"], "minimum": 0 },
+        "status": {
+          "enum": [
+            "VALID", "INSUFFICIENT_HISTORY", "STALE_INPUT", "PROVIDER_UNAVAILABLE",
+            "UNSUPPORTED_INSTRUMENT", "CONTRACT_MISMATCH", "INSTRUMENT_INACTIVE",
+            "PARTIAL_INTERVAL", "INVALID_UNIT", "COMPUTE_ERROR", "DEGRADED"
+          ]
+        },
+        "reason_if_invalid": { "type": ["string", "null"] },
+        "raw_value": { "type": ["number", "null"] },
+        "normalized_value": { "type": "null" },
+        "bucket": { "type": "null" },
+        "direction_hint": { "type": "null" },
+        "confidence_hint": { "type": "null" },
+        "risk_hint": { "type": "null" },
+        "unit": {
+          "enum": [
+            "FRACTION_PER_INTERVAL", "PROVIDER_NATIVE_CONTRACT_QUANTITY",
+            "USDT_NOTIONAL", "CONTRACTS", "BASE_ASSET_QUANTITY", "USD_NOTIONAL"
+          ]
+        },
+        "source_count": { "type": "integer", "minimum": 0 },
+        "provider_priority": { "type": "integer", "minimum": 1 },
+        "influence_mode": { "const": "SHADOW_ONLY" },
+        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "no_lookahead_assertion": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "VALID" } } },
+          "then": { "properties": { "reason_if_invalid": { "type": "null" } } },
+          "else": {
+            "properties": { "reason_if_invalid": { "type": "string", "minLength": 1 } }
+          }
+        }
+      ]
+    },
+    "derivativesProviderSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "status", "valid_metric_count", "total_metric_count", "reason"],
+      "properties": {
+        "provider": { "enum": ["BINANCE_USDM", "OKX_SWAP"] },
+        "status": {
+          "enum": [
+            "AVAILABLE", "DEGRADED_PARTIAL", "UNSUPPORTED_INSTRUMENT",
+            "INSTRUMENT_INACTIVE", "PROVIDER_UNAVAILABLE", "NO_VALID_METRIC"
+          ]
+        },
+        "valid_metric_count": { "type": "integer", "minimum": 0 },
+        "total_metric_count": { "type": "integer", "minimum": 0 },
+        "reason": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "AVAILABLE" } } },
+          "then": { "properties": { "reason": { "type": "null" } } },
+          "else": { "properties": { "reason": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "derivativesComparability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic_class", "left_provider", "right_provider", "comparable", "reason"],
+      "properties": {
+        "semantic_class": { "enum": ["CURRENT_FUNDING", "CURRENT_OPEN_INTEREST"] },
+        "left_provider": { "const": "BINANCE_USDM" },
+        "right_provider": { "const": "OKX_SWAP" },
+        "comparable": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "derivativesIntelligence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "influence_mode", "decision_influence_frac",
+        "methodology_version", "normalized_symbol", "core_prediction_as_of_utc",
+        "observation_as_of_utc", "block_status", "provider_summary", "metrics",
+        "comparability", "disagreement", "warnings", "not_trade_command",
+        "not_financial_advice", "plain_english"
+      ],
+      "properties": {
+        "schema_version": { "const": "deriv-intel.v0" },
+        "influence_mode": { "const": "SHADOW_ONLY" },
+        "decision_influence_frac": { "const": 0.0 },
+        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "normalized_symbol": { "type": "string", "minLength": 1 },
+        "core_prediction_as_of_utc": { "type": "string", "format": "date-time" },
+        "observation_as_of_utc": { "type": ["string", "null"], "format": "date-time" },
+        "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE", "DISABLED"] },
+        "provider_summary": {
+          "type": "array", "items": { "$ref": "#/$defs/derivativesProviderSummary" }
+        },
+        "metrics": { "type": "array", "items": { "$ref": "#/$defs/derivativesMetric" } },
+        "comparability": {
+          "type": "array", "items": { "$ref": "#/$defs/derivativesComparability" }
+        },
+        "disagreement": { "type": "array", "maxItems": 0 },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "not_trade_command": { "const": true },
+        "not_financial_advice": { "const": true },
+        "plain_english": {
+          "const": "Derivatives context — observe only, not used in the decision."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "block_status": { "const": "DISABLED" } } },
+          "then": {
+            "properties": {
+              "observation_as_of_utc": { "type": "null" },
+              "provider_summary": { "maxItems": 0 },
+              "metrics": { "maxItems": 0 },
+              "comparability": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "observation_as_of_utc": { "type": "string", "format": "date-time" },
+              "provider_summary": { "minItems": 2, "maxItems": 2 }
+            }
+          }
+        }
+      ]
+    },
     "quantV2FeatureDataQuality": {
       "type": "object",
       "additionalProperties": false,

@@ -34,5 +34,8 @@ def test_provenance_has_no_wall_clock_or_network_dependency() -> None:
     assert all(value not in text for value in fragments)
 
 
-def test_no_runtime_analysis_or_response_wiring_changed() -> None:
-    assert not any("derivatives_intel" in path.read_text() for path in (ROOT / "api").glob("*.py"))
+def test_runtime_wiring_is_limited_to_allowed_api_file() -> None:
+    touched = {
+        path.name for path in (ROOT / "api").glob("*.py") if "derivatives_intel" in path.read_text()
+    }
+    assert touched == {"analysis_service.py", "schemas.py"}
