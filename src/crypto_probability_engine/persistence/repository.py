@@ -72,6 +72,27 @@ class PersistenceRepository(Protocol):
     ) -> list[dict]:
         """Fetch resolved live prediction/outcome rows for read-only calibration."""
 
+    def fetch_feature_snapshot_validation_coverage(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+    ) -> dict[str, Any]:
+        """Return aggregate read-only snapshot-validation coverage."""
+
+    def fetch_feature_snapshot_validation_rows(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return bounded joined rows for offline shadow validation."""
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         """List normalized watchlist symbols for an operator."""
 
@@ -216,6 +237,112 @@ class InMemoryPersistenceRepository:
         if limit is not None:
             return rows[: max(0, int(limit))]
         return rows
+
+    def fetch_feature_snapshot_validation_coverage(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+    ) -> dict[str, Any]:
+        predictions = [
+            row
+            for row in self._predictions.values()
+            if row.get("is_live_data") is True
+            and (timeframe is None or row.get("timeframe") == timeframe)
+            and _validation_within_upper_bound(row.get("predicted_at_utc"), until)
+        ]
+        snapshots = [
+            row
+            for row in self._feature_snapshots.values()
+            if row.get("feature_methodology_version") == feature_methodology_version
+            and (timeframe is None or row.get("timeframe") == timeframe)
+            and _validation_within_upper_bound(row.get("prediction_as_of_utc"), until)
+        ]
+        snapshot_times = [
+            row.get("prediction_as_of_utc")
+            for row in snapshots
+            if row.get("prediction_as_of_utc") is not None
+        ]
+        first_snapshot = min(snapshot_times, key=_to_utc_datetime) if snapshot_times else None
+        latest_snapshot = max(snapshot_times, key=_to_utc_datetime) if snapshot_times else None
+        era_start = since if since is not None else first_snapshot
+        eligible_predictions = [
+            row
+            for row in predictions
+            if _validation_at_or_after(row.get("predicted_at_utc"), era_start)
+        ]
+        eligible_snapshots = [
+            row
+            for row in snapshots
+            if _validation_at_or_after(row.get("prediction_as_of_utc"), era_start)
+        ]
+        eligible_snapshot_ids = {
+            str(row.get("prediction_id", "")) for row in eligible_snapshots
+        }
+        resolved_ids = {
+            str(prediction.get("prediction_id", ""))
+            for prediction in eligible_predictions
+            if _validation_live_outcome(
+                self._prediction_outcomes.get(str(prediction.get("prediction_id", "")))
+            )
+        }
+        eligible_prediction_ids = {
+            str(row.get("prediction_id", "")) for row in eligible_predictions
+        }
+        return {
+            "live_predictions_all_time": len(predictions),
+            "live_predictions_eligible_era": len(eligible_predictions),
+            "snapshots_all_time": len(snapshots),
+            "snapshots_eligible_era": len(eligible_snapshots),
+            "resolved_outcomes_eligible_era": len(resolved_ids),
+            "snapshot_outcome_joins_eligible_era": len(
+                eligible_snapshot_ids & resolved_ids
+            ),
+            "predictions_missing_snapshot_eligible_era": len(
+                eligible_prediction_ids - eligible_snapshot_ids
+            ),
+            "snapshots_missing_outcome_eligible_era": len(
+                eligible_snapshot_ids - resolved_ids
+            ),
+            "first_snapshot_as_of_utc": first_snapshot,
+            "latest_snapshot_as_of_utc": latest_snapshot,
+        }
+
+    def fetch_feature_snapshot_validation_rows(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        bounded_limit = _validation_limit(limit)
+        rows: list[dict[str, Any]] = []
+        for prediction_id, snapshot in self._feature_snapshots.items():
+            prediction = self._predictions.get(prediction_id)
+            outcome = self._prediction_outcomes.get(prediction_id)
+            if not prediction or not _validation_live_outcome(outcome):
+                continue
+            if prediction.get("is_live_data") is not True:
+                continue
+            if snapshot.get("feature_methodology_version") != feature_methodology_version:
+                continue
+            if timeframe is not None and prediction.get("timeframe") != timeframe:
+                continue
+            predicted_at = prediction.get("predicted_at_utc")
+            if not _validation_in_window(predicted_at, since, until):
+                continue
+            rows.append(_validation_row_from_parts(prediction, outcome, snapshot))
+        rows.sort(
+            key=lambda row: (
+                _to_utc_datetime(row["predicted_at_utc"]),
+                str(row["prediction_id"]),
+            )
+        )
+        return rows[:bounded_limit]
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         return list(self._watchlists.get(operator_id, OrderedDict()).keys())
@@ -678,6 +805,59 @@ class SupabasePersistenceRepository:
         self._mark_ok()
         return converted
 
+    def fetch_feature_snapshot_validation_coverage(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+    ) -> dict[str, Any]:
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    _execute_feature_snapshot_coverage_query(
+                        cursor,
+                        feature_methodology_version=feature_methodology_version,
+                        timeframe=timeframe,
+                        since=since,
+                        until=until,
+                    )
+                    row = cursor.fetchone()
+        except Exception as exc:
+            raise RuntimeError(
+                _postgres_error_message("feature snapshot coverage read", "query", exc)
+            ) from None
+        return _validation_coverage_from_db(row)
+
+    def fetch_feature_snapshot_validation_rows(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        bounded_limit = _validation_limit(limit)
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    _execute_feature_snapshot_validation_query(
+                        cursor,
+                        feature_methodology_version=feature_methodology_version,
+                        timeframe=timeframe,
+                        since=since,
+                        until=until,
+                        limit=bounded_limit,
+                    )
+                    rows = cursor.fetchall()
+        except Exception as exc:
+            raise RuntimeError(
+                _postgres_error_message("feature snapshot validation read", "query", exc)
+            ) from None
+        return [_validation_row_from_db(row) for row in rows]
+
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_db(lambda cursor: _fetch_watchlist_rows(cursor, operator_id))
         if status == "UNAVAILABLE" or rows is None:
@@ -1008,6 +1188,27 @@ class SupabaseRestRepository:
         limit: int | None = None,
     ) -> list[dict]:
         raise NotImplementedError("Supabase REST calibration read is not implemented.")
+
+    def fetch_feature_snapshot_validation_coverage(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError("Supabase REST snapshot validation read is not implemented.")
+
+    def fetch_feature_snapshot_validation_rows(
+        self,
+        *,
+        feature_methodology_version: str,
+        timeframe: str | None,
+        since: datetime | None,
+        until: datetime | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        raise NotImplementedError("Supabase REST snapshot validation read is not implemented.")
 
     def list_watchlist(self, operator_id: str = "operator") -> list[str]:
         status, rows = self._run_rest(
@@ -1522,6 +1723,271 @@ def _calibration_row_matches(
     if until is not None and _timestamp_before(until, row.get("outcome_close_utc")):
         return False
     return True
+
+
+_VALIDATION_ROW_KEYS = (
+    "prediction_id",
+    "run_id",
+    "normalized_symbol",
+    "symbol",
+    "timeframe",
+    "predicted_at_utc",
+    "reference_close_utc",
+    "horizon_end_utc",
+    "horizon_bars",
+    "p_up_frac",
+    "p_down_frac",
+    "p_timeout_frac",
+    "model_version",
+    "methodology_version",
+    "prediction_is_live_data",
+    "realized_label",
+    "terminal_return_frac",
+    "resolver_version",
+    "outcome_is_live_data",
+    "quant_v2_schema_version",
+    "feature_methodology_version",
+    "block_status",
+    "no_lookahead_assertion",
+    "provider_signature",
+    "snapshot_payload",
+)
+
+_VALIDATION_COVERAGE_KEYS = (
+    "live_predictions_all_time",
+    "live_predictions_eligible_era",
+    "snapshots_all_time",
+    "snapshots_eligible_era",
+    "resolved_outcomes_eligible_era",
+    "snapshot_outcome_joins_eligible_era",
+    "predictions_missing_snapshot_eligible_era",
+    "snapshots_missing_outcome_eligible_era",
+    "first_snapshot_as_of_utc",
+    "latest_snapshot_as_of_utc",
+)
+
+
+def _execute_feature_snapshot_coverage_query(
+    cursor,
+    *,
+    feature_methodology_version: str,
+    timeframe: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> None:
+    cursor.execute(
+        """
+        WITH matching_snapshots AS (
+          SELECT s.prediction_id, s.timeframe, s.prediction_as_of_utc
+          FROM public.prediction_feature_snapshots s
+          WHERE s.feature_methodology_version = %(feature_methodology_version)s
+            AND (%(timeframe)s IS NULL OR s.timeframe = %(timeframe)s)
+            AND (%(until)s IS NULL OR s.prediction_as_of_utc <= %(until)s)
+        ),
+        era AS (
+          SELECT COALESCE(%(since)s, MIN(prediction_as_of_utc)) AS era_start
+          FROM matching_snapshots
+        ),
+        live_predictions AS (
+          SELECT p.prediction_id, p.predicted_at_utc
+          FROM public.predictions p
+          WHERE p.is_live_data = true
+            AND (%(timeframe)s IS NULL OR p.timeframe = %(timeframe)s)
+            AND (%(until)s IS NULL OR p.predicted_at_utc <= %(until)s)
+        ),
+        eligible_predictions AS (
+          SELECT p.prediction_id, p.predicted_at_utc
+          FROM live_predictions p CROSS JOIN era
+          WHERE era.era_start IS NOT NULL
+            AND p.predicted_at_utc >= era.era_start
+        ),
+        eligible_snapshots AS (
+          SELECT s.prediction_id, s.prediction_as_of_utc
+          FROM matching_snapshots s CROSS JOIN era
+          WHERE era.era_start IS NOT NULL
+            AND s.prediction_as_of_utc >= era.era_start
+        ),
+        eligible_outcomes AS (
+          SELECT p.prediction_id
+          FROM eligible_predictions p
+          JOIN public.prediction_outcomes o ON o.prediction_id = p.prediction_id
+          WHERE o.is_live_data = true
+            AND o.realized_label IN ('UP', 'DOWN', 'TIMEOUT')
+        )
+        SELECT
+          (SELECT COUNT(*) FROM live_predictions) AS live_predictions_all_time,
+          (SELECT COUNT(*) FROM eligible_predictions) AS live_predictions_eligible_era,
+          (SELECT COUNT(*) FROM matching_snapshots) AS snapshots_all_time,
+          (SELECT COUNT(*) FROM eligible_snapshots) AS snapshots_eligible_era,
+          (SELECT COUNT(*) FROM eligible_outcomes) AS resolved_outcomes_eligible_era,
+          (SELECT COUNT(*) FROM eligible_snapshots s
+             JOIN eligible_outcomes o ON o.prediction_id = s.prediction_id)
+            AS snapshot_outcome_joins_eligible_era,
+          (SELECT COUNT(*) FROM eligible_predictions p
+             LEFT JOIN eligible_snapshots s ON s.prediction_id = p.prediction_id
+             WHERE s.prediction_id IS NULL)
+            AS predictions_missing_snapshot_eligible_era,
+          (SELECT COUNT(*) FROM eligible_snapshots s
+             LEFT JOIN eligible_outcomes o ON o.prediction_id = s.prediction_id
+             WHERE o.prediction_id IS NULL)
+            AS snapshots_missing_outcome_eligible_era,
+          (SELECT MIN(prediction_as_of_utc) FROM matching_snapshots)
+            AS first_snapshot_as_of_utc,
+          (SELECT MAX(prediction_as_of_utc) FROM matching_snapshots)
+            AS latest_snapshot_as_of_utc
+        """,
+        {
+            "feature_methodology_version": feature_methodology_version,
+            "timeframe": timeframe,
+            "since": since,
+            "until": until,
+        },
+    )
+
+
+def _execute_feature_snapshot_validation_query(
+    cursor,
+    *,
+    feature_methodology_version: str,
+    timeframe: str | None,
+    since: datetime | None,
+    until: datetime | None,
+    limit: int,
+) -> None:
+    cursor.execute(
+        """
+        SELECT p.prediction_id, p.run_id, p.normalized_symbol, p.symbol,
+               p.timeframe, p.predicted_at_utc, p.reference_close_utc,
+               p.horizon_end_utc, p.horizon_bars, p.p_up_frac, p.p_down_frac,
+               p.p_timeout_frac, p.model_version, p.methodology_version,
+               p.is_live_data AS prediction_is_live_data, o.realized_label,
+               o.terminal_return_frac, o.resolver_version,
+               o.is_live_data AS outcome_is_live_data, s.quant_v2_schema_version,
+               s.feature_methodology_version, s.block_status,
+               s.no_lookahead_assertion, s.provider_signature, s.snapshot_payload
+        FROM public.prediction_feature_snapshots s
+        JOIN public.predictions p ON p.prediction_id = s.prediction_id
+        JOIN public.prediction_outcomes o ON o.prediction_id = s.prediction_id
+        WHERE p.is_live_data = true
+          AND o.is_live_data = true
+          AND o.realized_label IN ('UP', 'DOWN', 'TIMEOUT')
+          AND s.feature_methodology_version = %(feature_methodology_version)s
+          AND (%(timeframe)s IS NULL OR p.timeframe = %(timeframe)s)
+          AND (%(since)s IS NULL OR p.predicted_at_utc >= %(since)s)
+          AND (%(until)s IS NULL OR p.predicted_at_utc <= %(until)s)
+        ORDER BY p.predicted_at_utc ASC, p.prediction_id ASC
+        LIMIT %(limit)s
+        """,
+        {
+            "feature_methodology_version": feature_methodology_version,
+            "timeframe": timeframe,
+            "since": since,
+            "until": until,
+            "limit": _validation_limit(limit),
+        },
+    )
+
+
+def _validation_coverage_from_db(row: Any) -> dict[str, Any]:
+    if row is None:
+        return {key: None if key.endswith("_utc") else 0 for key in _VALIDATION_COVERAGE_KEYS}
+    if isinstance(row, Mapping):
+        values = {key: row.get(key) for key in _VALIDATION_COVERAGE_KEYS}
+    else:
+        values = dict(zip(_VALIDATION_COVERAGE_KEYS, row, strict=True))
+    return {
+        key: (
+            value.isoformat() if value is not None and key.endswith("_utc") else value
+        )
+        for key, value in values.items()
+    }
+
+
+def _validation_row_from_db(row: Any) -> dict[str, Any]:
+    if isinstance(row, Mapping):
+        values = {key: row.get(key) for key in _VALIDATION_ROW_KEYS}
+    else:
+        values = dict(zip(_VALIDATION_ROW_KEYS, row, strict=True))
+    payload = values.get("snapshot_payload")
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    values["snapshot_payload"] = deepcopy(payload)
+    return {
+        key: value.isoformat() if hasattr(value, "isoformat") else value
+        for key, value in values.items()
+    }
+
+
+def _validation_row_from_parts(
+    prediction: Mapping[str, Any],
+    outcome: Mapping[str, Any],
+    snapshot: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "prediction_id": prediction.get("prediction_id"),
+        "run_id": prediction.get("run_id"),
+        "normalized_symbol": prediction.get("normalized_symbol"),
+        "symbol": prediction.get("symbol"),
+        "timeframe": prediction.get("timeframe"),
+        "predicted_at_utc": prediction.get("predicted_at_utc"),
+        "reference_close_utc": prediction.get("reference_close_utc"),
+        "horizon_end_utc": prediction.get("horizon_end_utc"),
+        "horizon_bars": prediction.get("horizon_bars"),
+        "p_up_frac": prediction.get("p_up_frac"),
+        "p_down_frac": prediction.get("p_down_frac"),
+        "p_timeout_frac": prediction.get("p_timeout_frac"),
+        "model_version": prediction.get("model_version"),
+        "methodology_version": prediction.get("methodology_version"),
+        "prediction_is_live_data": prediction.get("is_live_data"),
+        "realized_label": outcome.get("realized_label"),
+        "terminal_return_frac": outcome.get("terminal_return_frac"),
+        "resolver_version": outcome.get("resolver_version"),
+        "outcome_is_live_data": outcome.get("is_live_data"),
+        "quant_v2_schema_version": snapshot.get("quant_v2_schema_version"),
+        "feature_methodology_version": snapshot.get("feature_methodology_version"),
+        "block_status": snapshot.get("block_status"),
+        "no_lookahead_assertion": snapshot.get("no_lookahead_assertion"),
+        "provider_signature": snapshot.get("provider_signature"),
+        "snapshot_payload": deepcopy(snapshot.get("snapshot_payload")),
+    }
+
+
+def _validation_limit(limit: int) -> int:
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        raise ValueError("Validation row limit must be a positive integer.")
+    return min(limit, 50_000)
+
+
+def _validation_live_outcome(row: Mapping[str, Any] | None) -> bool:
+    return bool(
+        row
+        and row.get("is_live_data") is True
+        and row.get("realized_label") in {"UP", "DOWN", "TIMEOUT"}
+    )
+
+
+def _validation_at_or_after(value: Any, lower: Any | None) -> bool:
+    if lower is None:
+        return False
+    try:
+        return _to_utc_datetime(value) >= _to_utc_datetime(lower)
+    except (TypeError, ValueError):
+        return False
+
+
+def _validation_within_upper_bound(value: Any, upper: Any | None) -> bool:
+    if upper is None:
+        return True
+    try:
+        return _to_utc_datetime(value) <= _to_utc_datetime(upper)
+    except (TypeError, ValueError):
+        return False
+
+
+def _validation_in_window(value: Any, lower: Any | None, upper: Any | None) -> bool:
+    if lower is not None and not _validation_at_or_after(value, lower):
+        return False
+    return _validation_within_upper_bound(value, upper)
 
 
 def _postgres_error_message(operation: str, phase: str, exc: Exception) -> str:

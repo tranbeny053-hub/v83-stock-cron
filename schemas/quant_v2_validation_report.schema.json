@@ -1,0 +1,580 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/quant_v2_validation_report.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_schema_version",
+    "generated_at_utc",
+    "repository",
+    "read_only",
+    "framework_mode",
+    "feature_methodology_version",
+    "model_methodology_versions",
+    "quant_v2_schema_versions",
+    "timeframes",
+    "data_window",
+    "sample_gate_policy",
+    "overall_status",
+    "warnings",
+    "coverage_summary",
+    "cohort_summary",
+    "baseline_metrics",
+    "feature_reports",
+    "temporal_validation_policy",
+    "uncertainty_policy",
+    "multiple_testing_summary",
+    "promotion_eligibility",
+    "safety_notes"
+  ],
+  "properties": {
+    "report_schema_version": { "const": "quant-v2-validation.v0" },
+    "generated_at_utc": { "type": "string", "format": "date-time" },
+    "repository": { "type": "string", "minLength": 1 },
+    "read_only": { "const": true },
+    "framework_mode": { "const": "FRAMEWORK_ONLY" },
+    "feature_methodology_version": { "type": "string", "minLength": 1 },
+    "model_methodology_versions": { "$ref": "#/$defs/stringList" },
+    "quant_v2_schema_versions": { "$ref": "#/$defs/stringList" },
+    "timeframes": { "$ref": "#/$defs/stringList" },
+    "data_window": { "$ref": "#/$defs/dataWindow" },
+    "sample_gate_policy": { "$ref": "#/$defs/sampleGatePolicy" },
+    "overall_status": { "$ref": "#/$defs/evidenceStatus" },
+    "warnings": { "$ref": "#/$defs/stringList" },
+    "coverage_summary": { "$ref": "#/$defs/coverageSummary" },
+    "cohort_summary": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/cohortSummary" }
+    },
+    "baseline_metrics": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/baselineMetrics" }
+    },
+    "feature_reports": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/featureReport" }
+    },
+    "temporal_validation_policy": { "$ref": "#/$defs/temporalPolicy" },
+    "uncertainty_policy": { "$ref": "#/$defs/uncertainty" },
+    "multiple_testing_summary": { "$ref": "#/$defs/multipleTesting" },
+    "promotion_eligibility": { "$ref": "#/$defs/promotionEligibility" },
+    "safety_notes": { "$ref": "#/$defs/stringList" }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nullableNumber": { "type": ["number", "null"] },
+    "sampleGate": {
+      "enum": [
+        "NO_SAMPLES",
+        "INSUFFICIENT_SAMPLE",
+        "WARMING_UP",
+        "PRELIMINARY_MEASURED",
+        "MEASURED"
+      ]
+    },
+    "evidenceStatus": {
+      "enum": [
+        "NO_DATA",
+        "INSUFFICIENT_SAMPLE",
+        "COVERAGE_FAILURE",
+        "INVALID_COHORT",
+        "TEMPORAL_SPLIT_NOT_AVAILABLE",
+        "SPARSE_CELL",
+        "SPARSE_CLASS",
+        "UNSTABLE_OVER_TIME",
+        "PROVIDER_DEPENDENT",
+        "SYMBOL_DEPENDENT",
+        "NO_DETECTABLE_ASSOCIATION",
+        "NEGATIVE_EVIDENCE",
+        "EXPLORATORY_SIGNAL_ONLY",
+        "PROMISING_SHADOW_EVIDENCE",
+        "NOT_ELIGIBLE_FOR_PROMOTION_REVIEW"
+      ]
+    },
+    "distributionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "count"],
+      "properties": {
+        "key": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "distribution": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/distributionItem" }
+    },
+    "frequencyItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "count", "fraction"],
+      "properties": {
+        "key": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "fraction": { "$ref": "#/$defs/nullableNumber" }
+      }
+    },
+    "cohortKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeframe",
+        "feature_methodology_version",
+        "quant_v2_schema_version",
+        "methodology_version",
+        "model_version",
+        "resolver_version",
+        "prediction_is_live_data",
+        "outcome_is_live_data",
+        "no_lookahead_assertion"
+      ],
+      "properties": {
+        "timeframe": { "type": ["string", "null"] },
+        "feature_methodology_version": { "type": ["string", "null"] },
+        "quant_v2_schema_version": { "type": ["string", "null"] },
+        "methodology_version": { "type": ["string", "null"] },
+        "model_version": { "type": ["string", "null"] },
+        "resolver_version": { "type": ["string", "null"] },
+        "prediction_is_live_data": { "type": ["boolean", "null"] },
+        "outcome_is_live_data": { "type": ["boolean", "null"] },
+        "no_lookahead_assertion": { "type": ["boolean", "null"] }
+      }
+    },
+    "featureCohortKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeframe",
+        "feature_methodology_version",
+        "quant_v2_schema_version",
+        "methodology_version",
+        "model_version",
+        "resolver_version",
+        "prediction_is_live_data",
+        "outcome_is_live_data",
+        "no_lookahead_assertion",
+        "provider_signature",
+        "scope_symbol"
+      ],
+      "properties": {
+        "timeframe": { "type": ["string", "null"] },
+        "feature_methodology_version": { "type": ["string", "null"] },
+        "quant_v2_schema_version": { "type": ["string", "null"] },
+        "methodology_version": { "type": ["string", "null"] },
+        "model_version": { "type": ["string", "null"] },
+        "resolver_version": { "type": ["string", "null"] },
+        "prediction_is_live_data": { "type": ["boolean", "null"] },
+        "outcome_is_live_data": { "type": ["boolean", "null"] },
+        "no_lookahead_assertion": { "type": ["boolean", "null"] },
+        "provider_signature": { "type": "string", "minLength": 1 },
+        "scope_symbol": { "type": "string", "minLength": 1 }
+      }
+    },
+    "dataWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "since",
+        "until",
+        "eligible_era_basis",
+        "first_snapshot_as_of_utc",
+        "latest_snapshot_as_of_utc",
+        "row_limit",
+        "limit_reached"
+      ],
+      "properties": {
+        "since": { "type": ["string", "null"], "format": "date-time" },
+        "until": { "type": ["string", "null"], "format": "date-time" },
+        "eligible_era_basis": { "enum": ["requested_since", "first_observed_snapshot"] },
+        "first_snapshot_as_of_utc": { "type": ["string", "null"], "format": "date-time" },
+        "latest_snapshot_as_of_utc": { "type": ["string", "null"], "format": "date-time" },
+        "row_limit": { "type": "integer", "minimum": 1, "maximum": 50000 },
+        "limit_reached": { "type": "boolean" }
+      }
+    },
+    "threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "minimum", "maximum"],
+      "properties": {
+        "gate": { "$ref": "#/$defs/sampleGate" },
+        "minimum": { "type": "integer", "minimum": 0 },
+        "maximum": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "sampleGatePolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thresholds",
+        "minimum_feature_bucket_cell",
+        "minimum_outcome_class_cell",
+        "sample_basis"
+      ],
+      "properties": {
+        "thresholds": { "type": "array", "items": { "$ref": "#/$defs/threshold" } },
+        "minimum_feature_bucket_cell": { "const": 30 },
+        "minimum_outcome_class_cell": { "const": 30 },
+        "sample_basis": { "const": "DETERMINISTIC_NON_OVERLAPPING_EFFECTIVE_N" }
+      }
+    },
+    "coverageAllTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["live_predictions", "snapshots"],
+      "properties": {
+        "live_predictions": { "type": "integer", "minimum": 0 },
+        "snapshots": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "coverageEligible": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis",
+        "live_predictions",
+        "snapshots",
+        "resolved_outcomes",
+        "snapshot_outcome_joins",
+        "predictions_missing_snapshot",
+        "snapshots_missing_outcome"
+      ],
+      "properties": {
+        "basis": { "enum": ["requested_since", "first_observed_snapshot"] },
+        "live_predictions": { "type": "integer", "minimum": 0 },
+        "snapshots": { "type": "integer", "minimum": 0 },
+        "resolved_outcomes": { "type": "integer", "minimum": 0 },
+        "snapshot_outcome_joins": { "type": "integer", "minimum": 0 },
+        "predictions_missing_snapshot": { "type": "integer", "minimum": 0 },
+        "snapshots_missing_outcome": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "coverageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["all_time", "eligible_era"],
+      "properties": {
+        "all_time": { "$ref": "#/$defs/coverageAllTime" },
+        "eligible_era": { "$ref": "#/$defs/coverageEligible" }
+      }
+    },
+    "cohortSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cohort_id",
+        "cohort_keys",
+        "valid",
+        "invalid_reasons",
+        "raw_n",
+        "deduplicated_n",
+        "effective_n",
+        "sample_gate",
+        "evidence_status",
+        "block_status_distribution",
+        "provider_distribution"
+      ],
+      "properties": {
+        "cohort_id": { "type": "string", "minLength": 1 },
+        "cohort_keys": { "$ref": "#/$defs/cohortKeys" },
+        "valid": { "type": "boolean" },
+        "invalid_reasons": { "$ref": "#/$defs/stringList" },
+        "raw_n": { "type": "integer", "minimum": 0 },
+        "deduplicated_n": { "type": "integer", "minimum": 0 },
+        "effective_n": { "type": "integer", "minimum": 0 },
+        "sample_gate": { "$ref": "#/$defs/sampleGate" },
+        "evidence_status": { "$ref": "#/$defs/evidenceStatus" },
+        "block_status_distribution": { "$ref": "#/$defs/distribution" },
+        "provider_distribution": { "$ref": "#/$defs/distribution" }
+      }
+    },
+    "confusionCell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicted", "actual", "count"],
+      "properties": {
+        "predicted": { "enum": ["UP", "DOWN", "TIMEOUT"] },
+        "actual": { "enum": ["UP", "DOWN", "TIMEOUT"] },
+        "count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reliabilityBucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bucket",
+        "count",
+        "average_top_probability",
+        "top_label_frequency",
+        "calibration_gap"
+      ],
+      "properties": {
+        "bucket": { "type": "string" },
+        "count": { "type": "integer", "minimum": 30 },
+        "average_top_probability": { "$ref": "#/$defs/nullableNumber" },
+        "top_label_frequency": { "$ref": "#/$defs/nullableNumber" },
+        "calibration_gap": { "$ref": "#/$defs/nullableNumber" }
+      }
+    },
+    "baselineMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cohort_id",
+        "timeframe",
+        "raw_n",
+        "deduplicated_n",
+        "effective_n",
+        "sample_gate",
+        "valid_probability_count",
+        "invalid_probability_count",
+        "brier_score",
+        "log_loss",
+        "top_label_hit_diagnostic",
+        "outcome_distribution",
+        "confusion_matrix",
+        "reliability_buckets",
+        "warnings"
+      ],
+      "properties": {
+        "cohort_id": { "type": "string" },
+        "timeframe": { "type": "string" },
+        "raw_n": { "type": "integer", "minimum": 0 },
+        "deduplicated_n": { "type": "integer", "minimum": 0 },
+        "effective_n": { "type": "integer", "minimum": 0 },
+        "sample_gate": { "$ref": "#/$defs/sampleGate" },
+        "valid_probability_count": { "type": "integer", "minimum": 0 },
+        "invalid_probability_count": { "type": "integer", "minimum": 0 },
+        "brier_score": { "$ref": "#/$defs/nullableNumber" },
+        "log_loss": { "$ref": "#/$defs/nullableNumber" },
+        "top_label_hit_diagnostic": { "$ref": "#/$defs/nullableNumber" },
+        "outcome_distribution": { "$ref": "#/$defs/distribution" },
+        "confusion_matrix": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "array", "items": { "$ref": "#/$defs/confusionCell" } }
+          ]
+        },
+        "reliability_buckets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/reliabilityBucket" }
+        },
+        "warnings": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "missingness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "missing_or_malformed",
+        "degraded_or_invalid",
+        "disabled_rows",
+        "no_lookahead_excluded",
+        "missing_fraction",
+        "degraded_fraction"
+      ],
+      "properties": {
+        "missing_or_malformed": { "type": "integer", "minimum": 0 },
+        "degraded_or_invalid": { "type": "integer", "minimum": 0 },
+        "disabled_rows": { "type": "integer", "minimum": 0 },
+        "no_lookahead_excluded": { "type": "integer", "minimum": 0 },
+        "missing_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "degraded_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "conditionedDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_or_bucket",
+        "count",
+        "outcome_distribution",
+        "mean_brier_contribution",
+        "mean_log_loss_contribution",
+        "mean_realized_probability_residual",
+        "calibration_gap",
+        "class_conditional_frequencies"
+      ],
+      "properties": {
+        "state_or_bucket": { "type": "string" },
+        "count": { "type": "integer", "minimum": 30 },
+        "outcome_distribution": { "$ref": "#/$defs/distribution" },
+        "mean_brier_contribution": { "$ref": "#/$defs/nullableNumber" },
+        "mean_log_loss_contribution": { "$ref": "#/$defs/nullableNumber" },
+        "mean_realized_probability_residual": { "$ref": "#/$defs/nullableNumber" },
+        "calibration_gap": { "$ref": "#/$defs/nullableNumber" },
+        "class_conditional_frequencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/frequencyItem" }
+        }
+      }
+    },
+    "temporalStability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "development_n",
+        "validation_n",
+        "frozen_edges",
+        "ordered_bin_monotonicity"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "DEVELOPMENT_FIT_REPRESENTATION_FROZEN",
+            "NOT_EVALUATED_INSUFFICIENT_EFFECTIVE_SAMPLE"
+          ]
+        },
+        "development_n": { "type": "integer", "minimum": 0 },
+        "validation_n": { "type": "integer", "minimum": 0 },
+        "frozen_edges": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "array", "items": { "type": "number" } }
+          ]
+        },
+        "ordered_bin_monotonicity": { "type": ["boolean", "null"] }
+      }
+    },
+    "uncertainty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned_method", "applied", "interval", "reason"],
+      "properties": {
+        "planned_method": { "const": "DEPENDENCE_AWARE_BLOCK_BOOTSTRAP" },
+        "applied": { "const": false },
+        "interval": { "type": "null" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "adjustedEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "multiplicity_adjustment_applied"],
+      "properties": {
+        "status": { "$ref": "#/$defs/evidenceStatus" },
+        "multiplicity_adjustment_applied": { "const": false }
+      }
+    },
+    "featureReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feature_id",
+        "family",
+        "timeframe",
+        "cohort_keys",
+        "total_snapshot_count",
+        "resolved_count",
+        "valid_feature_count",
+        "raw_n",
+        "deduplicated_n",
+        "effective_n",
+        "sample_gate",
+        "coverage_fraction",
+        "missingness",
+        "status_distribution",
+        "provider_distribution",
+        "symbol_distribution",
+        "value_or_bucket_distribution",
+        "realized_outcome_distribution",
+        "feature_conditioned_diagnostics",
+        "data_quality_distribution",
+        "temporal_split_status",
+        "temporal_stability",
+        "uncertainty",
+        "adjusted_evidence",
+        "limitations",
+        "evidence_status",
+        "promotion_eligible",
+        "reason"
+      ],
+      "properties": {
+        "feature_id": { "type": "string", "minLength": 1 },
+        "family": { "enum": ["VOLATILITY", "TREND", "VOLUME", "REGIME"] },
+        "timeframe": { "type": "string", "minLength": 1 },
+        "cohort_keys": { "$ref": "#/$defs/featureCohortKeys" },
+        "total_snapshot_count": { "type": "integer", "minimum": 0 },
+        "resolved_count": { "type": "integer", "minimum": 0 },
+        "valid_feature_count": { "type": "integer", "minimum": 0 },
+        "raw_n": { "type": "integer", "minimum": 0 },
+        "deduplicated_n": { "type": "integer", "minimum": 0 },
+        "effective_n": { "type": "integer", "minimum": 0 },
+        "sample_gate": { "$ref": "#/$defs/sampleGate" },
+        "coverage_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "missingness": { "$ref": "#/$defs/missingness" },
+        "status_distribution": { "$ref": "#/$defs/distribution" },
+        "provider_distribution": { "$ref": "#/$defs/distribution" },
+        "symbol_distribution": { "$ref": "#/$defs/distribution" },
+        "value_or_bucket_distribution": { "$ref": "#/$defs/distribution" },
+        "realized_outcome_distribution": { "$ref": "#/$defs/distribution" },
+        "feature_conditioned_diagnostics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conditionedDiagnostic" }
+        },
+        "data_quality_distribution": { "$ref": "#/$defs/distribution" },
+        "temporal_split_status": {
+          "enum": [
+            "NOT_AVAILABLE_INSUFFICIENT_EFFECTIVE_SAMPLE",
+            "AVAILABLE_DEVELOPMENT_VALIDATION_ONLY"
+          ]
+        },
+        "temporal_stability": { "$ref": "#/$defs/temporalStability" },
+        "uncertainty": { "$ref": "#/$defs/uncertainty" },
+        "adjusted_evidence": { "$ref": "#/$defs/adjustedEvidence" },
+        "limitations": { "$ref": "#/$defs/stringList" },
+        "evidence_status": { "$ref": "#/$defs/evidenceStatus" },
+        "promotion_eligible": { "const": false },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "temporalPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "minimum_effective_n",
+        "development_fraction",
+        "holdout_status",
+        "holdout_metrics"
+      ],
+      "properties": {
+        "method": { "const": "CHRONOLOGICAL_DEVELOPMENT_VALIDATION" },
+        "minimum_effective_n": { "const": 100 },
+        "development_fraction": { "const": 0.7 },
+        "holdout_status": { "const": "SEALED_NOT_EVALUATED" },
+        "holdout_metrics": { "type": "null" }
+      }
+    },
+    "multipleTesting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planned_methods", "selected_method", "applied", "reason"],
+      "properties": {
+        "planned_methods": {
+          "type": "array",
+          "prefixItems": [{ "const": "BH" }, { "const": "BY" }],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "selected_method": { "type": "null" },
+        "applied": { "const": false },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "promotionEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promotion_eligible", "any_eligible", "reason"],
+      "properties": {
+        "promotion_eligible": { "const": false },
+        "any_eligible": { "const": false },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
