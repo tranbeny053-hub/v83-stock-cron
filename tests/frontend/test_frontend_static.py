@@ -25,10 +25,28 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    version = "ui-d1-5b-trade-plan-render"
-    assert f'href="/styles.css?v={version}"' in html
-    assert f'src="/app.js?v={version}"' in html
-    assert f'const UCPE_FRONTEND_BUILD = "{version}";' in js
+    asset_version = "w4c1-ka1-20260621-a"
+    assert f'href="/styles.css?v={asset_version}"' in html
+    assert f'src="/app.js?v={asset_version}"' in html
+    assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
+
+
+def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert html.count("data-build-fingerprint") == 1
+    marker = html.split("data-build-fingerprint", maxsplit=1)[1].split("</span>", maxsplit=1)[0]
+    assert "Build fingerprint…" in marker
+    assert "UCPE-W4C1-KA1-20260621-A" not in html
+    assert "UCPE-W4C1-KA1-20260621-A" not in js
+    assert 'fetch("/v1/build-info", {' in js
+    assert 'cache: "no-store"' in js
+    assert 'credentials: "include"' in js
+    assert "response.ok" in js
+    assert "payload.fingerprint" in js
+    assert 'document.querySelectorAll("[data-build-fingerprint]")' in js
+    assert 'marker.textContent = "Build fingerprint unavailable"' in js
+    assert "void loadBuildFingerprint();" in js
 
 
 def test_frontend_uses_backend_display_fields() -> None:

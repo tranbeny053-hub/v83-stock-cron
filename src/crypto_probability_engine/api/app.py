@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import BackgroundTasks, Cookie, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
@@ -32,9 +32,11 @@ from crypto_probability_engine.api.health import runtime_health, system_status
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
     BatchAnalysisRequest,
+    BuildInfoResponse,
     ErrorCode,
     WatchlistRequest,
 )
+from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
 from crypto_probability_engine.persistence.repository import build_persistence_repository
@@ -43,6 +45,7 @@ from crypto_probability_engine.telemetry.events import TelemetrySink
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
 WATCHLIST_LIMIT = 20
+FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -94,6 +97,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/healthcheck")
     def healthcheck() -> dict:
         return runtime_health(app_settings)
+
+    @app.get("/v1/build-info", response_model=BuildInfoResponse)
+    def get_build_info() -> JSONResponse:
+        payload = BuildInfoResponse.model_validate(build_info_payload()).model_dump(mode="json")
+        return JSONResponse(
+            content=payload,
+            headers={
+                "Cache-Control": "no-store",
+                "Pragma": "no-cache",
+            },
+        )
 
     def require_app_session(
         session_token: str | None = Cookie(default=None, alias=SESSION_COOKIE),  # noqa: B008
@@ -271,9 +285,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         }
 
-    frontend_dir = Path("frontend")
-    if frontend_dir.exists():
-        app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+    @app.get("/", include_in_schema=False)
+    @app.get("/index.html", include_in_schema=False)
+    def frontend_index() -> FileResponse:
+        return FileResponse(
+            FRONTEND_DIR / "index.html",
+            media_type="text/html",
+            headers={
+                "Cache-Control": "no-store",
+                "Pragma": "no-cache",
+            },
+        )
+
+    if FRONTEND_DIR.exists():
+        app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 
     return app
 

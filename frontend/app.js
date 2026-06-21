@@ -12,7 +12,7 @@ const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy =
   "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
-const UCPE_FRONTEND_BUILD = "ui-d1-5b-trade-plan-render";
+const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";
 const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
 const tacticalTimeframes = ["15m", "1H", "4H"];
@@ -82,6 +82,30 @@ const scoreHeatBands = [
   { min: 21, max: 40, level: "Low", mainColor: "#5A4545", className: "heat-low" },
   { min: 0, max: 20, level: "Cold / Neutral", mainColor: "#374151", className: "heat-cold" },
 ];
+
+async function loadBuildFingerprint() {
+  const markers = document.querySelectorAll("[data-build-fingerprint]");
+  try {
+    const response = await fetch("/v1/build-info", {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Build information request failed.");
+    }
+    const payload = await response.json();
+    if (typeof payload.fingerprint !== "string" || !payload.fingerprint.trim()) {
+      throw new Error("Build information fingerprint is unavailable.");
+    }
+    for (const marker of markers) {
+      marker.textContent = payload.fingerprint;
+    }
+  } catch {
+    for (const marker of markers) {
+      marker.textContent = "Build fingerprint unavailable";
+    }
+  }
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -2138,6 +2162,7 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
 });
 
 renderTimeframePlaceholders(singleResult, singlePayloads);
+void loadBuildFingerprint();
 updatePersistenceStatus("UNKNOWN");
 updateDevModeUx({ enabled: false, configured: false });
 updateRefreshButton();

@@ -97,6 +97,11 @@ textarea {
   padding: 18px;
 }
 
+.build-fingerprint {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
 .eyebrow,
 .muted,
 .news-note,

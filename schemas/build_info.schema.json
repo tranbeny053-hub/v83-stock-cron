@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/build_info.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_id",
+    "release_label",
+    "environment",
+    "source_milestone",
+    "fingerprint"
+  ],
+  "properties": {
+    "schema_version": { "const": "build-info.v1" },
+    "release_id": { "type": "string", "pattern": "^UCPE-[A-Z0-9-]{3,}$" },
+    "release_label": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "minLength": 1 },
+    "source_milestone": { "type": "string", "minLength": 1 },
+    "fingerprint": { "type": "string", "minLength": 1 }
+  }
+}

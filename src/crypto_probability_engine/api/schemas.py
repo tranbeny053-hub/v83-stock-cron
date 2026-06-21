@@ -63,6 +63,17 @@ class ErrorResponse(BaseModel):
     error: ErrorEnvelope
 
 
+class BuildInfoResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["build-info.v1"]
+    release_id: str = Field(min_length=1, pattern=r"^UCPE-[A-Z0-9-]{3,}$")
+    release_label: str = Field(min_length=1)
+    environment: str = Field(min_length=1)
+    source_milestone: str = Field(min_length=1)
+    fingerprint: str = Field(min_length=1)
+
+
 class AnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
