@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_metric.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metric_id",
+    "family",
+    "provider",
+    "provider_endpoint",
+    "provider_instrument",
+    "normalized_symbol",
+    "contract_type",
+    "margin_asset",
+    "settlement_asset",
+    "timeframe_or_period",
+    "event_time",
+    "interval_start",
+    "interval_end",
+    "interval_final",
+    "fetched_at_utc",
+    "prediction_as_of_utc",
+    "input_staleness_seconds",
+    "status",
+    "reason_if_invalid",
+    "raw_value",
+    "normalized_value",
+    "bucket",
+    "direction_hint",
+    "confidence_hint",
+    "risk_hint",
+    "unit",
+    "source_count",
+    "provider_priority",
+    "influence_mode",
+    "methodology_version",
+    "no_lookahead_assertion"
+  ],
+  "properties": {
+    "metric_id": {
+      "enum": [
+        "binance.funding.current_estimate",
+        "binance.funding.settled",
+        "binance.open_interest.current",
+        "binance.open_interest.history.quantity",
+        "binance.open_interest.history.quote_value",
+        "okx.funding.current_estimate",
+        "okx.funding.settled",
+        "okx.open_interest.current.contracts",
+        "okx.open_interest.current.base",
+        "okx.open_interest.current.usd"
+      ]
+    },
+    "family": { "enum": ["FUNDING", "OPEN_INTEREST"] },
+    "provider": { "enum": ["BINANCE_USDM", "OKX_SWAP"] },
+    "provider_endpoint": {
+      "enum": [
+        "/fapi/v1/premiumIndex",
+        "/fapi/v1/fundingRate",
+        "/fapi/v1/openInterest",
+        "/futures/data/openInterestHist",
+        "/api/v5/public/funding-rate",
+        "/api/v5/public/funding-rate-history",
+        "/api/v5/public/open-interest"
+      ]
+    },
+    "provider_instrument": { "type": "string", "minLength": 1 },
+    "normalized_symbol": { "type": "string", "minLength": 1 },
+    "contract_type": {
+      "enum": ["USDT_LINEAR_PERPETUAL", "CONTRACT_MISMATCH", "UNKNOWN"]
+    },
+    "margin_asset": { "type": "string", "minLength": 1 },
+    "settlement_asset": { "type": "string", "minLength": 1 },
+    "timeframe_or_period": { "type": ["string", "null"] },
+    "event_time": { "$ref": "#/$defs/nullableTimestamp" },
+    "interval_start": { "$ref": "#/$defs/nullableTimestamp" },
+    "interval_end": { "$ref": "#/$defs/nullableTimestamp" },
+    "interval_final": { "type": "boolean" },
+    "fetched_at_utc": { "$ref": "#/$defs/timestamp" },
+    "prediction_as_of_utc": { "$ref": "#/$defs/timestamp" },
+    "input_staleness_seconds": {
+      "oneOf": [
+        { "type": "number", "minimum": 0, "maximum": 1e308 },
+        { "type": "null" }
+      ]
+    },
+    "status": {
+      "enum": [
+        "VALID",
+        "INSUFFICIENT_HISTORY",
+        "STALE_INPUT",
+        "PROVIDER_UNAVAILABLE",
+        "UNSUPPORTED_INSTRUMENT",
+        "CONTRACT_MISMATCH",
+        "INSTRUMENT_INACTIVE",
+        "PARTIAL_INTERVAL",
+        "INVALID_UNIT",
+        "COMPUTE_ERROR",
+        "DEGRADED"
+      ]
+    },
+    "reason_if_invalid": { "type": ["string", "null"] },
+    "raw_value": {
+      "oneOf": [
+        { "type": "number", "minimum": -1e308, "maximum": 1e308 },
+        { "type": "null" }
+      ]
+    },
+    "normalized_value": { "type": "null" },
+    "bucket": { "type": "null" },
+    "direction_hint": { "type": "null" },
+    "confidence_hint": { "type": "null" },
+    "risk_hint": { "type": "null" },
+    "unit": {
+      "enum": [
+        "FRACTION_PER_INTERVAL",
+        "PROVIDER_NATIVE_CONTRACT_QUANTITY",
+        "USDT_NOTIONAL",
+        "CONTRACTS",
+        "BASE_ASSET_QUANTITY",
+        "USD_NOTIONAL"
+      ]
+    },
+    "source_count": { "type": "integer", "minimum": 0 },
+    "provider_priority": { "type": "integer", "minimum": 1 },
+    "influence_mode": { "const": "SHADOW_ONLY" },
+    "methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "no_lookahead_assertion": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "VALID" } } },
+      "then": { "properties": { "reason_if_invalid": { "type": "null" } } },
+      "else": {
+        "properties": {
+          "reason_if_invalid": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T.+(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "nullableTimestamp": {
+      "oneOf": [
+        { "$ref": "#/$defs/timestamp" },
+        { "type": "null" }
+      ]
+    }
+  }
+}
