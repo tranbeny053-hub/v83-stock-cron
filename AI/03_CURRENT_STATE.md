@@ -170,3 +170,17 @@ insufficient, `1W` 0 no samples, and `1M` 0 no samples. No timeframe is measured
 - Live endpoint rendering was not exercised with real credentials; static, full-suite, and
   offline smoke verification passed without secrets.
 - Next: Claude reviews the single commit before merge/deployment.
+## Wave 4D.3-Ops Phase 1 — Prediction-Origin Cohort Separation
+
+- Runtime release source advances to `UCPE-W4D3-OPS-COHORT-20260622-A`.
+- Predictions gain an immutable origin contract: `USER_REQUESTED`, `CONTROLLED_SMOKE`, or
+  `SCHEDULED_SHADOW_EVIDENCE`; existing analysis callers default to `USER_REQUESTED`.
+- Origin is ledger metadata only and does not enter analysis hash, prediction identity,
+  probabilities, gates, decisions, Scenario Plan, Quant V2, or derivatives influence.
+- Calibration and Quant V2 shadow validation default to `USER_REQUESTED`; outcome resolution
+  remains origin-agnostic.
+- Migration `0007_prediction_origin.sql` is source-only until separately reviewed/applied.
+- Phase 2 stays blocked pending an inventory and explicit classification decision for the six
+  historical derivatives smoke predictions and their outcome links.
+- No cadence collector, scheduler, evidence generation, derivatives activation, or production
+  mutation is part of this phase.

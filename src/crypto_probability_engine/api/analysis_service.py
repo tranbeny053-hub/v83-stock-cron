@@ -47,6 +47,10 @@ from crypto_probability_engine.persistence.feature_snapshot import (
     FeatureSnapshotWriteStatus,
     build_feature_snapshot,
 )
+from crypto_probability_engine.persistence.prediction_origin import (
+    DEFAULT_PREDICTION_ORIGIN,
+    validate_prediction_origin,
+)
 from crypto_probability_engine.persistence.repository import PersistenceRepository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
@@ -81,7 +85,9 @@ def analyze_request(
     settings: Settings,
     run_store: InMemoryRunStore,
     persistence_status: str = "STATELESS",
+    prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
 ) -> dict:
+    prediction_origin = validate_prediction_origin(prediction_origin)
     if request.asset_class == AssetClass.CRYPTO_PERP and not settings.enable_derivatives:
         raise api_error(
             400,
@@ -215,6 +221,7 @@ def analyze_request(
         quant_result=quant_result,
         data_quality=data_quality,
         provider_state=provider_state,
+        prediction_origin=prediction_origin,
     )
     response["quant_v2"] = build_quant_v2_shadow(
         quant_result=quant_result,
@@ -455,7 +462,9 @@ def _prediction_row(
     quant_result: dict,
     data_quality: dict,
     provider_state: dict,
+    prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
 ) -> dict | None:
+    prediction_origin = validate_prediction_origin(prediction_origin)
     if not data_quality.get("is_live_data"):
         return None
     if timeframe not in TIMEFRAME_SECONDS:
@@ -516,6 +525,7 @@ def _prediction_row(
         "is_live_data": True,
         "cross_provider_state": data_quality.get("cross_provider_state")
         or provider_state.get("cross_provider_state"),
+        "prediction_origin": prediction_origin,
     }
 
 

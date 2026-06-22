@@ -208,6 +208,7 @@ def test_live_analysis_schedules_immutable_prediction_row(monkeypatch) -> None:
     assert row["calibration_status"] == "DEFAULT_PHASE1A"
     assert row["reliability_status"] == "INSUFFICIENT_SAMPLE"
     assert row["is_live_data"] is True
+    assert row["prediction_origin"] == "USER_REQUESTED"
     assert len(repo.feature_snapshots) == 1
     feature_snapshot = repo.feature_snapshots[0]
     assert feature_snapshot["prediction_id"] == row["prediction_id"]

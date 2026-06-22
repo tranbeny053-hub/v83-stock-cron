@@ -21,6 +21,10 @@ from crypto_probability_engine.persistence.derivatives_snapshot import (
 from crypto_probability_engine.persistence.feature_snapshot import (
     FeatureSnapshotWriteStatus,
 )
+from crypto_probability_engine.persistence.prediction_origin import (
+    DEFAULT_PREDICTION_ORIGIN,
+    validate_prediction_origin,
+)
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
 
@@ -77,6 +81,7 @@ class PersistenceRepository(Protocol):
         since: Any | None = None,
         until: Any | None = None,
         limit: int | None = None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict]:
         """Fetch resolved live prediction/outcome rows for read-only calibration."""
 
@@ -87,6 +92,7 @@ class PersistenceRepository(Protocol):
         timeframe: str | None,
         since: datetime | None,
         until: datetime | None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> dict[str, Any]:
         """Return aggregate read-only snapshot-validation coverage."""
 
@@ -98,6 +104,7 @@ class PersistenceRepository(Protocol):
         since: datetime | None,
         until: datetime | None,
         limit: int,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict[str, Any]]:
         """Return bounded joined rows for offline shadow validation."""
 
@@ -170,9 +177,10 @@ class InMemoryPersistenceRepository:
         return self.persistence_status()
 
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        prediction_id = str(row.get("prediction_id", ""))
+        normalized_row = _prediction_row_with_origin(row)
+        prediction_id = str(normalized_row.get("prediction_id", ""))
         if prediction_id and prediction_id not in self._predictions:
-            self._predictions[prediction_id] = dict(row)
+            self._predictions[prediction_id] = normalized_row
         return self.persistence_status()
 
     def save_feature_snapshot(
@@ -245,7 +253,9 @@ class InMemoryPersistenceRepository:
         since: Any | None = None,
         until: Any | None = None,
         limit: int | None = None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         rows = []
         for prediction_id, prediction in self._predictions.items():
             outcome = self._prediction_outcomes.get(prediction_id)
@@ -259,6 +269,7 @@ class InMemoryPersistenceRepository:
                 normalized_symbol=normalized_symbol,
                 model_version=model_version,
                 methodology_version=methodology_version,
+                prediction_origin=prediction_origin,
                 since=since,
                 until=until,
             ):
@@ -275,18 +286,25 @@ class InMemoryPersistenceRepository:
         timeframe: str | None,
         since: datetime | None,
         until: datetime | None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> dict[str, Any]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         predictions = [
             row
             for row in self._predictions.values()
             if row.get("is_live_data") is True
             and (timeframe is None or row.get("timeframe") == timeframe)
+            and _prediction_origin_matches(row, prediction_origin)
             and _validation_within_upper_bound(row.get("predicted_at_utc"), until)
         ]
         snapshots = [
             row
             for row in self._feature_snapshots.values()
             if row.get("feature_methodology_version") == feature_methodology_version
+            and _prediction_origin_matches(
+                self._predictions.get(str(row.get("prediction_id", ""))),
+                prediction_origin,
+            )
             and (timeframe is None or row.get("timeframe") == timeframe)
             and _validation_within_upper_bound(row.get("prediction_as_of_utc"), until)
         ]
@@ -348,7 +366,9 @@ class InMemoryPersistenceRepository:
         since: datetime | None,
         until: datetime | None,
         limit: int,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict[str, Any]]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         bounded_limit = _validation_limit(limit)
         rows: list[dict[str, Any]] = []
         for prediction_id, snapshot in self._feature_snapshots.items():
@@ -357,6 +377,8 @@ class InMemoryPersistenceRepository:
             if not prediction or not _validation_live_outcome(outcome):
                 continue
             if prediction.get("is_live_data") is not True:
+                continue
+            if not _prediction_origin_matches(prediction, prediction_origin):
                 continue
             if snapshot.get("feature_methodology_version") != feature_methodology_version:
                 continue
@@ -682,7 +704,8 @@ class SupabasePersistenceRepository:
         return status
 
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._fallback.save_prediction(row)
+        normalized_row = _prediction_row_with_origin(row)
+        self._fallback.save_prediction(normalized_row)
         status, _ = self._run_db(
             lambda cursor: cursor.execute(
                 """
@@ -692,7 +715,8 @@ class SupabasePersistenceRepository:
                   reference_price, horizon_end_utc, p_up_frac, p_down_frac,
                   p_timeout_frac, decision_band_frac, model_version, methodology_version,
                   calibration_status, reliability_status, epistemic_sufficiency,
-                  gate_action, data_source, is_live_data, cross_provider_state
+                  gate_action, data_source, is_live_data, cross_provider_state,
+                  prediction_origin
                 )
                 VALUES (
                   %(prediction_id)s, %(run_id)s, %(operator_id)s, %(symbol)s,
@@ -702,11 +726,12 @@ class SupabasePersistenceRepository:
                   %(p_timeout_frac)s, %(decision_band_frac)s, %(model_version)s,
                   %(methodology_version)s, %(calibration_status)s,
                   %(reliability_status)s, %(epistemic_sufficiency)s, %(gate_action)s,
-                  %(data_source)s, %(is_live_data)s, %(cross_provider_state)s
+                  %(data_source)s, %(is_live_data)s, %(cross_provider_state)s,
+                  %(prediction_origin)s
                 )
                 ON CONFLICT (prediction_id) DO NOTHING
                 """,
-                dict(row),
+                normalized_row,
             )
         )
         return status
@@ -822,7 +847,9 @@ class SupabasePersistenceRepository:
         since: Any | None = None,
         until: Any | None = None,
         limit: int | None = None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         if not self.maybe_can_attempt():
             raise RuntimeError(
                 "SUPABASE_POSTGRES calibration read failed: RuntimeError [circuit] CircuitOpen"
@@ -844,6 +871,7 @@ class SupabasePersistenceRepository:
                         since=since,
                         until=until,
                         limit=limit,
+                        prediction_origin=prediction_origin,
                     )
                     phase = "fetch"
                     rows = cursor.fetchall()
@@ -862,7 +890,9 @@ class SupabasePersistenceRepository:
         timeframe: str | None,
         since: datetime | None,
         until: datetime | None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> dict[str, Any]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         try:
             with self._direct_connection() as conn:
                 with conn.cursor() as cursor:
@@ -872,6 +902,7 @@ class SupabasePersistenceRepository:
                         timeframe=timeframe,
                         since=since,
                         until=until,
+                        prediction_origin=prediction_origin,
                     )
                     row = cursor.fetchone()
         except Exception as exc:
@@ -888,7 +919,9 @@ class SupabasePersistenceRepository:
         since: datetime | None,
         until: datetime | None,
         limit: int,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict[str, Any]]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
         bounded_limit = _validation_limit(limit)
         try:
             with self._direct_connection() as conn:
@@ -900,6 +933,7 @@ class SupabasePersistenceRepository:
                         since=since,
                         until=until,
                         limit=bounded_limit,
+                        prediction_origin=prediction_origin,
                     )
                     rows = cursor.fetchall()
         except Exception as exc:
@@ -1136,12 +1170,13 @@ class SupabaseRestRepository:
         return status
 
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._fallback.save_prediction(row)
+        normalized_row = _prediction_row_with_origin(row)
+        self._fallback.save_prediction(normalized_row)
         status, _ = self._run_rest(
             lambda: self._request(
                 "POST",
                 "predictions",
-                json=dict(row),
+                json=normalized_row,
                 params={"on_conflict": "prediction_id"},
                 prefer="resolution=ignore-duplicates,return=minimal",
             )
@@ -1273,6 +1308,7 @@ class SupabaseRestRepository:
         since: Any | None = None,
         until: Any | None = None,
         limit: int | None = None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict]:
         raise NotImplementedError("Supabase REST calibration read is not implemented.")
 
@@ -1283,6 +1319,7 @@ class SupabaseRestRepository:
         timeframe: str | None,
         since: datetime | None,
         until: datetime | None,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> dict[str, Any]:
         raise NotImplementedError("Supabase REST snapshot validation read is not implemented.")
 
@@ -1294,6 +1331,7 @@ class SupabaseRestRepository:
         since: datetime | None,
         until: datetime | None,
         limit: int,
+        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     ) -> list[dict[str, Any]]:
         raise NotImplementedError("Supabase REST snapshot validation read is not implemented.")
 
@@ -1681,13 +1719,15 @@ def _execute_calibration_query(
     since: Any | None,
     until: Any | None,
     limit: int | None,
+    prediction_origin: str,
 ) -> None:
     clauses = [
         "p.is_live_data = true",
         "o.is_live_data = true",
         "o.realized_label IN ('UP', 'DOWN', 'TIMEOUT')",
+        "coalesce(p.prediction_origin, 'USER_REQUESTED') = %(prediction_origin)s",
     ]
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"prediction_origin": prediction_origin}
     for key, value, column in (
         ("timeframe", timeframe, "p.timeframe"),
         ("symbol", symbol, "p.symbol"),
@@ -1769,6 +1809,9 @@ def _calibration_row_from_parts(prediction: Mapping[str, Any], outcome: Mapping[
         "prediction_data_source": prediction.get("data_source"),
         "prediction_is_live_data": prediction.get("is_live_data"),
         "cross_provider_state": prediction.get("cross_provider_state"),
+        "prediction_origin": prediction.get(
+            "prediction_origin", DEFAULT_PREDICTION_ORIGIN
+        ),
         "resolved_at_utc": outcome.get("resolved_at_utc"),
         "outcome_close_utc": outcome.get("outcome_close_utc"),
         "outcome_reference_price": outcome.get("outcome_reference_price"),
@@ -1831,6 +1874,7 @@ def _calibration_row_matches(
     normalized_symbol: str | None,
     model_version: str | None,
     methodology_version: str | None,
+    prediction_origin: str,
     since: Any | None,
     until: Any | None,
 ) -> bool:
@@ -1839,6 +1883,8 @@ def _calibration_row_matches(
     if row.get("outcome_is_live_data") is not True:
         return False
     if row.get("realized_label") not in {"UP", "DOWN", "TIMEOUT"}:
+        return False
+    if not _prediction_origin_matches(row, prediction_origin):
         return False
     for expected, key in (
         (timeframe, "timeframe"),
@@ -1905,13 +1951,16 @@ def _execute_feature_snapshot_coverage_query(
     timeframe: str | None,
     since: datetime | None,
     until: datetime | None,
+    prediction_origin: str,
 ) -> None:
     cursor.execute(
         """
         WITH matching_snapshots AS (
           SELECT s.prediction_id, s.timeframe, s.prediction_as_of_utc
           FROM public.prediction_feature_snapshots s
+          JOIN public.predictions p ON p.prediction_id = s.prediction_id
           WHERE s.feature_methodology_version = %(feature_methodology_version)s
+            AND coalesce(p.prediction_origin, 'USER_REQUESTED') = %(prediction_origin)s
             AND (%(timeframe)s IS NULL OR s.timeframe = %(timeframe)s)
             AND (%(until)s IS NULL OR s.prediction_as_of_utc <= %(until)s)
         ),
@@ -1923,6 +1972,7 @@ def _execute_feature_snapshot_coverage_query(
           SELECT p.prediction_id, p.predicted_at_utc
           FROM public.predictions p
           WHERE p.is_live_data = true
+            AND coalesce(p.prediction_origin, 'USER_REQUESTED') = %(prediction_origin)s
             AND (%(timeframe)s IS NULL OR p.timeframe = %(timeframe)s)
             AND (%(until)s IS NULL OR p.predicted_at_utc <= %(until)s)
         ),
@@ -1972,6 +2022,7 @@ def _execute_feature_snapshot_coverage_query(
             "timeframe": timeframe,
             "since": since,
             "until": until,
+            "prediction_origin": prediction_origin,
         },
     )
 
@@ -1984,6 +2035,7 @@ def _execute_feature_snapshot_validation_query(
     since: datetime | None,
     until: datetime | None,
     limit: int,
+    prediction_origin: str,
 ) -> None:
     cursor.execute(
         """
@@ -2003,6 +2055,7 @@ def _execute_feature_snapshot_validation_query(
           AND o.is_live_data = true
           AND o.realized_label IN ('UP', 'DOWN', 'TIMEOUT')
           AND s.feature_methodology_version = %(feature_methodology_version)s
+          AND coalesce(p.prediction_origin, 'USER_REQUESTED') = %(prediction_origin)s
           AND (%(timeframe)s IS NULL OR p.timeframe = %(timeframe)s)
           AND (%(since)s IS NULL OR p.predicted_at_utc >= %(since)s)
           AND (%(until)s IS NULL OR p.predicted_at_utc <= %(until)s)
@@ -2015,6 +2068,7 @@ def _execute_feature_snapshot_validation_query(
             "since": since,
             "until": until,
             "limit": _validation_limit(limit),
+            "prediction_origin": prediction_origin,
         },
     )
 
@@ -2081,6 +2135,29 @@ def _validation_row_from_parts(
         "provider_signature": snapshot.get("provider_signature"),
         "snapshot_payload": deepcopy(snapshot.get("snapshot_payload")),
     }
+
+
+def _prediction_row_with_origin(row: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    normalized["prediction_origin"] = validate_prediction_origin(
+        row.get("prediction_origin", DEFAULT_PREDICTION_ORIGIN)
+    )
+    return normalized
+
+
+def _prediction_origin_matches(
+    row: Mapping[str, Any] | None,
+    expected_origin: str,
+) -> bool:
+    if row is None:
+        return False
+    try:
+        actual = validate_prediction_origin(
+            row.get("prediction_origin", DEFAULT_PREDICTION_ORIGIN)
+        )
+    except ValueError:
+        return False
+    return actual == expected_origin
 
 
 def _validation_limit(limit: int) -> int:

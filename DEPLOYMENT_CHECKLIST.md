@@ -65,6 +65,22 @@ Clarifications:
 
 ## Optional Supabase Persistence Setup
 
+### Wave 4D.3-Ops prediction-origin provenance gate
+
+Before applying `0007_prediction_origin.sql` or deploying its Phase-1 runtime:
+
+- [ ] Query and record the prediction IDs linked to the six historical derivatives smoke
+  snapshots without changing any row.
+- [ ] Confirm that no scheduled-cadence prediction rows exist.
+- [ ] Confirm the current outcome-linkage state for each of those six prediction IDs.
+- [ ] Keep Phase 2 disabled until the legacy smoke predictions are explicitly classified as
+  `CONTROLLED_SMOKE`, or a separately reviewed decision proves they cannot enter calibration.
+- [ ] Treat the migration default as backward compatibility only; do not conceal legacy smoke
+  provenance by assuming those rows were genuinely `USER_REQUESTED`.
+
+Any classification correction is a separate reviewed production-data operation. This change
+does not perform it and does not enable a cadence collector.
+
 - [ ] Create or select a Supabase Postgres project.
 - [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
 - [ ] Apply `migrations/0002_news.sql` in the Supabase SQL Editor before expecting durable news metadata.

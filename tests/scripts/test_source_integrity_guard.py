@@ -112,9 +112,9 @@ def _healthy_http_get(
 def test_intended_identity_is_read_without_importing_runtime() -> None:
     intended = _intended()
 
-    assert intended.release_id == "UCPE-W4D3-DERIV-SNAPSHOT-20260622-A"
-    assert intended.source_milestone == "wave-4d3-derivatives-snapshots"
-    assert intended.fingerprint == "UCPE LIVE BUILD · W4D3-DERIV-SNAPSHOT-20260622-A"
+    assert intended.release_id == "UCPE-W4D3-OPS-COHORT-20260622-A"
+    assert intended.source_milestone == "wave-4d3-ops-prediction-origin"
+    assert intended.fingerprint == "UCPE LIVE BUILD · W4D3-OPS-COHORT-20260622-A"
     assert intended.asset_tokens == {
         "styles_css": "w4c1-ka1-20260621-a",
         "app_js": "w4c1-ka1-20260621-a",

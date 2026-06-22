@@ -1,10 +1,10 @@
 """Source-controlled runtime build fingerprint."""
 
 SCHEMA_VERSION = "build-info.v1"
-RELEASE_ID = "UCPE-W4D3-DERIV-SNAPSHOT-20260622-A"
-RELEASE_LABEL = "Wave 4D.3 Derivatives Evidence Snapshots"
+RELEASE_ID = "UCPE-W4D3-OPS-COHORT-20260622-A"
+RELEASE_LABEL = "Wave 4D.3-Ops Prediction Origin Cohort"
 ENVIRONMENT = "HF_PRODUCTION"
-SOURCE_MILESTONE = "wave-4d3-derivatives-snapshots"
+SOURCE_MILESTONE = "wave-4d3-ops-prediction-origin"
 
 SHORT_RELEASE_ID = RELEASE_ID.removeprefix("UCPE-")
 FINGERPRINT = f"UCPE LIVE BUILD · {SHORT_RELEASE_ID}"

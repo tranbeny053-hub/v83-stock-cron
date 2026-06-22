@@ -180,6 +180,54 @@ def test_validation_row_limit_must_be_positive() -> None:
         )
 
 
+def test_validation_reads_default_to_user_requested_origin() -> None:
+    repository = InMemoryPersistenceRepository()
+    predicted = datetime(2026, 1, 1, tzinfo=UTC)
+    for offset, (identifier, origin) in enumerate(
+        (
+            ("legacy", None),
+            ("user", "USER_REQUESTED"),
+            ("smoke", "CONTROLLED_SMOKE"),
+            ("scheduled", "SCHEDULED_SHADOW_EVIDENCE"),
+        )
+    ):
+        when = predicted + timedelta(days=offset)
+        prediction = _prediction(identifier, when)
+        if origin is not None:
+            prediction["prediction_origin"] = origin
+        repository.save_prediction(prediction)
+        repository.save_prediction_outcome(_outcome(identifier))
+        repository.save_feature_snapshot(_snapshot(identifier, when))
+    repository._predictions["legacy"].pop("prediction_origin")  # noqa: SLF001
+
+    default_coverage = repository.fetch_feature_snapshot_validation_coverage(
+        feature_methodology_version="quant-v2-shadow-v0",
+        timeframe="4H",
+        since=predicted,
+        until=None,
+    )
+    default_rows = repository.fetch_feature_snapshot_validation_rows(
+        feature_methodology_version="quant-v2-shadow-v0",
+        timeframe="4H",
+        since=None,
+        until=None,
+        limit=100,
+    )
+    smoke_rows = repository.fetch_feature_snapshot_validation_rows(
+        feature_methodology_version="quant-v2-shadow-v0",
+        timeframe="4H",
+        since=None,
+        until=None,
+        limit=100,
+        prediction_origin="CONTROLLED_SMOKE",
+    )
+
+    assert default_coverage["live_predictions_all_time"] == 2
+    assert default_coverage["snapshots_all_time"] == 2
+    assert [row["prediction_id"] for row in default_rows] == ["legacy", "user"]
+    assert [row["prediction_id"] for row in smoke_rows] == ["smoke"]
+
+
 class _Cursor:
     def __init__(self, *, row=None, rows=None) -> None:
         self.row = row
@@ -261,8 +309,13 @@ def test_postgres_validation_reads_are_select_only_bounded_and_explicit() -> Non
     assert "JOIN PUBLIC.PREDICTIONS P ON P.PREDICTION_ID = S.PREDICTION_ID" in statements
     assert "JOIN PUBLIC.PREDICTION_OUTCOMES O ON O.PREDICTION_ID = S.PREDICTION_ID" in statements
     assert "ORDER BY P.PREDICTED_AT_UTC ASC, P.PREDICTION_ID ASC" in statements
+    assert statements.count(
+        "COALESCE(P.PREDICTION_ORIGIN, 'USER_REQUESTED') = %(PREDICTION_ORIGIN)S"
+    ) >= 2
     assert not any(term in statements for term in ("INSERT ", "UPDATE ", "DELETE ", "MERGE "))
     assert row_cursor.params[0]["limit"] == 50_000
+    assert coverage_cursor.params[0]["prediction_origin"] == "USER_REQUESTED"
+    assert row_cursor.params[0]["prediction_origin"] == "USER_REQUESTED"
 
 
 def test_rest_validation_reads_are_explicitly_unsupported() -> None:

@@ -7,6 +7,10 @@ from typing import Any
 from crypto_probability_engine.calibration.metrics import compute_calibration_metrics
 from crypto_probability_engine.calibration.schemas import CalibrationReport, SampleGate
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.prediction_origin import (
+    DEFAULT_PREDICTION_ORIGIN,
+    validate_prediction_origin,
+)
 from crypto_probability_engine.persistence.repository import (
     PersistenceRepository,
     build_operator_repository,
@@ -37,9 +41,11 @@ def build_calibration_report(
     since: str | None = None,
     until: str | None = None,
     limit: int | None = None,
+    prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
 ) -> CalibrationReport:
     """Build a JSON-safe diagnostic calibration report without mutating state."""
 
+    prediction_origin = validate_prediction_origin(prediction_origin)
     repository = repository or build_operator_repository(settings or Settings.from_env())
     rows = repository.fetch_resolved_prediction_outcomes_for_calibration(
         timeframe=timeframe,
@@ -50,6 +56,7 @@ def build_calibration_report(
         since=since,
         until=until,
         limit=limit,
+        prediction_origin=prediction_origin,
     )
     computed = compute_calibration_metrics(rows)
     versions_present = _versions_present(rows)

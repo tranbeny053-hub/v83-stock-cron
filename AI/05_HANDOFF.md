@@ -127,3 +127,17 @@
 The Detail view now explains the backend Scenario plan, why it is limited, what confirmation
 is missing, and the mandatory safety notes without inventing a tradable level or instruction.
 Next: Claude review, then deployment and browser DOM QA as a separate approved step.
+## Wave 4D.3-Ops Phase 1 Handoff
+
+- Branch: `codex/wave-4d3-ops-prediction-origin`.
+- Adds migration `0007_prediction_origin.sql` and a shared exact prediction-origin contract.
+- Existing analyses persist `USER_REQUESTED`; explicit controlled/scheduled origins are accepted
+  only through the internal `analyze_request` keyword and never alter identity or response logic.
+- Calibration and Quant V2 shadow validation filter to `USER_REQUESTED` by default and allow a
+  future explicit cohort argument. Resolver behavior is unchanged for every origin.
+- Release contract: `UCPE-W4D3-OPS-COHORT-20260622-A`, milestone
+  `wave-4d3-ops-prediction-origin`; the frontend marker remains backend-driven.
+- The migration has not been applied. Before Phase 2, inventory the six historical derivatives
+  smoke prediction IDs/outcomes and complete a separately reviewed `CONTROLLED_SMOKE`
+  classification or prove they cannot enter calibration.
+- No cadence, workflow, derivatives activation, merge, push, deploy, or production mutation.

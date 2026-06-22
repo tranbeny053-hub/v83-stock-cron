@@ -46,6 +46,21 @@ def test_report_uses_only_two_read_methods_and_is_deterministic() -> None:
     assert first["framework_mode"] == "FRAMEWORK_ONLY"
 
 
+def test_report_passes_requested_prediction_origin_to_both_reads() -> None:
+    repository = ReadOnlyRepository([])
+
+    build_shadow_validation_report(
+        repository,
+        generated_at_utc=GENERATED_AT,
+        prediction_origin="CONTROLLED_SMOKE",
+    )
+
+    assert [call[1]["prediction_origin"] for call in repository.calls] == [
+        "CONTROLLED_SMOKE",
+        "CONTROLLED_SMOKE",
+    ]
+
+
 def test_framework_and_cli_source_contain_no_write_path() -> None:
     sources = [
         path.read_text()

@@ -368,6 +368,19 @@ No phase is releasable because an agent says so. Release requires evidence.
 
 ## Required Evidence
 
+## Wave 4D.3-Ops Phase-1 Cohort Gate
+
+- [ ] `prediction_origin` migration reviewed but not applied by the implementation commit.
+- [ ] Existing analysis callers remain `USER_REQUESTED` by default; invalid origins fail closed.
+- [ ] Calibration and Quant V2 shadow validation default to the `USER_REQUESTED` cohort.
+- [ ] Resolver due-selection remains origin-agnostic.
+- [ ] The six historical derivatives smoke snapshot prediction IDs and outcome links are
+  inventoried before migration/runtime deployment.
+- [ ] Phase 2 remains blocked until those legacy rows are explicitly `CONTROLLED_SMOKE`, or a
+  separate reviewed decision proves they cannot enter calibration.
+- [ ] No cadence workflow, collector, derivatives activation, evidence generation, or production
+  data correction is included in Phase 1.
+
 - Commands run or attempted.
 - Pass/fail/not-run result for each relevant command.
 - Files changed.

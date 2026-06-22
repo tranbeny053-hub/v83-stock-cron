@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from crypto_probability_engine.persistence.prediction_origin import (
+    DEFAULT_PREDICTION_ORIGIN,
+    validate_prediction_origin,
+)
 from crypto_probability_engine.persistence.repository import PersistenceRepository
 from crypto_probability_engine.shadow_validation.binning import (
     apply_frozen_edges,
@@ -48,7 +52,9 @@ def build_shadow_validation_report(
     until: datetime | None = None,
     limit: int = MAX_VALIDATION_ROWS,
     generated_at_utc: str,
+    prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
 ) -> dict[str, Any]:
+    prediction_origin = validate_prediction_origin(prediction_origin)
     bounded_limit = _bounded_limit(limit)
     generated_at = _required_utc_text(generated_at_utc)
     coverage = repository.fetch_feature_snapshot_validation_coverage(
@@ -56,6 +62,7 @@ def build_shadow_validation_report(
         timeframe=timeframe,
         since=since,
         until=until,
+        prediction_origin=prediction_origin,
     )
     raw_rows = repository.fetch_feature_snapshot_validation_rows(
         feature_methodology_version=feature_methodology_version,
@@ -63,6 +70,7 @@ def build_shadow_validation_report(
         since=since,
         until=until,
         limit=bounded_limit,
+        prediction_origin=prediction_origin,
     )
     rows = sanitize_validation_rows(raw_rows)
     cohort_summaries = []

@@ -346,7 +346,9 @@ def test_supabase_postgres_prediction_write_is_do_nothing_on_conflict() -> None:
     assert repo.save_prediction(_sample_prediction()) == "OK"
     statements = "\n".join(cursor.statements)
     assert "INSERT INTO predictions" in statements
+    assert "prediction_origin" in statements
     assert "ON CONFLICT (prediction_id) DO NOTHING" in statements
+    assert cursor.params[-1]["prediction_origin"] == "USER_REQUESTED"
     assert pool.attempts == 1
 
 
@@ -565,6 +567,10 @@ def test_supabase_postgres_calibration_read_is_select_only_and_uses_literal_time
     assert "P.IS_LIVE_DATA = TRUE" in query_upper
     assert "O.IS_LIVE_DATA = TRUE" in query_upper
     assert "O.REALIZED_LABEL IN ('UP', 'DOWN', 'TIMEOUT')" in query_upper
+    assert (
+        "COALESCE(P.PREDICTION_ORIGIN, 'USER_REQUESTED') = %(PREDICTION_ORIGIN)S"
+        in query_upper
+    )
     assert "ORDER BY O.OUTCOME_CLOSE_UTC ASC" in query_upper
     assert "LIMIT %(LIMIT)S" in query_upper
     assert "INSERT" not in query_upper
@@ -579,6 +585,7 @@ def test_supabase_postgres_calibration_read_is_select_only_and_uses_literal_time
         "since": "2026-06-08T00:00:00Z",
         "until": "2026-06-08T01:00:00Z",
         "limit": 25,
+        "prediction_origin": "USER_REQUESTED",
     }
 
 
@@ -754,6 +761,7 @@ def test_supabase_rest_prediction_write_uses_ignore_duplicates() -> None:
         seen.append(request)
         body = request.read().decode("utf-8")
         assert "prediction_id" in body
+        assert '"prediction_origin":"USER_REQUESTED"' in body
         assert "article_body" not in body
         assert request.url.params["on_conflict"] == "prediction_id"
         assert request.headers["prefer"] == "resolution=ignore-duplicates,return=minimal"
