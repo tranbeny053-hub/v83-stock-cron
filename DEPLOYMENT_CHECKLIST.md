@@ -81,6 +81,17 @@ Before applying `0007_prediction_origin.sql` or deploying its Phase-1 runtime:
 Any classification correction is a separate reviewed production-data operation. This change
 does not perform it and does not enable a cadence collector.
 
+### Wave 4D.3-Ops Phase 2A.0 runtime-primitives gate
+
+- [ ] Confirm the release contract is `UCPE-W4D3-OPS-2A0-20260622-A`.
+- [ ] Confirm no collector, cadence workflow, cadence variable, or scheduled evidence run exists.
+- [ ] Keep `UCPE_ENABLE_DERIVATIVES_INTEL=false`; Phase 2A.0 does not activate derivatives.
+- [ ] Coordinate scheduler-subtree source sync with the HF runtime deployment; do not deploy only
+  one side of the integrity comparison.
+- [ ] Require Ops-RT.1 to return `HEALTHY` after deployment.
+- [ ] Keep the Phase 2A collector in a separate reviewed branch and do not generate evidence from
+  these primitives alone.
+
 - [ ] Create or select a Supabase Postgres project.
 - [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
 - [ ] Apply `migrations/0002_news.sql` in the Supabase SQL Editor before expecting durable news metadata.

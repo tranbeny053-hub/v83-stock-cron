@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -26,6 +28,7 @@ from crypto_probability_engine.config.defaults import (
     METHODOLOGY_VERSION,
     MODEL_VERSION,
     TIMEFRAME_SECONDS,
+    min_history_for,
 )
 from crypto_probability_engine.config.env_flags import QUANT_V2_SHADOW_ENABLED
 from crypto_probability_engine.config.settings import Settings
@@ -40,13 +43,9 @@ from crypto_probability_engine.detail.frontend_display import build_frontend_dis
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
 from crypto_probability_engine.persistence.derivatives_snapshot import (
-    DerivativesSnapshotWriteStatus,
     build_derivatives_snapshot,
 )
-from crypto_probability_engine.persistence.feature_snapshot import (
-    FeatureSnapshotWriteStatus,
-    build_feature_snapshot,
-)
+from crypto_probability_engine.persistence.feature_snapshot import build_feature_snapshot
 from crypto_probability_engine.persistence.prediction_origin import (
     DEFAULT_PREDICTION_ORIGIN,
     validate_prediction_origin,
@@ -55,6 +54,10 @@ from crypto_probability_engine.persistence.repository import PersistenceReposito
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
+from crypto_probability_engine.validation.market_data import (
+    DataValidationError,
+    validate_market_snapshot,
+)
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
@@ -79,6 +82,23 @@ class PersistenceWork:
     derivatives_snapshot_build_failed: bool = False
 
 
+@dataclass(frozen=True)
+class _PersistenceConfirmation:
+    prediction: str | None
+    feature_snapshot: str | None
+    derivatives_snapshot: str | None
+    overall: str
+    background_status: str
+
+    def public_result(self) -> dict[str, object]:
+        return {
+            "prediction": self.prediction,
+            "feature_snapshot": self.feature_snapshot,
+            "derivatives_snapshot": self.derivatives_snapshot,
+            "overall": self.overall,
+        }
+
+
 def analyze_request(
     request: AnalysisRequest,
     *,
@@ -86,6 +106,7 @@ def analyze_request(
     run_store: InMemoryRunStore,
     persistence_status: str = "STATELESS",
     prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
+    deterministic_identity: bool = False,
 ) -> dict:
     prediction_origin = validate_prediction_origin(prediction_origin)
     if request.asset_class == AssetClass.CRYPTO_PERP and not settings.enable_derivatives:
@@ -119,13 +140,27 @@ def analyze_request(
     snapshot = selection.snapshot
     provider_state = selection.provider_state
     data_quality = selection.data_quality
+    deterministic_run_id = (
+        _deterministic_cadence_run_id(
+            normalized_symbol=symbol.display,
+            timeframe=request.timeframe,
+            snapshot=snapshot,
+        )
+        if deterministic_identity
+        else None
+    )
     quant_result = run_quant_pipeline(snapshot, provider_state)
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
         settings=settings,
     )
-    run_id = f"run_{uuid4().hex}"
+    if deterministic_identity:
+        if deterministic_run_id is None:
+            raise _cadence_identity_error()
+        run_id = deterministic_run_id
+    else:
+        run_id = f"run_{uuid4().hex}"
     horizon_context = build_horizon_context(request.timeframe)
     frontend_display = build_frontend_display(
         quant_result,
@@ -274,6 +309,75 @@ def _status_for_selection_error(code: ErrorCode) -> int:
     return 503
 
 
+def _deterministic_cadence_run_id(
+    *,
+    normalized_symbol: str,
+    timeframe: str,
+    snapshot,
+) -> str:
+    try:
+        canonical_symbol = normalize_symbol(normalized_symbol).display
+    except (SymbolNormalizationError, TypeError, ValueError) as exc:
+        raise _cadence_identity_error() from exc
+    if (
+        not normalized_symbol
+        or canonical_symbol != normalized_symbol
+        or timeframe not in TIMEFRAME_SECONDS
+    ):
+        raise _cadence_identity_error()
+    try:
+        validate_market_snapshot(snapshot, min_bars=min_history_for(timeframe))
+        candles = tuple(getattr(snapshot, "candles", ()) or ())
+        reference_candle = candles[-1]
+        reference_close = reference_candle.close_time_utc
+        snapshot_as_of = snapshot.as_of_utc
+        snapshot_symbol = str(snapshot.normalized_symbol)
+        snapshot_timeframe = str(snapshot.timeframe)
+    except (AttributeError, DataValidationError, IndexError, TypeError, ValueError) as exc:
+        raise _cadence_identity_error() from exc
+    if (
+        snapshot_symbol != normalized_symbol
+        or snapshot_timeframe != timeframe
+        or not _is_utc_datetime(reference_close)
+        or not _is_utc_datetime(snapshot_as_of)
+        or reference_close > snapshot_as_of
+    ):
+        raise _cadence_identity_error()
+    try:
+        reference_close_utc = _iso_utc(reference_close)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise _cadence_identity_error() from exc
+    material = "|".join(
+        (
+            "derivatives-evidence-cadence-v1",
+            MODEL_VERSION,
+            METHODOLOGY_VERSION,
+            normalized_symbol,
+            timeframe,
+            reference_close_utc,
+        )
+    )
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return f"cadence-{digest[:32]}"
+
+
+def _cadence_identity_error():
+    return api_error(
+        400,
+        ErrorCode.SCHEMA_VALIDATION_FAILED,
+        "Deterministic cadence identity requires a validated fully closed candle.",
+    )
+
+
+def _is_utc_datetime(value: object) -> bool:
+    return bool(
+        isinstance(value, datetime)
+        and value.tzinfo is not None
+        and value.utcoffset() is not None
+        and value.utcoffset() == timedelta(0)
+    )
+
+
 def current_persistence_status(repository: PersistenceRepository | None) -> str:
     if repository is None:
         return "STATELESS"
@@ -312,20 +416,64 @@ def _best_effort_persist(
     work: PersistenceWork,
     repository: PersistenceRepository | None,
 ) -> str:
+    return _persist_work_confirmed(work, repository).background_status
+
+
+def persist_analysis_now(
+    payload: dict,
+    repository,
+) -> dict[str, object]:
+    """Synchronously persist approved analysis artifacts and confirm their statuses."""
+
+    unavailable = {
+        "prediction": None,
+        "feature_snapshot": None,
+        "derivatives_snapshot": None,
+        "overall": "UNAVAILABLE",
+    }
     if repository is None:
-        return "STATELESS"
+        return unavailable
+    try:
+        payload_copy = deepcopy(payload)
+        work = _persistence_work(
+            payload_copy,
+            current_persistence_status(repository),
+            consume_pending=False,
+        )
+        return _persist_work_confirmed(work, repository).public_result()
+    except Exception:
+        _mark_repository_unavailable(repository)
+        return unavailable
+
+
+def _persist_work_confirmed(
+    work: PersistenceWork,
+    repository: PersistenceRepository | None,
+) -> _PersistenceConfirmation:
+    if repository is None:
+        return _PersistenceConfirmation(None, None, None, "UNAVAILABLE", "STATELESS")
+    prediction_confirmation: str | None = None
+    feature_confirmation: str | None = None
+    derivatives_confirmation: str | None = None
+    auxiliary_unavailable = False
+    unexpected_failure = False
+    terminal_repository_unavailable = False
     try:
         statuses = [
-            repository.save_run(work.run_summary),
-            repository.save_timeframe_result(work.timeframe_result),
+            _status_text(repository.save_run(work.run_summary)),
+            _status_text(repository.save_timeframe_result(work.timeframe_result)),
         ]
         statuses.extend(
-            repository.save_provider_observation(row) for row in work.provider_observations
+            _status_text(repository.save_provider_observation(row))
+            for row in work.provider_observations
         )
-        statuses.extend(repository.save_news_item(row) for row in work.news_items)
-        statuses.extend(repository.save_news_cluster(row) for row in work.news_clusters)
+        statuses.extend(_status_text(repository.save_news_item(row)) for row in work.news_items)
         statuses.extend(
-            repository.save_news_evidence_link(row) for row in work.news_evidence_links
+            _status_text(repository.save_news_cluster(row)) for row in work.news_clusters
+        )
+        statuses.extend(
+            _status_text(repository.save_news_evidence_link(row))
+            for row in work.news_evidence_links
         )
         snapshot_rows = {
             str(row.get("prediction_id", "")): row for row in work.feature_snapshot_rows
@@ -337,7 +485,11 @@ def _best_effort_persist(
         snapshot_issue = work.feature_snapshot_build_failed
         derivatives_snapshot_issue = work.derivatives_snapshot_build_failed
         for prediction_row in work.prediction_rows:
-            prediction_status = repository.save_prediction(prediction_row)
+            prediction_status = _status_text(repository.save_prediction(prediction_row))
+            prediction_confirmation = _merge_artifact_status(
+                prediction_confirmation,
+                prediction_status,
+            )
             statuses.append(prediction_status)
             if prediction_status not in {"OK", "STATELESS"}:
                 continue
@@ -347,11 +499,12 @@ def _best_effort_persist(
             if snapshot_row is None or not callable(save_snapshot):
                 snapshot_issue = True
             else:
-                snapshot_status = save_snapshot(snapshot_row)
-                if snapshot_status in {
-                    FeatureSnapshotWriteStatus.CONFLICT,
-                    FeatureSnapshotWriteStatus.UNAVAILABLE,
-                }:
+                snapshot_status = _status_text(save_snapshot(snapshot_row))
+                feature_confirmation = _merge_artifact_status(
+                    feature_confirmation,
+                    snapshot_status,
+                )
+                if snapshot_status not in {"INSERTED", "IDENTICAL_DUPLICATE"}:
                     snapshot_issue = True
             derivatives_snapshot_row = derivatives_snapshot_rows.pop(
                 prediction_id, None
@@ -363,12 +516,16 @@ def _best_effort_persist(
                 if not callable(save_derivatives_snapshot):
                     derivatives_snapshot_issue = True
                 else:
-                    derivatives_snapshot_status = save_derivatives_snapshot(
-                        derivatives_snapshot_row
+                    derivatives_snapshot_status = _status_text(
+                        save_derivatives_snapshot(derivatives_snapshot_row)
                     )
-                    if derivatives_snapshot_status in {
-                        DerivativesSnapshotWriteStatus.CONFLICT,
-                        DerivativesSnapshotWriteStatus.UNAVAILABLE,
+                    derivatives_confirmation = _merge_artifact_status(
+                        derivatives_confirmation,
+                        derivatives_snapshot_status,
+                    )
+                    if derivatives_snapshot_status not in {
+                        "INSERTED",
+                        "IDENTICAL_DUPLICATE",
                     }:
                         derivatives_snapshot_issue = True
         if snapshot_rows:
@@ -376,18 +533,74 @@ def _best_effort_persist(
         if derivatives_snapshot_rows:
             derivatives_snapshot_issue = True
     except Exception:
-        mark_unavailable = getattr(repository, "mark_unavailable", None)
-        if callable(mark_unavailable):
+        unexpected_failure = True
+        snapshot_issue = True
+        derivatives_snapshot_issue = True
+        statuses = []
+    auxiliary_unavailable = any(status == "UNAVAILABLE" for status in statuses)
+    persistence_unavailable = (
+        unexpected_failure
+        or auxiliary_unavailable
+        or snapshot_issue
+        or derivatives_snapshot_issue
+    )
+    if persistence_unavailable:
+        if unexpected_failure or (
+            not auxiliary_unavailable
+            and (snapshot_issue or derivatives_snapshot_issue)
+        ):
+            _mark_repository_unavailable(repository)
+        background_status = "UNAVAILABLE"
+    else:
+        try:
+            background_status = _status_text(repository.persistence_status()) or "UNAVAILABLE"
+            terminal_repository_unavailable = background_status == "UNAVAILABLE"
+        except Exception:
+            _mark_repository_unavailable(repository)
+            background_status = "UNAVAILABLE"
+            unexpected_failure = True
+
+    prediction_succeeded = prediction_confirmation in {"OK", "STATELESS"}
+    if (
+        unexpected_failure
+        or auxiliary_unavailable
+        or terminal_repository_unavailable
+        or not prediction_succeeded
+    ):
+        overall = "UNAVAILABLE"
+    elif snapshot_issue or derivatives_snapshot_issue:
+        overall = "PARTIAL"
+    else:
+        overall = "OK"
+    return _PersistenceConfirmation(
+        prediction_confirmation,
+        feature_confirmation,
+        derivatives_confirmation,
+        overall,
+        background_status,
+    )
+
+
+def _status_text(status: object) -> str | None:
+    if status is None:
+        return None
+    value = getattr(status, "value", status)
+    return value if isinstance(value, str) else str(value)
+
+
+def _merge_artifact_status(current: str | None, new: str | None) -> str | None:
+    if current is None:
+        return new
+    return current if current == new else "UNAVAILABLE"
+
+
+def _mark_repository_unavailable(repository) -> None:
+    mark_unavailable = getattr(repository, "mark_unavailable", None)
+    if callable(mark_unavailable):
+        try:
             mark_unavailable()
-        return "UNAVAILABLE"
-    if any(status == "UNAVAILABLE" for status in statuses):
-        return "UNAVAILABLE"
-    if snapshot_issue or derivatives_snapshot_issue:
-        mark_unavailable = getattr(repository, "mark_unavailable", None)
-        if callable(mark_unavailable):
-            mark_unavailable()
-        return "UNAVAILABLE"
-    return repository.persistence_status()
+        except Exception:
+            pass
 
 
 def _remember_prediction_persistence(
@@ -416,17 +629,48 @@ def _remember_prediction_persistence(
 def _pop_prediction_persistence(
     payload: dict,
 ) -> tuple[list[dict], list[dict], bool, list[dict], bool]:
+    return _prediction_persistence(payload, consume=True)
+
+
+def _peek_prediction_persistence(
+    payload: dict,
+) -> tuple[list[dict], list[dict], bool, list[dict], bool]:
+    return _prediction_persistence(payload, consume=False)
+
+
+def _prediction_persistence(
+    payload: dict,
+    *,
+    consume: bool,
+) -> tuple[list[dict], list[dict], bool, list[dict], bool]:
     run_id = str(payload.get("run_id") or "")
     if not run_id:
         return [], [], False, [], False
     with _PENDING_PREDICTION_LOCK:
-        prediction_row = _PENDING_PREDICTION_ROWS.pop(run_id, None)
+        prediction_row = _pending_value(
+            _PENDING_PREDICTION_ROWS,
+            run_id,
+            consume=consume,
+        )
         had_snapshot_marker = run_id in _PENDING_FEATURE_SNAPSHOT_ROWS
-        feature_snapshot_row = _PENDING_FEATURE_SNAPSHOT_ROWS.pop(run_id, None)
+        feature_snapshot_row = _pending_value(
+            _PENDING_FEATURE_SNAPSHOT_ROWS,
+            run_id,
+            consume=consume,
+        )
         had_derivatives_marker = run_id in _PENDING_DERIVATIVES_SNAPSHOT_ROWS
-        derivatives_snapshot_row = _PENDING_DERIVATIVES_SNAPSHOT_ROWS.pop(run_id, None)
-        derivatives_snapshot_required = _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED.pop(
-            run_id, False
+        derivatives_snapshot_row = _pending_value(
+            _PENDING_DERIVATIVES_SNAPSHOT_ROWS,
+            run_id,
+            consume=consume,
+        )
+        derivatives_snapshot_required = bool(
+            _pending_value(
+                _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED,
+                run_id,
+                consume=consume,
+                default=False,
+            )
         )
     prediction_rows = [prediction_row] if prediction_row is not None else []
     feature_snapshot_rows = (
@@ -450,6 +694,17 @@ def _pop_prediction_persistence(
         derivatives_snapshot_rows,
         derivatives_build_failed,
     )
+
+
+def _pending_value(
+    values: dict,
+    run_id: str,
+    *,
+    consume: bool,
+    default=None,
+):
+    value = values.pop(run_id, default) if consume else values.get(run_id, default)
+    return deepcopy(value)
 
 
 def _prediction_row(
@@ -539,7 +794,12 @@ def _iso_utc(value: datetime) -> str:
     return _coerce_utc_datetime(value).isoformat().replace("+00:00", "Z")
 
 
-def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork:
+def _persistence_work(
+    payload: dict,
+    persistence_status: str,
+    *,
+    consume_pending: bool = True,
+) -> PersistenceWork:
     run_summary = _run_summary(payload)
     run_summary["persistence_status"] = persistence_status
     (
@@ -548,7 +808,11 @@ def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork
         snapshot_build_failed,
         derivatives_snapshot_rows,
         derivatives_snapshot_build_failed,
-    ) = _pop_prediction_persistence(payload)
+    ) = (
+        _pop_prediction_persistence(payload)
+        if consume_pending
+        else _peek_prediction_persistence(payload)
+    )
     return PersistenceWork(
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),

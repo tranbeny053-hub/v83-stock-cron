@@ -184,3 +184,17 @@ insufficient, `1W` 0 no samples, and `1M` 0 no samples. No timeframe is measured
   historical derivatives smoke predictions and their outcome links.
 - No cadence collector, scheduler, evidence generation, derivatives activation, or production
   mutation is part of this phase.
+
+## Wave 4D.3-Ops Phase 2A.0 — Cadence Runtime Primitives
+
+- Adds an opt-in deterministic identity mode derived from the canonical normalized symbol,
+  timeframe, model/methodology versions, and latest validated closed-candle timestamp.
+- Adds synchronous persist-and-confirm by reusing the existing persistence work builders,
+  ordering, parent gates, and repository methods; no SQL or persistence implementation changes.
+- Default analyses keep UUID run IDs and unchanged response/decision behavior.
+- Release source advances to `UCPE-W4D3-OPS-2A0-20260622-A`.
+- Runtime primitives only: no collector, workflow, cadence schedule, evidence generation,
+  migration, or derivatives activation exists. The production derivatives flag remains false.
+- Any later deployment requires coordinated scheduler-subtree source sync and HF deployment,
+  followed by an Ops-RT.1 `HEALTHY` result.
+- The Phase 2A collector remains a separate, later reviewed branch.

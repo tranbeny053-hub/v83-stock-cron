@@ -381,6 +381,19 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] No cadence workflow, collector, derivatives activation, evidence generation, or production
   data correction is included in Phase 1.
 
+## Wave 4D.3-Ops Phase 2A.0 Runtime-Primitives Gate
+
+- [ ] Default user analysis retains `run_<uuid hex>` identity and frozen-fixture output.
+- [ ] Deterministic identity fails closed unless the canonical latest candle is fully closed and
+  UTC-valid.
+- [ ] Synchronous persistence confirmation reuses existing builders, repository methods,
+  ordering, parent gates, and immutable duplicate semantics.
+- [ ] Caller payload remains unchanged and persistence exceptions return sanitized status only.
+- [ ] No collector, workflow, schedule, cadence variable, migration, evidence generation, or
+  derivatives activation is included.
+- [ ] Coordinated scheduler-subtree/HF deployment is followed by an Ops-RT.1 `HEALTHY` result.
+- [ ] Phase 2A collector implementation remains a later independent review gate.
+
 - Commands run or attempted.
 - Pass/fail/not-run result for each relevant command.
 - Files changed.

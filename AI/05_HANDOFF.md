@@ -141,3 +141,25 @@ Next: Claude review, then deployment and browser DOM QA as a separate approved s
   smoke prediction IDs/outcomes and complete a separately reviewed `CONTROLLED_SMOKE`
   classification or prove they cannot enter calibration.
 - No cadence, workflow, derivatives activation, merge, push, deploy, or production mutation.
+
+## Wave 4D.3-Ops Phase 2A.0 Handoff
+
+- Branch: `codex/wave-4d3-ops-2a0-cadence-runtime`.
+- Adds only deterministic closed-candle identity and synchronous persistence confirmation to the
+  existing analysis service; normal callers remain unchanged.
+- Persistence confirmation reuses the approved work projection, repository writes, ordering,
+  parent-success gates, and immutable duplicate classifications.
+- Release contract: `UCPE-W4D3-OPS-2A0-20260622-A`, milestone
+  `wave-4d3-ops-2a0-cadence-runtime`.
+- No collector or workflow exists, no evidence was generated, no cadence is active, and the
+  production derivatives flag remains false.
+- A future coordinated deployment must sync the scheduler subtree and HF runtime, then confirm
+  Ops-RT.1 is `HEALTHY`. Collector work remains a separate independent branch.
+- Verification: 554 offline tests passed; Ruff, schemas, manual smoke, build-info, forbidden-scope,
+  secret, full-article-body, protected-diff, and whitespace checks passed.
+- Changed scope: analysis service, canonical build identity, focused API/release tests, and the
+  four approved state/deployment documents. Read unchanged: persistence repositories and snapshot
+  builders, derivatives runtime, API schemas/app, workflows, migrations, frontend, and scripts.
+- Remaining risk: the synchronous helper depends on the existing in-process pending handoff and
+  is intended for a later one-shot manual collector; no collector or cross-process contract exists
+  in this phase.
