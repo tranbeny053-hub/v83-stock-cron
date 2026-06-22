@@ -2,6 +2,35 @@
 
 Updated: 2026-06-22
 
+## Wave 4D.3 Immutable Derivatives Evidence Snapshots
+
+- Branch: `codex/wave-4d3-derivatives-snapshots`, based on the merged 4D.2 milestone.
+- Added an unapplied additive migration for immutable prediction-linked derivatives snapshots.
+- Eligible `ACTIVE`, `DEGRADED`, and `UNAVAILABLE` shadow blocks are projected through explicit
+  nested allowlists; `DISABLED`, malformed, mismatched, or timestamp-inconsistent blocks are not
+  persisted.
+- Both the core prediction timestamp and the later derivatives observation timestamp are retained
+  in dedicated columns and the immutable payload.
+- First-write-wins storage distinguishes inserted rows, identical retries, conflicts, and
+  repository unavailability without overwriting original evidence.
+- RLS is enabled with no client policy. The server role receives only `SELECT` and `INSERT`, and
+  database triggers reject update, delete, and truncate operations at the data plane.
+- Snapshot construction occurs after response validation and identity finalization. Persistence is
+  parent-gated after the prediction and existing Quant V2 feature snapshot paths; failures degrade
+  persistence health but cannot fail core analysis.
+- No validation, outcome join, backfill, frontend, provider-runtime, decision, Quant V2, resolver,
+  or calibration behavior is added or changed.
+
+## Wave 4D.3 Release Boundary
+
+- Runtime fingerprint source is `UCPE-W4D3-DERIV-SNAPSHOT-20260622-A`.
+- Migration `0006_prediction_derivatives_snapshots.sql` has not been applied.
+- Next gate: Claude merge-readiness review before merge and before migration approval.
+
+---
+
+Updated: 2026-06-22
+
 ## Wave 4D.2 Derivatives Intelligence Shadow Runtime
 
 - Branch: `codex/wave-4d2-derivatives-runtime`, based on `dev` at `87eb22c`.

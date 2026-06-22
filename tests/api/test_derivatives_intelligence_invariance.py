@@ -24,8 +24,11 @@ def analyze(*, enabled: bool) -> tuple[dict, list[dict], list[dict]]:
         settings=Settings(data_mode="fixture", enable_derivatives_intel=enabled),
         run_store=InMemoryRunStore(),
     )
-    predictions, snapshots, failed = _pop_prediction_persistence(payload)
+    predictions, snapshots, failed, _, derivatives_failed = (
+        _pop_prediction_persistence(payload)
+    )
     assert not failed
+    assert not derivatives_failed
     return payload, predictions, snapshots
 
 

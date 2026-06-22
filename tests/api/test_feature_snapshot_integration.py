@@ -94,3 +94,5 @@ def test_snapshot_attachment_does_not_change_response_identity_or_decisions(monk
     with analysis_service._PENDING_PREDICTION_LOCK:  # noqa: SLF001
         analysis_service._PENDING_PREDICTION_ROWS.clear()  # noqa: SLF001
         analysis_service._PENDING_FEATURE_SNAPSHOT_ROWS.clear()  # noqa: SLF001
+        analysis_service._PENDING_DERIVATIVES_SNAPSHOT_ROWS.clear()  # noqa: SLF001
+        analysis_service._PENDING_DERIVATIVES_SNAPSHOT_REQUIRED.clear()  # noqa: SLF001

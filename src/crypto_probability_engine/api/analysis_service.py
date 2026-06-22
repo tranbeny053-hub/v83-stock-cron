@@ -39,6 +39,10 @@ from crypto_probability_engine.detail.decision_synthesis import build_decision_s
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.derivatives_snapshot import (
+    DerivativesSnapshotWriteStatus,
+    build_derivatives_snapshot,
+)
 from crypto_probability_engine.persistence.feature_snapshot import (
     FeatureSnapshotWriteStatus,
     build_feature_snapshot,
@@ -51,6 +55,8 @@ from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
 _PENDING_FEATURE_SNAPSHOT_ROWS: dict[str, dict | None] = {}
+_PENDING_DERIVATIVES_SNAPSHOT_ROWS: dict[str, dict | None] = {}
+_PENDING_DERIVATIVES_SNAPSHOT_REQUIRED: dict[str, bool] = {}
 _PENDING_PREDICTION_LOCK = threading.Lock()
 
 
@@ -65,6 +71,8 @@ class PersistenceWork:
     prediction_rows: tuple[dict, ...] = ()
     feature_snapshot_rows: tuple[dict, ...] = ()
     feature_snapshot_build_failed: bool = False
+    derivatives_snapshot_rows: tuple[dict, ...] = ()
+    derivatives_snapshot_build_failed: bool = False
 
 
 def analyze_request(
@@ -225,8 +233,27 @@ def analyze_request(
     )
     feature_snapshot_row = build_feature_snapshot(prediction_row, response["quant_v2"])
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
+    derivatives_block = validated["derivatives_intelligence"]
+    derivatives_snapshot_required = derivatives_block["block_status"] in {
+        "ACTIVE",
+        "DEGRADED",
+        "UNAVAILABLE",
+    }
+    try:
+        derivatives_snapshot_row = build_derivatives_snapshot(
+            prediction_row,
+            derivatives_block,
+        )
+    except Exception:
+        derivatives_snapshot_row = None
     if prediction_row is not None:
-        _remember_prediction_persistence(run_id, prediction_row, feature_snapshot_row)
+        _remember_prediction_persistence(
+            run_id,
+            prediction_row,
+            feature_snapshot_row,
+            derivatives_snapshot_row,
+            derivatives_snapshot_required=derivatives_snapshot_required,
+        )
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
@@ -296,26 +323,51 @@ def _best_effort_persist(
         snapshot_rows = {
             str(row.get("prediction_id", "")): row for row in work.feature_snapshot_rows
         }
+        derivatives_snapshot_rows = {
+            str(row.get("prediction_id", "")): row
+            for row in work.derivatives_snapshot_rows
+        }
         snapshot_issue = work.feature_snapshot_build_failed
+        derivatives_snapshot_issue = work.derivatives_snapshot_build_failed
         for prediction_row in work.prediction_rows:
             prediction_status = repository.save_prediction(prediction_row)
             statuses.append(prediction_status)
-            if prediction_status == "UNAVAILABLE":
+            if prediction_status not in {"OK", "STATELESS"}:
                 continue
             prediction_id = str(prediction_row.get("prediction_id", ""))
             snapshot_row = snapshot_rows.pop(prediction_id, None)
             save_snapshot = getattr(repository, "save_feature_snapshot", None)
             if snapshot_row is None or not callable(save_snapshot):
                 snapshot_issue = True
-                continue
-            snapshot_status = save_snapshot(snapshot_row)
-            if snapshot_status in {
-                FeatureSnapshotWriteStatus.CONFLICT,
-                FeatureSnapshotWriteStatus.UNAVAILABLE,
-            }:
-                snapshot_issue = True
+            else:
+                snapshot_status = save_snapshot(snapshot_row)
+                if snapshot_status in {
+                    FeatureSnapshotWriteStatus.CONFLICT,
+                    FeatureSnapshotWriteStatus.UNAVAILABLE,
+                }:
+                    snapshot_issue = True
+            derivatives_snapshot_row = derivatives_snapshot_rows.pop(
+                prediction_id, None
+            )
+            if derivatives_snapshot_row is not None:
+                save_derivatives_snapshot = getattr(
+                    repository, "save_derivatives_snapshot", None
+                )
+                if not callable(save_derivatives_snapshot):
+                    derivatives_snapshot_issue = True
+                else:
+                    derivatives_snapshot_status = save_derivatives_snapshot(
+                        derivatives_snapshot_row
+                    )
+                    if derivatives_snapshot_status in {
+                        DerivativesSnapshotWriteStatus.CONFLICT,
+                        DerivativesSnapshotWriteStatus.UNAVAILABLE,
+                    }:
+                        derivatives_snapshot_issue = True
         if snapshot_rows:
             snapshot_issue = True
+        if derivatives_snapshot_rows:
+            derivatives_snapshot_issue = True
     except Exception:
         mark_unavailable = getattr(repository, "mark_unavailable", None)
         if callable(mark_unavailable):
@@ -323,7 +375,7 @@ def _best_effort_persist(
         return "UNAVAILABLE"
     if any(status == "UNAVAILABLE" for status in statuses):
         return "UNAVAILABLE"
-    if snapshot_issue:
+    if snapshot_issue or derivatives_snapshot_issue:
         mark_unavailable = getattr(repository, "mark_unavailable", None)
         if callable(mark_unavailable):
             mark_unavailable()
@@ -335,22 +387,40 @@ def _remember_prediction_persistence(
     run_id: str,
     prediction_row: dict,
     feature_snapshot_row: dict | None,
+    derivatives_snapshot_row: dict | None,
+    *,
+    derivatives_snapshot_required: bool,
 ) -> None:
     with _PENDING_PREDICTION_LOCK:
         _PENDING_PREDICTION_ROWS[run_id] = dict(prediction_row)
         _PENDING_FEATURE_SNAPSHOT_ROWS[run_id] = (
             dict(feature_snapshot_row) if feature_snapshot_row is not None else None
         )
+        _PENDING_DERIVATIVES_SNAPSHOT_ROWS[run_id] = (
+            dict(derivatives_snapshot_row)
+            if derivatives_snapshot_row is not None
+            else None
+        )
+        _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED[run_id] = bool(
+            derivatives_snapshot_required
+        )
 
 
-def _pop_prediction_persistence(payload: dict) -> tuple[list[dict], list[dict], bool]:
+def _pop_prediction_persistence(
+    payload: dict,
+) -> tuple[list[dict], list[dict], bool, list[dict], bool]:
     run_id = str(payload.get("run_id") or "")
     if not run_id:
-        return [], [], False
+        return [], [], False, [], False
     with _PENDING_PREDICTION_LOCK:
         prediction_row = _PENDING_PREDICTION_ROWS.pop(run_id, None)
         had_snapshot_marker = run_id in _PENDING_FEATURE_SNAPSHOT_ROWS
         feature_snapshot_row = _PENDING_FEATURE_SNAPSHOT_ROWS.pop(run_id, None)
+        had_derivatives_marker = run_id in _PENDING_DERIVATIVES_SNAPSHOT_ROWS
+        derivatives_snapshot_row = _PENDING_DERIVATIVES_SNAPSHOT_ROWS.pop(run_id, None)
+        derivatives_snapshot_required = _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED.pop(
+            run_id, False
+        )
     prediction_rows = [prediction_row] if prediction_row is not None else []
     feature_snapshot_rows = (
         [feature_snapshot_row] if feature_snapshot_row is not None else []
@@ -358,7 +428,21 @@ def _pop_prediction_persistence(payload: dict) -> tuple[list[dict], list[dict], 
     build_failed = prediction_row is not None and (
         not had_snapshot_marker or feature_snapshot_row is None
     )
-    return prediction_rows, feature_snapshot_rows, build_failed
+    derivatives_snapshot_rows = (
+        [derivatives_snapshot_row] if derivatives_snapshot_row is not None else []
+    )
+    derivatives_build_failed = (
+        prediction_row is not None
+        and derivatives_snapshot_required
+        and (not had_derivatives_marker or derivatives_snapshot_row is None)
+    )
+    return (
+        prediction_rows,
+        feature_snapshot_rows,
+        build_failed,
+        derivatives_snapshot_rows,
+        derivatives_build_failed,
+    )
 
 
 def _prediction_row(
@@ -448,9 +532,13 @@ def _iso_utc(value: datetime) -> str:
 def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork:
     run_summary = _run_summary(payload)
     run_summary["persistence_status"] = persistence_status
-    prediction_rows, feature_snapshot_rows, snapshot_build_failed = (
-        _pop_prediction_persistence(payload)
-    )
+    (
+        prediction_rows,
+        feature_snapshot_rows,
+        snapshot_build_failed,
+        derivatives_snapshot_rows,
+        derivatives_snapshot_build_failed,
+    ) = _pop_prediction_persistence(payload)
     return PersistenceWork(
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),
@@ -461,6 +549,8 @@ def _persistence_work(payload: dict, persistence_status: str) -> PersistenceWork
         prediction_rows=tuple(prediction_rows),
         feature_snapshot_rows=tuple(feature_snapshot_rows),
         feature_snapshot_build_failed=snapshot_build_failed,
+        derivatives_snapshot_rows=tuple(derivatives_snapshot_rows),
+        derivatives_snapshot_build_failed=derivatives_snapshot_build_failed,
     )
 
 

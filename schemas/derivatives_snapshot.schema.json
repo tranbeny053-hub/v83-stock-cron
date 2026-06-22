@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prediction_id",
+    "run_id",
+    "normalized_symbol",
+    "derivatives_schema_version",
+    "derivatives_methodology_version",
+    "influence_mode",
+    "decision_influence_frac",
+    "block_status",
+    "core_prediction_as_of_utc",
+    "observation_as_of_utc",
+    "snapshot_payload",
+    "snapshot_hash"
+  ],
+  "properties": {
+    "prediction_id": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "normalized_symbol": { "type": "string", "minLength": 1 },
+    "derivatives_schema_version": { "const": "deriv-intel.v0" },
+    "derivatives_methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "influence_mode": { "const": "SHADOW_ONLY" },
+    "decision_influence_frac": { "const": 0.0 },
+    "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE"] },
+    "core_prediction_as_of_utc": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
+    },
+    "observation_as_of_utc": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
+    },
+    "snapshot_payload": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/snapshotPayload"
+    },
+    "snapshot_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "created_at": {
+      "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T.+(?:Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "providerSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "status",
+        "valid_metric_count",
+        "total_metric_count",
+        "reason"
+      ],
+      "properties": {
+        "provider": { "enum": ["BINANCE_USDM", "OKX_SWAP"] },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "DEGRADED_PARTIAL",
+            "UNSUPPORTED_INSTRUMENT",
+            "INSTRUMENT_INACTIVE",
+            "PROVIDER_UNAVAILABLE",
+            "NO_VALID_METRIC"
+          ]
+        },
+        "valid_metric_count": { "type": "integer", "minimum": 0 },
+        "total_metric_count": { "type": "integer", "minimum": 0 },
+        "reason": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "AVAILABLE" } } },
+          "then": { "properties": { "reason": { "type": "null" } } },
+          "else": { "properties": { "reason": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "comparability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_class",
+        "left_provider",
+        "right_provider",
+        "comparable",
+        "reason"
+      ],
+      "properties": {
+        "semantic_class": { "enum": ["CURRENT_FUNDING", "CURRENT_OPEN_INTEREST"] },
+        "left_provider": { "const": "BINANCE_USDM" },
+        "right_provider": { "const": "OKX_SWAP" },
+        "comparable": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "snapshotPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "methodology_version",
+        "influence_mode",
+        "decision_influence_frac",
+        "normalized_symbol",
+        "core_prediction_as_of_utc",
+        "observation_as_of_utc",
+        "block_status",
+        "provider_summary",
+        "metrics",
+        "comparability",
+        "disagreement",
+        "warnings",
+        "not_trade_command",
+        "not_financial_advice"
+      ],
+      "properties": {
+        "schema_version": { "const": "deriv-intel.v0" },
+        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "influence_mode": { "const": "SHADOW_ONLY" },
+        "decision_influence_frac": { "const": 0.0 },
+        "normalized_symbol": { "type": "string", "minLength": 1 },
+        "core_prediction_as_of_utc": {
+          "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
+        },
+        "observation_as_of_utc": {
+          "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
+        },
+        "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE"] },
+        "provider_summary": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/providerSummary"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "derivatives_metric.schema.json" }
+        },
+        "comparability": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/comparability"
+          }
+        },
+        "disagreement": { "type": "array", "maxItems": 0 },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "not_trade_command": { "const": true },
+        "not_financial_advice": { "const": true }
+      }
+    }
+  }
+}

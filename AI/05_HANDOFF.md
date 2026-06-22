@@ -1,5 +1,29 @@
 # Handoff Packet
 
+## Wave 4D.3 Review Handoff — 2026-06-22
+
+- Goal: persist the already-built 4D.2 derivatives block as immutable, prediction-linked shadow
+  evidence without changing the response or any analysis artifact.
+- Branch: `codex/wave-4d3-derivatives-snapshots`; base tag
+  `wave-4d2-derivatives-intel-runtime`.
+- Eligibility: only `ACTIVE`, `DEGRADED`, and `UNAVAILABLE` blocks with valid shadow constants,
+  matching normalized symbol/core timestamp, and a non-earlier observation timestamp.
+- Projection: exact top-level, provider-summary, provenance-metric, and comparability allowlists;
+  presentation text, raw envelopes, unknown future fields, and non-finite values are excluded or
+  rejected.
+- Immutability: canonical full-envelope SHA-256 plus insert-ignore/read-classify semantics across
+  memory, PostgreSQL, and REST repositories. Conflicts never overwrite the first row.
+- Database boundary: RLS enabled, no client policies, server-role `SELECT`/`INSERT` only, with
+  update/delete/truncate rejection triggers. The migration is source-only and remains unapplied.
+- Persistence ordering: prediction ledger, existing Quant V2 snapshot, then derivatives snapshot;
+  parent failure prevents an orphan write, and derivatives failure never escapes core analysis.
+- Safety: `SHADOW_ONLY`, decision influence zero, no validation, backfill, promotion, frontend,
+  provider collection, resolver, calibration, probability, gate, or decision change.
+- Fingerprint: `UCPE-W4D3-DERIV-SNAPSHOT-20260622-A`.
+- Next: Claude reviews the one implementation commit before any merge or migration action.
+
+---
+
 ## Wave 4D.2 Review Handoff — 2026-06-22
 
 - Goal: add a default-OFF, public-only derivatives context block without changing any protected

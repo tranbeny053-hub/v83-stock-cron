@@ -15,6 +15,9 @@ from typing import Any, Literal, Protocol
 import httpx
 
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.derivatives_snapshot import (
+    DerivativesSnapshotWriteStatus,
+)
 from crypto_probability_engine.persistence.feature_snapshot import (
     FeatureSnapshotWriteStatus,
 )
@@ -51,6 +54,11 @@ class PersistenceRepository(Protocol):
         self, row: Mapping[str, Any]
     ) -> FeatureSnapshotWriteStatus:
         """Persist immutable prediction-time Quant V2 evidence."""
+
+    def save_derivatives_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> DerivativesSnapshotWriteStatus:
+        """Persist immutable prediction-linked derivatives evidence."""
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         """Fetch due live predictions with no immutable outcome row yet."""
@@ -121,6 +129,7 @@ class InMemoryPersistenceRepository:
         self._news_evidence_links: list[dict] = []
         self._predictions: OrderedDict[str, dict] = OrderedDict()
         self._feature_snapshots: OrderedDict[str, dict] = OrderedDict()
+        self._derivatives_snapshots: OrderedDict[str, dict] = OrderedDict()
         self._prediction_outcomes: OrderedDict[str, dict] = OrderedDict()
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
 
@@ -185,6 +194,27 @@ class InMemoryPersistenceRepository:
         """Return an isolated snapshot copy for focused internal tests."""
 
         row = self._feature_snapshots.get(prediction_id)
+        return deepcopy(row) if row is not None else None
+
+    def save_derivatives_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> DerivativesSnapshotWriteStatus:
+        prediction_id = str(row.get("prediction_id", ""))
+        snapshot_hash = str(row.get("snapshot_hash", ""))
+        if not prediction_id or not snapshot_hash:
+            return DerivativesSnapshotWriteStatus.UNAVAILABLE
+        existing = self._derivatives_snapshots.get(prediction_id)
+        if existing is None:
+            self._derivatives_snapshots[prediction_id] = deepcopy(dict(row))
+            return DerivativesSnapshotWriteStatus.INSERTED
+        if str(existing.get("snapshot_hash", "")) == snapshot_hash:
+            return DerivativesSnapshotWriteStatus.IDENTICAL_DUPLICATE
+        return DerivativesSnapshotWriteStatus.CONFLICT
+
+    def get_derivatives_snapshot(self, prediction_id: str) -> dict | None:
+        """Return an isolated derivatives snapshot copy for focused tests."""
+
+        row = self._derivatives_snapshots.get(prediction_id)
         return deepcopy(row) if row is not None else None
 
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
@@ -701,6 +731,26 @@ class SupabasePersistenceRepository:
             return FeatureSnapshotWriteStatus.UNAVAILABLE
         return result
 
+    def save_derivatives_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> DerivativesSnapshotWriteStatus:
+        database_row = dict(row)
+        database_row["snapshot_payload"] = json.dumps(
+            row.get("snapshot_payload"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        status, result = self._run_db(
+            lambda cursor: _insert_derivatives_snapshot(cursor, database_row)
+        )
+        if status == "UNAVAILABLE" or not isinstance(
+            result, DerivativesSnapshotWriteStatus
+        ):
+            return DerivativesSnapshotWriteStatus.UNAVAILABLE
+        return result
+
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         if not self.maybe_can_attempt():
             raise RuntimeError(
@@ -1135,6 +1185,43 @@ class SupabaseRestRepository:
             return FeatureSnapshotWriteStatus.CONFLICT
         return FeatureSnapshotWriteStatus.UNAVAILABLE
 
+    def save_derivatives_snapshot(
+        self, row: Mapping[str, Any]
+    ) -> DerivativesSnapshotWriteStatus:
+        status, inserted = self._run_rest(
+            lambda: self._request(
+                "POST",
+                "prediction_derivatives_snapshots",
+                json=dict(row),
+                params={"on_conflict": "prediction_id"},
+                prefer="resolution=ignore-duplicates,return=representation",
+            )
+        )
+        if status == "UNAVAILABLE":
+            return DerivativesSnapshotWriteStatus.UNAVAILABLE
+        if _rest_returned_inserted_snapshot(inserted):
+            return DerivativesSnapshotWriteStatus.INSERTED
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "prediction_derivatives_snapshots",
+                params={
+                    "select": "prediction_id,snapshot_hash",
+                    "prediction_id": f"eq.{row.get('prediction_id', '')}",
+                    "limit": "1",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list) or not rows:
+            return DerivativesSnapshotWriteStatus.UNAVAILABLE
+        stored_hash = str(rows[0].get("snapshot_hash", ""))
+        incoming_hash = str(row.get("snapshot_hash", ""))
+        if stored_hash and stored_hash == incoming_hash:
+            return DerivativesSnapshotWriteStatus.IDENTICAL_DUPLICATE
+        if stored_hash:
+            return DerivativesSnapshotWriteStatus.CONFLICT
+        return DerivativesSnapshotWriteStatus.UNAVAILABLE
+
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         status, rows = self._run_rest(
             lambda: self._request(
@@ -1452,6 +1539,50 @@ def _insert_feature_snapshot(
     if stored_hash:
         return FeatureSnapshotWriteStatus.CONFLICT
     return FeatureSnapshotWriteStatus.UNAVAILABLE
+
+
+def _insert_derivatives_snapshot(
+    cursor, row: Mapping[str, Any]
+) -> DerivativesSnapshotWriteStatus:
+    cursor.execute(
+        """
+        INSERT INTO public.prediction_derivatives_snapshots (
+          prediction_id, run_id, normalized_symbol, derivatives_schema_version,
+          derivatives_methodology_version, influence_mode, decision_influence_frac,
+          block_status, core_prediction_as_of_utc, observation_as_of_utc,
+          snapshot_payload, snapshot_hash
+        )
+        VALUES (
+          %(prediction_id)s, %(run_id)s, %(normalized_symbol)s,
+          %(derivatives_schema_version)s, %(derivatives_methodology_version)s,
+          %(influence_mode)s, %(decision_influence_frac)s, %(block_status)s,
+          %(core_prediction_as_of_utc)s, %(observation_as_of_utc)s,
+          %(snapshot_payload)s::jsonb, %(snapshot_hash)s
+        )
+        ON CONFLICT (prediction_id) DO NOTHING
+        RETURNING snapshot_hash
+        """,
+        dict(row),
+    )
+    inserted = cursor.fetchone()
+    if inserted is not None:
+        return DerivativesSnapshotWriteStatus.INSERTED
+    cursor.execute(
+        """
+        SELECT snapshot_hash
+        FROM public.prediction_derivatives_snapshots
+        WHERE prediction_id = %(prediction_id)s
+        """,
+        {"prediction_id": row.get("prediction_id")},
+    )
+    existing = cursor.fetchone()
+    stored_hash = _snapshot_hash_from_db_row(existing)
+    incoming_hash = str(row.get("snapshot_hash", ""))
+    if stored_hash and stored_hash == incoming_hash:
+        return DerivativesSnapshotWriteStatus.IDENTICAL_DUPLICATE
+    if stored_hash:
+        return DerivativesSnapshotWriteStatus.CONFLICT
+    return DerivativesSnapshotWriteStatus.UNAVAILABLE
 
 
 def _snapshot_hash_from_db_row(row: Any) -> str:
