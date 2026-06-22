@@ -78,6 +78,12 @@ Clarifications:
 
 ## Smoke Tests
 
+- [ ] `Runtime Source Integrity Guard` exists on the default branch of
+  `tranbeny053-hub/v83-stock-cron` and its latest result is reviewed.
+- [ ] A healthy integrity result confirms the intended release contract, HF runtime-critical
+  source, public build information, frontend tokens, fingerprint marker, and live asset hashes.
+- [ ] Any persistent divergence is resolved through `OPS_RT1_RUNBOOK.md`; do not use a blind push
+  or restart as the first response.
 - [ ] `/healthcheck` returns OK within documented cold-start budget.
 - [ ] `/v1/system_status` returns runtime/system/provider/news-source/shelter state after session auth.
 - [ ] `BTC` with `METRICS_ONLY` returns schema-valid payload and no news fetch.

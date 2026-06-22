@@ -1,5 +1,26 @@
 # Handoff Packet
 
+## Ops-RT.1 Review Handoff — 2026-06-22
+
+- Goal: detect persistent disagreement between intended source, HF `main`, public build identity,
+  and live frontend serving without mutating any system.
+- Branch: `codex/ops-rt1-source-integrity-guard`; base `dev` at
+  `wave-4d3-derivatives-snapshots`.
+- Topology: app-subtree workflow paths publish to repository-root `.github/workflows` on
+  `tranbeny053-hub/v83-stock-cron`.
+- Probe: three rounds, 20 seconds apart; four public GET resources and an isolated exact-commit HF
+  Git comparison of eleven runtime-critical files.
+- Verdict: only 3/3 persistent runtime, frontend, source, or contract divergence exits non-zero.
+  Metadata anomalies, transitions, and probe unavailability remain non-failing.
+- Safety: exact URL/method allowlist, no session/authentication, no response-body logging, no
+  analysis/calibration/watchlist request, and no database/deployment action.
+- Workflow: every two hours at minute 27, manual dispatch available to the operator, read-only
+  contents permission, no repository secrets.
+- Fingerprint remains `UCPE-W4D3-DERIV-SNAPSHOT-20260622-A`; runtime files are unchanged.
+- Next: Claude merge-readiness review before merge. Do not dispatch or deploy from this branch.
+
+---
+
 ## Wave 4D.3 Review Handoff — 2026-06-22
 
 - Goal: persist the already-built 4D.2 derivatives block as immutable, prediction-linked shadow

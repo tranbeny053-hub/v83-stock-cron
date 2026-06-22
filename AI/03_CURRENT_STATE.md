@@ -2,6 +2,27 @@
 
 Updated: 2026-06-22
 
+## Ops-RT.1 Runtime Source/Serving Integrity Guard
+
+- Branch: `codex/ops-rt1-source-integrity-guard`, based on `dev` at the merged Wave 4D.3 tag.
+- Added a public-read-only three-round guard comparing source-controlled release identity,
+  allowlisted HF `main` blobs, public build information, root asset tokens/marker, and exact live
+  JavaScript/stylesheet hashes.
+- Persistent divergence fails only when all three rounds agree on `STALE_RUNTIME`,
+  `STALE_FRONTEND`, `SOURCE_DIVERGENCE`, or `CONTRACT_MISSING`. Transitioning and unavailable
+  probes remain non-failing signals.
+- The GitHub scheduler uses the existing subtree topology: this app's `.github/workflows` becomes
+  repository-root `.github/workflows` on `tranbeny053-hub/v83-stock-cron`.
+- The guard performs no authenticated request, analysis request, database access, workflow
+  dispatch, deployment, restart, or mutation. Output is strictly allowlisted and contains no raw
+  response bodies.
+- No runtime source, frontend asset, schema, migration, release fingerprint, or existing workflow
+  was modified.
+
+---
+
+Updated: 2026-06-22
+
 ## Wave 4D.3 Immutable Derivatives Evidence Snapshots
 
 - Branch: `codex/wave-4d3-derivatives-snapshots`, based on the merged 4D.2 milestone.

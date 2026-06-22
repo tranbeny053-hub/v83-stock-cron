@@ -14,6 +14,11 @@ Use this if the Hugging Face Space is broken, secrets may have leaked, external 
 4. Record the visible failure in `AI/03_CURRENT_STATE.md` or ask Codex/Claude to do it.
 5. Ask Claude to enter Recovery Mode.
 
+If `Runtime Source Integrity Guard` reports persistent divergence, retain its allowlisted JSON
+summary, follow `OPS_RT1_RUNBOOK.md`, and verify the reported mismatch paths before approving a
+rollback or redeploy. Do not infer divergence by comparing the Hugging Face deployment SHA with the
+local `dev` SHA.
+
 ## Restore Drill
 
 1. Rebuild the Space from the repo at the last-known-good commit/build.
@@ -63,4 +68,3 @@ Record only that each secret was rotated. Do not record actual values.
 - [ ] `AI/03_CURRENT_STATE.md` updated.
 - [ ] `AI/05_HANDOFF.md` updated.
 - [ ] Claude reviewed the recovery result.
-

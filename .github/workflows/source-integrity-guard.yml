@@ -1,0 +1,27 @@
+name: Runtime Source Integrity Guard
+
+on:
+  schedule:
+    - cron: "27 */2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-integrity-guard
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Compare intended source with HF main and live serving
+        run: python scripts/source_integrity_guard.py
