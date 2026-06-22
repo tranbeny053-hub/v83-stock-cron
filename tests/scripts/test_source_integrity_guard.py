@@ -494,15 +494,15 @@ def test_workflow_is_scheduled_read_only_unsecreted_and_uses_current_majors() ->
         "group: source-integrity-guard",
         "cancel-in-progress: false",
         "timeout-minutes: 10",
-        "actions/checkout@v7",
-        "actions/setup-python@v6",
+        "actions/checkout@v4",
+        "actions/setup-python@v5",
         'python-version: "3.11"',
         "python scripts/source_integrity_guard.py",
     ):
         assert required in workflow
     assert "secrets." not in workflow
-    assert "actions/checkout@v4" not in workflow
-    assert "actions/setup-python@v5" not in workflow
+    assert "actions/checkout@v7" not in workflow
+    assert "actions/setup-python@v6" not in workflow
 
 
 def test_declared_worst_case_budget_fits_workflow_timeout() -> None:
