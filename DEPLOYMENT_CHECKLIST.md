@@ -92,6 +92,18 @@ does not perform it and does not enable a cadence collector.
 - [ ] Keep the Phase 2A collector in a separate reviewed branch and do not generate evidence from
   these primitives alone.
 
+### Wave 4D.3-Ops Phase 2A manual collector gate
+
+- [ ] Claude has approved the collector branch before syncing the scheduler subtree.
+- [ ] Confirm the workflow has `workflow_dispatch` only and no schedule or cron.
+- [ ] Confirm its defaults are `enable_collector=false` and `dry_run=true`.
+- [ ] Run a reviewed zero-write dry run before considering a write.
+- [ ] For a one-shot write, use only the exact `WRITE-EVIDENCE` confirmation and a reviewed matrix
+  scope; do not change the Hugging Face derivatives variable.
+- [ ] After a write, run the read-only checks in `DERIVATIVES_EVIDENCE_RUNBOOK.md` and confirm no
+  more than four predictions and four derivatives snapshots were inserted.
+- [ ] Keep Wave 4D.4 evaluation and Wave 4D.5 promotion closed.
+
 - [ ] Create or select a Supabase Postgres project.
 - [ ] Apply `migrations/0001_init.sql` in the Supabase SQL Editor, or run `PYTHONPATH=src python3 scripts/apply_migrations.py` locally with `SUPABASE_DB_URL` set only in the local shell.
 - [ ] Apply `migrations/0002_news.sql` in the Supabase SQL Editor before expecting durable news metadata.

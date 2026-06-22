@@ -1,5 +1,25 @@
 # Handoff Packet
 
+## Wave 4D.3-Ops Phase 2A Collector Review Handoff — 2026-06-22
+
+- Goal: add a dormant manual collector around the deployed deterministic identity and synchronous
+  persistence primitives, without changing the runtime or generating evidence.
+- Branch: `codex/wave-4d3-ops-2a-collector-foundation`; base tag
+  `wave-4d3-ops-2a0-cadence-runtime` at `cc8d4f0`.
+- Gate order: validate fixed matrix, evaluate the process-local enable gate, require dry-run/write
+  confirmation, construct dependencies, then process cells sequentially.
+- Matrix: BTC/ETH at 1H/4H only; maximum four cells, predictions, and derivatives snapshots.
+- Identity and persistence: `analyze_request(..., deterministic_identity=True,
+  prediction_origin="SCHEDULED_SHADOW_EVIDENCE")`, followed only in confirmed write mode by
+  `persist_analysis_now`.
+- Workflow: `workflow_dispatch` only, defaults disabled and dry-run, exact confirmation token
+  `WRITE-EVIDENCE`, read-only repository permission, non-cancelling concurrency.
+- Safety: no normal runtime change, no global derivatives activation, no migration, no SQL, no
+  direct repository save, no secret output, no HF token, no schedule, and no evidence generated.
+- Next: Claude merge-readiness review before GitHub-only deployment and any manual dispatch.
+
+---
+
 ## Ops-RT.1 Review Handoff — 2026-06-22
 
 - Goal: detect persistent disagreement between intended source, HF `main`, public build identity,

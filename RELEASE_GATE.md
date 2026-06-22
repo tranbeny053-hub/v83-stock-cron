@@ -4,6 +4,17 @@ Status: Wave 4B.3 read-only calibration metrics implemented locally. Claude/User
 
 No phase is releasable because an agent says so. Release requires evidence.
 
+## Wave 4D.3-Ops Phase 2A Manual Collector Gate
+
+- [x] Collector defaults disabled and dry-run.
+- [x] Fixed BTC/ETH 1H/4H matrix is bounded to four cells.
+- [x] Deterministic identity and synchronous persistence are delegated to deployed runtime
+  primitives; the collector contains no SQL or persistence-row construction.
+- [x] Manual workflow uses `workflow_dispatch` only, with no schedule or cron.
+- [x] Normal runtime derivatives remain disabled and no release fingerprint changes.
+- [ ] Claude merge-readiness review completed before GitHub-only deployment.
+- [ ] Explicit operator authorization obtained before any manual dispatch.
+
 ## Phase 0 Gate
 
 - [ ] All required Phase 0 artifacts exist and are non-empty.

@@ -2,6 +2,27 @@
 
 Updated: 2026-06-22
 
+## Wave 4D.3-Ops Phase 2A Collector Foundation
+
+- Branch: `codex/wave-4d3-ops-2a-collector-foundation`, based on the deployed
+  `wave-4d3-ops-2a0-cadence-runtime` milestone.
+- Added a dormant, manual-only collector CLI and `workflow_dispatch` workflow. There is no cron,
+  recurring schedule, historical range, backfill, or catch-up loop.
+- The collector defaults to disabled and dry-run. Write mode additionally requires the exact
+  `WRITE-EVIDENCE` confirmation and the existing database URL contract.
+- The fixed matrix contains BTC/ETH at 1H/4H only, with four-cell, four-prediction, and
+  four-derivatives-snapshot circuit breakers.
+- Analysis uses the deployed deterministic-identity primitive with origin
+  `SCHEDULED_SHADOW_EVIDENCE`; persistence is delegated only to `persist_analysis_now`.
+- The normal Hugging Face derivatives flag remains false. No runtime source, response schema,
+  release fingerprint, migration, provider adapter, frontend, or existing workflow changed.
+- No collector run or evidence generation has occurred. Next gate is Claude merge-readiness
+  review before any GitHub-only deployment or manual dispatch.
+
+---
+
+Updated: 2026-06-22
+
 ## Ops-RT.1 Runtime Source/Serving Integrity Guard
 
 - Branch: `codex/ops-rt1-source-integrity-guard`, based on `dev` at the merged Wave 4D.3 tag.
