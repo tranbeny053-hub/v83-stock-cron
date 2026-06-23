@@ -1,5 +1,25 @@
 # Current State
 
+Updated: 2026-06-23
+
+## Wave 4D.3-Ops Phase 2B OKX-only Methodology v1
+
+- Branch: `codex/wave-4d3-ops-2b-okx-only-method-v1`, based on the merged
+  `wave-4d3-ops-binance-registry-diagnostic` milestone.
+- Adds a local, explicit derivatives methodology contract:
+  `deriv-intel-okx-shadow-v1` with schema `deriv-intel.v1` and provider policy
+  `deriv-provider-policy-okx-only-v1`.
+- Historical v0 remains representable as `deriv-intel-shadow-v0` / `deriv-intel.v0`
+  with the two-provider Binance+OKX provider set.
+- v1 collection requests only OKX SWAP current funding and current open interest. It does
+  not call Binance, fabricate a Binance summary, or create cross-provider comparability.
+- v1 remains `SHADOW_ONLY` with `decision_influence_frac = 0.0`, no normalization,
+  no aggregation, no decision influence, no migration, and no workflow/runtime deployment.
+- Current cadence identity still does not include derivatives methodology, so no production
+  v1 evidence write is authorized before Phase 2D reviews identity and first-write semantics.
+
+---
+
 Updated: 2026-06-22
 
 ## Wave 4D.3-Ops Phase 2A Collector Foundation

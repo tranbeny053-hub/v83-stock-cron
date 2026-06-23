@@ -7,6 +7,12 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+SCHEMA_VERSION_V0 = "deriv-intel.v0"
+METHODOLOGY_VERSION_V0 = "deriv-intel-shadow-v0"
+SCHEMA_VERSION_V1 = "deriv-intel.v1"
+METHODOLOGY_VERSION_V1 = "deriv-intel-okx-shadow-v1"
+PROVIDER_POLICY_VERSION_V1 = "deriv-provider-policy-okx-only-v1"
+
 
 class DerivativesFamily(StrEnum):
     FUNDING = "FUNDING"

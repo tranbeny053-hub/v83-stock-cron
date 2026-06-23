@@ -65,6 +65,17 @@ Clarifications:
 
 ## Optional Supabase Persistence Setup
 
+### Wave 4D.3-Ops OKX-only v1 provenance gate
+
+Before any deployment or evidence write using `deriv-intel-okx-shadow-v1`:
+
+- [ ] Confirm Claude has reviewed the exact v1 implementation commit.
+- [ ] Confirm v0 derivatives snapshots remain valid and are not rewritten.
+- [ ] Confirm no scheduler, cron, HF variable, or collector write has been authorized by this
+  methodology-only branch.
+- [ ] Confirm Phase 2D has reviewed cadence identity and first-write semantics, because current
+  cadence identity does not include derivatives methodology.
+
 ### Wave 4D.3-Ops prediction-origin provenance gate
 
 Before applying `0007_prediction_origin.sql` or deploying its Phase-1 runtime:

@@ -1,5 +1,28 @@
 # Handoff Packet
 
+## Wave 4D.3-Ops Phase 2B OKX-only v1 Handoff — 2026-06-23
+
+- Goal: add an explicit OKX-only derivatives shadow methodology contract without changing
+  historical v0 evidence, cadence identity, collector source, API models, workflows, migrations,
+  or build identity.
+- Branch: `codex/wave-4d3-ops-2b-okx-only-method-v1`; base tag
+  `wave-4d3-ops-binance-registry-diagnostic`.
+- Versioning: v0 stays `deriv-intel-shadow-v0` / `deriv-intel.v0`; v1 is
+  `deriv-intel-okx-shadow-v1` / `deriv-intel.v1` with provider policy
+  `deriv-provider-policy-okx-only-v1`.
+- Provider policy: v1 requires exactly `OKX_SWAP`, emits no Binance summary or metrics, and
+  leaves comparability empty because there is no cross-provider comparison.
+- Status semantics: v1 `ACTIVE` requires the complete valid OKX metric set; partial OKX evidence
+  is `DEGRADED`; zero valid OKX evidence or provider unavailability is `UNAVAILABLE`.
+- Safety: `SHADOW_ONLY`, decision influence zero, provider-native values only, no aggregation,
+  no score/probability/gate/decision impact, no live provider call, no DB access, and no evidence
+  generation.
+- Limitation: cadence identity does not include derivatives methodology. Do not authorize a
+  production v1 write until Phase 2D reviews identity and first-write semantics.
+- Next: Claude merge-readiness review of the exact implementation commit.
+
+---
+
 ## Wave 4D.3-Ops Phase 2A Collector Review Handoff — 2026-06-22
 
 - Goal: add a dormant manual collector around the deployed deterministic identity and synchronous

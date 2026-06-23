@@ -12,6 +12,7 @@ from jsonschema import Draft202012Validator, FormatChecker, RefResolver
 from jsonschema import ValidationError as JsonSchemaError
 
 import crypto_probability_engine.api.analysis_service as analysis_service
+import crypto_probability_engine.derivatives_intel.block as block_module
 from crypto_probability_engine.api.analysis_service import (
     PersistenceWork,
     _best_effort_persist,
@@ -19,6 +20,13 @@ from crypto_probability_engine.api.analysis_service import (
 )
 from crypto_probability_engine.derivatives_intel.block import (
     build_derivatives_intelligence,
+)
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V0,
+    METHODOLOGY_VERSION_V1,
+    PROVIDER_POLICY_VERSION_V1,
+    SCHEMA_VERSION_V0,
+    SCHEMA_VERSION_V1,
 )
 from crypto_probability_engine.persistence.derivatives_snapshot import (
     COMPARABILITY_FIELDS,
@@ -37,6 +45,7 @@ from crypto_probability_engine.persistence.repository import (
 )
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
+from tests.derivatives_intel.test_block import OBSERVED, raw_okx_only_bundle
 from tests.fixtures.market_data import make_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -125,6 +134,28 @@ def _row(status: str = "UNAVAILABLE") -> dict:
     row = build_derivatives_snapshot(prediction, _block(status))
     assert row is not None
     return row
+
+
+def _v1_block(monkeypatch: pytest.MonkeyPatch, *, valid_components: int = 4) -> tuple[dict, dict]:
+    prediction, _ = _prediction_and_quant_v2()
+    core_datetime = analysis_service._coerce_utc_datetime(
+        analysis_service.datetime.fromisoformat(
+            prediction["predicted_at_utc"].replace("Z", "+00:00")
+        )
+    )
+    monkeypatch.setattr(
+        block_module,
+        "get_raw_derivatives_bundle",
+        lambda *a, **k: raw_okx_only_bundle(valid_components=valid_components),
+    )
+    block = build_derivatives_intelligence(
+        normalized_symbol=prediction["normalized_symbol"],
+        core_prediction_as_of_utc=core_datetime,
+        enabled=True,
+        now_utc=OBSERVED,
+        methodology_version=METHODOLOGY_VERSION_V1,
+    )
+    return prediction, block
 
 
 def _validator() -> Draft202012Validator:
@@ -288,6 +319,65 @@ def test_metric_projection_is_allowlisted_when_metric_evidence_is_present() -> N
     assert set(row["snapshot_payload"]["metrics"][0]) == set(METRIC_FIELDS)
     assert "future_metric_field" not in row["snapshot_payload"]["metrics"][0]
     _validator().validate(row)
+
+
+def test_v1_okx_only_snapshot_is_accepted_and_schema_valid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prediction, block = _v1_block(monkeypatch)
+
+    row = build_derivatives_snapshot(prediction, block)
+
+    assert row is not None
+    assert row["derivatives_schema_version"] == SCHEMA_VERSION_V1
+    assert row["derivatives_methodology_version"] == METHODOLOGY_VERSION_V1
+    payload = row["snapshot_payload"]
+    assert payload["provider_policy_version"] == PROVIDER_POLICY_VERSION_V1
+    assert {summary["provider"] for summary in payload["provider_summary"]} == {"OKX_SWAP"}
+    assert {metric["provider"] for metric in payload["metrics"]} == {"OKX_SWAP"}
+    assert {metric["methodology_version"] for metric in payload["metrics"]} == {
+        METHODOLOGY_VERSION_V1
+    }
+    assert payload["comparability"] == []
+    _validator().validate(row)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda block: block.update({"schema_version": SCHEMA_VERSION_V0}),
+        lambda block: block.update({"methodology_version": METHODOLOGY_VERSION_V0}),
+        lambda block: block.update({"provider_policy_version": "unknown-policy"}),
+        lambda block: block["provider_summary"].append(
+            {
+                "provider": "BINANCE_USDM",
+                "status": "PROVIDER_UNAVAILABLE",
+                "valid_metric_count": 0,
+                "total_metric_count": 0,
+                "reason": "Not in the OKX-only provider policy.",
+            }
+        ),
+        lambda block: block["metrics"].append(
+            {
+                **block["metrics"][0],
+                "metric_id": "binance.funding.current_estimate",
+                "provider": "BINANCE_USDM",
+                "provider_endpoint": "/fapi/v1/premiumIndex",
+                "methodology_version": METHODOLOGY_VERSION_V1,
+            }
+        ),
+        lambda block: block.update({"influence_mode": "ACTIVE"}),
+        lambda block: block.update({"decision_influence_frac": 0.1}),
+    ],
+)
+def test_v1_mixed_provider_policy_or_governance_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    mutate,
+) -> None:
+    prediction, block = _v1_block(monkeypatch)
+    mutate(block)
+
+    assert build_derivatives_snapshot(prediction, block) is None
 
 
 def test_hash_is_order_independent_full_envelope_and_rejects_nonfinite_values() -> None:

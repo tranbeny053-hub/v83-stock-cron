@@ -124,7 +124,9 @@
     "source_count": { "type": "integer", "minimum": 0 },
     "provider_priority": { "type": "integer", "minimum": 1 },
     "influence_mode": { "const": "SHADOW_ONLY" },
-    "methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "methodology_version": {
+      "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+    },
     "no_lookahead_assertion": { "type": "boolean" }
   },
   "allOf": [

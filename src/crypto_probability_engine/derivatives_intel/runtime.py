@@ -43,7 +43,9 @@ NEW_CALL_START_DEADLINE_SECONDS = 9.0
 REQUEST_TIMEOUT_SECONDS = 3.0
 REQUEST_MAX_RETRIES = 0
 
-_PROVIDERS = ("BINANCE_USDM", "OKX_SWAP")
+PROVIDERS_V0 = ("BINANCE_USDM", "OKX_SWAP")
+PROVIDERS_V1_OKX_ONLY = ("OKX_SWAP",)
+_PROVIDERS = PROVIDERS_V0
 _BINANCE_REGISTRY_FIELDS = (
     "symbol",
     "status",
@@ -170,6 +172,7 @@ _SYMBOL_CACHE: OrderedDict[tuple[str, str], _SymbolEntry] = OrderedDict()
 def get_raw_derivatives_bundle(
     normalized_symbol: str,
     *,
+    providers: tuple[str, ...] = PROVIDERS_V0,
     http_client: PublicHttpClient | None = None,
     rate_limit_per_min: int = 120,
     monotonic_func: Callable[[], float] = time.monotonic,
@@ -177,18 +180,19 @@ def get_raw_derivatives_bundle(
 ) -> RawDerivativesBundle:
     """Return cached or freshly fetched allowlisted current raw evidence."""
 
+    provider_names = _validate_provider_names(providers)
     now_mono = monotonic_func()
-    cached = _cached_providers(normalized_symbol, now_mono)
-    if len(cached) == len(_PROVIDERS):
-        return _bundle(normalized_symbol, cached)
+    cached = _cached_providers(normalized_symbol, now_mono, provider_names)
+    if len(cached) == len(provider_names):
+        return _bundle(normalized_symbol, cached, provider_names)
 
     stripe = _LOCK_STRIPES[_stripe_index(normalized_symbol)]
     with stripe:
         now_mono = monotonic_func()
-        cached = _cached_providers(normalized_symbol, now_mono)
-        missing = [provider for provider in _PROVIDERS if provider not in cached]
+        cached = _cached_providers(normalized_symbol, now_mono, provider_names)
+        missing = [provider for provider in provider_names if provider not in cached]
         if not missing:
-            return _bundle(normalized_symbol, cached)
+            return _bundle(normalized_symbol, cached, provider_names)
 
         start = monotonic_func()
         client = http_client or DerivativesPublicHttpClient(
@@ -196,8 +200,12 @@ def get_raw_derivatives_bundle(
             max_retries=REQUEST_MAX_RETRIES,
             rate_limit_per_min=rate_limit_per_min,
         )
-        binance = BinanceUsdmDerivativesAdapter(http_client=client)
-        okx = OkxSwapDerivativesAdapter(http_client=client)
+        binance = (
+            BinanceUsdmDerivativesAdapter(http_client=client)
+            if "BINANCE_USDM" in missing
+            else None
+        )
+        okx = OkxSwapDerivativesAdapter(http_client=client) if "OKX_SWAP" in missing else None
         for provider in missing:
             raw = _fetch_provider(
                 provider,
@@ -210,7 +218,7 @@ def get_raw_derivatives_bundle(
             )
             _put_symbol(raw, monotonic_func())
             cached[provider] = raw
-        return _bundle(normalized_symbol, cached)
+        return _bundle(normalized_symbol, cached, provider_names)
 
 
 def clear_runtime_caches() -> None:
@@ -234,8 +242,8 @@ def _fetch_provider(
     provider: str,
     normalized_symbol: str,
     *,
-    binance: BinanceUsdmDerivativesAdapter,
-    okx: OkxSwapDerivativesAdapter,
+    binance: BinanceUsdmDerivativesAdapter | None,
+    okx: OkxSwapDerivativesAdapter | None,
     start: float,
     monotonic_func: Callable[[], float],
     utc_now_func: Callable[[], datetime],
@@ -280,9 +288,9 @@ def _fetch_provider(
     if _can_start(start, monotonic_func):
         try:
             raw_funding = (
-                binance.fetch_current_funding(resolution.candidate or "")
+                _require_binance(binance).fetch_current_funding(resolution.candidate or "")
                 if provider == "BINANCE_USDM"
-                else okx.fetch_current_funding(resolution.candidate or "")
+                else _require_okx(okx).fetch_current_funding(resolution.candidate or "")
             )
             funding_fetched = _require_utc(utc_now_func())
             funding_payload = _freeze_current_payload(provider, "funding", raw_funding)
@@ -296,9 +304,9 @@ def _fetch_provider(
     if _can_start(start, monotonic_func):
         try:
             raw_oi = (
-                binance.fetch_current_open_interest(resolution.candidate or "")
+                _require_binance(binance).fetch_current_open_interest(resolution.candidate or "")
                 if provider == "BINANCE_USDM"
-                else okx.fetch_current_open_interest(resolution.candidate or "")
+                else _require_okx(okx).fetch_current_open_interest(resolution.candidate or "")
             )
             oi_fetched = _require_utc(utc_now_func())
             oi_payload = _freeze_current_payload(provider, "open_interest", raw_oi)
@@ -335,18 +343,18 @@ def _fetch_provider(
 def _fetch_registry(
     provider: str,
     *,
-    binance: BinanceUsdmDerivativesAdapter,
-    okx: OkxSwapDerivativesAdapter,
+    binance: BinanceUsdmDerivativesAdapter | None,
+    okx: OkxSwapDerivativesAdapter | None,
     monotonic_func: Callable[[], float],
     utc_now_func: Callable[[], datetime],
 ) -> _RegistryEntry | None:
     try:
         if provider == "BINANCE_USDM":
-            payload = binance.fetch_exchange_info()
+            payload = _require_binance(binance).fetch_exchange_info()
             rows = payload.get("symbols", [])
             fields = _BINANCE_REGISTRY_FIELDS
         else:
-            rows = okx.fetch_instruments()
+            rows = _require_okx(okx).fetch_instruments()
             fields = _OKX_REGISTRY_FIELDS
         frozen_rows = tuple(
             _freeze_mapping(row, fields) for row in rows if isinstance(row, Mapping)
@@ -372,11 +380,13 @@ def _resolve(
     return resolve_okx_swap_instrument(normalized_symbol, rows)
 
 
-def _cached_providers(normalized_symbol: str, now_mono: float) -> dict[str, RawProviderBundle]:
+def _cached_providers(
+    normalized_symbol: str, now_mono: float, providers: tuple[str, ...]
+) -> dict[str, RawProviderBundle]:
     found: dict[str, RawProviderBundle] = {}
     with _CACHE_GUARD:
         _purge_expired(_SYMBOL_CACHE, now_mono)
-        for provider in _PROVIDERS:
+        for provider in providers:
             key = (provider, normalized_symbol)
             entry = _SYMBOL_CACHE.get(key)
             if entry is not None:
@@ -475,12 +485,34 @@ def _unavailable(provider: str, normalized_symbol: str, reason: str) -> RawProvi
 
 
 def _bundle(
-    normalized_symbol: str, providers: Mapping[str, RawProviderBundle]
+    normalized_symbol: str,
+    providers: Mapping[str, RawProviderBundle],
+    provider_names: tuple[str, ...],
 ) -> RawDerivativesBundle:
     return RawDerivativesBundle(
         normalized_symbol=normalized_symbol,
-        providers=tuple(providers[provider] for provider in _PROVIDERS),
+        providers=tuple(providers[provider] for provider in provider_names),
     )
+
+
+def _validate_provider_names(providers: tuple[str, ...]) -> tuple[str, ...]:
+    if providers not in {PROVIDERS_V0, PROVIDERS_V1_OKX_ONLY}:
+        raise ValueError("Unsupported derivatives provider policy.")
+    return providers
+
+
+def _require_binance(
+    adapter: BinanceUsdmDerivativesAdapter | None,
+) -> BinanceUsdmDerivativesAdapter:
+    if adapter is None:
+        raise RuntimeError("Binance adapter was not constructed for this provider policy.")
+    return adapter
+
+
+def _require_okx(adapter: OkxSwapDerivativesAdapter | None) -> OkxSwapDerivativesAdapter:
+    if adapter is None:
+        raise RuntimeError("OKX adapter was not constructed for this provider policy.")
+    return adapter
 
 
 def _stripe_index(normalized_symbol: str) -> int:

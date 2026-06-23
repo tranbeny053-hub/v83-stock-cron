@@ -11,6 +11,7 @@ from crypto_probability_engine.derivatives_intel.instruments import (
     InstrumentResolutionStatus,
 )
 from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V0,
     DerivativesFamily,
     DerivativesMetric,
     DerivativesMetricStatus,
@@ -18,7 +19,7 @@ from crypto_probability_engine.derivatives_intel.schemas import (
 )
 
 INFLUENCE_MODE = "SHADOW_ONLY"
-METHODOLOGY_VERSION = "deriv-intel-shadow-v0"
+METHODOLOGY_VERSION = METHODOLOGY_VERSION_V0
 CURRENT_FUNDING_MAX_STALENESS_SECONDS = 3600
 CURRENT_OPEN_INTEREST_MAX_STALENESS_SECONDS = 300
 PROVIDER_PRIORITY = {"BINANCE_USDM": 1, "OKX_SWAP": 2}
@@ -156,6 +157,7 @@ def build_okx_current_funding_metric(
     *,
     fetched_at_utc: datetime,
     prediction_as_of_utc: datetime,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> dict[str, Any]:
     row = _first_okx_row(payload)
     return _build_current_metric(
@@ -170,6 +172,7 @@ def build_okx_current_funding_metric(
         fetched_at_utc=fetched_at_utc,
         prediction_as_of_utc=prediction_as_of_utc,
         max_staleness_seconds=CURRENT_FUNDING_MAX_STALENESS_SECONDS,
+        methodology_version=methodology_version,
     )
 
 
@@ -200,6 +203,7 @@ def build_okx_current_open_interest_metrics(
     *,
     fetched_at_utc: datetime,
     prediction_as_of_utc: datetime,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> list[dict[str, Any]]:
     row = _first_okx_row(payload)
     definitions = (
@@ -220,6 +224,7 @@ def build_okx_current_open_interest_metrics(
             fetched_at_utc=fetched_at_utc,
             prediction_as_of_utc=prediction_as_of_utc,
             max_staleness_seconds=CURRENT_OPEN_INTEREST_MAX_STALENESS_SECONDS,
+            methodology_version=methodology_version,
         )
         for metric_id, field, unit in definitions
     ]
@@ -276,6 +281,7 @@ def _build_current_metric(
     fetched_at_utc: datetime,
     prediction_as_of_utc: datetime,
     max_staleness_seconds: int,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> dict[str, Any]:
     invalid = _resolution_status(resolution)
     raw_value = _finite_value(payload.get(raw_field)) if isinstance(payload, dict) else None
@@ -316,6 +322,7 @@ def _build_current_metric(
         raw_value=raw_value,
         unit=unit,
         no_lookahead=no_lookahead,
+        methodology_version=methodology_version,
     )
 
 
@@ -557,6 +564,7 @@ def _metric(
     raw_value: float | None,
     unit: DerivativesUnit,
     no_lookahead: bool,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> dict[str, Any]:
     if not _is_utc(fetched_at_utc) or not _is_utc(prediction_as_of_utc):
         raise ValueError("Caller timestamps must be timezone-aware UTC values.")
@@ -590,7 +598,7 @@ def _metric(
         source_count=1,
         provider_priority=PROVIDER_PRIORITY.get(provider, 99),
         influence_mode=INFLUENCE_MODE,
-        methodology_version=METHODOLOGY_VERSION,
+        methodology_version=methodology_version,
         no_lookahead_assertion=no_lookahead,
     ).to_dict()
 

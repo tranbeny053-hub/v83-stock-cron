@@ -20,14 +20,35 @@ from crypto_probability_engine.derivatives_intel.provenance import (
     build_okx_current_open_interest_metrics,
 )
 from crypto_probability_engine.derivatives_intel.runtime import (
+    PROVIDERS_V0,
+    PROVIDERS_V1_OKX_ONLY,
     RawDerivativesBundle,
     RawProviderBundle,
     get_raw_derivatives_bundle,
 )
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V0,
+    METHODOLOGY_VERSION_V1,
+    PROVIDER_POLICY_VERSION_V1,
+    SCHEMA_VERSION_V0,
+    SCHEMA_VERSION_V1,
+)
 
-SCHEMA_VERSION = "deriv-intel.v0"
+SCHEMA_VERSION = SCHEMA_VERSION_V0
 DECISION_INFLUENCE_FRAC = 0.0
 PLAIN_ENGLISH = "Derivatives context — observe only, not used in the decision."
+METHODOLOGY_PROVIDER_POLICIES = {
+    METHODOLOGY_VERSION_V0: {
+        "schema_version": SCHEMA_VERSION_V0,
+        "providers": PROVIDERS_V0,
+        "provider_policy_version": None,
+    },
+    METHODOLOGY_VERSION_V1: {
+        "schema_version": SCHEMA_VERSION_V1,
+        "providers": PROVIDERS_V1_OKX_ONLY,
+        "provider_policy_version": PROVIDER_POLICY_VERSION_V1,
+    },
+}
 
 
 class ProviderSummaryStatus(StrEnum):
@@ -47,10 +68,12 @@ def build_derivatives_intelligence(
     http_client: PublicHttpClient | None = None,
     now_utc: datetime | None = None,
     rate_limit_per_min: int = 120,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> dict[str, Any]:
     """Build a request-specific block while containing all provider failures."""
 
     core_time = _require_utc(core_prediction_as_of_utc)
+    policy = _policy_for_methodology(methodology_version)
     if not enabled:
         return _base_block(
             normalized_symbol=normalized_symbol,
@@ -61,51 +84,77 @@ def build_derivatives_intelligence(
             metrics=[],
             comparability=[],
             warnings=[],
+            methodology_version=methodology_version,
+            schema_version=policy["schema_version"],
+            provider_policy_version=policy["provider_policy_version"],
         )
 
     try:
         raw_bundle = get_raw_derivatives_bundle(
             normalized_symbol,
+            providers=policy["providers"],
             http_client=http_client,
             rate_limit_per_min=rate_limit_per_min,
         )
     except Exception:
         observation = _require_utc(now_utc or utc_now())
-        return _unavailable_block(normalized_symbol, core_time, observation)
+        return _unavailable_block(
+            normalized_symbol,
+            core_time,
+            observation,
+            methodology_version=methodology_version,
+            schema_version=policy["schema_version"],
+            providers=policy["providers"],
+            provider_policy_version=policy["provider_policy_version"],
+        )
 
     observation = _require_utc(now_utc or utc_now())
     try:
-        return _build_enabled_block(raw_bundle, core_time, observation)
+        return _build_enabled_block(
+            raw_bundle,
+            core_time,
+            observation,
+            methodology_version=methodology_version,
+            schema_version=policy["schema_version"],
+            provider_policy_version=policy["provider_policy_version"],
+        )
     except Exception:
-        return _unavailable_block(normalized_symbol, core_time, observation)
+        return _unavailable_block(
+            normalized_symbol,
+            core_time,
+            observation,
+            methodology_version=methodology_version,
+            schema_version=policy["schema_version"],
+            providers=policy["providers"],
+            provider_policy_version=policy["provider_policy_version"],
+        )
 
 
 def _build_enabled_block(
     raw_bundle: RawDerivativesBundle,
     core_time: datetime,
     observation: datetime,
+    *,
+    methodology_version: str,
+    schema_version: str,
+    provider_policy_version: str | None,
 ) -> dict[str, Any]:
     metrics: list[dict[str, Any]] = []
     summaries: list[dict[str, Any]] = []
     warnings: list[str] = []
 
     for provider_bundle in raw_bundle.providers:
-        provider_metrics = _provider_metrics(provider_bundle, observation)
+        provider_metrics = _provider_metrics(
+            provider_bundle, observation, methodology_version=methodology_version
+        )
         metrics.extend(provider_metrics)
         summary = _provider_summary(provider_bundle, provider_metrics)
         summaries.append(summary)
         if summary["status"] != ProviderSummaryStatus.AVAILABLE.value:
             warnings.append(f"{provider_bundle.provider}: {summary['reason']}")
 
-    available_count = sum(
-        summary["status"] == ProviderSummaryStatus.AVAILABLE.value for summary in summaries
-    )
-    block_status = (
-        "ACTIVE"
-        if available_count == len(summaries) and summaries
-        else "DEGRADED"
-        if available_count > 0
-        else "UNAVAILABLE"
+    block_status = _block_status_for_methodology(
+        summaries, methodology_version=methodology_version
     )
     return _base_block(
         normalized_symbol=raw_bundle.normalized_symbol,
@@ -114,12 +163,17 @@ def _build_enabled_block(
         block_status=block_status,
         provider_summary=summaries,
         metrics=metrics,
-        comparability=_comparability(metrics),
+        comparability=_comparability(metrics, methodology_version=methodology_version),
         warnings=warnings,
+        methodology_version=methodology_version,
+        schema_version=schema_version,
+        provider_policy_version=provider_policy_version,
     )
 
 
-def _provider_metrics(bundle: RawProviderBundle, observation: datetime) -> list[dict[str, Any]]:
+def _provider_metrics(
+    bundle: RawProviderBundle, observation: datetime, *, methodology_version: str
+) -> list[dict[str, Any]]:
     if bundle.instrument is None:
         return []
     resolution = bundle.instrument.thaw()
@@ -143,6 +197,7 @@ def _provider_metrics(bundle: RawProviderBundle, observation: datetime) -> list[
                     resolution,
                     fetched_at_utc=bundle.funding_fetched_at_utc,
                     prediction_as_of_utc=observation,
+                    methodology_version=methodology_version,
                 )
             )
     if oi is not None and bundle.open_interest_fetched_at_utc is not None:
@@ -162,6 +217,7 @@ def _provider_metrics(bundle: RawProviderBundle, observation: datetime) -> list[
                     resolution,
                     fetched_at_utc=bundle.open_interest_fetched_at_utc,
                     prediction_as_of_utc=observation,
+                    methodology_version=methodology_version,
                 )
             )
     return metrics
@@ -203,7 +259,38 @@ def _provider_summary(bundle: RawProviderBundle, metrics: list[dict[str, Any]]) 
     }
 
 
-def _comparability(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _block_status_for_methodology(
+    summaries: list[dict[str, Any]], *, methodology_version: str
+) -> str:
+    available_count = sum(
+        summary["status"] == ProviderSummaryStatus.AVAILABLE.value for summary in summaries
+    )
+    if methodology_version == METHODOLOGY_VERSION_V1:
+        okx = next((summary for summary in summaries if summary["provider"] == "OKX_SWAP"), None)
+        if okx is None:
+            return "UNAVAILABLE"
+        if (
+            okx["status"] == ProviderSummaryStatus.AVAILABLE.value
+            and okx["valid_metric_count"] == okx["total_metric_count"] == 4
+        ):
+            return "ACTIVE"
+        if okx["valid_metric_count"] > 0:
+            return "DEGRADED"
+        return "UNAVAILABLE"
+    return (
+        "ACTIVE"
+        if available_count == len(summaries) and summaries
+        else "DEGRADED"
+        if available_count > 0
+        else "UNAVAILABLE"
+    )
+
+
+def _comparability(
+    metrics: list[dict[str, Any]], *, methodology_version: str = METHODOLOGY_VERSION
+) -> list[dict[str, Any]]:
+    if methodology_version == METHODOLOGY_VERSION_V1:
+        return []
     funding = {
         metric["provider"]: metric
         for metric in metrics
@@ -278,12 +365,15 @@ def _base_block(
     metrics: list[dict[str, Any]],
     comparability: list[dict[str, Any]],
     warnings: list[str],
+    methodology_version: str,
+    schema_version: str,
+    provider_policy_version: str | None,
 ) -> dict[str, Any]:
-    return {
-        "schema_version": SCHEMA_VERSION,
+    block = {
+        "schema_version": schema_version,
         "influence_mode": INFLUENCE_MODE,
         "decision_influence_frac": DECISION_INFLUENCE_FRAC,
-        "methodology_version": METHODOLOGY_VERSION,
+        "methodology_version": methodology_version,
         "normalized_symbol": normalized_symbol,
         "core_prediction_as_of_utc": _timestamp(core_prediction_as_of_utc),
         "observation_as_of_utc": _timestamp(observation_as_of_utc),
@@ -297,10 +387,20 @@ def _base_block(
         "not_financial_advice": True,
         "plain_english": PLAIN_ENGLISH,
     }
+    if provider_policy_version is not None:
+        block["provider_policy_version"] = provider_policy_version
+    return block
 
 
 def _unavailable_block(
-    normalized_symbol: str, core_time: datetime, observation: datetime
+    normalized_symbol: str,
+    core_time: datetime,
+    observation: datetime,
+    *,
+    methodology_version: str = METHODOLOGY_VERSION,
+    schema_version: str = SCHEMA_VERSION,
+    providers: tuple[str, ...] = PROVIDERS_V0,
+    provider_policy_version: str | None = None,
 ) -> dict[str, Any]:
     summaries = [
         {
@@ -310,7 +410,7 @@ def _unavailable_block(
             "total_metric_count": 0,
             "reason": "Public provider resources unavailable.",
         }
-        for provider in ("BINANCE_USDM", "OKX_SWAP")
+        for provider in providers
     ]
     return _base_block(
         normalized_symbol=normalized_symbol,
@@ -319,9 +419,19 @@ def _unavailable_block(
         block_status="UNAVAILABLE",
         provider_summary=summaries,
         metrics=[],
-        comparability=_comparability([]),
+        comparability=_comparability([], methodology_version=methodology_version),
         warnings=["Derivatives context unavailable; core analysis is unchanged."],
+        methodology_version=methodology_version,
+        schema_version=schema_version,
+        provider_policy_version=provider_policy_version,
     )
+
+
+def _policy_for_methodology(methodology_version: str) -> dict[str, Any]:
+    try:
+        return METHODOLOGY_PROVIDER_POLICIES[methodology_version]
+    except KeyError as exc:
+        raise ValueError("Unsupported derivatives methodology version.") from exc
 
 
 def _timestamp(value: datetime | None) -> str | None:

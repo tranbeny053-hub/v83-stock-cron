@@ -22,10 +22,13 @@
     "plain_english"
   ],
   "properties": {
-    "schema_version": { "const": "deriv-intel.v0" },
+    "schema_version": { "enum": ["deriv-intel.v0", "deriv-intel.v1"] },
     "influence_mode": { "const": "SHADOW_ONLY" },
     "decision_influence_frac": { "const": 0.0 },
-    "methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "methodology_version": {
+      "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+    },
+    "provider_policy_version": { "const": "deriv-provider-policy-okx-only-v1" },
     "normalized_symbol": { "type": "string", "minLength": 1 },
     "core_prediction_as_of_utc": {
       "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/timestamp"
@@ -78,9 +81,87 @@
         "properties": {
           "observation_as_of_utc": {
             "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/timestamp"
-          },
-          "provider_summary": { "minItems": 2, "maxItems": 2 }
+          }
         }
+      }
+    },
+    {
+      "if": { "properties": { "schema_version": { "const": "deriv-intel.v0" } } },
+      "then": {
+        "properties": {
+          "methodology_version": { "const": "deriv-intel-shadow-v0" },
+          "metrics": {
+            "items": {
+              "allOf": [
+                { "$ref": "derivatives_metric.schema.json" },
+                {
+                  "properties": {
+                    "methodology_version": { "const": "deriv-intel-shadow-v0" }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "block_status": { "not": { "const": "DISABLED" } } }
+            },
+            "then": {
+              "properties": { "provider_summary": { "minItems": 2, "maxItems": 2 } }
+            }
+          }
+        ],
+        "not": { "required": ["provider_policy_version"] }
+      }
+    },
+    {
+      "if": { "properties": { "schema_version": { "const": "deriv-intel.v1" } } },
+      "then": {
+        "required": ["provider_policy_version"],
+        "properties": {
+          "methodology_version": { "const": "deriv-intel-okx-shadow-v1" },
+          "provider_policy_version": {
+            "const": "deriv-provider-policy-okx-only-v1"
+          },
+          "provider_summary": {
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_intelligence.schema.json#/$defs/providerSummary"
+                },
+                { "properties": { "provider": { "const": "OKX_SWAP" } } }
+              ]
+            }
+          },
+          "metrics": {
+            "items": {
+              "allOf": [
+                { "$ref": "derivatives_metric.schema.json" },
+                {
+                  "properties": {
+                    "provider": { "const": "OKX_SWAP" },
+                    "methodology_version": {
+                      "const": "deriv-intel-okx-shadow-v1"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "comparability": { "maxItems": 0 }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "block_status": { "not": { "const": "DISABLED" } } }
+            },
+            "then": {
+              "properties": { "provider_summary": { "minItems": 1, "maxItems": 1 } }
+            }
+          }
+        ]
       }
     }
   ],

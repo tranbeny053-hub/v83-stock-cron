@@ -10,6 +10,14 @@ from enum import StrEnum
 from math import isfinite
 from typing import Any
 
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V0,
+    METHODOLOGY_VERSION_V1,
+    PROVIDER_POLICY_VERSION_V1,
+    SCHEMA_VERSION_V0,
+    SCHEMA_VERSION_V1,
+)
+
 
 class DerivativesSnapshotWriteStatus(StrEnum):
     INSERTED = "INSERTED"
@@ -21,6 +29,25 @@ class DerivativesSnapshotWriteStatus(StrEnum):
 SNAPSHOT_PAYLOAD_FIELDS = (
     "schema_version",
     "methodology_version",
+    "influence_mode",
+    "decision_influence_frac",
+    "normalized_symbol",
+    "core_prediction_as_of_utc",
+    "observation_as_of_utc",
+    "block_status",
+    "provider_summary",
+    "metrics",
+    "comparability",
+    "disagreement",
+    "warnings",
+    "not_trade_command",
+    "not_financial_advice",
+)
+
+SNAPSHOT_PAYLOAD_FIELDS_V1 = (
+    "schema_version",
+    "methodology_version",
+    "provider_policy_version",
     "influence_mode",
     "decision_influence_frac",
     "normalized_symbol",
@@ -110,6 +137,14 @@ _METRIC_STATUSES = {
 }
 _METRIC_FAMILIES = {"FUNDING", "OPEN_INTEREST"}
 _PROVIDERS = {"BINANCE_USDM", "OKX_SWAP"}
+_PROVIDERS_V0 = {"BINANCE_USDM", "OKX_SWAP"}
+_PROVIDERS_V1 = {"OKX_SWAP"}
+_REQUIRED_V1_OKX_METRICS = {
+    "okx.funding.current_estimate",
+    "okx.open_interest.current.contracts",
+    "okx.open_interest.current.base",
+    "okx.open_interest.current.usd",
+}
 
 
 def build_derivatives_snapshot(
@@ -176,16 +211,20 @@ def snapshot_hash(row: Mapping[str, Any]) -> str:
 
 
 def _project_payload(block: Mapping[str, Any]) -> dict[str, Any]:
-    _require_fields(block, SNAPSHOT_PAYLOAD_FIELDS)
+    fields = _payload_fields(block)
+    _require_fields(block, fields)
     projected = {
         key: block[key]
-        for key in SNAPSHOT_PAYLOAD_FIELDS
+        for key in fields
         if key not in {"provider_summary", "metrics", "comparability", "warnings"}
     }
     projected["provider_summary"] = _project_list(
         block["provider_summary"], _project_provider_summary
     )
-    projected["metrics"] = _project_list(block["metrics"], _project_metric)
+    projected["metrics"] = _project_list(
+        block["metrics"],
+        lambda metric: _project_metric(metric, projected["methodology_version"]),
+    )
     projected["comparability"] = _project_list(
         block["comparability"], _project_comparability
     )
@@ -196,6 +235,15 @@ def _project_payload(block: Mapping[str, Any]) -> dict[str, Any]:
     _validate_payload(projected)
     _canonical_json(projected)
     return projected
+
+
+def _payload_fields(block: Mapping[str, Any]) -> tuple[str, ...]:
+    if (
+        block.get("schema_version") == SCHEMA_VERSION_V1
+        or block.get("methodology_version") == METHODOLOGY_VERSION_V1
+    ):
+        return SNAPSHOT_PAYLOAD_FIELDS_V1
+    return SNAPSHOT_PAYLOAD_FIELDS
 
 
 def _project_list(value: Any, projector) -> list[dict[str, Any]]:
@@ -226,7 +274,7 @@ def _project_provider_summary(value: Any) -> dict[str, Any]:
     return projected
 
 
-def _project_metric(value: Any) -> dict[str, Any]:
+def _project_metric(value: Any, methodology_version: str) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise TypeError("Derivative metric must be an object.")
     _require_fields(value, METRIC_FIELDS)
@@ -250,7 +298,7 @@ def _project_metric(value: Any) -> dict[str, Any]:
         raise ValueError("Invalid metric status.")
     if metric["influence_mode"] != "SHADOW_ONLY":
         raise ValueError("Derivative metrics must remain shadow-only.")
-    if metric["methodology_version"] != "deriv-intel-shadow-v0":
+    if metric["methodology_version"] != methodology_version:
         raise ValueError("Invalid derivatives methodology version.")
     for key in ("normalized_value", "bucket", "direction_hint", "confidence_hint", "risk_hint"):
         if metric[key] is not None:
@@ -304,10 +352,7 @@ def _project_comparability(value: Any) -> dict[str, Any]:
 
 
 def _validate_payload(payload: Mapping[str, Any]) -> None:
-    if payload["schema_version"] != "deriv-intel.v0":
-        raise ValueError("Unsupported derivatives schema version.")
-    if payload["methodology_version"] != "deriv-intel-shadow-v0":
-        raise ValueError("Unsupported derivatives methodology version.")
+    contract = _contract_for_payload(payload)
     if payload["influence_mode"] != "SHADOW_ONLY":
         raise ValueError("Derivatives evidence must remain shadow-only.")
     fraction = payload["decision_influence_frac"]
@@ -321,26 +366,64 @@ def _validate_payload(payload: Mapping[str, Any]) -> None:
     if payload["block_status"] not in _ELIGIBLE_BLOCK_STATUSES:
         raise ValueError("Block is not eligible for persistence.")
     summaries = payload["provider_summary"]
-    if len(summaries) != 2 or {item["provider"] for item in summaries} != _PROVIDERS:
+    providers = {item["provider"] for item in summaries}
+    expected_providers = contract["providers"]
+    if len(summaries) != len(expected_providers) or providers != expected_providers:
         raise ValueError("Eligible evidence requires both provider summaries.")
     available_count = sum(item["status"] == "AVAILABLE" for item in summaries)
-    if payload["block_status"] == "ACTIVE" and available_count != 2:
-        raise ValueError("Active evidence requires both providers available.")
-    if payload["block_status"] == "DEGRADED" and available_count != 1:
-        raise ValueError("Degraded evidence requires mixed provider availability.")
-    if payload["block_status"] == "UNAVAILABLE" and available_count:
-        raise ValueError("Unavailable evidence cannot contain an available provider.")
+    if payload["methodology_version"] == METHODOLOGY_VERSION_V1:
+        okx = summaries[0]
+        valid_metric_ids = {
+            metric["metric_id"]
+            for metric in payload["metrics"]
+            if metric["provider"] == "OKX_SWAP" and metric["status"] == "VALID"
+        }
+        if payload["block_status"] == "ACTIVE" and not (
+            okx["status"] == "AVAILABLE"
+            and okx["valid_metric_count"] == okx["total_metric_count"] == 4
+            and valid_metric_ids == _REQUIRED_V1_OKX_METRICS
+        ):
+            raise ValueError("Active v1 evidence requires the complete OKX metric set.")
+        if payload["block_status"] == "DEGRADED" and okx["valid_metric_count"] <= 0:
+            raise ValueError("Degraded v1 evidence requires partial valid OKX evidence.")
+        if payload["block_status"] == "UNAVAILABLE" and okx["valid_metric_count"] > 0:
+            raise ValueError("Unavailable v1 evidence cannot contain valid metrics.")
+        if payload["comparability"]:
+            raise ValueError("OKX-only v1 evidence cannot contain comparability pairs.")
+    else:
+        if payload["block_status"] == "ACTIVE" and available_count != 2:
+            raise ValueError("Active evidence requires both providers available.")
+        if payload["block_status"] == "DEGRADED" and available_count != 1:
+            raise ValueError("Degraded evidence requires mixed provider availability.")
+        if payload["block_status"] == "UNAVAILABLE" and available_count:
+            raise ValueError("Unavailable evidence cannot contain an available provider.")
     for metric in payload["metrics"]:
         if metric["normalized_symbol"] != payload["normalized_symbol"]:
             raise ValueError("Metric and block symbols differ.")
         if _parse_timestamp(metric["prediction_as_of_utc"]) != observation_time:
             raise ValueError("Metric and block observation cutoffs differ.")
+        if metric["provider"] not in expected_providers:
+            raise ValueError("Metric provider is outside the methodology provider set.")
     if not isinstance(payload["disagreement"], list) or payload["disagreement"]:
         raise ValueError("Wave 4D.3 disagreement evidence must remain empty.")
     if payload["not_trade_command"] is not True or payload[
         "not_financial_advice"
     ] is not True:
         raise ValueError("Derivatives safety assertions are required.")
+
+
+def _contract_for_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    schema_version = payload["schema_version"]
+    methodology_version = payload["methodology_version"]
+    if schema_version == SCHEMA_VERSION_V0 and methodology_version == METHODOLOGY_VERSION_V0:
+        if "provider_policy_version" in payload:
+            raise ValueError("Historical v0 evidence has no provider policy version.")
+        return {"providers": _PROVIDERS_V0}
+    if schema_version == SCHEMA_VERSION_V1 and methodology_version == METHODOLOGY_VERSION_V1:
+        if payload.get("provider_policy_version") != PROVIDER_POLICY_VERSION_V1:
+            raise ValueError("Invalid derivatives provider policy version.")
+        return {"providers": _PROVIDERS_V1}
+    raise ValueError("Unsupported derivatives schema/methodology pair.")
 
 
 def _require_fields(value: Mapping[str, Any], fields: tuple[str, ...]) -> None:

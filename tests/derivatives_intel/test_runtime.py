@@ -4,9 +4,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 import crypto_probability_engine.derivatives_intel.runtime as runtime
+from crypto_probability_engine.adapters.derivatives_endpoints import DerivativesPublicHttpClient
 from crypto_probability_engine.derivatives_intel.block import build_derivatives_intelligence
 
 
@@ -162,6 +164,116 @@ def test_cold_warm_and_registry_warm_call_bounds(monkeypatch: pytest.MonkeyPatch
     )
     assert len(calls.paths) == 10
     assert not any("history" in path.lower() for path in calls.paths)
+
+
+def test_okx_only_v1_real_adapter_path_has_zero_binance_requests() -> None:
+    event = datetime(2026, 6, 22, 0, tzinfo=UTC)
+    event_ms = int(event.timestamp() * 1000)
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.host != "www.okx.com":
+            raise AssertionError(f"unexpected non-OKX host: {request.url.host}")
+        if request.url.path == "/api/v5/public/instruments":
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "instId": "BTC-USDT-SWAP",
+                            "instType": "SWAP",
+                            "settleCcy": "USDT",
+                            "ctType": "linear",
+                            "state": "live",
+                            "ctVal": "0.01",
+                            "ctMult": "1",
+                        },
+                        {
+                            "instId": "ETH-USDT-SWAP",
+                            "instType": "SWAP",
+                            "settleCcy": "USDT",
+                            "ctType": "linear",
+                            "state": "live",
+                            "ctVal": "0.1",
+                            "ctMult": "1",
+                        },
+                    ],
+                },
+                request=request,
+            )
+        if request.url.path == "/api/v5/public/funding-rate":
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "instId": request.url.params["instId"],
+                            "fundingRate": "0.0002",
+                            "ts": str(event_ms),
+                        }
+                    ],
+                },
+                request=request,
+            )
+        if request.url.path == "/api/v5/public/open-interest":
+            return httpx.Response(
+                200,
+                json={
+                    "code": "0",
+                    "data": [
+                        {
+                            "instId": request.url.params["instId"],
+                            "instType": "SWAP",
+                            "oi": "40",
+                            "oiCcy": "0.4",
+                            "oiUsd": "26000",
+                            "ts": str(event_ms),
+                        }
+                    ],
+                },
+                request=request,
+            )
+        raise AssertionError(f"unexpected OKX path: {request.url.path}")
+
+    client = DerivativesPublicHttpClient(
+        timeout_seconds=3.0,
+        max_retries=0,
+        rate_limit_per_min=120,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    clock = MutableClock()
+
+    one_cell = runtime.get_raw_derivatives_bundle(
+        "BTC/USDT",
+        providers=runtime.PROVIDERS_V1_OKX_ONLY,
+        http_client=client,
+        monotonic_func=clock,
+        utc_now_func=lambda: event + timedelta(seconds=1),
+    )
+    assert len(one_cell.providers) == 1
+    assert one_cell.providers[0].provider == "OKX_SWAP"
+    assert len(requests) == 3
+
+    for symbol in ("BTC/USDT", "ETH/USDT", "ETH/USDT"):
+        runtime.get_raw_derivatives_bundle(
+            symbol,
+            providers=runtime.PROVIDERS_V1_OKX_ONLY,
+            http_client=client,
+            monotonic_func=clock,
+            utc_now_func=lambda: event + timedelta(seconds=1),
+        )
+
+    paths = [request.url.path for request in requests]
+    assert len(requests) == 5
+    assert paths.count("/api/v5/public/instruments") == 1
+    assert paths.count("/api/v5/public/funding-rate") == 2
+    assert paths.count("/api/v5/public/open-interest") == 2
+    assert all(request.url.host == "www.okx.com" for request in requests)
+    assert not any("binance" in str(request.url).lower() for request in requests)
+    assert not any("history" in request.url.path.lower() for request in requests)
 
 
 def test_concurrent_single_flight_rebuilds_request_specific_blocks(

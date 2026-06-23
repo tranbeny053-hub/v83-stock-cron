@@ -132,3 +132,20 @@ OKX is a same-runner control probe only; it does not override the Binance final
 classification. Do not claim a root cause until the diagnostic workflow has run
 and the result has been reviewed. Cron scheduling and Wave 4D.4 evaluation
 remain blocked until a separate review authorizes them.
+
+## OKX-only v1 methodology boundary
+
+Wave 4D.3-Ops Phase 2B introduces a local source contract for
+`deriv-intel-okx-shadow-v1` / `deriv-intel.v1` with provider policy
+`deriv-provider-policy-okx-only-v1`.
+
+This is not deployed and does not authorize a collector rerun. Historical v0
+evidence remains `deriv-intel-shadow-v0` / `deriv-intel.v0` with Binance+OKX
+provider provenance. The v1 policy uses OKX SWAP only, does not call Binance,
+does not fabricate Binance unavailability, and does not make provider agreement,
+disagreement, consensus, profitability, or validation claims.
+
+Do not dispatch `WRITE-EVIDENCE` for v1 until Phase 2D reviews cadence identity
+and first-write semantics. Current cadence identity does not include derivatives
+methodology, so a v0 and v1 observation for the same symbol, timeframe, and
+closed candle may resolve to the same prediction identity.

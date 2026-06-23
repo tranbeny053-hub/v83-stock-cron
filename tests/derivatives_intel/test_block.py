@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -15,6 +16,11 @@ from crypto_probability_engine.derivatives_intel.runtime import (
     CachedInstrumentResolution,
     RawDerivativesBundle,
     RawProviderBundle,
+)
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V1,
+    PROVIDER_POLICY_VERSION_V1,
+    SCHEMA_VERSION_V1,
 )
 
 CORE = datetime(2026, 6, 22, 0, tzinfo=UTC)
@@ -93,6 +99,42 @@ def raw_bundle(*, okx_status: str = "OK") -> RawDerivativesBundle:
         reason=None if okx_status == "OK" else "Fixture provider unavailable.",
     )
     return RawDerivativesBundle(normalized_symbol="BTC/USDT", providers=(binance, okx))
+
+
+def raw_okx_only_bundle(*, valid_components: int = 4) -> RawDerivativesBundle:
+    okx = raw_bundle().providers[1]
+    if valid_components == 4:
+        return RawDerivativesBundle(normalized_symbol="BTC/USDT", providers=(okx,))
+    if valid_components == 1:
+        return RawDerivativesBundle(
+            normalized_symbol="BTC/USDT",
+            providers=(
+                replace(
+                    okx,
+                    open_interest_payload=None,
+                    open_interest_event_time=None,
+                    open_interest_fetched_at_utc=None,
+                    fetch_status="DEGRADED_PARTIAL",
+                    reason="Fixture partial OKX evidence.",
+                ),
+            ),
+        )
+    return RawDerivativesBundle(
+        normalized_symbol="BTC/USDT",
+        providers=(
+            replace(
+                okx,
+                funding_payload=None,
+                open_interest_payload=None,
+                funding_event_time=None,
+                open_interest_event_time=None,
+                funding_fetched_at_utc=None,
+                open_interest_fetched_at_utc=None,
+                fetch_status="PROVIDER_UNAVAILABLE",
+                reason="Fixture OKX unavailable.",
+            ),
+        ),
+    )
 
 
 def test_flag_off_returns_before_runtime_and_has_no_observation(
@@ -199,3 +241,67 @@ def test_one_provider_unavailable_is_degraded(monkeypatch: pytest.MonkeyPatch) -
     )
     assert result["block_status"] == "DEGRADED"
     assert result["provider_summary"][1]["status"] == "PROVIDER_UNAVAILABLE"
+
+
+@pytest.mark.parametrize(
+    ("valid_components", "expected_status"),
+    [(4, "ACTIVE"), (1, "DEGRADED"), (0, "UNAVAILABLE")],
+)
+def test_okx_only_v1_block_status_and_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    valid_components: int,
+    expected_status: str,
+) -> None:
+    calls: list[dict] = []
+
+    def fake_bundle(*args, **kwargs):
+        calls.append(kwargs)
+        return raw_okx_only_bundle(valid_components=valid_components)
+
+    monkeypatch.setattr(block_module, "get_raw_derivatives_bundle", fake_bundle)
+
+    result = build_derivatives_intelligence(
+        normalized_symbol="BTC/USDT",
+        core_prediction_as_of_utc=CORE,
+        enabled=True,
+        now_utc=OBSERVED,
+        methodology_version=METHODOLOGY_VERSION_V1,
+    )
+
+    assert calls[0]["providers"] == ("OKX_SWAP",)
+    assert result["schema_version"] == SCHEMA_VERSION_V1
+    assert result["methodology_version"] == METHODOLOGY_VERSION_V1
+    assert result["provider_policy_version"] == PROVIDER_POLICY_VERSION_V1
+    assert result["block_status"] == expected_status
+    assert [summary["provider"] for summary in result["provider_summary"]] == ["OKX_SWAP"]
+    assert {metric["provider"] for metric in result["metrics"]} <= {"OKX_SWAP"}
+    assert {metric["methodology_version"] for metric in result["metrics"]} <= {
+        METHODOLOGY_VERSION_V1
+    }
+    assert result["comparability"] == []
+    assert "BINANCE_USDM" not in {summary["provider"] for summary in result["provider_summary"]}
+
+
+def test_okx_only_v1_does_not_fabricate_cross_provider_comparability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        block_module,
+        "get_raw_derivatives_bundle",
+        lambda *a, **k: raw_okx_only_bundle(),
+    )
+
+    result = build_derivatives_intelligence(
+        normalized_symbol="BTC/USDT",
+        core_prediction_as_of_utc=CORE,
+        enabled=True,
+        now_utc=OBSERVED,
+        methodology_version=METHODOLOGY_VERSION_V1,
+    )
+
+    assert result["comparability"] == []
+    assert result["disagreement"] == []
+    assert not any(
+        item.get("left_provider") == item.get("right_provider")
+        for item in result["comparability"]
+    )

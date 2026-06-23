@@ -4,6 +4,17 @@ Status: Wave 4B.3 read-only calibration metrics implemented locally. Claude/User
 
 No phase is releasable because an agent says so. Release requires evidence.
 
+## Wave 4D.3-Ops Phase 2B OKX-only v1 Methodology Gate
+
+- [x] Historical v0 methodology and schema remain representable.
+- [x] v1 methodology/schema/provider-policy identifiers are explicit and strict.
+- [x] v1 provider policy is OKX-only and emits no Binance summary, metric, or comparability pair.
+- [x] v1 remains `SHADOW_ONLY` with zero decision influence and provider-native metrics only.
+- [x] No migration, workflow, collector dispatch, HF deployment, build fingerprint change, or
+  production evidence write is part of this branch.
+- [ ] Phase 2D cadence-identity and first-write review completed before any v1 write.
+- [ ] Claude merge-readiness review completed before merge.
+
 ## Wave 4D.3-Ops Phase 2A Manual Collector Gate
 
 - [x] Collector defaults disabled and dry-run.

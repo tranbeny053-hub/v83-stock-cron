@@ -21,8 +21,10 @@
     "prediction_id": { "type": "string", "minLength": 1 },
     "run_id": { "type": "string", "minLength": 1 },
     "normalized_symbol": { "type": "string", "minLength": 1 },
-    "derivatives_schema_version": { "const": "deriv-intel.v0" },
-    "derivatives_methodology_version": { "const": "deriv-intel-shadow-v0" },
+    "derivatives_schema_version": { "enum": ["deriv-intel.v0", "deriv-intel.v1"] },
+    "derivatives_methodology_version": {
+      "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+    },
     "influence_mode": { "const": "SHADOW_ONLY" },
     "decision_influence_frac": { "const": 0.0 },
     "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE"] },
@@ -40,6 +42,102 @@
       "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/timestamp"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "derivatives_schema_version": { "const": "deriv-intel.v0" } }
+      },
+      "then": {
+        "properties": {
+          "derivatives_methodology_version": { "const": "deriv-intel-shadow-v0" },
+          "snapshot_payload": {
+            "allOf": [
+              {
+                "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/snapshotPayload"
+              },
+              {
+                "properties": {
+                  "schema_version": { "const": "deriv-intel.v0" },
+                  "methodology_version": { "const": "deriv-intel-shadow-v0" },
+                  "provider_summary": { "minItems": 2, "maxItems": 2 },
+                  "metrics": {
+                    "items": {
+                      "allOf": [
+                        { "$ref": "derivatives_metric.schema.json" },
+                        {
+                          "properties": {
+                            "methodology_version": { "const": "deriv-intel-shadow-v0" }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                },
+                "not": { "required": ["provider_policy_version"] }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "derivatives_schema_version": { "const": "deriv-intel.v1" } }
+      },
+      "then": {
+        "properties": {
+          "derivatives_methodology_version": {
+            "const": "deriv-intel-okx-shadow-v1"
+          },
+          "snapshot_payload": {
+            "allOf": [
+              {
+                "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/snapshotPayload"
+              },
+              {
+                "required": ["provider_policy_version"],
+                "properties": {
+                  "schema_version": { "const": "deriv-intel.v1" },
+                  "methodology_version": { "const": "deriv-intel-okx-shadow-v1" },
+                  "provider_policy_version": {
+                    "const": "deriv-provider-policy-okx-only-v1"
+                  },
+                  "provider_summary": {
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "items": {
+                      "allOf": [
+                        {
+                          "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/providerSummary"
+                        },
+                        { "properties": { "provider": { "const": "OKX_SWAP" } } }
+                      ]
+                    }
+                  },
+                  "metrics": {
+                    "items": {
+                      "allOf": [
+                        { "$ref": "derivatives_metric.schema.json" },
+                        {
+                          "properties": {
+                            "provider": { "const": "OKX_SWAP" },
+                            "methodology_version": {
+                              "const": "deriv-intel-okx-shadow-v1"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "comparability": { "maxItems": 0 }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "timestamp": {
       "type": "string",
@@ -119,8 +217,11 @@
         "not_financial_advice"
       ],
       "properties": {
-        "schema_version": { "const": "deriv-intel.v0" },
-        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "schema_version": { "enum": ["deriv-intel.v0", "deriv-intel.v1"] },
+        "methodology_version": {
+          "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+        },
+        "provider_policy_version": { "const": "deriv-provider-policy-okx-only-v1" },
         "influence_mode": { "const": "SHADOW_ONLY" },
         "decision_influence_frac": { "const": 0.0 },
         "normalized_symbol": { "type": "string", "minLength": 1 },
@@ -133,8 +234,6 @@
         "block_status": { "enum": ["ACTIVE", "DEGRADED", "UNAVAILABLE"] },
         "provider_summary": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
           "items": {
             "$ref": "https://ultimate-crypto-probability-engine.local/schemas/derivatives_snapshot.schema.json#/$defs/providerSummary"
           }
