@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -456,6 +456,130 @@ class DerivativesIntelligenceBlock(BaseModel):
         return self
 
 
+DerivativesIntelligenceBlockV0 = DerivativesIntelligenceBlock
+
+
+class DerivativesProviderSummaryV1(DerivativesProviderSummary):
+    provider: Literal["OKX_SWAP"]
+
+
+class DerivativesMetricResponseV1(DerivativesMetricResponse):
+    metric_id: Literal[
+        "okx.funding.current_estimate",
+        "okx.open_interest.current.contracts",
+        "okx.open_interest.current.base",
+        "okx.open_interest.current.usd",
+    ]
+    provider: Literal["OKX_SWAP"]
+    methodology_version: Literal["deriv-intel-okx-shadow-v1"]
+
+
+_REQUIRED_V1_OKX_METRIC_IDS = frozenset(
+    {
+        "okx.funding.current_estimate",
+        "okx.open_interest.current.contracts",
+        "okx.open_interest.current.base",
+        "okx.open_interest.current.usd",
+    }
+)
+
+
+class DerivativesIntelligenceBlockV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    schema_version: Literal["deriv-intel.v1"]
+    influence_mode: Literal["SHADOW_ONLY"]
+    decision_influence_frac: Literal[0.0]
+    methodology_version: Literal["deriv-intel-okx-shadow-v1"]
+    provider_policy_version: Literal["deriv-provider-policy-okx-only-v1"]
+    normalized_symbol: str = Field(min_length=1)
+    core_prediction_as_of_utc: datetime
+    observation_as_of_utc: datetime | None
+    block_status: Literal["ACTIVE", "DEGRADED", "UNAVAILABLE", "DISABLED"]
+    provider_summary: list[DerivativesProviderSummaryV1]
+    metrics: list[DerivativesMetricResponseV1]
+    comparability: list[DerivativesComparability] = Field(max_length=0)
+    disagreement: list[JsonObject] = Field(max_length=0)
+    warnings: list[str]
+    not_trade_command: Literal[True]
+    not_financial_advice: Literal[True]
+    plain_english: Literal["Derivatives context — observe only, not used in the decision."]
+
+    @field_validator("core_prediction_as_of_utc", "observation_as_of_utc")
+    @classmethod
+    def validate_block_timestamps(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        return ensure_utc_datetime(value, "derivatives block timestamp")
+
+    @model_validator(mode="after")
+    def validate_v1_block_state(self) -> DerivativesIntelligenceBlockV1:
+        if self.block_status == "DISABLED":
+            if (
+                self.observation_as_of_utc is not None
+                or self.provider_summary
+                or self.metrics
+                or self.comparability
+                or self.disagreement
+            ):
+                raise ValueError("DISABLED v1 derivatives block contains no observation evidence.")
+            return self
+        if self.observation_as_of_utc is None:
+            raise ValueError("Enabled v1 derivatives blocks require an observation timestamp.")
+        if len(self.provider_summary) != 1:
+            raise ValueError("Enabled v1 derivatives blocks require one OKX provider summary.")
+
+        summary = self.provider_summary[0]
+        metric_ids = [metric.metric_id for metric in self.metrics]
+        if len(metric_ids) != len(set(metric_ids)):
+            raise ValueError("V1 derivatives metrics must not duplicate required metric IDs.")
+        metric_id_set = set(metric_ids)
+        valid_metric_ids = {
+            metric.metric_id for metric in self.metrics if metric.status == "VALID"
+        }
+        valid_count = len(valid_metric_ids)
+        if summary.valid_metric_count != valid_count or summary.total_metric_count != 4:
+            raise ValueError("V1 provider summary counters must match OKX metrics.")
+        if not metric_id_set <= _REQUIRED_V1_OKX_METRIC_IDS:
+            raise ValueError("V1 derivatives metrics must be approved OKX metric IDs.")
+
+        if self.block_status == "ACTIVE":
+            if (
+                summary.status != DerivativesProviderSummaryStatus.AVAILABLE
+                or summary.valid_metric_count != summary.total_metric_count
+                or valid_metric_ids != _REQUIRED_V1_OKX_METRIC_IDS
+                or metric_id_set != _REQUIRED_V1_OKX_METRIC_IDS
+            ):
+                raise ValueError(
+                    "ACTIVE v1 derivatives block requires complete valid OKX evidence."
+                )
+        elif self.block_status == "DEGRADED":
+            if not (
+                summary.status == DerivativesProviderSummaryStatus.DEGRADED_PARTIAL
+                and 0 < valid_count < 4
+            ):
+                raise ValueError(
+                    "DEGRADED v1 derivatives block requires partial valid OKX evidence."
+                )
+        elif self.block_status == "UNAVAILABLE":
+            if (
+                summary.status
+                in {
+                    DerivativesProviderSummaryStatus.AVAILABLE,
+                    DerivativesProviderSummaryStatus.DEGRADED_PARTIAL,
+                }
+                or valid_count != 0
+            ):
+                raise ValueError("UNAVAILABLE v1 derivatives block cannot contain valid evidence.")
+        return self
+
+
+DerivativesIntelligenceBlockResponse = Annotated[
+    DerivativesIntelligenceBlockV0 | DerivativesIntelligenceBlockV1,
+    Field(discriminator="schema_version"),
+]
+
+
 class HorizonProbability(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -577,7 +701,7 @@ class AnalysisResponse(BaseModel):
     decision_brief: DecisionBrief
     decision_synthesis: JsonObject = Field(default_factory=dict)
     quant_v2: QuantV2Block
-    derivatives_intelligence: DerivativesIntelligenceBlock
+    derivatives_intelligence: DerivativesIntelligenceBlockResponse
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject

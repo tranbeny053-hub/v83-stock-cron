@@ -2,6 +2,25 @@
 
 Updated: 2026-06-23
 
+## Wave 4D.3-Ops Phase 2D.0A Versioned Response + Selector Seam
+
+- Branch: `codex/wave-4d3-ops-2d0a-versioned-response-and-selector`, based on
+  `wave-4d3-ops-2b-okx-only-method-v1`.
+- Implements a local internal-only `analyze_request` keyword selector for derivatives
+  methodology version. Omitted callers remain on `deriv-intel-shadow-v0`.
+- Adds strict version-aware API response validation for the historical two-provider v0 block and
+  the OKX-only v1 block. V1 requires `deriv-intel.v1`,
+  `deriv-intel-okx-shadow-v1`, and provider policy
+  `deriv-provider-policy-okx-only-v1`.
+- HTTP request models and FastAPI handlers remain unchanged; users cannot select the derivatives
+  methodology through request JSON, query parameters, or headers.
+- The collector remains unchanged and does not pass v1. Cutover guard, collection windows,
+  workflow deployment, dry runs, writes, cron, 4D.4, 4D.5, and decision influence remain blocked.
+- No build-info, persistence, migration, frontend, workflow, runtime provider, cadence identity,
+  probability, score, gate, or Decision behavior changed.
+
+---
+
 ## Wave 4D.3-Ops Phase 2B OKX-only Methodology v1
 
 - Branch: `codex/wave-4d3-ops-2b-okx-only-method-v1`, based on the merged

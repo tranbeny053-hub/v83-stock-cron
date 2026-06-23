@@ -33,6 +33,10 @@ from crypto_probability_engine.config.defaults import (
 from crypto_probability_engine.config.env_flags import QUANT_V2_SHADOW_ENABLED
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.derivatives_intel.block import build_derivatives_intelligence
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V0,
+    METHODOLOGY_VERSION_V1,
+)
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
     build_decision_brief,
@@ -65,6 +69,12 @@ _PENDING_FEATURE_SNAPSHOT_ROWS: dict[str, dict | None] = {}
 _PENDING_DERIVATIVES_SNAPSHOT_ROWS: dict[str, dict | None] = {}
 _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED: dict[str, bool] = {}
 _PENDING_PREDICTION_LOCK = threading.Lock()
+_ALLOWED_DERIVATIVES_METHODOLOGY_VERSIONS = frozenset(
+    {
+        METHODOLOGY_VERSION_V0,
+        METHODOLOGY_VERSION_V1,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -107,8 +117,19 @@ def analyze_request(
     persistence_status: str = "STATELESS",
     prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     deterministic_identity: bool = False,
+    derivatives_methodology_version: str = METHODOLOGY_VERSION_V0,
 ) -> dict:
     prediction_origin = validate_prediction_origin(prediction_origin)
+    if (
+        not isinstance(derivatives_methodology_version, str)
+        or derivatives_methodology_version
+        not in _ALLOWED_DERIVATIVES_METHODOLOGY_VERSIONS
+    ):
+        raise api_error(
+            400,
+            ErrorCode.SCHEMA_VALIDATION_FAILED,
+            "Unsupported derivatives methodology version.",
+        )
     if request.asset_class == AssetClass.CRYPTO_PERP and not settings.enable_derivatives:
         raise api_error(
             400,
@@ -272,6 +293,7 @@ def analyze_request(
         core_prediction_as_of_utc=snapshot.as_of_utc,
         enabled=settings.enable_derivatives_intel,
         rate_limit_per_min=settings.provider_rate_limit_per_min,
+        methodology_version=derivatives_methodology_version,
     )
     feature_snapshot_row = build_feature_snapshot(prediction_row, response["quant_v2"])
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")

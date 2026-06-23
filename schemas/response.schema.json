@@ -219,7 +219,9 @@
         "source_count": { "type": "integer", "minimum": 0 },
         "provider_priority": { "type": "integer", "minimum": 1 },
         "influence_mode": { "const": "SHADOW_ONLY" },
-        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "methodology_version": {
+          "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+        },
         "no_lookahead_assertion": { "type": "boolean" }
       },
       "allOf": [
@@ -279,10 +281,13 @@
         "not_financial_advice", "plain_english"
       ],
       "properties": {
-        "schema_version": { "const": "deriv-intel.v0" },
+        "schema_version": { "enum": ["deriv-intel.v0", "deriv-intel.v1"] },
         "influence_mode": { "const": "SHADOW_ONLY" },
         "decision_influence_frac": { "const": 0.0 },
-        "methodology_version": { "const": "deriv-intel-shadow-v0" },
+        "methodology_version": {
+          "enum": ["deriv-intel-shadow-v0", "deriv-intel-okx-shadow-v1"]
+        },
+        "provider_policy_version": { "const": "deriv-provider-policy-okx-only-v1" },
         "normalized_symbol": { "type": "string", "minLength": 1 },
         "core_prediction_as_of_utc": { "type": "string", "format": "date-time" },
         "observation_as_of_utc": { "type": ["string", "null"], "format": "date-time" },
@@ -315,9 +320,170 @@
           },
           "else": {
             "properties": {
-              "observation_as_of_utc": { "type": "string", "format": "date-time" },
-              "provider_summary": { "minItems": 2, "maxItems": 2 }
+              "observation_as_of_utc": { "type": "string", "format": "date-time" }
             }
+          }
+        },
+        {
+          "if": { "properties": { "schema_version": { "const": "deriv-intel.v0" } } },
+          "then": {
+            "properties": {
+              "methodology_version": { "const": "deriv-intel-shadow-v0" },
+              "metrics": {
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/derivativesMetric" },
+                    {
+                      "properties": {
+                        "methodology_version": { "const": "deriv-intel-shadow-v0" }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "block_status": { "not": { "const": "DISABLED" } } }
+                },
+                "then": {
+                  "properties": { "provider_summary": { "minItems": 2, "maxItems": 2 } }
+                }
+              }
+            ],
+            "not": { "required": ["provider_policy_version"] }
+          }
+        },
+        {
+          "if": { "properties": { "schema_version": { "const": "deriv-intel.v1" } } },
+          "then": {
+            "required": ["provider_policy_version"],
+            "properties": {
+              "methodology_version": { "const": "deriv-intel-okx-shadow-v1" },
+              "provider_policy_version": {
+                "const": "deriv-provider-policy-okx-only-v1"
+              },
+              "provider_summary": {
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/derivativesProviderSummary" },
+                    { "properties": { "provider": { "const": "OKX_SWAP" } } }
+                  ]
+                }
+              },
+              "metrics": {
+                "items": {
+                  "allOf": [
+                    { "$ref": "#/$defs/derivativesMetric" },
+                    {
+                      "properties": {
+                        "metric_id": {
+                          "enum": [
+                            "okx.funding.current_estimate",
+                            "okx.open_interest.current.contracts",
+                            "okx.open_interest.current.base",
+                            "okx.open_interest.current.usd"
+                          ]
+                        },
+                        "provider": { "const": "OKX_SWAP" },
+                        "methodology_version": {
+                          "const": "deriv-intel-okx-shadow-v1"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "comparability": { "maxItems": 0 },
+              "disagreement": { "maxItems": 0 }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "block_status": { "not": { "const": "DISABLED" } } }
+                },
+                "then": {
+                  "properties": { "provider_summary": { "minItems": 1, "maxItems": 1 } }
+                }
+              },
+              {
+                "if": { "properties": { "block_status": { "const": "ACTIVE" } } },
+                "then": {
+                  "properties": {
+                    "provider_summary": {
+                      "contains": {
+                        "properties": {
+                          "provider": { "const": "OKX_SWAP" },
+                          "status": { "const": "AVAILABLE" },
+                          "valid_metric_count": { "const": 4 },
+                          "total_metric_count": { "const": 4 },
+                          "reason": { "type": "null" }
+                        },
+                        "required": [
+                          "provider", "status", "valid_metric_count",
+                          "total_metric_count", "reason"
+                        ]
+                      },
+                      "minContains": 1,
+                      "maxContains": 1
+                    },
+                    "metrics": {
+                      "minItems": 4,
+                      "maxItems": 4,
+                      "allOf": [
+                        {
+                          "contains": {
+                            "properties": {
+                              "metric_id": { "const": "okx.funding.current_estimate" },
+                              "status": { "const": "VALID" }
+                            },
+                            "required": ["metric_id", "status"]
+                          },
+                          "minContains": 1,
+                          "maxContains": 1
+                        },
+                        {
+                          "contains": {
+                            "properties": {
+                              "metric_id": {
+                                "const": "okx.open_interest.current.contracts"
+                              },
+                              "status": { "const": "VALID" }
+                            },
+                            "required": ["metric_id", "status"]
+                          },
+                          "minContains": 1,
+                          "maxContains": 1
+                        },
+                        {
+                          "contains": {
+                            "properties": {
+                              "metric_id": { "const": "okx.open_interest.current.base" },
+                              "status": { "const": "VALID" }
+                            },
+                            "required": ["metric_id", "status"]
+                          },
+                          "minContains": 1,
+                          "maxContains": 1
+                        },
+                        {
+                          "contains": {
+                            "properties": {
+                              "metric_id": { "const": "okx.open_interest.current.usd" },
+                              "status": { "const": "VALID" }
+                            },
+                            "required": ["metric_id", "status"]
+                          },
+                          "minContains": 1,
+                          "maxContains": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
           }
         }
       ]

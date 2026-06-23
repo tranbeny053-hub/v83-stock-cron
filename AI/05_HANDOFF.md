@@ -1,5 +1,29 @@
 # Handoff Packet
 
+## Wave 4D.3-Ops Phase 2D.0A Versioned Response + Selector Handoff — 2026-06-23
+
+- Goal: add the safe internal selector seam needed by a future trusted caller while preserving
+  default v0 behavior for every existing caller.
+- Branch: `codex/wave-4d3-ops-2d0a-versioned-response-and-selector`; base tag
+  `wave-4d3-ops-2b-okx-only-method-v1`.
+- Implementation: `analyze_request` accepts a keyword-only
+  `derivatives_methodology_version` defaulting to `deriv-intel-shadow-v0`, validates against a
+  closed allowlist of v0/v1 constants before market/provider work, and forwards the value only to
+  `build_derivatives_intelligence`.
+- Response contract: `AnalysisResponse` and `schemas/response.schema.json` now accept exactly the
+  historical v0 derivatives block or the OKX-only v1 block. V1 requires the reviewed provider
+  policy, OKX-only summary/metrics, empty comparability/disagreement, and complete valid OKX
+  evidence for `ACTIVE`.
+- Safety: `AnalysisRequest`, `app.py`, collector, cadence identity, persistence, migrations,
+  workflows, frontend, build fingerprint, Quant V2, probability, score, gates, Decision, and
+  decision influence remain unchanged.
+- Still blocked: collector v1 wiring, Phase 2D cutover guard, collection windows, scheduler
+  deployment, HF deployment, workflow dispatch, dry run, `WRITE-EVIDENCE`, cron, 4D.4, 4D.5, and
+  any production write.
+- Next: Claude merge-readiness review of the exact selector/response-contract commit.
+
+---
+
 ## Wave 4D.3-Ops Phase 2B OKX-only v1 Handoff — 2026-06-23
 
 - Goal: add an explicit OKX-only derivatives shadow methodology contract without changing
