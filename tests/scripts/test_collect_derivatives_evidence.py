@@ -5,12 +5,19 @@ import hashlib
 import json
 import os
 import re
+from collections import defaultdict
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 
+import crypto_probability_engine.adapters.provider_selection as provider_selection
+import crypto_probability_engine.api.analysis_service as analysis_service
+import crypto_probability_engine.derivatives_intel.runtime as derivatives_runtime
+from crypto_probability_engine.adapters.http_client import PublicHttpClient
 from scripts import collect_derivatives_evidence as collector
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -112,6 +119,380 @@ class _NoDatabaseRead(dict):
         if key == "SUPABASE_DB_URL":
             raise AssertionError("disabled/dry-run path read the database URL")
         return super().get(key, default)
+
+
+class _CountingFakeTransport:
+    """Count real HTTP-client crossings while returning deterministic fixtures."""
+
+    def __init__(self) -> None:
+        self.reference_now = datetime.now(UTC).replace(microsecond=0)
+        self.logical_requests: list[dict[str, object]] = []
+        self.http_attempts: list[dict[str, object]] = []
+        self._current_logical_id: int | None = None
+        self._attempts_by_logical: defaultdict[int, int] = defaultdict(int)
+
+    @property
+    def logical_request_count(self) -> int:
+        return len(self.logical_requests)
+
+    @property
+    def http_attempt_count(self) -> int:
+        return len(self.http_attempts)
+
+    def begin_logical(
+        self,
+        *,
+        provider: str,
+        base_url: str,
+        path: str,
+        params: dict[str, object],
+    ) -> int:
+        logical_id = len(self.logical_requests)
+        self.logical_requests.append(
+            {
+                "id": logical_id,
+                "provider": provider,
+                "base_url": base_url,
+                "path": path,
+                "params": dict(params),
+            }
+        )
+        return logical_id
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        logical_id = self._current_logical_id
+        if logical_id is None:
+            raise AssertionError("transport crossed without a logical request marker")
+        self._attempts_by_logical[logical_id] += 1
+        attempt = self._attempts_by_logical[logical_id]
+        record = {
+            "logical_id": logical_id,
+            "attempt": attempt,
+            "host": request.url.host,
+            "path": request.url.path,
+            "query": str(request.url.query, "utf-8"),
+        }
+        self.http_attempts.append(record)
+        assert request.method == "GET"
+        assert not request.headers.get("authorization")
+        if self._is_spot_request(request) and attempt == 1:
+            return httpx.Response(
+                503,
+                json={"code": "transient_fixture_retry"},
+                request=request,
+            )
+        return httpx.Response(200, json=self._payload_for(request), request=request)
+
+    def attempts_for_logical(self) -> dict[int, int]:
+        return dict(self._attempts_by_logical)
+
+    def _is_spot_request(self, request: httpx.Request) -> bool:
+        if request.url.host == "data-api.binance.vision":
+            return True
+        if request.url.host != "www.okx.com":
+            return False
+        if request.url.path.startswith("/api/v5/market/"):
+            return True
+        return (
+            request.url.path == "/api/v5/public/instruments"
+            and request.url.params.get("instType") == "SPOT"
+        )
+
+    def _payload_for(self, request: httpx.Request) -> Any:
+        host = request.url.host
+        path = request.url.path
+        params = request.url.params
+        if host == "data-api.binance.vision":
+            return self._binance_spot_payload(path, params)
+        if host == "www.okx.com" and self._is_spot_request(request):
+            return self._okx_spot_payload(path, params)
+        if host == "fapi.binance.com":
+            return self._binance_derivatives_payload(path, params)
+        if host == "www.okx.com":
+            return self._okx_derivatives_payload(path, params)
+        raise AssertionError(f"unexpected fixture host: {host}")
+
+    def _binance_spot_payload(self, path: str, params: httpx.QueryParams) -> Any:
+        symbol = params.get("symbol", "BTCUSDT")
+        if path == "/api/v3/exchangeInfo":
+            return {
+                "symbols": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "status": "TRADING",
+                        "baseAsset": "BTC",
+                        "quoteAsset": "USDT",
+                    },
+                    {
+                        "symbol": "ETHUSDT",
+                        "status": "TRADING",
+                        "baseAsset": "ETH",
+                        "quoteAsset": "USDT",
+                    },
+                ]
+            }
+        if path == "/api/v3/klines":
+            return _binance_candle_rows(
+                latest_close=self._latest_close(str(params["interval"])),
+                timeframe_seconds=_binance_interval_seconds(str(params["interval"])),
+            )
+        if path == "/api/v3/depth":
+            return {"lastUpdateId": 1, "bids": [["120.0", "2.0"]], "asks": [["120.5", "2.5"]]}
+        if path == "/api/v3/ticker/24hr":
+            return {
+                "symbol": symbol,
+                "lastPrice": "120.25",
+                "bidPrice": "120.0",
+                "askPrice": "120.5",
+                "volume": "10000",
+                "quoteVolume": "1200000",
+            }
+        if path == "/api/v3/trades":
+            return [
+                {
+                    "id": 1,
+                    "price": "120.2",
+                    "qty": "0.4",
+                    "quoteQty": "48.08",
+                    "time": _epoch_millis(self.reference_now),
+                    "isBuyerMaker": False,
+                    "isBestMatch": True,
+                }
+            ]
+        raise AssertionError(f"unexpected Binance spot path: {path}")
+
+    def _okx_spot_payload(self, path: str, params: httpx.QueryParams) -> Any:
+        if path == "/api/v5/public/instruments":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": "BTC-USDT",
+                        "instType": "SPOT",
+                        "baseCcy": "BTC",
+                        "quoteCcy": "USDT",
+                        "state": "live",
+                    },
+                    {
+                        "instId": "ETH-USDT",
+                        "instType": "SPOT",
+                        "baseCcy": "ETH",
+                        "quoteCcy": "USDT",
+                        "state": "live",
+                    },
+                ],
+            }
+        if path == "/api/v5/market/candles":
+            return {
+                "code": "0",
+                "data": _okx_candle_rows(
+                    latest_close=self._latest_close(str(params["bar"])),
+                    timeframe_seconds=_okx_interval_seconds(str(params["bar"])),
+                ),
+            }
+        if path == "/api/v5/market/books":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "bids": [["120.0", "2.0", "0", "1"]],
+                        "asks": [["120.5", "2.5", "0", "1"]],
+                    }
+                ],
+            }
+        if path == "/api/v5/market/ticker":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": params.get("instId", "BTC-USDT"),
+                        "last": "120.25",
+                        "bidPx": "120.0",
+                        "askPx": "120.5",
+                        "vol24h": "10000",
+                        "volCcy24h": "1200000",
+                        "ts": str(_epoch_millis(self.reference_now)),
+                    }
+                ],
+            }
+        if path == "/api/v5/market/trades":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": params.get("instId", "BTC-USDT"),
+                        "tradeId": "1",
+                        "px": "120.2",
+                        "sz": "0.4",
+                        "side": "buy",
+                        "ts": str(_epoch_millis(self.reference_now)),
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected OKX spot path: {path}")
+
+    def _binance_derivatives_payload(self, path: str, params: httpx.QueryParams) -> Any:
+        if path == "/fapi/v1/exchangeInfo":
+            return {
+                "symbols": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "status": "TRADING",
+                        "contractType": "PERPETUAL",
+                        "quoteAsset": "USDT",
+                        "marginAsset": "USDT",
+                    },
+                    {
+                        "symbol": "ETHUSDT",
+                        "status": "TRADING",
+                        "contractType": "PERPETUAL",
+                        "quoteAsset": "USDT",
+                        "marginAsset": "USDT",
+                    },
+                ]
+            }
+        if path == "/fapi/v1/premiumIndex":
+            return {
+                "symbol": params.get("symbol", "BTCUSDT"),
+                "lastFundingRate": "-0.0001",
+                "time": _epoch_millis(self.reference_now),
+            }
+        if path == "/fapi/v1/openInterest":
+            return {
+                "symbol": params.get("symbol", "BTCUSDT"),
+                "openInterest": "1200",
+                "time": _epoch_millis(self.reference_now),
+            }
+        raise AssertionError(f"unexpected Binance derivatives path: {path}")
+
+    def _okx_derivatives_payload(self, path: str, params: httpx.QueryParams) -> Any:
+        if path == "/api/v5/public/instruments":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": "BTC-USDT-SWAP",
+                        "instType": "SWAP",
+                        "settleCcy": "USDT",
+                        "ctType": "linear",
+                        "state": "live",
+                        "ctVal": "0.01",
+                        "ctMult": "1",
+                    },
+                    {
+                        "instId": "ETH-USDT-SWAP",
+                        "instType": "SWAP",
+                        "settleCcy": "USDT",
+                        "ctType": "linear",
+                        "state": "live",
+                        "ctVal": "0.1",
+                        "ctMult": "1",
+                    },
+                ],
+            }
+        if path == "/api/v5/public/funding-rate":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": params.get("instId", "BTC-USDT-SWAP"),
+                        "fundingRate": "0.0002",
+                        "ts": str(_epoch_millis(self.reference_now)),
+                    }
+                ],
+            }
+        if path == "/api/v5/public/open-interest":
+            return {
+                "code": "0",
+                "data": [
+                    {
+                        "instId": params.get("instId", "BTC-USDT-SWAP"),
+                        "instType": "SWAP",
+                        "oi": "40",
+                        "oiCcy": "0.4",
+                        "oiUsd": "26000",
+                        "ts": str(_epoch_millis(self.reference_now)),
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected OKX derivatives path: {path}")
+
+    def _latest_close(self, interval: str) -> datetime:
+        seconds = (
+            _binance_interval_seconds(interval)
+            if interval in {"1h", "4h"}
+            else _okx_interval_seconds(interval)
+        )
+        lag = 5 * 60 if seconds == 3600 else 20 * 60
+        return self.reference_now - timedelta(seconds=lag)
+
+
+def _epoch_millis(value: datetime) -> int:
+    return int(value.timestamp() * 1000)
+
+
+def _binance_interval_seconds(interval: str) -> int:
+    return {"1h": 3600, "4h": 14_400}[interval]
+
+
+def _okx_interval_seconds(interval: str) -> int:
+    return {"1H": 3600, "4H": 14_400}[interval]
+
+
+def _binance_candle_rows(
+    *,
+    latest_close: datetime,
+    timeframe_seconds: int,
+    count: int = 202,
+) -> list[list[Any]]:
+    start = latest_close - timedelta(seconds=(count - 1) * timeframe_seconds)
+    rows: list[list[Any]] = []
+    for idx in range(count):
+        open_time = start + timedelta(seconds=idx * timeframe_seconds)
+        rows.append(
+            [
+                _epoch_millis(open_time),
+                "120.0",
+                "121.0",
+                "119.0",
+                "120.25",
+                "1000.0",
+                _epoch_millis(open_time + timedelta(seconds=timeframe_seconds)) - 1,
+                "0",
+                0,
+                "0",
+                "0",
+                "0",
+            ]
+        )
+    return rows
+
+
+def _okx_candle_rows(
+    *,
+    latest_close: datetime,
+    timeframe_seconds: int,
+    count: int = 202,
+) -> list[list[Any]]:
+    start = latest_close - timedelta(seconds=(count - 1) * timeframe_seconds)
+    rows: list[list[Any]] = []
+    for idx in range(count):
+        open_time = start + timedelta(seconds=idx * timeframe_seconds)
+        confirmed = "0" if idx == count - 1 else "1"
+        rows.append(
+            [
+                str(_epoch_millis(open_time)),
+                "120.0",
+                "121.0",
+                "119.0",
+                "120.25",
+                "1000.0",
+                "0",
+                "0",
+                confirmed,
+            ]
+        )
+    return list(reversed(rows))
 
 
 def _run(
@@ -466,6 +847,115 @@ def test_provider_call_ceiling_matches_current_bounded_adapter_policy() -> None:
     assert collector.MAX_NEW_DERIVATIVES_SNAPSHOTS == 4
 
 
+def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counter = _CountingFakeTransport()
+    client = httpx.Client(transport=httpx.MockTransport(counter.handle))
+    original_get_json = PublicHttpClient.get_json
+
+    def counting_get_json(self, *, base_url, path, params, provider, headers=None):
+        self.sleep_func = lambda _: None
+        logical_id = counter.begin_logical(
+            provider=provider,
+            base_url=base_url,
+            path=path,
+            params=dict(params),
+        )
+        previous = counter._current_logical_id  # noqa: SLF001
+        counter._current_logical_id = logical_id  # noqa: SLF001
+        try:
+            return original_get_json(
+                self,
+                base_url=base_url,
+                path=path,
+                params=params,
+                provider=provider,
+                headers=headers,
+            )
+        finally:
+            counter._current_logical_id = previous  # noqa: SLF001
+
+    def live_analyze(request, **kwargs):
+        provider_selection.clear_provider_cache()
+        with derivatives_runtime._CACHE_GUARD:  # noqa: SLF001
+            derivatives_runtime._SYMBOL_CACHE.clear()  # noqa: SLF001
+        settings = kwargs["settings"].model_copy(
+            update={
+                "symbol_universe_cache_ttl_seconds": 0,
+                "candle_cache_ttl_seconds": 0,
+                "provider_rate_limit_per_min": 10_000,
+                "provider_max_retries": 1,
+            }
+        )
+        return analysis_service.analyze_request(request, **{**kwargs, "settings": settings})
+
+    monkeypatch.setattr(PublicHttpClient, "_client", lambda self: client)
+    monkeypatch.setattr(PublicHttpClient, "get_json", counting_get_json)
+    provider_selection.clear_provider_cache()
+    derivatives_runtime.clear_runtime_caches()
+    try:
+        report = collector.run_collector(
+            collector.CollectorOptions(dry_run=True, matrix_scope="FULL_4_CELL"),
+            environ={collector.ENABLE_ENV: "true"},
+            dependencies=replace(
+                collector.DEFAULT_DEPENDENCIES,
+                analyze=live_analyze,
+                persist=lambda *_, **__: pytest.fail("dry-run attempted persistence"),
+                repository_factory=lambda *_: pytest.fail(
+                    "dry-run constructed a repository"
+                ),
+                now_utc=lambda: FIXED_NOW,
+                monotonic=_Monotonic(),
+            ),
+        )
+    finally:
+        provider_selection.clear_provider_cache()
+        derivatives_runtime.clear_runtime_caches()
+        for values in (
+            analysis_service._PENDING_PREDICTION_ROWS,  # noqa: SLF001
+            analysis_service._PENDING_FEATURE_SNAPSHOT_ROWS,  # noqa: SLF001
+            analysis_service._PENDING_DERIVATIVES_SNAPSHOT_ROWS,  # noqa: SLF001
+            analysis_service._PENDING_DERIVATIVES_SNAPSHOT_REQUIRED,  # noqa: SLF001
+        ):
+            values.clear()
+        client.close()
+
+    assert report["final_classification"] == "DRY_RUN_COMPLETE"
+    assert [(row["symbol"], row["timeframe"]) for row in report["matrix_cells"]] == list(
+        collector.MATRIX
+    )
+    assert all(row["classification"] == "SKIPPED_DRY_RUN" for row in report["matrix_cells"])
+    assert len(report["matrix_cells"]) == collector.MAX_MATRIX_CELLS
+    assert report["new_predictions"] == 0
+    assert report["new_derivatives_snapshots"] == 0
+    assert counter.logical_request_count <= collector.FULL_MATRIX_LOGICAL_REQUEST_CAP
+    assert counter.http_attempt_count <= collector.FULL_MATRIX_HTTP_ATTEMPT_CAP
+    assert counter.logical_request_count == 58
+    assert counter.http_attempt_count == 98
+    attempts = counter.attempts_for_logical()
+    spot_ids = {
+        int(row["id"])
+        for row in counter.logical_requests
+        if (
+            str(row["base_url"]) == "https://data-api.binance.vision"
+            or (
+                str(row["base_url"]) == "https://www.okx.com"
+                and (
+                    str(row["path"]).startswith("/api/v5/market/")
+                    or row["params"] == {"instType": "SPOT"}
+                )
+            )
+        )
+    }
+    derivatives_ids = set(attempts) - spot_ids
+    assert len(spot_ids) == 40
+    assert all(attempts[logical_id] == 2 for logical_id in spot_ids)
+    assert all(attempts[logical_id] == 1 for logical_id in derivatives_ids)
+    assert not any("history" in str(row["path"]).lower() for row in counter.logical_requests)
+    assert not any("fundingRate" in str(row["path"]) for row in counter.logical_requests)
+
+
 def test_observed_insert_cap_breach_stops_subsequent_cells(monkeypatch) -> None:
     runtime = _FixtureRuntime()
     monkeypatch.setattr(collector, "MAX_NEW_PREDICTIONS", 0)
@@ -523,7 +1013,32 @@ def test_manual_workflow_contract_and_existing_integrity_workflow_unchanged() ->
         assert f"          - {option}\n" in text
     assert '        default: ""\n' in text
     assert "UCPE_DERIV_CADENCE_ENABLED: ${{ inputs.enable_collector }}" in text
-    assert "SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}" in text
+    assert (
+        "if: ${{ !inputs.enable_collector || inputs.dry_run || "
+        "inputs.confirm_write != 'WRITE-EVIDENCE' }}"
+    ) in text
+    assert (
+        "if: ${{ inputs.enable_collector && !inputs.dry_run && "
+        "inputs.confirm_write == 'WRITE-EVIDENCE' }}"
+    ) in text
+    non_write_step = text.split(
+        "- name: Run manual derivatives evidence collector without write secret", 1
+    )[1].split("- name: Run confirmed manual derivatives evidence collector write", 1)[0]
+    write_step = text.split(
+        "- name: Run confirmed manual derivatives evidence collector write", 1
+    )[1]
+    assert "SUPABASE_DB_URL" not in non_write_step
+    assert "SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}" in write_step
+    assert text.count("SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}") == 1
+    assert "secrets." not in "\n".join(
+        line for line in text.splitlines() if line.strip().startswith("if:")
+    )
+    assert "secrets." not in text.split("jobs:", 1)[0]
+    job_header = text.split("jobs:", 1)[1].split("steps:", 1)[0]
+    assert "secrets." not in job_header
+    for step in (non_write_step, write_step):
+        run_block = step.split("run: |", 1)[1]
+        assert "SUPABASE_DB_URL" not in run_block
     assert "HF_TOKEN" not in text
     assert "Authorization" not in text
 

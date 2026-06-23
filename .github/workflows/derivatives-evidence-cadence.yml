@@ -51,7 +51,22 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run manual derivatives evidence collector
+      - name: Run manual derivatives evidence collector without write secret
+        if: ${{ !inputs.enable_collector || inputs.dry_run || inputs.confirm_write != 'WRITE-EVIDENCE' }}
+        env:
+          PYTHONPATH: src
+          UCPE_DERIV_CADENCE_ENABLED: ${{ inputs.enable_collector }}
+          COLLECTOR_DRY_RUN: ${{ inputs.dry_run }}
+          COLLECTOR_MATRIX_SCOPE: ${{ inputs.matrix_scope }}
+          COLLECTOR_CONFIRM_WRITE: ${{ inputs.confirm_write }}
+        run: |
+          python scripts/collect_derivatives_evidence.py \
+            --dry-run "${COLLECTOR_DRY_RUN}" \
+            --matrix-scope "${COLLECTOR_MATRIX_SCOPE}" \
+            --confirm-write "${COLLECTOR_CONFIRM_WRITE}"
+
+      - name: Run confirmed manual derivatives evidence collector write
+        if: ${{ inputs.enable_collector && !inputs.dry_run && inputs.confirm_write == 'WRITE-EVIDENCE' }}
         env:
           PYTHONPATH: src
           UCPE_DERIV_CADENCE_ENABLED: ${{ inputs.enable_collector }}
