@@ -4,10 +4,12 @@ The collector is dormant unless its process-local enable gate is exactly true.
 It delegates analysis identity and persistence to the approved runtime services;
 it does not construct persistence rows or issue database statements itself.
 
-The current full four-cell matrix has a finite worst-case ceiling of 58 logical
-public requests and 98 HTTP attempts. Failed spot registry reads are not cached,
-spot calls use the existing one-retry policy, and the 60-second derivatives
-symbol cache may expire between slow cells. Derivatives calls do not retry.
+The v1 OKX-only derivatives methodology has a finite derivatives-provider
+ceiling of five logical public requests and five HTTP attempts for the full
+four-cell matrix when the process-local symbol cache remains warm. The first
+cell observes at most three derivatives-provider requests: registry, current
+funding, and current open interest. Binance derivatives requests must remain
+zero in this v1 collector boundary.
 """
 
 from __future__ import annotations
@@ -30,6 +32,17 @@ from crypto_probability_engine.api.analysis_service import (
 )
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.derivatives_intel.cadence_guard import (
+    CUTOVER_CLOSE_UTC,
+    CUTOVER_POLICY_ID,
+    CadenceAdmissionClassification,
+    CadenceAdmissionResult,
+    evaluate_cadence_admission,
+)
+from crypto_probability_engine.derivatives_intel.schemas import (
+    METHODOLOGY_VERSION_V1,
+    PROVIDER_POLICY_VERSION_V1,
+)
 from crypto_probability_engine.persistence.repository import build_operator_repository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 
@@ -37,7 +50,8 @@ COLLECTOR_VERSION = "derivatives-evidence-collector.v0"
 ENABLE_ENV = "UCPE_DERIV_CADENCE_ENABLED"
 WRITE_CONFIRMATION = "WRITE-EVIDENCE"
 SCHEDULED_ORIGIN = "SCHEDULED_SHADOW_EVIDENCE"
-DERIVATIVES_METHODOLOGY = "deriv-intel-shadow-v0"
+DERIVATIVES_METHODOLOGY = METHODOLOGY_VERSION_V1
+DERIVATIVES_PROVIDER_POLICY = PROVIDER_POLICY_VERSION_V1
 RUN_ID_PATTERN = re.compile(r"^cadence-[0-9a-f]{32}$")
 
 MAX_MATRIX_CELLS = 4
@@ -49,29 +63,11 @@ MATRIX = (
     ("ETH/USDT", "1H"),
     ("ETH/USDT", "4H"),
 )
-SPOT_PROVIDER_COUNT = 2
-SPOT_CALLS_PER_PROVIDER_CELL = 5  # registry plus four current market resources
-SPOT_ATTEMPTS_PER_CALL = 2
-DERIVATIVES_PROVIDER_COUNT = 2
-DERIVATIVES_CURRENT_CALLS_PER_PROVIDER_SYMBOL = 2
-DERIVATIVES_REGISTRY_CALLS = 2
-FULL_MATRIX_LOGICAL_REQUEST_CAP = (
-    len(MATRIX) * SPOT_PROVIDER_COUNT * SPOT_CALLS_PER_PROVIDER_CELL
-    + DERIVATIVES_REGISTRY_CALLS
-    + DERIVATIVES_PROVIDER_COUNT
-    * len(MATRIX)
-    * DERIVATIVES_CURRENT_CALLS_PER_PROVIDER_SYMBOL
-)
-FULL_MATRIX_HTTP_ATTEMPT_CAP = (
-    len(MATRIX)
-    * SPOT_PROVIDER_COUNT
-    * SPOT_CALLS_PER_PROVIDER_CELL
-    * SPOT_ATTEMPTS_PER_CALL
-    + DERIVATIVES_REGISTRY_CALLS
-    + DERIVATIVES_PROVIDER_COUNT
-    * len(MATRIX)
-    * DERIVATIVES_CURRENT_CALLS_PER_PROVIDER_SYMBOL
-)
+ONE_CELL_LOGICAL_REQUEST_CAP = 3
+ONE_CELL_HTTP_ATTEMPT_CAP = 3
+FULL_MATRIX_LOGICAL_REQUEST_CAP = 5
+FULL_MATRIX_HTTP_ATTEMPT_CAP = 5
+BINANCE_DERIVATIVES_REQUEST_CAP = 0
 
 MATRIX_SCOPES = {
     "FULL_4_CELL": MATRIX,
@@ -85,7 +81,19 @@ CELL_RESULT_FIELDS = frozenset(
         "run_id",
         "prediction_id",
         "reference_close_utc",
+        "canonical_reference_close_utc",
         "classification",
+        "guard_classification",
+        "guard_reason",
+        "cutover_policy_id",
+        "cutover_close_utc",
+        "guard_evaluated_at_utc",
+        "earliest_collection_utc",
+        "latest_collection_utc",
+        "window_post_close_delay_seconds",
+        "window_max_lateness_seconds",
+        "derivatives_methodology_version",
+        "provider_policy_version",
         "provider_status",
         "prediction_status",
         "derivatives_snapshot_status",
@@ -102,6 +110,9 @@ CELL_CLASSIFICATIONS = frozenset(
         "PROVIDER_UNAVAILABLE",
         "PARTIAL_PERSISTENCE",
         "FAILED_SAFETY_INVARIANT",
+        "REJECTED_METHODOLOGY_CUTOVER",
+        "REJECTED_OUTSIDE_WINDOW",
+        "CONFIGURATION_ERROR",
         "FAILED",
     }
 )
@@ -149,6 +160,13 @@ class CollectorDependencies:
 DEFAULT_DEPENDENCIES = CollectorDependencies()
 
 
+@dataclass(frozen=True)
+class PendingCell:
+    result: dict[str, object]
+    payload: dict
+    identity: Mapping[str, object]
+
+
 def parse_bool(value: str) -> bool:
     """Parse only explicit true/false CLI values."""
 
@@ -185,8 +203,6 @@ def run_collector(
 ) -> dict[str, Any]:
     """Run one bounded matrix and return the strict allowlisted report."""
 
-    started_dt = _require_utc(dependencies.now_utc())
-    started_mono = dependencies.monotonic()
     cells = _validated_cells(options.matrix_scope)
 
     gate = _enable_gate(environ.get(ENABLE_ENV))
@@ -196,8 +212,8 @@ def run_collector(
             options,
             enabled=False,
             results=results,
-            started_dt=started_dt,
-            elapsed=_elapsed(started_mono, dependencies.monotonic),
+            started_dt=None,
+            elapsed=0.0,
             skipped=len(results),
             final_classification="DISABLED",
             exit_code=0,
@@ -207,12 +223,15 @@ def run_collector(
             options,
             enabled=False,
             results=[],
-            started_dt=started_dt,
-            elapsed=_elapsed(started_mono, dependencies.monotonic),
+            started_dt=None,
+            elapsed=0.0,
             failed=1,
             final_classification="CONFIGURATION_ERROR",
             exit_code=1,
         )
+
+    started_dt = _require_utc(dependencies.now_utc())
+    started_mono = dependencies.monotonic()
 
     if not options.dry_run and options.confirm_write != WRITE_CONFIRMATION:
         return _report(
@@ -245,58 +264,46 @@ def run_collector(
         {
             "data_mode": "live",
             "enable_derivatives_intel": True,
+            "provider_priority": ("okx",),
             "supabase_db_url": database_url,
             "external_store_configured": bool(database_url),
         }
     )
     run_store = dependencies.run_store_factory()
-    repository = (
-        None if options.dry_run else dependencies.repository_factory(settings)
-    )
 
     results: list[dict[str, object]] = []
-    new_predictions = 0
-    new_derivatives_snapshots = 0
-    duplicates = 0
-    skipped = 0
-    failed = 0
+    pending: list[PendingCell] = []
     cap_status = "OK"
 
     for symbol, timeframe in cells:
-        result = _process_cell(
+        cell = _analyze_cell(
             symbol,
             timeframe,
-            options=options,
             settings=settings,
             run_store=run_store,
-            repository=repository,
             dependencies=dependencies,
         )
-        results.append(result)
-        classification = str(result["classification"])
-        derivative_status = result["derivatives_snapshot_status"]
-        if derivative_status == "INSERTED":
-            new_predictions += 1
-            new_derivatives_snapshots += 1
-        elif derivative_status == "IDENTICAL_DUPLICATE":
-            duplicates += 1
-        if classification.startswith("SKIPPED_"):
-            skipped += 1
-        if classification in {
-            "PROVIDER_UNAVAILABLE",
-            "PARTIAL_PERSISTENCE",
-            "FAILED_SAFETY_INVARIANT",
-            "FAILED",
-            "SKIPPED_REFERENCE_UNCERTAIN",
-        }:
-            failed += 1
-        if (
-            new_predictions > MAX_NEW_PREDICTIONS
-            or new_derivatives_snapshots > MAX_NEW_DERIVATIVES_SNAPSHOTS
-        ):
-            cap_status = "BREACHED"
-            failed += 1
-            break
+        results.append(cell.result)
+        if cell.payload:
+            pending.append(cell)
+
+    guard_now = _require_utc(dependencies.now_utc())
+    for cell in pending:
+        _apply_preflight(cell, options=options, guard_now=guard_now)
+
+    if not options.dry_run and not any(
+        _preflight_blocks_persistence(row) for row in results
+    ):
+        repository = dependencies.repository_factory(settings)
+        for cell in pending:
+            _persist_cell(cell.result, cell.payload, repository, dependencies)
+            if _insert_cap_breached(results):
+                cap_status = "BREACHED"
+                break
+
+    tally = _tally_results(results)
+    if cap_status == "BREACHED":
+        tally["failed"] += 1
 
     final_classification, exit_code = _final_result(
         options=options,
@@ -309,27 +316,87 @@ def run_collector(
         results=results,
         started_dt=started_dt,
         elapsed=_elapsed(started_mono, dependencies.monotonic),
-        new_predictions=new_predictions,
-        new_derivatives_snapshots=new_derivatives_snapshots,
-        duplicates=duplicates,
-        skipped=skipped,
-        failed=failed,
+        new_predictions=tally["new_predictions"],
+        new_derivatives_snapshots=tally["new_derivatives_snapshots"],
+        duplicates=tally["duplicates"],
+        skipped=tally["skipped"],
+        failed=tally["failed"],
         cap_status=cap_status,
         final_classification=final_classification,
         exit_code=exit_code,
     )
 
 
-def _process_cell(
+def _preflight_blocks_persistence(row: Mapping[str, object]) -> bool:
+    classification = str(row.get("classification"))
+    if classification in {
+        "CONFIGURATION_ERROR",
+        "FAILED_SAFETY_INVARIANT",
+        "REJECTED_METHODOLOGY_CUTOVER",
+        "REJECTED_OUTSIDE_WINDOW",
+        "SKIPPED_REFERENCE_UNCERTAIN",
+    }:
+        return True
+    if (
+        classification == "FAILED"
+        and row.get("guard_classification") != CadenceAdmissionClassification.ADMITTED.value
+    ):
+        return True
+    return False
+
+
+def _tally_results(results: list[dict[str, object]]) -> dict[str, int]:
+    new_predictions = 0
+    new_derivatives_snapshots = 0
+    duplicates = 0
+    skipped = 0
+    failed = 0
+    for result in results:
+        classification = str(result["classification"])
+        derivative_status = result["derivatives_snapshot_status"]
+        if derivative_status == "INSERTED":
+            new_predictions += 1
+            new_derivatives_snapshots += 1
+        elif derivative_status == "IDENTICAL_DUPLICATE":
+            duplicates += 1
+        if classification.startswith("SKIPPED_"):
+            skipped += 1
+        if classification in {
+            "CONFIGURATION_ERROR",
+            "PROVIDER_UNAVAILABLE",
+            "PARTIAL_PERSISTENCE",
+            "FAILED_SAFETY_INVARIANT",
+            "REJECTED_METHODOLOGY_CUTOVER",
+            "REJECTED_OUTSIDE_WINDOW",
+            "FAILED",
+            "SKIPPED_REFERENCE_UNCERTAIN",
+        }:
+            failed += 1
+    return {
+        "new_predictions": new_predictions,
+        "new_derivatives_snapshots": new_derivatives_snapshots,
+        "duplicates": duplicates,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+
+def _insert_cap_breached(results: list[dict[str, object]]) -> bool:
+    tally = _tally_results(results)
+    return (
+        tally["new_predictions"] > MAX_NEW_PREDICTIONS
+        or tally["new_derivatives_snapshots"] > MAX_NEW_DERIVATIVES_SNAPSHOTS
+    )
+
+
+def _analyze_cell(
     symbol: str,
     timeframe: str,
     *,
-    options: CollectorOptions,
     settings: Settings,
     run_store: InMemoryRunStore,
-    repository: object | None,
     dependencies: CollectorDependencies,
-) -> dict[str, object]:
+) -> PendingCell:
     result = _blank_cell(symbol, timeframe, "FAILED")
     try:
         payload = dependencies.analyze(
@@ -338,9 +405,10 @@ def _process_cell(
             run_store=run_store,
             prediction_origin=SCHEDULED_ORIGIN,
             deterministic_identity=True,
+            derivatives_methodology_version=DERIVATIVES_METHODOLOGY,
         )
     except Exception:
-        return result
+        return PendingCell(result=result, payload={}, identity={})
 
     run_id = payload.get("run_id")
     result["run_id"] = run_id if isinstance(run_id, str) else None
@@ -352,32 +420,83 @@ def _process_cell(
     )
     if identity is None:
         result["classification"] = "SKIPPED_REFERENCE_UNCERTAIN"
-        return result
+        return PendingCell(result=result, payload={}, identity={})
     result.update(
         prediction_id=identity["prediction_id"],
         reference_close_utc=identity["reference_close_utc"],
+        canonical_reference_close_utc=identity["reference_close_utc"],
     )
 
     block = payload.get("derivatives_intelligence")
     provider_status = block.get("block_status") if isinstance(block, Mapping) else None
     result["provider_status"] = provider_status if isinstance(provider_status, str) else None
-    if not _safety_invariants_hold(payload, identity):
-        result["classification"] = "FAILED_SAFETY_INVARIANT"
-        return result
+    if isinstance(block, Mapping):
+        result["derivatives_methodology_version"] = _optional_text(
+            block.get("methodology_version")
+        )
+        result["provider_policy_version"] = _optional_text(
+            block.get("provider_policy_version")
+        )
+    return PendingCell(result=result, payload=payload, identity=identity)
 
+
+def _apply_preflight(
+    cell: PendingCell,
+    *,
+    options: CollectorOptions,
+    guard_now: datetime,
+) -> None:
+    reference_close = _parse_utc_datetime(cell.result.get("canonical_reference_close_utc"))
+    if reference_close is None:
+        cell.result["classification"] = "SKIPPED_REFERENCE_UNCERTAIN"
+        return
+    guard = evaluate_cadence_admission(
+        methodology_version=cell.result.get("derivatives_methodology_version"),
+        timeframe=str(cell.result["timeframe"]),
+        reference_close_utc=reference_close,
+        now_utc=guard_now,
+    )
+    _apply_guard_metadata(cell.result, guard)
+    if guard.classification != CadenceAdmissionClassification.ADMITTED:
+        cell.result["classification"] = guard.classification.value
+        return
+    if not _safety_invariants_hold(cell.payload, cell.identity):
+        cell.result["classification"] = "FAILED_SAFETY_INVARIANT"
+        return
     if options.dry_run:
-        result["classification"] = (
+        cell.result["classification"] = (
             "PROVIDER_UNAVAILABLE"
-            if provider_status == "UNAVAILABLE"
+            if cell.result.get("provider_status") == "UNAVAILABLE"
             else "SKIPPED_DRY_RUN"
         )
-        return result
+        return
+    cell.result["classification"] = "FAILED"
 
-    if repository is None:
-        return result
+
+def _apply_guard_metadata(result: dict[str, object], guard: CadenceAdmissionResult) -> None:
+    result.update(
+        cutover_policy_id=guard.cutover_policy_id,
+        cutover_close_utc=guard.cutover_close_utc,
+        guard_classification=guard.classification.value,
+        guard_reason=guard.reason.value,
+        guard_evaluated_at_utc=guard.guard_evaluated_at_utc,
+        earliest_collection_utc=guard.earliest_collection_utc,
+        latest_collection_utc=guard.latest_collection_utc,
+        window_post_close_delay_seconds=guard.window_post_close_delay_seconds,
+        window_max_lateness_seconds=guard.window_max_lateness_seconds,
+        derivatives_methodology_version=guard.derivatives_methodology_version,
+    )
+
+
+def _persist_cell(
+    result: dict[str, object],
+    payload: dict,
+    repository: object,
+    dependencies: CollectorDependencies,
+) -> None:
     confirmation = dependencies.persist(payload, repository)
     if not isinstance(confirmation, Mapping):
-        return result
+        return
     prediction_status = _optional_text(confirmation.get("prediction"))
     derivatives_status = _optional_text(confirmation.get("derivatives_snapshot"))
     overall = _optional_text(confirmation.get("overall"))
@@ -389,7 +508,7 @@ def _process_cell(
         "INSERTED",
         "IDENTICAL_DUPLICATE",
     }
-    if provider_status == "UNAVAILABLE":
+    if result.get("provider_status") == "UNAVAILABLE":
         result["classification"] = "PROVIDER_UNAVAILABLE"
     elif overall == "OK" and prediction_accepted and derivatives_status == "INSERTED":
         result["classification"] = "INSERTED"
@@ -403,7 +522,6 @@ def _process_cell(
         result["classification"] = "PARTIAL_PERSISTENCE"
     else:
         result["classification"] = "FAILED"
-    return result
 
 
 def _validated_pending_identity(
@@ -451,6 +569,8 @@ def _safety_invariants_hold(payload: dict, identity: Mapping[str, object]) -> bo
     if identity.get("prediction_origin") != SCHEDULED_ORIGIN:
         return False
     if block.get("methodology_version") != DERIVATIVES_METHODOLOGY:
+        return False
+    if block.get("provider_policy_version") != DERIVATIVES_PROVIDER_POLICY:
         return False
     if block.get("influence_mode") != "SHADOW_ONLY":
         return False
@@ -522,8 +642,14 @@ def _final_result(
     classifications = {str(row["classification"]) for row in results}
     if cap_status != "OK":
         return "FAILED", 1
+    if "CONFIGURATION_ERROR" in classifications:
+        return "CONFIGURATION_ERROR", 1
     if "FAILED_SAFETY_INVARIANT" in classifications:
         return "FAILED_SAFETY_INVARIANT", 1
+    if "REJECTED_METHODOLOGY_CUTOVER" in classifications:
+        return "REJECTED_METHODOLOGY_CUTOVER", 1
+    if "REJECTED_OUTSIDE_WINDOW" in classifications:
+        return "REJECTED_OUTSIDE_WINDOW", 1
     if "PARTIAL_PERSISTENCE" in classifications:
         return "PARTIAL_PERSISTENCE", 1
     if classifications & {
@@ -546,7 +672,19 @@ def _blank_cell(symbol: str, timeframe: str, classification: str) -> dict[str, o
         "run_id": None,
         "prediction_id": None,
         "reference_close_utc": None,
+        "canonical_reference_close_utc": None,
         "classification": classification,
+        "guard_classification": None,
+        "guard_reason": None,
+        "cutover_policy_id": CUTOVER_POLICY_ID,
+        "cutover_close_utc": _iso_utc(CUTOVER_CLOSE_UTC),
+        "guard_evaluated_at_utc": None,
+        "earliest_collection_utc": None,
+        "latest_collection_utc": None,
+        "window_post_close_delay_seconds": None,
+        "window_max_lateness_seconds": None,
+        "derivatives_methodology_version": DERIVATIVES_METHODOLOGY,
+        "provider_policy_version": DERIVATIVES_PROVIDER_POLICY,
         "provider_status": None,
         "prediction_status": None,
         "derivatives_snapshot_status": None,
@@ -558,7 +696,7 @@ def _report(
     *,
     enabled: bool,
     results: list[dict[str, object]],
-    started_dt: datetime,
+    started_dt: datetime | None,
     elapsed: float,
     new_predictions: int = 0,
     new_derivatives_snapshots: int = 0,
@@ -575,7 +713,7 @@ def _report(
         "dry_run": options.dry_run,
         "matrix_scope": options.matrix_scope,
         "matrix_cells": results,
-        "started_at_utc": _iso_utc(started_dt),
+        "started_at_utc": _iso_utc(started_dt) if started_dt is not None else None,
         "elapsed_seconds": elapsed,
         "new_predictions": new_predictions,
         "new_derivatives_snapshots": new_derivatives_snapshots,
@@ -608,6 +746,19 @@ def _require_utc(value: datetime) -> datetime:
 
 def _iso_utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parse_utc_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    candidate = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(UTC)
 
 
 def _optional_text(value: object) -> str | None:

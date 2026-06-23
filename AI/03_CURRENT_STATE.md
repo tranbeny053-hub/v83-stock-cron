@@ -258,3 +258,18 @@ insufficient, `1W` 0 no samples, and `1M` 0 no samples. No timeframe is measured
 - Any later deployment requires coordinated scheduler-subtree source sync and HF deployment,
   followed by an Ops-RT.1 `HEALTHY` result.
 - The Phase 2A collector remains a separate, later reviewed branch.
+
+## Wave 4D.3-Ops Phase 2D.1 — v1 Cutover Guard Source State
+
+- Local source adds a pure internal cadence admission guard and wires the manual collector to
+  request `deriv-intel-okx-shadow-v1` through the existing `analyze_request` selector seam.
+- v1 collection is still blocked by the provisional sentinel cutover close
+  `2100-01-01T00:00:00Z`; current evidence attempts are expected to return
+  `REJECTED_METHODOLOGY_CUTOVER` and perform no writes.
+- Source collection windows are `1H` = 300 to 1200 seconds after the validated closed candle and
+  `4H` = 300 to 1800 seconds after the validated closed candle.
+- The collector remains manual-only, disabled by default, and non-writing unless all existing
+  enable and confirmation gates pass; rejected preflight constructs no production repository.
+- No workflow, scheduler, runtime API, persistence implementation, migration, build fingerprint,
+  frontend, deployment, dry run, write run, 4D.4 evaluation, 4D.5 opening, or Decision influence
+  is part of this local source state.

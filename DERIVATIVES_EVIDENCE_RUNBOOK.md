@@ -149,3 +149,22 @@ Do not dispatch `WRITE-EVIDENCE` for v1 until Phase 2D reviews cadence identity
 and first-write semantics. Current cadence identity does not include derivatives
 methodology, so a v0 and v1 observation for the same symbol, timeframe, and
 closed candle may resolve to the same prediction identity.
+
+## Phase 2D.1 v1 cutover guard
+
+Local source now contains a v1 collector guard for a future, separately
+authorized collection run. The collector explicitly requests
+`deriv-intel-okx-shadow-v1` and uses the OKX-only provider policy, but collection
+is rejected unless the validated deterministic reference close is after the
+provisional sentinel cutover close `2100-01-01T00:00:00Z`.
+
+The accepted post-close collection windows are source constants only:
+
+* `1H`: earliest 300 seconds after close; latest 1200 seconds after close.
+* `4H`: earliest 300 seconds after close; latest 1800 seconds after close.
+
+Current real-world references are therefore expected to return
+`REJECTED_METHODOLOGY_CUTOVER`; this is intentional safety behavior, not
+provider evidence. A rejected run constructs no production repository and writes
+no predictions or snapshots. Do not dispatch dry run or `WRITE-EVIDENCE` until a
+later reviewed phase replaces the sentinel with an approved real cutover policy.

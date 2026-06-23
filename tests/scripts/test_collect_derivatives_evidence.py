@@ -18,10 +18,13 @@ import crypto_probability_engine.adapters.provider_selection as provider_selecti
 import crypto_probability_engine.api.analysis_service as analysis_service
 import crypto_probability_engine.derivatives_intel.runtime as derivatives_runtime
 from crypto_probability_engine.adapters.http_client import PublicHttpClient
+from crypto_probability_engine.derivatives_intel.schemas import PROVIDER_POLICY_VERSION_V1
 from scripts import collect_derivatives_evidence as collector
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXED_NOW = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
+ADMITTED_REFERENCE_CLOSE = datetime(2100, 1, 1, 1, 0, tzinfo=UTC)
+ADMITTED_NOW = ADMITTED_REFERENCE_CLOSE + timedelta(minutes=5)
 
 
 class _Monotonic:
@@ -40,6 +43,8 @@ class _FixtureRuntime:
         provider_status: str = "ACTIVE",
         persist_result: dict[str, object] | None = None,
         fail_symbols: set[str] | None = None,
+        reference_close_utc: datetime = ADMITTED_REFERENCE_CLOSE,
+        now_utc: datetime = ADMITTED_NOW,
     ) -> None:
         self.provider_status = provider_status
         self.persist_result = persist_result or {
@@ -52,11 +57,15 @@ class _FixtureRuntime:
         self.analysis_calls: list[dict[str, object]] = []
         self.persist_calls: list[tuple[dict, object]] = []
         self.repository_calls: list[object] = []
+        self.events: list[str] = []
         self.pending: dict[str, dict] = {}
         self.repository = object()
+        self.reference_close_utc = reference_close_utc
+        self.now_utc = now_utc
 
     def analyze(self, request, **kwargs) -> dict:
         self.analysis_calls.append({"request": request, **kwargs})
+        self.events.append(f"analyze:{request.symbol}:{request.timeframe}")
         if request.symbol in self.fail_symbols:
             raise RuntimeError("credential=must-not-leak")
         digest = hashlib.sha256(
@@ -74,7 +83,9 @@ class _FixtureRuntime:
                 "future_quant_v2_hooks": {"decision_influence_frac": 0.0}
             },
             "derivatives_intelligence": {
+                "schema_version": "deriv-intel.v1",
                 "methodology_version": collector.DERIVATIVES_METHODOLOGY,
+                "provider_policy_version": PROVIDER_POLICY_VERSION_V1,
                 "influence_mode": "SHADOW_ONLY",
                 "decision_influence_frac": 0.0,
                 "block_status": self.provider_status,
@@ -86,7 +97,9 @@ class _FixtureRuntime:
             "symbol": request.symbol,
             "normalized_symbol": payload["normalized_symbol"],
             "timeframe": request.timeframe,
-            "reference_close_utc": "2026-06-22T08:00:00Z",
+            "reference_close_utc": self.reference_close_utc.isoformat().replace(
+                "+00:00", "Z"
+            ),
             "prediction_origin": kwargs["prediction_origin"],
         }
         return payload
@@ -97,10 +110,12 @@ class _FixtureRuntime:
 
     def persist(self, payload: dict, repository: object) -> dict[str, object]:
         self.persist_calls.append((payload, repository))
+        self.events.append("persist")
         return dict(self.persist_result)
 
     def build_repository(self, settings) -> object:
         self.repository_calls.append(settings)
+        self.events.append("repository")
         return self.repository
 
     def dependencies(self) -> collector.CollectorDependencies:
@@ -109,7 +124,7 @@ class _FixtureRuntime:
             persist=self.persist,
             inspect_pending=self.inspect,
             repository_factory=self.build_repository,
-            now_utc=lambda: FIXED_NOW,
+            now_utc=lambda: self.now_utc,
             monotonic=_Monotonic(),
         )
 
@@ -424,7 +439,7 @@ class _CountingFakeTransport:
             else _okx_interval_seconds(interval)
         )
         lag = 5 * 60 if seconds == 3600 else 20 * 60
-        return self.reference_now - timedelta(seconds=lag)
+        return self.reference_now - timedelta(seconds=seconds + lag)
 
 
 def _epoch_millis(value: datetime) -> int:
@@ -478,7 +493,6 @@ def _okx_candle_rows(
     rows: list[list[Any]] = []
     for idx in range(count):
         open_time = start + timedelta(seconds=idx * timeframe_seconds)
-        confirmed = "0" if idx == count - 1 else "1"
         rows.append(
             [
                 str(_epoch_millis(open_time)),
@@ -489,7 +503,7 @@ def _okx_candle_rows(
                 "1000.0",
                 "0",
                 "0",
-                confirmed,
+                "1",
             ]
         )
     return list(reversed(rows))
@@ -584,7 +598,51 @@ def test_enabled_dry_run_uses_process_local_settings_and_zero_persistence() -> N
         for call in runtime.analysis_calls
     )
     assert all(call["deterministic_identity"] is True for call in runtime.analysis_calls)
+    assert all(
+        call["derivatives_methodology_version"] == collector.DERIVATIVES_METHODOLOGY
+        for call in runtime.analysis_calls
+    )
     assert dict(os.environ) == before
+
+
+def test_practical_current_references_are_rejected_by_cutover_guard() -> None:
+    runtime = _FixtureRuntime(
+        reference_close_utc=datetime(2026, 6, 22, 8, 0, tzinfo=UTC),
+        now_utc=FIXED_NOW,
+    )
+    report = _run(runtime, dry_run=True, scope="BTC_ONLY")
+
+    assert report["final_classification"] == "REJECTED_METHODOLOGY_CUTOVER"
+    assert report["exit_code"] == 1
+    assert runtime.repository_calls == []
+    assert runtime.persist_calls == []
+    assert [row["classification"] for row in report["matrix_cells"]] == [
+        "REJECTED_METHODOLOGY_CUTOVER",
+        "REJECTED_METHODOLOGY_CUTOVER",
+    ]
+    assert all(
+        row["guard_reason"] == "AT_OR_BEFORE_CUTOVER"
+        for row in report["matrix_cells"]
+    )
+
+
+def test_confirmed_write_rejected_by_cutover_guard_constructs_no_repository() -> None:
+    runtime = _FixtureRuntime(
+        reference_close_utc=datetime(2026, 6, 22, 8, 0, tzinfo=UTC),
+        now_utc=FIXED_NOW,
+    )
+    report = _run(
+        runtime,
+        dry_run=False,
+        confirm=collector.WRITE_CONFIRMATION,
+        database_url="postgresql://fixture",
+    )
+
+    assert report["final_classification"] == "REJECTED_METHODOLOGY_CUTOVER"
+    assert report["exit_code"] == 1
+    assert len(runtime.analysis_calls) == 2
+    assert runtime.repository_calls == []
+    assert runtime.persist_calls == []
 
 
 @pytest.mark.parametrize(
@@ -653,6 +711,11 @@ def test_deterministic_identity_and_pending_origin_are_required_before_persisten
         for row in valid["matrix_cells"]
     )
     assert len(runtime.persist_calls) == 2
+    assert runtime.events[:2] == [
+        "analyze:BTC/USDT:1H",
+        "analyze:BTC/USDT:4H",
+    ]
+    assert runtime.events[2] == "repository"
 
     invalid_runtime = _FixtureRuntime()
 
@@ -840,8 +903,11 @@ def test_step_summary_is_allowlisted(tmp_path) -> None:
 
 
 def test_provider_call_ceiling_matches_current_bounded_adapter_policy() -> None:
-    assert collector.FULL_MATRIX_LOGICAL_REQUEST_CAP == 58
-    assert collector.FULL_MATRIX_HTTP_ATTEMPT_CAP == 98
+    assert collector.ONE_CELL_LOGICAL_REQUEST_CAP == 3
+    assert collector.ONE_CELL_HTTP_ATTEMPT_CAP == 3
+    assert collector.FULL_MATRIX_LOGICAL_REQUEST_CAP == 5
+    assert collector.FULL_MATRIX_HTTP_ATTEMPT_CAP == 5
+    assert collector.BINANCE_DERIVATIVES_REQUEST_CAP == 0
     assert collector.MAX_MATRIX_CELLS == 4
     assert collector.MAX_NEW_PREDICTIONS == 4
     assert collector.MAX_NEW_DERIVATIVES_SNAPSHOTS == 4
@@ -851,6 +917,7 @@ def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     counter = _CountingFakeTransport()
+    counter.reference_now = datetime.now(UTC).replace(microsecond=0)
     client = httpx.Client(transport=httpx.MockTransport(counter.handle))
     original_get_json = PublicHttpClient.get_json
 
@@ -877,12 +944,8 @@ def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
             counter._current_logical_id = previous  # noqa: SLF001
 
     def live_analyze(request, **kwargs):
-        provider_selection.clear_provider_cache()
-        with derivatives_runtime._CACHE_GUARD:  # noqa: SLF001
-            derivatives_runtime._SYMBOL_CACHE.clear()  # noqa: SLF001
         settings = kwargs["settings"].model_copy(
             update={
-                "symbol_universe_cache_ttl_seconds": 0,
                 "candle_cache_ttl_seconds": 0,
                 "provider_rate_limit_per_min": 10_000,
                 "provider_max_retries": 1,
@@ -892,6 +955,15 @@ def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
 
     monkeypatch.setattr(PublicHttpClient, "_client", lambda self: client)
     monkeypatch.setattr(PublicHttpClient, "get_json", counting_get_json)
+    original_guard = collector.evaluate_cadence_admission
+
+    def pre_cutover_guard(**kwargs):
+        return original_guard(
+            **kwargs,
+            cutover_close_utc=datetime(2000, 1, 1, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(collector, "evaluate_cadence_admission", pre_cutover_guard)
     provider_selection.clear_provider_cache()
     derivatives_runtime.clear_runtime_caches()
     try:
@@ -905,7 +977,7 @@ def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
                 repository_factory=lambda *_: pytest.fail(
                     "dry-run constructed a repository"
                 ),
-                now_utc=lambda: FIXED_NOW,
+                now_utc=lambda: counter.reference_now,
                 monotonic=_Monotonic(),
             ),
         )
@@ -929,29 +1001,45 @@ def test_full_matrix_provider_budget_is_observed_through_real_adapter_transport(
     assert len(report["matrix_cells"]) == collector.MAX_MATRIX_CELLS
     assert report["new_predictions"] == 0
     assert report["new_derivatives_snapshots"] == 0
-    assert counter.logical_request_count <= collector.FULL_MATRIX_LOGICAL_REQUEST_CAP
-    assert counter.http_attempt_count <= collector.FULL_MATRIX_HTTP_ATTEMPT_CAP
-    assert counter.logical_request_count == 58
-    assert counter.http_attempt_count == 98
     attempts = counter.attempts_for_logical()
-    spot_ids = {
+    derivatives_ids = {
         int(row["id"])
         for row in counter.logical_requests
         if (
-            str(row["base_url"]) == "https://data-api.binance.vision"
+            str(row["base_url"]) == "https://fapi.binance.com"
             or (
                 str(row["base_url"]) == "https://www.okx.com"
                 and (
-                    str(row["path"]).startswith("/api/v5/market/")
-                    or row["params"] == {"instType": "SPOT"}
+                    str(row["path"]) in {
+                        "/api/v5/public/funding-rate",
+                        "/api/v5/public/open-interest",
+                    }
+                    or row["params"] == {"instType": "SWAP"}
                 )
             )
         )
     }
-    derivatives_ids = set(attempts) - spot_ids
-    assert len(spot_ids) == 40
-    assert all(attempts[logical_id] == 2 for logical_id in spot_ids)
+    binance_request_count = sum(
+        1
+        for row in counter.logical_requests
+        if str(row["base_url"]) in {
+            "https://data-api.binance.vision",
+            "https://fapi.binance.com",
+        }
+    )
+    assert len(derivatives_ids) <= collector.FULL_MATRIX_LOGICAL_REQUEST_CAP
+    assert sum(attempts[logical_id] for logical_id in derivatives_ids) <= (
+        collector.FULL_MATRIX_HTTP_ATTEMPT_CAP
+    )
+    assert len(derivatives_ids) == collector.FULL_MATRIX_LOGICAL_REQUEST_CAP
+    assert sum(attempts[logical_id] for logical_id in derivatives_ids) == (
+        collector.FULL_MATRIX_HTTP_ATTEMPT_CAP
+    )
+    assert binance_request_count == collector.BINANCE_DERIVATIVES_REQUEST_CAP
     assert all(attempts[logical_id] == 1 for logical_id in derivatives_ids)
+    spot_ids = set(attempts) - derivatives_ids
+    assert spot_ids
+    assert any(attempts[logical_id] == 2 for logical_id in spot_ids)
     assert not any("history" in str(row["path"]).lower() for row in counter.logical_requests)
     assert not any("fundingRate" in str(row["path"]) for row in counter.logical_requests)
 
@@ -969,8 +1057,9 @@ def test_observed_insert_cap_breach_stops_subsequent_cells(monkeypatch) -> None:
 
     assert report["cap_status"] == "BREACHED"
     assert report["exit_code"] == 1
-    assert len(report["matrix_cells"]) == 1
-    assert len(runtime.analysis_calls) == 1
+    assert len(report["matrix_cells"]) == 4
+    assert len(runtime.analysis_calls) == 4
+    assert len(runtime.persist_calls) == 1
 
 
 def test_collector_source_uses_only_approved_persistence_entrypoint() -> None:

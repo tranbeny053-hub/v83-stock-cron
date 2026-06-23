@@ -230,3 +230,19 @@ Next: Claude review, then deployment and browser DOM QA as a separate approved s
 - Remaining risk: the synchronous helper depends on the existing in-process pending handoff and
   is intended for a later one-shot manual collector; no collector or cross-process contract exists
   in this phase.
+
+## Wave 4D.3-Ops Phase 2D.1 Handoff
+
+- Branch: `codex/wave-4d3-ops-2d1-cutover-guard`.
+- Adds a pure internal cadence admission guard for v1 derivatives evidence and wires the existing
+  manual collector to request `deriv-intel-okx-shadow-v1`.
+- Guard constants keep the current approved source blocked: sentinel cutover close
+  `2100-01-01T00:00:00Z`, `1H` window 300-1200 seconds post-close, and `4H` window 300-1800
+  seconds post-close.
+- Rejected methodology-cutover or outside-window preflight happens after deterministic analysis
+  identity is known and before repository construction or persistence.
+- Full four-cell v1 derivatives-provider budget is documented/tested as five logical OKX-only
+  requests and five HTTP attempts; Binance request count is zero for the v1 derivatives path.
+- No workflow change, production collector run, dry run, write run, Supabase access, HF access,
+  migration, fingerprint change, persistence change, scheduler, cron, 4D.4, 4D.5, or Decision
+  influence is included. Next step is Claude merge-readiness review of the source commit only.
