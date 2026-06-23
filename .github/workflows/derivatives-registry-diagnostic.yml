@@ -1,0 +1,33 @@
+name: UCPE Derivatives Registry Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: derivatives-registry-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run Binance registry diagnostic
+        env:
+          PYTHONPATH: src
+        run: |
+          PYTHONPATH=src python3 scripts/diagnose_binance_registry.py

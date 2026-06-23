@@ -89,3 +89,46 @@ Never treat unavailable or degraded evidence as healthy evidence.
 Phase 2A does not perform Wave 4D.4 evaluation and does not open Wave 4D.5.
 Collection must remain dormant until a separately reviewed GitHub-only
 deployment and an explicitly authorized manual dispatch.
+
+## Binance Registry Diagnostic
+
+The Binance registry diagnostic is diagnosis only. It does not access a
+database, does not create predictions, does not persist evidence, and does not
+authorize a collector rerun by itself.
+
+The manual workflow `UCPE Derivatives Registry Diagnostic` runs exactly three
+public probes from the scheduler runner:
+
+1. Binance USD-M `GET /fapi/v1/exchangeInfo` with a 3 second timeout.
+2. Binance USD-M `GET /fapi/v1/exchangeInfo` with a 10 second timeout.
+3. OKX SWAP `GET /api/v5/public/instruments?instType=SWAP` with a 10 second
+   timeout.
+
+Dispatch it manually from GitHub Actions when a reviewer asks for runner-side
+registry evidence. The output is intentionally sanitized: endpoint paths,
+timeouts, HTTP status, high-level error categories, elapsed milliseconds, and
+symbol/data counts only. It never prints full URLs, response bodies, headers,
+cookies, secrets, database values, or exception traces.
+
+Interpret final classifications as follows:
+
+* `BINANCE_OK`: both Binance registry probes returned a valid public symbols
+  payload.
+* `BINANCE_TIMEOUT_AT_3S_BUT_OK_AT_10S`: the 3 second probe timed out but the
+  10 second probe succeeded.
+* `BINANCE_ACCESS_RESTRICTED`: Binance returned access or legal restriction
+  evidence such as 401, 403, or 451.
+* `BINANCE_RATE_LIMITED`: Binance returned rate-limit evidence such as 418 or
+  429.
+* `BINANCE_SERVER_FAILURE`: Binance returned a 5xx failure.
+* `BINANCE_NETWORK_OR_TLS_FAILURE`: both Binance probes failed before a usable
+  HTTP status.
+* `BINANCE_MALFORMED_RESPONSE`: Binance returned a response that did not match
+  the expected registry JSON shape.
+* `BINANCE_UNKNOWN_FAILURE`: the sanitized evidence did not fit a more specific
+  diagnostic category.
+
+OKX is a same-runner control probe only; it does not override the Binance final
+classification. Do not claim a root cause until the diagnostic workflow has run
+and the result has been reviewed. Cron scheduling and Wave 4D.4 evaluation
+remain blocked until a separate review authorizes them.
