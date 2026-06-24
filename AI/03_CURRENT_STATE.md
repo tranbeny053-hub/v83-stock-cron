@@ -273,3 +273,17 @@ insufficient, `1W` 0 no samples, and `1M` 0 no samples. No timeframe is measured
 - No workflow, scheduler, runtime API, persistence implementation, migration, build fingerprint,
   frontend, deployment, dry run, write run, 4D.4 evaluation, 4D.5 opening, or Decision influence
   is part of this local source state.
+
+## Wave 4D.3-Ops Phase 2D.2A — OKX Cadence Readiness Diagnostic Source State
+
+- Local source adds a write-free OKX cadence-readiness diagnostic and a manual-only diagnostic
+  workflow for scheduler-runner measurement.
+- The diagnostic probes only public OKX resources: server time, latest closed 1H/4H candles,
+  SWAP instruments, current funding, and current open interest for the fixed BTC/ETH matrix.
+- The full four-cell probe is bounded to five derivatives logical requests, four candle requests,
+  one server-time request, and zero Binance requests.
+- Output is sanitized readiness evidence only and contains no raw provider body, database row,
+  secret, header, analysis payload, prediction, or persistence result.
+- No collector change, cutover-guard change, runtime source change, persistence, migration,
+  fingerprint bump, deployment, workflow dispatch, dry run, write run, cron, 4D.4, 4D.5, or
+  Decision influence is part of this source state.

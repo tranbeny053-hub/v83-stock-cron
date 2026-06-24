@@ -168,3 +168,41 @@ Current real-world references are therefore expected to return
 provider evidence. A rejected run constructs no production repository and writes
 no predictions or snapshots. Do not dispatch dry run or `WRITE-EVIDENCE` until a
 later reviewed phase replaces the sentinel with an approved real cutover policy.
+
+## OKX Cadence Readiness Diagnostic
+
+Wave 4D.3-Ops Phase 2D.2A adds a write-free OKX cadence-readiness diagnostic
+for scheduler-runner measurement only. It is `workflow_dispatch` only and has no
+cron trigger.
+
+The diagnostic does not call the collector, does not call `analyze_request`,
+does not construct a persistence repository, does not read database secrets, and
+does not write predictions or evidence. It measures only public OKX access for
+the fixed BTC/USDT and ETH/USDT 1H/4H matrix using:
+
+* OKX server time once;
+* OKX latest closed candles for the selected cells;
+* OKX SWAP instruments once;
+* OKX current funding and current open interest once per selected symbol.
+
+The full four-cell measurement is bounded to five derivatives logical requests,
+four candle requests, one server-time request, and zero Binance requests. Output
+is sanitized JSON plus an optional GitHub step summary; it includes endpoint
+paths, counts, timestamps, status categories, and required metric coverage, but
+never raw provider bodies, secrets, headers, database rows, or analysis payloads.
+
+Interpret the final classification as readiness evidence only:
+
+* `AVAILABLE_COMPLETE`: all required OKX v1 metrics were present, valid, and
+  no-lookahead safe for the measured cells.
+* `AVAILABLE_PARTIAL`: OKX responded, but one or more required metric fields
+  were missing or invalid.
+* `NO_LOOKAHEAD_FAILED` or `TIMESTAMP_INVALID`: timing semantics require review
+  before any cadence run.
+* `RATE_LIMITED`, `TIMEOUT`, `HTTP_ERROR`, or `PROVIDER_UNAVAILABLE`: runner-side
+  public-provider access is not ready enough for cadence collection.
+* `CONFIGURATION_ERROR`: the diagnostic invocation exceeded its source caps.
+
+Completion of this diagnostic does not authorize a collector dry run, a
+`WRITE-EVIDENCE` run, cron activation, Wave 4D.4, Wave 4D.5, or any Decision
+influence. Those remain blocked pending separate review.

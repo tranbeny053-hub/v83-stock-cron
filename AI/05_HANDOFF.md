@@ -246,3 +246,20 @@ Next: Claude review, then deployment and browser DOM QA as a separate approved s
 - No workflow change, production collector run, dry run, write run, Supabase access, HF access,
   migration, fingerprint change, persistence change, scheduler, cron, 4D.4, 4D.5, or Decision
   influence is included. Next step is Claude merge-readiness review of the source commit only.
+
+## Wave 4D.3-Ops Phase 2D.2A Handoff
+
+- Branch: `codex/wave-4d3-ops-2d2a-cadence-readiness-diagnostic`.
+- Adds `scripts/measure_okx_cadence_readiness.py` for write-free, public-read-only OKX v1 cadence
+  readiness measurement.
+- Adds the manual-only `Derivatives Cadence Readiness Diagnostic` workflow; it has no schedule,
+  no secrets, no database URL, and no collector invocation.
+- The diagnostic measures OKX server time, latest closed candles, SWAP instruments, current
+  funding, and current open interest for the fixed BTC/ETH 1H/4H matrix. Full-matrix bounds are
+  five derivatives logical requests, four candle requests, one server-time request, and zero
+  Binance requests.
+- Sanitized output reports timing offsets, required metric presence, no-lookahead status, and
+  final readiness classification only. It does not generate predictions, persist evidence, call
+  Supabase, call Hugging Face, change runtime flags, or bypass the existing v1 cutover guard.
+- Remaining blocked items: merge, tag, workflow dispatch, measurement run, collector dry run,
+  `WRITE-EVIDENCE`, cron, 4D.4, 4D.5, deployment, and Decision influence.
