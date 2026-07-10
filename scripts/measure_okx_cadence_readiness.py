@@ -324,7 +324,12 @@ def run_diagnostic(
 ) -> dict[str, Any]:
     process_started_at = _require_utc(dependencies.now_utc())
     cells = _select_cells(options)
-    if options.max_cells < 1 or options.max_cells > MAX_CELLS or len(cells) > options.max_cells:
+    if (
+        options.max_cells < 1
+        or options.max_cells > MAX_CELLS
+        or not cells
+        or len(cells) > options.max_cells
+    ):
         completed = _require_utc(dependencies.now_utc())
         return _output(
             options,
@@ -343,10 +348,7 @@ def run_diagnostic(
         monotonic=dependencies.monotonic,
     )
     adapter = OkxSwapDerivativesAdapter(http_client=recorder)
-    server_time_utc, clock_offset_ms, server_classification = _probe_server_time(
-        recorder,
-        local_now=process_started_at,
-    )
+    server_time_utc, clock_offset_ms, server_classification = _probe_server_time(recorder)
 
     instruments_payload: list[dict[str, Any]] | None = None
     symbol_observations: dict[str, SymbolObservation] = {}
@@ -554,30 +556,32 @@ def _fetch_symbol_observation(
     instruments_payload: list[dict[str, Any]] | None,
 ) -> tuple[SymbolObservation, list[dict[str, Any]] | None]:
     start_index = len(recorder.timings)
-    classification: str | None = None
+    classifications: list[str] = []
     if instruments_payload is None:
         try:
             instruments_payload = adapter.fetch_instruments()
         except PublicDerivativesAdapterError:
             instruments_payload = None
-            classification = recorder.latest_error(OKX_INSTRUMENTS_PATH) or "PROVIDER_UNAVAILABLE"
+            classifications.append(
+                recorder.latest_error(OKX_INSTRUMENTS_PATH) or "PROVIDER_UNAVAILABLE"
+            )
     resolution = resolve_okx_swap_instrument(symbol, instruments_payload or [])
-    if resolution.status != InstrumentResolutionStatus.SUPPORTED and classification is None:
-        classification = "PROVIDER_UNAVAILABLE"
+    if resolution.status != InstrumentResolutionStatus.SUPPORTED:
+        classifications.append("PROVIDER_UNAVAILABLE")
     funding_payload: list[dict[str, Any]] | None = None
     open_interest_payload: list[dict[str, Any]] | None = None
-    if resolution.candidate and classification is None:
+    if resolution.candidate and not classifications:
         try:
             funding_payload = adapter.fetch_current_funding(resolution.candidate)
         except PublicDerivativesAdapterError:
-            classification = (
+            classifications.append(
                 recorder.latest_error(OKX_CURRENT_FUNDING_PATH) or "PROVIDER_UNAVAILABLE"
             )
         try:
             open_interest_payload = adapter.fetch_current_open_interest(resolution.candidate)
         except PublicDerivativesAdapterError:
-            classification = recorder.latest_error(OKX_CURRENT_OPEN_INTEREST_PATH) or (
-                "PROVIDER_UNAVAILABLE"
+            classifications.append(
+                recorder.latest_error(OKX_CURRENT_OPEN_INTEREST_PATH) or "PROVIDER_UNAVAILABLE"
             )
     timings = recorder.timings_since(start_index)
     return (
@@ -590,7 +594,7 @@ def _fetch_symbol_observation(
                 OKX_CURRENT_OPEN_INTEREST_PATH
             ),
             timings=timings,
-            classification=classification,
+            classification=_reduce_classification(classifications) if classifications else None,
         ),
         instruments_payload,
     )
@@ -648,9 +652,8 @@ def _latest_closed_candle(payload: Any, timeframe: str) -> tuple[datetime, datet
 
 def _probe_server_time(
     recorder: RecordingOkxHttpClient,
-    *,
-    local_now: datetime,
 ) -> tuple[str | None, int | None, str | None]:
+    start_index = len(recorder.timings)
     try:
         payload = recorder.get_json(
             base_url=OKX_PUBLIC_BASE_URL,
@@ -666,8 +669,26 @@ def _probe_server_time(
     server_time = _millis_to_utc(rows[0].get("ts") if isinstance(rows[0], dict) else None)
     if server_time is None:
         return None, None, "TIMESTAMP_INVALID"
-    offset_ms = int(round((server_time - local_now).total_seconds() * 1000))
+    offset_ms = _server_clock_offset_ms(server_time, recorder.timings_since(start_index))
     return _iso(server_time), offset_ms, None
+
+
+def _server_clock_offset_ms(
+    server_time: datetime,
+    timings: Sequence[Mapping[str, object]],
+) -> int | None:
+    if not timings:
+        return None
+    timing = timings[0]
+    try:
+        started = _parse_iso(str(timing["request_started_at_utc"]))
+        completed = _parse_iso(str(timing["request_completed_at_utc"]))
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if completed < started:
+        return None
+    midpoint = started + ((completed - started) / 2)
+    return int(round((server_time - midpoint).total_seconds() * 1000))
 
 
 def _select_cells(options: DiagnosticOptions) -> tuple[tuple[str, str], ...]:
@@ -788,18 +809,16 @@ def _cell_classification(
     no_lookahead_failed: bool,
     metric_valid_count: int,
 ) -> str:
-    for candidate in (candle_classification, observation_classification):
-        if candidate in {"RATE_LIMITED", "TIMEOUT", "HTTP_ERROR", "PROVIDER_UNAVAILABLE"}:
-            return candidate
-        if candidate == "TIMESTAMP_INVALID":
-            return candidate
+    classifications = [candle_classification, observation_classification]
     if block_status == "UNAVAILABLE":
-        return "PROVIDER_UNAVAILABLE"
+        classifications.append("PROVIDER_UNAVAILABLE")
     if not no_lookahead_pass and no_lookahead_failed:
-        return "NO_LOOKAHEAD_FAILED"
+        classifications.append("NO_LOOKAHEAD_FAILED")
     if block_status == "DEGRADED":
-        return "AVAILABLE_PARTIAL"
-    return "AVAILABLE_COMPLETE"
+        classifications.append("AVAILABLE_PARTIAL")
+    if block_status == "ACTIVE" and metric_valid_count == len(REQUIRED_METRIC_IDS):
+        classifications.append("AVAILABLE_COMPLETE")
+    return _reduce_classification(classifications)
 
 
 def _block_status(provider_available: bool, valid_metrics: Sequence[Mapping[str, Any]]) -> str:
@@ -815,7 +834,7 @@ def _reduce_classification(classifications: Sequence[str | None]) -> str:
     for candidate in FINAL_CLASSIFICATION_ORDER:
         if candidate in values:
             return candidate
-    return "AVAILABLE_COMPLETE"
+    return "CONFIGURATION_ERROR"
 
 
 def _payload_ts(payload: list[dict[str, Any]] | None, field: str) -> str | None:
@@ -829,9 +848,12 @@ def _millis_to_utc(value: Any) -> datetime | None:
         return None
     try:
         millis = int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
-    return datetime.fromtimestamp(millis / 1000, tz=UTC)
+    try:
+        return datetime.fromtimestamp(millis / 1000, tz=UTC)
+    except (OSError, OverflowError, TypeError, ValueError):
+        return None
 
 
 def _require_utc(value: datetime) -> datetime:

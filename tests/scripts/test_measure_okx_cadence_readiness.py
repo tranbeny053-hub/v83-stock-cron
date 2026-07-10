@@ -44,12 +44,14 @@ class _OkxFixtureTransport:
         malformed_path: str | None = None,
         omit_oi_usd: bool = False,
         future_event: bool = False,
+        provider_timestamp: Any | None = None,
     ) -> None:
         self.funding_status = funding_status
         self.timeout_path = timeout_path
         self.malformed_path = malformed_path
         self.omit_oi_usd = omit_oi_usd
         self.future_event = future_event
+        self.provider_timestamp = provider_timestamp
         self.calls: list[dict[str, str]] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -111,27 +113,33 @@ class _OkxFixtureTransport:
         ]
 
     def _funding_row(self, inst_id: str) -> dict[str, str]:
-        event_time = datetime(2099, 1, 1, tzinfo=UTC) if self.future_event else FIXED_NOW
+        event_ts = self._provider_timestamp()
         return {
             "instId": inst_id,
             "fundingRate": "0.0001",
-            "ts": str(_ms(event_time)),
+            "ts": event_ts,
             "fundingTime": str(_ms(datetime(2026, 6, 22, 8, 0, tzinfo=UTC))),
             "nextFundingTime": str(_ms(datetime(2026, 6, 22, 16, 0, tzinfo=UTC))),
         }
 
     def _open_interest_row(self, inst_id: str) -> dict[str, str]:
-        event_time = datetime(2099, 1, 1, tzinfo=UTC) if self.future_event else FIXED_NOW
+        event_ts = self._provider_timestamp()
         row = {
             "instId": inst_id,
             "oi": "100",
             "oiCcy": "2.5",
             "oiUsd": "250000",
-            "ts": str(_ms(event_time)),
+            "ts": event_ts,
         }
         if self.omit_oi_usd:
             row.pop("oiUsd")
         return row
+
+    def _provider_timestamp(self) -> Any:
+        if self.provider_timestamp is not None:
+            return self.provider_timestamp
+        event_time = datetime(2099, 1, 1, tzinfo=UTC) if self.future_event else FIXED_NOW
+        return str(_ms(event_time))
 
 
 def _ms(value: datetime) -> int:
@@ -250,6 +258,20 @@ def test_configuration_error_does_not_start_provider_requests() -> None:
     assert fixture.calls == []
 
 
+def test_zero_cell_selection_fails_closed_before_provider_requests() -> None:
+    output, fixture = _run(options=diagnostic.DiagnosticOptions(symbol="SOL/USDT"))
+
+    assert output["final_classification"] == "CONFIGURATION_ERROR"
+    assert output["selected_cell_count"] == 0
+    assert output["server_time_logical_request_count"] == 0
+    assert output["candle_logical_request_count"] == 0
+    assert output["derivatives_logical_request_count"] == 0
+    assert output["total_logical_request_count"] == 0
+    assert output["total_http_attempt_count"] == 0
+    assert fixture.calls == []
+    assert diagnostic._reduce_classification([]) == "CONFIGURATION_ERROR"
+
+
 def test_latest_closed_candle_ignores_current_forming_candle() -> None:
     output, _ = _run(
         options=diagnostic.DiagnosticOptions(symbol="BTC/USDT", timeframe="1H", max_cells=1)
@@ -261,6 +283,15 @@ def test_latest_closed_candle_ignores_current_forming_candle() -> None:
     assert cell["candle_confirmed"] is True
     assert cell["observed_request_start_offset_seconds"] is not None
     assert cell["observed_completion_offset_seconds"] is not None
+
+
+def test_server_clock_offset_uses_request_midpoint() -> None:
+    output, _ = _run(
+        options=diagnostic.DiagnosticOptions(symbol="BTC/USDT", timeframe="1H", max_cells=1)
+    )
+
+    assert output["okx_server_time_utc"] == "2026-06-22T12:05:00Z"
+    assert output["okx_server_clock_offset_ms"] == -1500
 
 
 @pytest.mark.parametrize(
@@ -288,6 +319,20 @@ def test_provider_failures_are_sanitized_and_classified(
     assert "https://" not in encoded
 
 
+def test_mixed_candle_timestamp_and_funding_rate_limit_uses_precedence() -> None:
+    output, _ = _run(
+        _OkxFixtureTransport(
+            funding_status=429,
+            malformed_path=diagnostic.OKX_CANDLES_PATH,
+        ),
+        options=diagnostic.DiagnosticOptions(symbol="BTC/USDT", timeframe="1H", max_cells=1),
+    )
+
+    assert output["final_classification"] == "RATE_LIMITED"
+    assert output["cells"][0]["classification"] == "RATE_LIMITED"
+    assert output["cells"][0]["candle_confirmed"] is False
+
+
 def test_missing_metric_is_available_partial() -> None:
     output, _ = _run(
         _OkxFixtureTransport(omit_oi_usd=True),
@@ -312,6 +357,21 @@ def test_future_provider_timestamps_fail_no_lookahead() -> None:
     assert cell["classification"] == "NO_LOOKAHEAD_FAILED"
     assert cell["no_lookahead_pass"] is False
     assert cell["present_metric_ids"] == sorted(diagnostic.REQUIRED_METRIC_IDS)
+
+
+def test_invalid_provider_timestamp_does_not_raise_and_classifies_safely() -> None:
+    output, _ = _run(
+        _OkxFixtureTransport(provider_timestamp="9" * 400),
+        options=diagnostic.DiagnosticOptions(symbol="BTC/USDT", timeframe="1H", max_cells=1),
+    )
+    cell = output["cells"][0]
+
+    assert diagnostic._millis_to_utc(float("inf")) is None
+    assert output["final_classification"] == "AVAILABLE_PARTIAL"
+    assert cell["classification"] == "AVAILABLE_PARTIAL"
+    assert cell["metric_valid_count"] == 0
+    assert cell["funding_response_ts_utc"] is None
+    assert cell["open_interest_ts_utc"] is None
 
 
 def test_server_time_timeout_is_classified_without_stopping_cell_measurement() -> None:
