@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/hf_runtime_baseline.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "hf_main_sha",
+    "release_id",
+    "release_label",
+    "environment",
+    "source_milestone",
+    "fingerprint",
+    "frontend_asset_tokens",
+    "critical_source_digests"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "minLength": 1,
+      "const": "hf-runtime-baseline.v1"
+    },
+    "hf_main_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "release_id": { "type": "string", "minLength": 1 },
+    "release_label": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "minLength": 1 },
+    "source_milestone": { "type": "string", "minLength": 1 },
+    "fingerprint": { "type": "string", "minLength": 1 },
+    "frontend_asset_tokens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_js", "styles_css"],
+      "properties": {
+        "app_js": { "type": "string", "minLength": 1 },
+        "styles_css": { "type": "string", "minLength": 1 }
+      }
+    },
+    "critical_source_digests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "src/crypto_probability_engine/config/build_info.py",
+        "src/crypto_probability_engine/api/app.py",
+        "src/crypto_probability_engine/api/analysis_service.py",
+        "src/crypto_probability_engine/quant_v2/contract.py",
+        "src/crypto_probability_engine/derivatives_intel/runtime.py",
+        "schemas/build_info.schema.json",
+        "schemas/response.schema.json",
+        "frontend/index.html",
+        "frontend/app.js",
+        "frontend/styles.css",
+        "Dockerfile"
+      ],
+      "properties": {
+        "src/crypto_probability_engine/config/build_info.py": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "src/crypto_probability_engine/api/app.py": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "src/crypto_probability_engine/api/analysis_service.py": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "src/crypto_probability_engine/quant_v2/contract.py": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "src/crypto_probability_engine/derivatives_intel/runtime.py": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "schemas/build_info.schema.json": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "schemas/response.schema.json": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "frontend/index.html": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "frontend/app.js": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "frontend/styles.css": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "Dockerfile": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

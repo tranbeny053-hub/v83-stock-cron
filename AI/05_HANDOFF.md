@@ -1,5 +1,33 @@
 # Handoff Packet
 
+## Ops-RT.1 Pinned HF Baseline Handoff — 2026-07-13
+
+- Goal: replace the scheduler-checkout production-intent assumption with a committed HF baseline
+  and add a strictly advisory scheduler deployment delta.
+- Q1: `ops/hf_runtime_baseline.json`, validated by
+  `schemas/hf_runtime_baseline.schema.json`, pins HF release 2A.0 at
+  `30d4982903e6f44e063616bc3f03f334bd2544e2`. All intended release, milestone, fingerprint,
+  frontend token, and critical-digest values come from that manifest.
+- Fail-closed behavior: missing or invalid pin/schema is `PIN_MISSING` before network activity;
+  confirmed HF main identity drift is `PIN_DRIFT`. Existing source, runtime, frontend, transition,
+  unavailable-probe, and metadata-anomaly semantics remain intact.
+- Q2: only a fully `HEALTHY` Q1 can evaluate the local scheduler SHA and governed checkout bytes.
+  Missing local pin history causes no fetch or failure; the ahead count is null and the advisory
+  remains non-failing. Q2 cannot change Q1 classification or exit code.
+- Ownership: scheduler commits may advance independently and do not become production intent. A
+  pin change requires separate reviewed deployment authorization plus mechanical regeneration and
+  fidelity verification from the authorized app-root HF Git object.
+- Incident interpretation: the current red guard was caused by the old baseline model, not an HF
+  production defect. No HF deployment, production mutation, schedule weakening, or guard
+  weakening occurred.
+- Separate gates remain closed: cadence freeze, sentinel/window decisions, 4D.4, 4D.5, production
+  evidence writes, and Decision influence.
+- Verification: 62 focused guard tests and 724 full offline tests pass. Ruff, schema, build-info,
+  secret, forbidden-scope, article-body, and offline manual-smoke checks pass.
+- Next: Claude high-risk merge-readiness review of the exact local implementation commit.
+
+---
+
 ## Wave 4D.3-Ops Phase 2D.0A Versioned Response + Selector Handoff — 2026-06-23
 
 - Goal: add the safe internal selector seam needed by a future trusted caller while preserving

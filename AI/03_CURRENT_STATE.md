@@ -1,5 +1,32 @@
 # Current State
 
+Updated: 2026-07-13
+
+## Ops-RT.1 Pinned HF Baseline and Deployment-Delta Advisory
+
+- Q1 production intent now comes only from the committed, schema-versioned
+  `ops/hf_runtime_baseline.json`; the current authorized pin is HF release 2A.0 at
+  `30d4982903e6f44e063616bc3f03f334bd2544e2`.
+- Manifest/schema failures are fail-closed as `PIN_MISSING` before any probe, while an observed
+  HF `main` SHA mismatch is confirmed across the existing three-round evidence contract as
+  `PIN_DRIFT`.
+- HF critical blobs, live build identity, live frontend tokens, and live asset bytes are compared
+  only with the pin. Scheduler checkout contents no longer define Q1 production intent.
+- Q2 is a non-failing local advisory evaluated only after fully `HEALTHY` Q1 evidence. It reports
+  the bounded governed-path delta and locally provable ahead count; shallow history requires no
+  fetch and leaves the count unavailable.
+- Scheduler source may advance without becoming HF production intent. Pin advancement requires a
+  separate reviewed deployment authorization and a mechanically regenerated manifest.
+- The current red guard was a baseline-model defect, not evidence of an HF production defect. No
+  HF deployment or mutation occurred, and the workflow schedule, confirmation rounds, transport
+  limits, and fail-closed classifications were not weakened.
+- Cadence freeze remains a separate later gate. The cutover sentinel, cadence windows, 4D.4/4D.5,
+  and Decision influence remain unchanged.
+- Offline verification: 62 focused guard tests and 724 full-suite tests pass; Ruff, schema,
+  build-info, secret, forbidden-scope, article-body, and manual-smoke checks pass.
+
+---
+
 Updated: 2026-06-23
 
 ## Wave 4D.3-Ops Phase 2D.0A Versioned Response + Selector Seam
