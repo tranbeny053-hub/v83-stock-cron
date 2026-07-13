@@ -15,7 +15,7 @@ from types import MappingProxyType
 from crypto_probability_engine.derivatives_intel.schemas import METHODOLOGY_VERSION_V1
 
 CUTOVER_POLICY_ID = "cadence-cutover-okx-v1"
-CUTOVER_CLOSE_UTC = datetime(2100, 1, 1, tzinfo=UTC)
+CUTOVER_CLOSE_UTC = datetime(2026, 7, 14, 8, 0, tzinfo=UTC)
 
 
 class CadenceAdmissionClassification(StrEnum):

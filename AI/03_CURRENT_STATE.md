@@ -2,6 +2,23 @@
 
 Updated: 2026-07-13
 
+## Phase 2D.2G Cadence Activation Source
+
+- The source-only implementation on `feat/2d2g-cadence-activation-t` replaces the fail-closed
+  sentinel with `2026-07-14T08:00:00Z` (`2026-07-14 15:00 Asia/Ho_Chi_Minh`). It is not merged,
+  tagged, pushed, or deployed.
+- Policy `cadence-cutover-okx-v1` and the frozen windows remain unchanged: 1H = 300-1200 seconds
+  and 4H = 300-1800 seconds. Admission remains strict-greater than the cutover close.
+- Only the scheduler deployment lane would be affected by a later authorized deployment. Hugging
+  Face and the database are unaffected.
+- No workflow was dispatched and no dry run was authorized or executed. `WRITE-EVIDENCE` and the
+  first production write remain separately gated and unauthorized; production v1 rows remain
+  zero according to the latest read-only proof.
+- The next gate is Claude High merge-readiness review of the exact local commit. Deployment,
+  timing confirmation, dry-run dispatch, and any first write remain separate authorizations.
+
+---
+
 ## Phase 2D.2F Evidence-Backed Cadence Policy Freeze
 
 - `CADENCE_POLICY_FREEZE_2D2F.md` records the six write-free OKX scheduler samples and ratifies

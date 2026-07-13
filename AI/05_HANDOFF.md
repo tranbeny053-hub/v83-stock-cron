@@ -1,5 +1,23 @@
 # Handoff Packet
 
+## Phase 2D.2G Cadence Activation Source Handoff — 2026-07-13
+
+- Scope: source-only implementation on `feat/2d2g-cadence-activation-t`; it is not merged, tagged,
+  pushed, deployed, or dispatched.
+- Concrete cutover close: `2026-07-14T08:00:00Z` (`2026-07-14 15:00
+  Asia/Ho_Chi_Minh`). Reference closes at or before this boundary remain rejected.
+- Frozen policy remains unchanged: `cadence-cutover-okx-v1`; 1H = 300-1200 seconds; 4H =
+  300-1800 seconds. The comparison and cadence classifications are unchanged.
+- A later authorized deployment would affect only the scheduler lane. Hugging Face, the HF pin,
+  runtime derivatives behavior, and the database are unaffected.
+- No dry run was authorized or executed. `WRITE-EVIDENCE` remains unauthorized, production v1
+  rows remain zero according to the latest read-only proof, and the first write remains a separate
+  gate.
+- Next: Claude High merge-readiness review of the exact local commit. Deployment proof, operator
+  timing confirmation, dry-run dispatch, and any write authorization remain later gates.
+
+---
+
 ## Phase 2D.2F Cadence Policy Freeze Handoff — 2026-07-13
 
 - Goal: record the evidence-backed decision to retain the existing OKX v1 cadence policy without

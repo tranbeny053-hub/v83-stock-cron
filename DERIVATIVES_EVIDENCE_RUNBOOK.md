@@ -23,6 +23,38 @@ registry read to be retried for each cell, allows every spot call its one
 configured retry, and assumes the 60-second derivatives symbol cache expires
 between slow cells. Derivatives registry and current-state resources do not retry.
 
+## Phase 2D.2G activation source and dry-run timing
+
+The source-only Phase 2D.2G change sets the methodology cutover close to
+`2026-07-14T08:00:00Z` (`2026-07-14 15:00 Asia/Ho_Chi_Minh`). Reference closes
+at or before that boundary are rejected. The frozen windows remain unchanged:
+1H = 300-1200 seconds and 4H = 300-1800 seconds. This feature-branch source is
+not merged, tagged, pushed, deployed, or dispatched.
+
+Only a later scheduler deployment would be affected; Hugging Face and the
+database are unaffected. The first joint guard interval is
+`2026-07-14T12:05:00Z-12:20:00Z` (`19:05-19:20 Asia/Ho_Chi_Minh`). For a
+separately authorized dry run, the operator dispatch band is
+`2026-07-14T12:06:00Z-12:10:00Z` (`19:06-19:10` local), with a hard dispatch
+stop at `2026-07-14T12:12:00Z` (`19:12` local). The guard evaluates after
+queueing, setup, and live analysis, so the dispatch band is narrower than the
+guard interval; a late dispatch can make the 1H cell `TOO_LATE`. Do not retry
+after an abnormal result.
+
+The planned later inputs are `matrix_scope=BTC_ONLY`, `enable_collector=true`,
+`dry_run=true`, and empty `confirm_write`. The expected later result is
+BTC/USDT 1H and 4H using the 12:00Z reference close, both admitted, with
+`SKIPPED_DRY_RUN` per cell, `DRY_RUN_COMPLETE`, exit code 0, zero database
+writes, and the v1 row count still zero. This task does not authorize or run
+that dry run. If the timing-only window is missed, the fallback guard interval
+is `2026-07-14T20:05:00Z-20:20:00Z`; it still requires operator confirmation
+and deployment proofs and is not automatically authorized.
+
+`WRITE-EVIDENCE` and the first production write remain unauthorized. The
+latest read-only proof reports zero production v1 rows. The next gate is Claude
+High merge-readiness review, followed by separate deployment, dry-run, and
+first-write authorizations.
+
 ## Zero-write dry run
 
 Use `workflow_dispatch` and select:
