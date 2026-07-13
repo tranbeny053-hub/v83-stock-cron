@@ -206,3 +206,22 @@ Interpret the final classification as readiness evidence only:
 Completion of this diagnostic does not authorize a collector dry run, a
 `WRITE-EVIDENCE` run, cron activation, Wave 4D.4, Wave 4D.5, or any Decision
 influence. Those remain blocked pending separate review.
+
+## Phase 2D.2F cadence policy freeze
+
+The governed decision record `CADENCE_POLICY_FREEZE_2D2F.md` ratifies the
+existing `cadence-cutover-okx-v1` values unchanged:
+
+* `1H`: 300-second post-close delay and 1200-second maximum lateness.
+* `4H`: 300-second post-close delay and 1800-second maximum lateness.
+* Sentinel: `2100-01-01T00:00:00Z`, retained as the fail-closed activation lock.
+
+The six write-free OKX samples were complete for all four cells. Direct 4H
+completion offsets were approximately +3072, +3690, +3935, +4787, +6940, and
++11166 seconds at their lower reported bounds. No sample directly measured the
+4H early edge near +300 to +400 seconds; the 300-second 4H lower bound is an
+inference and must not be tightened from this cohort.
+
+Phase 2D.2F changes no runtime source, workflow, sentinel, window, collector
+state, or production data. It authorizes no deployment or production write.
+Any activation or cutover decision remains a separate Phase 2D.2G review.

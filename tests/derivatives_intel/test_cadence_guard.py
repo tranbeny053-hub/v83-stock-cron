@@ -18,6 +18,20 @@ from crypto_probability_engine.derivatives_intel.schemas import METHODOLOGY_VERS
 REFERENCE_AFTER_CUTOVER = datetime(2100, 1, 1, 1, 0, tzinfo=UTC)
 
 
+def test_frozen_cadence_policy_2d2f_contract() -> None:
+    assert CUTOVER_POLICY_ID == "cadence-cutover-okx-v1"
+    assert CUTOVER_CLOSE_UTC == datetime(2100, 1, 1, tzinfo=UTC)
+    assert CADENCE_WINDOWS["1H"] == CadenceWindow(
+        post_close_delay_seconds=300,
+        max_lateness_seconds=1200,
+    )
+    assert CADENCE_WINDOWS["4H"] == CadenceWindow(
+        post_close_delay_seconds=300,
+        max_lateness_seconds=1800,
+    )
+    assert set(CADENCE_WINDOWS) == {"1H", "4H"}
+
+
 def _admit(**overrides):
     values = {
         "methodology_version": METHODOLOGY_VERSION_V1,

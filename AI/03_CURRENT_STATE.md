@@ -2,6 +2,26 @@
 
 Updated: 2026-07-13
 
+## Phase 2D.2F Evidence-Backed Cadence Policy Freeze
+
+- `CADENCE_POLICY_FREEZE_2D2F.md` records the six write-free OKX scheduler samples and ratifies
+  the existing `cadence-cutover-okx-v1` values unchanged: 1H = 300-1200 seconds and 4H =
+  300-1800 seconds after close.
+- The activation sentinel remains `2100-01-01T00:00:00Z` as an intentional fail-closed lock.
+- The direct 4H observations were approximately +3072 through +11167 seconds. No sample measured
+  the 4H early edge near +300 to +400 seconds, so the 300-second 4H delay remains an inference and
+  may not be tightened from this cohort.
+- This phase adds a decision record and a test-only constant lock. It changes no runtime source,
+  workflow, deployment, collector state, cadence classification, production data, or Decision
+  influence.
+- No production write is authorized. The next gate remains a separate Phase 2D.2G review for any
+  activation or cutover decision.
+- Offline verification: 15 focused cadence tests and 725 full-suite tests pass with the existing
+  15 warnings; Ruff, schema, build-info, secret, forbidden-scope, article-body, manual-smoke, and
+  whitespace checks pass.
+
+---
+
 ## Ops-RT.1 Pinned HF Baseline and Deployment-Delta Advisory
 
 - Q1 production intent now comes only from the committed, schema-versioned

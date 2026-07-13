@@ -1,5 +1,28 @@
 # Handoff Packet
 
+## Phase 2D.2F Cadence Policy Freeze Handoff — 2026-07-13
+
+- Goal: record the evidence-backed decision to retain the existing OKX v1 cadence policy without
+  changing runtime source or production configuration.
+- Frozen contract: policy `cadence-cutover-okx-v1`; 1H = 300-second delay and 1200-second maximum
+  lateness; 4H = 300-second delay and 1800-second maximum lateness.
+- Sentinel: `2100-01-01T00:00:00Z` remains the intentional fail-closed activation lock.
+- Evidence: six write-free four-cell samples from scheduler source
+  `da5bb7f17de085f50fc254ee571bf77ef156630c` were complete and no-lookahead safe. Correct direct
+  4H completion offsets ranged from approximately +3072 to +11167 seconds.
+- Limitation: no sample directly measured a 4H close near +300 to +400 seconds. The 4H lower bound
+  is inferred from shared OKX candle infrastructure, early complete 1H evidence, current-value
+  derivatives endpoints, and six complete 4H cells; it must not be tightened from this cohort.
+- Safety: decision record and one test-only constant assertion; no runtime, workflow, sentinel,
+  window, collector, deployment, database, production-write, 4D.4/4D.5, or Decision change.
+- Verification: 15 focused cadence tests and 725 full offline tests pass with the existing 15
+  warnings. Ruff, schema, build-info, secret, forbidden-scope, article-body, offline manual-smoke,
+  and whitespace checks pass.
+- Next: Claude High/Max merge-readiness review, followed only by a separately authorized Phase
+  2D.2G activation/cutover review.
+
+---
+
 ## Ops-RT.1 Pinned HF Baseline Handoff — 2026-07-13
 
 - Goal: replace the scheduler-checkout production-intent assumption with a committed HF baseline
