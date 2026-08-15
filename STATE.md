@@ -24,10 +24,18 @@ proven byte-identical to `676fafb` except the four files now committed. Retire i
 `UCPE-W4D3-OPS-2A0-20260622-A`. `origin/main` is **44 files / +10,098 / −350 ahead** of it,
 entirely the default-off derivatives shadow track.
 
+**Live operations (verified 2026-08-15, read-only)** — all 7 GitHub workflows active.
+Outcome resolver: **670 runs, last 100 all successful**, most recent 09:40. Its
+config-validation step passes, so `SUPABASE_DB_URL` is set and `RESOLVER_LIMIT` is valid;
+and since the resolver exits non-zero on any exception, migrations **0003 and 0004 are
+proven applied**. Source-integrity guard green. *This corrects the strategic audit, which
+inferred the resolver was blocked on an unset secret — it is not, and the calibration
+clock is already running.*
+
 **Open decisions** — none blocking.
 
-**NEXT ACTION** — Packet 1 (T3, owner-gated): confirm `RESOLVER_LIMIT`, verify the hourly
-outcome resolver is succeeding, apply outstanding Supabase migrations, and get
-calibration `sample_gate` advancing off `NO_SAMPLES`. Highest-value item in the project:
-calibration needs elapsed wall-clock time to accumulate samples, so every day of delay is
-a day the engine cannot demonstrate it is calibrated. See `.work/OWNER_ACTION.md`.
+**NEXT ACTION** — Packet 1, owner-gated (`.work/OWNER_ACTION.md`): run
+`sql/migration_status_readonly.sql` in the Supabase SQL editor to determine which of
+migrations 0002/0005/0006/0007 are outstanding and how far calibration has accumulated;
+then authorize the two T3 actions (push branches to `origin`; deploy the 44-file gap to
+`hf`). Applying any migration is T4 and unauthorized.
