@@ -25,17 +25,25 @@ proven byte-identical to `676fafb` except the four files now committed. Retire i
 entirely the default-off derivatives shadow track.
 
 **Live operations (verified 2026-08-15, read-only)** — all 7 GitHub workflows active.
-Outcome resolver: **670 runs, last 100 all successful**, most recent 09:40. Its
-config-validation step passes, so `SUPABASE_DB_URL` is set and `RESOLVER_LIMIT` is valid;
-and since the resolver exits non-zero on any exception, migrations **0003 and 0004 are
-proven applied**. Source-integrity guard green. *This corrects the strategic audit, which
-inferred the resolver was blocked on an unset secret — it is not, and the calibration
-clock is already running.*
+Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
+**Database: all 7 migrations (0001–0007) APPLIED. No migration work is required.**
+965 predictions, 813 resolved outcomes (DOWN 376 / UP 327 / TIMEOUT 110).
 
-**Open decisions** — none blocking.
+**Prediction generation is traffic-driven, not scheduled.** A prediction row is written
+only as a best-effort background side-effect of a session-gated `/v1/analyze` or
+`/v1/analyze_batch` call (`app.py:164,185` → `analysis_service.py:510`). No scheduled
+workflow calls it: keepalive GETs `/` only; the other two schedules resolve outcomes and
+check source integrity. So `predictions_last_7d = 0` means **no operator used the app
+since 2026-08-05 04:25:18Z** — the month spent on UABO. It is not a fault.
 
-**NEXT ACTION** — Packet 1, owner-gated (`.work/OWNER_ACTION.md`): run
-`sql/migration_status_readonly.sql` in the Supabase SQL editor to determine which of
-migrations 0002/0005/0006/0007 are outstanding and how far calibration has accumulated;
-then authorize the two T3 actions (push branches to `origin`; deploy the 44-file gap to
-`hf`). Applying any migration is T4 and unauthorized.
+**CI has never run** (`ci.yml` total_count 0). It triggers only on `push` to `codex/**`
+or on `pull_request`; the two pushed branches match neither. Clean-room verification of
+this repository has never actually executed.
+
+**Open decisions** — none blocking. DEPLOY not authorized.
+
+**NEXT ACTION** — run `sql/calibration_cohort_readonly.sql` (read-only) to settle the real
+`sample_gate`. Row totals alone cannot: the app's calibration filter also requires
+`p.is_live_data = true AND o.is_live_data = true`, and both columns default to `false`.
+Then the first product packet is resuming operator traffic so predictions accumulate
+again. See `.work/OWNER_ACTION.md`.
