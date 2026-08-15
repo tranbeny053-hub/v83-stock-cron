@@ -50,8 +50,18 @@ fi
 }
 SUMMARY=$(grep -m1 -E '[0-9]+ (passed|failed)' "$LOG" | cut -c1-60)
 
+PYTHONPATH=src "$PY" scripts/validate_schemas.py >"$LOG" 2>&1 || {
+  first=$(awk 'NF { line=$0 } END { print line }' "$LOG" | cut -c1-120)
+  fail "schemas: ${first:-unknown} (see $LOG)"
+}
+
+PYTHONPATH=src "$PY" scripts/manual_smoke.py >"$LOG" 2>&1 || {
+  first=$(awk 'NF { line=$0 } END { print line }' "$LOG" | cut -c1-120)
+  fail "smoke: ${first:-unknown} (see $LOG)"
+}
+
 for s in check_no_forbidden_scope check_no_secrets check_no_full_article_body; do
   "$PY" "scripts/$s.py" >>"$LOG" 2>&1 || fail "scanner $s (see $LOG)"
 done
 
-echo "VERIFY=PASS ruff ok | $SUMMARY | scanners 3/3 | $(git rev-parse --short HEAD)"
+echo "VERIFY=PASS ruff ok | $SUMMARY | schemas+smoke ok | scanners 3/3 | $(git rev-parse --short HEAD)"

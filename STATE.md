@@ -56,12 +56,28 @@ So unscoped reports are MEASURED; per-timeframe reports warn; per-symbol will wa
 *This is the second time live evidence beat the documentation: the strategic audit
 assumed calibration was stuck at `INSUFFICIENT_SAMPLE`. It is at `MEASURED`.*
 
-**Open decisions** — none blocking. DEPLOY not authorized. PR #1 open, not merged.
+**Gate** — `./verify.sh` is now materially equivalent to GitHub CI: ruff, full pytest,
+`validate_schemas.py`, `manual_smoke.py`, and all 3 safety scanners. **3.84 s**, one-line
+output, first-causal-failure preserved. A local PASS is now as strong as a green CI run.
 
-**NEXT ACTION** — the product question is now answerable and is the real v1 work: read the
-actual calibration report for those 806 samples (Brier score, reliability buckets,
-top-label hit rate) and judge whether the stated probabilities are honest. Blocker to
-check first: `build_operator_repository` needs `SUPABASE_DB_URL`; the Supabase REST
-repository raises `NotImplementedError` for calibration reads. If the HF runtime is
-configured for REST only, production cannot serve `/v1/calibration` even though the data
-exists. Verify HF runtime configuration before assuming the endpoint works.
+**HF production (read-only, 2026-08-15)** — Space `RUNNING`, `cpu-basic`, sha `30d4982`
+(= baseline), uptime ~2.5 days. `/healthcheck` 200; `/v1/build-info` 200 with fingerprint
+`UCPE-W4D3-OPS-2A0-20260622-A`. `/v1/system_status` and `/v1/calibration` both return
+**401 with a well-formed UNAUTHORIZED body — the route is registered and its auth gate
+works** (not 404, not 500).
+
+**Whether production can actually serve calibration: UNVERIFIED.** No Hugging Face CLI,
+token, or `huggingface_hub` library exists on this machine, and no HF credential is in the
+keychain, so Space secret keys cannot be enumerated. The outcome hinges on exactly one env
+var in the HF runtime (`settings.py:182`), via `build_operator_repository`:
+  `SUPABASE_DB_URL` set → Postgres → calibration works, reports MEASURED/806
+  else `SUPABASE_URL`+`SUPABASE_SERVICE_ROLE_KEY` → REST → `NotImplementedError` → **500**
+  else → InMemory → empty process-local store → **NO_SAMPLES**
+GitHub Actions having the URL proves nothing here; HF is a separate runtime.
+
+**Open decisions** — none blocking. HF deploy not authorized.
+
+**NEXT ACTION** — first real v1 product work: read the calibration report for the 806
+samples (Brier score, reliability buckets, top-label hit rate) and judge whether the
+stated probabilities are honest. Establish the HF `SUPABASE_DB_URL` question first, since
+it decides whether that report is reachable in production or only via direct DB read.
