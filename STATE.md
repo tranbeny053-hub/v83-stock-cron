@@ -40,10 +40,28 @@ since 2026-08-05 04:25:18Z** — the month spent on UABO. It is not a fault.
 or on `pull_request`; the two pushed branches match neither. Clean-room verification of
 this repository has never actually executed.
 
-**Open decisions** — none blocking. DEPLOY not authorized.
+**Calibration — MEASURED (verified 2026-08-15, read-only production query)**
+Default cohort **806 samples → `MEASURED`** (threshold ≥500). Nothing is lost to data
+quality: `excluded_prediction_not_live = 0`, `excluded_outcome_not_live = 0`,
+`excluded_bad_label = 0`. The only exclusions are 7 correctly-cohorted rows
+(5 `CONTROLLED_SMOKE` + 2 `SCHEDULED_SHADOW_EVIDENCE`), so the derivatives smoke rows are
+**already reclassified** — the contamination query returned no rows.
+Single `model_version=phase1a-wave4b0` and `methodology_version=heuristic-v1-wave4b0`
+across all 806 → **no `VERSION_MIX_WARNING`**. A clean single-version sample.
 
-**NEXT ACTION** — run `sql/calibration_cohort_readonly.sql` (read-only) to settle the real
-`sample_gate`. Row totals alone cannot: the app's calibration filter also requires
-`p.is_live_data = true AND o.is_live_data = true`, and both columns default to `false`.
-Then the first product packet is resuming operator traffic so predictions accumulate
-again. See `.work/OWNER_ACTION.md`.
+Per-timeframe, all `WARMING_UP` (100–299): 15m 172 · 4H 172 · 1H 165 · 1D 163 · 1W 134.
+**1M has zero resolved outcomes** (its horizons sit among the 152 still-unresolved).
+So unscoped reports are MEASURED; per-timeframe reports warn; per-symbol will warn more.
+
+*This is the second time live evidence beat the documentation: the strategic audit
+assumed calibration was stuck at `INSUFFICIENT_SAMPLE`. It is at `MEASURED`.*
+
+**Open decisions** — none blocking. DEPLOY not authorized. PR #1 open, not merged.
+
+**NEXT ACTION** — the product question is now answerable and is the real v1 work: read the
+actual calibration report for those 806 samples (Brier score, reliability buckets,
+top-label hit rate) and judge whether the stated probabilities are honest. Blocker to
+check first: `build_operator_repository` needs `SUPABASE_DB_URL`; the Supabase REST
+repository raises `NotImplementedError` for calibration reads. If the HF runtime is
+configured for REST only, production cannot serve `/v1/calibration` even though the data
+exists. Verify HF runtime configuration before assuming the endpoint works.
