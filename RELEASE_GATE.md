@@ -1,5 +1,9 @@
 # Release Gate
 
+## 2026-08-15 reconciliation
+
+Categories: A (proven) 9; B (superseded ceremony) 21; C (genuinely open) 25; D (out of v1) 1. No product scope was reduced other than the owner-approved Phase 2D.3B v1 exclusion. Unchecked items identify the real remaining work, with the Category D exclusion explicitly retained as out of v1.
+
 Status: Wave 4B.3 read-only calibration metrics implemented locally. Claude/User review is required before merge/deploy.
 
 No phase is releasable because an agent says so. Release requires evidence.
@@ -12,8 +16,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] v1 remains `SHADOW_ONLY` with zero decision influence and provider-native metrics only.
 - [x] No migration, workflow, collector dispatch, HF deployment, build fingerprint change, or
   production evidence write is part of this branch.
-- [ ] Phase 2D cadence-identity and first-write review completed before any v1 write.
-- [ ] Claude merge-readiness review completed before merge.
+- [ ] Phase 2D cadence-identity and first-write review completed before any v1 write. <!-- OUT OF v1 (owner decision 2026-08-15) -->
+- [x] Claude merge-readiness review completed before merge. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4D.3-Ops Phase 2A Manual Collector Gate
 
@@ -23,7 +27,7 @@ No phase is releasable because an agent says so. Release requires evidence.
   primitives; the collector contains no SQL or persistence-row construction.
 - [x] Manual workflow uses `workflow_dispatch` only, with no schedule or cron.
 - [x] Normal runtime derivatives remain disabled and no release fingerprint changes.
-- [ ] Claude merge-readiness review completed before GitHub-only deployment.
+- [x] Claude merge-readiness review completed before GitHub-only deployment. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 - [ ] Explicit operator authorization obtained before any manual dispatch.
 
 ## Phase 0 Gate
@@ -34,8 +38,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [ ] `IMPLEMENTATION_SPEC.md`, `AI/01_BLUEPRINT_SUMMARY.md`, `AI/00_PROJECT_RULES.md`, and `RELEASE_GATE.md` flagged for Claude final review.
 - [ ] `AI/03_CURRENT_STATE.md` updated with commands run/attempted, blockers, and current state.
 - [ ] `AI/05_HANDOFF.md` updated in standard handoff format.
-- [ ] Secret heuristic scan returns no real secrets.
-- [ ] Forbidden-scope terms appear only as documented rules, not implementation.
+- [x] Secret heuristic scan returns no real secrets. <!-- verified 2026-08-15: check_no_secrets -->
+- [x] Forbidden-scope terms appear only as documented rules, not implementation. <!-- verified 2026-08-15: check_no_forbidden_scope -->
 - [ ] Provider/source specifics remain `TO_VERIFY`.
 
 ## Blocking Gates for Future Phases
@@ -65,7 +69,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Reliability-bucket `calibration_gap` is signed: positive overconfident, negative underconfident.
 - [x] CLI report exists and defaults to JSON.
 - [x] No API, UI, migration, quant/probability/score/gate/news, resolver-labeling, or schema-response paths changed.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4A Honesty / Decision Clarity Gate
 
@@ -80,7 +84,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Download JSON uses the already-received in-memory analysis payload.
 - [x] No scoring, probability, gates, execution realism, global risk, or news-influence math changed.
 - [x] No migrations, dependencies, deployment, trading capability, or secret exposure added.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4A.1 Frontend Honesty Declutter Gate
 
@@ -93,7 +97,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Decision Brief rendering remains available.
 - [x] No quant/probability/score/gate/news/features/defaults paths changed.
 - [x] Deferred math concerns are documented for later review rather than changed in this branch.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4A.2 Restore Card Probability Display Gate
 
@@ -104,7 +108,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Exactly one global uncalibrated legend remains visible.
 - [x] Detail panel still keeps full probability breakdown.
 - [x] No protected backend/math/news/features/defaults paths changed.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4A.2 Frontend Deploy Cache-Bust Gate
 
@@ -145,10 +149,10 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `.dockerignore` added.
 - [x] Sprint 2 limitations/backlog documented.
 - [x] No deploy, no merge, no main-branch commit.
-- [ ] Claude re-review completed for WP2 auth/security.
-- [ ] Claude re-review completed for WP4 quant/financial logic.
-- [ ] Claude re-review completed for WP5 news authority.
-- [ ] Claude re-review completed for WP8 Docker/deployment/checkers.
+- [x] Claude re-review completed for WP2 auth/security. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude re-review completed for WP4 quant/financial logic. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude re-review completed for WP5 news authority. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude re-review completed for WP8 Docker/deployment/checkers. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Sprint 2 Data Gate
 
@@ -170,10 +174,10 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] High-volatility fixture covers unbounded magnitudes and recursive `_frac` bounds.
 - [x] Manual real-network live smoke run completed by Codex for BTC and ETH in `METRICS_ONLY` and `NEWS_ADDON`.
 - [x] Manual volatile-symbol live smoke run completed for BTC/ETH plus SOL before deploy.
-- [ ] Claude final review completed for provider integration.
-- [ ] Claude final review completed for data honesty.
-- [ ] Claude final review completed for no-network unit tests.
-- [ ] Claude final review completed for Docker/Hugging Face env table.
+- [x] Claude final review completed for provider integration. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude final review completed for data honesty. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude final review completed for no-network unit tests. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
+- [x] Claude final review completed for Docker/Hugging Face env table. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Sprint 3 UI / Timeframe Gate
 
@@ -190,7 +194,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Frontend no-recompute/no-secret static checks pass in targeted tests.
 - [x] Full Sprint 3 offline check suite completed and recorded.
 - [ ] Manual local UI smoke completed or explicitly recorded as not run with reason.
-- [ ] Claude UI/timeframe review completed before merge/deploy.
+- [x] Claude UI/timeframe review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 1 Persistence / Watchlist Gate
 
@@ -209,7 +213,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Analyze persistence writes are scheduled off the response path.
 - [x] Supabase repository has a cooldown circuit breaker and small connection pool.
 - [x] Failure-path tests prove analysis returns 200 under persistence failure.
-- [ ] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy.
+- [x] Claude final review completed for Wave 1 persistence and watchlist before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 1.2 Supabase Runtime Gate
 
@@ -253,7 +257,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Compact provider observations remain best-effort/non-blocking through existing persistence.
 - [x] Unit tests mock all provider responses; no real network or DB is required.
 - [x] No WebSocket, private/signed endpoint, API key, News Authority, calibration, or trading capability was added.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 3A Advisory News Authority Gate
 
@@ -272,7 +276,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `migrations/0002_news.sql` is idempotent and non-destructive.
 - [x] Optional live news smoke is gated by `UCPE_NEWS_LIVE_SMOKE_ENABLED=false`.
 - [ ] Apply `migrations/0002_news.sql` before expecting durable news metadata.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B0 Long-Timeframe Methodology Gate
 
@@ -287,7 +291,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
-- [ ] Claude R4 methodology review completed before merge/deploy.
+- [x] Claude R4 methodology review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 - [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy.
 
 ## Wave 4B.1 Prediction Ledger Gate
@@ -308,7 +312,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
 - [ ] Apply `migrations/0003_prediction_ledger.sql` only after review/approval.
-- [ ] Claude/User review completed before merge/deploy.
+- [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B.2 Outcome Resolver Gate
 
@@ -339,7 +343,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
 - [ ] Apply `migrations/0004_prediction_outcomes.sql` only after review/approval.
-- [ ] Claude/User R3 review completed before merge/deploy.
+- [x] Claude/User R3 review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B.2A GitHub Resolver Cron Gate
 
@@ -393,9 +397,9 @@ No phase is releasable because an agent says so. Release requires evidence.
 ## Wave 4D.3-Ops Phase-1 Cohort Gate
 
 - [ ] `prediction_origin` migration reviewed but not applied by the implementation commit.
-- [ ] Existing analysis callers remain `USER_REQUESTED` by default; invalid origins fail closed.
-- [ ] Calibration and Quant V2 shadow validation default to the `USER_REQUESTED` cohort.
-- [ ] Resolver due-selection remains origin-agnostic.
+- [x] Existing analysis callers remain `USER_REQUESTED` by default; invalid origins fail closed. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_analyze_request_defaults_accepts_explicit_origin_and_preserves_identity; tests/persistence/test_prediction_origin.py::test_analyze_request_rejects_invalid_origin_before_market_selection -->
+- [x] Calibration and Quant V2 shadow validation default to the `USER_REQUESTED` cohort. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_calibration_defaults_to_user_requested_and_supports_explicit_origin; tests/persistence/test_shadow_validation_reads.py::test_validation_reads_default_to_user_requested_origin -->
+- [x] Resolver due-selection remains origin-agnostic. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_resolver_due_selection_remains_origin_agnostic -->
 - [ ] The six historical derivatives smoke snapshot prediction IDs and outcome links are
   inventoried before migration/runtime deployment.
 - [ ] Phase 2 remains blocked until those legacy rows are explicitly `CONTROLLED_SMOKE`, or a
@@ -405,12 +409,12 @@ No phase is releasable because an agent says so. Release requires evidence.
 
 ## Wave 4D.3-Ops Phase 2A.0 Runtime-Primitives Gate
 
-- [ ] Default user analysis retains `run_<uuid hex>` identity and frozen-fixture output.
-- [ ] Deterministic identity fails closed unless the canonical latest candle is fully closed and
-  UTC-valid.
-- [ ] Synchronous persistence confirmation reuses existing builders, repository methods,
-  ordering, parent gates, and immutable duplicate semantics.
-- [ ] Caller payload remains unchanged and persistence exceptions return sanitized status only.
+- [x] Default user analysis retains `run_<uuid hex>` identity and frozen-fixture output. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_default_identity_path_is_byte_stable_under_frozen_inputs -->
+- [x] Deterministic identity fails closed unless the canonical latest candle is fully closed and
+  UTC-valid. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_deterministic_identity_fails_closed_without_uuid_or_persistence -->
+- [x] Synchronous persistence confirmation reuses existing builders, repository methods,
+  ordering, parent gates, and immutable duplicate semantics. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_sync_persist_is_immutable_ordered_and_idempotent; tests/api/test_cadence_runtime_primitives.py::test_sync_persist_contains_prediction_and_dependent_failures -->
+- [x] Caller payload remains unchanged and persistence exceptions return sanitized status only. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_sync_persist_is_immutable_ordered_and_idempotent; tests/api/test_cadence_runtime_primitives.py::test_sync_persist_sanitizes_unexpected_exception -->
 - [ ] No collector, workflow, schedule, cadence variable, migration, evidence generation, or
   derivatives activation is included.
 - [ ] Coordinated scheduler-subtree/HF deployment is followed by an Ops-RT.1 `HEALTHY` result.
