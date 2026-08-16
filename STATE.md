@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 **Goal** — Complete UCPE v1: a production-quality, analysis-only crypto probability engine.
 
@@ -15,14 +15,23 @@ in Git on `preserve/2d3b-readiness-packet`; must not block v1.
 Pre-Git copy preserved read-only at `/Users/kha/Documents/Kha-app/v8-crypto-api-clean`;
 proven byte-identical to `676fafb` except the four files now committed. Retire it after v1.
 
-**Last green** — `main` @ `676fafb` · `VERIFY=PASS` 754 passed, ruff clean, 3/3 scanners.
+**Last green** — `main` @ `e6ee23c` · `VERIFY=PASS` 776 passed, ruff clean, 3/3 scanners.
 
-**Branches** — `main` (= origin, undeployed work ahead of production) ·
-`preserve/2d3b-readiness-packet` · `chore/operating-model`. Nothing pushed.
+**Change A is merged to GitHub (2026-08-16).** PR #2 `feat/calibration-truth` → `main`,
+head `44ca1d9`, CI green on that exact head, merged as merge commit
+`e6ee23cc81274c2ad68e247293738bc8e81f082a` = `origin/main`. 20 files, +1252 −28. The
+merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` was verified
+unchanged at `30d4982` before and after, and no workflow references Hugging Face or
+triggers on push to `main`, so merging cannot deploy.
 
-**Production** — HF Space live at `30d4982`, healthy, fingerprint
-`UCPE-W4D3-OPS-2A0-20260622-A`. `origin/main` is **44 files / +10,098 / −350 ahead** of it,
-entirely the default-off derivatives shadow track.
+**Branches** — `main` = `origin/main` = `e6ee23c` (also the exact intended deploy source) ·
+`chore/deploy-pin-change-a` (deploy packet, **local only, never pushed**) ·
+`feat/calibration-truth` (merged) · `preserve/2d3b-readiness-packet` ·
+`chore/operating-model`.
+
+**Production** — HF Space still live at `30d4982`, healthy, fingerprint
+`UCPE-W4D3-OPS-2A0-20260622-A`. `30d4982` is a strict **ancestor** of `e6ee23c`, 24 commits
+behind, so the deploy is a fast-forward.
 
 **Live operations (verified 2026-08-15, read-only)** — all 7 GitHub workflows active.
 Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
@@ -36,9 +45,9 @@ workflow calls it: keepalive GETs `/` only; the other two schedules resolve outc
 check source integrity. So `predictions_last_7d = 0` means **no operator used the app
 since 2026-08-05 04:25:18Z** — the month spent on UABO. It is not a fault.
 
-**CI has never run** (`ci.yml` total_count 0). It triggers only on `push` to `codex/**`
-or on `pull_request`; the two pushed branches match neither. Clean-room verification of
-this repository has never actually executed.
+**CI has now run.** `ci.yml` triggers on `push` to `codex/**` and on `pull_request`; PR #2
+supplied the first real trigger. Check run `test` completed `success` on head `44ca1d9`.
+Clean-room verification of this repository has now actually executed.
 
 **Calibration — MEASURED (verified 2026-08-15, read-only production query)**
 Default cohort **806 samples → `MEASURED`** (threshold ≥500). Nothing is lost to data
@@ -84,9 +93,44 @@ production will report **WARMING_UP ×5 and NO_SAMPLES for 1M** — not MEASURED
 MEASURED per timeframe needs ≥500 resolved outcomes in a single timeframe (currently
 134–172), i.e. roughly 3× more operator traffic per timeframe.
 
-**Open decisions** — none blocking. HF deploy not authorized.
+**Deploy packet for Change A — prepared, verified, unpushed (2026-08-16)**
+Branch `chore/deploy-pin-change-a` @ `1712469`, one commit, `VERIFY=PASS` 776.
+The source-integrity guard (`.github/workflows/source-integrity-guard.yml`, cron `27 */2 * * *`
+→ `scripts/source_integrity_guard.py`) is a **composite pin** held as tracked literals in
+`ops/hf_runtime_baseline.json`: the HF `refs/heads/main` commit SHA, SHA-256 of eleven
+guarded source blobs read from that HF commit, plus build identity and frontend asset
+tokens. It runs in GitHub Actions and reads the manifest from the **GitHub** checkout; it
+queries HF only for its ref SHA and blobs. So the pin update belongs on GitHub `main`
+only — never in the HF repo. No secret supplies any expected value.
 
-**NEXT ACTION** — first real v1 product work: read the calibration report for the 806
-samples (Brier score, reliability buckets, top-label hit rate) and judge whether the
-stated probabilities are honest. Establish the HF `SUPABASE_DB_URL` question first, since
-it decides whether that report is reachable in production or only via direct DB read.
+The packet changes exactly five literals: `hf_main_sha` `30d4982` → `e6ee23c`, and the four
+guarded digests Change A alters (`schemas/response.schema.json`, `api/analysis_service.py`,
+`api/app.py`, `derivatives_intel/runtime.py`). `config/build_info.py` is byte-identical
+across both builds, so the **fingerprint does not move** — drift would come from the SHA
+and blob layers, not identity. The test's `PIN_SHA`/`CURRENT_DELTA_PATHS` mirror follows;
+non-empty-delta coverage is retained by `test_shallow_checkout_advisory_is_non_failing`.
+
+**Order is not optional.** Deploy first, pin second. A commit cannot contain its own SHA,
+so the pin must name the already-deployed commit: (1) push `e6ee23c` to `hf`;
+(2) confirm healthy; (3) land `chore/deploy-pin-change-a` on GitHub `main`; (4) dispatch the
+guard. Landing the pin before the push would itself report `PIN_DRIFT`. Between (1) and (3)
+the guard reports `PIN_DRIFT` exit 1 — that window is expected, not a fault.
+
+Deploy command (**not run, owner-gated T3**): `git push hf e6ee23cc81274c2ad68e247293738bc8e81f082a:refs/heads/main` — a fast-forward.
+Verify after: Space rebuild (uvicorn restart resets `uptime_seconds`) · `/healthcheck` 200
+`status=OK` · `/v1/build-info` 200, fingerprint unchanged at
+`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` · guard `workflow_dispatch` → `HEALTHY` exit 0
+after step (3), with a non-failing `SCHEDULER_AHEAD_OF_PIN` advisory · `/v1/calibration` and
+`/v1/system_status` still 401 `UNAUTHORIZED` unauthenticated (Change A does not touch either
+route's path, dependency, or unauthenticated body).
+Rollback: `git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e247293738bc8e81f082a hf 30d4982903e6f44e063616bc3f03f334bd2544e2:refs/heads/main`
+— a force is required because the restore moves the remote backwards. Revert the five pin
+literals on GitHub only if step (3) already landed. No Change A source commit needs
+reverting; GitHub `main` may stay ahead.
+
+**Open decisions** — one: **authorize the HF deploy of `e6ee23c`**. Nothing else blocks.
+
+**NEXT ACTION** — owner decision on the deploy above. Change B (horizon-specific
+probability modelling) stays deferred: it needs a new `methodology_version`, which resets
+calibration to `NO_SAMPLES`, so the 806-sample cohort must survive as the control until
+Change A has shipped and re-accumulated evidence under gating.
