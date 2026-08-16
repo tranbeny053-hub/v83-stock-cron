@@ -8,7 +8,9 @@ Status: Wave 4B.3 is merged and deployed; production is running `e6ee23c` with h
 
 ## 2026-08-16 reconciliation
 
-Current evidence proves 271 checklist items, 15 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
+Current evidence proves 271 checklist items, 15 remain unchecked, and 27 historical review or docs-only ceremony items are resolved inline as superseded. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
+
+Of the 15 unchecked items, **one is an owner-accepted v1 exception rather than outstanding work**: the Wave 4B0 live BTC/SOL write smoke, closed not-run on 2026-08-16 because `/v1/analyze` cannot carry a prediction origin and any live write would contaminate the calibration control cohort. It stays unchecked because it genuinely did not happen. Three of the remainder need an authorized production session; the rest are deferred or out of v1.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -296,7 +298,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
 - [x] Claude R4 methodology review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
-- [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy. <!-- PENDING 2026-08-16: blocked on contract, not authorization. AnalysisRequest (src/crypto_probability_engine/api/schemas.py) is extra="forbid" with no prediction-origin field, so any live /v1/analyze write is recorded USER_REQUESTED and would contaminate the calibration control cohort. Owner decision required. -->
+- [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy. <!-- CLOSED NOT-RUN 2026-08-16 (owner decision): deliberately not run and not required for v1. Blocked by contract, not authorization: AnalysisRequest (src/crypto_probability_engine/api/schemas.py) is extra="forbid" with no prediction-origin field, so any live /v1/analyze write is stamped USER_REQUESTED and would contaminate the 806-sample calibration control cohort that Change B depends on as its baseline. Offline coverage stands in: scripts/manual_smoke.py exercises both analysis modes under ./verify.sh, and the Wave 4B0 long-timeframe golden tests cover 1D/1W/1M behaviour. The box stays unchecked because the live smoke genuinely did not happen — this is an accepted v1 exception, not a pass. Revisit only if a live write path is needed for an independent reason. -->
 
 ## Wave 4B.1 Prediction Ledger Gate
 
