@@ -94,7 +94,8 @@ MEASURED per timeframe needs ≥500 resolved outcomes in a single timeframe (cur
 134–172), i.e. roughly 3× more operator traffic per timeframe.
 
 **Deploy packet for Change A — prepared, verified, unpushed (2026-08-16)**
-Branch `chore/deploy-pin-change-a` @ `1712469`, one commit, `VERIFY=PASS` 776.
+Branch `chore/deploy-pin-change-a`, **local only, never pushed**, `VERIFY=PASS` 776.
+The pin commit is `1712469`; `a4bd2ac` and this checkpoint are `STATE.md`-only commits on top.
 The source-integrity guard (`.github/workflows/source-integrity-guard.yml`, cron `27 */2 * * *`
 → `scripts/source_integrity_guard.py`) is a **composite pin** held as tracked literals in
 `ops/hf_runtime_baseline.json`: the HF `refs/heads/main` commit SHA, SHA-256 of eleven
@@ -128,9 +129,47 @@ Rollback: `git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e24729
 literals on GitHub only if step (3) already landed. No Change A source commit needs
 reverting; GitHub `main` may stay ahead.
 
-**Open decisions** — one: **authorize the HF deploy of `e6ee23c`**. Nothing else blocks.
+**CANONICAL HANDOFF CHECKPOINT — Change A deployment closure attempted and BLOCKED
+(2026-08-16). No mutation of any kind occurred.**
+The owner authorized the T3 deploy. Pre-deploy fail-closed checks all passed: `origin/main`
+= `e6ee23c` exactly, `hf refs/heads/main` = `30d4982` exactly, `30d4982` is an ancestor of
+`e6ee23c` (fast-forward), the packet diff is exactly the five pin literals + the test
+mirror + `STATE.md`, and `./verify.sh` = `PASS` 776 on the branch head.
 
-**NEXT ACTION** — owner decision on the deploy above. Change B (horizon-specific
-probability modelling) stays deferred: it needs a new `methodology_version`, which resets
-calibration to `NO_SAMPLES`, so the 806-sample cohort must survive as the control until
-Change A has shipped and re-accumulated evidence under gating.
+`git push hf e6ee23c:refs/heads/main` then **hung and was killed at 10 minutes without
+transferring anything.** Root cause, isolated and confirmed — **no Hugging Face write
+credential is reachable by git on this machine.** `credential.helper` is `osxkeychain` with
+no `huggingface.co` entry, so git falls back to an interactive username prompt; the
+Claude Code `GIT_ASKPASS` helper never returns, which is the hang. Re-run with
+`GIT_TERMINAL_PROMPT=0` and no askpass fails immediately and states it outright:
+`fatal: could not read Username for 'https://huggingface.co'`. Not a sandbox effect — it
+reproduces with the sandbox disabled. `~/.cache/huggingface/token` does not exist and no
+`hf`/`huggingface-cli` is installed. Anonymous **read** of `hf` works, which is why every
+`git ls-remote hf` in this thread succeeded; only **write** is unauthenticated.
+
+Non-mutation is positively evidenced, not merely assumed: `hf refs/heads/main` still
+`30d4982`; `origin/main` still `e6ee23c`; worktree clean; and production
+`uptime_seconds` rose monotonically **277567 → 278648** across the attempt with no reset —
+the Space never restarted. `/healthcheck` 200 `status=OK`, `/v1/build-info` 200,
+`/v1/calibration` and `/v1/system_status` both 401 `UNAUTHORIZED`, all unchanged.
+
+The pin was deliberately **not** pushed. Pin closure is conditional on a healthy new
+deployment, and landing it first would itself manufacture `PIN_DRIFT`. Deploy-first /
+pin-second still holds. No rollback was used or needed — there was nothing to roll back.
+The prepared packet is unchanged and remains valid; the deploy is resumable as-is the
+moment credentials exist.
+
+**Open decisions** — one: **give git a Hugging Face write credential, then re-run the
+authorized deploy.** The owner must do this themselves; a token must never be pasted into
+this chat or into any file in the repo. Either authenticate once so `osxkeychain` holds it,
+or run the push directly:
+`git push hf e6ee23cc81274c2ad68e247293738bc8e81f082a:refs/heads/main`.
+Nothing else blocks, and no step after the push has changed.
+
+**NEXT ACTION** — owner supplies the HF write credential (or performs the push), then the
+same bounded closure resumes at step (2): confirm health and restart, land
+`chore/deploy-pin-change-a` on GitHub `main` by PR, dispatch the guard. Change B
+(horizon-specific probability modelling) stays deferred and **has not started**: it needs a
+new `methodology_version`, which resets calibration to `NO_SAMPLES`, so the 806-sample
+cohort must survive as the control until Change A has shipped and re-accumulated evidence
+under gating.
