@@ -24,14 +24,14 @@ merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` 
 unchanged at `30d4982` before and after, and no workflow references Hugging Face or
 triggers on push to `main`, so merging cannot deploy.
 
-**Branches** — `main` = `origin/main` = `e6ee23c` (also the exact intended deploy source) ·
-`chore/deploy-pin-change-a` (deploy packet, **local only, never pushed**) ·
+**Branches** — `main` = `origin/main` = `e6ee23c` (also the exact deploy source, now live) ·
+`chore/deploy-pin-change-a` (deploy packet, pushed for the pin PR) ·
 `feat/calibration-truth` (merged) · `preserve/2d3b-readiness-packet` ·
 `chore/operating-model`.
 
-**Production** — HF Space still live at `30d4982`, healthy, fingerprint
-`UCPE-W4D3-OPS-2A0-20260622-A`. `30d4982` is a strict **ancestor** of `e6ee23c`, 24 commits
-behind, so the deploy is a fast-forward.
+**Production — Change A IS DEPLOYED (2026-08-16).** HF Space live at `e6ee23c`,
+`stage=RUNNING`, `cpu-basic`, healthy. The prior build `30d4982` was a strict ancestor,
+24 commits behind, so the deploy was the expected fast-forward.
 
 **Live operations (verified 2026-08-15, read-only)** — all 7 GitHub workflows active.
 Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
@@ -129,47 +129,41 @@ Rollback: `git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e24729
 literals on GitHub only if step (3) already landed. No Change A source commit needs
 reverting; GitHub `main` may stay ahead.
 
-**CANONICAL HANDOFF CHECKPOINT — Change A deployment closure attempted and BLOCKED
-(2026-08-16). No mutation of any kind occurred.**
-The owner authorized the T3 deploy. Pre-deploy fail-closed checks all passed: `origin/main`
-= `e6ee23c` exactly, `hf refs/heads/main` = `30d4982` exactly, `30d4982` is an ancestor of
-`e6ee23c` (fast-forward), the packet diff is exactly the five pin literals + the test
-mirror + `STATE.md`, and `./verify.sh` = `PASS` 776 on the branch head.
+**CHANGE A DEPLOYED TO PRODUCTION — 2026-08-16.**
+`e6ee23c` is live on the HF Space. Pre-deploy fail-closed checks all passed first:
+`origin/main` = `e6ee23c` exactly, `hf refs/heads/main` = `30d4982` exactly, ancestry
+confirmed fast-forward, packet diff exactly the five pin literals + test mirror +
+`STATE.md`, `./verify.sh` = `PASS` 776.
 
-`git push hf e6ee23c:refs/heads/main` then **hung and was killed at 10 minutes without
-transferring anything.** Root cause, isolated and confirmed — **no Hugging Face write
-credential is reachable by git on this machine.** `credential.helper` is `osxkeychain` with
-no `huggingface.co` entry, so git falls back to an interactive username prompt; the
-Claude Code `GIT_ASKPASS` helper never returns, which is the hang. Re-run with
-`GIT_TERMINAL_PROMPT=0` and no askpass fails immediately and states it outright:
-`fatal: could not read Username for 'https://huggingface.co'`. Not a sandbox effect — it
-reproduces with the sandbox disabled. `~/.cache/huggingface/token` does not exist and no
-`hf`/`huggingface-cli` is installed. Anonymous **read** of `hf` works, which is why every
-`git ls-remote hf` in this thread succeeded; only **write** is unauthenticated.
+*First attempt was blocked at the credential boundary and mutated nothing.* `git push hf`
+hung ten minutes and transferred zero bytes: `credential.helper` is `osxkeychain` with no
+`huggingface.co` entry, so git fell back to an interactive username prompt the harness
+askpass never answers. Confirmed with `GIT_TERMINAL_PROMPT=0` →
+`fatal: could not read Username for 'https://huggingface.co'`; reproduced with the sandbox
+disabled, so not a sandbox effect. **Anonymous read of `hf` works — only write needs
+credentials**, which is why every `git ls-remote hf` succeeded throughout.
+Resolution: the owner ran `hf auth login`, which installs the CLI and writes
+`~/.cache/huggingface/token` but **does not configure git over HTTPS**. The push was
+completed by bridging that owner-provisioned token to git for the single push via an
+inline `credential.helper`. **No token was printed, stored in the repo, or modified.**
+If `osxkeychain` still lacks a `huggingface.co` entry, a future push needs the same bridge
+or a one-time `hf auth login --add-to-git-credential`.
 
-Non-mutation is positively evidenced, not merely assumed: `hf refs/heads/main` still
-`30d4982`; `origin/main` still `e6ee23c`; worktree clean; and production
-`uptime_seconds` rose monotonically **277567 → 278648** across the attempt with no reset —
-the Space never restarted. `/healthcheck` 200 `status=OK`, `/v1/build-info` 200,
-`/v1/calibration` and `/v1/system_status` both 401 `UNAUTHORIZED`, all unchanged.
+**Deploy evidence — restart proven independently of the fingerprint.** `hf refs/heads/main`
+= `e6ee23c`; HF Spaces API reports `sha=e6ee23c`, `stage=RUNNING`, `cpu-basic`;
+`uptime_seconds` collapsed **278648 → 28** and resumed climbing, so the runtime genuinely
+rebuilt and restarted. The build fingerprint stayed
+`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` exactly as predicted — `config/build_info.py`
+is byte-identical across both builds — which is why it was never used as deploy proof.
+Health after deploy: `/healthcheck` 200 `status=OK` · `/v1/build-info` 200 · `/` 200 ·
+`/v1/calibration` and `/v1/system_status` both **401 `UNAUTHORIZED` with a well-formed
+body — routes registered, auth gates intact, not 404 and not 500**.
+No rollback was used and none was needed. No DB write, no migration, no secret change.
 
-The pin was deliberately **not** pushed. Pin closure is conditional on a healthy new
-deployment, and landing it first would itself manufacture `PIN_DRIFT`. Deploy-first /
-pin-second still holds. No rollback was used or needed — there was nothing to roll back.
-The prepared packet is unchanged and remains valid; the deploy is resumable as-is the
-moment credentials exist.
+**Open decisions** — none blocking. Change B is still not started.
 
-**Open decisions** — one: **give git a Hugging Face write credential, then re-run the
-authorized deploy.** The owner must do this themselves; a token must never be pasted into
-this chat or into any file in the repo. Either authenticate once so `osxkeychain` holds it,
-or run the push directly:
-`git push hf e6ee23cc81274c2ad68e247293738bc8e81f082a:refs/heads/main`.
-Nothing else blocks, and no step after the push has changed.
-
-**NEXT ACTION** — owner supplies the HF write credential (or performs the push), then the
-same bounded closure resumes at step (2): confirm health and restart, land
-`chore/deploy-pin-change-a` on GitHub `main` by PR, dispatch the guard. Change B
-(horizon-specific probability modelling) stays deferred and **has not started**: it needs a
-new `methodology_version`, which resets calibration to `NO_SAMPLES`, so the 806-sample
-cohort must survive as the control until Change A has shipped and re-accumulated evidence
+**NEXT ACTION** — none for Change A beyond the source-integrity pin closure recorded below.
+Change B (horizon-specific probability modelling) stays deferred and **has not started**:
+it needs a new `methodology_version`, which resets calibration to `NO_SAMPLES`, so the
+806-sample cohort must survive as the control until Change A has re-accumulated evidence
 under gating.
