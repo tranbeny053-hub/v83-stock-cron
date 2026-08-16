@@ -71,6 +71,7 @@ def compute_calibration_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "log_loss": _mean(log_loss_values),
             "top_label_hit_rate": _ratio(top_label_hits, valid_count),
             "directional_hit_rate": _ratio(directional_hits, directional_count),
+            "directional_hit_count": directional_hits,
             "directional_subset_count": directional_count,
             "directional_subset_note": "Directional subset excludes TIMEOUT outcomes.",
         },

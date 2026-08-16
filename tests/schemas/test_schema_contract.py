@@ -39,6 +39,29 @@ def test_response_schema_and_model_accept_canonical_payload(analysis_mode: str) 
     assert model.analysis_mode == analysis_mode
 
 
+def test_skill_evidence_schema_extension_is_additive_for_existing_payloads() -> None:
+    existing_payload = sample_analysis_payload()
+
+    assert "skill_evidence" not in existing_payload
+    validate_json_schema(existing_payload)
+    model = AnalysisResponse.model_validate(existing_payload)
+    assert model.skill_evidence is None
+
+
+def test_schema_accepts_additive_skill_evidence_block() -> None:
+    payload = sample_analysis_payload()
+    payload["skill_evidence"] = {
+        "verdict": "NO_DEMONSTRATED_SKILL",
+        "n": 110,
+        "observed_directional_rate": 54 / 110,
+    }
+
+    validate_json_schema(payload)
+    model = AnalysisResponse.model_validate(payload)
+    assert model.skill_evidence is not None
+    assert model.skill_evidence.n == 110
+
+
 def test_probability_invariant_rejects_bad_sum() -> None:
     with pytest.raises(ValueError):
         validate_probability_triplet(0.9, 0.2, 0.1)
@@ -67,4 +90,3 @@ def test_model_rejects_fraction_out_of_bounds() -> None:
 
 def test_error_code_includes_unsupported_asset_class() -> None:
     assert ErrorCode.UNSUPPORTED_ASSET_CLASS == "UNSUPPORTED_ASSET_CLASS"
-

@@ -66,14 +66,23 @@ output, first-causal-failure preserved. A local PASS is now as strong as a green
 **401 with a well-formed UNAUTHORIZED body — the route is registered and its auth gate
 works** (not 404, not 500).
 
-**Whether production can actually serve calibration: UNVERIFIED.** No Hugging Face CLI,
-token, or `huggingface_hub` library exists on this machine, and no HF credential is in the
-keychain, so Space secret keys cannot be enumerated. The outcome hinges on exactly one env
-var in the HF runtime (`settings.py:182`), via `build_operator_repository`:
-  `SUPABASE_DB_URL` set → Postgres → calibration works, reports MEASURED/806
-  else `SUPABASE_URL`+`SUPABASE_SERVICE_ROLE_KEY` → REST → `NotImplementedError` → **500**
-  else → InMemory → empty process-local store → **NO_SAMPLES**
-GitHub Actions having the URL proves nothing here; HF is a separate runtime.
+**Production CAN serve calibration — configuration proven end to end (2026-08-16).**
+Owner confirmed the HF Space secret key `SUPABASE_DB_URL` is PRESENT. Every file in the
+calibration path is **byte-identical** between the deployed build `30d4982` and `main`:
+`calibration/service.py`, `calibration/metrics.py`, `persistence/repository.py`,
+`persistence/prediction_origin.py`, `config/settings.py`, `api/app.py`,
+`api/calibration_endpoint.py`. So `build_operator_repository` selects
+`SupabasePersistenceRepository`, the endpoint's `_EXPECTED_REPOSITORY` guard
+(`SUPABASE_POSTGRES`) passes, and it reads the same database the resolver writes to.
+Only the live HTTP invocation is unverified (session-gated; not circumvented).
+
+**But `/v1/calibration` will NOT report MEASURED.** The endpoint never issues an unscoped
+query: `calibration_endpoint.py:118` iterates `SUPPORTED_TIMEFRAMES` =
+`("15m","1H","4H","1D","1W","1M")` and builds one scoped report per timeframe. So
+production will report **WARMING_UP ×5 and NO_SAMPLES for 1M** — not MEASURED. The
+806/MEASURED figure is the unscoped aggregate, which no endpoint requests. Reaching
+MEASURED per timeframe needs ≥500 resolved outcomes in a single timeframe (currently
+134–172), i.e. roughly 3× more operator traffic per timeframe.
 
 **Open decisions** — none blocking. HF deploy not authorized.
 

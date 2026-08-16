@@ -20,6 +20,7 @@ DRIFT_SHA = "d" * 40
 CURRENT_DELTA_PATHS = [
     "schemas/response.schema.json",
     "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
     "src/crypto_probability_engine/derivatives_intel/runtime.py",
 ]
 

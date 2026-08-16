@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 OutcomeLabel = Literal["UP", "DOWN", "TIMEOUT"]
+SkillVerdict = Literal[
+    "INSUFFICIENT_EVIDENCE",
+    "SKILL_DEMONSTRATED",
+    "NO_DEMONSTRATED_SKILL",
+]
 SampleGate = Literal[
     "NO_SAMPLES",
     "INSUFFICIENT_SAMPLE",
@@ -53,3 +58,8 @@ class CalibrationReport(TypedDict):
     terminal_return_diagnostics: dict
     warnings: list[str]
 
+
+class SkillEvidence(TypedDict):
+    verdict: SkillVerdict
+    n: int
+    observed_directional_rate: float | None

@@ -23,6 +23,10 @@ from crypto_probability_engine.api.schemas import (
     AssetClass,
     ErrorCode,
 )
+from crypto_probability_engine.calibration.skill import (
+    get_cached_skill_evidence,
+    insufficient_skill_evidence,
+)
 from crypto_probability_engine.config.defaults import (
     DEFAULT_PHASE1A,
     METHODOLOGY_VERSION,
@@ -44,6 +48,7 @@ from crypto_probability_engine.detail.decision_brief import (
 )
 from crypto_probability_engine.detail.decision_synthesis import build_decision_synthesis
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
+from crypto_probability_engine.gates.composite import apply_skill_gate
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
 from crypto_probability_engine.persistence.derivatives_snapshot import (
@@ -171,6 +176,8 @@ def analyze_request(
         else None
     )
     quant_result = run_quant_pipeline(snapshot, provider_state)
+    skill_evidence = _skill_evidence_for_analysis(request.timeframe)
+    quant_result = _apply_skill_evidence_gate(quant_result, skill_evidence)
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
@@ -259,6 +266,7 @@ def analyze_request(
         "frontend_display": frontend_display,
         "detail_view": detail_view,
         "gate_result": quant_result["gate_result"],
+        "skill_evidence": skill_evidence,
         "debug": {
             "warnings": list(data_quality.get("warnings", [])),
             "news_influence": news_blocks["news_influence"],
@@ -321,6 +329,29 @@ def analyze_request(
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     run_store.put(run_id, validated)
     return validated
+
+
+def _skill_evidence_for_analysis(timeframe: str) -> dict:
+    try:
+        return get_cached_skill_evidence(timeframe)
+    except Exception:
+        return insufficient_skill_evidence()
+
+
+def _apply_skill_evidence_gate(quant_result: dict, skill_evidence: dict) -> dict:
+    gate = apply_skill_gate(
+        quant_result.get("gate_result") or {},
+        skill_state=skill_evidence,
+    )
+    score = dict(quant_result.get("score_stack") or {})
+    forced_disposition = gate.get("forced_score_disposition")
+    if forced_disposition:
+        score["disposition"] = forced_disposition
+    return {
+        **quant_result,
+        "score_stack": score,
+        "gate_result": gate,
+    }
 
 
 def _status_for_selection_error(code: ErrorCode) -> int:

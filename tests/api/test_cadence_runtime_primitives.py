@@ -25,10 +25,10 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:3d65034da3b18e10b474d1a9908373537deddab2ad523a73914c63d2727f58f4"
+    "sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08"
 )
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "72cfb34d213a1b57f5010558a6b7e9a22fd794c2c82bb357d5cf4b5a63ac050c"
+    "af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 
@@ -75,6 +75,15 @@ def _analyze(
     derivatives: bool = False,
 ) -> dict:
     monkeypatch.setattr(analysis_service, "select_market_data", _selection(snapshot))
+    monkeypatch.setattr(
+        analysis_service,
+        "get_cached_skill_evidence",
+        lambda _timeframe: {
+            "verdict": "INSUFFICIENT_EVIDENCE",
+            "n": 0,
+            "observed_directional_rate": None,
+        },
+    )
     return analysis_service.analyze_request(
         AnalysisRequest(symbol=symbol, timeframe="4H"),
         settings=Settings(data_mode="fixture", enable_derivatives_intel=derivatives),

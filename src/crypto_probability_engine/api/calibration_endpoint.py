@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, Query
 
 from crypto_probability_engine.api.schemas import (
     CalibrationReliabilityBucket,
@@ -16,7 +17,14 @@ from crypto_probability_engine.api.schemas import (
     CalibrationTimeframe,
     CalibrationTimeframeItem,
 )
-from crypto_probability_engine.calibration.service import build_calibration_report
+from crypto_probability_engine.calibration.service import (
+    build_calibration_report,
+    refresh_skill_evidence_cache,
+)
+from crypto_probability_engine.calibration.skill import (
+    finish_skill_evidence_refresh,
+    reserve_skill_evidence_refresh,
+)
 from crypto_probability_engine.config.settings import Settings
 
 SUPPORTED_TIMEFRAMES: tuple[CalibrationTimeframe, ...] = ("15m", "1H", "4H", "1D", "1W", "1M")
@@ -31,6 +39,10 @@ CacheKey = tuple[str, str | None, str | None, int, bool]
 CacheEntry = tuple[float, CalibrationResponse]
 _cache: dict[CacheKey, CacheEntry] = {}
 _cache_lock = Lock()
+_skill_evidence_executor = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="ucpe-skill-evidence",
+)
 
 
 def clear_calibration_cache() -> None:
@@ -38,6 +50,28 @@ def clear_calibration_cache() -> None:
 
     with _cache_lock:
         _cache.clear()
+
+
+def schedule_skill_evidence_refresh(
+    background_tasks: BackgroundTasks,
+    repository: Any,
+) -> None:
+    """Schedule a non-blocking refresh after an analysis response is produced."""
+
+    try:
+        repository_type = repository.repository_type()
+        if repository_type != _EXPECTED_REPOSITORY or not reserve_skill_evidence_refresh():
+            return
+        background_tasks.add_task(_submit_skill_evidence_refresh, repository)
+    except Exception:
+        return
+
+
+def _submit_skill_evidence_refresh(repository: Any) -> None:
+    try:
+        _skill_evidence_executor.submit(refresh_skill_evidence_cache, repository)
+    except Exception:
+        finish_skill_evidence_refresh()
 
 
 def register_calibration_endpoint(

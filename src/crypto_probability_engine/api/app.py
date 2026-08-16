@@ -26,7 +26,10 @@ from crypto_probability_engine.api.auth import (
     set_session_cookie,
     verify_session_token,
 )
-from crypto_probability_engine.api.calibration_endpoint import register_calibration_endpoint
+from crypto_probability_engine.api.calibration_endpoint import (
+    register_calibration_endpoint,
+    schedule_skill_evidence_refresh,
+)
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.health import runtime_health, system_status
 from crypto_probability_engine.api.schemas import (
@@ -39,7 +42,10 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
-from crypto_probability_engine.persistence.repository import build_persistence_repository
+from crypto_probability_engine.persistence.repository import (
+    build_operator_repository,
+    build_persistence_repository,
+)
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.telemetry.events import TelemetrySink
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
@@ -52,6 +58,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or get_settings()
     run_store = InMemoryRunStore(limit=app_settings.recent_run_limit)
     persistence_repository = build_persistence_repository(app_settings)
+    try:
+        skill_evidence_repository = build_operator_repository(app_settings)
+    except Exception:
+        skill_evidence_repository = None
     telemetry = TelemetrySink()
 
     @asynccontextmanager
@@ -59,9 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
-            close = getattr(persistence_repository, "close", None)
-            if callable(close):
-                close()
+            repositories = (persistence_repository, skill_evidence_repository)
+            for repository in repositories:
+                close = getattr(repository, "close", None)
+                if callable(close):
+                    close()
 
     app = FastAPI(
         title=app_settings.app_name,
@@ -70,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.run_store = run_store
     app.state.persistence_repository = persistence_repository
+    app.state.skill_evidence_repository = skill_evidence_repository
     app.state.telemetry = telemetry
 
     origins = list(app_settings.strict_cors_origins)
@@ -162,6 +175,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             persistence_status=current_persistence_status(repository),
         )
         schedule_best_effort_persist(background_tasks, repository, result)
+        schedule_skill_evidence_refresh(
+            background_tasks,
+            app.state.skill_evidence_repository,
+        )
         telemetry.record("analysis_completed", {"run_id": result["run_id"]})
         return result
 
@@ -198,6 +215,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             ).detail,
                         }
                     )
+        schedule_skill_evidence_refresh(
+            background_tasks,
+            app.state.skill_evidence_repository,
+        )
         return {"results": results, "errors": errors}
 
     @app.get("/v1/watchlist")
