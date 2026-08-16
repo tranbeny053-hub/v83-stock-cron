@@ -6,17 +6,18 @@ Updated: 2026-08-16
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (6 commits, unpushed; main still 1 docs commit ahead of origin)
-LAST_GREEN_SHA=90d6d83
-LAST_VERIFY=PASS 785 passed, ruff clean, 3/3 scanners · 2026-08-16
+CURRENT_BRANCH=feat/production-live-smoke (9 commits, unpushed; main still 1 docs commit ahead of origin)
+LAST_GREEN_SHA=91254f3
+LAST_VERIFY=PASS 796 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=3 open — (1) Phase B access code, (2) Wave 4B0 route decision, (3) T3 push of
-  feat/production-live-smoke. None crossed. A NOT_RUN closure of (2) was applied and then
-  reverted as an invalid waiver (audit 2026-08-16, revert 90d6d83); do not re-apply it.
-NEXT_ACTION=owner answers the batched boundary; nothing is half-applied; Wave 4B0 stays open
+OWNER_BOUNDARY=2 open — (1) Phase B access code, (2) T3 push of feat/production-live-smoke.
+  None crossed. Wave 4B0 is CLOSED ON EVIDENCE (2026-08-16), not waived: an earlier NOT_RUN
+  closure was reverted as an invalid waiver, then the smoke was actually run.
+NEXT_ACTION=owner supplies the Phase B access code in-session and runs the T3 push; nothing
+  is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -326,7 +327,30 @@ the mock can never silently drift from production again.
    `/v1/calibration` serves rather than 401s** — currently only inferred from byte-identical
    source.
 
-2. **Wave 4B0 live write-smoke — genuinely OPEN. Two honest routes remain.**
+2. **Wave 4B0 — CLOSED ON EVIDENCE 2026-08-16 (`91254f3`). No waiver, no scope exclusion, no
+   API widening, no synthetic `USER_REQUESTED` row.**
+   The block was never really about authorization: `analyze_request()`
+   (`api/analysis_service.py:117`) has always accepted `prediction_origin` as a keyword. Only
+   the HTTP request model lacks the field. Driving that runtime primitive directly with
+   `CONTROLLED_SMOKE` — the pattern the Phase 2A collector gate already blesses — produces
+   correctly classified evidence with **no schema change, no API change and no redeploy**.
+   Ran live via `scripts/live_smoke.py`, all six cells `CROSS_PROVIDER`: BTC 1D DOWN=0.477839
+   SUFFICIENT · BTC 1W UP=0.505850 SUFFICIENT · BTC 1M UP=0.377757 LOW_SAMPLE · SOL 1D
+   DOWN=0.399734 SUFFICIENT · SOL 1W UP=0.395839 SUFFICIENT · SOL 1M UP=0.365214 LOW_SAMPLE.
+   Each cell asserted schema-valid, live, probability invariant within 1e-9,
+   `profitability_claim=false`, `news_influence_frac=0.0`, the Wave 4B0 `1M` LOW_SAMPLE rule,
+   and `CONTROLLED_SMOKE` classification read from the runtime's own non-consuming
+   `_peek_prediction_persistence`.
+   **Scope of the evidence, stated plainly:** local process, code byte-identical to deployed
+   `e6ee23c` (`git diff e6ee23c HEAD -- src/ schemas/` is empty), `STATELESS`, zero database
+   writes. Not executed against the HF Space over HTTP — impossible without cohort
+   contamination. The item says "after merge/deploy", not "against the deployed instance";
+   where this gate means the latter it says so (Wave 1.1's "Manual **deployed** UI smoke").
+   The smoke is **non-writing by construction**: it refuses to start if any database variable
+   is configured, so it cannot reach production data. Persisting CONTROLLED_SMOKE rows to the
+   production DB remains an unauthorized **T4** action and no write path was built.
+
+   *Superseded routes, kept for the record:*
    **A NOT_RUN closure was tried on 2026-08-16 and reverted as an invalid waiver** (`acfc690`
    + `3e1cf10`, reverted by `90d6d83`). The post-decision audit found `RELEASE_GATE.md`
    authorizes not-run closure exactly once, inside the item's own text (Sprint 3: "or

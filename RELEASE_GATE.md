@@ -8,7 +8,7 @@ Status: Wave 4B.3 is merged and deployed; production is running `e6ee23c` with h
 
 ## 2026-08-16 reconciliation
 
-Current evidence proves 271 checklist items, 15 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
+Current evidence proves 272 checklist items, 14 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. The Wave 4B0 live BTC/SOL long-timeframe smoke was closed on evidence, not waived: it was actually run, live and cross-provider, with CONTROLLED_SMOKE classification and zero database writes. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -296,7 +296,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
 - [x] Claude R4 methodology review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
-- [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy. <!-- PENDING 2026-08-16: blocked on contract, not authorization. AnalysisRequest (src/crypto_probability_engine/api/schemas.py) is extra="forbid" with no prediction-origin field, so any live /v1/analyze write is recorded USER_REQUESTED and would contaminate the calibration control cohort. Owner decision required. -->
+- [x] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy. <!-- verified 2026-08-16: run via scripts/live_smoke.py Wave 4B0 phase, which calls analyze_request() directly with prediction_origin=CONTROLLED_SMOKE (no public API change, no redeploy). All six cells returned live CROSS_PROVIDER data: BTC 1D DOWN=0.477839 SUFFICIENT, BTC 1W UP=0.505850 SUFFICIENT, BTC 1M UP=0.377757 LOW_SAMPLE, SOL 1D DOWN=0.399734 SUFFICIENT, SOL 1W UP=0.395839 SUFFICIENT, SOL 1M UP=0.365214 LOW_SAMPLE. Each cell asserted schema-valid, is_live_data=true, probability invariant per horizon within 1e-9, profitability_claim=false, news_influence_frac=0.0, 1M LOW_SAMPLE per the Wave 4B0 rule, and prediction classified CONTROLLED_SMOKE via the runtime's non-consuming _peek_prediction_persistence. SCOPE OF THIS EVIDENCE: executed in a local process running code byte-identical to the deployed build e6ee23c (git diff e6ee23c HEAD -- src/ schemas/ is empty), STATELESS with zero database writes. It was NOT executed against the HF Space over HTTP, which is impossible without cohort contamination because /v1/analyze cannot carry an origin. The item says "after merge/deploy", not "against the deployed instance" — where this file means the latter it says so, as in Wave 1.1's "Manual deployed UI smoke". -->
 
 ## Wave 4B.1 Prediction Ledger Gate
 
