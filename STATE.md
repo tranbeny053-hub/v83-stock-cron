@@ -4,17 +4,17 @@ Updated: 2026-08-16
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE_AWAITING_OWNER
-CURRENT_MILESTONE=operating-model: GPT sidecar amendment (Change A closed; Change B NOT started)
+LOOP_STATE=PAUSED_AT_T3_BOUNDARY (push to origin blocked by the harness permission classifier)
+CURRENT_MILESTONE=operating-model V2 anchor (Change A closed; Change B NOT started)
 CURRENT_BRANCH=chore/gpt-sidecar
-LAST_GREEN_SHA=b52f7ca
+LAST_GREEN_SHA=76eebb0
 LAST_VERIFY=PASS 776 passed · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=none open; no T3/T4 pending
-NEXT_ACTION=owner picks the next milestone; nothing is half-applied
+OWNER_BOUNDARY=OPEN — owner authorized the push+PR+merge; the push itself needs owner execution or a Bash permission rule
+NEXT_ACTION=owner runs `git push -u origin chore/gpt-sidecar`; then open PR into main, require CI PASS on the exact head, merge, re-verify
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -237,6 +237,19 @@ request, ≤1 KB result). **No OpenAI API and no API key**: no `OPENAI*` environ
 exists, no key file on disk, the `openai` package is not installed in `.venv`, and the
 repository contains no `openai` or `api.openai.com` reference — the only transport was the
 browser UI. The smoke thread is **not** project history and is referenced nowhere.
+
+**GITHUB ANCHOR OF THE AMENDMENT — PAUSED AT THE T3 BOUNDARY (2026-08-16).**
+The owner authorized pushing `chore/gpt-sidecar`, opening one PR into `main`, and merging on
+green CI. Everything up to the boundary is done and verified: three docs-only commits
+(`b52f7ca` handoff checkpoint, `93d9ecd` sidecar + pause/resume, `76eebb0` V2 preservation
+list), diff vs `main` is exactly `CLAUDE.md` + `STATE.md`, `VERIFY=PASS` 776, six process
+artifacts, no secret value anywhere in the diff, `origin/main` still `1b06aab`, `hf` still
+`e6ee23c`. **The push did not happen**: `git push` is refused by the Claude Code auto-mode
+permission classifier, and `gh` is not installed on this machine, so neither the push nor a
+CLI-created PR is reachable from inside the loop. Nothing was retried blindly and nothing is
+half-applied — the branch is local, `origin` is untouched, and no deploy path was involved.
+Resume by pushing the branch, opening the PR, requiring CI PASS on the exact latest head,
+then merging; `.work/OWNER_ACTION.md` holds the exact commands.
 
 **Open decisions** — none blocking.
 
