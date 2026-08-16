@@ -6,16 +6,17 @@ Updated: 2026-08-16
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (2 commits, unpushed; main still 1 docs commit ahead of origin)
-LAST_GREEN_SHA=d97b553
+CURRENT_BRANCH=feat/production-live-smoke (6 commits, unpushed; main still 1 docs commit ahead of origin)
+LAST_GREEN_SHA=90d6d83
 LAST_VERIFY=PASS 785 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=3 batched decisions open — (1) Phase B access code, (2) Wave 4B0 write-smoke
-  product decision, (3) T3 push of feat/production-live-smoke. None crossed.
-NEXT_ACTION=owner answers the batched boundary; nothing is half-applied
+OWNER_BOUNDARY=3 open — (1) Phase B access code, (2) Wave 4B0 route decision, (3) T3 push of
+  feat/production-live-smoke. None crossed. A NOT_RUN closure of (2) was applied and then
+  reverted as an invalid waiver (audit 2026-08-16, revert 90d6d83); do not re-apply it.
+NEXT_ACTION=owner answers the batched boundary; nothing is half-applied; Wave 4B0 stays open
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -325,15 +326,24 @@ the mock can never silently drift from production again.
    `/v1/calibration` serves rather than 401s** — currently only inferred from byte-identical
    source.
 
-2. **Wave 4B0 live write-smoke — product decision, not an authorization.** Options:
-   (a) **Close it as not-run with reason** — cheapest, honest, keeps the control cohort clean,
-   and v1 loses only a live BTC/SOL write check already covered offline;
-   (b) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
-   `CONTROLLED_SMOKE` — a T2 API/schema change plus a T3 redeploy before it is usable, and it
+2. **Wave 4B0 live write-smoke — genuinely OPEN. Two honest routes remain.**
+   **A NOT_RUN closure was tried on 2026-08-16 and reverted as an invalid waiver** (`acfc690`
+   + `3e1cf10`, reverted by `90d6d83`). The post-decision audit found `RELEASE_GATE.md`
+   authorizes not-run closure exactly once, inside the item's own text (Sprint 3: "or
+   explicitly recorded as not run with reason"); the Wave 4B0 item has no such clause. The
+   "Pass/fail/not-run result for each relevant command" line is a *reporting* obligation, not
+   a satisfying condition. "Release requires evidence" stands and the Deployment gate blocks
+   release. `V1_QUANT_CONTRACT.md` is silent on live smoke, so `RELEASE_GATE.md` governs.
+   No box was ever ticked (271/15 throughout), so nothing was presented as a pass.
+   **Do not re-apply a not-run closure.** The remaining routes are:
+   (a) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
+   `CONTROLLED_SMOKE` — T2 API/schema change plus a T3 redeploy before it is usable, and it
    widens the public contract for a test-only need;
-   (c) **Accept `USER_REQUESTED` smoke writes** — rejected on the evidence: it contaminates the
-   806-sample control cohort and contradicts the standing instruction to preserve the split.
-   Recommendation: **(a)**, revisiting only if a live write path is needed for another reason.
+   (b) **Record an explicit v1 scope exclusion** in the Phase 2D.3B form
+   (`<!-- OUT OF v1 (owner decision <date>) -->`), which **also requires amending line 5** of
+   `RELEASE_GATE.md` so its "only one owner-approved v1 scope reduction" claim stays true.
+   (b) is a scope reduction and is the owner's alone. Accepting `USER_REQUESTED` smoke writes
+   stays rejected: it contaminates the 806-sample control cohort.
 
 3. **T3 push of `feat/production-live-smoke`** (2 commits, plus the docs commit on `main`
    riding along). Expect the same wall as last time: `git push` is refused by the auto-mode
