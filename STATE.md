@@ -2,6 +2,40 @@
 
 Updated: 2026-08-16
 
+## Recovery block — read this first on resume
+```
+LOOP_STATE=PAUSED_AT_T3_BOUNDARY (push to origin blocked by the harness permission classifier)
+CURRENT_MILESTONE=operating-model V2 anchor (Change A closed; Change B NOT started)
+CURRENT_BRANCH=chore/gpt-sidecar
+LAST_GREEN_SHA=76eebb0
+LAST_VERIFY=PASS 776 passed · 2026-08-16
+CODEX_PENDING=NONE
+GPT_REQUEST_ID=NONE
+GPT_THREAD_URL=NONE
+GPT_REQUEST_STATE=NONE
+OWNER_BOUNDARY=OPEN — owner authorized the push+PR+merge; the push itself needs owner execution or a Bash permission rule
+NEXT_ACTION=owner runs `git push -u origin chore/gpt-sidecar`; then open PR into main, require CI PASS on the exact head, merge, re-verify
+```
+Update this block on every pause, every milestone change, and every GPT consultation.
+`GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
+`SKIPPED_UNAVAILABLE`.
+
+## Operating model V2 — anchored 2026-08-16
+- **Claude Code holds the loop.** **Codex `exec` is the implementation and debugging lane.**
+  **Deterministic tooling is the verification authority** — `./verify.sh`, Git, and the three
+  safety scanners decide pass/fail; no model adjudicates a gate.
+- **GPT-5.6 Sol via Claude Code Chrome is an exceptional sidecar only**, outside the normal
+  loop, default budget **≤1 consultation per milestone**, advisory and granting no authority.
+- **No OpenAI API fallback, no API key, ever. No transcript relay.** GPT sees only the
+  compact gitignored `.work/gpt-request.md` (≤2 KB) and returns `.work/gpt-result.md` (≤1 KB).
+- **The owner is the sole authority** for product and scope decisions, T3/T4 boundaries,
+  secrets, spend, and release.
+- **PAUSE/RESUME semantics live in `CLAUDE.md`.** The recovery block above plus Git plus
+  `.work/` are sufficient to resume after abrupt quota exhaustion **without repeating any
+  completed Codex delegation or GPT consultation**.
+- **UABO remains retired and frozen. Change A remains deployed and closed. Change B has NOT
+  started.**
+
 **Goal** — Complete UCPE v1: a production-quality, analysis-only crypto probability engine.
 
 **v1 scope** — resolver + calibration activation · deploy the GitHub↔HF gap · full
@@ -15,7 +49,8 @@ in Git on `preserve/2d3b-readiness-packet`; must not block v1.
 Pre-Git copy preserved read-only at `/Users/kha/Documents/Kha-app/v8-crypto-api-clean`;
 proven byte-identical to `676fafb` except the four files now committed. Retire it after v1.
 
-**Last green** — `main` @ `e6ee23c` · `VERIFY=PASS` 776 passed, ruff clean, 3/3 scanners.
+**Last green** — `main` @ `1b06aab` · `VERIFY=PASS` 776 passed, ruff clean, 3/3 scanners.
+Deployed production build is `e6ee23c`; `main` is one pin commit ahead of it by design.
 
 **Change A is merged to GitHub (2026-08-16).** PR #2 `feat/calibration-truth` → `main`,
 head `44ca1d9`, CI green on that exact head, merged as merge commit
@@ -111,23 +146,41 @@ across both builds, so the **fingerprint does not move** — drift would come fr
 and blob layers, not identity. The test's `PIN_SHA`/`CURRENT_DELTA_PATHS` mirror follows;
 non-empty-delta coverage is retained by `test_shallow_checkout_advisory_is_non_failing`.
 
-**Order is not optional.** Deploy first, pin second. A commit cannot contain its own SHA,
-so the pin must name the already-deployed commit: (1) push `e6ee23c` to `hf`;
-(2) confirm healthy; (3) land `chore/deploy-pin-change-a` on GitHub `main`; (4) dispatch the
-guard. Landing the pin before the push would itself report `PIN_DRIFT`. Between (1) and (3)
-the guard reports `PIN_DRIFT` exit 1 — that window is expected, not a fault.
+**Order held: deploy first, pin second — all four steps executed 2026-08-16.**
+(1) `e6ee23c` pushed to `hf` (fast-forward); (2) health confirmed; (3)
+`chore/deploy-pin-change-a` landed on GitHub `main` by PR #3; (4) guard dispatched.
+The `PIN_DRIFT` window between (1) and (3) opened and closed as designed and was never
+observed as a failure, because the guard was only dispatched after the pin landed.
 
-Deploy command (**not run, owner-gated T3**): `git push hf e6ee23cc81274c2ad68e247293738bc8e81f082a:refs/heads/main` — a fast-forward.
-Verify after: Space rebuild (uvicorn restart resets `uptime_seconds`) · `/healthcheck` 200
-`status=OK` · `/v1/build-info` 200, fingerprint unchanged at
-`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` · guard `workflow_dispatch` → `HEALTHY` exit 0
-after step (3), with a non-failing `SCHEDULER_AHEAD_OF_PIN` advisory · `/v1/calibration` and
-`/v1/system_status` still 401 `UNAUTHORIZED` unauthenticated (Change A does not touch either
-route's path, dependency, or unauthenticated body).
-Rollback: `git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e247293738bc8e81f082a hf 30d4982903e6f44e063616bc3f03f334bd2544e2:refs/heads/main`
-— a force is required because the restore moves the remote backwards. Revert the five pin
-literals on GitHub only if step (3) already landed. No Change A source commit needs
-reverting; GitHub `main` may stay ahead.
+**PIN CLOSED — PR #3 merged.** `chore/deploy-pin-change-a` @ `7290a0e` → `main`, CI check
+run `test` = `success` on that exact head, merged as merge commit
+`1b06aab32ed560cf890609ef9c722862c71ebf6c` = `origin/main`. The PR contained exactly three
+files — `ops/hf_runtime_baseline.json`, `tests/scripts/test_source_integrity_guard.py`,
+`STATE.md` — no source, schema, gate, or quant change. `mergeable_state` was `clean`.
+
+**SOURCE-INTEGRITY GUARD — HEALTHY, exit 0** (`workflow_dispatch` run `31941852536`,
+head `1b06aab`). `pinned_hf_main_sha` == `hf_main_sha` == `e6ee23c`, so **no `PIN_DRIFT`
+remains**. Three probe rounds all `HEALTHY`; `critical_source_match: true`;
+`mismatched_path_names: []`; `frontend_asset_match: true`; live fingerprint == intended.
+
+*Correction to the earlier prediction:* the advisory came back
+**`SCHEDULER_DIVERGENT_FROM_PIN`, not `SCHEDULER_AHEAD_OF_PIN`.** This is benign and
+contract-defined. The guard workflow uses `actions/checkout@v4` with no `fetch-depth`, so
+the runner has a depth-1 shallow clone and the ancestry walk in `evaluate_deployment_delta`
+raises; `_safe_deployment_advisory` catches it and returns the fallback
+(`scheduler_ahead_count: null`, `deployment_delta_paths: []`) — exactly what was observed.
+`test_shallow_checkout_advisory_is_non_failing` covers this path, and the advisory
+structurally cannot affect Q1: the summary validator raises
+`"Integrity summary advisory affected Q1."` if it ever did, and
+`test_advisory_internal_failure_cannot_fail_healthy_q1` pins that. So the advisory is
+non-failing by contract, not by interpretation. **Expect this advisory on every run until
+the workflow sets `fetch-depth: 0`** — not a fault, and not worth a change on its own.
+
+Rollback was pre-authorized but **not used and not needed**. For reference, restoring the
+previous build would need
+`git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e247293738bc8e81f082a hf 30d4982903e6f44e063616bc3f03f334bd2544e2:refs/heads/main`
+plus reverting the five pin literals on GitHub — a force is required because the restore
+moves the remote backwards.
 
 **CHANGE A DEPLOYED TO PRODUCTION — 2026-08-16.**
 `e6ee23c` is live on the HF Space. Pre-deploy fail-closed checks all passed first:
@@ -160,9 +213,53 @@ Health after deploy: `/healthcheck` 200 `status=OK` · `/v1/build-info` 200 · `
 body — routes registered, auth gates intact, not 404 and not 500**.
 No rollback was used and none was needed. No DB write, no migration, no secret change.
 
-**Open decisions** — none blocking. Change B is still not started.
+**CANONICAL HANDOFF CHECKPOINT — CHANGE A DEPLOYMENT CLOSURE COMPLETE (2026-08-16).**
+Production `e6ee23c` · GitHub `main` `1b06aab` · guard `HEALTHY` exit 0 · no `PIN_DRIFT`.
+Closure boundaries held exactly: **no production DB write, no migration applied, no secret
+created or modified, no rollback used, and Change B not started.** The one secret-adjacent
+act was *using* the owner's already-provisioned HF token for a single push without printing,
+storing, or altering it. Nothing in this closure is pending or half-applied.
 
-**NEXT ACTION** — none for Change A beyond the source-integrity pin closure recorded below.
+**GPT SIDECAR AMENDED INTO THE OPERATING MODEL — 2026-08-16 (T0, docs only).**
+`CLAUDE.md` gains two sections — *GPT sidecar* and *Pause and resume* — and `STATE.md`
+gains the recovery block above. **No new process file**: still exactly six
+(`CLAUDE.md` `AGENTS.md` `STATE.md` `verify.sh` `delegate.sh` `docs/OPERATING_DOCTRINE.md`).
+`.work/gpt-request.md` and `.work/gpt-result.md` are gitignored ephemera, not artifacts.
+Routing is unchanged — deterministic tool > Codex > Opus > owner — and GPT sits outside the
+loop at ≤1 consultation per milestone.
+
+*Smoke test executed once, end to end, and discarded.* A temporary ChatGPT thread was
+opened in the owner's logged-in Plus session via Claude Code Chrome; the Advanced menu read
+**Model `GPT-5.6 Sol`, Effort High** before anything was sent; a 566-byte non-sensitive
+handshake went out and a 450-byte reply came back (`UCPE-SIDECAR-OK` · self-reported
+`GPT-5.6 Sol` · one clause on why advice carries no authority). Both limits held (≤2 KB
+request, ≤1 KB result). **No OpenAI API and no API key**: no `OPENAI*` environment variable
+exists, no key file on disk, the `openai` package is not installed in `.venv`, and the
+repository contains no `openai` or `api.openai.com` reference — the only transport was the
+browser UI. The smoke thread is **not** project history and is referenced nowhere.
+
+**GITHUB ANCHOR OF THE AMENDMENT — PAUSED AT THE T3 BOUNDARY (2026-08-16).**
+The owner authorized pushing `chore/gpt-sidecar`, opening one PR into `main`, and merging on
+green CI. Everything up to the boundary is done and verified: three docs-only commits
+(`b52f7ca` handoff checkpoint, `93d9ecd` sidecar + pause/resume, `76eebb0` V2 preservation
+list), diff vs `main` is exactly `CLAUDE.md` + `STATE.md`, `VERIFY=PASS` 776, six process
+artifacts, no secret value anywhere in the diff, `origin/main` still `1b06aab`, `hf` still
+`e6ee23c`. **The push did not happen**: `git push` is refused by the Claude Code auto-mode
+permission classifier, and `gh` is not installed on this machine, so neither the push nor a
+CLI-created PR is reachable from inside the loop. Nothing was retried blindly and nothing is
+half-applied — the branch is local, `origin` is untouched, and no deploy path was involved.
+Resume by pushing the branch, opening the PR, requiring CI PASS on the exact latest head,
+then merging; `.work/OWNER_ACTION.md` holds the exact commands.
+
+**Open decisions** — none blocking.
+
+**NEXT ACTION** — owner's call on what ships next; Change A needs nothing further.
+Worth knowing before choosing: production now serves Change A's gating, but
+`/v1/calibration` still reports **`WARMING_UP` ×5 and `NO_SAMPLES` for 1M**, because the
+endpoint only issues per-timeframe scoped queries and no timeframe has ≥500 resolved
+outcomes (134–172 each). The 806/`MEASURED` figure remains an unscoped aggregate no
+endpoint requests. Since predictions are traffic-driven, that gap closes only with roughly
+3× more operator traffic per timeframe — not with time alone.
 Change B (horizon-specific probability modelling) stays deferred and **has not started**:
 it needs a new `methodology_version`, which resets calibration to `NO_SAMPLES`, so the
 806-sample cohort must survive as the control until Change A has re-accumulated evidence
