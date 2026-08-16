@@ -20,6 +20,22 @@ Update this block on every pause, every milestone change, and every GPT consulta
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
 
+## Operating model V2 — anchored 2026-08-16
+- **Claude Code holds the loop.** **Codex `exec` is the implementation and debugging lane.**
+  **Deterministic tooling is the verification authority** — `./verify.sh`, Git, and the three
+  safety scanners decide pass/fail; no model adjudicates a gate.
+- **GPT-5.6 Sol via Claude Code Chrome is an exceptional sidecar only**, outside the normal
+  loop, default budget **≤1 consultation per milestone**, advisory and granting no authority.
+- **No OpenAI API fallback, no API key, ever. No transcript relay.** GPT sees only the
+  compact gitignored `.work/gpt-request.md` (≤2 KB) and returns `.work/gpt-result.md` (≤1 KB).
+- **The owner is the sole authority** for product and scope decisions, T3/T4 boundaries,
+  secrets, spend, and release.
+- **PAUSE/RESUME semantics live in `CLAUDE.md`.** The recovery block above plus Git plus
+  `.work/` are sufficient to resume after abrupt quota exhaustion **without repeating any
+  completed Codex delegation or GPT consultation**.
+- **UABO remains retired and frozen. Change A remains deployed and closed. Change B has NOT
+  started.**
+
 **Goal** — Complete UCPE v1: a production-quality, analysis-only crypto probability engine.
 
 **v1 scope** — resolver + calibration activation · deploy the GitHub↔HF gap · full
