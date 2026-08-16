@@ -2,6 +2,24 @@
 
 Updated: 2026-08-16
 
+## Recovery block — read this first on resume
+```
+LOOP_STATE=IDLE_AWAITING_OWNER
+CURRENT_MILESTONE=operating-model: GPT sidecar amendment (Change A closed; Change B NOT started)
+CURRENT_BRANCH=chore/gpt-sidecar
+LAST_GREEN_SHA=b52f7ca
+LAST_VERIFY=PASS 776 passed · 2026-08-16
+CODEX_PENDING=NONE
+GPT_REQUEST_ID=NONE
+GPT_THREAD_URL=NONE
+GPT_REQUEST_STATE=NONE
+OWNER_BOUNDARY=none open; no T3/T4 pending
+NEXT_ACTION=owner picks the next milestone; nothing is half-applied
+```
+Update this block on every pause, every milestone change, and every GPT consultation.
+`GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
+`SKIPPED_UNAVAILABLE`.
+
 **Goal** — Complete UCPE v1: a production-quality, analysis-only crypto probability engine.
 
 **v1 scope** — resolver + calibration activation · deploy the GitHub↔HF gap · full
@@ -185,6 +203,24 @@ Closure boundaries held exactly: **no production DB write, no migration applied,
 created or modified, no rollback used, and Change B not started.** The one secret-adjacent
 act was *using* the owner's already-provisioned HF token for a single push without printing,
 storing, or altering it. Nothing in this closure is pending or half-applied.
+
+**GPT SIDECAR AMENDED INTO THE OPERATING MODEL — 2026-08-16 (T0, docs only).**
+`CLAUDE.md` gains two sections — *GPT sidecar* and *Pause and resume* — and `STATE.md`
+gains the recovery block above. **No new process file**: still exactly six
+(`CLAUDE.md` `AGENTS.md` `STATE.md` `verify.sh` `delegate.sh` `docs/OPERATING_DOCTRINE.md`).
+`.work/gpt-request.md` and `.work/gpt-result.md` are gitignored ephemera, not artifacts.
+Routing is unchanged — deterministic tool > Codex > Opus > owner — and GPT sits outside the
+loop at ≤1 consultation per milestone.
+
+*Smoke test executed once, end to end, and discarded.* A temporary ChatGPT thread was
+opened in the owner's logged-in Plus session via Claude Code Chrome; the Advanced menu read
+**Model `GPT-5.6 Sol`, Effort High** before anything was sent; a 566-byte non-sensitive
+handshake went out and a 450-byte reply came back (`UCPE-SIDECAR-OK` · self-reported
+`GPT-5.6 Sol` · one clause on why advice carries no authority). Both limits held (≤2 KB
+request, ≤1 KB result). **No OpenAI API and no API key**: no `OPENAI*` environment variable
+exists, no key file on disk, the `openai` package is not installed in `.venv`, and the
+repository contains no `openai` or `api.openai.com` reference — the only transport was the
+browser UI. The smoke thread is **not** project history and is referenced nowhere.
 
 **Open decisions** — none blocking.
 

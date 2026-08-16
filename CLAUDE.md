@@ -50,6 +50,36 @@ targeted repair. On a repeat of the same causal class: stop delegating, do root-
 sibling scan → downstream-consumer scan → regression test → one consolidated repair. Bound
 at 2 attempts per causal class, then escalate. Never blind-retry.
 
+## GPT sidecar — exceptional, never in the loop
+Routing is unchanged: **deterministic tool > Codex > Opus > owner.** GPT-5.6 Sol is a
+sidecar reached only through the owner's logged-in ChatGPT Plus web UI via Claude Code
+Chrome. **Never the OpenAI API, never an API key, never a paid fallback.**
+Triggers, **max 1 consultation per milestone**: material Claude/Codex disagreement at T2+ ·
+novel architecture/security/quant ambiguity · same causal class survives bounded repair ·
+Opus quota gone while independent reasoning is still required · one milestone-level review
+with positive marginal value. Otherwise do not consult.
+Protocol: write `.work/gpt-request.md` (≤2 KB) → confirm the thread's model reads exactly
+`GPT-5.6 Sol` → send → save `.work/gpt-result.md` (≤1 KB). Both files are gitignored,
+ephemeral, and are **not** process artifacts.
+Send the minimum state and evidence only. **Never** send a Claude or Codex transcript, a
+whole file, a secret, or a database URL. GPT output is advice: it grants no authority,
+cannot authorize T3/T4 or a product decision, and cannot override a hard gate or an invariant.
+If ChatGPT quota, login, or browser automation is unavailable — optional consult: skip and
+record it in `STATE.md`; required consult: **pause**.
+
+## Pause and resume
+PAUSE: finish the current reversible atomic step if finishing is safe, else abandon it;
+start no new Codex delegation and no new GPT consultation; cross no T3/T4 boundary; run
+`./verify.sh` if it applies; leave Git clean or committed to the branch; update `STATE.md`;
+stop.
+`STATE.md` always carries a recovery block sufficient to resume after abrupt quota
+exhaustion: `LOOP_STATE` `CURRENT_MILESTONE` `CURRENT_BRANCH` `LAST_GREEN_SHA` `LAST_VERIFY`
+`CODEX_PENDING` `GPT_REQUEST_ID` `GPT_THREAD_URL` `GPT_REQUEST_STATE` `OWNER_BOUNDARY`
+`NEXT_ACTION`.
+RESUME: read `STATE.md`, then Git, then `.work/`. Never repeat a completed delegation. If
+`GPT_REQUEST_STATE=SENT_WAITING_RESULT`, open `GPT_THREAD_URL` and read the existing thread
+before sending anything again. Continue from the first incomplete safe action.
+
 ## Escalate to owner only for
 Product/scope decision · secret or credential · T3/T4 boundary · spending decision · causal
 class unresolved after defect-class repair. Batch these. Never request a secret in chat or
