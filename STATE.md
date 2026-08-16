@@ -6,17 +6,17 @@ Updated: 2026-08-16
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (12 commits, unpushed; main still 1 docs commit ahead of origin)
+CURRENT_BRANCH=feat/production-live-smoke (PUSHED to origin @ 28f0e4b; this checkpoint sits 1 commit ahead of that ref)
 LAST_GREEN_SHA=6ba8da1
 LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 open — T3 push of feat/production-live-smoke. Not crossed. Wave 4B0 and
-  Wave 1.2 are both CLOSED ON EVIDENCE (2026-08-16). /v1/calibration is PROVEN to serve in
-  production. All live-smoke work that does not need a browser is complete.
-NEXT_ACTION=owner runs the T3 push of feat/production-live-smoke; nothing is half-applied
+OWNER_BOUNDARY=1 open — whether to open a PR for feat/production-live-smoke, and whether to
+  merge it. The T3 push was AUTHORIZED AND EXECUTED by the owner 2026-08-16. Wave 4B0 and
+  Wave 1.2 are CLOSED ON EVIDENCE; /v1/calibration is PROVEN to serve in production.
+NEXT_ACTION=owner decides on the PR; CI has NOT yet run on this branch; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -364,7 +364,18 @@ was touched.
 *That run proved only that the endpoint did not answer within 10 seconds — neither health nor
 fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
 
-**Open decisions** — one: the T3 push. See NEXT ACTION.
+**T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
+`origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
+head at push time. `origin/main` unchanged at `a59b295`. **`hf` untouched — the push cannot
+deploy**: no workflow references Hugging Face. The long-standing `main` docs commit `22b3414`
+is an ancestor of this branch, so it rode along exactly as `b52f7ca` did in PR #4.
+
+**CI HAS NOT RUN on these commits.** `ci.yml` triggers on `push` to `codex/**` and on
+`pull_request` only; this branch is `feat/**`, so the push fired nothing. The 803-test suite
+has been verified locally but has **not** had clean-room verification. Opening a PR is what
+triggers it.
+
+**Open decisions** — one: whether to open a PR, and whether to merge. See NEXT ACTION.
 
 **NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
 
