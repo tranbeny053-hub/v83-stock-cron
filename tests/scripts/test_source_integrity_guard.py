@@ -14,15 +14,10 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "30d4982903e6f44e063616bc3f03f334bd2544e2"
+PIN_SHA = "e6ee23cc81274c2ad68e247293738bc8e81f082a"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
-CURRENT_DELTA_PATHS = [
-    "schemas/response.schema.json",
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/api/app.py",
-    "src/crypto_probability_engine/derivatives_intel/runtime.py",
-]
+CURRENT_DELTA_PATHS = []
 
 
 def _manifest() -> dict:
