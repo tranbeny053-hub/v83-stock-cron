@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 from collections.abc import Sequence
@@ -21,10 +22,22 @@ STALE_FRONTEND_MARKERS = (
 )
 REQUIRED_FRONTEND_MARKERS = ("prob_up_pct", "prob_down_pct", "prob_timeout_pct")
 SENSITIVE_SYSTEM_FIELD_PARTS = ("url", "host", "username", "password", "key")
+DEFAULT_TIMEOUT = 10.0
+DEFAULT_CALIBRATION_TIMEOUT = 120.0
 
 
 class SmokeFailure(RuntimeError):
     """The first causal smoke failure."""
+
+
+def _positive_timeout(value: str) -> float:
+    try:
+        timeout = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive number") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("must be a positive number")
+    return timeout
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -32,6 +45,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--authenticated", action="store_true")
     parser.add_argument("--raw-capture-dir", default=".work/prod-smoke/")
+    parser.add_argument("--timeout", type=_positive_timeout, default=DEFAULT_TIMEOUT)
+    parser.add_argument(
+        "--calibration-timeout",
+        type=_positive_timeout,
+        default=DEFAULT_CALIBRATION_TIMEOUT,
+    )
     return parser
 
 
@@ -57,9 +76,33 @@ def _request(
     capture_dir: Path,
     name: str,
     path: str,
+    timeout: float,
 ) -> httpx.Response:
-    response = client.get(path)
+    safe_path = urlsplit(path).path
+    try:
+        response = client.get(path, timeout=timeout)
+    except httpx.TimeoutException as exc:
+        raise SmokeFailure(f"GET {safe_path} timed out after {timeout:.1f}s") from exc
+    except httpx.TransportError as exc:
+        raise SmokeFailure(f"GET {safe_path} transport error after {timeout:.1f}s") from exc
     _capture(response, capture_dir, name)
+    return response
+
+
+def _login(
+    client: httpx.Client,
+    capture_dir: Path,
+    access_code: str,
+    timeout: float,
+) -> httpx.Response:
+    path = "/v1/auth/login"
+    try:
+        response = client.post("/v1/auth/login", json={"code": access_code}, timeout=timeout)
+    except httpx.TimeoutException as exc:
+        raise SmokeFailure(f"POST {path} timed out after {timeout:.1f}s") from exc
+    except httpx.TransportError as exc:
+        raise SmokeFailure(f"POST {path} transport error after {timeout:.1f}s") from exc
+    _capture(response, capture_dir, "phase-b-login.body")
     return response
 
 
@@ -89,26 +132,26 @@ def _assert_unauthorized(response: httpx.Response, context: str) -> None:
         raise SmokeFailure(f"{context} did not return the UNAUTHORIZED error contract")
 
 
-def _phase_a(client: httpx.Client, capture_dir: Path) -> str:
-    health = _request(client, capture_dir, "phase-a-healthcheck.body", "/healthcheck")
+def _phase_a(client: httpx.Client, capture_dir: Path, timeout: float) -> str:
+    health = _request(client, capture_dir, "phase-a-healthcheck.body", "/healthcheck", timeout)
     _require_status(health, 200, "GET /healthcheck")
     if _json(health, "GET /healthcheck").get("status") != "OK":
         raise SmokeFailure("GET /healthcheck did not report status OK")
 
-    build = _request(client, capture_dir, "phase-a-build-info.body", "/v1/build-info")
+    build = _request(client, capture_dir, "phase-a-build-info.body", "/v1/build-info", timeout)
     _require_status(build, 200, "GET /v1/build-info")
     fingerprint = _json(build, "GET /v1/build-info").get("fingerprint")
     if not isinstance(fingerprint, str) or not fingerprint:
         raise SmokeFailure("GET /v1/build-info omitted the build fingerprint")
     print(f"build fingerprint: {fingerprint}")
 
-    root = _request(client, capture_dir, "phase-a-root.body", "/")
+    root = _request(client, capture_dir, "phase-a-root.body", "/", timeout)
     _require_status(root, 200, "GET /")
     match = re.search(r'<script[^>]+src="([^"]*app\.js[^"]*)"', root.text)
     if match is None:
         raise SmokeFailure("app.js script tag not found in served HTML")
     app_js_path = match.group(1)
-    bundle = _request(client, capture_dir, "phase-a-app-js.body", app_js_path)
+    bundle = _request(client, capture_dir, "phase-a-app-js.body", app_js_path, timeout)
     _require_status(bundle, 200, f"GET {app_js_path}")
     for marker in REQUIRED_FRONTEND_MARKERS:
         if marker not in bundle.text:
@@ -118,11 +161,19 @@ def _phase_a(client: httpx.Client, capture_dir: Path) -> str:
             raise SmokeFailure(f"served app.js contains stale marker: {marker}")
 
     status = _request(
-        client, capture_dir, "phase-a-system-status-unauthorized.body", "/v1/system_status"
+        client,
+        capture_dir,
+        "phase-a-system-status-unauthorized.body",
+        "/v1/system_status",
+        timeout,
     )
     _assert_unauthorized(status, "unauthenticated GET /v1/system_status")
     calibration = _request(
-        client, capture_dir, "phase-a-calibration-unauthorized.body", "/v1/calibration"
+        client,
+        capture_dir,
+        "phase-a-calibration-unauthorized.body",
+        "/v1/calibration",
+        timeout,
     )
     _assert_unauthorized(calibration, "unauthenticated GET /v1/calibration")
     return app_js_path
@@ -150,19 +201,28 @@ def _phase_b(
     client: httpx.Client,
     capture_dir: Path,
     access_code: str,
+    timeout: float,
+    calibration_timeout: float,
 ) -> None:
-    login = client.post("/v1/auth/login", json={"code": access_code})
-    _capture(login, capture_dir, "phase-b-login.body")
+    login = _login(client, capture_dir, access_code, timeout)
     _require_status(login, 200, "login")
 
-    status = _request(client, capture_dir, "phase-b-system-status.body", "/v1/system_status")
+    status = _request(
+        client, capture_dir, "phase-b-system-status.body", "/v1/system_status", timeout
+    )
     _require_status(status, 200, "authenticated GET /v1/system_status")
     persistence, repository = _assert_system_status_sanitized(
         _json(status, "authenticated GET /v1/system_status")
     )
     print(f"persistence_status={persistence} repository_type={repository}")
 
-    response = _request(client, capture_dir, "phase-b-calibration.body", "/v1/calibration")
+    response = _request(
+        client,
+        capture_dir,
+        "phase-b-calibration.body",
+        "/v1/calibration",
+        calibration_timeout,
+    )
     _require_status(response, 200, "authenticated GET /v1/calibration")
     payload = _json(response, "authenticated GET /v1/calibration")
     timeframes = payload.get("timeframes")
@@ -204,13 +264,18 @@ def main(
             base_url=args.base_url.rstrip("/") + "/",
             transport=transport,
             follow_redirects=False,
-            timeout=10.0,
         ) as client:
             phases.append("A")
-            _phase_a(client, capture_dir)
+            _phase_a(client, capture_dir, args.timeout)
             if args.authenticated:
                 phases.append("B")
-                _phase_b(client, capture_dir, access_code or "")
+                _phase_b(
+                    client,
+                    capture_dir,
+                    access_code or "",
+                    args.timeout,
+                    args.calibration_timeout,
+                )
     except (SmokeFailure, httpx.HTTPError, OSError) as exc:
         ran = "+".join(phases) if phases else "none"
         print(f"FAIL: production smoke phases {ran}; {exc}")

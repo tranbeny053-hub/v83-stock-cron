@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 
 from scripts import manual_smoke, production_smoke
 
@@ -58,10 +59,19 @@ def _handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected request: {request.method} {request.url}")
 
 
-def _run(tmp_path: Path, handler=_handler, *, authenticated: bool = False, environ=ENABLED) -> int:
+def _run(
+    tmp_path: Path,
+    handler=_handler,
+    *,
+    authenticated: bool = False,
+    environ=ENABLED,
+    extra_args: list[str] | None = None,
+) -> int:
     argv = ["--base-url", "https://production.invalid", "--raw-capture-dir", str(tmp_path)]
     if authenticated:
         argv.append("--authenticated")
+    if extra_args:
+        argv.extend(extra_args)
     return production_smoke.main(
         argv,
         transport=httpx.MockTransport(handler),
@@ -137,6 +147,115 @@ def test_phase_a_fails_if_calibration_is_public(tmp_path: Path, capsys) -> None:
         "returned HTTP 200, expected 401\n"
     )
     assert output.endswith(expected)
+
+
+def test_phase_a_timeout_names_request_and_default_budget(tmp_path: Path, capsys) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/healthcheck":
+            raise httpx.ReadTimeout("private transport detail", request=request)
+        return _handler(request)
+
+    assert _run(tmp_path, handler) == 1
+    output = capsys.readouterr().out
+    assert output.endswith(
+        "FAIL: production smoke phases A; GET /healthcheck timed out after 10.0s\n"
+    )
+    assert output.count("FAIL:") == 1
+
+
+def test_calibration_timeout_names_request_and_long_budget(tmp_path: Path, capsys) -> None:
+    authenticated = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal authenticated
+        if request.url.path == "/v1/auth/login":
+            authenticated = True
+            return httpx.Response(200, json={"ok": True})
+        if authenticated and request.url.path == "/v1/system_status":
+            return httpx.Response(
+                200,
+                json={
+                    "system": {
+                        "persistence_status": "OK",
+                        "repository_type": "SUPABASE_POSTGRES",
+                    }
+                },
+            )
+        if authenticated and request.url.path == "/v1/calibration":
+            raise httpx.ReadTimeout("private transport detail", request=request)
+        return _handler(request)
+
+    assert _run(tmp_path, handler, authenticated=True) == 1
+    output = capsys.readouterr().out
+    assert output.endswith(
+        "FAIL: production smoke phases A+B; GET /v1/calibration timed out after 120.0s\n"
+    )
+    assert output.count("FAIL:") == 1
+    assert "private transport detail" not in output
+
+
+def test_requests_receive_their_configured_per_request_timeouts(tmp_path: Path) -> None:
+    authenticated = False
+    observed: dict[tuple[str, bool], dict[str, float]] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal authenticated
+        observed[(request.url.path, authenticated)] = request.extensions["timeout"]
+        if request.url.path == "/v1/auth/login":
+            authenticated = True
+            return httpx.Response(200, json={"ok": True})
+        if authenticated and request.url.path == "/v1/system_status":
+            return httpx.Response(
+                200,
+                json={
+                    "system": {
+                        "persistence_status": "OK",
+                        "repository_type": "SUPABASE_POSTGRES",
+                    }
+                },
+            )
+        if authenticated and request.url.path == "/v1/calibration":
+            return httpx.Response(200, json=_calibration())
+        return _handler(request)
+
+    assert (
+        _run(
+            tmp_path,
+            handler,
+            authenticated=True,
+            extra_args=["--timeout", "3.5", "--calibration-timeout", "45"],
+        )
+        == 0
+    )
+    assert set(observed[("/healthcheck", False)].values()) == {3.5}
+    assert set(observed[("/v1/calibration", True)].values()) == {45.0}
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [
+        ("--timeout", "0"),
+        ("--timeout", "not-a-number"),
+        ("--calibration-timeout", "-1"),
+        ("--calibration-timeout", "nan"),
+    ],
+)
+def test_invalid_timeout_is_rejected_before_request(
+    tmp_path: Path,
+    flag: str,
+    value: str,
+) -> None:
+    requests = 0
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        raise AssertionError("network must not be reached")
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, handler, extra_args=[flag, value])
+    assert exc_info.value.code != 0
+    assert requests == 0
 
 
 def test_phase_b_prints_only_bounded_diagnostics_and_keeps_secrets_out(
