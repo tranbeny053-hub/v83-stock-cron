@@ -4,17 +4,17 @@ Updated: 2026-08-16
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AT_T3_BOUNDARY (push to origin blocked by the harness permission classifier)
-CURRENT_MILESTONE=operating-model V2 anchor (Change A closed; Change B NOT started)
-CURRENT_BRANCH=chore/gpt-sidecar
-LAST_GREEN_SHA=76eebb0
-LAST_VERIFY=PASS 776 passed · 2026-08-16
+LOOP_STATE=IDLE_AWAITING_OWNER (operating model V2 anchored to GitHub; milestone closed)
+CURRENT_MILESTONE=NONE — next milestone not started and not chosen
+CURRENT_BRANCH=main (local main is 1 docs-only commit ahead of origin/main; see below)
+LAST_GREEN_SHA=a59b295
+LAST_VERIFY=PASS 776 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=OPEN — owner authorized the push+PR+merge; the push itself needs owner execution or a Bash permission rule
-NEXT_ACTION=owner runs `git push -u origin chore/gpt-sidecar`; then open PR into main, require CI PASS on the exact head, merge, re-verify
+OWNER_BOUNDARY=none open; no T3/T4 pending
+NEXT_ACTION=owner picks the next milestone; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -59,10 +59,10 @@ merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` 
 unchanged at `30d4982` before and after, and no workflow references Hugging Face or
 triggers on push to `main`, so merging cannot deploy.
 
-**Branches** — `main` = `origin/main` = `e6ee23c` (also the exact deploy source, now live) ·
-`chore/deploy-pin-change-a` (deploy packet, pushed for the pin PR) ·
-`feat/calibration-truth` (merged) · `preserve/2d3b-readiness-packet` ·
-`chore/operating-model`.
+**Branches** — `main` = `a59b295` (one docs-only checkpoint ahead of `origin/main`) ·
+`chore/gpt-sidecar` (merged by PR #4, kept) · `chore/deploy-pin-change-a` (merged by PR #3) ·
+`feat/calibration-truth` (merged by PR #2) · `preserve/2d3b-readiness-packet` ·
+`chore/operating-model`. Production remains `e6ee23c`, which is an ancestor of `main`.
 
 **Production — Change A IS DEPLOYED (2026-08-16).** HF Space live at `e6ee23c`,
 `stage=RUNNING`, `cpu-basic`, healthy. The prior build `30d4982` was a strict ancestor,
@@ -238,18 +238,26 @@ exists, no key file on disk, the `openai` package is not installed in `.venv`, a
 repository contains no `openai` or `api.openai.com` reference — the only transport was the
 browser UI. The smoke thread is **not** project history and is referenced nowhere.
 
-**GITHUB ANCHOR OF THE AMENDMENT — PAUSED AT THE T3 BOUNDARY (2026-08-16).**
-The owner authorized pushing `chore/gpt-sidecar`, opening one PR into `main`, and merging on
-green CI. Everything up to the boundary is done and verified: three docs-only commits
-(`b52f7ca` handoff checkpoint, `93d9ecd` sidecar + pause/resume, `76eebb0` V2 preservation
-list), diff vs `main` is exactly `CLAUDE.md` + `STATE.md`, `VERIFY=PASS` 776, six process
-artifacts, no secret value anywhere in the diff, `origin/main` still `1b06aab`, `hf` still
-`e6ee23c`. **The push did not happen**: `git push` is refused by the Claude Code auto-mode
-permission classifier, and `gh` is not installed on this machine, so neither the push nor a
-CLI-created PR is reachable from inside the loop. Nothing was retried blindly and nothing is
-half-applied — the branch is local, `origin` is untouched, and no deploy path was involved.
-Resume by pushing the branch, opening the PR, requiring CI PASS on the exact latest head,
-then merging; `.work/OWNER_ACTION.md` holds the exact commands.
+**OPERATING MODEL V2 IS ANCHORED TO GITHUB — PR #4 MERGED (2026-08-16).**
+`chore/gpt-sidecar` @ `74af3ce` → `main`, four docs-only commits (`b52f7ca` handoff
+checkpoint · `93d9ecd` sidecar + pause/resume · `76eebb0` V2 preservation list · `74af3ce`
+T3 pause record), exactly two files changed (`CLAUDE.md`, `STATE.md`), +147 −20. CI check
+`CI / test (pull_request)` was **`Successful in 34s` on the exact latest head `74af3ce`**,
+`mergeable_state` clean, merged as merge commit
+`a59b295aead428fa51667b9e915b02ad7a6c4feb` = `origin/main`. `hf` was `e6ee23c` before and
+after — **the merge cannot deploy**: no workflow references Hugging Face and `ci.yml`'s push
+trigger is limited to `codex/**`, so nothing fires on push to `main`.
+
+*The push needed the owner.* `git push` is refused by the Claude Code auto-mode permission
+classifier and `gh` is not installed on this machine, so the loop paused at the T3 boundary
+with `origin` untouched and the owner ran the one-line push in-session. The PR itself was
+opened and merged through the GitHub web UI via Claude Code Chrome. If a future session
+needs to push, expect the same wall: either the owner runs it, or a Bash permission rule for
+`git push` is added.
+
+**Local `main` is one docs-only commit ahead of `origin/main`** — this checkpoint. That is
+the established pattern (`b52f7ca` rode along the same way and landed in PR #4); it will
+ride along in the next PR. Nothing else is unpushed.
 
 **Open decisions** — none blocking.
 
