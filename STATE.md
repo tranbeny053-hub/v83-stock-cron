@@ -4,17 +4,18 @@ Updated: 2026-08-16
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE_AWAITING_OWNER (operating model V2 anchored to GitHub; milestone closed)
-CURRENT_MILESTONE=NONE — next milestone not started and not chosen
-CURRENT_BRANCH=main (local main is 1 docs-only commit ahead of origin/main; see below)
-LAST_GREEN_SHA=a59b295
-LAST_VERIFY=PASS 776 passed, ruff clean, 3/3 scanners · 2026-08-16
+LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
+CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
+CURRENT_BRANCH=feat/production-live-smoke (2 commits, unpushed; main still 1 docs commit ahead of origin)
+LAST_GREEN_SHA=d97b553
+LAST_VERIFY=PASS 785 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=none open; no T3/T4 pending
-NEXT_ACTION=owner picks the next milestone; nothing is half-applied
+OWNER_BOUNDARY=3 batched decisions open — (1) Phase B access code, (2) Wave 4B0 write-smoke
+  product decision, (3) T3 push of feat/production-live-smoke. None crossed.
+NEXT_ACTION=owner answers the batched boundary; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -259,9 +260,86 @@ needs to push, expect the same wall: either the owner runs it, or a Bash permiss
 the established pattern (`b52f7ca` rode along the same way and landed in PR #4); it will
 ride along in the next PR. Nothing else is unpushed.
 
-**Open decisions** — none blocking.
+**MILESTONE: PRODUCTION LIVE-SMOKE + RELEASE-GATE CLOSURE — started 2026-08-16.**
+Branch `feat/production-live-smoke`, two commits, `VERIFY=PASS` 785 (was 776).
 
-**NEXT ACTION** — owner's call on what ships next; Change A needs nothing further.
+*Change L1 — read-only production smoke (`87fd77a`, T1).* `scripts/production_smoke.py` plus
+`tests/scripts/test_production_smoke.py`. **Read-only by construction**: GET only, with a
+single `POST /v1/auth/login`, pinned by an AST test that fails if any other write verb or any
+analyze path ever appears in the module. Gated behind `UCPE_PRODUCTION_SMOKE_ENABLED`,
+mirroring `UCPE_LIVE_SMOKE_ENABLED`, so the suite never reaches the network. Raw bodies are
+captured before parsing; headers are never captured; no secret is ever printed.
+
+**PHASE A EXECUTED AGAINST LIVE PRODUCTION — exit 0, 2026-08-16.** Unauthenticated,
+read-only, no write, no secret. `/healthcheck` 200 `status=OK`, `uptime_seconds=12154`;
+`/v1/build-info` 200, `release_id=UCPE-W4D3-OPS-2A0-20260622-A`, `environment=HF_PRODUCTION`;
+`/` 200 serving `/app.js?v=w4c1-ka1-20260621-a`, and **that served bundle contains
+`prob_up_pct`, `prob_down_pct`, `prob_timeout_pct` and none of the stale markers**;
+`/v1/system_status` and `/v1/calibration` both 401 with a well-formed `UNAUTHORIZED` body.
+This is the first time the deployed frontend bundle has been verified from outside the app.
+`frontend/index.html` references the same `w4c1-ka1-20260621-a` token production serves, so
+source and production agree — **no frontend drift**.
+
+*Change L2 — gate reconciliation (`d97b553`, T0).* `RELEASE_GATE.md` now reads 271 proven,
+15 genuinely open, 27 historical ceremony items resolved inline as superseded. Every newly
+ticked box carries a checkable citation; **every one of the 15 open boxes states the specific
+evidence that would close it.** The Wave 4A.2 cache-bust literals are annotated as historical
+(`wave4a2-b9137ee` → live `w4c1-ka1-20260621-a`).
+
+*Deliberately left open:* the Phase-1 cohort item says **six** historical derivatives smoke
+rows; the production query found **seven** (5 `CONTROLLED_SMOKE` + 2
+`SCHEDULED_SHADOW_EVIDENCE`). Recorded as an open reconciliation rather than guessed at.
+
+**BLOCKING FINDING — the live write-smoke is blocked by contract, not by authorization.**
+`AnalysisRequest` (`src/crypto_probability_engine/api/schemas.py:77`) is `extra="forbid"` and
+carries only `symbol`, `analysis_mode`, `timeframe`, `asset_class`, `include_detail`. **There
+is no prediction-origin field on the HTTP contract**, so every production `/v1/analyze` write
+is recorded `USER_REQUESTED`. The origin contract exists at the service layer and in the DB,
+but the endpoint cannot reach it. Codex reported this as `BLOCKED` on task 009 and the finding
+was independently confirmed. Consequence: **any live write-smoke would inject synthetic rows
+into the 806-sample `USER_REQUESTED` control cohort**, destroying the very evidence separation
+Change B depends on. No workaround was attempted; the write phase was removed from scope and
+the capability rebuilt read-only as task 011.
+
+*Repair record — one causal class, one consolidated repair, no blind retry.* Task 011 came
+back `BLOCKED` after the same cookie-session failure twice under `MockTransport`. Root cause
+was **a test-fixture defect, not a script defect**: the mocked `Set-Cookie` omitted `Path`, so
+`http.cookiejar` derived the cookie path from the login URL as `/v1/auth` and never sent it to
+`/v1/system_status`. Proven directly — the cookie *was* delivered to `/v1/auth/whoami` and
+withheld from `/v1/system_status`. The real app emits `Path=/` (`api/auth.py:166` → Starlette
+default), so the mock did not reproduce production. Sibling scan found no other `Set-Cookie`
+mock in the repo. Consolidated repair: fixture corrected to production's real cookie
+attributes, the redundant manual `client.cookies.update(...)` that disguised the cause removed,
+and **a regression test added that asserts the real login response still sets `Path=/`**, so
+the mock can never silently drift from production again.
+
+**Open decisions** — three, batched, all at genuine owner boundaries; see NEXT ACTION.
+
+**NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
+
+1. **Phase B access code (secret boundary).** Phase B is built and tested but never run: it
+   needs `UCPE_SMOKE_ACCESS_CODE`. Never put the code in chat or in a file. The owner runs it
+   in-session so the value stays in their shell only:
+   `! UCPE_PRODUCTION_SMOKE_ENABLED=true UCPE_SMOKE_ACCESS_CODE='<code>' .venv/bin/python scripts/production_smoke.py --base-url https://beny053-ultimate-crypto-probability-engine.hf.space --authenticated`
+   Read-only. It closes the Wave 1.2 `Persistence: OK` item and gives the **first live proof
+   `/v1/calibration` serves rather than 401s** — currently only inferred from byte-identical
+   source.
+
+2. **Wave 4B0 live write-smoke — product decision, not an authorization.** Options:
+   (a) **Close it as not-run with reason** — cheapest, honest, keeps the control cohort clean,
+   and v1 loses only a live BTC/SOL write check already covered offline;
+   (b) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
+   `CONTROLLED_SMOKE` — a T2 API/schema change plus a T3 redeploy before it is usable, and it
+   widens the public contract for a test-only need;
+   (c) **Accept `USER_REQUESTED` smoke writes** — rejected on the evidence: it contaminates the
+   806-sample control cohort and contradicts the standing instruction to preserve the split.
+   Recommendation: **(a)**, revisiting only if a live write path is needed for another reason.
+
+3. **T3 push of `feat/production-live-smoke`** (2 commits, plus the docs commit on `main`
+   riding along). Expect the same wall as last time: `git push` is refused by the auto-mode
+   permission classifier and `gh` is absent, so the owner runs the push in-session.
+
+Change A still needs nothing further.
 Worth knowing before choosing: production now serves Change A's gating, but
 `/v1/calibration` still reports **`WARMING_UP` ×5 and `NO_SAMPLES` for 1M**, because the
 endpoint only issues per-timeframe scoped queries and no timeframe has ≥500 resolved
