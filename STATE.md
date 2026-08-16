@@ -6,18 +6,17 @@ Updated: 2026-08-16
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (11 commits, unpushed; main still 1 docs commit ahead of origin)
-LAST_GREEN_SHA=20c19d3
+CURRENT_BRANCH=feat/production-live-smoke (12 commits, unpushed; main still 1 docs commit ahead of origin)
+LAST_GREEN_SHA=6ba8da1
 LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=2 open — (1) Phase B re-run after the timeout repair, (2) T3 push of
-  feat/production-live-smoke. None crossed. Wave 4B0 and Wave 1.2 are both CLOSED ON EVIDENCE
-  (2026-08-16). /v1/calibration remains unproven in production.
-NEXT_ACTION=owner supplies the Phase B access code in-session and runs the T3 push; nothing
-  is half-applied
+OWNER_BOUNDARY=1 open — T3 push of feat/production-live-smoke. Not crossed. Wave 4B0 and
+  Wave 1.2 are both CLOSED ON EVIDENCE (2026-08-16). /v1/calibration is PROVEN to serve in
+  production. All live-smoke work that does not need a browser is complete.
+NEXT_ACTION=owner runs the T3 push of feat/production-live-smoke; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -121,9 +120,10 @@ calibration path is **byte-identical** between the deployed build `30d4982` and 
 `api/calibration_endpoint.py`. So `build_operator_repository` selects
 `SupabasePersistenceRepository`, the endpoint's `_EXPECTED_REPOSITORY` guard
 (`SUPABASE_POSTGRES`) passes, and it reads the same database the resolver writes to.
-Only the live HTTP invocation is unverified (session-gated; not circumvented).
+*Superseded 2026-08-16: the live HTTP invocation is no longer unverified — Phase B invoked it
+with a real session and it served 200. See the Phase B section below.*
 
-**But `/v1/calibration` will NOT report MEASURED.** The endpoint never issues an unscoped
+**But `/v1/calibration` will NOT report MEASURED — CONFIRMED LIVE 2026-08-16.** The endpoint never issues an unscoped
 query: `calibration_endpoint.py:118` iterates `SUPPORTED_TIMEFRAMES` =
 `("15m","1H","4H","1D","1W","1M")` and builds one scoped report per timeframe. So
 production will report **WARMING_UP ×5 and NO_SAMPLES for 1M** — not MEASURED. The
@@ -315,7 +315,26 @@ attributes, the redundant manual `client.cookies.update(...)` that disguised the
 and **a regression test added that asserts the real login response still sets `Path=/`**, so
 the mock can never silently drift from production again.
 
-**PHASE B PARTIALLY SUCCEEDED — first authorized authenticated production read, 2026-08-16.**
+**PHASE B PASSED IN FULL — 2026-08-16, re-run with the repaired instrument.**
+`PASS: production smoke phases A+B`. `/v1/calibration` served **200** at the 120s budget and
+returned exactly what was predicted:
+`15m WARMING_UP 172 · 1H WARMING_UP 165 · 4H WARMING_UP 172 · 1D WARMING_UP 163 ·
+1W WARMING_UP 134 · 1M NO_SAMPLES 0`.
+
+**Those counts match the 2026-08-15 read-only SQL query exactly.** That is an independent
+cross-check, not a restatement: the live endpoint and the direct database query agree
+per timeframe, which confirms the deployed endpoint really does read the same database the
+resolver writes to. The identical counts also confirm **no new outcomes resolved since
+2026-08-15**, consistent with zero operator traffic.
+
+Three standing predictions are now confirmed by live evidence rather than inference: the
+endpoint serves rather than 401-ing; it reports per-timeframe scoped results, never the
+unscoped 806/`MEASURED` aggregate; and 1M reports `NO_SAMPLES`. The earlier 10s timeout was
+an instrument defect, exactly as diagnosed — production was healthy throughout.
+
+*History of that failure, kept because the diagnosis mattered:*
+
+**PHASE B FIRST RUN — partial, 2026-08-16.**
 The owner ran Phase A+B. Phase A passed again. Login succeeded and
 `GET /v1/system_status` returned 200 with **`persistence_status=OK`,
 `repository_type=SUPABASE_REST`, `store_status=CONFIGURED`, `circuit_state=CLOSED`** — the
@@ -342,24 +361,16 @@ transport errors now name method, path and elapsed budget, with the query string
 the raw transport message dropped so nothing sensitive rides along. No production behaviour
 was touched.
 
-**What this does and does not establish about `/v1/calibration`.** It proves only that the
-endpoint did not answer within 10 seconds. It is **not** evidence the endpoint is healthy and
-**not** evidence it is broken. The re-run decides. Expect `WARMING_UP` ×5 and `NO_SAMPLES`
-for 1M when it does answer — that is the known per-timeframe scoping, not a fault.
+*That run proved only that the endpoint did not answer within 10 seconds — neither health nor
+fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
 
-**Open decisions** — two, batched, at genuine owner boundaries; see NEXT ACTION.
+**Open decisions** — one: the T3 push. See NEXT ACTION.
 
 **NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
 
-1. **Phase B re-run after the timeout repair (secret boundary).** Phase B ran once and got as
-   far as `persistence_status=OK` before `/v1/calibration` exceeded the old 10s budget. The
-   repair is in `20c19d3`. Re-running needs `UCPE_SMOKE_ACCESS_CODE`; never put the code in
-   chat or in a file. The owner runs it in-session so the value stays in their shell only:
-   `! UCPE_PRODUCTION_SMOKE_ENABLED=true UCPE_SMOKE_ACCESS_CODE='<code>' .venv/bin/python scripts/production_smoke.py --base-url https://beny053-ultimate-crypto-probability-engine.hf.space --authenticated`
-   Read-only. Wave 1.2 is already closed by the first run; what remains is the **first live
-   proof `/v1/calibration` actually serves** rather than 401-ing or hanging. If it times out
-   again at 120s, that is a genuine production finding rather than an instrument defect, and
-   `--calibration-timeout` can be raised to separate slowness from a hang.
+1. ~~**Phase B**~~ — **DONE 2026-08-16.** Ran clean end to end at the 120s budget; see the
+   Phase B section above. The access code stayed in the owner's shell (`read -s`, then
+   `unset`) and never entered chat, a file, or the repository. Nothing further is needed.
 
 2. **Wave 4B0 — CLOSED ON EVIDENCE 2026-08-16 (`91254f3`). No waiver, no scope exclusion, no
    API widening, no synthetic `USER_REQUESTED` row.**
