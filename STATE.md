@@ -7,15 +7,16 @@ Updated: 2026-08-16
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
 CURRENT_BRANCH=feat/production-live-smoke (2 commits, unpushed; main still 1 docs commit ahead of origin)
-LAST_GREEN_SHA=d97b553
+LAST_GREEN_SHA=acfc690
 LAST_VERIFY=PASS 785 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=3 batched decisions open — (1) Phase B access code, (2) Wave 4B0 write-smoke
-  product decision, (3) T3 push of feat/production-live-smoke. None crossed.
-NEXT_ACTION=owner answers the batched boundary; nothing is half-applied
+OWNER_BOUNDARY=2 open — (1) Phase B access code, (3) T3 push of feat/production-live-smoke.
+  Decision (2) Wave 4B0 write-smoke resolved 2026-08-16: closed not-run. None crossed.
+NEXT_ACTION=owner supplies the Phase B access code in-session and runs the T3 push; nothing
+  is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -325,15 +326,11 @@ the mock can never silently drift from production again.
    `/v1/calibration` serves rather than 401s** — currently only inferred from byte-identical
    source.
 
-2. **Wave 4B0 live write-smoke — product decision, not an authorization.** Options:
-   (a) **Close it as not-run with reason** — cheapest, honest, keeps the control cohort clean,
-   and v1 loses only a live BTC/SOL write check already covered offline;
-   (b) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
-   `CONTROLLED_SMOKE` — a T2 API/schema change plus a T3 redeploy before it is usable, and it
-   widens the public contract for a test-only need;
-   (c) **Accept `USER_REQUESTED` smoke writes** — rejected on the evidence: it contaminates the
-   806-sample control cohort and contradicts the standing instruction to preserve the split.
-   Recommendation: **(a)**, revisiting only if a live write path is needed for another reason.
+2. ~~**Wave 4B0 live write-smoke**~~ — **DECIDED 2026-08-16 (owner): close as not-run with
+   reason.** Applied in `acfc690`. The box stays unchecked and is recorded as an accepted v1
+   exception, not converted into a pass. `AnalysisRequest` is unchanged, nothing was
+   redeployed, and the `USER_REQUESTED` control cohort stays clean. Revisit only if a live
+   write path is needed for an independent reason.
 
 3. **T3 push of `feat/production-live-smoke`** (2 commits, plus the docs commit on `main`
    riding along). Expect the same wall as last time: `git push` is refused by the auto-mode
