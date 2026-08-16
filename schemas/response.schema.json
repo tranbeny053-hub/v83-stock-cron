@@ -145,6 +145,26 @@
     "frontend_display": { "type": "object" },
     "detail_view": { "$ref": "detail_view.schema.json" },
     "gate_result": { "type": "object" },
+    "skill_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "n", "observed_directional_rate"],
+      "properties": {
+        "verdict": {
+          "enum": [
+            "INSUFFICIENT_EVIDENCE",
+            "SKILL_DEMONSTRATED",
+            "NO_DEMONSTRATED_SKILL"
+          ]
+        },
+        "n": { "type": "integer", "minimum": 0 },
+        "observed_directional_rate": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
     "debug": { "type": "object" },
     "analysis_hash": { "type": "string" }
   },

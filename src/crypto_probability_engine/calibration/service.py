@@ -6,6 +6,17 @@ from typing import Any
 
 from crypto_probability_engine.calibration.metrics import compute_calibration_metrics
 from crypto_probability_engine.calibration.schemas import CalibrationReport, SampleGate
+from crypto_probability_engine.calibration.skill import (
+    cache_skill_evidence,
+    classify_directional_skill,
+    finish_skill_evidence_refresh,
+    insufficient_skill_evidence,
+)
+from crypto_probability_engine.config.defaults import (
+    DEFAULT_PHASE1A,
+    METHODOLOGY_VERSION,
+    MODEL_VERSION,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.prediction_origin import (
     DEFAULT_PREDICTION_ORIGIN,
@@ -96,6 +107,33 @@ def build_calibration_report(
         "warnings": warnings,
     }
     return report
+
+
+def refresh_skill_evidence_cache(repository: PersistenceRepository) -> None:
+    """Refresh all timeframe verdicts outside analysis; failures remain conservative."""
+
+    try:
+        for timeframe in DEFAULT_PHASE1A.timeframes:
+            try:
+                report = build_calibration_report(
+                    repository,
+                    timeframe=timeframe,
+                    model_version=MODEL_VERSION,
+                    methodology_version=METHODOLOGY_VERSION,
+                )
+                metrics = report.get("metrics") or {}
+                evidence = classify_directional_skill(
+                    int(metrics.get("directional_subset_count", 0)),
+                    int(metrics.get("directional_hit_count", 0)),
+                )
+            except Exception:
+                evidence = insufficient_skill_evidence()
+            cache_skill_evidence(timeframe, evidence)
+    except Exception:
+        for timeframe in DEFAULT_PHASE1A.timeframes:
+            cache_skill_evidence(timeframe, insufficient_skill_evidence())
+    finally:
+        finish_skill_evidence_refresh()
 
 
 def _versions_present(rows: list[dict[str, Any]]) -> dict[str, list[str]]:

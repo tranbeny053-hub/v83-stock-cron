@@ -48,6 +48,7 @@ def apply_composite_gates(
     liquidity_state: dict | None = None,
     tail_risk_state: dict | None = None,
     execution_state: dict | None = None,
+    skill_state: dict | None = None,
     shelter_mode: bool = False,
     kill_switch: bool = False,
 ) -> dict:
@@ -65,7 +66,7 @@ def apply_composite_gates(
 
     if hard_blocks:
         risk_guard_applied = bool(risk_blocks)
-        return {
+        result = {
             "action": "NO_TRADE" if risk_guard_applied else "ABORT",
             "hard_gate_passed": False,
             "hard_blocks": hard_blocks,
@@ -74,12 +75,39 @@ def apply_composite_gates(
             "risk_guard_applied": risk_guard_applied,
             "forced_score_disposition": "ELEVATED_RISK_AVOID" if risk_guard_applied else None,
         }
-    return {
-        "action": score_state.get("disposition", "WATCH"),
-        "hard_gate_passed": True,
-        "hard_blocks": [],
-        "score_ignored": False,
-        "news_ignored": True,
-        "risk_guard_applied": False,
-        "forced_score_disposition": None,
-    }
+    else:
+        result = {
+            "action": score_state.get("disposition", "WATCH"),
+            "hard_gate_passed": True,
+            "hard_blocks": [],
+            "score_ignored": False,
+            "news_ignored": True,
+            "risk_guard_applied": False,
+            "forced_score_disposition": None,
+        }
+    return apply_skill_gate(result, skill_state=skill_state)
+
+
+def apply_skill_gate(gate_result: dict, *, skill_state: dict | None) -> dict:
+    """Apply the evidence gate without changing existing hard-gate seniority."""
+
+    if skill_state is None or skill_state.get("verdict") == "SKILL_DEMONSTRATED":
+        return gate_result
+
+    gated = dict(gate_result)
+    preexisting_hard_gate = gated.get("hard_gate_passed") is False
+    hard_blocks = list(gated.get("hard_blocks") or [])
+    if "SKILL_NOT_DEMONSTRATED" not in hard_blocks:
+        hard_blocks.append("SKILL_NOT_DEMONSTRATED")
+    gated.update(
+        {
+            "action": gated.get("action") if preexisting_hard_gate else "NO_TRADE",
+            "hard_gate_passed": False,
+            "hard_blocks": hard_blocks,
+            "score_ignored": True,
+            "news_ignored": True,
+            "skill_guard_applied": True,
+            "forced_score_disposition": "ELEVATED_RISK_AVOID",
+        }
+    )
+    return gated

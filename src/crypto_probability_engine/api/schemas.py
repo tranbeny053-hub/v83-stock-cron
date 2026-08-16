@@ -662,6 +662,18 @@ class DecisionBrief(BaseModel):
     disclaimer: str
 
 
+class SkillEvidenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal[
+        "INSUFFICIENT_EVIDENCE",
+        "SKILL_DEMONSTRATED",
+        "NO_DEMONSTRATED_SKILL",
+    ]
+    n: int = Field(ge=0)
+    observed_directional_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
 class AnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -705,6 +717,7 @@ class AnalysisResponse(BaseModel):
     frontend_display: JsonObject
     detail_view: DetailView
     gate_result: JsonObject
+    skill_evidence: SkillEvidenceResponse | None = None
     debug: JsonObject
     analysis_hash: str
 
