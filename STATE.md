@@ -6,16 +6,16 @@ Updated: 2026-08-16
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
 CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (9 commits, unpushed; main still 1 docs commit ahead of origin)
-LAST_GREEN_SHA=91254f3
-LAST_VERIFY=PASS 796 passed, ruff clean, 3/3 scanners · 2026-08-16
+CURRENT_BRANCH=feat/production-live-smoke (11 commits, unpushed; main still 1 docs commit ahead of origin)
+LAST_GREEN_SHA=20c19d3
+LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=2 open — (1) Phase B access code, (2) T3 push of feat/production-live-smoke.
-  None crossed. Wave 4B0 is CLOSED ON EVIDENCE (2026-08-16), not waived: an earlier NOT_RUN
-  closure was reverted as an invalid waiver, then the smoke was actually run.
+OWNER_BOUNDARY=2 open — (1) Phase B re-run after the timeout repair, (2) T3 push of
+  feat/production-live-smoke. None crossed. Wave 4B0 and Wave 1.2 are both CLOSED ON EVIDENCE
+  (2026-08-16). /v1/calibration remains unproven in production.
 NEXT_ACTION=owner supplies the Phase B access code in-session and runs the T3 push; nothing
   is half-applied
 ```
@@ -315,17 +315,51 @@ attributes, the redundant manual `client.cookies.update(...)` that disguised the
 and **a regression test added that asserts the real login response still sets `Path=/`**, so
 the mock can never silently drift from production again.
 
-**Open decisions** — three, batched, all at genuine owner boundaries; see NEXT ACTION.
+**PHASE B PARTIALLY SUCCEEDED — first authorized authenticated production read, 2026-08-16.**
+The owner ran Phase A+B. Phase A passed again. Login succeeded and
+`GET /v1/system_status` returned 200 with **`persistence_status=OK`,
+`repository_type=SUPABASE_REST`, `store_status=CONFIGURED`, `circuit_state=CLOSED`** — the
+first live proof the deployed runtime reaches durable persistence. It also settles which
+Wave 1.2 priority tier production actually selects: **`SUPABASE_REST`**, the first tier. Note
+this is the *runtime* repository; the calibration endpoint builds a separate *operator*
+repository that prefers direct Postgres (`repository.py:2258`), so both tiers are in use for
+different purposes. **Wave 1.2's `Persistence: OK` item is closed on this evidence.**
+
+Then: `FAIL: production smoke phases A+B; The read operation timed out`.
+
+*The timed-out read was `GET /v1/calibration`, identified without re-running anything.* Raw
+capture proved it by absence: every earlier request wrote its body, and
+`phase-b-calibration.body` was the only one missing, so no response ever arrived.
+
+**Both defects were in the instrument, not proven in production.** (1) A single blanket 10s
+timeout was applied to every request, but `/v1/calibration` fans one HTTP call out to six
+sequential Space→Supabase round trips — `calibration_endpoint.py:30` iterates six
+`SUPPORTED_TIMEFRAMES`, each a scoped read with `limit` defaulting to 5000 (line 90), against
+the direct-Postgres operator repository. Ten seconds was never a contract-grounded budget.
+(2) The failure never named *which* read died. Repaired in `20c19d3`: `--calibration-timeout`
+(default 120s) separate from `--timeout` (10s, so real hangs still surface fast), and
+transport errors now name method, path and elapsed budget, with the query string stripped and
+the raw transport message dropped so nothing sensitive rides along. No production behaviour
+was touched.
+
+**What this does and does not establish about `/v1/calibration`.** It proves only that the
+endpoint did not answer within 10 seconds. It is **not** evidence the endpoint is healthy and
+**not** evidence it is broken. The re-run decides. Expect `WARMING_UP` ×5 and `NO_SAMPLES`
+for 1M when it does answer — that is the known per-timeframe scoping, not a fault.
+
+**Open decisions** — two, batched, at genuine owner boundaries; see NEXT ACTION.
 
 **NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
 
-1. **Phase B access code (secret boundary).** Phase B is built and tested but never run: it
-   needs `UCPE_SMOKE_ACCESS_CODE`. Never put the code in chat or in a file. The owner runs it
-   in-session so the value stays in their shell only:
+1. **Phase B re-run after the timeout repair (secret boundary).** Phase B ran once and got as
+   far as `persistence_status=OK` before `/v1/calibration` exceeded the old 10s budget. The
+   repair is in `20c19d3`. Re-running needs `UCPE_SMOKE_ACCESS_CODE`; never put the code in
+   chat or in a file. The owner runs it in-session so the value stays in their shell only:
    `! UCPE_PRODUCTION_SMOKE_ENABLED=true UCPE_SMOKE_ACCESS_CODE='<code>' .venv/bin/python scripts/production_smoke.py --base-url https://beny053-ultimate-crypto-probability-engine.hf.space --authenticated`
-   Read-only. It closes the Wave 1.2 `Persistence: OK` item and gives the **first live proof
-   `/v1/calibration` serves rather than 401s** — currently only inferred from byte-identical
-   source.
+   Read-only. Wave 1.2 is already closed by the first run; what remains is the **first live
+   proof `/v1/calibration` actually serves** rather than 401-ing or hanging. If it times out
+   again at 120s, that is a genuine production finding rather than an instrument defect, and
+   `--calibration-timeout` can be raised to separate slowness from a hang.
 
 2. **Wave 4B0 — CLOSED ON EVIDENCE 2026-08-16 (`91254f3`). No waiver, no scope exclusion, no
    API widening, no synthetic `USER_REQUESTED` row.**

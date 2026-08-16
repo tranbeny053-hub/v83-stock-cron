@@ -8,7 +8,7 @@ Status: Wave 4B.3 is merged and deployed; production is running `e6ee23c` with h
 
 ## 2026-08-16 reconciliation
 
-Current evidence proves 272 checklist items, 14 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. The Wave 4B0 live BTC/SOL long-timeframe smoke was closed on evidence, not waived: it was actually run, live and cross-provider, with CONTROLLED_SMOKE classification and zero database writes. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
+Current evidence proves 273 checklist items, 13 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. The Wave 4B0 live BTC/SOL long-timeframe smoke was closed on evidence, not waived: it was actually run, live and cross-provider, with CONTROLLED_SMOKE classification and zero database writes. Wave 1.2's `Persistence: OK` closed on an authorized authenticated production read. `/v1/calibration` remains unproven in production — its first authorized attempt did not answer within the smoke's then-10s budget, which establishes nothing about the endpoint's health either way. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -229,7 +229,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] REST watchlist CRUD is covered by mocked `httpx` tests; no real DB/network in unit tests.
 - [x] REST failure returns `UNAVAILABLE` and analysis still returns 200.
 - [x] Frontend contains no Supabase URL/key references and never calls Supabase directly.
-- [ ] Hugging Face runtime smoke confirms `Persistence: OK` after secrets are configured. <!-- PENDING 2026-08-16: requires authorized production live smoke confirming the deployed HF runtime reports `Persistence: OK`; see STATE.md. -->
+- [x] Hugging Face runtime smoke confirms `Persistence: OK` after secrets are configured. <!-- verified 2026-08-16: authorized authenticated live smoke against the deployed HF Space (scripts/production_smoke.py Phase B). GET /v1/system_status returned 200 with persistence_status=OK, repository_type=SUPABASE_REST, store_status=CONFIGURED, circuit_state=CLOSED. Raw body captured. This confirms the deployed runtime reaches durable persistence over REST, and resolves which of the Wave 1.2 priority tiers production actually selects: SUPABASE_REST, the first tier. -->
 
 ## Wave 1.1 Stabilization Gate
 
