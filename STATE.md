@@ -4,21 +4,20 @@ Updated: 2026-08-17
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (T2 built and green; stopped before secret/deploy/T4)
+LOOP_STATE=PAUSED_AWAITING_OWNER (DEPLOYED and pinned locally; stopped before the pin push)
 CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
-CURRENT_BRANCH=feat/session-scoped-origin (3 commits, unpushed); origin/main = 6eb632d
-LAST_GREEN_SHA=bb09cb0
+CURRENT_BRANCH=chore/deploy-pin-session-origin (unpushed); origin/main = 9933615
+LAST_GREEN_SHA=0237e8e
 LAST_VERIFY=PASS 822 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=3 sequential, none crossed — (1) generate the smoke code and configure the HF
-  secret CONTROLLED_SMOKE_CODE_HASH [T3, secret]; (2) push/PR and deploy the build [T3];
-  (3) run the browser smoke, which writes CONTROLLED_SMOKE rows to production [T4, one-shot].
-  Order matters: the secret must exist before the deploy is useful, and the deploy before the
-  smoke.
-NEXT_ACTION=owner provisions CONTROLLED_SMOKE_CODE_HASH; then deploy; then the T4 smoke
+OWNER_BOUNDARY=2 open — (1) push/PR the pin branch to origin [T3]; (2) configure the HF secret
+  CONTROLLED_SMOKE_CODE_HASH [T3], which is what finally activates the feature; then the
+  one-shot T4 browser smoke. DEPLOY IS DONE: 9933615 is live. A PIN_DRIFT window is open until
+  the pin lands on GitHub main — do not dispatch the source-integrity guard before then.
+NEXT_ACTION=owner pushes the pin branch, then configures the HF secret; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -436,6 +435,51 @@ production analysis.**
    Space holds all three credentials. Emptying it means removing **three** secrets and
    restoring **three** — six owner-only operations on production, where a botched restore
    silently costs durable persistence.
+
+**DEPLOYED TO PRODUCTION — 2026-08-17. `9933615` IS LIVE.**
+Deploy-first staging, at the owner's direction. `git push hf 9933615:refs/heads/main` was a
+clean **fast-forward** (`e6ee23c..9933615`, ancestry verified beforehand, no force) and this
+time needed **no credential bridging** — the earlier `osxkeychain` wall did not recur.
+
+*Restart proven independently of the fingerprint.* `hf/main` = `9933615` exactly;
+`uptime_seconds` collapsed **72539 → 94** and resumed climbing. The fingerprint stayed
+`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` **exactly as predicted**, because
+`config/build_info.py` is byte-identical across both builds — which is precisely why uptime,
+not the fingerprint, was designated the proof in advance. Post-deploy Phase A: `PASS` — health
+200, build-info 200, served bundle intact, `/v1/system_status` and `/v1/calibration` both
+well-formed 401s.
+
+**THE DEPLOYED FEATURE IS INERT, BY DESIGN.** `CONTROLLED_SMOKE_CODE_HASH` is **not**
+configured on the Space, so `_hash_matches` returns `False` immediately (`api/auth.py:127-128`)
+and the `CONTROLLED_SMOKE` branch is unreachable. Login behaviour is byte-for-byte what it was.
+This deploy changed **no observable production behaviour**; it only staged the code. That is
+the whole point of deploy-first: the secret becomes the single, reversible moment of change.
+
+**PIN RE-BASELINED LOCALLY (`0237e8e`, branch `chore/deploy-pin-session-origin`).** Deploy
+first, pin second. Exactly **two** literals, both computed: `hf_main_sha` `e6ee23c…` →
+`9933615…`, and the `api/app.py` digest `8c559699…` → `ea55f4b3…`. Only **one of the eleven**
+guarded blobs moved — `api/auth.py` and `config/settings.py` are not guarded.
+*Applied by exact string substitution, not a JSON round-trip:* re-encoding escaped the
+non-ASCII separator in the fingerprint to `\u00b7`, semantically identical but not
+byte-identical, which would have been a third unintended literal change. `CURRENT_DELTA_PATHS`
+is empty again and `PIN_SHA` follows the new pin.
+
+**A `PIN_DRIFT` WINDOW IS OPEN** between the deploy and the pin landing on GitHub `main` — the
+pinned SHA still says `e6ee23c` on `origin/main` while HF serves `9933615`. **Do not dispatch
+the source-integrity guard until the pin merges.** This is the same window Change A opened and
+closed by design.
+
+**PR #6 MERGED TO GITHUB — 2026-08-17.** `feat/session-scoped-origin` @ `966e5bf` → `main`,
+merged as merge commit **`9933615b3a9a1bdffada6cc568c2927ff9106114`** = `origin/main`.
+Verified from Git rather than the UI: **two parents** (`6eb632d` + `966e5bf`) confirm the
+merge-commit method rather than a squash or rebase, and the exact head CI went green on is an
+ancestor of `main`. 7 commits, 10 files, +542 −27. CI `CI / test (pull_request)` passed on that
+exact head — the first clean-room verification of this T2 auth change.
+
+**`hf/main` re-verified `e6ee23c` after the merge — nothing deployed.** The owner generated the
+smoke code locally against the existing production salt; it is **not yet configured** on the
+Space, so the feature is inert in production by design. CI could not exercise it end to end for
+the same reason, which is itself a tested property.
 
 **CREDENTIAL BOUNDARY FAILED ONCE, THEN REPAIRED — 2026-08-17 (`bb09cb0`).**
 The owner's first attempt to generate the secret was blocked before any hash existed:
