@@ -875,6 +875,7 @@ def test_no_secret_markers_in_frontend() -> None:
     for marker in (
         "APP_ACCESS_CODE_HASH",
         "DEV_MODE_CODE_HASH",
+        "CONTROLLED_SMOKE_CODE_HASH",
         "SESSION_SIGNING_KEY",
         "FRED_API_KEY",
         "NEWSAPI_KEY",
