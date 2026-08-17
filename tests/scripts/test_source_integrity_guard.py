@@ -14,14 +14,14 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "e6ee23cc81274c2ad68e247293738bc8e81f082a"
+PIN_SHA = "9933615b3a9a1bdffada6cc568c2927ff9106114"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
-# Non-empty while a guarded change is merged on GitHub but not yet deployed to the Space:
-# session-scoped prediction origin touches api/app.py. This mirrors reality and must be
-# emptied again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/app.py"]
+# Empty while GitHub and the deployed Space agree. It goes non-empty whenever a guarded
+# change is merged but not yet deployed, and is emptied again once the deploy lands and
+# ops/hf_runtime_baseline.json is re-pinned.
+CURRENT_DELTA_PATHS = []
 
 
 def _manifest() -> dict:
