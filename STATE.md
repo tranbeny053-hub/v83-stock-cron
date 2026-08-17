@@ -4,21 +4,21 @@ Updated: 2026-08-17
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (investigation complete; stopped at a contract decision)
+LOOP_STATE=PAUSED_AWAITING_OWNER (T2 built and green; stopped before secret/deploy/T4)
 CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
-CURRENT_BRANCH=main; origin/main = 6eb632d; local rides docs checkpoints ahead, as usual
-LAST_GREEN_SHA=6eb632d
-LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-17
+CURRENT_BRANCH=feat/session-scoped-origin (unpushed); origin/main = 6eb632d
+LAST_GREEN_SHA=be2104e
+LAST_VERIFY=PASS 815 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 open — how to close Wave 4A.2 + Wave 1.1. Both need a browser against the
-  deployed Space, which forces an analysis, which today can only be recorded USER_REQUESTED.
-  Requires a contract decision: complete the origin contract at the HTTP+frontend layer
-  (T2+T1, then T3 deploy, then a one-shot T4 write), or empty production persistence for an
-  evidence window (six secret operations, T3). Nothing crossed.
-NEXT_ACTION=owner chooses the closure path for the two browser items; nothing is half-applied
+OWNER_BOUNDARY=3 sequential, none crossed — (1) generate the smoke code and configure the HF
+  secret CONTROLLED_SMOKE_CODE_HASH [T3, secret]; (2) push/PR and deploy the build [T3];
+  (3) run the browser smoke, which writes CONTROLLED_SMOKE rows to production [T4, one-shot].
+  Order matters: the secret must exist before the deploy is useful, and the deploy before the
+  smoke.
+NEXT_ACTION=owner provisions CONTROLLED_SMOKE_CODE_HASH; then deploy; then the T4 smoke
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -428,7 +428,38 @@ production analysis.**
    restoring **three** — six owner-only operations on production, where a botched restore
    silently costs durable persistence.
 
-**Conclusion: closing both items honestly does require a contract change.** Wave 1.1 says
+**RESOLVED — session-scoped origin implemented (`be2104e`, T2, branch
+`feat/session-scoped-origin`).** Owner chose the session-layer approach over widening the
+request contract. `VERIFY=PASS` 815 (was 803).
+
+The origin now rides inside the session payload, which was **already HMAC-signed over its
+body** (`api/auth.py:84-95`), so it cannot be forged without the signing key. A second access
+code, hashed as `CONTROLLED_SMOKE_CODE_HASH`, mints a session whose analyses are recorded
+`CONTROLLED_SMOKE`; both `/v1/analyze` and `/v1/analyze_batch` read it from the verified
+session. **`AnalysisRequest` is untouched** — it keeps `extra="forbid"` and gains no origin
+field — and **the frontend is unchanged**, so the browser simply logs in with the other code.
+
+*Fail-closed, deliberately asymmetric:* an **absent** origin key means `USER_REQUESTED`, so
+sessions minted before this change survive the deploy; an origin key that is **present but
+unsupported** returns 401 rather than defaulting, because a silent downgrade would contaminate
+the cohort invisibly — the precise harm this exists to prevent. Login is byte-for-byte
+unchanged when the hash is unset, the normal code is still checked first, a wrong code returns
+an identical error either way, the same limiter and constant-time compare apply, and a smoke
+session grants no Dev Mode. All eleven of those properties have direct tests
+(`tests/api/test_session_prediction_origin.py`).
+
+*Known, accepted:* whether the smoke hash is configured is observable through login **timing**,
+since an unset hash short-circuits before PBKDF2. It leaks only the existence of the feature —
+which this repository documents publicly anyway — never the credential, and the attempt limiter
+bounds sampling. Not worth constant-time padding; recorded rather than silently ignored.
+
+*Guard test:* `CURRENT_DELTA_PATHS` now lists `api/app.py`, because a guarded source file is
+changed on GitHub but not yet deployed. **`ops/hf_runtime_baseline.json` is deliberately NOT
+re-pinned** — the pin tracks what is deployed, and the order is deploy first, pin second. The
+regression test now exercises a real non-empty delta instead of an empty one, which is stronger
+coverage than before.
+
+**Original conclusion, which drove the decision: closing both items honestly does require a contract change.** Wave 1.1 says
 "Manual **deployed** UI smoke" — by the same reading the audit applied, that means the real
 Space, so a local render check cannot close it. No waiver, no scope reduction, and no
 reinterpretation is available here.
