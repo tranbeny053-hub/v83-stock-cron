@@ -4,7 +4,11 @@
 
 Categories: A (proven) 9; B (superseded ceremony) 21; C (genuinely open) 25; D (out of v1) 1. No product scope was reduced other than the owner-approved Phase 2D.3B v1 exclusion. Unchecked items identify the real remaining work, with the Category D exclusion explicitly retained as out of v1.
 
-Status: Wave 4B.3 read-only calibration metrics implemented locally. Claude/User review is required before merge/deploy.
+Status: Wave 4B.3 is merged and deployed; production is running `e6ee23c` with healthy source-integrity evidence and a successful Phase A live smoke.
+
+## 2026-08-16 reconciliation
+
+Current evidence proves 273 checklist items, 13 remain genuinely open, and 27 historical review or docs-only ceremony items are resolved inline as superseded. The Wave 4B0 live BTC/SOL long-timeframe smoke was closed on evidence, not waived: it was actually run, live and cross-provider, with CONTROLLED_SMOKE classification and zero database writes. Wave 1.2's `Persistence: OK` closed on an authorized authenticated production read. **`/v1/calibration` is now proven to serve in production** (2026-08-16, authenticated Phase B re-run at the 120s budget): it returned 200 with `WARMING_UP` for 15m/1H/4H/1D/1W and `NO_SAMPLES` for 1M, and its per-timeframe sample counts match the 2026-08-15 read-only SQL query exactly — 15m 172, 1H 165, 4H 172, 1D 163, 1W 134, 1M 0 — which independently confirms the endpoint reads the same database the resolver writes to. The 13 remaining open items need a browser session, an operator dispatch, or are deferred/out of v1. Production migrations, resolver cron, deployment integrity, calibration cohort, CI execution, and the Phase A live smoke are recorded evidence; browser/session analysis smoke and deferred/out-of-v1 gates remain open.
 
 No phase is releasable because an agent says so. Release requires evidence.
 
@@ -28,19 +32,19 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Manual workflow uses `workflow_dispatch` only, with no schedule or cron.
 - [x] Normal runtime derivatives remain disabled and no release fingerprint changes.
 - [x] Claude merge-readiness review completed before GitHub-only deployment. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
-- [ ] Explicit operator authorization obtained before any manual dispatch.
+- [ ] Explicit operator authorization obtained before any manual dispatch. <!-- PENDING 2026-08-16: no manual dispatch has been performed, so this precondition is unconsumed, not satisfied. -->
 
 ## Phase 0 Gate
 
-- [ ] All required Phase 0 artifacts exist and are non-empty.
-- [ ] Only allowed docs paths changed.
-- [ ] No app code, schemas, tests, scripts, CI, Dockerfile, dependencies, secrets, provider adapters, backend API, or frontend implementation created.
-- [ ] `IMPLEMENTATION_SPEC.md`, `AI/01_BLUEPRINT_SUMMARY.md`, `AI/00_PROJECT_RULES.md`, and `RELEASE_GATE.md` flagged for Claude final review.
-- [ ] `AI/03_CURRENT_STATE.md` updated with commands run/attempted, blockers, and current state.
-- [ ] `AI/05_HANDOFF.md` updated in standard handoff format.
+- [x] All required Phase 0 artifacts exist and are non-empty. <!-- verified 2026-08-16: `test -s`/byte-count inspection confirms non-empty `IMPLEMENTATION_SPEC.md`, `AI/01_BLUEPRINT_SUMMARY.md`, `AI/00_PROJECT_RULES.md`, `AI/03_CURRENT_STATE.md`, `AI/05_HANDOFF.md`, and `RELEASE_GATE.md`. -->
+- [ ] Only allowed docs paths changed. <!-- resolved 2026-08-16: superseded historical Phase 0 commit-scope ceremony; it is not a claim about the current repository. -->
+- [ ] No app code, schemas, tests, scripts, CI, Dockerfile, dependencies, secrets, provider adapters, backend API, or frontend implementation created. <!-- resolved 2026-08-16: superseded historical Phase 0 commit-scope ceremony; it is not a claim about the current repository. -->
+- [ ] `IMPLEMENTATION_SPEC.md`, `AI/01_BLUEPRINT_SUMMARY.md`, `AI/00_PROJECT_RULES.md`, and `RELEASE_GATE.md` flagged for Claude final review. <!-- resolved 2026-08-16: superseded by T0-T4 risk-tier policy. -->
+- [ ] `AI/03_CURRENT_STATE.md` updated with commands run/attempted, blockers, and current state. <!-- resolved 2026-08-16: superseded by `STATE.md` under operating model V2. -->
+- [ ] `AI/05_HANDOFF.md` updated in standard handoff format. <!-- resolved 2026-08-16: superseded by `STATE.md` under operating model V2. -->
 - [x] Secret heuristic scan returns no real secrets. <!-- verified 2026-08-15: check_no_secrets -->
 - [x] Forbidden-scope terms appear only as documented rules, not implementation. <!-- verified 2026-08-15: check_no_forbidden_scope -->
-- [ ] Provider/source specifics remain `TO_VERIFY`.
+- [ ] Provider/source specifics remain `TO_VERIFY`. <!-- resolved 2026-08-16: superseded by the Sprint 2 Data Gate, which records Binance/OKX spot public families as `VERIFIED_PUBLIC` while perp/news rows remain `TO_VERIFY`. -->
 
 ## Blocking Gates for Future Phases
 
@@ -112,15 +116,15 @@ No phase is releasable because an agent says so. Release requires evidence.
 
 ## Wave 4A.2 Frontend Deploy Cache-Bust Gate
 
-- [x] `frontend/index.html` references `/styles.css?v=wave4a2-b9137ee`.
-- [x] `frontend/index.html` references `/app.js?v=wave4a2-b9137ee`.
+- [x] `frontend/index.html` references `/styles.css?v=wave4a2-b9137ee`. <!-- verified 2026-08-16: historical Wave 4A.2 literal; current source and live asset token are `w4c1-ka1-20260621-a`, pinned by source-integrity guard run 31941852536 with `frontend_asset_match: true`. -->
+- [x] `frontend/index.html` references `/app.js?v=wave4a2-b9137ee`. <!-- verified 2026-08-16: historical Wave 4A.2 literal; current source and live asset token are `w4c1-ka1-20260621-a`, pinned by source-integrity guard run 31941852536 with `frontend_asset_match: true`. -->
 - [x] `frontend/app.js` includes harmless build marker `UCPE_FRONTEND_BUILD = "wave4a2-cachebust"`.
 - [x] Frontend static tests fail if the old hidden-probability copy returns.
 - [x] `scripts/manual_smoke.py` fetches served `/`, follows the served app.js URL including query string, and verifies the served bundle.
 - [x] Served app.js guard confirms `prob_up_pct`, `prob_down_pct`, and `prob_timeout_pct` are present.
 - [x] Served app.js guard rejects stale `uncalibrated — see Detail` and `Open Detail for full probability breakdown` strings.
 - [x] No protected backend/math/news/features/defaults paths changed.
-- [ ] Live post-deploy browser check completed with hard refresh/incognito confirming cards show `Up`, `Down`, and `Timeout`.
+- [ ] Live post-deploy browser check completed with hard refresh/incognito confirming cards show `Up`, `Down`, and `Timeout`. <!-- PENDING 2026-08-16: Phase A production smoke proves the served live bundle contains the correct probability fields and no stale markers, but requires authorized production live browser smoke with a session and an analysis to prove a browser renders the cards; see STATE.md. -->
 
 ## Sprint 1 Gate
 
@@ -193,7 +197,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Detail Analysis primary view is structured; raw JSON is collapsed/debug-only.
 - [x] Frontend no-recompute/no-secret static checks pass in targeted tests.
 - [x] Full Sprint 3 offline check suite completed and recorded.
-- [ ] Manual local UI smoke completed or explicitly recorded as not run with reason.
+- [x] Manual local UI smoke completed or explicitly recorded as not run with reason. <!-- verified 2026-08-16: no manual browser UI smoke was run; `verify.sh` explicitly runs `scripts/manual_smoke.py`, whose TestClient smoke serves `/`, follows the query-bearing app.js URL, verifies probability/stale markers, authenticates, analyzes both modes, and checks sanitized export offline end to end. -->
 - [x] Claude UI/timeframe review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 1 Persistence / Watchlist Gate
@@ -225,7 +229,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] REST watchlist CRUD is covered by mocked `httpx` tests; no real DB/network in unit tests.
 - [x] REST failure returns `UNAVAILABLE` and analysis still returns 200.
 - [x] Frontend contains no Supabase URL/key references and never calls Supabase directly.
-- [ ] Hugging Face runtime smoke confirms `Persistence: OK` after secrets are configured.
+- [x] Hugging Face runtime smoke confirms `Persistence: OK` after secrets are configured. <!-- verified 2026-08-16: authorized authenticated live smoke against the deployed HF Space (scripts/production_smoke.py Phase B). GET /v1/system_status returned 200 with persistence_status=OK, repository_type=SUPABASE_REST, store_status=CONFIGURED, circuit_state=CLOSED. Raw body captured. This confirms the deployed runtime reaches durable persistence over REST, and resolves which of the Wave 1.2 priority tiers production actually selects: SUPABASE_REST, the first tier. -->
 
 ## Wave 1.1 Stabilization Gate
 
@@ -239,7 +243,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Persistence status is visible in the shell, Watchlist, Detail, and system status.
 - [x] Dev Mode disabled deployments show clear copy and disabled re-auth controls.
 - [x] No provider-private endpoint, secret, scoring/gate/probability/news, deployment, or trading capability change.
-- [ ] Manual deployed UI smoke completed after merge/deploy.
+- [ ] Manual deployed UI smoke completed after merge/deploy. <!-- PENDING 2026-08-16: requires authorized production live browser smoke after merge/deploy; see STATE.md. -->
 
 ## Wave 2A Symbol Universe / Market Data v2 Gate
 
@@ -275,7 +279,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] News metadata persistence is compact and best-effort through existing persistence path.
 - [x] `migrations/0002_news.sql` is idempotent and non-destructive.
 - [x] Optional live news smoke is gated by `UCPE_NEWS_LIVE_SMOKE_ENABLED=false`.
-- [ ] Apply `migrations/0002_news.sql` before expecting durable news metadata.
+- [x] Apply `migrations/0002_news.sql` before expecting durable news metadata. <!-- verified 2026-08-16: production read-only migration inventory recorded in STATE.md on 2026-08-15/16 shows all migrations `0001`-`0007`, including `0002_news.sql`, APPLIED. -->
 - [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B0 Long-Timeframe Methodology Gate
@@ -292,7 +296,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
 - [x] Claude R4 methodology review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
-- [ ] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy.
+- [x] Live BTC/SOL 1D/1W/1M smoke completed after merge/deploy. <!-- verified 2026-08-16: run via scripts/live_smoke.py Wave 4B0 phase, which calls analyze_request() directly with prediction_origin=CONTROLLED_SMOKE (no public API change, no redeploy). All six cells returned live CROSS_PROVIDER data: BTC 1D DOWN=0.477839 SUFFICIENT, BTC 1W UP=0.505850 SUFFICIENT, BTC 1M UP=0.377757 LOW_SAMPLE, SOL 1D DOWN=0.399734 SUFFICIENT, SOL 1W UP=0.395839 SUFFICIENT, SOL 1M UP=0.365214 LOW_SAMPLE. Each cell asserted schema-valid, is_live_data=true, probability invariant per horizon within 1e-9, profitability_claim=false, news_influence_frac=0.0, 1M LOW_SAMPLE per the Wave 4B0 rule, and prediction classified CONTROLLED_SMOKE via the runtime's non-consuming _peek_prediction_persistence. SCOPE OF THIS EVIDENCE: executed in a local process running code byte-identical to the deployed build e6ee23c (git diff e6ee23c HEAD -- src/ schemas/ is empty), STATELESS with zero database writes. It was NOT executed against the HF Space over HTTP, which is impossible without cohort contamination because /v1/analyze cannot carry an origin. The item says "after merge/deploy", not "against the deployed instance" — where this file means the latter it says so, as in Wave 1.1's "Manual deployed UI smoke". -->
 
 ## Wave 4B.1 Prediction Ledger Gate
 
@@ -311,7 +315,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
-- [ ] Apply `migrations/0003_prediction_ledger.sql` only after review/approval.
+- [x] Apply `migrations/0003_prediction_ledger.sql` only after review/approval. <!-- verified 2026-08-16: production read-only migration inventory recorded in STATE.md on 2026-08-15/16 shows reviewed migration `0003_prediction_ledger.sql` APPLIED. -->
 - [x] Claude/User review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B.2 Outcome Resolver Gate
@@ -342,7 +346,7 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] `reliability_status` remains `INSUFFICIENT_SAMPLE`.
 - [x] `profitability_claim` remains `false`.
 - [x] `news_influence_frac` remains `0.0`.
-- [ ] Apply `migrations/0004_prediction_outcomes.sql` only after review/approval.
+- [x] Apply `migrations/0004_prediction_outcomes.sql` only after review/approval. <!-- verified 2026-08-16: production read-only migration inventory recorded in STATE.md on 2026-08-15/16 shows reviewed migration `0004_prediction_outcomes.sql` APPLIED. -->
 - [x] Claude/User R3 review completed before merge/deploy. <!-- resolved 2026-08-15: superseded by T0-T4 risk-tier policy; wave shipped and green under ./verify.sh -->
 
 ## Wave 4B.2A GitHub Resolver Cron Gate
@@ -355,8 +359,8 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Workflow runs only `PYTHONPATH=src python3 scripts/resolve_outcomes.py --limit <limit>`.
 - [x] Workflow fails if `SUPABASE_DB_URL` is missing, resolver exits nonzero, or output reports `failed > 0`.
 - [x] No migration, Hugging Face deployment, API, frontend, quant/probability/score/gate/news, calibration, or trading change was added.
-- [ ] User configures GitHub secret `SUPABASE_DB_URL` in `tranbeny053-hub/v83-stock-cron`.
-- [ ] User optionally configures GitHub variable `RESOLVER_LIMIT=50`.
+- [x] User configures GitHub secret `SUPABASE_DB_URL` in `tranbeny053-hub/v83-stock-cron`. <!-- verified 2026-08-16: `.github/workflows/resolve-outcomes.yml` exits 1 when the secret is empty; STATE.md records 670 production resolver runs with the last 100 successful, proving the fail-closed scheduled job has the secret configured. -->
+- [x] User optionally configures GitHub variable `RESOLVER_LIMIT=50`. <!-- verified 2026-08-16: configuration is explicitly optional and is not set; `.github/workflows/resolve-outcomes.yml` uses `github.event.inputs.limit || vars.RESOLVER_LIMIT || '50'`, so scheduled runs use the satisfied default `50`. -->
 
 ## Hugging Face Variables and Secrets Required
 
@@ -396,16 +400,16 @@ No phase is releasable because an agent says so. Release requires evidence.
 
 ## Wave 4D.3-Ops Phase-1 Cohort Gate
 
-- [ ] `prediction_origin` migration reviewed but not applied by the implementation commit.
+- [x] `prediction_origin` migration reviewed but not applied by the implementation commit. <!-- verified 2026-08-16: `git show --name-status 1464437` records reviewed additive `migrations/0007_prediction_origin.sql` as a new file and no migration runner/workflow change or application action in the Phase 1 implementation commit. -->
 - [x] Existing analysis callers remain `USER_REQUESTED` by default; invalid origins fail closed. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_analyze_request_defaults_accepts_explicit_origin_and_preserves_identity; tests/persistence/test_prediction_origin.py::test_analyze_request_rejects_invalid_origin_before_market_selection -->
 - [x] Calibration and Quant V2 shadow validation default to the `USER_REQUESTED` cohort. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_calibration_defaults_to_user_requested_and_supports_explicit_origin; tests/persistence/test_shadow_validation_reads.py::test_validation_reads_default_to_user_requested_origin -->
 - [x] Resolver due-selection remains origin-agnostic. <!-- verified 2026-08-15: tests/persistence/test_prediction_origin.py::test_resolver_due_selection_remains_origin_agnostic -->
 - [ ] The six historical derivatives smoke snapshot prediction IDs and outcome links are
-  inventoried before migration/runtime deployment.
+  inventoried before migration/runtime deployment. <!-- PENDING 2026-08-16: open reconciliation because the gate says six, while the production query found seven excluded rows: 5 `CONTROLLED_SMOKE` + 2 `SCHEDULED_SHADOW_EVIDENCE`; do not guess which count is right. -->
 - [ ] Phase 2 remains blocked until those legacy rows are explicitly `CONTROLLED_SMOKE`, or a
-  separate reviewed decision proves they cannot enter calibration.
-- [ ] No cadence workflow, collector, derivatives activation, evidence generation, or production
-  data correction is included in Phase 1.
+  separate reviewed decision proves they cannot enter calibration. <!-- PENDING 2026-08-16: the production contamination query returned no rows, so the calibration-contamination purpose is satisfied; Phase 2 itself is out of v1. -->
+- [x] No cadence workflow, collector, derivatives activation, evidence generation, or production
+  data correction is included in Phase 1. <!-- verified 2026-08-16: `git show --name-status 1464437` limits Phase 1 to the additive origin migration, cohort-aware app/repository/read services, docs, and tests; it contains no workflow, collector, derivatives activation, evidence-generation, or production-data-correction path. -->
 
 ## Wave 4D.3-Ops Phase 2A.0 Runtime-Primitives Gate
 
@@ -415,10 +419,10 @@ No phase is releasable because an agent says so. Release requires evidence.
 - [x] Synchronous persistence confirmation reuses existing builders, repository methods,
   ordering, parent gates, and immutable duplicate semantics. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_sync_persist_is_immutable_ordered_and_idempotent; tests/api/test_cadence_runtime_primitives.py::test_sync_persist_contains_prediction_and_dependent_failures -->
 - [x] Caller payload remains unchanged and persistence exceptions return sanitized status only. <!-- verified 2026-08-15: tests/api/test_cadence_runtime_primitives.py::test_sync_persist_is_immutable_ordered_and_idempotent; tests/api/test_cadence_runtime_primitives.py::test_sync_persist_sanitizes_unexpected_exception -->
-- [ ] No collector, workflow, schedule, cadence variable, migration, evidence generation, or
-  derivatives activation is included.
-- [ ] Coordinated scheduler-subtree/HF deployment is followed by an Ops-RT.1 `HEALTHY` result.
-- [ ] Phase 2A collector implementation remains a later independent review gate.
+- [x] No collector, workflow, schedule, cadence variable, migration, evidence generation, or
+  derivatives activation is included. <!-- verified 2026-08-16: `git show --name-status 30d4982` limits Phase 2A.0 to runtime primitives in `analysis_service.py`, build metadata, docs, and tests; no collector, workflow, schedule, cadence variable, migration, evidence generation, or derivatives activation is present. -->
+- [x] Coordinated scheduler-subtree/HF deployment is followed by an Ops-RT.1 `HEALTHY` result. <!-- verified 2026-08-16: OPS_RT1_RUNBOOK.md defines HEALTHY as matching governed HF source, public build information, and live frontend evidence; recorded workflow_dispatch run 31941852536 exited 0 with three HEALTHY rounds, source/frontend matches, no mismatched paths, and pinned/HF SHA both `e6ee23c`. -->
+- [ ] Phase 2A collector implementation remains a later independent review gate. <!-- PENDING 2026-08-16: deferred beyond v1 and remains an independent review gate. -->
 
 - Commands run or attempted.
 - Pass/fail/not-run result for each relevant command.

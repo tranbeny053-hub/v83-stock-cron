@@ -4,17 +4,19 @@ Updated: 2026-08-16
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AT_T3_BOUNDARY (push to origin blocked by the harness permission classifier)
-CURRENT_MILESTONE=operating-model V2 anchor (Change A closed; Change B NOT started)
-CURRENT_BRANCH=chore/gpt-sidecar
-LAST_GREEN_SHA=76eebb0
-LAST_VERIFY=PASS 776 passed · 2026-08-16
+LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
+CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
+CURRENT_BRANCH=feat/production-live-smoke (PUSHED to origin @ 28f0e4b; this checkpoint sits 1 commit ahead of that ref)
+LAST_GREEN_SHA=6ba8da1
+LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=OPEN — owner authorized the push+PR+merge; the push itself needs owner execution or a Bash permission rule
-NEXT_ACTION=owner runs `git push -u origin chore/gpt-sidecar`; then open PR into main, require CI PASS on the exact head, merge, re-verify
+OWNER_BOUNDARY=1 open — whether to open a PR for feat/production-live-smoke, and whether to
+  merge it. The T3 push was AUTHORIZED AND EXECUTED by the owner 2026-08-16. Wave 4B0 and
+  Wave 1.2 are CLOSED ON EVIDENCE; /v1/calibration is PROVEN to serve in production.
+NEXT_ACTION=owner decides on the PR; CI has NOT yet run on this branch; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -59,10 +61,10 @@ merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` 
 unchanged at `30d4982` before and after, and no workflow references Hugging Face or
 triggers on push to `main`, so merging cannot deploy.
 
-**Branches** — `main` = `origin/main` = `e6ee23c` (also the exact deploy source, now live) ·
-`chore/deploy-pin-change-a` (deploy packet, pushed for the pin PR) ·
-`feat/calibration-truth` (merged) · `preserve/2d3b-readiness-packet` ·
-`chore/operating-model`.
+**Branches** — `main` = `a59b295` (one docs-only checkpoint ahead of `origin/main`) ·
+`chore/gpt-sidecar` (merged by PR #4, kept) · `chore/deploy-pin-change-a` (merged by PR #3) ·
+`feat/calibration-truth` (merged by PR #2) · `preserve/2d3b-readiness-packet` ·
+`chore/operating-model`. Production remains `e6ee23c`, which is an ancestor of `main`.
 
 **Production — Change A IS DEPLOYED (2026-08-16).** HF Space live at `e6ee23c`,
 `stage=RUNNING`, `cpu-basic`, healthy. The prior build `30d4982` was a strict ancestor,
@@ -118,9 +120,10 @@ calibration path is **byte-identical** between the deployed build `30d4982` and 
 `api/calibration_endpoint.py`. So `build_operator_repository` selects
 `SupabasePersistenceRepository`, the endpoint's `_EXPECTED_REPOSITORY` guard
 (`SUPABASE_POSTGRES`) passes, and it reads the same database the resolver writes to.
-Only the live HTTP invocation is unverified (session-gated; not circumvented).
+*Superseded 2026-08-16: the live HTTP invocation is no longer unverified — Phase B invoked it
+with a real session and it served 200. See the Phase B section below.*
 
-**But `/v1/calibration` will NOT report MEASURED.** The endpoint never issues an unscoped
+**But `/v1/calibration` will NOT report MEASURED — CONFIRMED LIVE 2026-08-16.** The endpoint never issues an unscoped
 query: `calibration_endpoint.py:118` iterates `SUPPORTED_TIMEFRAMES` =
 `("15m","1H","4H","1D","1W","1M")` and builds one scoped report per timeframe. So
 production will report **WARMING_UP ×5 and NO_SAMPLES for 1M** — not MEASURED. The
@@ -238,22 +241,195 @@ exists, no key file on disk, the `openai` package is not installed in `.venv`, a
 repository contains no `openai` or `api.openai.com` reference — the only transport was the
 browser UI. The smoke thread is **not** project history and is referenced nowhere.
 
-**GITHUB ANCHOR OF THE AMENDMENT — PAUSED AT THE T3 BOUNDARY (2026-08-16).**
-The owner authorized pushing `chore/gpt-sidecar`, opening one PR into `main`, and merging on
-green CI. Everything up to the boundary is done and verified: three docs-only commits
-(`b52f7ca` handoff checkpoint, `93d9ecd` sidecar + pause/resume, `76eebb0` V2 preservation
-list), diff vs `main` is exactly `CLAUDE.md` + `STATE.md`, `VERIFY=PASS` 776, six process
-artifacts, no secret value anywhere in the diff, `origin/main` still `1b06aab`, `hf` still
-`e6ee23c`. **The push did not happen**: `git push` is refused by the Claude Code auto-mode
-permission classifier, and `gh` is not installed on this machine, so neither the push nor a
-CLI-created PR is reachable from inside the loop. Nothing was retried blindly and nothing is
-half-applied — the branch is local, `origin` is untouched, and no deploy path was involved.
-Resume by pushing the branch, opening the PR, requiring CI PASS on the exact latest head,
-then merging; `.work/OWNER_ACTION.md` holds the exact commands.
+**OPERATING MODEL V2 IS ANCHORED TO GITHUB — PR #4 MERGED (2026-08-16).**
+`chore/gpt-sidecar` @ `74af3ce` → `main`, four docs-only commits (`b52f7ca` handoff
+checkpoint · `93d9ecd` sidecar + pause/resume · `76eebb0` V2 preservation list · `74af3ce`
+T3 pause record), exactly two files changed (`CLAUDE.md`, `STATE.md`), +147 −20. CI check
+`CI / test (pull_request)` was **`Successful in 34s` on the exact latest head `74af3ce`**,
+`mergeable_state` clean, merged as merge commit
+`a59b295aead428fa51667b9e915b02ad7a6c4feb` = `origin/main`. `hf` was `e6ee23c` before and
+after — **the merge cannot deploy**: no workflow references Hugging Face and `ci.yml`'s push
+trigger is limited to `codex/**`, so nothing fires on push to `main`.
 
-**Open decisions** — none blocking.
+*The push needed the owner.* `git push` is refused by the Claude Code auto-mode permission
+classifier and `gh` is not installed on this machine, so the loop paused at the T3 boundary
+with `origin` untouched and the owner ran the one-line push in-session. The PR itself was
+opened and merged through the GitHub web UI via Claude Code Chrome. If a future session
+needs to push, expect the same wall: either the owner runs it, or a Bash permission rule for
+`git push` is added.
 
-**NEXT ACTION** — owner's call on what ships next; Change A needs nothing further.
+**Local `main` is one docs-only commit ahead of `origin/main`** — this checkpoint. That is
+the established pattern (`b52f7ca` rode along the same way and landed in PR #4); it will
+ride along in the next PR. Nothing else is unpushed.
+
+**MILESTONE: PRODUCTION LIVE-SMOKE + RELEASE-GATE CLOSURE — started 2026-08-16.**
+Branch `feat/production-live-smoke`, two commits, `VERIFY=PASS` 785 (was 776).
+
+*Change L1 — read-only production smoke (`87fd77a`, T1).* `scripts/production_smoke.py` plus
+`tests/scripts/test_production_smoke.py`. **Read-only by construction**: GET only, with a
+single `POST /v1/auth/login`, pinned by an AST test that fails if any other write verb or any
+analyze path ever appears in the module. Gated behind `UCPE_PRODUCTION_SMOKE_ENABLED`,
+mirroring `UCPE_LIVE_SMOKE_ENABLED`, so the suite never reaches the network. Raw bodies are
+captured before parsing; headers are never captured; no secret is ever printed.
+
+**PHASE A EXECUTED AGAINST LIVE PRODUCTION — exit 0, 2026-08-16.** Unauthenticated,
+read-only, no write, no secret. `/healthcheck` 200 `status=OK`, `uptime_seconds=12154`;
+`/v1/build-info` 200, `release_id=UCPE-W4D3-OPS-2A0-20260622-A`, `environment=HF_PRODUCTION`;
+`/` 200 serving `/app.js?v=w4c1-ka1-20260621-a`, and **that served bundle contains
+`prob_up_pct`, `prob_down_pct`, `prob_timeout_pct` and none of the stale markers**;
+`/v1/system_status` and `/v1/calibration` both 401 with a well-formed `UNAUTHORIZED` body.
+This is the first time the deployed frontend bundle has been verified from outside the app.
+`frontend/index.html` references the same `w4c1-ka1-20260621-a` token production serves, so
+source and production agree — **no frontend drift**.
+
+*Change L2 — gate reconciliation (`d97b553`, T0).* `RELEASE_GATE.md` now reads 271 proven,
+15 genuinely open, 27 historical ceremony items resolved inline as superseded. Every newly
+ticked box carries a checkable citation; **every one of the 15 open boxes states the specific
+evidence that would close it.** The Wave 4A.2 cache-bust literals are annotated as historical
+(`wave4a2-b9137ee` → live `w4c1-ka1-20260621-a`).
+
+*Deliberately left open:* the Phase-1 cohort item says **six** historical derivatives smoke
+rows; the production query found **seven** (5 `CONTROLLED_SMOKE` + 2
+`SCHEDULED_SHADOW_EVIDENCE`). Recorded as an open reconciliation rather than guessed at.
+
+**BLOCKING FINDING — the live write-smoke is blocked by contract, not by authorization.**
+`AnalysisRequest` (`src/crypto_probability_engine/api/schemas.py:77`) is `extra="forbid"` and
+carries only `symbol`, `analysis_mode`, `timeframe`, `asset_class`, `include_detail`. **There
+is no prediction-origin field on the HTTP contract**, so every production `/v1/analyze` write
+is recorded `USER_REQUESTED`. The origin contract exists at the service layer and in the DB,
+but the endpoint cannot reach it. Codex reported this as `BLOCKED` on task 009 and the finding
+was independently confirmed. Consequence: **any live write-smoke would inject synthetic rows
+into the 806-sample `USER_REQUESTED` control cohort**, destroying the very evidence separation
+Change B depends on. No workaround was attempted; the write phase was removed from scope and
+the capability rebuilt read-only as task 011.
+
+*Repair record — one causal class, one consolidated repair, no blind retry.* Task 011 came
+back `BLOCKED` after the same cookie-session failure twice under `MockTransport`. Root cause
+was **a test-fixture defect, not a script defect**: the mocked `Set-Cookie` omitted `Path`, so
+`http.cookiejar` derived the cookie path from the login URL as `/v1/auth` and never sent it to
+`/v1/system_status`. Proven directly — the cookie *was* delivered to `/v1/auth/whoami` and
+withheld from `/v1/system_status`. The real app emits `Path=/` (`api/auth.py:166` → Starlette
+default), so the mock did not reproduce production. Sibling scan found no other `Set-Cookie`
+mock in the repo. Consolidated repair: fixture corrected to production's real cookie
+attributes, the redundant manual `client.cookies.update(...)` that disguised the cause removed,
+and **a regression test added that asserts the real login response still sets `Path=/`**, so
+the mock can never silently drift from production again.
+
+**PHASE B PASSED IN FULL — 2026-08-16, re-run with the repaired instrument.**
+`PASS: production smoke phases A+B`. `/v1/calibration` served **200** at the 120s budget and
+returned exactly what was predicted:
+`15m WARMING_UP 172 · 1H WARMING_UP 165 · 4H WARMING_UP 172 · 1D WARMING_UP 163 ·
+1W WARMING_UP 134 · 1M NO_SAMPLES 0`.
+
+**Those counts match the 2026-08-15 read-only SQL query exactly.** That is an independent
+cross-check, not a restatement: the live endpoint and the direct database query agree
+per timeframe, which confirms the deployed endpoint really does read the same database the
+resolver writes to. The identical counts also confirm **no new outcomes resolved since
+2026-08-15**, consistent with zero operator traffic.
+
+Three standing predictions are now confirmed by live evidence rather than inference: the
+endpoint serves rather than 401-ing; it reports per-timeframe scoped results, never the
+unscoped 806/`MEASURED` aggregate; and 1M reports `NO_SAMPLES`. The earlier 10s timeout was
+an instrument defect, exactly as diagnosed — production was healthy throughout.
+
+*History of that failure, kept because the diagnosis mattered:*
+
+**PHASE B FIRST RUN — partial, 2026-08-16.**
+The owner ran Phase A+B. Phase A passed again. Login succeeded and
+`GET /v1/system_status` returned 200 with **`persistence_status=OK`,
+`repository_type=SUPABASE_REST`, `store_status=CONFIGURED`, `circuit_state=CLOSED`** — the
+first live proof the deployed runtime reaches durable persistence. It also settles which
+Wave 1.2 priority tier production actually selects: **`SUPABASE_REST`**, the first tier. Note
+this is the *runtime* repository; the calibration endpoint builds a separate *operator*
+repository that prefers direct Postgres (`repository.py:2258`), so both tiers are in use for
+different purposes. **Wave 1.2's `Persistence: OK` item is closed on this evidence.**
+
+Then: `FAIL: production smoke phases A+B; The read operation timed out`.
+
+*The timed-out read was `GET /v1/calibration`, identified without re-running anything.* Raw
+capture proved it by absence: every earlier request wrote its body, and
+`phase-b-calibration.body` was the only one missing, so no response ever arrived.
+
+**Both defects were in the instrument, not proven in production.** (1) A single blanket 10s
+timeout was applied to every request, but `/v1/calibration` fans one HTTP call out to six
+sequential Space→Supabase round trips — `calibration_endpoint.py:30` iterates six
+`SUPPORTED_TIMEFRAMES`, each a scoped read with `limit` defaulting to 5000 (line 90), against
+the direct-Postgres operator repository. Ten seconds was never a contract-grounded budget.
+(2) The failure never named *which* read died. Repaired in `20c19d3`: `--calibration-timeout`
+(default 120s) separate from `--timeout` (10s, so real hangs still surface fast), and
+transport errors now name method, path and elapsed budget, with the query string stripped and
+the raw transport message dropped so nothing sensitive rides along. No production behaviour
+was touched.
+
+*That run proved only that the endpoint did not answer within 10 seconds — neither health nor
+fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
+
+**T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
+`origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
+head at push time. `origin/main` unchanged at `a59b295`. **`hf` untouched — the push cannot
+deploy**: no workflow references Hugging Face. The long-standing `main` docs commit `22b3414`
+is an ancestor of this branch, so it rode along exactly as `b52f7ca` did in PR #4.
+
+**CI HAS NOT RUN on these commits.** `ci.yml` triggers on `push` to `codex/**` and on
+`pull_request` only; this branch is `feat/**`, so the push fired nothing. The 803-test suite
+has been verified locally but has **not** had clean-room verification. Opening a PR is what
+triggers it.
+
+**Open decisions** — one: whether to open a PR, and whether to merge. See NEXT ACTION.
+
+**NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
+
+1. ~~**Phase B**~~ — **DONE 2026-08-16.** Ran clean end to end at the 120s budget; see the
+   Phase B section above. The access code stayed in the owner's shell (`read -s`, then
+   `unset`) and never entered chat, a file, or the repository. Nothing further is needed.
+
+2. **Wave 4B0 — CLOSED ON EVIDENCE 2026-08-16 (`91254f3`). No waiver, no scope exclusion, no
+   API widening, no synthetic `USER_REQUESTED` row.**
+   The block was never really about authorization: `analyze_request()`
+   (`api/analysis_service.py:117`) has always accepted `prediction_origin` as a keyword. Only
+   the HTTP request model lacks the field. Driving that runtime primitive directly with
+   `CONTROLLED_SMOKE` — the pattern the Phase 2A collector gate already blesses — produces
+   correctly classified evidence with **no schema change, no API change and no redeploy**.
+   Ran live via `scripts/live_smoke.py`, all six cells `CROSS_PROVIDER`: BTC 1D DOWN=0.477839
+   SUFFICIENT · BTC 1W UP=0.505850 SUFFICIENT · BTC 1M UP=0.377757 LOW_SAMPLE · SOL 1D
+   DOWN=0.399734 SUFFICIENT · SOL 1W UP=0.395839 SUFFICIENT · SOL 1M UP=0.365214 LOW_SAMPLE.
+   Each cell asserted schema-valid, live, probability invariant within 1e-9,
+   `profitability_claim=false`, `news_influence_frac=0.0`, the Wave 4B0 `1M` LOW_SAMPLE rule,
+   and `CONTROLLED_SMOKE` classification read from the runtime's own non-consuming
+   `_peek_prediction_persistence`.
+   **Scope of the evidence, stated plainly:** local process, code byte-identical to deployed
+   `e6ee23c` (`git diff e6ee23c HEAD -- src/ schemas/` is empty), `STATELESS`, zero database
+   writes. Not executed against the HF Space over HTTP — impossible without cohort
+   contamination. The item says "after merge/deploy", not "against the deployed instance";
+   where this gate means the latter it says so (Wave 1.1's "Manual **deployed** UI smoke").
+   The smoke is **non-writing by construction**: it refuses to start if any database variable
+   is configured, so it cannot reach production data. Persisting CONTROLLED_SMOKE rows to the
+   production DB remains an unauthorized **T4** action and no write path was built.
+
+   *Superseded routes, kept for the record:*
+   **A NOT_RUN closure was tried on 2026-08-16 and reverted as an invalid waiver** (`acfc690`
+   + `3e1cf10`, reverted by `90d6d83`). The post-decision audit found `RELEASE_GATE.md`
+   authorizes not-run closure exactly once, inside the item's own text (Sprint 3: "or
+   explicitly recorded as not run with reason"); the Wave 4B0 item has no such clause. The
+   "Pass/fail/not-run result for each relevant command" line is a *reporting* obligation, not
+   a satisfying condition. "Release requires evidence" stands and the Deployment gate blocks
+   release. `V1_QUANT_CONTRACT.md` is silent on live smoke, so `RELEASE_GATE.md` governs.
+   No box was ever ticked (271/15 throughout), so nothing was presented as a pass.
+   **Do not re-apply a not-run closure.** The remaining routes are:
+   (a) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
+   `CONTROLLED_SMOKE` — T2 API/schema change plus a T3 redeploy before it is usable, and it
+   widens the public contract for a test-only need;
+   (b) **Record an explicit v1 scope exclusion** in the Phase 2D.3B form
+   (`<!-- OUT OF v1 (owner decision <date>) -->`), which **also requires amending line 5** of
+   `RELEASE_GATE.md` so its "only one owner-approved v1 scope reduction" claim stays true.
+   (b) is a scope reduction and is the owner's alone. Accepting `USER_REQUESTED` smoke writes
+   stays rejected: it contaminates the 806-sample control cohort.
+
+3. **T3 push of `feat/production-live-smoke`** (2 commits, plus the docs commit on `main`
+   riding along). Expect the same wall as last time: `git push` is refused by the auto-mode
+   permission classifier and `gh` is absent, so the owner runs the push in-session.
+
+Change A still needs nothing further.
 Worth knowing before choosing: production now serves Change A's gating, but
 `/v1/calibration` still reports **`WARMING_UP` ×5 and `NO_SAMPLES` for 1M**, because the
 endpoint only issues per-timeframe scoped queries and no timeframe has ≥500 resolved
