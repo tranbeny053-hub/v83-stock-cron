@@ -4,21 +4,21 @@ Updated: 2026-08-17
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (T2 built and green; stopped before secret/deploy/T4)
+LOOP_STATE=PAUSED_AWAITING_OWNER (merged to GitHub; stopped before secret and deploy)
 CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
-CURRENT_BRANCH=feat/session-scoped-origin (3 commits, unpushed); origin/main = 6eb632d
-LAST_GREEN_SHA=bb09cb0
+CURRENT_BRANCH=main = origin/main = 9933615 (this checkpoint rides 1 docs commit ahead)
+LAST_GREEN_SHA=9933615
 LAST_VERIFY=PASS 822 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=3 sequential, none crossed — (1) generate the smoke code and configure the HF
-  secret CONTROLLED_SMOKE_CODE_HASH [T3, secret]; (2) push/PR and deploy the build [T3];
-  (3) run the browser smoke, which writes CONTROLLED_SMOKE rows to production [T4, one-shot].
-  Order matters: the secret must exist before the deploy is useful, and the deploy before the
-  smoke.
-NEXT_ACTION=owner provisions CONTROLLED_SMOKE_CODE_HASH; then deploy; then the T4 smoke
+OWNER_BOUNDARY=3 sequential, none crossed — (1) configure the HF secret
+  CONTROLLED_SMOKE_CODE_HASH [T3]; (2) deploy via git push hf [T3]; (3) re-pin
+  ops/hf_runtime_baseline.json and empty CURRENT_DELTA_PATHS [T1, deploy first pin second];
+  then (4) the one-shot T4 browser smoke. The code is generated and merged; GitHub work is
+  DONE (PR #6, merge 9933615). Nothing is deployed.
+NEXT_ACTION=owner configures the HF secret, then deploys; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -436,6 +436,18 @@ production analysis.**
    Space holds all three credentials. Emptying it means removing **three** secrets and
    restoring **three** — six owner-only operations on production, where a botched restore
    silently costs durable persistence.
+
+**PR #6 MERGED TO GITHUB — 2026-08-17.** `feat/session-scoped-origin` @ `966e5bf` → `main`,
+merged as merge commit **`9933615b3a9a1bdffada6cc568c2927ff9106114`** = `origin/main`.
+Verified from Git rather than the UI: **two parents** (`6eb632d` + `966e5bf`) confirm the
+merge-commit method rather than a squash or rebase, and the exact head CI went green on is an
+ancestor of `main`. 7 commits, 10 files, +542 −27. CI `CI / test (pull_request)` passed on that
+exact head — the first clean-room verification of this T2 auth change.
+
+**`hf/main` re-verified `e6ee23c` after the merge — nothing deployed.** The owner generated the
+smoke code locally against the existing production salt; it is **not yet configured** on the
+Space, so the feature is inert in production by design. CI could not exercise it end to end for
+the same reason, which is itself a tested property.
 
 **CREDENTIAL BOUNDARY FAILED ONCE, THEN REPAIRED — 2026-08-17 (`bb09cb0`).**
 The owner's first attempt to generate the secret was blocked before any hash existed:
