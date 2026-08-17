@@ -17,6 +17,11 @@ from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import ErrorCode
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.prediction_origin import (
+    DEFAULT_PREDICTION_ORIGIN,
+    PredictionOrigin,
+    validate_prediction_origin,
+)
 
 SESSION_COOKIE = "ucpe_session"
 DEV_SESSION_COOKIE = "ucpe_dev_session"
@@ -81,14 +86,22 @@ def _sign(payload: str, key: str) -> str:
     return hmac.new(key.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def create_session_token(subject: str, settings: Settings, *, dev: bool = False) -> str:
+def create_session_token(
+    subject: str,
+    settings: Settings,
+    *,
+    dev: bool = False,
+    prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
+) -> str:
     if not settings.session_signing_key:
         raise api_error(503, ErrorCode.UNAUTHORIZED, "Session signing key is not configured.")
+    prediction_origin = validate_prediction_origin(prediction_origin)
     expires = datetime.now(UTC) + timedelta(seconds=settings.session_ttl_seconds)
     payload = {
         "sub": subject,
         "dev": dev,
         "exp": int(expires.timestamp()),
+        "prediction_origin": prediction_origin,
     }
     body = _b64_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     signature = _sign(body, settings.session_signing_key)
@@ -115,7 +128,19 @@ def verify_session_token(
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Session expired.")
     if require_dev and not payload.get("dev"):
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Dev Mode re-auth is required.")
+    session_prediction_origin(payload)
     return payload
+
+
+def session_prediction_origin(payload: dict) -> str:
+    """Return a verified session's origin, preserving the legacy-session default."""
+
+    try:
+        return validate_prediction_origin(
+            payload.get("prediction_origin", DEFAULT_PREDICTION_ORIGIN)
+        )
+    except (TypeError, ValueError) as exc:
+        raise api_error(401, ErrorCode.UNAUTHORIZED, "Valid session is required.") from exc
 
 
 def _client_key(request: Request, purpose: str) -> str:
@@ -138,10 +163,16 @@ def authenticate_login(request: Request, body: LoginRequest, settings: Settings)
     key = _client_key(request, "login")
     if not session_limiter.check(key):
         raise api_error(429, ErrorCode.UNAUTHORIZED, "Too many attempts.", retry_after_seconds=60)
-    if not _hash_matches(body.code, settings.access_code_hash, settings):
-        session_limiter.record_failure(key)
-        raise api_error(401, ErrorCode.UNAUTHORIZED, "Invalid access code.")
-    return create_session_token("operator", settings)
+    if _hash_matches(body.code, settings.access_code_hash, settings):
+        return create_session_token("operator", settings)
+    if _hash_matches(body.code, settings.controlled_smoke_code_hash, settings):
+        return create_session_token(
+            "operator",
+            settings,
+            prediction_origin=PredictionOrigin.CONTROLLED_SMOKE,
+        )
+    session_limiter.record_failure(key)
+    raise api_error(401, ErrorCode.UNAUTHORIZED, "Invalid access code.")
 
 
 def authenticate_dev(request: Request, body: LoginRequest, settings: Settings) -> str:

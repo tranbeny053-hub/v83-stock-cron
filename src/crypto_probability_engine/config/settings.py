@@ -57,6 +57,7 @@ class Settings(BaseModel):
     cross_provider_required: bool = DEFAULT_PHASE1A.cross_provider_required
     live_smoke_enabled: bool = DEFAULT_PHASE1A.live_smoke_enabled
     access_code_hash: str | None = Field(default=None, repr=False)
+    controlled_smoke_code_hash: str | None = Field(default=None, repr=False)
     dev_mode_code_hash: str | None = Field(default=None, repr=False)
     access_code_salt: str = Field(default=DEFAULT_PHASE1A.access_code_local_salt, repr=False)
     access_code_pbkdf2_iterations: int = DEFAULT_PHASE1A.access_code_pbkdf2_iterations
@@ -167,6 +168,7 @@ class Settings(BaseModel):
                 default=DEFAULT_PHASE1A.live_smoke_enabled,
             ),
             access_code_hash=os.environ.get("APP_ACCESS_CODE_HASH"),
+            controlled_smoke_code_hash=os.environ.get("CONTROLLED_SMOKE_CODE_HASH"),
             dev_mode_code_hash=os.environ.get("DEV_MODE_CODE_HASH"),
             access_code_salt=os.environ.get(
                 "UCPE_ACCESS_CODE_SALT",

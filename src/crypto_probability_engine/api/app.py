@@ -23,6 +23,7 @@ from crypto_probability_engine.api.auth import (
     LoginRequest,
     authenticate_dev,
     authenticate_login,
+    session_prediction_origin,
     set_session_cookie,
     verify_session_token,
 )
@@ -165,7 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def analyze(
         body: AnalysisRequest,
         background_tasks: BackgroundTasks,
-        _session: dict = Depends(require_app_session),  # noqa: B008
+        session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         repository = app.state.persistence_repository
         result = analyze_request(
@@ -173,6 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings=app_settings,
             run_store=run_store,
             persistence_status=current_persistence_status(repository),
+            prediction_origin=session_prediction_origin(session),
         )
         schedule_best_effort_persist(background_tasks, repository, result)
         schedule_skill_evidence_refresh(
@@ -186,7 +188,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def analyze_batch(
         body: BatchAnalysisRequest,
         background_tasks: BackgroundTasks,
-        _session: dict = Depends(require_app_session),  # noqa: B008
+        session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         results: list[dict] = []
         errors: list[dict] = []
@@ -198,6 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     settings=app_settings,
                     run_store=run_store,
                     persistence_status=current_persistence_status(repository),
+                    prediction_origin=session_prediction_origin(session),
                 )
                 schedule_best_effort_persist(background_tasks, repository, result)
                 results.append(result)

@@ -17,7 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 PIN_SHA = "e6ee23cc81274c2ad68e247293738bc8e81f082a"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
-CURRENT_DELTA_PATHS = []
+# Guarded source files that currently differ between the deployed pin and this tree.
+# Non-empty while a guarded change is merged on GitHub but not yet deployed to the Space:
+# session-scoped prediction origin touches api/app.py. This mirrors reality and must be
+# emptied again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
+CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/app.py"]
 
 
 def _manifest() -> dict:
