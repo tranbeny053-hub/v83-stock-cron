@@ -1,26 +1,56 @@
 # STATE
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
-CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (PUSHED to origin @ 28f0e4b; this checkpoint sits 1 commit ahead of that ref)
-LAST_GREEN_SHA=6ba8da1
-LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
+LOOP_STATE=PAUSED_AWAITING_OWNER (T2 built and green; stopped before secret/deploy/T4)
+CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
+CURRENT_BRANCH=feat/session-scoped-origin (3 commits, unpushed); origin/main = 6eb632d
+LAST_GREEN_SHA=bb09cb0
+LAST_VERIFY=PASS 822 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 open — whether to open a PR for feat/production-live-smoke, and whether to
-  merge it. The T3 push was AUTHORIZED AND EXECUTED by the owner 2026-08-16. Wave 4B0 and
-  Wave 1.2 are CLOSED ON EVIDENCE; /v1/calibration is PROVEN to serve in production.
-NEXT_ACTION=owner decides on the PR; CI has NOT yet run on this branch; nothing is half-applied
+OWNER_BOUNDARY=3 sequential, none crossed — (1) generate the smoke code and configure the HF
+  secret CONTROLLED_SMOKE_CODE_HASH [T3, secret]; (2) push/PR and deploy the build [T3];
+  (3) run the browser smoke, which writes CONTROLLED_SMOKE rows to production [T4, one-shot].
+  Order matters: the secret must exist before the deploy is useful, and the deploy before the
+  smoke.
+NEXT_ACTION=owner provisions CONTROLLED_SMOKE_CODE_HASH; then deploy; then the T4 smoke
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
+
+## v1 roadmap — progress at a glance
+*Updated 2026-08-17 · `RELEASE_GATE.md`: **273 proven / 13 open***
+
+**Completed milestones**
+1. **Change A — calibration truth + skill gating.** PR #2, merged `e6ee23c`, **deployed to
+   production**. Change A is closed and needs nothing further.
+2. **Deploy pin + source-integrity closure.** PR #3, merged `1b06aab`; guard `HEALTHY` exit 0,
+   no `PIN_DRIFT`.
+3. **Operating model V2 + GPT sidecar.** PR #4, merged `a59b295`. Six process artifacts, no
+   growth.
+4. **Production live-smoke + release-gate reconciliation.** PR #5, merged `6eb632d`. Gate went
+   271/15 → 273/13; `/v1/calibration` proven to serve in production.
+
+**Current milestone** — **Remaining Deployed Browser Evidence Closure** (started 2026-08-17).
+Close Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke **without**
+misclassifying test-motivated traffic as `USER_REQUESTED`, without waiving scope, and without
+widening the API unless genuinely necessary.
+
+**Next major milestone** — **Change B: horizon-specific probability modelling.** Still
+deliberately blocked. It needs a new `methodology_version`, which resets calibration to
+`NO_SAMPLES`, so the 806-sample cohort must survive as the control until Change A has
+re-accumulated evidence under gating. Re-accumulation is **traffic-driven, not scheduled**, so
+it does not progress with time alone.
+
+**Outstanding, but not milestones** — per-timeframe `MEASURED` needs roughly 3× more operator
+traffic per timeframe (currently 134–172 against a ≥500 threshold) · the six-versus-seven
+derivatives-cohort reconciliation is open and deliberately not guessed at.
 
 ## Operating model V2 — anchored 2026-08-16
 - **Claude Code holds the loop.** **Codex `exec` is the implementation and debugging lane.**
@@ -58,7 +88,7 @@ Deployed production build is `e6ee23c`; `main` is one pin commit ahead of it by 
 head `44ca1d9`, CI green on that exact head, merged as merge commit
 `e6ee23cc81274c2ad68e247293738bc8e81f082a` = `origin/main`. 20 files, +1252 −28. The
 merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` was verified
-unchanged at `30d4982` before and after, and no workflow references Hugging Face or
+unchanged at `30d4982` before and after, and no workflow deploys to Hugging Face or
 triggers on push to `main`, so merging cannot deploy.
 
 **Branches** — `main` = `a59b295` (one docs-only checkpoint ahead of `origin/main`) ·
@@ -74,6 +104,15 @@ triggers on push to `main`, so merging cannot deploy.
 Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
 **Database: all 7 migrations (0001–0007) APPLIED. No migration work is required.**
 965 predictions, 813 resolved outcomes (DOWN 376 / UP 327 / TIMEOUT 110).
+
+**CORRECTION 2026-08-17 — one workflow *does* reference Hugging Face.** Earlier entries said
+"no workflow references Hugging Face". That phrasing was wrong, though the conclusion it
+supported still holds. `.github/workflows/keepalive.yml` pings the Space, but it is
+`schedule` + `workflow_dispatch` **only, with no push trigger**; it issues a single
+`curl GET` on `/` and hard-refuses any URL containing `/v1/`, `analyze`, `auth`, or
+`calibration`. **It cannot deploy and cannot write.** The accurate claim is: *no workflow
+deploys to Hugging Face, and none triggers on push to `main`* — so merging still cannot
+deploy. Deployment happens only by an explicit `git push hf`.
 
 **Prediction generation is traffic-driven, not scheduled.** A prediction row is written
 only as a best-effort background side-effect of a session-gated `/v1/analyze` or
@@ -248,7 +287,7 @@ T3 pause record), exactly two files changed (`CLAUDE.md`, `STATE.md`), +147 −2
 `CI / test (pull_request)` was **`Successful in 34s` on the exact latest head `74af3ce`**,
 `mergeable_state` clean, merged as merge commit
 `a59b295aead428fa51667b9e915b02ad7a6c4feb` = `origin/main`. `hf` was `e6ee23c` before and
-after — **the merge cannot deploy**: no workflow references Hugging Face and `ci.yml`'s push
+after — **the merge cannot deploy**: no workflow deploys to Hugging Face and `ci.yml`'s push
 trigger is limited to `codex/**`, so nothing fires on push to `main`.
 
 *The push needed the owner.* `git push` is refused by the Claude Code auto-mode permission
@@ -364,10 +403,125 @@ was touched.
 *That run proved only that the endpoint did not answer within 10 seconds — neither health nor
 fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
 
+**MILESTONE: REMAINING DEPLOYED BROWSER EVIDENCE CLOSURE — started 2026-08-17.**
+Target: Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke, the last two
+gate items that need a browser. Investigation complete; **no code changed, no smoke run, no
+production analysis.**
+
+*Findings, each verified against the code:*
+- **No request shape renders the cards without writing a ledger row.** Every card is filled
+  only from its own fresh `/v1/analyze` response (`frontend/app.js:733-748`), and neither
+  `analysis_mode` nor `include_detail` suppresses prediction construction. Row construction
+  needs live data plus a valid anchor (`api/analysis_service.py:776-787`); the only skips are
+  fixture mode, failure, or degradation — none of which is a viable request shape.
+- **There is no way at all to set a non-default origin over HTTP.** `AnalysisRequest` has no
+  origin field and forbids extras (`api/schemas.py:77-84`); the routes pass no origin
+  (`api/app.py:164-202`); CORS allows only `Content-Type`; and there is **no deployment-wide
+  origin setting** — `Settings` has no such field and `from_env` reads no such variable.
+- **No deployed view renders cards from stored data.** The detail endpoint reads the
+  **in-memory** run store, which does not survive a Space restart
+  (`api/app.py:264-272`, `persistence/run_store.py:9-14`). Persisted rows hold the three
+  numbers but not the `decision_synthesis` fields the cards render from.
+- **Loading the page writes nothing.** Init renders placeholders and fetches only public
+  `/v1/build-info`; login calls only `/v1/system_status`. Analysis starts *only* on explicit
+  user action (`frontend/app.js:2164-2168`, `1910-1921`, `1928-2127`). A browser can safely
+  load and log in.
+
+*Two corrections to the delegated investigation, both material:*
+1. **An API-only field would not help a browser.** The frontend posts exactly
+   `{symbol, analysis_mode, timeframe}` (`frontend/app.js:737-741`), so a UI smoke would still
+   send the default. Closing these items via the origin route needs a **frontend** change too.
+2. **Going stateless is far costlier than reported.** `build_persistence_repository` falls
+   through REST → **Postgres** → in-memory (`persistence/repository.py:2244-2252`), and the
+   Space holds all three credentials. Emptying it means removing **three** secrets and
+   restoring **three** — six owner-only operations on production, where a botched restore
+   silently costs durable persistence.
+
+**CREDENTIAL BOUNDARY FAILED ONCE, THEN REPAIRED — 2026-08-17 (`bb09cb0`).**
+The owner's first attempt to generate the secret was blocked before any hash existed:
+`make_access_hash.py` restricted `--name` to the two original secrets, while `RELEASE_GATE.md`
+already documented generating `CONTROLLED_SMOKE_CODE_HASH` with that exact command. **The
+feature added a third deployment secret and never reconciled the generator** — my omission, not
+the operator's error.
+
+*Not worked around.* The hash must use the **same salt and iteration count the app uses at
+login**; this script reads `UCPE_ACCESS_CODE_SALT` and `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` and
+calls the app's own `pbkdf2_hash_code`, so reusing another secret's name or hand-rolling a
+digest would risk a silent mismatch that surfaces only as a failed production login. A test now
+pins that the digest is identical whichever `--name` is chosen. The supported names live in one
+constant feeding both the argparse choices and the description, since those drifting apart is
+what caused this.
+
+*Sibling scan caught a second gap:* the frontend static **safety** test enumerated backend
+secret names without the new one, so frontend code could have referenced
+`CONTROLLED_SMOKE_CODE_HASH` without failing. Closed in the same commit rather than left open
+while asking the owner to create that secret. Remaining incomplete lists are **documentation
+only** and were reported, not changed: `README.md`, `DEPLOYMENT_CHECKLIST.md`,
+`DEBUG_PACK_EXAMPLE.md`, `AI/06_TEST_COMMANDS.md`.
+
+**RESOLVED — session-scoped origin implemented (`be2104e`, T2, branch
+`feat/session-scoped-origin`).** Owner chose the session-layer approach over widening the
+request contract. `VERIFY=PASS` 815 (was 803).
+
+The origin now rides inside the session payload, which was **already HMAC-signed over its
+body** (`api/auth.py:84-95`), so it cannot be forged without the signing key. A second access
+code, hashed as `CONTROLLED_SMOKE_CODE_HASH`, mints a session whose analyses are recorded
+`CONTROLLED_SMOKE`; both `/v1/analyze` and `/v1/analyze_batch` read it from the verified
+session. **`AnalysisRequest` is untouched** — it keeps `extra="forbid"` and gains no origin
+field — and **the frontend is unchanged**, so the browser simply logs in with the other code.
+
+*Fail-closed, deliberately asymmetric:* an **absent** origin key means `USER_REQUESTED`, so
+sessions minted before this change survive the deploy; an origin key that is **present but
+unsupported** returns 401 rather than defaulting, because a silent downgrade would contaminate
+the cohort invisibly — the precise harm this exists to prevent. Login is byte-for-byte
+unchanged when the hash is unset, the normal code is still checked first, a wrong code returns
+an identical error either way, the same limiter and constant-time compare apply, and a smoke
+session grants no Dev Mode. All eleven of those properties have direct tests
+(`tests/api/test_session_prediction_origin.py`).
+
+*Known, accepted:* whether the smoke hash is configured is observable through login **timing**,
+since an unset hash short-circuits before PBKDF2. It leaks only the existence of the feature —
+which this repository documents publicly anyway — never the credential, and the attempt limiter
+bounds sampling. Not worth constant-time padding; recorded rather than silently ignored.
+
+*Guard test:* `CURRENT_DELTA_PATHS` now lists `api/app.py`, because a guarded source file is
+changed on GitHub but not yet deployed. **`ops/hf_runtime_baseline.json` is deliberately NOT
+re-pinned** — the pin tracks what is deployed, and the order is deploy first, pin second. The
+regression test now exercises a real non-empty delta instead of an empty one, which is stronger
+coverage than before.
+
+**Original conclusion, which drove the decision: closing both items honestly does require a contract change.** Wave 1.1 says
+"Manual **deployed** UI smoke" — by the same reading the audit applied, that means the real
+Space, so a local render check cannot close it. No waiver, no scope reduction, and no
+reinterpretation is available here.
+
+**MILESTONE CLOSED — PR #5 MERGED TO GITHUB, 2026-08-17.**
+`feat/production-live-smoke` @ `0e0c844` → `main`, merged as merge commit
+**`6eb632d1417190d8517284e89a7d7dd1408aff42`** = `origin/main`. Verified from Git, not the UI:
+the commit has **two parents** (`a59b295` + `0e0c844`), confirming the merge-commit method
+rather than a squash or rebase, and `0e0c844` — the exact head CI went green on — is an
+ancestor of `main`. 14 commits, 6 files, +1262 −61.
+
+**CI ran clean-room for the first time on this work**: `CI / test (pull_request)`
+**Successful in 29s** on head `0e0c844`, the exact commit merged.
+
+**NOTHING WAS DEPLOYED.** `hf/main` verified `e6ee23c` **after** the merge, unchanged. No
+workflow references Hugging Face and `ci.yml`'s push trigger is limited to `codex/**`, so a
+merge to `main` cannot deploy. Production still runs `e6ee23c`. The branch was **kept**, not
+deleted, matching how `chore/gpt-sidecar` was kept after PR #4.
+
+**Gate: 273 proven / 13 open.** What the merge did *not* close, and why: 2 items need a real
+browser session (Wave 4A.2's card-rendering check, Wave 1.1's deployed UI smoke); 1 is an
+unconsumed precondition (manual collector dispatch); the rest are superseded, deferred, or
+out of v1. The six-versus-seven derivatives-cohort discrepancy remains an open reconciliation,
+deliberately not guessed at.
+
+*Prior boundary, for the record:*
+
 **T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
 `origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
 head at push time. `origin/main` unchanged at `a59b295`. **`hf` untouched — the push cannot
-deploy**: no workflow references Hugging Face. The long-standing `main` docs commit `22b3414`
+deploy**: no workflow deploys to Hugging Face. The long-standing `main` docs commit `22b3414`
 is an ancestor of this branch, so it rode along exactly as `b52f7ca` did in PR #4.
 
 **CI HAS NOT RUN on these commits.** `ci.yml` triggers on `push` to `codex/**` and on

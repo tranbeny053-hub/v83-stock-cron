@@ -10,17 +10,23 @@ import sys
 from crypto_probability_engine.api.auth import pbkdf2_hash_code
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 
+SUPPORTED_SECRET_NAMES = (
+    "APP_ACCESS_CODE_HASH",
+    "DEV_MODE_CODE_HASH",
+    "CONTROLLED_SMOKE_CODE_HASH",
+)
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate a PBKDF2-HMAC-SHA256 access-code hash for APP_ACCESS_CODE_HASH "
-            "or DEV_MODE_CODE_HASH. The plaintext code is never printed."
+            "Generate a PBKDF2-HMAC-SHA256 access-code hash for one of: "
+            f"{', '.join(SUPPORTED_SECRET_NAMES)}. The plaintext code is never printed."
         )
     )
     parser.add_argument(
         "--name",
-        choices=("APP_ACCESS_CODE_HASH", "DEV_MODE_CODE_HASH"),
+        choices=SUPPORTED_SECRET_NAMES,
         default="APP_ACCESS_CODE_HASH",
         help="Hugging Face Secret name to print with the generated hash.",
     )
