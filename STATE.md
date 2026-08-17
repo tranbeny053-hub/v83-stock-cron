@@ -1,25 +1,56 @@
 # STATE
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE_AWAITING_OWNER (milestone closed and merged; nothing in flight)
-CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure — COMPLETE, merged by PR #5
-CURRENT_BRANCH=main = origin/main = 6eb632d (this checkpoint rides 1 docs commit ahead, as usual)
+LOOP_STATE=PAUSED_AWAITING_OWNER (investigation complete; stopped at a contract decision)
+CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
+CURRENT_BRANCH=main; origin/main = 6eb632d; local rides docs checkpoints ahead, as usual
 LAST_GREEN_SHA=6eb632d
-LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
+LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=none open; no T3/T4 pending. The T3 push, PR #5 and its merge were all
-  owner-authorized and are complete. Nothing was deployed.
-NEXT_ACTION=owner picks the next milestone; nothing is half-applied
+OWNER_BOUNDARY=1 open — how to close Wave 4A.2 + Wave 1.1. Both need a browser against the
+  deployed Space, which forces an analysis, which today can only be recorded USER_REQUESTED.
+  Requires a contract decision: complete the origin contract at the HTTP+frontend layer
+  (T2+T1, then T3 deploy, then a one-shot T4 write), or empty production persistence for an
+  evidence window (six secret operations, T3). Nothing crossed.
+NEXT_ACTION=owner chooses the closure path for the two browser items; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
+
+## v1 roadmap — progress at a glance
+*Updated 2026-08-17 · `RELEASE_GATE.md`: **273 proven / 13 open***
+
+**Completed milestones**
+1. **Change A — calibration truth + skill gating.** PR #2, merged `e6ee23c`, **deployed to
+   production**. Change A is closed and needs nothing further.
+2. **Deploy pin + source-integrity closure.** PR #3, merged `1b06aab`; guard `HEALTHY` exit 0,
+   no `PIN_DRIFT`.
+3. **Operating model V2 + GPT sidecar.** PR #4, merged `a59b295`. Six process artifacts, no
+   growth.
+4. **Production live-smoke + release-gate reconciliation.** PR #5, merged `6eb632d`. Gate went
+   271/15 → 273/13; `/v1/calibration` proven to serve in production.
+
+**Current milestone** — **Remaining Deployed Browser Evidence Closure** (started 2026-08-17).
+Close Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke **without**
+misclassifying test-motivated traffic as `USER_REQUESTED`, without waiving scope, and without
+widening the API unless genuinely necessary.
+
+**Next major milestone** — **Change B: horizon-specific probability modelling.** Still
+deliberately blocked. It needs a new `methodology_version`, which resets calibration to
+`NO_SAMPLES`, so the 806-sample cohort must survive as the control until Change A has
+re-accumulated evidence under gating. Re-accumulation is **traffic-driven, not scheduled**, so
+it does not progress with time alone.
+
+**Outstanding, but not milestones** — per-timeframe `MEASURED` needs roughly 3× more operator
+traffic per timeframe (currently 134–172 against a ≥500 threshold) · the six-versus-seven
+derivatives-cohort reconciliation is open and deliberately not guessed at.
 
 ## Operating model V2 — anchored 2026-08-16
 - **Claude Code holds the loop.** **Codex `exec` is the implementation and debugging lane.**
@@ -362,6 +393,45 @@ was touched.
 
 *That run proved only that the endpoint did not answer within 10 seconds — neither health nor
 fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
+
+**MILESTONE: REMAINING DEPLOYED BROWSER EVIDENCE CLOSURE — started 2026-08-17.**
+Target: Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke, the last two
+gate items that need a browser. Investigation complete; **no code changed, no smoke run, no
+production analysis.**
+
+*Findings, each verified against the code:*
+- **No request shape renders the cards without writing a ledger row.** Every card is filled
+  only from its own fresh `/v1/analyze` response (`frontend/app.js:733-748`), and neither
+  `analysis_mode` nor `include_detail` suppresses prediction construction. Row construction
+  needs live data plus a valid anchor (`api/analysis_service.py:776-787`); the only skips are
+  fixture mode, failure, or degradation — none of which is a viable request shape.
+- **There is no way at all to set a non-default origin over HTTP.** `AnalysisRequest` has no
+  origin field and forbids extras (`api/schemas.py:77-84`); the routes pass no origin
+  (`api/app.py:164-202`); CORS allows only `Content-Type`; and there is **no deployment-wide
+  origin setting** — `Settings` has no such field and `from_env` reads no such variable.
+- **No deployed view renders cards from stored data.** The detail endpoint reads the
+  **in-memory** run store, which does not survive a Space restart
+  (`api/app.py:264-272`, `persistence/run_store.py:9-14`). Persisted rows hold the three
+  numbers but not the `decision_synthesis` fields the cards render from.
+- **Loading the page writes nothing.** Init renders placeholders and fetches only public
+  `/v1/build-info`; login calls only `/v1/system_status`. Analysis starts *only* on explicit
+  user action (`frontend/app.js:2164-2168`, `1910-1921`, `1928-2127`). A browser can safely
+  load and log in.
+
+*Two corrections to the delegated investigation, both material:*
+1. **An API-only field would not help a browser.** The frontend posts exactly
+   `{symbol, analysis_mode, timeframe}` (`frontend/app.js:737-741`), so a UI smoke would still
+   send the default. Closing these items via the origin route needs a **frontend** change too.
+2. **Going stateless is far costlier than reported.** `build_persistence_repository` falls
+   through REST → **Postgres** → in-memory (`persistence/repository.py:2244-2252`), and the
+   Space holds all three credentials. Emptying it means removing **three** secrets and
+   restoring **three** — six owner-only operations on production, where a botched restore
+   silently costs durable persistence.
+
+**Conclusion: closing both items honestly does require a contract change.** Wave 1.1 says
+"Manual **deployed** UI smoke" — by the same reading the audit applied, that means the real
+Space, so a local render check cannot close it. No waiver, no scope reduction, and no
+reinterpretation is available here.
 
 **MILESTONE CLOSED — PR #5 MERGED TO GITHUB, 2026-08-17.**
 `feat/production-live-smoke` @ `0e0c844` → `main`, merged as merge commit
