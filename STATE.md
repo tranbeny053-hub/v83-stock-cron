@@ -88,7 +88,7 @@ Deployed production build is `e6ee23c`; `main` is one pin commit ahead of it by 
 head `44ca1d9`, CI green on that exact head, merged as merge commit
 `e6ee23cc81274c2ad68e247293738bc8e81f082a` = `origin/main`. 20 files, +1252 −28. The
 merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` was verified
-unchanged at `30d4982` before and after, and no workflow references Hugging Face or
+unchanged at `30d4982` before and after, and no workflow deploys to Hugging Face or
 triggers on push to `main`, so merging cannot deploy.
 
 **Branches** — `main` = `a59b295` (one docs-only checkpoint ahead of `origin/main`) ·
@@ -104,6 +104,15 @@ triggers on push to `main`, so merging cannot deploy.
 Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
 **Database: all 7 migrations (0001–0007) APPLIED. No migration work is required.**
 965 predictions, 813 resolved outcomes (DOWN 376 / UP 327 / TIMEOUT 110).
+
+**CORRECTION 2026-08-17 — one workflow *does* reference Hugging Face.** Earlier entries said
+"no workflow references Hugging Face". That phrasing was wrong, though the conclusion it
+supported still holds. `.github/workflows/keepalive.yml` pings the Space, but it is
+`schedule` + `workflow_dispatch` **only, with no push trigger**; it issues a single
+`curl GET` on `/` and hard-refuses any URL containing `/v1/`, `analyze`, `auth`, or
+`calibration`. **It cannot deploy and cannot write.** The accurate claim is: *no workflow
+deploys to Hugging Face, and none triggers on push to `main`* — so merging still cannot
+deploy. Deployment happens only by an explicit `git push hf`.
 
 **Prediction generation is traffic-driven, not scheduled.** A prediction row is written
 only as a best-effort background side-effect of a session-gated `/v1/analyze` or
@@ -278,7 +287,7 @@ T3 pause record), exactly two files changed (`CLAUDE.md`, `STATE.md`), +147 −2
 `CI / test (pull_request)` was **`Successful in 34s` on the exact latest head `74af3ce`**,
 `mergeable_state` clean, merged as merge commit
 `a59b295aead428fa51667b9e915b02ad7a6c4feb` = `origin/main`. `hf` was `e6ee23c` before and
-after — **the merge cannot deploy**: no workflow references Hugging Face and `ci.yml`'s push
+after — **the merge cannot deploy**: no workflow deploys to Hugging Face and `ci.yml`'s push
 trigger is limited to `codex/**`, so nothing fires on push to `main`.
 
 *The push needed the owner.* `git push` is refused by the Claude Code auto-mode permission
@@ -512,7 +521,7 @@ deliberately not guessed at.
 **T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
 `origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
 head at push time. `origin/main` unchanged at `a59b295`. **`hf` untouched — the push cannot
-deploy**: no workflow references Hugging Face. The long-standing `main` docs commit `22b3414`
+deploy**: no workflow deploys to Hugging Face. The long-standing `main` docs commit `22b3414`
 is an ancestor of this branch, so it rode along exactly as `b52f7ca` did in PR #4.
 
 **CI HAS NOT RUN on these commits.** `ci.yml` triggers on `push` to `codex/**` and on
