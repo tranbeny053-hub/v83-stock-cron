@@ -6,9 +6,9 @@ Updated: 2026-08-17
 ```
 LOOP_STATE=PAUSED_AWAITING_OWNER (T2 built and green; stopped before secret/deploy/T4)
 CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
-CURRENT_BRANCH=feat/session-scoped-origin (unpushed); origin/main = 6eb632d
-LAST_GREEN_SHA=be2104e
-LAST_VERIFY=PASS 815 passed, ruff clean, 3/3 scanners · 2026-08-17
+CURRENT_BRANCH=feat/session-scoped-origin (3 commits, unpushed); origin/main = 6eb632d
+LAST_GREEN_SHA=bb09cb0
+LAST_VERIFY=PASS 822 passed, ruff clean, 3/3 scanners · 2026-08-17
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
@@ -427,6 +427,28 @@ production analysis.**
    Space holds all three credentials. Emptying it means removing **three** secrets and
    restoring **three** — six owner-only operations on production, where a botched restore
    silently costs durable persistence.
+
+**CREDENTIAL BOUNDARY FAILED ONCE, THEN REPAIRED — 2026-08-17 (`bb09cb0`).**
+The owner's first attempt to generate the secret was blocked before any hash existed:
+`make_access_hash.py` restricted `--name` to the two original secrets, while `RELEASE_GATE.md`
+already documented generating `CONTROLLED_SMOKE_CODE_HASH` with that exact command. **The
+feature added a third deployment secret and never reconciled the generator** — my omission, not
+the operator's error.
+
+*Not worked around.* The hash must use the **same salt and iteration count the app uses at
+login**; this script reads `UCPE_ACCESS_CODE_SALT` and `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` and
+calls the app's own `pbkdf2_hash_code`, so reusing another secret's name or hand-rolling a
+digest would risk a silent mismatch that surfaces only as a failed production login. A test now
+pins that the digest is identical whichever `--name` is chosen. The supported names live in one
+constant feeding both the argparse choices and the description, since those drifting apart is
+what caused this.
+
+*Sibling scan caught a second gap:* the frontend static **safety** test enumerated backend
+secret names without the new one, so frontend code could have referenced
+`CONTROLLED_SMOKE_CODE_HASH` without failing. Closed in the same commit rather than left open
+while asking the owner to create that secret. Remaining incomplete lists are **documentation
+only** and were reported, not changed: `README.md`, `DEPLOYMENT_CHECKLIST.md`,
+`DEBUG_PACK_EXAMPLE.md`, `AI/06_TEST_COMMANDS.md`.
 
 **RESOLVED — session-scoped origin implemented (`be2104e`, T2, branch
 `feat/session-scoped-origin`).** Owner chose the session-layer approach over widening the
