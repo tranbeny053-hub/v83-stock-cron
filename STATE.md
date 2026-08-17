@@ -4,19 +4,18 @@ Updated: 2026-08-16
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (autonomous work complete; stopped at a genuine boundary)
-CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure (owner-authorized 2026-08-16)
-CURRENT_BRANCH=feat/production-live-smoke (PUSHED to origin @ 28f0e4b; this checkpoint sits 1 commit ahead of that ref)
-LAST_GREEN_SHA=6ba8da1
+LOOP_STATE=IDLE_AWAITING_OWNER (milestone closed and merged; nothing in flight)
+CURRENT_MILESTONE=Production Live-Smoke + Release-Gate Closure — COMPLETE, merged by PR #5
+CURRENT_BRANCH=main = origin/main = 6eb632d (this checkpoint rides 1 docs commit ahead, as usual)
+LAST_GREEN_SHA=6eb632d
 LAST_VERIFY=PASS 803 passed, ruff clean, 3/3 scanners · 2026-08-16
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 open — whether to open a PR for feat/production-live-smoke, and whether to
-  merge it. The T3 push was AUTHORIZED AND EXECUTED by the owner 2026-08-16. Wave 4B0 and
-  Wave 1.2 are CLOSED ON EVIDENCE; /v1/calibration is PROVEN to serve in production.
-NEXT_ACTION=owner decides on the PR; CI has NOT yet run on this branch; nothing is half-applied
+OWNER_BOUNDARY=none open; no T3/T4 pending. The T3 push, PR #5 and its merge were all
+  owner-authorized and are complete. Nothing was deployed.
+NEXT_ACTION=owner picks the next milestone; nothing is half-applied
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
@@ -363,6 +362,29 @@ was touched.
 
 *That run proved only that the endpoint did not answer within 10 seconds — neither health nor
 fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
+
+**MILESTONE CLOSED — PR #5 MERGED TO GITHUB, 2026-08-17.**
+`feat/production-live-smoke` @ `0e0c844` → `main`, merged as merge commit
+**`6eb632d1417190d8517284e89a7d7dd1408aff42`** = `origin/main`. Verified from Git, not the UI:
+the commit has **two parents** (`a59b295` + `0e0c844`), confirming the merge-commit method
+rather than a squash or rebase, and `0e0c844` — the exact head CI went green on — is an
+ancestor of `main`. 14 commits, 6 files, +1262 −61.
+
+**CI ran clean-room for the first time on this work**: `CI / test (pull_request)`
+**Successful in 29s** on head `0e0c844`, the exact commit merged.
+
+**NOTHING WAS DEPLOYED.** `hf/main` verified `e6ee23c` **after** the merge, unchanged. No
+workflow references Hugging Face and `ci.yml`'s push trigger is limited to `codex/**`, so a
+merge to `main` cannot deploy. Production still runs `e6ee23c`. The branch was **kept**, not
+deleted, matching how `chore/gpt-sidecar` was kept after PR #4.
+
+**Gate: 273 proven / 13 open.** What the merge did *not* close, and why: 2 items need a real
+browser session (Wave 4A.2's card-rendering check, Wave 1.1's deployed UI smoke); 1 is an
+unconsumed precondition (manual collector dispatch); the rest are superseded, deferred, or
+out of v1. The six-versus-seven derivatives-cohort discrepancy remains an open reconciliation,
+deliberately not guessed at.
+
+*Prior boundary, for the record:*
 
 **T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
 `origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
