@@ -29,6 +29,10 @@ from crypto_probability_engine.persistence.prediction_origin import (
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
 
 
+class OOSArmIdentityConflict(RuntimeError):
+    """An OOS arm identity was already occupied instead of being inserted."""
+
+
 class PersistenceRepository(Protocol):
     def persistence_status(self) -> PersistenceStatus:
         """Return current persistence health without exposing connection details."""
@@ -179,7 +183,13 @@ class InMemoryPersistenceRepository:
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
         normalized_row = _prediction_row_with_origin(row)
         prediction_id = str(normalized_row.get("prediction_id", ""))
-        if prediction_id and prediction_id not in self._predictions:
+        if prediction_id in self._predictions:
+            if _is_oos_arm_prediction_id(prediction_id):
+                raise OOSArmIdentityConflict(
+                    "OOS arm prediction identity is already occupied."
+                )
+            return self.persistence_status()
+        if prediction_id:
             self._predictions[prediction_id] = normalized_row
         return self.persistence_status()
 
@@ -706,35 +716,28 @@ class SupabasePersistenceRepository:
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
         normalized_row = _prediction_row_with_origin(row)
         self._fallback.save_prediction(normalized_row)
+        if _is_oos_arm_prediction_id(normalized_row.get("prediction_id")):
+            return self._save_oos_prediction(normalized_row)
         status, _ = self._run_db(
-            lambda cursor: cursor.execute(
-                """
-                INSERT INTO predictions (
-                  prediction_id, run_id, operator_id, symbol, normalized_symbol,
-                  timeframe, horizon_bars, predicted_at_utc, reference_close_utc,
-                  reference_price, horizon_end_utc, p_up_frac, p_down_frac,
-                  p_timeout_frac, decision_band_frac, model_version, methodology_version,
-                  calibration_status, reliability_status, epistemic_sufficiency,
-                  gate_action, data_source, is_live_data, cross_provider_state,
-                  prediction_origin
-                )
-                VALUES (
-                  %(prediction_id)s, %(run_id)s, %(operator_id)s, %(symbol)s,
-                  %(normalized_symbol)s, %(timeframe)s, %(horizon_bars)s,
-                  %(predicted_at_utc)s, %(reference_close_utc)s, %(reference_price)s,
-                  %(horizon_end_utc)s, %(p_up_frac)s, %(p_down_frac)s,
-                  %(p_timeout_frac)s, %(decision_band_frac)s, %(model_version)s,
-                  %(methodology_version)s, %(calibration_status)s,
-                  %(reliability_status)s, %(epistemic_sufficiency)s, %(gate_action)s,
-                  %(data_source)s, %(is_live_data)s, %(cross_provider_state)s,
-                  %(prediction_origin)s
-                )
-                ON CONFLICT (prediction_id) DO NOTHING
-                """,
-                normalized_row,
-            )
+            lambda cursor: _insert_prediction(cursor, normalized_row)
         )
         return status
+
+    def _save_oos_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        if not self.maybe_can_attempt():
+            raise OOSArmIdentityConflict("OOS arm prediction write could not be confirmed.")
+        try:
+            with self._connection() as conn:
+                with conn.cursor() as cursor:
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    _insert_prediction(cursor, row, reject_conflict=True)
+        except Exception as exc:
+            self.mark_unavailable()
+            raise OOSArmIdentityConflict(
+                "OOS arm prediction identity clash or unconfirmed write."
+            ) from exc
+        self._mark_ok()
+        return self.persistence_status()
 
     def save_feature_snapshot(
         self, row: Mapping[str, Any]
@@ -1172,6 +1175,8 @@ class SupabaseRestRepository:
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
         normalized_row = _prediction_row_with_origin(row)
         self._fallback.save_prediction(normalized_row)
+        if _is_oos_arm_prediction_id(normalized_row.get("prediction_id")):
+            return self._save_oos_prediction(normalized_row)
         status, _ = self._run_rest(
             lambda: self._request(
                 "POST",
@@ -1182,6 +1187,24 @@ class SupabaseRestRepository:
             )
         )
         return status
+
+    def _save_oos_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        if not self.maybe_can_attempt():
+            raise OOSArmIdentityConflict("OOS arm prediction write could not be confirmed.")
+        try:
+            self._request(
+                "POST",
+                "predictions",
+                json=dict(row),
+                prefer="return=minimal",
+            )
+        except Exception as exc:
+            self.mark_unavailable()
+            raise OOSArmIdentityConflict(
+                "OOS arm prediction identity clash or unconfirmed write."
+            ) from exc
+        self._mark_ok()
+        return self.persistence_status()
 
     def save_feature_snapshot(
         self, row: Mapping[str, Any]
@@ -1531,6 +1554,41 @@ def _fetch_run(cursor, run_id: str):
 
 def _set_local_statement_timeout(cursor, timeout_ms: int) -> None:
     cursor.execute(f"SET LOCAL statement_timeout = {int(timeout_ms)}")
+
+
+def _insert_prediction(
+    cursor,
+    row: Mapping[str, Any],
+    *,
+    reject_conflict: bool = False,
+) -> None:
+    conflict_clause = "" if reject_conflict else "ON CONFLICT (prediction_id) DO NOTHING"
+    cursor.execute(
+        f"""
+        INSERT INTO predictions (
+          prediction_id, run_id, operator_id, symbol, normalized_symbol,
+          timeframe, horizon_bars, predicted_at_utc, reference_close_utc,
+          reference_price, horizon_end_utc, p_up_frac, p_down_frac,
+          p_timeout_frac, decision_band_frac, model_version, methodology_version,
+          calibration_status, reliability_status, epistemic_sufficiency,
+          gate_action, data_source, is_live_data, cross_provider_state,
+          prediction_origin
+        )
+        VALUES (
+          %(prediction_id)s, %(run_id)s, %(operator_id)s, %(symbol)s,
+          %(normalized_symbol)s, %(timeframe)s, %(horizon_bars)s,
+          %(predicted_at_utc)s, %(reference_close_utc)s, %(reference_price)s,
+          %(horizon_end_utc)s, %(p_up_frac)s, %(p_down_frac)s,
+          %(p_timeout_frac)s, %(decision_band_frac)s, %(model_version)s,
+          %(methodology_version)s, %(calibration_status)s,
+          %(reliability_status)s, %(epistemic_sufficiency)s, %(gate_action)s,
+          %(data_source)s, %(is_live_data)s, %(cross_provider_state)s,
+          %(prediction_origin)s
+        )
+        {conflict_clause}
+        """,
+        dict(row),
+    )
 
 
 def _insert_feature_snapshot(
@@ -2142,7 +2200,21 @@ def _prediction_row_with_origin(row: Mapping[str, Any]) -> dict[str, Any]:
     normalized["prediction_origin"] = validate_prediction_origin(
         row.get("prediction_origin", DEFAULT_PREDICTION_ORIGIN)
     )
+    if _is_oos_arm_prediction_id(normalized.get("prediction_id")) and (
+        normalized["prediction_origin"] != "SCHEDULED_SHADOW_EVIDENCE"
+    ):
+        raise ValueError("OOS arm predictions require shadow-evidence origin.")
     return normalized
+
+
+def _is_oos_arm_prediction_id(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and re.fullmatch(
+            r"oosb-[0-9a-f]{32}:(?:15m|1H|4H|1D|1W|1M):(BASELINE|CANDIDATE)",
+            value,
+        )
+    )
 
 
 def _prediction_origin_matches(
