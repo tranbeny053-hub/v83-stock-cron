@@ -8,6 +8,7 @@ from types import MappingProxyType
 
 MODEL_VERSION = "phase1a-wave4b0"
 DEFAULT_METHODOLOGY_VERSION = "heuristic-v1-wave4b0"
+DISTRIBUTIONAL_METHODOLOGY_VERSION = "distributional-v1"
 METHODOLOGY_VERSION = DEFAULT_METHODOLOGY_VERSION
 RESOLVER_VERSION = "resolver-v1-wave4b2"
 FEATURE_METHODOLOGY_VERSION = "quant-v2-shadow-v0"

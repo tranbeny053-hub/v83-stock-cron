@@ -29,6 +29,7 @@ from crypto_probability_engine.calibration.skill import (
 )
 from crypto_probability_engine.config.defaults import (
     DEFAULT_PHASE1A,
+    DISTRIBUTIONAL_METHODOLOGY_VERSION,
     METHODOLOGY_VERSION,
     MODEL_VERSION,
     TIMEFRAME_SECONDS,
@@ -145,6 +146,15 @@ def analyze_request(
             ErrorCode.SCHEMA_VALIDATION_FAILED,
             "Methodology version must be a non-empty string.",
         )
+    if methodology_version not in {
+        METHODOLOGY_VERSION,
+        DISTRIBUTIONAL_METHODOLOGY_VERSION,
+    }:
+        raise api_error(
+            400,
+            ErrorCode.SCHEMA_VALIDATION_FAILED,
+            "Unsupported methodology version.",
+        )
     try:
         arm_context = _oos_arm_context(
             pair_context=pair_context,
@@ -219,7 +229,11 @@ def analyze_request(
         if deterministic_identity
         else None
     )
-    quant_result = run_quant_pipeline(snapshot, provider_state)
+    quant_result = run_quant_pipeline(
+        snapshot,
+        provider_state,
+        methodology_version=methodology_version,
+    )
     skill_evidence = (
         arm_context.resolved_skill_evidence
         if arm_context is not None
