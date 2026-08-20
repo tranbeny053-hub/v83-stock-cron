@@ -51,6 +51,14 @@ from crypto_probability_engine.detail.frontend_display import build_frontend_dis
 from crypto_probability_engine.gates.composite import apply_skill_gate
 from crypto_probability_engine.news.contract import build_news_blocks
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.oos.pair_context import (
+    OOS_PREDICTION_ORIGIN,
+    OOSArm,
+    OOSPairContext,
+    PairInvalidError,
+    PairTarget,
+    is_oos_run_id,
+)
 from crypto_probability_engine.persistence.derivatives_snapshot import (
     build_derivatives_snapshot,
 )
@@ -59,7 +67,10 @@ from crypto_probability_engine.persistence.prediction_origin import (
     DEFAULT_PREDICTION_ORIGIN,
     validate_prediction_origin,
 )
-from crypto_probability_engine.persistence.repository import PersistenceRepository
+from crypto_probability_engine.persistence.repository import (
+    OOSArmIdentityConflict,
+    PersistenceRepository,
+)
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
@@ -123,8 +134,30 @@ def analyze_request(
     prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
     deterministic_identity: bool = False,
     derivatives_methodology_version: str = METHODOLOGY_VERSION_V0,
+    methodology_version: str = METHODOLOGY_VERSION,
+    pair_context: OOSPairContext | None = None,
+    arm: OOSArm | str | None = None,
 ) -> dict:
     prediction_origin = validate_prediction_origin(prediction_origin)
+    if not isinstance(methodology_version, str) or not methodology_version:
+        raise api_error(
+            400,
+            ErrorCode.SCHEMA_VALIDATION_FAILED,
+            "Methodology version must be a non-empty string.",
+        )
+    try:
+        arm_context = _oos_arm_context(
+            pair_context=pair_context,
+            arm=arm,
+            prediction_origin=prediction_origin,
+            deterministic_identity=deterministic_identity,
+        )
+    except PairInvalidError as exc:
+        raise api_error(
+            400,
+            ErrorCode.SCHEMA_VALIDATION_FAILED,
+            str(exc),
+        ) from exc
     if (
         not isinstance(derivatives_methodology_version, str)
         or derivatives_methodology_version
@@ -166,6 +199,17 @@ def analyze_request(
     snapshot = selection.snapshot
     provider_state = selection.provider_state
     data_quality = selection.data_quality
+    if arm_context is not None:
+        if (
+            arm_context.market_snapshot.normalized_symbol != symbol.display
+            or arm_context.market_snapshot.timeframe != request.timeframe
+        ):
+            raise api_error(
+                400,
+                ErrorCode.SCHEMA_VALIDATION_FAILED,
+                "OOS pair snapshot does not match the requested market and timeframe.",
+            )
+        snapshot = arm_context.market_snapshot
     deterministic_run_id = (
         _deterministic_cadence_run_id(
             normalized_symbol=symbol.display,
@@ -176,14 +220,20 @@ def analyze_request(
         else None
     )
     quant_result = run_quant_pipeline(snapshot, provider_state)
-    skill_evidence = _skill_evidence_for_analysis(request.timeframe)
+    skill_evidence = (
+        arm_context.resolved_skill_evidence
+        if arm_context is not None
+        else _skill_evidence_for_analysis(request.timeframe)
+    )
     quant_result = _apply_skill_evidence_gate(quant_result, skill_evidence)
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
         settings=settings,
     )
-    if deterministic_identity:
+    if arm_context is not None:
+        run_id = arm_context.run_id
+    elif deterministic_identity:
         if deterministic_run_id is None:
             raise _cadence_identity_error()
         run_id = deterministic_run_id
@@ -286,6 +336,9 @@ def analyze_request(
         data_quality=data_quality,
         provider_state=provider_state,
         prediction_origin=prediction_origin,
+        arm=arm_context.arm if arm_context is not None else None,
+        target=arm_context.target if arm_context is not None else None,
+        methodology_version=methodology_version,
     )
     response["quant_v2"] = build_quant_v2_shadow(
         quant_result=quant_result,
@@ -336,6 +389,26 @@ def _skill_evidence_for_analysis(timeframe: str) -> dict:
         return get_cached_skill_evidence(timeframe)
     except Exception:
         return insufficient_skill_evidence()
+
+
+def _oos_arm_context(
+    *,
+    pair_context: OOSPairContext | None,
+    arm: OOSArm | str | None,
+    prediction_origin: str,
+    deterministic_identity: bool,
+):
+    if pair_context is None and arm is None:
+        return None
+    if pair_context is None or arm is None:
+        raise PairInvalidError("OOS pair context and arm must be supplied together.")
+    if deterministic_identity:
+        raise PairInvalidError("OOS identity cannot use the derivatives cadence identity.")
+    if prediction_origin != pair_context.prediction_origin:
+        raise PairInvalidError(
+            "OOS pairs require SCHEDULED_SHADOW_EVIDENCE origin."
+        )
+    return pair_context.for_arm(arm)
 
 
 def _apply_skill_evidence_gate(quant_result: dict, skill_evidence: dict) -> dict:
@@ -494,6 +567,8 @@ def persist_analysis_now(
             consume_pending=False,
         )
         return _persist_work_confirmed(work, repository).public_result()
+    except OOSArmIdentityConflict:
+        raise
     except Exception:
         _mark_repository_unavailable(repository)
         return unavailable
@@ -585,6 +660,8 @@ def _persist_work_confirmed(
             snapshot_issue = True
         if derivatives_snapshot_rows:
             derivatives_snapshot_issue = True
+    except OOSArmIdentityConflict:
+        raise
     except Exception:
         unexpected_failure = True
         snapshot_issue = True
@@ -665,18 +742,43 @@ def _remember_prediction_persistence(
     derivatives_snapshot_required: bool,
 ) -> None:
     with _PENDING_PREDICTION_LOCK:
-        _PENDING_PREDICTION_ROWS[run_id] = dict(prediction_row)
-        _PENDING_FEATURE_SNAPSHOT_ROWS[run_id] = (
+        prediction_value = dict(prediction_row)
+        feature_value = (
             dict(feature_snapshot_row) if feature_snapshot_row is not None else None
         )
-        _PENDING_DERIVATIVES_SNAPSHOT_ROWS[run_id] = (
+        derivatives_value = (
             dict(derivatives_snapshot_row)
             if derivatives_snapshot_row is not None
             else None
         )
-        _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED[run_id] = bool(
-            derivatives_snapshot_required
-        )
+        if str(prediction_row.get("prediction_id", "")).startswith("oosb-"):
+            _append_pending(_PENDING_PREDICTION_ROWS, run_id, prediction_value)
+            _append_pending(_PENDING_FEATURE_SNAPSHOT_ROWS, run_id, feature_value)
+            _append_pending(
+                _PENDING_DERIVATIVES_SNAPSHOT_ROWS, run_id, derivatives_value
+            )
+            _append_pending(
+                _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED,
+                run_id,
+                bool(derivatives_snapshot_required),
+            )
+        else:
+            _PENDING_PREDICTION_ROWS[run_id] = prediction_value
+            _PENDING_FEATURE_SNAPSHOT_ROWS[run_id] = feature_value
+            _PENDING_DERIVATIVES_SNAPSHOT_ROWS[run_id] = derivatives_value
+            _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED[run_id] = bool(
+                derivatives_snapshot_required
+            )
+
+
+def _append_pending(values: dict, run_id: str, value: object) -> None:
+    existing = values.get(run_id)
+    if isinstance(existing, list):
+        existing.append(value)
+    elif existing is None and run_id not in values:
+        values[run_id] = [value]
+    else:
+        values[run_id] = [existing, value]
 
 
 def _pop_prediction_persistence(
@@ -700,45 +802,50 @@ def _prediction_persistence(
     if not run_id:
         return [], [], False, [], False
     with _PENDING_PREDICTION_LOCK:
-        prediction_row = _pending_value(
+        prediction_value = _pending_value(
             _PENDING_PREDICTION_ROWS,
             run_id,
             consume=consume,
         )
         had_snapshot_marker = run_id in _PENDING_FEATURE_SNAPSHOT_ROWS
-        feature_snapshot_row = _pending_value(
+        feature_snapshot_value = _pending_value(
             _PENDING_FEATURE_SNAPSHOT_ROWS,
             run_id,
             consume=consume,
         )
         had_derivatives_marker = run_id in _PENDING_DERIVATIVES_SNAPSHOT_ROWS
-        derivatives_snapshot_row = _pending_value(
+        derivatives_snapshot_value = _pending_value(
             _PENDING_DERIVATIVES_SNAPSHOT_ROWS,
             run_id,
             consume=consume,
         )
-        derivatives_snapshot_required = bool(
-            _pending_value(
-                _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED,
-                run_id,
-                consume=consume,
-                default=False,
+        derivatives_required_value = _pending_value(
+            _PENDING_DERIVATIVES_SNAPSHOT_REQUIRED,
+            run_id,
+            consume=consume,
+            default=False,
+        )
+    prediction_rows = _pending_rows(prediction_value)
+    feature_values = _pending_values(feature_snapshot_value)
+    feature_snapshot_rows = [row for row in feature_values if row is not None]
+    build_failed = bool(prediction_rows) and (
+        not had_snapshot_marker
+        or len(feature_values) != len(prediction_rows)
+        or any(row is None for row in feature_values)
+    )
+    derivatives_values = _pending_values(derivatives_snapshot_value)
+    derivatives_snapshot_rows = [row for row in derivatives_values if row is not None]
+    derivatives_required = [bool(value) for value in _pending_values(derivatives_required_value)]
+    derivatives_build_failed = bool(prediction_rows) and (
+        not had_derivatives_marker
+        or len(derivatives_values) != len(prediction_rows)
+        or len(derivatives_required) != len(prediction_rows)
+        or any(
+            required and row is None
+            for required, row in zip(
+                derivatives_required, derivatives_values, strict=False
             )
         )
-    prediction_rows = [prediction_row] if prediction_row is not None else []
-    feature_snapshot_rows = (
-        [feature_snapshot_row] if feature_snapshot_row is not None else []
-    )
-    build_failed = prediction_row is not None and (
-        not had_snapshot_marker or feature_snapshot_row is None
-    )
-    derivatives_snapshot_rows = (
-        [derivatives_snapshot_row] if derivatives_snapshot_row is not None else []
-    )
-    derivatives_build_failed = (
-        prediction_row is not None
-        and derivatives_snapshot_required
-        and (not had_derivatives_marker or derivatives_snapshot_row is None)
     )
     return (
         prediction_rows,
@@ -760,6 +867,14 @@ def _pending_value(
     return deepcopy(value)
 
 
+def _pending_values(value: object) -> list:
+    return value if isinstance(value, list) else [value]
+
+
+def _pending_rows(value: object) -> list[dict]:
+    return [row for row in _pending_values(value) if isinstance(row, dict)]
+
+
 def _prediction_row(
     *,
     run_id: str,
@@ -771,8 +886,13 @@ def _prediction_row(
     data_quality: dict,
     provider_state: dict,
     prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
+    arm: OOSArm | str | None = None,
+    target: PairTarget | None = None,
+    methodology_version: str = METHODOLOGY_VERSION,
 ) -> dict | None:
     prediction_origin = validate_prediction_origin(prediction_origin)
+    if arm is not None and prediction_origin != OOS_PREDICTION_ORIGIN:
+        raise PairInvalidError("OOS arm rows require shadow-evidence origin.")
     if not data_quality.get("is_live_data"):
         return None
     if timeframe not in TIMEFRAME_SECONDS:
@@ -780,16 +900,27 @@ def _prediction_row(
     candles = tuple(getattr(snapshot, "candles", ()) or ())
     if not candles:
         return None
-    reference_candle = candles[-1]
-    reference_close_utc = _coerce_utc_datetime(reference_candle.close_time_utc)
     predicted_at_utc = _coerce_utc_datetime(snapshot.as_of_utc)
-    reference_price = float(reference_candle.close)
+    reference_candle = candles[-1]
+    if target is None:
+        reference_close_utc = _coerce_utc_datetime(reference_candle.close_time_utc)
+        reference_price = float(reference_candle.close)
+        horizon_bars = int(DEFAULT_PHASE1A.h_primary_bars)
+        horizon_end_utc = reference_close_utc + timedelta(
+            seconds=horizon_bars * TIMEFRAME_SECONDS[timeframe]
+        )
+        decision_band_frac = quant_result.get("execution_realism", {}).get(
+            "round_trip_cost_frac"
+        )
+    else:
+        reference_close_utc = target.reference_close_utc
+        reference_price = target.reference_price
+        horizon_bars = int(DEFAULT_PHASE1A.h_primary_bars)
+        horizon_end_utc = target.horizon_end_utc
+        decision_band_frac = target.decision_band_frac
     if reference_price <= 0.0 or reference_close_utc > predicted_at_utc:
         return None
-    horizon_bars = int(DEFAULT_PHASE1A.h_primary_bars)
-    horizon_end_utc = reference_close_utc + timedelta(
-        seconds=horizon_bars * TIMEFRAME_SECONDS[timeframe]
-    )
+    prediction_id = _prediction_id(run_id, timeframe, arm)
     horizon = quant_result.get("probability_state", {}).get("horizons", {}).get("H_primary", {})
     try:
         p_up_frac = float(horizon["p_up_frac"])
@@ -800,7 +931,7 @@ def _prediction_row(
     calibration = quant_result.get("calibration_state", {})
     epistemic = quant_result.get("epistemic_sufficiency_state", {})
     return {
-        "prediction_id": f"{run_id}:{timeframe}",
+        "prediction_id": prediction_id,
         "run_id": run_id,
         "operator_id": "operator",
         "symbol": request_symbol,
@@ -814,11 +945,9 @@ def _prediction_row(
         "p_up_frac": p_up_frac,
         "p_down_frac": p_down_frac,
         "p_timeout_frac": p_timeout_frac,
-        "decision_band_frac": quant_result.get("execution_realism", {}).get(
-            "round_trip_cost_frac"
-        ),
+        "decision_band_frac": decision_band_frac,
         "model_version": MODEL_VERSION,
-        "methodology_version": METHODOLOGY_VERSION,
+        "methodology_version": methodology_version,
         "calibration_status": calibration.get(
             "calibration_status",
             DEFAULT_PHASE1A.calibration_status,
@@ -835,6 +964,18 @@ def _prediction_row(
         or provider_state.get("cross_provider_state"),
         "prediction_origin": prediction_origin,
     }
+
+
+def _prediction_id(run_id: str, timeframe: str, arm: OOSArm | str | None) -> str:
+    if arm is None:
+        return f"{run_id}:{timeframe}"
+    try:
+        resolved_arm = OOSArm(arm)
+    except (TypeError, ValueError) as exc:
+        raise PairInvalidError("OOS arm must be BASELINE or CANDIDATE.") from exc
+    if not is_oos_run_id(run_id):
+        raise PairInvalidError("Arm-suffixed prediction identity requires an OOS run.")
+    return f"{run_id}:{timeframe}:{resolved_arm.value}"
 
 
 def _coerce_utc_datetime(value: datetime) -> datetime:

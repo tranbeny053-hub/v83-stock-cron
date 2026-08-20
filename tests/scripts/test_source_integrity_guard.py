@@ -21,7 +21,7 @@ DRIFT_SHA = "d" * 40
 # Empty while GitHub and the deployed Space agree. It goes non-empty whenever a guarded
 # change is merged but not yet deployed, and is emptied again once the deploy lands and
 # ops/hf_runtime_baseline.json is re-pinned.
-CURRENT_DELTA_PATHS = []
+CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/analysis_service.py"]
 
 
 def _manifest() -> dict:
