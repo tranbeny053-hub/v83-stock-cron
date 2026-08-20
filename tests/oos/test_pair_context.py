@@ -13,7 +13,10 @@ import pytest
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
-from crypto_probability_engine.config.defaults import METHODOLOGY_VERSION
+from crypto_probability_engine.config.defaults import (
+    DISTRIBUTIONAL_METHODOLOGY_VERSION,
+    METHODOLOGY_VERSION,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.oos.pair_context import (
     OOSArm,
@@ -82,9 +85,13 @@ def _analyze_pair(monkeypatch, pair):
     seen_snapshots = []
     real_pipeline = analysis_service.run_quant_pipeline
 
-    def capturing_pipeline(snapshot, provider_state):
+    def capturing_pipeline(snapshot, provider_state, *, methodology_version):
         seen_snapshots.append(snapshot)
-        return real_pipeline(snapshot, provider_state)
+        return real_pipeline(
+            snapshot,
+            provider_state,
+            methodology_version=methodology_version,
+        )
 
     monkeypatch.setattr(analysis_service, "select_market_data", _selection(pair.snapshot))
     monkeypatch.setattr(analysis_service, "run_quant_pipeline", capturing_pipeline)
@@ -94,9 +101,9 @@ def _analyze_pair(monkeypatch, pair):
         lambda _timeframe: pytest.fail("pair skill evidence must bypass the TTL cache"),
     )
     payloads = []
-    for arm, methodology in (
+    for arm, methodology_version in (
         (OOSArm.BASELINE, METHODOLOGY_VERSION),
-        (OOSArm.CANDIDATE, "candidate-version-label"),
+        (OOSArm.CANDIDATE, DISTRIBUTIONAL_METHODOLOGY_VERSION),
     ):
         payloads.append(
             analysis_service.analyze_request(
@@ -104,7 +111,7 @@ def _analyze_pair(monkeypatch, pair):
                 settings=Settings(data_mode="fixture"),
                 run_store=InMemoryRunStore(),
                 prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
-                methodology_version=methodology,
+                methodology_version=methodology_version,
                 pair_context=pair,
                 arm=arm,
             )
@@ -131,6 +138,13 @@ def test_t1_two_arms_on_one_input_persist_two_rows(monkeypatch) -> None:
     assert set(repository._predictions) == {  # noqa: SLF001
         f"{pair.run_id}:4H:BASELINE",
         f"{pair.run_id}:4H:CANDIDATE",
+    }
+    assert {
+        row["prediction_id"].rsplit(":", maxsplit=1)[-1]: row["methodology_version"]
+        for row in rows
+    } == {
+        "BASELINE": METHODOLOGY_VERSION,
+        "CANDIDATE": DISTRIBUTIONAL_METHODOLOGY_VERSION,
     }
 
 
@@ -376,14 +390,27 @@ def test_t11_both_arms_have_zero_served_decision_influence(monkeypatch) -> None:
         }
     )
     payloads, _ = _analyze_pair(monkeypatch, pair)
+    monkeypatch.setattr(
+        analysis_service,
+        "get_cached_skill_evidence",
+        lambda _timeframe: SKILL_EVIDENCE,
+    )
+    solo_baseline = analysis_service.analyze_request(
+        AnalysisRequest(symbol="BTC", timeframe="4H"),
+        settings=Settings(data_mode="fixture"),
+        run_store=InMemoryRunStore(),
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+        methodology_version=METHODOLOGY_VERSION,
+    )
     try:
         assert pair.decision_influence_frac == 0.0
         assert pair.for_arm("BASELINE").decision_influence_frac == 0.0
         assert pair.for_arm("CANDIDATE").decision_influence_frac == 0.0
-        assert payloads[0]["decision_synthesis"] == payloads[1]["decision_synthesis"]
-        assert payloads[0]["gate_result"] == payloads[1]["gate_result"]
+        assert payloads[0]["decision_synthesis"] == solo_baseline["decision_synthesis"]
+        assert payloads[0]["gate_result"] == solo_baseline["gate_result"]
     finally:
         analysis_service._pop_prediction_persistence(payloads[0])  # noqa: SLF001
+        analysis_service._pop_prediction_persistence(solo_baseline)  # noqa: SLF001
 
 
 def test_t12_ordinary_identity_and_response_payload_are_byte_identical(monkeypatch) -> None:

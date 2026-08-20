@@ -194,7 +194,16 @@ validated.
 
     T_freeze = UTC commit timestamp of the commit freezing the candidate methodology_version.
                GOVERNS PURGE AND EMBARGO -- the candidate's information boundary.
-               NOT SET. Recorded here only once that commit exists.
+
+               RECORDED. The candidate freeze commit exists:
+                 commit                61e9796351b6a0bd224f441a7a2e3ef99dd4239c
+                 T_freeze (UTC)        2026-08-20T11:35:56Z
+                 methodology_version   distributional-v1
+                 rooted at             origin/main 9b2eba5
+
+               This commit is IMMUTABLE. It must not be cherry-picked, rebased, amended or
+               recreated; its timestamp is the information boundary and any rewrite would move
+               T_freeze after the fact.
 
     T0       = reference_close_utc of the FIRST construction-time-eligible paired-shadow
                occasion after activation (§5A.4). GOVERNS THE LATTICE ORIGIN AND T_close.
