@@ -193,22 +193,6 @@ def analyze_request(
     except SymbolNormalizationError as exc:
         raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc
 
-    try:
-        selection = select_market_data(symbol, request.timeframe, settings=settings)
-    except ProviderSelectionError as exc:
-        raise api_error(
-            _status_for_selection_error(exc.code),
-            exc.code,
-            exc.message,
-            provider_state_snapshot={
-                "provider_state": exc.provider_state,
-                "data_quality": exc.data_quality,
-            },
-        ) from exc
-
-    snapshot = selection.snapshot
-    provider_state = selection.provider_state
-    data_quality = selection.data_quality
     if arm_context is not None:
         if (
             arm_context.market_snapshot.normalized_symbol != symbol.display
@@ -220,6 +204,25 @@ def analyze_request(
                 "OOS pair snapshot does not match the requested market and timeframe.",
             )
         snapshot = arm_context.market_snapshot
+        provider_state = arm_context.provider_state
+        data_quality = arm_context.data_quality
+    else:
+        try:
+            selection = select_market_data(symbol, request.timeframe, settings=settings)
+        except ProviderSelectionError as exc:
+            raise api_error(
+                _status_for_selection_error(exc.code),
+                exc.code,
+                exc.message,
+                provider_state_snapshot={
+                    "provider_state": exc.provider_state,
+                    "data_quality": exc.data_quality,
+                },
+            ) from exc
+
+        snapshot = selection.snapshot
+        provider_state = selection.provider_state
+        data_quality = selection.data_quality
     deterministic_run_id = (
         _deterministic_cadence_run_id(
             normalized_symbol=symbol.display,

@@ -71,6 +71,30 @@ class PersistenceRepository(Protocol):
     def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
         """Fetch due live predictions with no immutable outcome row yet."""
 
+    def fetch_latest_oos_occasion(
+        self, normalized_symbol: str, timeframe: str
+    ) -> datetime | None:
+        """Return the latest OOS reference close for one matrix cell."""
+
+    def oos_occasion_exists(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> bool:
+        """Return whether any row in the strict OOS namespace occupies an occasion."""
+
+    def count_oos_occasion_rows(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> int:
+        """Count strict-namespace rows occupying one OOS occasion."""
+
+    def fetch_oos_t0(self) -> datetime | None:
+        """Return the first exact, same-run baseline/candidate OOS pair close."""
+
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction outcome row."""
 
@@ -245,6 +269,52 @@ class InMemoryPersistenceRepository:
         ]
         due.sort(key=lambda row: str(row.get("horizon_end_utc", "")))
         return due[: max(0, int(limit))]
+
+    def fetch_latest_oos_occasion(
+        self, normalized_symbol: str, timeframe: str
+    ) -> datetime | None:
+        closes = [
+            _to_utc_datetime(row.get("reference_close_utc"))
+            for row in self._predictions.values()
+            if _is_oos_run_id(row.get("run_id"))
+            and row.get("normalized_symbol") == normalized_symbol
+            and row.get("timeframe") == timeframe
+            and row.get("reference_close_utc") is not None
+        ]
+        return max(closes, default=None)
+
+    def oos_occasion_exists(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> bool:
+        target = _to_utc_datetime(reference_close_utc)
+        return any(
+            _is_oos_run_id(row.get("run_id"))
+            and row.get("normalized_symbol") == normalized_symbol
+            and row.get("timeframe") == timeframe
+            and _same_timestamp(row.get("reference_close_utc"), target)
+            for row in self._predictions.values()
+        )
+
+    def count_oos_occasion_rows(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> int:
+        target = _to_utc_datetime(reference_close_utc)
+        return sum(
+            _is_oos_run_id(row.get("run_id"))
+            and row.get("normalized_symbol") == normalized_symbol
+            and row.get("timeframe") == timeframe
+            and _same_timestamp(row.get("reference_close_utc"), target)
+            for row in self._predictions.values()
+        )
+
+    def fetch_oos_t0(self) -> datetime | None:
+        return _oos_t0_from_rows(self._predictions.values())
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         prediction_id = str(row.get("prediction_id", ""))
@@ -802,6 +872,74 @@ class SupabasePersistenceRepository:
         self._mark_ok()
         return converted
 
+    def fetch_latest_oos_occasion(
+        self, normalized_symbol: str, timeframe: str
+    ) -> datetime | None:
+        row = self._run_required_oos_read(
+            "latest OOS occasion",
+            lambda cursor: _fetch_latest_oos_occasion_row(
+                cursor, normalized_symbol, timeframe
+            ),
+        )
+        value = _first_db_value(row)
+        return _to_utc_datetime(value) if value is not None else None
+
+    def oos_occasion_exists(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> bool:
+        row = self._run_required_oos_read(
+            "OOS occasion existence",
+            lambda cursor: _fetch_oos_occasion_existence_row(
+                cursor,
+                normalized_symbol,
+                timeframe,
+                reference_close_utc,
+            ),
+        )
+        return row is not None
+
+    def count_oos_occasion_rows(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> int:
+        row = self._run_required_oos_read(
+            "OOS occasion count",
+            lambda cursor: _fetch_oos_occasion_count_row(
+                cursor,
+                normalized_symbol,
+                timeframe,
+                reference_close_utc,
+            ),
+        )
+        return int(_first_db_value(row) or 0)
+
+    def fetch_oos_t0(self) -> datetime | None:
+        row = self._run_required_oos_read("OOS T0", _fetch_oos_t0_row)
+        value = _first_db_value(row)
+        return _to_utc_datetime(value) if value is not None else None
+
+    def _run_required_oos_read(self, label: str, operation):
+        if not self.maybe_can_attempt():
+            raise RuntimeError(f"SUPABASE_POSTGRES {label} failed: circuit open")
+        phase = "connect"
+        try:
+            with self._direct_connection() as conn:
+                with conn.cursor() as cursor:
+                    phase = "set_timeout"
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    phase = "query"
+                    row = operation(cursor)
+        except Exception as exc:
+            self.mark_unavailable()
+            raise RuntimeError(_postgres_error_message(label, phase, exc)) from None
+        self._mark_ok()
+        return row
+
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         if not self.maybe_can_attempt():
             raise RuntimeError(
@@ -1307,6 +1445,85 @@ class SupabaseRestRepository:
         existing = self._fetch_existing_outcome_ids(prediction_ids)
         return [dict(row) for row in rows if str(row.get("prediction_id", "")) not in existing]
 
+    def fetch_latest_oos_occasion(
+        self, normalized_symbol: str, timeframe: str
+    ) -> datetime | None:
+        rows = self._required_oos_rows(
+            params={
+                "select": "run_id,reference_close_utc",
+                "normalized_symbol": f"eq.{normalized_symbol}",
+                "timeframe": f"eq.{timeframe}",
+                "run_id": "like.oosb-*",
+                "order": "reference_close_utc.desc",
+            },
+            label="latest OOS occasion",
+        )
+        closes = [
+            _to_utc_datetime(row["reference_close_utc"])
+            for row in rows
+            if _is_oos_run_id(row.get("run_id")) and row.get("reference_close_utc")
+        ]
+        return max(closes, default=None)
+
+    def oos_occasion_exists(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> bool:
+        rows = self._required_oos_rows(
+            params={
+                "select": "run_id,reference_close_utc",
+                "normalized_symbol": f"eq.{normalized_symbol}",
+                "timeframe": f"eq.{timeframe}",
+                "reference_close_utc": f"eq.{_iso_for_query(reference_close_utc)}",
+                "run_id": "like.oosb-*",
+            },
+            label="OOS occasion existence",
+        )
+        return any(_is_oos_run_id(row.get("run_id")) for row in rows)
+
+    def count_oos_occasion_rows(
+        self,
+        normalized_symbol: str,
+        timeframe: str,
+        reference_close_utc: Any,
+    ) -> int:
+        rows = self._required_oos_rows(
+            params={
+                "select": "run_id",
+                "normalized_symbol": f"eq.{normalized_symbol}",
+                "timeframe": f"eq.{timeframe}",
+                "reference_close_utc": f"eq.{_iso_for_query(reference_close_utc)}",
+                "run_id": "like.oosb-*",
+            },
+            label="OOS occasion count",
+        )
+        return sum(_is_oos_run_id(row.get("run_id")) for row in rows)
+
+    def fetch_oos_t0(self) -> datetime | None:
+        rows = self._required_oos_rows(
+            params={
+                "select": (
+                    "prediction_id,run_id,normalized_symbol,timeframe,"
+                    "reference_close_utc,methodology_version"
+                ),
+                "run_id": "like.oosb-*",
+            },
+            label="OOS T0",
+        )
+        return _oos_t0_from_rows(rows)
+
+    def _required_oos_rows(
+        self, *, params: Mapping[str, str], label: str
+    ) -> list[dict]:
+        status, rows = self._run_rest(
+            lambda: self._request("GET", "predictions", params=dict(params))
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            raise RuntimeError(f"SUPABASE_REST {label} read failed")
+        return [dict(row) for row in rows if isinstance(row, Mapping)]
+
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         self._fallback.save_prediction_outcome(row)
         status, _ = self._run_rest(
@@ -1554,6 +1771,96 @@ def _fetch_run(cursor, run_id: str):
 
 def _set_local_statement_timeout(cursor, timeout_ms: int) -> None:
     cursor.execute(f"SET LOCAL statement_timeout = {int(timeout_ms)}")
+
+
+def _fetch_latest_oos_occasion_row(
+    cursor, normalized_symbol: str, timeframe: str
+):
+    cursor.execute(
+        """
+        SELECT max(reference_close_utc) AS reference_close_utc
+        FROM public.predictions
+        WHERE run_id ~ '^oosb-[0-9a-f]{32}$'
+          AND normalized_symbol = %(normalized_symbol)s
+          AND timeframe = %(timeframe)s
+        """,
+        {"normalized_symbol": normalized_symbol, "timeframe": timeframe},
+    )
+    return cursor.fetchone()
+
+
+def _fetch_oos_occasion_existence_row(
+    cursor,
+    normalized_symbol: str,
+    timeframe: str,
+    reference_close_utc: Any,
+):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM public.predictions
+        WHERE run_id ~ '^oosb-[0-9a-f]{32}$'
+          AND normalized_symbol = %(normalized_symbol)s
+          AND timeframe = %(timeframe)s
+          AND reference_close_utc = %(reference_close_utc)s
+        LIMIT 1
+        """,
+        {
+            "normalized_symbol": normalized_symbol,
+            "timeframe": timeframe,
+            "reference_close_utc": reference_close_utc,
+        },
+    )
+    return cursor.fetchone()
+
+
+def _fetch_oos_occasion_count_row(
+    cursor,
+    normalized_symbol: str,
+    timeframe: str,
+    reference_close_utc: Any,
+):
+    cursor.execute(
+        """
+        SELECT count(*)
+        FROM public.predictions
+        WHERE run_id ~ '^oosb-[0-9a-f]{32}$'
+          AND normalized_symbol = %(normalized_symbol)s
+          AND timeframe = %(timeframe)s
+          AND reference_close_utc = %(reference_close_utc)s
+        """,
+        {
+            "normalized_symbol": normalized_symbol,
+            "timeframe": timeframe,
+            "reference_close_utc": reference_close_utc,
+        },
+    )
+    return cursor.fetchone()
+
+
+def _fetch_oos_t0_row(cursor):
+    cursor.execute(
+        """
+        WITH qualifying_pairs AS (
+          SELECT run_id, normalized_symbol, timeframe, reference_close_utc
+          FROM public.predictions
+          WHERE run_id ~ '^oosb-[0-9a-f]{32}$'
+          GROUP BY run_id, normalized_symbol, timeframe, reference_close_utc
+          HAVING count(*) = 2
+             AND count(*) FILTER (
+               WHERE right(prediction_id, 9) = ':BASELINE'
+                 AND methodology_version = 'heuristic-v1-wave4b0'
+             ) = 1
+             AND count(*) FILTER (
+               WHERE right(prediction_id, 10) = ':CANDIDATE'
+                 AND methodology_version = 'distributional-v1'
+             ) = 1
+        )
+        SELECT min(reference_close_utc) AS t0
+        FROM qualifying_pairs
+        """
+    )
+    return cursor.fetchone()
 
 
 def _insert_prediction(
@@ -2215,6 +2522,71 @@ def _is_oos_arm_prediction_id(value: object) -> bool:
             value,
         )
     )
+
+
+def _is_oos_run_id(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and re.fullmatch(r"oosb-[0-9a-f]{32}", value)
+    )
+
+
+def _oos_t0_from_rows(rows) -> datetime | None:
+    groups: dict[tuple[object, object, object, object], list[Mapping[str, Any]]] = {}
+    for raw_row in rows:
+        if not isinstance(raw_row, Mapping) or not _is_oos_run_id(raw_row.get("run_id")):
+            continue
+        key = (
+            raw_row.get("run_id"),
+            raw_row.get("normalized_symbol"),
+            raw_row.get("timeframe"),
+            raw_row.get("reference_close_utc"),
+        )
+        groups.setdefault(key, []).append(raw_row)
+    qualifying: list[datetime] = []
+    for key, pair_rows in groups.items():
+        if len(pair_rows) != 2:
+            continue
+        baseline = sum(
+            _oos_arm(row) == "BASELINE"
+            and row.get("methodology_version") == "heuristic-v1-wave4b0"
+            for row in pair_rows
+        )
+        candidate = sum(
+            _oos_arm(row) == "CANDIDATE"
+            and row.get("methodology_version") == "distributional-v1"
+            for row in pair_rows
+        )
+        if baseline == candidate == 1 and key[3] is not None:
+            qualifying.append(_to_utc_datetime(key[3]))
+    return min(qualifying, default=None)
+
+
+def _oos_arm(row: Mapping[str, Any]) -> str | None:
+    explicit = row.get("arm")
+    if explicit in {"BASELINE", "CANDIDATE"}:
+        return str(explicit)
+    prediction_id = row.get("prediction_id")
+    if isinstance(prediction_id, str):
+        suffix = prediction_id.rsplit(":", maxsplit=1)[-1]
+        if suffix in {"BASELINE", "CANDIDATE"}:
+            return suffix
+    return None
+
+
+def _first_db_value(row: Any) -> Any:
+    if isinstance(row, Mapping):
+        return next(iter(row.values()), None)
+    if isinstance(row, (tuple, list)):
+        return row[0] if row else None
+    return row
+
+
+def _same_timestamp(left: Any, right: Any) -> bool:
+    try:
+        return _to_utc_datetime(left) == _to_utc_datetime(right)
+    except (TypeError, ValueError):
+        return False
 
 
 def _prediction_origin_matches(

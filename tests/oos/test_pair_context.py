@@ -44,8 +44,15 @@ SKILL_EVIDENCE = {
 
 def _pair(*, candidate_features=None):
     snapshot = make_snapshot(provider="binance")
+    selection = _selection(snapshot)(
+        type("Symbol", (), {"display": snapshot.normalized_symbol})(),
+        snapshot.timeframe,
+        settings=Settings(data_mode="fixture"),
+    )
     return build_oos_pair_context(
         market_snapshot=snapshot,
+        provider_state=selection.provider_state,
+        data_quality=selection.data_quality,
         resolved_skill_evidence=SKILL_EVIDENCE,
         information_cutoff=snapshot.as_of_utc,
         decision_band_frac=0.002,
@@ -304,9 +311,16 @@ def test_t6_one_cutoff_bounds_every_admitted_candidate_feature() -> None:
 
 def test_t7_feature_after_cutoff_invalidates_whole_pair() -> None:
     snapshot = make_snapshot(provider="binance")
+    selection = _selection(snapshot)(
+        type("Symbol", (), {"display": snapshot.normalized_symbol})(),
+        snapshot.timeframe,
+        settings=Settings(data_mode="fixture"),
+    )
     with pytest.raises(PairInvalidError, match="after the information cutoff"):
         build_oos_pair_context(
             market_snapshot=snapshot,
+            provider_state=selection.provider_state,
+            data_quality=selection.data_quality,
             resolved_skill_evidence=SKILL_EVIDENCE,
             information_cutoff=snapshot.as_of_utc,
             decision_band_frac=0.002,
@@ -447,3 +461,68 @@ def test_t12_ordinary_identity_and_response_payload_are_byte_identical(monkeypat
     explicit_bytes = json.dumps(explicit, sort_keys=True, separators=(",", ":")).encode()
     assert omitted_bytes == explicit_bytes
     assert hashlib.sha256(omitted_bytes).digest() == hashlib.sha256(explicit_bytes).digest()
+
+
+@pytest.mark.parametrize(
+    ("arm", "methodology"),
+    (
+        (OOSArm.BASELINE, METHODOLOGY_VERSION),
+        (OOSArm.CANDIDATE, DISTRIBUTIONAL_METHODOLOGY_VERSION),
+    ),
+)
+def test_pair_context_preserves_quant_result_and_skips_selection(
+    monkeypatch, arm, methodology
+) -> None:
+    pair = _pair()
+    calls = 0
+    equivalent_selection = _selection(pair.snapshot)
+
+    def counting_selection(symbol, timeframe, *, settings):
+        nonlocal calls
+        calls += 1
+        return equivalent_selection(symbol, timeframe, settings=settings)
+
+    monkeypatch.setattr(analysis_service, "select_market_data", counting_selection)
+    monkeypatch.setattr(
+        analysis_service,
+        "get_cached_skill_evidence",
+        lambda _timeframe: SKILL_EVIDENCE,
+    )
+    paired = analysis_service.analyze_request(
+        AnalysisRequest(symbol="BTC", timeframe="4H"),
+        settings=Settings(data_mode="fixture"),
+        run_store=InMemoryRunStore(),
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+        methodology_version=methodology,
+        pair_context=pair,
+        arm=arm,
+    )
+    assert calls == 0
+    ordinary = analysis_service.analyze_request(
+        AnalysisRequest(symbol="BTC", timeframe="4H"),
+        settings=Settings(data_mode="fixture"),
+        run_store=InMemoryRunStore(),
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+        methodology_version=methodology,
+    )
+    assert calls == 1
+    try:
+        for key in (
+            "market_features",
+            "liquidity_state",
+            "execution_realism",
+            "quant_compute_state",
+            "epistemic_sufficiency_state",
+            "probability_state",
+            "horizon_timeout_state",
+            "risk_arbiter_state",
+            "tail_risk_state",
+            "calibration_state",
+            "score_stack",
+            "trend_summary",
+            "gate_result",
+        ):
+            assert paired[key] == ordinary[key]
+    finally:
+        analysis_service._pop_prediction_persistence(paired)  # noqa: SLF001
+        analysis_service._pop_prediction_persistence(ordinary)  # noqa: SLF001
