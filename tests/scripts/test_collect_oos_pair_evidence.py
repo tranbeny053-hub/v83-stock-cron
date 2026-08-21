@@ -250,6 +250,131 @@ def test_invalid_live_reference_window_refuses_backfill_without_write(
     assert not persisted
 
 
+def test_earlier_qualifying_reference_is_blocked_by_no_backfill_guard() -> None:
+    t0 = datetime(2026, 8, 21, 4, tzinfo=UTC)
+    now = t0 + timedelta(minutes=15)
+    occasion_reads = []
+    persisted = []
+
+    class Repository:
+        @staticmethod
+        def fetch_latest_oos_occasion(symbol, timeframe):
+            return None if (symbol, timeframe) == TARGET_CELL else now
+
+        @staticmethod
+        def count_oos_occasion_rows(symbol, timeframe, reference):
+            occasion_reads.append((symbol, timeframe, reference))
+            return 0
+
+    def select(symbol, timeframe, *, settings):
+        del settings
+        assert (symbol.display, timeframe) == TARGET_CELL
+        return _selection_at(
+            symbol=symbol.display,
+            timeframe=timeframe,
+            reference_close=t0 - timedelta(minutes=15),
+            as_of=now,
+        )
+
+    dependencies = collector.CollectorDependencies(
+        select=select,
+        analyze=lambda _request, **_kwargs: {"run_id": "unexpected"},
+        persist=lambda payload, _repository: (
+            persisted.append(payload) or {"overall": "OK"}
+        ),
+        repository_factory=lambda _settings: Repository(),
+        verify_freeze=lambda: None,
+        now_utc=lambda: now,
+    )
+
+    result = collector.run_collector(
+        _write_options(),
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+
+    assert result["final_classification"] == "PARTIAL_FAILURE"
+    assert result["occasions_inserted"] == 0
+    assert result["cells"][0]["classification"] == "BACKFILL_REFUSED"
+    assert not occasion_reads
+    assert not persisted
+
+
+def test_second_run_on_same_bar_is_classified_occupied_without_persistence() -> None:
+    now = datetime(2026, 8, 21, 4, 15, tzinfo=UTC)
+    previous_due = now - collector.PERIOD_BY_TIMEFRAME[TARGET_CELL[1]]
+    occupied_references = set()
+    persistence_calls = []
+
+    class Repository:
+        @staticmethod
+        def fetch_latest_oos_occasion(symbol, timeframe):
+            return previous_due if (symbol, timeframe) == TARGET_CELL else now
+
+        @staticmethod
+        def count_oos_occasion_rows(symbol, timeframe, reference):
+            assert (symbol, timeframe) == TARGET_CELL
+            return 2 if reference in occupied_references else 0
+
+    def select(symbol, timeframe, *, settings):
+        del settings
+        assert (symbol.display, timeframe) == TARGET_CELL
+        return _selection_at(
+            symbol=symbol.display,
+            timeframe=timeframe,
+            reference_close=now,
+            as_of=now,
+        )
+
+    def analyze(request, *, pair_context, **_kwargs):
+        return {
+            "run_id": pair_context.run_id,
+            "symbol": request.symbol,
+            "timeframe": request.timeframe,
+        }
+
+    def persist(payload, repository):
+        assert isinstance(repository, Repository)
+        persistence_calls.append(
+            (payload["run_id"], payload["symbol"], payload["timeframe"])
+        )
+        occupied_references.add(now)
+        return {"overall": "OK"}
+
+    dependencies = collector.CollectorDependencies(
+        select=select,
+        resolve_skill=lambda _timeframe: {"verdict": "INSUFFICIENT_EVIDENCE"},
+        analyze=analyze,
+        persist=persist,
+        repository_factory=lambda _settings: Repository(),
+        verify_freeze=lambda: None,
+        now_utc=lambda: now,
+    )
+    options = collector.CollectorOptions(
+        dry_run=False,
+        confirm_write=collector.WRITE_CONFIRMATION,
+        max_occasions=1,
+    )
+
+    first = collector.run_collector(
+        options,
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+    calls_after_first = list(persistence_calls)
+    second = collector.run_collector(
+        options,
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+
+    assert first["cells"][0]["classification"] == "INSERTED"
+    assert len(calls_after_first) == 1
+    assert persistence_calls == calls_after_first
+    assert second["occasions_inserted"] == 0
+    assert second["cells"][0]["classification"] == "OCCASION_EXISTS"
+
+
 def test_one_selection_and_one_shared_selection_state_per_occasion() -> None:
     now = datetime(2026, 8, 20, 12, tzinfo=UTC)
     selections = []
@@ -459,7 +584,7 @@ def test_max_one_consumes_attempt_when_first_due_selection_fails() -> None:
     assert all(cell["classification"] == "SKIPPED_CAP" for cell in result["cells"][1:])
 
 
-def test_workflow_is_manual_only_and_dry_by_default() -> None:
+def test_workflow_has_preregistered_schedule_and_manual_defaults() -> None:
     path = (
         Path(__file__).resolve().parents[2]
         / ".github/workflows/oos-pair-evidence.yml"
@@ -480,11 +605,26 @@ def test_workflow_is_manual_only_and_dry_by_default() -> None:
         ).stdout
     )
     triggers = parsed["on"]
+    assert triggers["schedule"] == [{"cron": "7,22,37,52 * * * *"}]
     assert "workflow_dispatch" in triggers
-    for forbidden in ("schedule", "push", "pull_request", "repository_dispatch"):
+    for forbidden in ("push", "pull_request", "repository_dispatch"):
         assert forbidden not in triggers
     inputs = triggers["workflow_dispatch"]["inputs"]
     assert inputs["dry_run"]["default"] is True
     assert inputs["max_occasions"]["default"] == 6
-    run_command = parsed["jobs"]["collect"]["steps"][-1]["run"]
-    assert "--max-occasions ${{ inputs.max_occasions }}" in run_command
+    scheduled_step, manual_step = parsed["jobs"]["collect"]["steps"][-2:]
+    assert scheduled_step["if"] == "github.event_name == 'schedule'"
+    assert scheduled_step["env"]["UCPE_OOS_PAIR_EVIDENCE_ENABLED"] == "true"
+    assert "--dry-run false" in scheduled_step["run"]
+    assert "--max-occasions 6" in scheduled_step["run"]
+    assert "--confirm-write WRITE-OOS-PAIR-EVIDENCE" in scheduled_step["run"]
+    assert manual_step["if"] == "github.event_name == 'workflow_dispatch'"
+    assert manual_step["env"]["UCPE_OOS_PAIR_EVIDENCE_ENABLED"] == (
+        "${{ inputs.dry_run == false && 'true' || 'false' }}"
+    )
+    assert "--dry-run ${{ inputs.dry_run }}" in manual_step["run"]
+    assert "--max-occasions ${{ inputs.max_occasions }}" in manual_step["run"]
+    assert (
+        "--confirm-write ${{ inputs.dry_run == false && "
+        "'WRITE-OOS-PAIR-EVIDENCE' || 'DRY-RUN' }}"
+    ) in manual_step["run"]
