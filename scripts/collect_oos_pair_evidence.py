@@ -65,6 +65,7 @@ PERIOD_BY_TIMEFRAME = {
 class CollectorOptions:
     dry_run: bool = True
     confirm_write: str = ""
+    max_occasions: int = MAX_OCCASIONS_PER_RUN
 
 
 @dataclass(frozen=True)
@@ -91,12 +92,28 @@ def parse_bool(value: str) -> bool:
     raise argparse.ArgumentTypeError("expected exactly true or false")
 
 
+def parse_positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("expected an integer of at least 1")
+    return parsed
+
+
 def parse_args(argv: Sequence[str] | None = None) -> CollectorOptions:
     parser = argparse.ArgumentParser(description="Collect bounded OOS pair evidence.")
     parser.add_argument("--dry-run", type=parse_bool, default=True)
     parser.add_argument("--confirm-write", default="")
+    parser.add_argument(
+        "--max-occasions",
+        type=parse_positive_int,
+        default=MAX_OCCASIONS_PER_RUN,
+    )
     args = parser.parse_args(argv)
-    return CollectorOptions(dry_run=args.dry_run, confirm_write=args.confirm_write)
+    return CollectorOptions(
+        dry_run=args.dry_run,
+        confirm_write=args.confirm_write,
+        max_occasions=args.max_occasions,
+    )
 
 
 def run_collector(
@@ -143,10 +160,10 @@ def run_collector(
     except Exception:
         return _report(options, enabled=True, failed=1, classification="READ_UNAVAILABLE")
 
-    inserted = skipped = orphans = failed = selections = 0
+    attempted = inserted = skipped = orphans = failed = selections = 0
     cells: list[dict[str, object]] = []
     for symbol_text, timeframe in MATRIX:
-        if inserted >= MAX_OCCASIONS_PER_RUN:
+        if attempted >= options.max_occasions:
             skipped += 1
             cells.append(_cell(symbol_text, timeframe, "SKIPPED_CAP"))
             continue
@@ -161,6 +178,7 @@ def run_collector(
             skipped += 1
             cells.append(_cell(symbol_text, timeframe, "NOT_DUE"))
             continue
+        attempted += 1
         try:
             selection = dependencies.select(
                 normalize_symbol(symbol_text), timeframe, settings=settings

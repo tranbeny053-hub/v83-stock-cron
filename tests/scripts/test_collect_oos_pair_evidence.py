@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -98,6 +100,26 @@ def test_dry_run_writes_nothing() -> None:
         dependencies=dependencies,
     )
     assert result["final_classification"] == "DRY_RUN"
+
+
+def test_freeze_mismatch_writes_nothing() -> None:
+    dependencies = collector.CollectorDependencies(
+        persist=lambda *_args: pytest.fail("freeze mismatch attempted persistence"),
+        repository_factory=lambda _settings: pytest.fail("freeze mismatch constructed repository"),
+        verify_freeze=lambda: (_ for _ in ()).throw(RuntimeError("mismatch")),
+    )
+    result = collector.run_collector(
+        _write_options(),
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+    assert result["final_classification"] == "FREEZE_MISMATCH"
+
+
+@pytest.mark.parametrize("value", ("0", "-1"))
+def test_max_occasions_rejects_values_below_one(value) -> None:
+    with pytest.raises(SystemExit):
+        collector.parse_args(["--max-occasions", value])
 
 
 def test_historical_reference_is_not_current_live_snapshot() -> None:
@@ -300,11 +322,12 @@ def test_one_selection_and_one_shared_selection_state_per_occasion() -> None:
         verify_freeze=lambda: None,
         now_utc=lambda: now,
     )
+    options = collector.parse_args(
+        ["--dry-run", "false", "--confirm-write", collector.WRITE_CONFIRMATION]
+    )
+    assert options.max_occasions == collector.MAX_OCCASIONS_PER_RUN == 6
     result = collector.run_collector(
-        collector.CollectorOptions(
-            dry_run=False,
-            confirm_write=collector.WRITE_CONFIRMATION,
-        ),
+        options,
         environ={
             collector.ENABLE_ENV: "true",
             "SUPABASE_DB_URL": "postgresql://example.invalid/test",
@@ -313,6 +336,7 @@ def test_one_selection_and_one_shared_selection_state_per_occasion() -> None:
     )
 
     assert result["occasions_inserted"] == len(collector.MATRIX)
+    assert result["predictions_inserted"] == collector.MAX_PREDICTIONS_PER_RUN
     assert len(selections) == len(collector.MATRIX)
     assert len(analyses) == len(collector.MATRIX) * 2
     assert len(persisted) == len(collector.MATRIX)
@@ -322,11 +346,145 @@ def test_one_selection_and_one_shared_selection_state_per_occasion() -> None:
         assert baseline[3] is candidate[3]
 
 
+def test_max_one_attempts_only_first_due_matrix_cell() -> None:
+    now = datetime(2026, 8, 20, 12, tzinfo=UTC)
+    latest_reads = []
+    analyses = []
+    persisted = []
+
+    class Repository:
+        @staticmethod
+        def fetch_latest_oos_occasion(symbol, timeframe):
+            latest_reads.append((symbol, timeframe))
+            return None
+
+        @staticmethod
+        def count_oos_occasion_rows(_symbol, _timeframe, _reference):
+            return 0
+
+    def select(symbol, timeframe, *, settings):
+        del settings
+        return _selection_at(
+            symbol=symbol.display,
+            timeframe=timeframe,
+            reference_close=now,
+            as_of=now,
+        )
+
+    def analyze(request, *, pair_context, arm, **_kwargs):
+        analyses.append((request.symbol, request.timeframe, arm))
+        return {
+            "run_id": pair_context.run_id,
+            "symbol": request.symbol,
+            "timeframe": request.timeframe,
+        }
+
+    def persist(payload, _repository):
+        persisted.append((payload["symbol"], payload["timeframe"]))
+        return {"overall": "OK"}
+
+    dependencies = collector.CollectorDependencies(
+        select=select,
+        resolve_skill=lambda _timeframe: {"verdict": "INSUFFICIENT_EVIDENCE"},
+        analyze=analyze,
+        persist=persist,
+        repository_factory=lambda _settings: Repository(),
+        verify_freeze=lambda: None,
+        now_utc=lambda: now,
+    )
+    result = collector.run_collector(
+        collector.CollectorOptions(
+            dry_run=False,
+            confirm_write=collector.WRITE_CONFIRMATION,
+            max_occasions=1,
+        ),
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+
+    expected = collector.MATRIX[0]
+    assert expected == ("BTC/USDT", "15m")
+    assert latest_reads == [expected]
+    assert {(symbol, timeframe) for symbol, timeframe, _arm in analyses} == {expected}
+    assert len(analyses) == 2
+    assert persisted == [expected]
+    assert result["occasions_inserted"] == 1
+    assert result["predictions_inserted"] == 2
+    assert result["predictions_inserted"] <= 2
+    assert result["cells"][0]["symbol"] == expected[0]
+    assert result["cells"][0]["timeframe"] == expected[1]
+    assert result["cells"][0]["classification"] == "INSERTED"
+    assert all(cell["classification"] == "SKIPPED_CAP" for cell in result["cells"][1:])
+
+
+def test_max_one_consumes_attempt_when_first_due_selection_fails() -> None:
+    now = datetime(2026, 8, 20, 12, tzinfo=UTC)
+    selections = []
+    persisted = []
+
+    class Repository:
+        @staticmethod
+        def fetch_latest_oos_occasion(_symbol, _timeframe):
+            return None
+
+    def select(symbol, timeframe, *, settings):
+        del settings
+        selections.append((symbol.display, timeframe))
+        raise RuntimeError("selection failed")
+
+    dependencies = collector.CollectorDependencies(
+        select=select,
+        persist=lambda payload, _repository: (
+            persisted.append(payload) or {"overall": "OK"}
+        ),
+        repository_factory=lambda _settings: Repository(),
+        verify_freeze=lambda: None,
+        now_utc=lambda: now,
+    )
+    result = collector.run_collector(
+        collector.CollectorOptions(
+            dry_run=False,
+            confirm_write=collector.WRITE_CONFIRMATION,
+            max_occasions=1,
+        ),
+        environ=_write_environ(),
+        dependencies=dependencies,
+    )
+
+    expected = collector.MATRIX[0]
+    assert expected == ("BTC/USDT", "15m")
+    assert selections == [expected]
+    assert not persisted
+    assert result["cells"][0]["classification"] == "SELECTION_FAILED"
+    assert all(cell["classification"] == "SKIPPED_CAP" for cell in result["cells"][1:])
+
+
 def test_workflow_is_manual_only_and_dry_by_default() -> None:
-    text = (
+    path = (
         Path(__file__).resolve().parents[2]
         / ".github/workflows/oos-pair-evidence.yml"
-    ).read_text(encoding="utf-8")
-    assert "workflow_dispatch:" in text
-    assert "schedule:" not in text
-    assert "default: true" in text
+    )
+    parsed = json.loads(
+        subprocess.run(
+            [
+                "ruby",
+                "-rjson",
+                "-ryaml",
+                "-e",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV[0]), aliases: true))",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    triggers = parsed["on"]
+    assert "workflow_dispatch" in triggers
+    for forbidden in ("schedule", "push", "pull_request", "repository_dispatch"):
+        assert forbidden not in triggers
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert inputs["dry_run"]["default"] is True
+    assert inputs["max_occasions"]["default"] == 6
+    run_command = parsed["jobs"]["collect"]["steps"][-1]["run"]
+    assert "--max-occasions ${{ inputs.max_occasions }}" in run_command
