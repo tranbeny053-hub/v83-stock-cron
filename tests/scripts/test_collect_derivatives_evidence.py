@@ -1133,5 +1133,5 @@ def test_manual_workflow_contract_and_existing_integrity_workflow_unchanged() ->
 
     integrity = (ROOT / ".github/workflows/source-integrity-guard.yml").read_text()
     assert 'cron: "27 */2 * * *"' in integrity
-    assert "actions/checkout@v4" in integrity
-    assert "actions/setup-python@v5" in integrity
+    assert "actions/checkout@v7" in integrity
+    assert "actions/setup-python@v7" in integrity

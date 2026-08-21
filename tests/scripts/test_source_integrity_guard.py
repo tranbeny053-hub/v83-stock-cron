@@ -1008,8 +1008,8 @@ def test_workflow_is_scheduled_read_only_unsecreted_and_unchanged() -> None:
         "group: source-integrity-guard",
         "cancel-in-progress: false",
         "timeout-minutes: 10",
-        "actions/checkout@v4",
-        "actions/setup-python@v5",
+        "actions/checkout@v7",
+        "actions/setup-python@v7",
         'python-version: "3.11"',
         "python scripts/source_integrity_guard.py",
     ):
