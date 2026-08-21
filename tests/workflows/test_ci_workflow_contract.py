@@ -313,10 +313,12 @@ def test_verification_steps_are_unchanged() -> None:
         "python scripts/check_no_full_article_body.py",
         "python scripts/check_no_secrets.py",
     ], "the ordered CI verification commands changed"
+    # Current stable Node-24-native majors, measured from each action.yml runs.using field.
+    # This stays strict so future bumps are reviewed rather than drifting in.
     assert [step for step in steps if "uses" in step] == [
-        {"uses": "actions/checkout@v4"},
+        {"uses": "actions/checkout@v7"},
         {
-            "uses": "actions/setup-python@v5",
+            "uses": "actions/setup-python@v7",
             "with": {"python-version": "3.11"},
         },
     ], "checkout or Python setup steps changed"
