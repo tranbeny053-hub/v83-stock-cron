@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from crypto_probability_engine.persistence.repository import (
     InMemoryPersistenceRepository,
 )
 
 REFERENCE = datetime(2026, 8, 20, 8, tzinfo=UTC)
+T0 = datetime(2026, 8, 21, 4, tzinfo=UTC)
 
 
 def _row(
@@ -15,6 +16,7 @@ def _row(
     methodology: str,
     *,
     origin: str = "SCHEDULED_SHADOW_EVIDENCE",
+    reference_close: datetime = REFERENCE,
 ) -> dict:
     run_id = f"oosb-{run_suffix * 32}"
     return {
@@ -22,7 +24,7 @@ def _row(
         "run_id": run_id,
         "normalized_symbol": "BTC/USDT",
         "timeframe": "1H",
-        "reference_close_utc": REFERENCE,
+        "reference_close_utc": reference_close,
         "methodology_version": methodology,
         "prediction_origin": origin,
     }
@@ -69,3 +71,34 @@ def test_t0_rejects_candidate_methodology_on_baseline_arm() -> None:
     repository.save_prediction(_row("d", "CANDIDATE", "distributional-v1"))
 
     assert repository.fetch_oos_t0() is None
+
+
+def test_t0_does_not_move_when_later_qualifying_pairs_are_inserted() -> None:
+    repository = InMemoryPersistenceRepository()
+
+    for arm, methodology in (
+        ("BASELINE", "heuristic-v1-wave4b0"),
+        ("CANDIDATE", "distributional-v1"),
+    ):
+        repository.save_prediction(
+            _row("e", arm, methodology, reference_close=T0)
+        )
+    assert repository.fetch_oos_t0() == T0
+
+    for suffix, later_reference in (
+        ("f", T0 + timedelta(minutes=15)),
+        ("0", T0 + timedelta(hours=1)),
+    ):
+        for arm, methodology in (
+            ("BASELINE", "heuristic-v1-wave4b0"),
+            ("CANDIDATE", "distributional-v1"),
+        ):
+            repository.save_prediction(
+                _row(
+                    suffix,
+                    arm,
+                    methodology,
+                    reference_close=later_reference,
+                )
+            )
+        assert repository.fetch_oos_t0() == T0

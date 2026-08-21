@@ -1,6 +1,8 @@
-name: OOS pair evidence (manual only)
+name: OOS pair evidence (scheduled + manual)
 
 "on":
+  schedule:
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -24,7 +26,18 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - name: Run bounded collector
+      - name: Run scheduled bounded collector (writing enabled)
+        if: github.event_name == 'schedule'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          UCPE_OOS_PAIR_EVIDENCE_ENABLED: "true"
+        run: >-
+          PYTHONPATH=src python scripts/collect_oos_pair_evidence.py
+          --dry-run false
+          --max-occasions 6
+          --confirm-write WRITE-OOS-PAIR-EVIDENCE
+      - name: Run manually dispatched bounded collector (input driven)
+        if: github.event_name == 'workflow_dispatch'
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           UCPE_OOS_PAIR_EVIDENCE_ENABLED: ${{ inputs.dry_run == false && 'true' || 'false' }}
