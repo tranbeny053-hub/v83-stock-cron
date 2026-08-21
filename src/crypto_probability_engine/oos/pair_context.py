@@ -51,6 +51,8 @@ class OOSArmContext:
     arm: OOSArm
     run_id: str
     market_snapshot: MarketSnapshot
+    provider_state: Mapping[str, Any]
+    data_quality: Mapping[str, Any]
     resolved_skill_evidence: Mapping[str, Any]
     information_cutoff: datetime
     target: PairTarget
@@ -85,6 +87,8 @@ class OOSPairContext:
 
     run_id: str
     market_snapshot: MarketSnapshot
+    provider_state: Mapping[str, Any]
+    data_quality: Mapping[str, Any]
     resolved_skill_evidence: Mapping[str, Any]
     information_cutoff: datetime
     target: PairTarget
@@ -110,6 +114,8 @@ class OOSPairContext:
             arm=resolved_arm,
             run_id=self.run_id,
             market_snapshot=self.market_snapshot,
+            provider_state=self.provider_state,
+            data_quality=self.data_quality,
             resolved_skill_evidence=self.resolved_skill_evidence,
             information_cutoff=self.information_cutoff,
             target=self.target,
@@ -123,6 +129,8 @@ _EMPTY_FEATURES: Mapping[str, CandidateFeature] = MappingProxyType({})
 def build_oos_pair_context(
     *,
     market_snapshot: MarketSnapshot,
+    provider_state: Mapping[str, Any],
+    data_quality: Mapping[str, Any],
     resolved_skill_evidence: Mapping[str, Any],
     information_cutoff: datetime,
     decision_band_frac: float,
@@ -136,6 +144,10 @@ def build_oos_pair_context(
 
     if not isinstance(market_snapshot, MarketSnapshot):
         raise PairInvalidError("A MarketSnapshot is required for an OOS pair.")
+    if not isinstance(provider_state, Mapping):
+        raise PairInvalidError("Provider state is required for an OOS pair.")
+    if not isinstance(data_quality, Mapping):
+        raise PairInvalidError("Data quality is required for an OOS pair.")
     if not isinstance(resolved_skill_evidence, Mapping):
         raise PairInvalidError("Resolved skill evidence is required for an OOS pair.")
     cutoff = _aware_datetime(information_cutoff, "information cutoff")
@@ -147,6 +159,8 @@ def build_oos_pair_context(
     return OOSPairContext(
         run_id=run_id,
         market_snapshot=market_snapshot,
+        provider_state=provider_state,
+        data_quality=data_quality,
         resolved_skill_evidence=resolved_skill_evidence,
         information_cutoff=cutoff,
         target=target,
