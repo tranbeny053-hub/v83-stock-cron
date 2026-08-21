@@ -209,6 +209,20 @@ validated.
                occasion after activation (§5A.4). GOVERNS THE LATTICE ORIGIN AND T_close.
                OBSERVED, never chosen; committed to Git within the first sampling cycle.
 
+               OBSERVED AND RECORDED. The T4 canary produced one qualifying pair:
+                 T0                    2026-08-21T04:00:00Z
+                 occasion              BTC/USDT, 15m, one oosb- run, BASELINE + CANDIDATE
+                 T_freeze -> T0 gap    16h 24m 04s   (no leakage; the candidate was already frozen)
+
+               T_close derives by formula, it is not chosen:
+                 T_close = T0 + max_t(22 * E_t) = T0 + 528 h = T0 + 22 days
+                         = 2026-09-12T04:00:00Z          (driven by 4H, E_t = 24 h)
+
+               T0 IS IMMUTABLE ONCE SET. It is min(reference_close_utc) over qualifying pairs, and
+               the collector refuses backfill, so every later occasion has a strictly greater
+               reference_close_utc and the minimum cannot move. T_close may not be extended,
+               shortened or re-declared.
+
 `T_freeze <= T0`. Anchoring `T_close` to `T0` ensures activation delay cannot silently consume the
 holdout. The `T0 - T_freeze` gap is recorded and reported: it creates **no leakage**, because the
 candidate is already frozen, but a long delay is visibility-relevant. If no eligible occasion ever
