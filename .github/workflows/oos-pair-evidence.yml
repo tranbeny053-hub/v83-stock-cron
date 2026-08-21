@@ -8,6 +8,11 @@ name: OOS pair evidence (manual only)
         required: true
         type: boolean
         default: true
+      max_occasions:
+        description: Maximum due occasions attempted in MATRIX order
+        required: true
+        type: number
+        default: 6
 
 jobs:
   collect:
@@ -26,4 +31,5 @@ jobs:
         run: >-
           PYTHONPATH=src python scripts/collect_oos_pair_evidence.py
           --dry-run ${{ inputs.dry_run }}
+          --max-occasions ${{ inputs.max_occasions }}
           --confirm-write ${{ inputs.dry_run == false && 'WRITE-OOS-PAIR-EVIDENCE' || 'DRY-RUN' }}
