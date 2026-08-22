@@ -1,30 +1,94 @@
 # STATE
 
-Updated: 2026-08-17
+Updated: 2026-08-22
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED_AWAITING_OWNER (DEPLOYED and pinned locally; stopped before the pin push)
-CURRENT_MILESTONE=Remaining Deployed Browser Evidence Closure (started 2026-08-17)
-CURRENT_BRANCH=chore/deploy-pin-session-origin (unpushed); origin/main = 9933615
-LAST_GREEN_SHA=0237e8e
-LAST_VERIFY=PASS 822 passed, ruff clean, 3/3 scanners · 2026-08-17
+LOOP_STATE=IDLE — no lane is open. The Change B tranche-1 holdout accumulates unattended.
+CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
+CURRENT_BRANCH=chore/state-reconcile (local, unpushed), branched from origin/main = e910751
+  exactly. Its only content is this STATE reconciliation. origin/main = e910751.
+LAST_GREEN_SHA=e910751
+LAST_VERIFY=PASS ruff ok | 993 passed | schemas+smoke ok | scanners 3/3 · e910751 · 2026-08-22
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=2 open — (1) push/PR the pin branch to origin [T3]; (2) configure the HF secret
-  CONTROLLED_SMOKE_CODE_HASH [T3], which is what finally activates the feature; then the
-  one-shot T4 browser smoke. DEPLOY IS DONE: 9933615 is live. A PIN_DRIFT window is open until
-  the pin lands on GitHub main — do not dispatch the source-integrity guard before then.
-NEXT_ACTION=owner pushes the pin branch, then configures the HF secret; nothing is half-applied
+OWNER_BOUNDARY=1 open — push this reconciliation branch to origin [T3]. Every earlier
+  authorization is CONSUMED and must not be reused. Standing prohibition while the holdout
+  runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model change,
+  no re-freeze.
+NEXT_ACTION=WAIT until T_close = 2026-09-12T04:00:00Z, then run the V1_QUANT_CONTRACT.md
+  section 5A evaluation ONCE. Nothing else is pending.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
 
+## Current status — 2026-08-22
+
+`STATE.md` on `main` had not moved since `439c601` (2026-08-17) while **fourteen PRs, #8
+through #21, merged**. This section reconciles the top of the file to what is provable today.
+It replaces the recovery block and the roadmap only. **Everything from *Operating model V2 —
+anchored 2026-08-16* downwards is the historical record as written between 2026-08-15 and
+2026-08-17 and is preserved verbatim; where it conflicts with this section, this section
+governs.**
+
+**Proven this session — deterministic, local, read-only:**
+- `origin/main` = `e910751` — the PR #21 merge commit, dated 2026-08-22T22:55:23+07:00.
+- `./verify.sh` on that exact tree: **PASS** — ruff clean, **993 passed** in 6.05 s,
+  schemas + smoke ok, scanners **3/3**.
+- **Nothing is deployed from this work.** `git ls-remote hf refs/heads/main` = `9933615`.
+  That SHA is a strict ancestor of `origin/main`, which is **33 commits (15 first-parent)
+  ahead**, so a future deploy would be a fast-forward. No deploy is authorized.
+- **No `PIN_DRIFT`.** `ops/hf_runtime_baseline.json` carries `hf_main_sha = 9933615`, which
+  equals live `hf/main` exactly.
+- `ci.yml` triggers on `push` to `main` **and** on `pull_request`, so merges to `main` are
+  now verified in the clean room on the merge commit itself.
+- Node-24-native pins (`actions/checkout@v7`, `actions/setup-python@v7`) are in place on five
+  workflows: `ci.yml`, `source-integrity-guard.yml`, `derivatives-evidence-cadence.yml`,
+  `derivatives-cadence-readiness-diagnostic.yml`, `derivatives-registry-diagnostic.yml`.
+  **Two are deliberately still on Node-20-era pins** — `oos-pair-evidence.yml` and
+  `resolve-outcomes.yml` (`@v4`/`@v5`) — frozen for the duration of the holdout.
+- The holdout instants are tracked on `main` in `V1_QUANT_CONTRACT.md` §5A.2:
+  `T_freeze = 2026-08-20T11:35:56Z` · `T0 = 2026-08-21T04:00:00Z` ·
+  `T_close = 2026-09-12T04:00:00Z` (`= T0 + 528 h`, driven by 4H). The collector cadence
+  `7,22,37,52 * * * *` is enabled in `.github/workflows/oos-pair-evidence.yml` on `main`.
+
+**Recorded in Git during 2026-08-18…22, not re-verified in this session.** These lanes closed
+on GitHub-side evidence (`gh` is not installed on this machine and no browser check was run
+here), so they are reported as *recorded*, not as *re-proven today*: CI-1 `fd4684c` ·
+CI-2 `a950a0f` · CI-3 `9b36f50` (guard dispatch `HEALTHY`) · CI-4 `f3daffd`
+(`AVAILABLE_COMPLETE`) · CI-5 `68592f2` · TEST-1 `9605863` · GOV-1 (a branch ruleset on `main`
+enforcing pull-request + CI; `main` had been unprotected) · CI-6 `e910751`.
+
+**`NOT_RUN`, stated as a limitation and never as a pass.** The `@v7` pins on
+`derivatives-evidence-cadence.yml` have never executed on any SHA. Moving that to *executed*
+requires a T3 dispatch of a write-capable collector, which is refused while the holdout runs.
+
+**Known gaps between `origin/main` and the local record — none of them fixed by this lane.**
+The narrative history for 2026-08-17 → 2026-08-22 (~6 000 lines) exists only on the local,
+unpushed branch `chore/session-origin-diagnostic` @ `186d0ad`; that branch is **stale on code**
+— it predates PRs #8–#21 — so it must not be merged or copied wholesale, only mined. Also
+unpushed and still open: `RELEASE_GATE.md` on `main` reads **273 proven / 13 open**, while the
+local record has it at **275 / 11** after the authorized 2026-08-19 browser evidence run closed
+Wave 4A.2 and Wave 1.1 · `CLAUDE.md` on `main` lacks the *Model routing and effort* section ·
+`docs/OPERATING_DOCTRINE.md` on `main` lacks the owner-facing doctrine adopted 2026-08-19.
+
+**Section 5A's prohibition, verbatim.** The holdout is evaluated **exactly once**, at
+`T_close`. **No interim looks** — `d`, `ECE`, per-symbol tallies and window counts are not
+computed or inspected before `T_close`. A NOT PASS or FAIL **may not be retuned against the
+same holdout**; a second attempt requires a new candidate freeze, new `T_freeze`, new `T0` and
+a new holdout. `T_close` is fixed once `T0` is observed and may not be extended, shortened or
+re-declared.
+
+**Standing environment constraints.** `gh` is off `PATH`; outbound `curl` and `git push` are
+refused by the Claude Code permission classifier. Every remote write needs the owner to run it
+with the `!` prefix, and GitHub settings or PR work needs the browser.
+
 ## v1 roadmap — progress at a glance
-*Updated 2026-08-17 · `RELEASE_GATE.md`: **273 proven / 13 open***
+*Updated 2026-08-22 · `RELEASE_GATE.md` on `main`: **273 proven / 13 open** — stale; the local
+record has it at 275 / 11 and that correction is not yet pushed.*
 
 **Completed milestones**
 1. **Change A — calibration truth + skill gating.** PR #2, merged `e6ee23c`, **deployed to
@@ -35,20 +99,32 @@ Update this block on every pause, every milestone change, and every GPT consulta
    growth.
 4. **Production live-smoke + release-gate reconciliation.** PR #5, merged `6eb632d`. Gate went
    271/15 → 273/13; `/v1/calibration` proven to serve in production.
+5. **Remaining deployed browser evidence closure.** Closed 2026-08-19 by an authorized T4
+   evidence run in a `CONTROLLED_SMOKE` session: Wave 4A.2's card check and Wave 1.1's
+   deployed UI smoke. **The `RELEASE_GATE.md` edit recording this is not yet on `main`.**
+6. **Change B tranche-1 infrastructure and activation.** PRs #8–#14: paired-evidence
+   collector, the section 5A acceptance contract, the `distributional-v1` candidate freeze,
+   the recorded `T0`, and the recurring cadence. The collector is bounded by
+   `--max-occasions`, so a canary can be exactly one occasion.
+7. **CI and governance hardening.** PRs #15–#21: post-merge CI on `main`, Node-24 action pins
+   across five workflows, and bare-`pytest` parity — plus GOV-1, a branch ruleset protecting
+   `main`, which is a GitHub settings change rather than a PR.
 
-**Current milestone** — **Remaining Deployed Browser Evidence Closure** (started 2026-08-17).
-Close Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke **without**
-misclassifying test-motivated traffic as `USER_REQUESTED`, without waiving scope, and without
-widening the API unless genuinely necessary.
+**Current milestone** — **Change B tranche 1: the holdout is live and accumulating.** The
+candidate `distributional-v1` is frozen; collection runs unattended on the enabled cadence
+until `T_close = 2026-09-12T04:00:00Z`, when section 5A is evaluated **once**. There is no
+work to do in the meantime and no interim look is permitted.
 
-**Next major milestone** — **Change B: horizon-specific probability modelling.** Still
-deliberately blocked. It needs a new `methodology_version`, which resets calibration to
-`NO_SAMPLES`, so the 806-sample cohort must survive as the control until Change A has
-re-accumulated evidence under gating. Re-accumulation is **traffic-driven, not scheduled**, so
-it does not progress with time alone.
+**Next major milestone** — **the section 5A evaluation at `T_close`**, and only then the
+decision on whether `distributional-v1` ships. Change B remains **undeployed**; production
+still runs the Change A methodology.
 
-**Outstanding, but not milestones** — per-timeframe `MEASURED` needs roughly 3× more operator
-traffic per timeframe (currently 134–172 against a ≥500 threshold) · the six-versus-seven
+**Outstanding, but not milestones** — the unpushed `RELEASE_GATE.md`, `CLAUDE.md`, and
+`docs/OPERATING_DOCTRINE.md` corrections listed above · `oos-pair-evidence.yml` and
+`resolve-outcomes.yml` still on Node-20-era pins, frozen for the holdout, and
+`oos-pair-evidence.yml` additionally lacks a `permissions:` block (low severity — the
+repository default is already read-only) · per-timeframe `MEASURED` needs roughly 3× more
+operator traffic per timeframe (134–172 against a ≥500 threshold) · the six-versus-seven
 derivatives-cohort reconciliation is open and deliberately not guessed at.
 
 ## Operating model V2 — anchored 2026-08-16
