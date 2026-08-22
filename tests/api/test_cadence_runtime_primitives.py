@@ -24,11 +24,20 @@ from crypto_probability_engine.persistence.repository import InMemoryPersistence
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 
+# Moved 2026-08-23: `frontend_display` gained the backend-authored `blocking_reasons`
+# key, and `analysis_hash` is `stable_hash(response)` over the whole envelope, so any
+# added key moves it. The prior value was
+# sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08.
+# Nothing in the quant, gate, or probability path changed.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08"
+    "sha256:3bed6a3498aef7b10ea213f63ce9f355e1014e46fd075b9c3cb32d254f90e7d4"
 )
+# Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
+# a SHA-256 over the canonical JSON of the whole response, so the added
+# `frontend_display.blocking_reasons` key moves it. Prior value was
+# af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c"
+    "38fff6098e0888427c64e02537f0ef3e09229e30ddf0d65915c582ac2db595bc"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 
