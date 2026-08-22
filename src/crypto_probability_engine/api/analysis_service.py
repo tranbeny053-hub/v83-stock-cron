@@ -263,6 +263,7 @@ def analyze_request(
         request.analysis_mode.value,
         data_quality,
         horizon_context,
+        skill_evidence=skill_evidence,
     )
     decision_brief = build_decision_brief(
         symbol=request.symbol,
