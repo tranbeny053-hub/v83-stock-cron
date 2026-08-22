@@ -96,12 +96,13 @@ def build_frontend_display(
     horizon_context: dict,
     *,
     skill_evidence: dict | None = None,
+    include_blocking_reasons: bool = True,
 ) -> dict:
     horizon = quant_result["probability_state"]["horizons"]["H_primary"]
     score = quant_result["score_stack"]
     gate = quant_result["gate_result"]
     disposition = gate["action"] if not gate["hard_gate_passed"] else score["disposition"]
-    return {
+    display = {
         "prob_up_pct": horizon["p_up_frac"] * 100.0,
         "prob_down_pct": horizon["p_down_frac"] * 100.0,
         "prob_timeout_pct": horizon["p_timeout_frac"] * 100.0,
@@ -127,3 +128,6 @@ def build_frontend_display(
         "is_live_data": bool(data_quality.get("is_live_data", False)),
         "data_source": data_quality.get("data_source", "FIXTURE_DEMO"),
     }
+    if not include_blocking_reasons:
+        display.pop("blocking_reasons")
+    return display
