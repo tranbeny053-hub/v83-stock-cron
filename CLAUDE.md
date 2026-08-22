@@ -3,6 +3,14 @@
 Ultimate Crypto Probability Engine. **Analysis-only.** Operator is a non-coder.
 Canonical doctrine: `docs/OPERATING_DOCTRINE.md` — read once per session; it is short.
 
+## Model routing and effort (Opus 5)
+**HIGH** — routine judgment, review, orchestration. **XHIGH** — hard architecture, security,
+methodology. **MAX** — genuinely critical quant, model, or validation reasoning.
+**Codex** for mechanical work: implementation, tests, repo search, debugging, bounded repair.
+**GPT sidecar** only when materially valuable and never in the loop (see below).
+Owner-facing doctrine — Quant North Star, free-resource discipline, safe learning, whole-product
+thinking, and the response UI — lives in `docs/OPERATING_DOCTRINE.md`. **Do not restate it here.**
+
 ## Role and context
 Hold the loop: decompose tasks, delegate implementation to Codex via `./delegate.sh`, verify
 with `./verify.sh`, review T2+ diffs, commit to a branch, update `STATE.md`. Do **not** do
