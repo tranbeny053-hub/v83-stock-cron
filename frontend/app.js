@@ -298,8 +298,17 @@ function getScoreHeatBand(score) {
 
 function firstReason(payload) {
   const display = payload.frontend_display || {};
+  const blockingReasons = Array.isArray(display.blocking_reasons)
+    ? display.blocking_reasons
+        .map((reason) => {
+          const headline = typeof reason?.headline === "string" ? reason.headline : "";
+          const detail = typeof reason?.detail === "string" ? reason.detail : "";
+          return [headline, detail].filter(Boolean).join(": ");
+        })
+        .filter(Boolean)
+    : [];
   const candidates = [
-    ...(display.key_reasons || []),
+    ...(blockingReasons.length ? blockingReasons : display.key_reasons || []),
     ...(display.data_quality_warnings || []),
     ...(display.execution_warnings || []),
     ...(display.news_warnings || []),
@@ -1771,7 +1780,16 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}) {
   ]);
 }
 
-function renderDecisionBrief(brief = {}) {
+function renderDecisionBrief(brief = {}, blockingReasons = []) {
+  const readableBlockingReasons = Array.isArray(blockingReasons)
+    ? blockingReasons
+        .map((reason) => {
+          const headline = typeof reason?.headline === "string" ? reason.headline : "";
+          const detail = typeof reason?.detail === "string" ? reason.detail : "";
+          return [headline, detail].filter(Boolean).join(": ");
+        })
+        .filter(Boolean)
+    : [];
   return section("Decision Brief", [
     keyValueTable([
       ["Action", brief.action],
@@ -1785,7 +1803,10 @@ function renderDecisionBrief(brief = {}) {
       ["Risk note", brief.risk_note],
       ["Disclaimer", brief.disclaimer],
     ]),
-    briefListGroup("Key Reasons", brief.key_reasons),
+    briefListGroup(
+      "Key Reasons",
+      readableBlockingReasons.length ? readableBlockingReasons : brief.key_reasons,
+    ),
     briefListGroup("Hard Blockers", brief.hard_blockers),
     briefListGroup("Watchlist Triggers", brief.watchlist_triggers),
     briefListGroup("Invalidation Conditions", brief.invalidation_conditions),
@@ -1831,7 +1852,7 @@ function renderStructuredDetail(payload, detailView) {
         ["Persistence", payload.debug?.persistence_status || details.debug_lite?.persistence_status],
       ]),
     ]),
-    renderDecisionBrief(decisionBrief),
+    renderDecisionBrief(decisionBrief, display.blocking_reasons),
     section("Probability", [
       keyValueTable([
         ["Type", decisionBrief.probability_type],
