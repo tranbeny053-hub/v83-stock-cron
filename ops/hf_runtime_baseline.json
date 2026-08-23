@@ -1,12 +1,12 @@
 {
   "critical_source_digests": {
     "Dockerfile": "d6d90cbcce02014662f45f4b9f140017b751ec46ebdab770342ae8ba4cd11494",
-    "frontend/app.js": "f1961364bb042af512bb560491379d76baa7f63d4084e5efb1294642163e2cc9",
-    "frontend/index.html": "d9ac6702751faa183511c529d04e0a7309880ffa46cdc9012d14318812dc28b4",
+    "frontend/app.js": "9591fac6f3cfcade3358926c33d312052fca2e3e5659203fb1043058ba1e8719",
+    "frontend/index.html": "00aead02bdb2c5881898d4e3d3db99a100533cac1e9e4619f3380d8058909554",
     "frontend/styles.css": "6362e2407ac31922e3494a29ead760a0a8c81cf8df568698901f3373ad6dabc5",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "e1299d348b27a68248f6666989102d3bd3e2b9b3fca366981cbdb694333881d4",
+    "src/crypto_probability_engine/api/analysis_service.py": "85e556251a081711c6ae3c2eac7e2e831b012490fc700c1ee9117d37ea67bc1a",
     "src/crypto_probability_engine/api/app.py": "ea55f4b36bf7187405a9bad2481ea21a1951b8e88c67a7568dccd5b0e1f478f7",
     "src/crypto_probability_engine/config/build_info.py": "e0bd6f701933880fcb82e48621efda6c053759d11f623e48bbdc0e3b1eb03358",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
@@ -15,10 +15,10 @@
   "environment": "HF_PRODUCTION",
   "fingerprint": "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A",
   "frontend_asset_tokens": {
-    "app_js": "w4c1-ka1-20260621-a",
+    "app_js": "w4c1-ka1-20260823-a",
     "styles_css": "w4c1-ka1-20260621-a"
   },
-  "hf_main_sha": "9933615b3a9a1bdffada6cc568c2927ff9106114",
+  "hf_main_sha": "e9d549c59f159222e763182cf0aa02564c1ed67c",
   "release_id": "UCPE-W4D3-OPS-2A0-20260622-A",
   "release_label": "Wave 4D.3-Ops Cadence Runtime Primitives",
   "schema_version": "hf-runtime-baseline.v1",

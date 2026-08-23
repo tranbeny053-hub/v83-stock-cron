@@ -14,19 +14,16 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "9933615b3a9a1bdffada6cc568c2927ff9106114"
+PIN_SHA = "e9d549c59f159222e763182cf0aa02564c1ed67c"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # Empty while GitHub and the deployed Space agree. It goes non-empty whenever a guarded
 # change is merged but not yet deployed, and is emptied again once the deploy lands and
-# ops/hf_runtime_baseline.json is re-pinned. The two frontend entries are the pending
-# blocking_reasons UI and its cache-token bump, awaiting a deploy.
-CURRENT_DELTA_PATHS = [
-    "frontend/app.js",
-    "frontend/index.html",
-    "src/crypto_probability_engine/api/analysis_service.py",
-]
+# ops/hf_runtime_baseline.json is re-pinned. The frontend entries cleared when the
+# PROD-SAFE-1 candidate deployed; analysis_service.py stays, because main carries
+# section-5A code that the deployed candidate deliberately does not.
+CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/analysis_service.py"]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -270,7 +267,7 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
     assert intended.source_milestone == "wave-4d3-ops-2a0-cadence-runtime"
     assert intended.fingerprint == "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A"
     assert intended.asset_tokens == {
-        "app_js": "w4c1-ka1-20260621-a",
+        "app_js": "w4c1-ka1-20260823-a",
         "styles_css": "w4c1-ka1-20260621-a",
     }
     assert set(intended.critical_source_digests) == set(guard.CRITICAL_SOURCE_PATHS)
