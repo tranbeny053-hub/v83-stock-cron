@@ -1,29 +1,91 @@
 # STATE
 
-Updated: 2026-08-22
+Updated: 2026-08-23
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane is open. The Change B tranche-1 holdout accumulates unattended.
+LOOP_STATE=IDLE — PROD-SAFE-1 deployed and closed. No lane is open. The Change B tranche-1
+  holdout accumulates unattended and was never touched.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
-CURRENT_BRANCH=chore/state-reconcile (local, unpushed), branched from origin/main = e910751
-  exactly. Its only content is this STATE reconciliation. origin/main = e910751.
-LAST_GREEN_SHA=e910751
-LAST_VERIFY=PASS ruff ok | 993 passed | schemas+smoke ok | scanners 3/3 · e910751 · 2026-08-22
+CURRENT_BRANCH=docs/state-prod-safe-1 (this checkpoint). origin/main = 074e995.
+LAST_GREEN_SHA=074e995
+LAST_VERIFY=PASS ruff ok | 1034 passed | schemas+smoke ok | scanners 3/3 · 074e995 · 2026-08-23
+PRODUCTION=hf/main = e9d549c (PROD-SAFE-1), deployed 2026-08-23T06:01:39Z from 9933615 by
+  fast-forward. Guard #574 HEALTHY on 074e995. Pin on main describes the live build exactly.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 open — push this reconciliation branch to origin [T3]. Every earlier
-  authorization is CONSUMED and must not be reused. Standing prohibition while the holdout
-  runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model change,
-  no re-freeze.
+OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-1 T3/T4 authorization is CONSUMED and must not be
+  reused. Standing prohibition while the holdout runs: no holdout or outcome inspection, no
+  collector dispatch, no further deploy, no model change, no re-freeze.
 NEXT_ACTION=WAIT until T_close = 2026-09-12T04:00:00Z, then run the V1_QUANT_CONTRACT.md
   section 5A evaluation ONCE. Nothing else is pending.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
+
+## Production — PROD-SAFE-1 IS DEPLOYED (2026-08-23)
+
+`hf/main` = **`e9d549c`**, deployed 2026-08-23T06:01:39Z as a fast-forward from `9933615`.
+This is the first deploy since 2026-08-17 and it carries **no section-5A code whatsoever**.
+
+**What it is.** A release candidate rooted at the then-deployed `9933615` — deliberately NOT
+cut from `main`, because `main` carries the Change-B candidate and the collector, none of
+which may reach production while the holdout runs. Three backports were integrated onto that
+clean base: the `blocking_reasons` operator-facing UI, the login hardening, and the Docker
+build-context fix. `VERIFY=PASS`, 842 passed (822 base + 11 + 9).
+
+**Clean-room proof.** `oos/`, `probability_distributional.py`, the collector, the OOS workflow
+and the freeze file are all absent from the deployed tree. A word-boundary search for
+`OOSArm`, `pair_context`, `PairTarget` and `distributional` returns zero in both the base and
+the candidate, and no forbidden token appears on any added line. No protected-tier path
+(`quant/` `gates/` `persistence/` `config/` `schemas/` `migrations/`) is touched.
+
+**One real adaptation, recorded because it is a divergence from `main`.** APP-1 on `main`
+gates `blocking_reasons` off the collector arms via `include_blocking_reasons=arm_context is
+None`. There is no `arm_context` on this lineage and no collector to protect, so the flag is
+kept for parity but the call site gates nothing. `api/analysis_service.py` therefore moves by
+two lines here against a large diff on `main`.
+
+**Deploy evidence, in order.**
+1. Pre-deploy baseline: guard **#573**, scheduled, on `4dc8ad5` — HEALTHY.
+2. `git push hf e9d549c:refs/heads/main` — fast-forward, `9933615..e9d549c`, 06:01:39Z.
+3. Space rebuilt: API `sha=e9d549c`, `stage` went `RUNNING_BUILDING` → `RUNNING`.
+4. `/healthcheck`, `/v1/build-info`, `/` all 200.
+5. **Decisive:** the live Space serves `app.js` whose SHA-256 is `9591fac6…`, byte-identical
+   to the pinned digest. `styles.css` matches its unchanged pin. The build fingerprint does
+   NOT move — `config/build_info.py` is unchanged — so it was never used as proof.
+6. Pin PR #30 merged at 06:14:11Z. **`PIN_DRIFT` window: 12m 32s.** No scheduled guard fired
+   inside it; the latest scheduled run at window close was still #573.
+7. Post-merge CI **#47** on `074e995` — SUCCESS.
+8. Guard **#574** dispatched once on `074e995` — **HEALTHY**, critical source match True,
+   frontend asset match True, three probe rounds all HEALTHY.
+
+**The pin now describes the live build.** Five literals moved on `main` and only five:
+`hf_main_sha` → `e9d549c`; the digests for `frontend/app.js`, `frontend/index.html` and
+`api/analysis_service.py`; and `frontend_asset_tokens.app_js` → `w4c1-ka1-20260823-a`. Eight
+of eleven guarded digests, `styles_css`, and every identity field are untouched.
+
+**Two standing consequences a future session must not misread.**
+- The guard reports advisory `SCHEDULER_DIVERGENT_FROM_PIN` with `scheduler_ahead_count:
+  null`, permanently, because the deployed commit is a separate lineage from `main` and the
+  ancestry walk cannot resolve. It is contract-defined, non-failing, and was predicted before
+  the deploy. It is NOT drift.
+- `CURRENT_DELTA_PATHS` is `["src/crypto_probability_engine/api/analysis_service.py"]` and
+  stays that way, because `main` carries collector code the deployed build deliberately does
+  not. This does not empty until a future deploy is cut from `main` itself.
+
+**Rollback, if ever needed.**
+`git push --force-with-lease=refs/heads/main:e9d549c59f159222e763182cf0aa02564c1ed67c hf
+9933615b3a9a1bdffada6cc568c2927ff9106114:refs/heads/main`, then revert the five pin literals
+and the test mirror. Force is required because the restore moves the remote backwards.
+
+**Untouched throughout:** the database, the section-5A holdout, the collector, every
+`V1_QUANT_CONTRACT.md` §5A path, and `T_close` = 2026-09-12T04:00:00Z. No prediction row was
+written; `live_smoke.py` and `manual_smoke.py` were deliberately not run because they create
+prediction rows. Only `production_smoke.py`-class read-only GETs were used.
 
 ## Current status — 2026-08-22
 
