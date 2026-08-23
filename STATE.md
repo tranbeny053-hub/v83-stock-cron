@@ -4,12 +4,14 @@ Updated: 2026-08-23
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — PROD-SAFE-1 deployed and closed. No lane is open. The Change B tranche-1
-  holdout accumulates unattended and was never touched.
+LOOP_STATE=IDLE — PROD-SAFE-1 deployed and closed. The section 5A envelope is frozen: the
+  holdout, its evaluation, candidate freeze, collector, outcome and holdout inspection,
+  T_close itself, and any change to what the collector computes or persists. Ordinary safe work
+  outside that envelope continues under normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
-CURRENT_BRANCH=docs/state-prod-safe-1 (this checkpoint). origin/main = 074e995.
-LAST_GREEN_SHA=074e995
-LAST_VERIFY=PASS ruff ok | 1034 passed | schemas+smoke ok | scanners 3/3 · 074e995 · 2026-08-23
+CURRENT_BRANCH=docs/state-2-scope-wait (this checkpoint). origin/main = f6b4757.
+LAST_GREEN_SHA=f6b4757
+LAST_VERIFY=PASS ruff ok | 1034 passed | schemas+smoke ok | scanners 3/3 · f6b4757 · 2026-08-23
 PRODUCTION=hf/main = e9d549c (PROD-SAFE-1), deployed 2026-08-23T06:01:39Z from 9933615 by
   fast-forward. Guard #574 HEALTHY on 074e995. Pin on main describes the live build exactly.
 CODEX_PENDING=NONE
@@ -19,8 +21,9 @@ GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-1 T3/T4 authorization is CONSUMED and must not be
   reused. Standing prohibition while the holdout runs: no holdout or outcome inspection, no
   collector dispatch, no further deploy, no model change, no re-freeze.
-NEXT_ACTION=WAIT until T_close = 2026-09-12T04:00:00Z, then run the V1_QUANT_CONTRACT.md
-  section 5A evaluation ONCE. Nothing else is pending.
+NEXT_ACTION=SECTION 5A ONLY: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
+  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled section-5A
+  action; permitted ordinary safe work outside the frozen envelope continues meanwhile.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
