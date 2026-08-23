@@ -27,7 +27,7 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
     assert 'href="/styles.css?v=w4c1-ka1-20260621-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260823-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260823-b"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -47,6 +47,24 @@ def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:
     assert 'document.querySelectorAll("[data-build-fingerprint]")' in js
     assert 'marker.textContent = "Build fingerprint unavailable"' in js
     assert "void loadBuildFingerprint();" in js
+
+
+def test_login_submit_failure_keeps_session_locked() -> None:
+    js = read_frontend("app.js")
+    handler = js.split(
+        'document.querySelector("#loginForm").addEventListener("submit", async (event) => {',
+        maxsplit=1,
+    )[1].split("\n});", maxsplit=1)[0]
+    success_path, failure_path = handler.split("} catch (error) {", maxsplit=1)
+
+    assert "try {" in success_path
+    assert 'loginPanel.classList.add("hidden")' in success_path
+    assert 'workspace.classList.remove("hidden")' in success_path
+    assert 'sessionStatus.textContent = "Ready"' in success_path
+    assert "loginFailureMessage(error?.status, error?.payload)" in failure_path
+    assert 'loginPanel.classList.add("hidden")' not in failure_path
+    assert 'workspace.classList.remove("hidden")' not in failure_path
+    assert "sessionStatus.textContent" not in failure_path
 
 
 def test_frontend_uses_backend_display_fields() -> None:
