@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 
 NEWS_INFLUENCE_MODE = "ADVISORY_DISPLAY_ONLY"
+NEWS_SNIPPET_MAX_LENGTH = 480
 
 
 @dataclass(frozen=True)
@@ -150,7 +151,7 @@ def make_news_item(
     domain: str | None = None,
 ) -> NewsItem:
     safe_title = _clean_text(title)
-    safe_snippet = _clean_text(snippet) if snippet else None
+    safe_snippet = _clean_text(snippet)[:NEWS_SNIPPET_MAX_LENGTH] if snippet else None
     safe_url = str(url or "").strip()
     parsed_domain = domain or urlparse(safe_url).netloc.lower()
     published = _as_z(parse_datetime(published_at)) if published_at else None
