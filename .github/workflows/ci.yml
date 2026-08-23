@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Fetch pinned production commit
+        run: pin_sha="$(python -c 'import json; print(json.load(open("ops/hf_runtime_baseline.json")).get("hf_main_sha"))')"; git fetch --depth=1 origin "$pin_sha"
       - run: python -m pip install -r requirements.txt
       - run: ruff check src tests scripts
       - run: PYTHONPATH=src python -m pytest

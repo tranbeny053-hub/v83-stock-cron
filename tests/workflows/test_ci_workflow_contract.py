@@ -123,6 +123,11 @@ def test_verification_steps_are_unchanged() -> None:
 
     assert job["runs-on"] == "ubuntu-latest", "the CI runner changed"
     assert _run_commands(document) == [
+        # The production-manifest fidelity test needs the pinned objects; this
+        # fetch lets CI fail on a bad pin instead of lacking the objects.
+        'pin_sha="$(python -c \'import json; print(json.load('
+        'open("ops/hf_runtime_baseline.json")).get("hf_main_sha"))\')"; '
+        'git fetch --depth=1 origin "$pin_sha"',
         "python -m pip install -r requirements.txt",
         "ruff check src tests scripts",
         "PYTHONPATH=src python -m pytest",
