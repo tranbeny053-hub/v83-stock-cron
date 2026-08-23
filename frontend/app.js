@@ -744,6 +744,37 @@ function appendDefinitionRows(dl, values) {
   }
 }
 
+function batchErrorMessage(item) {
+  const errorItem = item && typeof item === "object" && !Array.isArray(item) ? item : null;
+  const detail =
+    errorItem?.detail &&
+    typeof errorItem.detail === "object" &&
+    !Array.isArray(errorItem.detail)
+      ? errorItem.detail
+      : null;
+  const error =
+    detail?.error && typeof detail.error === "object" && !Array.isArray(detail.error)
+      ? detail.error
+      : null;
+  const message =
+    typeof error?.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : "Batch item could not be analyzed.";
+  const code =
+    typeof error?.code === "string" && error.code.trim() ? error.code.trim() : null;
+  const symbol =
+    typeof errorItem?.symbol === "string" && errorItem.symbol.trim()
+      ? ` (${errorItem.symbol.trim()})`
+      : "";
+  const label =
+    Number.isInteger(errorItem?.index) && errorItem.index >= 0
+      ? `Item ${errorItem.index + 1}${symbol}`
+      : `Batch item${symbol}`;
+  const codeSuffix = code ? ` (Code: ${code})` : "";
+
+  return `${label}: ${message}${codeSuffix}`;
+}
+
 function renderResults(target, payloads, errors = []) {
   target.replaceChildren();
   for (const payload of payloads) {
@@ -752,7 +783,7 @@ function renderResults(target, payloads, errors = []) {
   for (const item of errors) {
     const node = document.createElement("article");
     node.className = "result-card";
-    node.textContent = `Item ${item.index + 1}: ${item.detail.error.code}`;
+    node.textContent = batchErrorMessage(item);
     target.append(node);
   }
 }
