@@ -20,10 +20,14 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # Empty while GitHub and the deployed Space agree. It goes non-empty whenever a guarded
 # change is merged but not yet deployed, and is emptied again once the deploy lands and
-# ops/hf_runtime_baseline.json is re-pinned. The frontend entries cleared when the
-# PROD-SAFE-1 candidate deployed; analysis_service.py stays, because main carries
+# ops/hf_runtime_baseline.json is re-pinned. The frontend entries are the pending
+# login-failure UI awaiting a deploy; analysis_service.py stays, because main carries
 # section-5A code that the deployed candidate deliberately does not.
-CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/analysis_service.py"]
+CURRENT_DELTA_PATHS = [
+    "frontend/app.js",
+    "frontend/index.html",
+    "src/crypto_probability_engine/api/analysis_service.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.

@@ -1,5 +1,6 @@
 const sessionStatus = document.querySelector("#sessionStatus");
 const loginPanel = document.querySelector("#loginPanel");
+const loginStatus = document.querySelector("#loginStatus");
 const workspace = document.querySelector("#workspace");
 const overviewTemplate = document.querySelector("#overviewTemplate");
 const singleResult = document.querySelector("#singleResult");
@@ -113,14 +114,62 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    const error = new Error("Response was not valid JSON.");
+    error.status = response.status;
+    error.payload = null;
+    throw error;
+  }
   if (response.ok) {
     updateStatusFromPayload(payload);
   }
   if (!response.ok) {
-    throw new Error(payload?.detail?.error?.message || "Request failed");
+    const error = new Error(payload?.detail?.error?.message || "Request failed");
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
   return payload;
+}
+
+function loginFailureMessage(status, payload) {
+  const detail =
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload.detail : null;
+  const errorEnvelope =
+    detail && typeof detail === "object" && !Array.isArray(detail) ? detail.error : null;
+  const backendMessage =
+    errorEnvelope &&
+    typeof errorEnvelope === "object" &&
+    !Array.isArray(errorEnvelope) &&
+    typeof errorEnvelope.message === "string" &&
+    errorEnvelope.message.trim()
+      ? errorEnvelope.message.trim()
+      : null;
+
+  if (status === 401) {
+    return backendMessage || "Access code not accepted. Check the code and try again.";
+  }
+  if (status === 429) {
+    const retryAfter = errorEnvelope?.retry_after_seconds;
+    const baseMessage = backendMessage || "Too many login attempts.";
+    if (typeof retryAfter === "number" && Number.isFinite(retryAfter) && retryAfter > 0) {
+      return `${baseMessage} Try again in ${retryAfter} seconds.`;
+    }
+    return `${baseMessage} Wait a moment, then try again.`;
+  }
+  if (status === 422) {
+    return backendMessage || "The access code was not accepted. Check the entry and try again.";
+  }
+  if (backendMessage) {
+    return backendMessage;
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "Login is temporarily unavailable. Try again shortly.";
 }
 
 function updateStatusFromPayload(payload = {}) {
@@ -1931,15 +1980,20 @@ function renderStructuredDetail(payload, detailView) {
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
-  await api("/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-  loginPanel.classList.add("hidden");
-  workspace.classList.remove("hidden");
-  sessionStatus.textContent = "Ready";
-  updateRefreshButton();
-  await loadSystemStatus();
+  loginStatus.textContent = "";
+  try {
+    await api("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+    loginPanel.classList.add("hidden");
+    workspace.classList.remove("hidden");
+    sessionStatus.textContent = "Ready";
+    updateRefreshButton();
+    await loadSystemStatus();
+  } catch (error) {
+    loginStatus.textContent = loginFailureMessage(error?.status, error?.payload);
+  }
 });
 
 for (const button of document.querySelectorAll(".tab")) {
