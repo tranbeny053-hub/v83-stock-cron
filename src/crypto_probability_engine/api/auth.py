@@ -6,12 +6,13 @@ import base64
 import hashlib
 import hmac
 import json
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import ErrorCode
@@ -27,28 +28,102 @@ SESSION_COOKIE = "ucpe_session"
 DEV_SESSION_COOKIE = "ucpe_dev_session"
 
 
+MAX_ACCESS_CODE_LENGTH = 128
+
+
 class LoginRequest(BaseModel):
-    code: str
+    # 128 characters is generous for a human access code but too small to amplify PBKDF2.
+    code: str = Field(max_length=MAX_ACCESS_CODE_LENGTH)
+
+    def __init__(self, **data: object) -> None:
+        try:
+            super().__init__(**data)
+        except ValidationError as exc:
+            errors = exc.errors(include_url=False)
+            for error in errors:
+                if error["type"] == "string_too_long" and error["loc"] == ("code",):
+                    error["input"] = "[REDACTED]"
+            raise ValidationError.from_exception_data(type(self).__name__, errors) from None
 
 
 @dataclass
 class AttemptLimiter:
     max_attempts: int = 5
     window_seconds: int = 60
+    max_keys: int = 10_000
     attempts: dict[str, list[float]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _last_sweep: float = field(default=0.0, repr=False)
+
+    def _prune_key(self, key: str, now: float) -> None:
+        window_start = now - self.window_seconds
+        recent = [item for item in self.attempts.get(key, []) if item >= window_start]
+        if recent:
+            self.attempts[key] = recent
+        else:
+            self.attempts.pop(key, None)
+
+    def _sweep_if_due(self, now: float) -> None:
+        if now - self._last_sweep < self.window_seconds:
+            return
+        window_start = now - self.window_seconds
+        for key, items in list(self.attempts.items()):
+            recent = [item for item in items if item >= window_start]
+            if recent:
+                self.attempts[key] = recent
+            else:
+                del self.attempts[key]
+        self._last_sweep = now
+
+    def _make_room_for(self, key: str, now: float) -> None:
+        if key in self.attempts or len(self.attempts) < self.max_keys:
+            return
+        self._sweep_if_due(now)
+        if len(self.attempts) < self.max_keys:
+            return
+        oldest_key = next(iter(self.attempts))
+        del self.attempts[oldest_key]
 
     def check(self, key: str) -> bool:
         now = time.time()
-        window_start = now - self.window_seconds
-        recent = [item for item in self.attempts.get(key, []) if item >= window_start]
-        self.attempts[key] = recent
-        return len(recent) < self.max_attempts
+        with self._lock:
+            self._prune_key(key, now)
+            self._sweep_if_due(now)
+            return len(self.attempts.get(key, [])) < self.max_attempts
 
-    def record_failure(self, key: str) -> None:
-        self.attempts.setdefault(key, []).append(time.time())
+    def check_and_record(self, key: str) -> float | None:
+        """Atomically reserve one attempt, returning its timestamp if allowed."""
+
+        now = time.time()
+        with self._lock:
+            self._prune_key(key, now)
+            self._sweep_if_due(now)
+            recent = self.attempts.get(key, [])
+            if len(recent) >= self.max_attempts:
+                return None
+            self._make_room_for(key, now)
+            self.attempts.setdefault(key, []).append(now)
+            return now
+
+    def record_failure(self, key: str) -> bool:
+        return self.check_and_record(key) is not None
+
+    def discard_reserved_attempt(self, key: str, reservation: float) -> None:
+        with self._lock:
+            recent = self.attempts.get(key)
+            if not recent:
+                return
+            try:
+                recent.remove(reservation)
+            except ValueError:
+                return
+            if not recent:
+                del self.attempts[key]
 
     def reset(self) -> None:
-        self.attempts.clear()
+        with self._lock:
+            self.attempts.clear()
+            self._last_sweep = time.time()
 
 
 session_limiter = AttemptLimiter()
@@ -161,17 +236,19 @@ def _hash_matches(candidate: str, expected_hash: str | None, settings: Settings)
 
 def authenticate_login(request: Request, body: LoginRequest, settings: Settings) -> str:
     key = _client_key(request, "login")
-    if not session_limiter.check(key):
+    reservation = session_limiter.check_and_record(key)
+    if reservation is None:
         raise api_error(429, ErrorCode.UNAUTHORIZED, "Too many attempts.", retry_after_seconds=60)
     if _hash_matches(body.code, settings.access_code_hash, settings):
+        session_limiter.discard_reserved_attempt(key, reservation)
         return create_session_token("operator", settings)
     if _hash_matches(body.code, settings.controlled_smoke_code_hash, settings):
+        session_limiter.discard_reserved_attempt(key, reservation)
         return create_session_token(
             "operator",
             settings,
             prediction_origin=PredictionOrigin.CONTROLLED_SMOKE,
         )
-    session_limiter.record_failure(key)
     raise api_error(401, ErrorCode.UNAUTHORIZED, "Invalid access code.")
 
 
@@ -179,11 +256,12 @@ def authenticate_dev(request: Request, body: LoginRequest, settings: Settings) -
     if not settings.dev_mode_enabled:
         raise api_error(403, ErrorCode.UNAUTHORIZED, "Dev Mode is disabled.")
     key = _client_key(request, "dev")
-    if not dev_limiter.check(key):
+    reservation = dev_limiter.check_and_record(key)
+    if reservation is None:
         raise api_error(429, ErrorCode.UNAUTHORIZED, "Too many attempts.", retry_after_seconds=60)
     if not _hash_matches(body.code, settings.dev_mode_code_hash, settings):
-        dev_limiter.record_failure(key)
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Invalid Dev Mode code.")
+    dev_limiter.discard_reserved_attempt(key, reservation)
     return create_session_token("operator", settings, dev=True)
 
 

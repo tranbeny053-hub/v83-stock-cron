@@ -1,6 +1,9 @@
+# .work/ holds raw captured responses and must never enter an image layer.
 .git
 .env
 .env.*
+.work/
+.venv/
 AI/
 tests/
 docs/
