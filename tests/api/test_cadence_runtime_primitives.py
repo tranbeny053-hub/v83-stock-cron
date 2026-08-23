@@ -24,11 +24,15 @@ from crypto_probability_engine.persistence.repository import InMemoryPersistence
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 
+# Prior value before `frontend_display.blocking_reasons` was added:
+# sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08"
+    "sha256:3bed6a3498aef7b10ea213f63ce9f355e1014e46fd075b9c3cb32d254f90e7d4"
 )
+# Prior value before `frontend_display.blocking_reasons` was added:
+# af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c"
+    "38fff6098e0888427c64e02537f0ef3e09229e30ddf0d65915c582ac2db595bc"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

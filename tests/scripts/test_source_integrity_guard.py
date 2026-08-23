@@ -21,7 +21,17 @@ DRIFT_SHA = "d" * 40
 # Non-empty while a guarded change is merged on GitHub but not yet deployed to the Space:
 # session-scoped prediction origin touches api/app.py. This mirrors reality and must be
 # emptied again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-CURRENT_DELTA_PATHS = ["src/crypto_probability_engine/api/app.py"]
+CURRENT_DELTA_PATHS = [
+    "frontend/app.js",
+    "frontend/index.html",
+    "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
+]
+
+# The deployed frontend comes from the pinned HF commit, not this working tree, so the
+# fake Space must not read frontend/ from the checkout.
+_DEPLOYED_APP_JS = b"// deployed app.js stand-in\n"
+_DEPLOYED_STYLES_CSS = b"/* deployed styles.css stand-in */\n"
 
 
 def _manifest() -> dict:
@@ -30,6 +40,20 @@ def _manifest() -> dict:
 
 def _intended() -> guard.IntendedContract:
     return guard.load_intended_contract(ROOT)
+
+
+def _deployed_intended(
+    intended: guard.IntendedContract | None = None,
+) -> guard.IntendedContract:
+    intended = intended or _intended()
+    digests = dict(intended.critical_source_digests)
+    digests.update(
+        {
+            "frontend/app.js": hashlib.sha256(_DEPLOYED_APP_JS).hexdigest(),
+            "frontend/styles.css": hashlib.sha256(_DEPLOYED_STYLES_CSS).hexdigest(),
+        }
+    )
+    return replace(intended, critical_source_digests=digests)
 
 
 def _healthy_source(
@@ -132,8 +156,8 @@ def _healthy_http_get(
     bodies = {
         "/": root_body or _root_body(intended),
         "/v1/build-info": build_body or _build_info_body(intended),
-        "/app.js": app_body or (ROOT / "frontend/app.js").read_bytes(),
-        "/styles.css": styles_body or (ROOT / "frontend/styles.css").read_bytes(),
+        "/app.js": app_body or _DEPLOYED_APP_JS,
+        "/styles.css": styles_body or _DEPLOYED_STYLES_CSS,
     }
 
     def get(url: str, timeout: float) -> guard.HttpResponse:
@@ -463,7 +487,7 @@ def test_stale_runtime_identity_fields_fail_after_confirmation(
 
 @pytest.mark.parametrize("mismatch", ["asset_token", "app_js", "styles_css"])
 def test_stale_frontend_variants_fail_after_confirmation(mismatch: str) -> None:
-    intended = _intended()
+    intended = _deployed_intended()
     kwargs: dict[str, bytes] = {}
     if mismatch == "asset_token":
         kwargs["root_body"] = _root_body(intended, app_token="stale-token")
@@ -558,7 +582,7 @@ def test_pin_missing_or_invalid_fails_before_any_probe(
 
 
 def test_contract_missing_behavior_is_preserved() -> None:
-    intended = _intended()
+    intended = _deployed_intended()
     live = guard.probe_live_runtime(
         intended,
         http_get=_healthy_http_get(intended, build_status=404),
@@ -590,7 +614,7 @@ def test_contract_missing_behavior_is_preserved() -> None:
     ],
 )
 def test_malformed_live_build_contract_remains_contract_missing(body: bytes) -> None:
-    intended = _intended()
+    intended = _deployed_intended()
     live = guard.probe_live_runtime(
         intended,
         http_get=_healthy_http_get(intended, build_body=body),
@@ -713,7 +737,7 @@ def test_stdout_and_step_summary_are_one_line_bounded_and_sanitized(
     capsys,
     tmp_path: Path,
 ) -> None:
-    intended = _intended()
+    intended = _deployed_intended()
     markers = {
         "debug": "raw-body-marker",
         "authorization": "Bearer secret-credential-marker",
@@ -847,7 +871,7 @@ def test_manifest_format_is_deterministic_sorted_json() -> None:
 
 
 def test_extra_live_build_info_field_is_tolerated() -> None:
-    intended = _intended()
+    intended = _deployed_intended()
     live = guard.probe_live_runtime(
         intended,
         http_get=_healthy_http_get(

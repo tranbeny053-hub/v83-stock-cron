@@ -196,6 +196,8 @@ def analyze_request(
         request.analysis_mode.value,
         data_quality,
         horizon_context,
+        skill_evidence=skill_evidence,
+        # This deployed base has no out-of-sample path, so there is nothing to gate.
     )
     decision_brief = build_decision_brief(
         symbol=request.symbol,
