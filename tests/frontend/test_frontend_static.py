@@ -25,9 +25,9 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    asset_version = "w4c1-ka1-20260621-a"
-    assert f'href="/styles.css?v={asset_version}"' in html
-    assert f'src="/app.js?v={asset_version}"' in html
+    # Tokens are per-asset; only the changed asset's token moves.
+    assert 'href="/styles.css?v=w4c1-ka1-20260621-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260823-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 

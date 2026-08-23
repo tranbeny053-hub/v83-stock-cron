@@ -263,6 +263,9 @@ def analyze_request(
         request.analysis_mode.value,
         data_quality,
         horizon_context,
+        skill_evidence=skill_evidence,
+        # OOS arms must remain byte-identical to base: section-5A persists analysis_hash.
+        include_blocking_reasons=arm_context is None,
     )
     decision_brief = build_decision_brief(
         symbol=request.symbol,
