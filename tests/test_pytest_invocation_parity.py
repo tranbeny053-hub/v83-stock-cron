@@ -6,8 +6,6 @@ import sys
 import tomllib
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -46,8 +44,9 @@ def test_task_050_pythonpath_configuration_contract() -> None:
 
 def test_task_050_pytest_invocation_parity() -> None:
     bare_pytest = Path(sys.executable).parent / "pytest"
-    if not bare_pytest.exists():
-        pytest.skip(f"bare pytest console script not found at {bare_pytest}")
+    assert bare_pytest.is_file() and os.access(bare_pytest, os.X_OK), (
+        f"bare pytest console script is required at {bare_pytest}"
+    )
 
     common_arguments = ["--collect-only", "-q", "-p", "no:cacheprovider"]
     results = {
