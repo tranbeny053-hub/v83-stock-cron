@@ -808,7 +808,12 @@ def test_manifest_fidelity_against_unprefixed_pinned_git_objects(
             capture_output=True,
         )
         if exists.returncode != 0:
-            pytest.skip(f"pinned Git object unavailable: {spec}")
+            pytest.fail(
+                f"pinned Git object unavailable: {spec}. Fetch the pinned objects with "
+                f"`git fetch --depth=1 origin {PIN_SHA}` before running this test. The "
+                "pinned commit must remain fetchable; if it has been garbage-collected, "
+                "the production pin is meaningless."
+            )
         prefixed = subprocess.run(
             ["git", "cat-file", "-e", f"{PIN_SHA}:v8-crypto-api-clean/{relative_path}"],
             cwd=ROOT,
