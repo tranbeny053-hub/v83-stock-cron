@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import UTC, datetime
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
+from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.api.schemas import validate_analysis_response
@@ -171,6 +174,125 @@ def test_slow_persistence_is_scheduled_without_blocking_response() -> None:
     assert response.status_code == 200
     validate_analysis_response(response.json())
     assert elapsed < 0.5
+
+
+def test_persistence_executor_has_bounded_nonblocking_admission(monkeypatch) -> None:
+    class CapturingExecutor:
+        def __init__(self) -> None:
+            self.jobs: list[tuple[object, tuple, dict]] = []
+            self.raise_on_submit = False
+
+        def submit(self, callable_, *args, **kwargs) -> None:
+            if self.raise_on_submit:
+                raise RuntimeError("simulated submit failure")
+            self.jobs.append((callable_, args, kwargs))
+
+    class RepositorySpy:
+        def __init__(self) -> None:
+            self.unavailable_marks = 0
+
+        def mark_unavailable(self) -> None:
+            self.unavailable_marks += 1
+
+    capacity = analysis_service._MAX_IN_FLIGHT_PERSISTENCE_JOBS  # noqa: SLF001
+    admission = threading.BoundedSemaphore(capacity)
+    executor = CapturingExecutor()
+    repository = RepositorySpy()
+    work = analysis_service.PersistenceWork({}, {}, ())
+    monkeypatch.setattr(analysis_service, "_PERSISTENCE_ADMISSION", admission)
+    monkeypatch.setattr(analysis_service, "_PERSISTENCE_EXECUTOR", executor)
+    monkeypatch.setattr(analysis_service, "_best_effort_persist", lambda *_args: "OK")
+
+    for _ in range(capacity):
+        analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+
+    started = time.perf_counter()
+    analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+    elapsed = time.perf_counter() - started
+    assert len(executor.jobs) == capacity
+    assert elapsed < 0.1
+    assert repository.unavailable_marks == 1
+
+    callable_, args, kwargs = executor.jobs[0]
+    assert callable_(*args, **kwargs) == "OK"
+    analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+    assert len(executor.jobs) == capacity + 1
+
+    def raise_during_persistence(*_args) -> str:
+        raise RuntimeError("simulated persistence failure")
+
+    monkeypatch.setattr(analysis_service, "_best_effort_persist", raise_during_persistence)
+    callable_, args, kwargs = executor.jobs[1]
+    with pytest.raises(RuntimeError, match="simulated persistence failure"):
+        callable_(*args, **kwargs)
+    analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+    assert len(executor.jobs) == capacity + 2
+
+    monkeypatch.setattr(analysis_service, "_best_effort_persist", lambda *_args: "OK")
+    callable_, args, kwargs = executor.jobs[2]
+    assert callable_(*args, **kwargs) == "OK"
+    executor.raise_on_submit = True
+    analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+    assert repository.unavailable_marks == 2
+    executor.raise_on_submit = False
+    analysis_service._submit_persistence_work(repository, work)  # noqa: SLF001
+    assert len(executor.jobs) == capacity + 3
+
+
+def test_persist_analysis_now_unaffected_by_persistence_admission_bound(
+    monkeypatch,
+) -> None:
+    class RepositorySpy:
+        def __init__(self) -> None:
+            self.persisted_run_ids: list[str] = []
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def save_run(self, summary) -> str:
+            self.persisted_run_ids.append(str(summary.get("run_id")))
+            return "OK"
+
+        def save_timeframe_result(self, _row) -> str:
+            return "OK"
+
+        def save_provider_observation(self, _row) -> str:
+            return "OK"
+
+        def save_prediction(self, _row) -> str:
+            return "OK"
+
+        def save_feature_snapshot(self, _row) -> str:
+            return "INSERTED"
+
+    capacity = analysis_service._MAX_IN_FLIGHT_PERSISTENCE_JOBS  # noqa: SLF001
+    exhausted_admission = threading.BoundedSemaphore(capacity)
+    for _ in range(capacity):
+        assert exhausted_admission.acquire(blocking=False)
+    monkeypatch.setattr(
+        analysis_service,
+        "_PERSISTENCE_ADMISSION",
+        exhausted_admission,
+    )
+    repository = RepositorySpy()
+    run_id = "sync-persistence-admission-test"
+    prediction_id = f"{run_id}:4H"
+    payload = {"run_id": run_id}
+    analysis_service._remember_prediction_persistence(  # noqa: SLF001
+        run_id,
+        {"prediction_id": prediction_id},
+        {"prediction_id": prediction_id},
+        None,
+        derivatives_snapshot_required=False,
+    )
+
+    try:
+        result = analysis_service.persist_analysis_now(payload, repository)
+    finally:
+        analysis_service._pop_prediction_persistence(payload)  # noqa: SLF001
+
+    assert result["overall"] == "OK"
+    assert repository.persisted_run_ids == [run_id]
 
 
 def test_analyze_monthly_timeframe_returns_schema_valid_payload() -> None:
