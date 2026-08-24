@@ -361,60 +361,6 @@ input:disabled {
   max-width: 100%;
 }
 
-.tactical-alignment {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  width: min(340px, 100%);
-  max-width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: rgba(142, 164, 177, 0.05);
-  text-align: right;
-}
-
-.tactical-alignment strong {
-  color: var(--muted);
-  text-transform: capitalize;
-}
-
-.tactical-alignment[data-alignment-state="blocked"] {
-  border-color: var(--danger);
-  background: rgba(255, 77, 77, 0.08);
-}
-
-.tactical-alignment[data-alignment-state="blocked"] strong {
-  color: var(--danger);
-}
-
-.tactical-alignment[data-alignment-state="insufficient"] {
-  border-color: rgba(255, 209, 102, 0.52);
-  background: rgba(255, 209, 102, 0.06);
-}
-
-.tactical-alignment[data-alignment-state="insufficient"] strong {
-  color: var(--warning);
-}
-
-.tactical-alignment[data-alignment-state="aligned"] {
-  border-color: rgba(138, 255, 128, 0.52);
-  background: rgba(138, 255, 128, 0.06);
-}
-
-.tactical-alignment[data-alignment-state="aligned"] strong {
-  color: var(--green);
-}
-
-.tactical-alignment[data-alignment-state="mixed"] {
-  border-color: rgba(0, 240, 255, 0.48);
-  background: rgba(0, 240, 255, 0.05);
-}
-
-.tactical-alignment[data-alignment-state="mixed"] strong {
-  color: var(--cyan);
-}
-
 .result-card {
   --heat-main: #374151;
   --heat-border: #374151;
@@ -1439,10 +1385,6 @@ pre {
 
   .horizon-group-header {
     display: grid;
-  }
-
-  .tactical-alignment {
-    text-align: left;
   }
 
   .detail-kv {
