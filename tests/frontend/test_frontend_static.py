@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -8,6 +9,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def read_frontend(name: str) -> str:
     return (ROOT / "frontend" / name).read_text(encoding="utf-8")
+
+
+def test_frontend_app_is_valid_javascript() -> None:
+    completed = subprocess.run(
+        ["node", "--check", str(ROOT / "frontend" / "app.js")],
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_heat_legend_and_metrics_only_news_copy_present() -> None:
