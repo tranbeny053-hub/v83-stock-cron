@@ -1,24 +1,34 @@
 # STATE
 
-Updated: 2026-08-23
+Updated: 2026-08-25
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — PROD-SAFE-1 deployed and closed. The section 5A envelope is frozen: the
+LOOP_STATE=IDLE — PROD-SAFE-2 deployed and closed. The section 5A envelope is frozen: the
   holdout, its evaluation, candidate freeze, collector, outcome and holdout inspection,
   T_close itself, and any change to what the collector computes or persists. Ordinary safe work
   outside that envelope continues under normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
-CURRENT_BRANCH=docs/state-2-scope-wait (this checkpoint). origin/main = f6b4757.
-LAST_GREEN_SHA=f6b4757
-LAST_VERIFY=PASS ruff ok | 1034 passed | schemas+smoke ok | scanners 3/3 · f6b4757 · 2026-08-23
-PRODUCTION=hf/main = e9d549c (PROD-SAFE-1), deployed 2026-08-23T06:01:39Z from 9933615 by
-  fast-forward. Guard #574 HEALTHY on 074e995. Pin on main describes the live build exactly.
+CURRENT_BRANCH=docs/state-prod-safe-2 (this checkpoint). origin/main = d444c62.
+LAST_GREEN_SHA=d444c62
+LAST_VERIFY=PASS ruff ok | 1045 passed | schemas+smoke ok | scanners 3/3 · d444c62 · 2026-08-25
+PRODUCTION=hf/main = a89b45e (PROD-SAFE-2), deployed 2026-08-25T17:55:11Z from e9d549c by
+  fast-forward. Guard #605 HEALTHY on d444c62, three rounds, critical source and frontend
+  asset match both True. Pin on main describes the live build exactly. Rollback target if ever
+  needed: e9d549c.
+PRODUCTION_LINEAGE=Production is a CLEAN-ROOM lineage that diverged from main at 9933615 and
+  is NOT an ancestor path of main. main carries the section-5A / Change-B machinery —
+  quant/probability_distributional.py, oos/**, the arm dispatch in quant/pipeline.py, and OOS
+  evidence persistence — and production deliberately does NOT. Never deploy main directly, and
+  never "fix" the standing one-path deployment delta
+  (src/crypto_probability_engine/api/analysis_service.py) by deploying main: that delta is
+  structural, not drift. Future deploys backport behaviour onto the release lineage, as
+  PROD-SAFE-1 and PROD-SAFE-2 both did.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-1 T3/T4 authorization is CONSUMED and must not be
+OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-2 T3/T4 authorization is CONSUMED and must not be
   reused. Standing prohibition while the holdout runs: no holdout or outcome inspection, no
   collector dispatch, no further deploy, no model change, no re-freeze.
 NEXT_ACTION=SECTION 5A ONLY: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
@@ -29,7 +39,22 @@ Update this block on every pause, every milestone change, and every GPT consulta
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
 
-## Production — PROD-SAFE-1 IS DEPLOYED (2026-08-23)
+## Production — PROD-SAFE-2 IS DEPLOYED (2026-08-25)
+hf/main moved e9d549c -> a89b45e at 2026-08-25T17:55:11Z by fast-forward, one commit.
+Shipped to users: login failure states, batch-item error messages that show the backend's
+message instead of a bare enum, and removal of the browser-derived "Tactical horizons"
+verdict. Also shipped: the 480-character news snippet cap and a bounded best-effort
+persistence backlog. The six authoritative per-timeframe cards are unchanged.
+
+Proof captured at deploy time, all read-only:
+  healthcheck  status OK, uptime 6s (fresh restart)
+  build-info   UCPE-W4D3-OPS-2A0-20260622-A / HF_PRODUCTION, matching the pin
+  served bytes sha256 of app.js, styles.css and index.html each byte-identical to the pin
+  guard #605  HEALTHY, 3/3 rounds, delta path count 1 (the structural analysis_service.py)
+
+No DB write, no prediction smoke, no holdout inspection, no Change-B/OOS code was included.
+
+## Production — PROD-SAFE-1 (2026-08-23, superseded)
 
 `hf/main` = **`e9d549c`**, deployed 2026-08-23T06:01:39Z as a fast-forward from `9933615`.
 This is the first deploy since 2026-08-17 and it carries **no section-5A code whatsoever**.
