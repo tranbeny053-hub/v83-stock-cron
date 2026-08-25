@@ -26,6 +26,7 @@ DRIFT_SHA = "d" * 40
 CURRENT_DELTA_PATHS = [
     "frontend/app.js",
     "frontend/index.html",
+    "frontend/styles.css",
     "src/crypto_probability_engine/api/analysis_service.py",
 ]
 
