@@ -14,7 +14,12 @@ from crypto_probability_engine.news.adapters.gdelt import GdeltDocAdapter, parse
 from crypto_probability_engine.news.adapters.newsapi import NewsApiAdapter, parse_newsapi_items
 from crypto_probability_engine.news.authority import score_and_classify_items, summarize_clusters
 from crypto_probability_engine.news.contract import build_news_blocks
-from crypto_probability_engine.news.models import MacroObservation, NewsItem, make_news_item
+from crypto_probability_engine.news.models import (
+    NEWS_SNIPPET_MAX_LENGTH,
+    MacroObservation,
+    NewsItem,
+    make_news_item,
+)
 
 FETCHED_AT = datetime(2026, 6, 8, 12, 0, tzinfo=UTC)
 
@@ -369,6 +374,27 @@ def test_newsapi_ignores_provider_text_field() -> None:
 
     assert public["snippet"] == "Short metadata summary."
     assert "provider text" not in str(public)
+
+
+def test_newsapi_bounds_description_before_public_output() -> None:
+    oversized_description = "article-body-marker " * 100
+    payload = {
+        "status": "ok",
+        "articles": [
+            {
+                "source": {"name": "Example"},
+                "title": "Bounded metadata",
+                "description": oversized_description,
+                "url": "https://example.com/bounded-metadata",
+                "publishedAt": "2026-06-08T09:00:00Z",
+            }
+        ],
+    }
+
+    public = parse_newsapi_items(payload, fetched_at=FETCHED_AT)[0].to_public_dict()
+
+    assert len(public["snippet"]) == NEWS_SNIPPET_MAX_LENGTH
+    assert public["snippet"] != oversized_description.strip()
 
 
 def test_dedup_cluster_is_deterministic() -> None:

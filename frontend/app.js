@@ -1,5 +1,6 @@
 const sessionStatus = document.querySelector("#sessionStatus");
 const loginPanel = document.querySelector("#loginPanel");
+const loginStatus = document.querySelector("#loginStatus");
 const workspace = document.querySelector("#workspace");
 const overviewTemplate = document.querySelector("#overviewTemplate");
 const singleResult = document.querySelector("#singleResult");
@@ -113,14 +114,62 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    const error = new Error("Response was not valid JSON.");
+    error.status = response.status;
+    error.payload = null;
+    throw error;
+  }
   if (response.ok) {
     updateStatusFromPayload(payload);
   }
   if (!response.ok) {
-    throw new Error(payload?.detail?.error?.message || "Request failed");
+    const error = new Error(payload?.detail?.error?.message || "Request failed");
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
   }
   return payload;
+}
+
+function loginFailureMessage(status, payload) {
+  const detail =
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload.detail : null;
+  const errorEnvelope =
+    detail && typeof detail === "object" && !Array.isArray(detail) ? detail.error : null;
+  const backendMessage =
+    errorEnvelope &&
+    typeof errorEnvelope === "object" &&
+    !Array.isArray(errorEnvelope) &&
+    typeof errorEnvelope.message === "string" &&
+    errorEnvelope.message.trim()
+      ? errorEnvelope.message.trim()
+      : null;
+
+  if (status === 401) {
+    return backendMessage || "Access code not accepted. Check the code and try again.";
+  }
+  if (status === 429) {
+    const retryAfter = errorEnvelope?.retry_after_seconds;
+    const baseMessage = backendMessage || "Too many login attempts.";
+    if (typeof retryAfter === "number" && Number.isFinite(retryAfter) && retryAfter > 0) {
+      return `${baseMessage} Try again in ${retryAfter} seconds.`;
+    }
+    return `${baseMessage} Wait a moment, then try again.`;
+  }
+  if (status === 422) {
+    return backendMessage || "The access code was not accepted. Check the entry and try again.";
+  }
+  if (backendMessage) {
+    return backendMessage;
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "Login is temporarily unavailable. Try again shortly.";
 }
 
 function updateStatusFromPayload(payload = {}) {
@@ -559,69 +608,7 @@ function horizonCard(payload) {
   return node;
 }
 
-function tacticalPayloads(payloadStore) {
-  return tacticalTimeframes
-    .map((timeframe) => ({ timeframe, payload: payloadStore.get(timeframe) }))
-    .filter(
-      ({ timeframe, payload }) =>
-        payload && timeframeRoleFor(payload, timeframe).tactical === true,
-    )
-    .map(({ payload }) => payload);
-}
-
-function tacticalAlignmentState(payloadStore) {
-  const payloads = tacticalPayloads(payloadStore);
-  if (payloads.length < tacticalTimeframes.length) {
-    return "unavailable";
-  }
-  if (
-    payloads.some((payload) =>
-      orderedActionability(payload.decision_synthesis?.actionability_stack).some(
-        (item) => item.status === "BLOCK",
-      ),
-    )
-  ) {
-    return "blocked";
-  }
-  if (
-    payloads.some((payload) => {
-      const quality = payload.decision_synthesis?.model_quality_summary || {};
-      const status = backendText(quality.reliability_status) || "";
-      return (
-        quality.reliability_available === false ||
-        ["INSUFFICIENT_SAMPLE", "NO_SAMPLES", "LOW_SAMPLE", "WARMING_UP"].includes(status)
-      );
-    })
-  ) {
-    return "insufficient";
-  }
-
-  const labels = payloads.map(
-    (payload) => payload.decision_synthesis?.decision_synthesis?.label,
-  );
-  if (labels.some((label) => !backendText(label))) {
-    return "insufficient";
-  }
-  const sameLabel = labels.every((label) => label === labels[0]);
-  const compatibleNonDirectional = labels.every((label) => ["WAIT", "WATCH"].includes(label));
-  return sameLabel || compatibleNonDirectional ? "aligned" : "mixed";
-}
-
-function tacticalAlignmentCopy(state) {
-  return state === "unavailable" ? "Tactical alignment unavailable" : `Tactical horizons: ${state}`;
-}
-
-function updateTacticalAlignment(target, payloadStore) {
-  const alignment = target.querySelector("[data-tactical-alignment]");
-  if (!alignment) {
-    return;
-  }
-  const state = tacticalAlignmentState(payloadStore);
-  alignment.dataset.alignmentState = state;
-  alignment.querySelector("strong").textContent = tacticalAlignmentCopy(state);
-}
-
-function horizonGroupSection(group, payloadStore) {
+function horizonGroupSection(group) {
   const wrapper = document.createElement("section");
   wrapper.className = `horizon-group horizon-group-${group.key}`;
   wrapper.dataset.horizonGroupSection = group.key;
@@ -632,21 +619,6 @@ function horizonGroupSection(group, payloadStore) {
   heading.append(textBlock("h2", group.title));
   heading.append(textBlock("p", group.description, "muted"));
   header.append(heading);
-  if (group.key === "tactical") {
-    const alignment = document.createElement("div");
-    alignment.className = "tactical-alignment";
-    alignment.dataset.tacticalAlignment = "";
-    alignment.dataset.alignmentState = "unavailable";
-    alignment.append(textBlock("strong", "Tactical alignment unavailable"));
-    alignment.append(
-      textBlock(
-        "span",
-        "Display-only summary of currently shown backend labels.",
-        "muted",
-      ),
-    );
-    header.append(alignment);
-  }
   const grid = document.createElement("div");
   grid.className = "timeframe-group-grid";
   grid.dataset.horizonGroup = group.key;
@@ -654,13 +626,10 @@ function horizonGroupSection(group, payloadStore) {
     grid.append(loadingCard(timeframe));
   }
   wrapper.append(header, grid);
-  if (group.key === "tactical") {
-    updateTacticalAlignment(wrapper, payloadStore);
-  }
   return wrapper;
 }
 
-function horizonGroups(payloadStore) {
+function horizonGroups() {
   return [
     horizonGroupSection(
       {
@@ -670,7 +639,6 @@ function horizonGroups(payloadStore) {
         description: "Backend timing and setup views.",
         timeframes: tacticalTimeframes,
       },
-      payloadStore,
     ),
     horizonGroupSection(
       {
@@ -680,7 +648,6 @@ function horizonGroups(payloadStore) {
         description: "Higher-horizon context, not an equal tactical forecast.",
         timeframes: regimeTimeframes,
       },
-      payloadStore,
     ),
   ];
 }
@@ -695,6 +662,37 @@ function appendDefinitionRows(dl, values) {
   }
 }
 
+function batchErrorMessage(item) {
+  const errorItem = item && typeof item === "object" && !Array.isArray(item) ? item : null;
+  const detail =
+    errorItem?.detail &&
+    typeof errorItem.detail === "object" &&
+    !Array.isArray(errorItem.detail)
+      ? errorItem.detail
+      : null;
+  const error =
+    detail?.error && typeof detail.error === "object" && !Array.isArray(detail.error)
+      ? detail.error
+      : null;
+  const message =
+    typeof error?.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : "Batch item could not be analyzed.";
+  const code =
+    typeof error?.code === "string" && error.code.trim() ? error.code.trim() : null;
+  const symbol =
+    typeof errorItem?.symbol === "string" && errorItem.symbol.trim()
+      ? ` (${errorItem.symbol.trim()})`
+      : "";
+  const label =
+    Number.isInteger(errorItem?.index) && errorItem.index >= 0
+      ? `Item ${errorItem.index + 1}${symbol}`
+      : `Batch item${symbol}`;
+  const codeSuffix = code ? ` (Code: ${code})` : "";
+
+  return `${label}: ${message}${codeSuffix}`;
+}
+
 function renderResults(target, payloads, errors = []) {
   target.replaceChildren();
   for (const payload of payloads) {
@@ -703,7 +701,7 @@ function renderResults(target, payloads, errors = []) {
   for (const item of errors) {
     const node = document.createElement("article");
     node.className = "result-card";
-    node.textContent = `Item ${item.index + 1}: ${item.detail.error.code}`;
+    node.textContent = batchErrorMessage(item);
     target.append(node);
   }
 }
@@ -728,14 +726,14 @@ function replaceTimeframeCard(target, timeframe, node, groupKey) {
   group.insertBefore(node, next || null);
 }
 
-function renderTimeframePlaceholders(target, payloadStore = new Map()) {
-  target.replaceChildren(...horizonGroups(payloadStore));
+function renderTimeframePlaceholders(target) {
+  target.replaceChildren(...horizonGroups());
   hideDetail();
 }
 
 async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, payloadStore }) {
   payloadStore.clear();
-  renderTimeframePlaceholders(target, payloadStore);
+  renderTimeframePlaceholders(target);
   setLoading(loadingSelector, true);
   setAnalysisActive(true);
   try {
@@ -757,7 +755,6 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
           horizonCard(payload),
           timeframeGroupFor(payload, timeframe),
         );
-        updateTacticalAlignment(target, payloadStore);
       } catch (error) {
         replaceTimeframeCard(
           target,
@@ -765,11 +762,9 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
           errorCard(timeframe, error),
           tacticalTimeframes.includes(timeframe) ? "tactical" : "regime",
         );
-        updateTacticalAlignment(target, payloadStore);
       }
     });
     await Promise.allSettled(requests);
-    updateTacticalAlignment(target, payloadStore);
     markRefreshed();
   } finally {
     setAnalysisActive(false);
@@ -1931,15 +1926,20 @@ function renderStructuredDetail(payload, detailView) {
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
-  await api("/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-  loginPanel.classList.add("hidden");
-  workspace.classList.remove("hidden");
-  sessionStatus.textContent = "Ready";
-  updateRefreshButton();
-  await loadSystemStatus();
+  loginStatus.textContent = "";
+  try {
+    await api("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    });
+    loginPanel.classList.add("hidden");
+    workspace.classList.remove("hidden");
+    sessionStatus.textContent = "Ready";
+    updateRefreshButton();
+    await loadSystemStatus();
+  } catch (error) {
+    loginStatus.textContent = loginFailureMessage(error?.status, error?.payload);
+  }
 });
 
 for (const button of document.querySelectorAll(".tab")) {
@@ -2182,7 +2182,7 @@ document.querySelector("#loadRuns").addEventListener("click", async () => {
   }
 });
 
-renderTimeframePlaceholders(singleResult, singlePayloads);
+renderTimeframePlaceholders(singleResult);
 void loadBuildFingerprint();
 updatePersistenceStatus("UNKNOWN");
 updateDevModeUx({ enabled: false, configured: false });

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -8,6 +9,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def read_frontend(name: str) -> str:
     return (ROOT / "frontend" / name).read_text(encoding="utf-8")
+
+
+def test_frontend_app_is_valid_javascript() -> None:
+    completed = subprocess.run(
+        ["node", "--check", str(ROOT / "frontend" / "app.js")],
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_heat_legend_and_metrics_only_news_copy_present() -> None:
@@ -26,8 +37,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260621-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260823-a"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260824-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -47,6 +58,24 @@ def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:
     assert 'document.querySelectorAll("[data-build-fingerprint]")' in js
     assert 'marker.textContent = "Build fingerprint unavailable"' in js
     assert "void loadBuildFingerprint();" in js
+
+
+def test_login_submit_failure_keeps_session_locked() -> None:
+    js = read_frontend("app.js")
+    handler = js.split(
+        'document.querySelector("#loginForm").addEventListener("submit", async (event) => {',
+        maxsplit=1,
+    )[1].split("\n});", maxsplit=1)[0]
+    success_path, failure_path = handler.split("} catch (error) {", maxsplit=1)
+
+    assert "try {" in success_path
+    assert 'loginPanel.classList.add("hidden")' in success_path
+    assert 'workspace.classList.remove("hidden")' in success_path
+    assert 'sessionStatus.textContent = "Ready"' in success_path
+    assert "loginFailureMessage(error?.status, error?.payload)" in failure_path
+    assert 'loginPanel.classList.add("hidden")' not in failure_path
+    assert 'workspace.classList.remove("hidden")' not in failure_path
+    assert "sessionStatus.textContent" not in failure_path
 
 
 def test_frontend_uses_backend_display_fields() -> None:
@@ -124,46 +153,33 @@ def test_ui_d1_3_hard_gate_dominates_muted_probability() -> None:
     assert ".matrix-probability-muted" in css
 
 
-def test_ui_d1_3_tactical_alignment_is_label_and_status_derived_only() -> None:
+def test_ui_d1_3_client_does_not_derive_tactical_alignment() -> None:
+    html = read_frontend("index.html")
     js = read_frontend("app.js")
-    chunk = js.split("function tacticalAlignmentState", maxsplit=1)[1].split(
-        "function tacticalAlignmentCopy", maxsplit=1
-    )[0]
-    assert "decision_synthesis?.decision_synthesis?.label" in chunk
-    assert "actionability_stack" in chunk
-    assert 'item.status === "BLOCK"' in chunk
-    assert "model_quality_summary" in chunk
-    for probability_name in (
-        "p_" "up",
-        "p_" "down",
-        "prob_" "up",
-        "prob_" "down",
-        "directional_" "edge",
+    css = read_frontend("styles.css")
+    for forbidden in (
+        "tacticalPayloads",
+        "tacticalAlignmentState",
+        "tacticalAlignmentCopy",
+        "updateTacticalAlignment",
+        "compatibleNonDirectional",
+        '["WAIT", "WATCH"].includes(label)',
+        "Tactical alignment unavailable",
+        "Tactical horizons:",
+        "data-tactical-alignment",
+        "tactical-alignment",
     ):
-        assert probability_name not in chunk
-    for state in ("blocked", "aligned", "mixed", "insufficient", "unavailable"):
-        assert f'"{state}"' in chunk or f'"{state}"' in js
-    assert "Display-only summary of currently shown backend labels." in js
-
-
-def test_ui_d1_3_missing_timeframe_keeps_card_and_alignment_unavailable() -> None:
-    js = read_frontend("app.js")
-    assert "errorCard(timeframe, error)" in js
-    assert "payloads.length < tacticalTimeframes.length" in js
-    assert 'return "unavailable"' in js
-    assert "Tactical alignment unavailable" in js
-    assert "updateTacticalAlignment(target, payloadStore)" in js
+        assert forbidden not in js
+        assert forbidden not in html
+        assert forbidden not in css
 
 
 def test_ui_d1_3_matrix_has_no_permission_label_or_zone_inference() -> None:
     js = read_frontend("app.js")
-    alignment_chunk = js.split("function tacticalAlignmentState", maxsplit=1)[1].split(
-        "function tacticalAlignmentCopy", maxsplit=1
-    )[0]
     assert "can_enter_now = true" not in js
     assert "canEnterNow = true" not in js
-    assert "> probability.p_" not in alignment_chunk
-    assert "> display.prob_" not in alignment_chunk
+    assert "> probability.p_" not in js
+    assert "> display.prob_" not in js
     assert "decisionLabelCopy[decision.label]" in js
     matrix_chunk = js.split("function overviewCard", maxsplit=1)[1].split(
         "function errorCard", maxsplit=1

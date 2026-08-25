@@ -69,6 +69,8 @@ from crypto_probability_engine.validation.market_data import (
 )
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
+_MAX_IN_FLIGHT_PERSISTENCE_JOBS = 8
+_PERSISTENCE_ADMISSION = threading.BoundedSemaphore(_MAX_IN_FLIGHT_PERSISTENCE_JOBS)
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
 _PENDING_FEATURE_SNAPSHOT_ROWS: dict[str, dict | None] = {}
 _PENDING_DERIVATIVES_SNAPSHOT_ROWS: dict[str, dict | None] = {}
@@ -459,12 +461,31 @@ def schedule_best_effort_persist(
 
 
 def _submit_persistence_work(repository: PersistenceRepository, work: PersistenceWork) -> None:
+    admission = _PERSISTENCE_ADMISSION
+    if not admission.acquire(blocking=False):
+        _mark_repository_unavailable(repository)
+        return
     try:
-        _PERSISTENCE_EXECUTOR.submit(_best_effort_persist, work, repository)
+        _PERSISTENCE_EXECUTOR.submit(
+            _run_persistence_work_with_permit,
+            work,
+            repository,
+            admission,
+        )
     except Exception:
-        mark_unavailable = getattr(repository, "mark_unavailable", None)
-        if callable(mark_unavailable):
-            mark_unavailable()
+        admission.release()
+        _mark_repository_unavailable(repository)
+
+
+def _run_persistence_work_with_permit(
+    work: PersistenceWork,
+    repository: PersistenceRepository,
+    admission: threading.BoundedSemaphore,
+) -> str:
+    try:
+        return _best_effort_persist(work, repository)
+    finally:
+        admission.release()
 
 
 def _best_effort_persist(
