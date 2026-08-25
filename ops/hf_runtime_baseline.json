@@ -1,12 +1,12 @@
 {
   "critical_source_digests": {
     "Dockerfile": "d6d90cbcce02014662f45f4b9f140017b751ec46ebdab770342ae8ba4cd11494",
-    "frontend/app.js": "9591fac6f3cfcade3358926c33d312052fca2e3e5659203fb1043058ba1e8719",
-    "frontend/index.html": "00aead02bdb2c5881898d4e3d3db99a100533cac1e9e4619f3380d8058909554",
-    "frontend/styles.css": "6362e2407ac31922e3494a29ead760a0a8c81cf8df568698901f3373ad6dabc5",
+    "frontend/app.js": "bb4810b7164ba1115fb40d77dced9bd327c8666ffc998c52073fc5bbd68c55cb",
+    "frontend/index.html": "68394e8d77f9515151f3628230ac091ad6662f49dcc6d0c3f8061ab86e739549",
+    "frontend/styles.css": "8419782f2ccf46595b5ad36bda3d8cedc04f9accd42f0de1ea106700fe75b398",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "85e556251a081711c6ae3c2eac7e2e831b012490fc700c1ee9117d37ea67bc1a",
+    "src/crypto_probability_engine/api/analysis_service.py": "b9bdd46e91a792680464d6cc5f49e53087c3071f0fc9175d4cba1a399607bfcd",
     "src/crypto_probability_engine/api/app.py": "ea55f4b36bf7187405a9bad2481ea21a1951b8e88c67a7568dccd5b0e1f478f7",
     "src/crypto_probability_engine/config/build_info.py": "e0bd6f701933880fcb82e48621efda6c053759d11f623e48bbdc0e3b1eb03358",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
@@ -15,10 +15,10 @@
   "environment": "HF_PRODUCTION",
   "fingerprint": "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A",
   "frontend_asset_tokens": {
-    "app_js": "w4c1-ka1-20260823-a",
-    "styles_css": "w4c1-ka1-20260621-a"
+    "app_js": "w4c1-ka1-20260824-a",
+    "styles_css": "w4c1-ka1-20260824-a"
   },
-  "hf_main_sha": "e9d549c59f159222e763182cf0aa02564c1ed67c",
+  "hf_main_sha": "a89b45e417fcf221daddf757b5fd5900a8a026b1",
   "release_id": "UCPE-W4D3-OPS-2A0-20260622-A",
   "release_label": "Wave 4D.3-Ops Cadence Runtime Primitives",
   "schema_version": "hf-runtime-baseline.v1",
