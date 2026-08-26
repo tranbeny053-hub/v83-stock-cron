@@ -41,7 +41,7 @@ class LoginRequest(BaseModel):
         except ValidationError as exc:
             errors = exc.errors(include_url=False)
             for error in errors:
-                if error["type"] == "string_too_long" and error["loc"] == ("code",):
+                if error["loc"] == ("code",) and "input" in error:
                     error["input"] = "[REDACTED]"
             raise ValidationError.from_exception_data(type(self).__name__, errors) from None
 
