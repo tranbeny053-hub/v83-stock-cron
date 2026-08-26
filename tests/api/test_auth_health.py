@@ -168,6 +168,45 @@ def test_malformed_login_code_is_not_echoed(
     assert submitted_text not in response.text
 
 
+@pytest.mark.parametrize("path", ["/v1/auth/login", "/v1/auth/dev"])
+@pytest.mark.parametrize(
+    ("submitted", "submitted_text"),
+    [
+        pytest.param("top-level-access-value", "top-level-access-value", id="string"),
+        pytest.param(8675309, "8675309", id="number"),
+        pytest.param(
+            ["top-level-list-access-value"],
+            "top-level-list-access-value",
+            id="list",
+        ),
+    ],
+)
+def test_top_level_auth_body_is_not_echoed(
+    path: str, submitted: object, submitted_text: str
+) -> None:
+    client = make_client()
+
+    response = client.post(path, json=submitted)
+
+    assert response.status_code == 422
+    assert submitted_text not in response.text
+
+
+def test_non_auth_validation_error_still_echoes_input() -> None:
+    client = make_client()
+    login_response = client.post("/v1/auth/login", json={"code": "operator-test-code"})
+    submitted = "non-auth-validation-input"
+
+    response = client.post(
+        "/v1/analyze",
+        json=submitted,
+        cookies={SESSION_COOKIE: login_response.cookies[SESSION_COOKIE]},
+    )
+
+    assert response.status_code == 422
+    assert submitted in response.text
+
+
 def test_login_code_at_maximum_length_still_works() -> None:
     code = "x" * MAX_ACCESS_CODE_LENGTH
     settings = Settings(

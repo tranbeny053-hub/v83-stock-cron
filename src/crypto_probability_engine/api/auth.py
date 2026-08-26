@@ -10,9 +10,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import Request, Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, GetCoreSchemaHandler, ValidationError
+from pydantic_core import core_schema
 
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import ErrorCode
@@ -34,6 +36,31 @@ MAX_ACCESS_CODE_LENGTH = 128
 class LoginRequest(BaseModel):
     # 128 characters is generous for a human access code but too small to amplify PBKDF2.
     code: str = Field(max_length=MAX_ACCESS_CODE_LENGTH)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        schema = handler(source_type)
+        return core_schema.no_info_wrap_validator_function(
+            cls._redact_validation_errors,
+            schema,
+        )
+
+    @classmethod
+    def _redact_validation_errors(
+        cls,
+        value: Any,
+        handler: core_schema.ValidatorFunctionWrapHandler,
+    ) -> Any:
+        try:
+            return handler(value)
+        except ValidationError as exc:
+            errors = exc.errors(include_url=False)
+            for error in errors:
+                if "input" in error:
+                    error["input"] = "[REDACTED]"
+            raise ValidationError.from_exception_data(cls.__name__, errors) from None
 
     def __init__(self, **data: object) -> None:
         try:
