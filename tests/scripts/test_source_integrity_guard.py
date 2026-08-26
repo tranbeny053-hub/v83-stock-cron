@@ -25,6 +25,8 @@ DRIFT_SHA = "d" * 40
 # clean-room candidate deliberately does not, so this entry stands until that code is either
 # retired or deliberately deployed.
 CURRENT_DELTA_PATHS = [
+    "frontend/app.js",
+    "frontend/index.html",
     "src/crypto_probability_engine/api/analysis_service.py",
 ]
 

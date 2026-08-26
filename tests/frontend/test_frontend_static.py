@@ -38,7 +38,7 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
     assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260824-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260826-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -243,6 +243,17 @@ def test_decision_section_reads_backend_contract_and_renders_first() -> None:
         'section("Overview"'
     )
     assert 'data-tab="decision"' not in html
+
+
+def test_final_decision_strength_is_qualified_by_backend_reliability_status() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("function renderFinalDecisionCard", maxsplit=1)[1].split(
+        "function renderActionabilityRow", maxsplit=1
+    )[0]
+
+    assert "const quality = synthesis.model_quality_summary || {};" in chunk
+    assert 'backendText(quality.reliability_status) || "Not measured yet"' in chunk
+    assert 'textBlock("p", `Reliability: ${reliabilityStatus}`, "muted")' in chunk
 
 
 def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> None:
