@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -9,6 +10,22 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def read_frontend(name: str) -> str:
     return (ROOT / "frontend" / name).read_text(encoding="utf-8")
+
+
+def extract_javascript_function(source: str, name: str) -> str:
+    function_start = source.index(f"function {name}(")
+    async_start = function_start - len("async ")
+    start = async_start if source[async_start:function_start] == "async " else function_start
+    opening_brace = source.index("{", start)
+    depth = 0
+    for index in range(opening_brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+    raise AssertionError(f"Could not extract {name}")
 
 
 def test_frontend_app_is_valid_javascript() -> None:
@@ -38,7 +55,7 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
     assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260826-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260826-b"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -814,16 +831,96 @@ def test_batch_cards_reuse_structured_detail_renderer() -> None:
         'id="batchPanel"', maxsplit=1
     )[0]
     assert 'id="detailPanel"' not in single_section
-    assert (
-        "renderResults(document.querySelector(\"#batchResult\"), payload.results, payload.errors)"
-        in js
-    )
+    assert "renderResults(target, payload.results, payload.errors)" in js
     assert "target.append(overviewCard(payload))" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
     assert "payload.detail_view" in js
     assert "renderStructuredDetail(payload, detailView)" in js
     assert "Detail Analysis is unavailable for this result." in js
+
+
+def test_failed_batch_replaces_stale_results_with_safe_failure_state() -> None:
+    source = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(source, name)
+        for name in (
+            "loginFailureMessage",
+            "batchFailureMessage",
+            "renderBatchFailure",
+            "runBatchAnalysis",
+        )
+    )
+    sentinel = "SENTINEL-SUBMITTED-SYMBOL"
+    script = f"""
+{functions}
+const target = {{
+  children: [{{ textContent: "STALE BATCH RESULT" }}],
+  replaceChildren(...children) {{ this.children = children; }},
+  append(...children) {{ this.children.push(...children); }},
+}};
+const document = {{
+  querySelector(selector) {{
+    if (selector === "#batchResult") return target;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+  createElement() {{ return {{ className: "", textContent: "" }}; }},
+}};
+let apiCalls = 0;
+let lastBatchRequest = null;
+const hideDetail = () => {{}};
+const setLoading = () => {{}};
+const setAnalysisActive = () => {{}};
+const renderResults = () => {{}};
+const updateStatusFromPayload = () => {{}};
+const markRefreshed = () => {{}};
+const api = async () => {{
+  apiCalls += 1;
+  throw {{
+    status: 422,
+    payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
+  }};
+}};
+(async () => {{
+  await runBatchAnalysis({{ symbols: ["BTC"], analysisMode: "METRICS_ONLY", timeframe: "4H" }});
+  const rejected = {{
+    apiCalls,
+    childCount: target.children.length,
+    className: target.children[0].className,
+    message: target.children[0].textContent,
+  }};
+  target.children = [{{ textContent: "ANOTHER STALE RESULT" }}];
+  await runBatchAnalysis({{ symbols: [], analysisMode: "METRICS_ONLY", timeframe: "4H" }});
+  const empty = {{
+    apiCalls,
+    childCount: target.children.length,
+    className: target.children[0].className,
+    message: target.children[0].textContent,
+  }};
+  console.log(JSON.stringify({{ rejected, empty }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    states = json.loads(completed.stdout)
+
+    assert states["rejected"] == {
+        "apiCalls": 1,
+        "childCount": 1,
+        "className": "result-card error-card",
+        "message": "Batch request was not accepted. Enter at least one symbol and try again.",
+    }
+    assert sentinel not in states["rejected"]["message"]
+    assert states["empty"] == {
+        "apiCalls": 1,
+        "childCount": 1,
+        "className": "result-card error-card",
+        "message": "Enter at least one symbol to run batch analysis.",
+    }
 
 
 def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:

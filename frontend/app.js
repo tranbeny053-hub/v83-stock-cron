@@ -693,6 +693,42 @@ function batchErrorMessage(item) {
   return `${label}: ${message}${codeSuffix}`;
 }
 
+function batchFailureMessage(status, payload) {
+  const detail =
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload.detail : null;
+  const errorEnvelope =
+    detail && typeof detail === "object" && !Array.isArray(detail) ? detail.error : null;
+  const backendMessage =
+    errorEnvelope &&
+    typeof errorEnvelope === "object" &&
+    !Array.isArray(errorEnvelope) &&
+    typeof errorEnvelope.message === "string" &&
+    errorEnvelope.message.trim()
+      ? errorEnvelope.message.trim()
+      : null;
+
+  if (status === 401) {
+    return loginFailureMessage(status, payload);
+  }
+  if (status === 422) {
+    return "Batch request was not accepted. Enter at least one symbol and try again.";
+  }
+  if (backendMessage) {
+    return backendMessage;
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "Batch analysis is temporarily unavailable. Try again shortly.";
+}
+
+function renderBatchFailure(target, message) {
+  const node = document.createElement("article");
+  node.className = "result-card error-card";
+  node.textContent = message;
+  target.replaceChildren(node);
+}
+
 function renderResults(target, payloads, errors = []) {
   target.replaceChildren();
   for (const payload of payloads) {
@@ -1969,6 +2005,11 @@ function batchRequestFromForm(form) {
 
 async function runBatchAnalysis(batchRequest) {
   hideDetail();
+  const target = document.querySelector("#batchResult");
+  if (!Array.isArray(batchRequest?.symbols) || batchRequest.symbols.length === 0) {
+    renderBatchFailure(target, "Enter at least one symbol to run batch analysis.");
+    return;
+  }
   setLoading("#batchLoading", true);
   setAnalysisActive(true);
   try {
@@ -1982,9 +2023,11 @@ async function runBatchAnalysis(batchRequest) {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
-    renderResults(document.querySelector("#batchResult"), payload.results, payload.errors);
+    renderResults(target, payload.results, payload.errors);
     updateStatusFromPayload(payload.results?.[0] || {});
     markRefreshed();
+  } catch (error) {
+    renderBatchFailure(target, batchFailureMessage(error?.status, error?.payload));
   } finally {
     setAnalysisActive(false);
     setLoading("#batchLoading", false);
