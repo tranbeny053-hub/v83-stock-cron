@@ -1023,6 +1023,7 @@ function primaryDecisionReason(stack, decision = {}) {
 function renderFinalDecisionCard(synthesis = {}) {
   const decision = synthesis.decision_synthesis || {};
   const permission = synthesis.action_permission || {};
+  const quality = synthesis.model_quality_summary || {};
   const stack = orderedActionability(synthesis.actionability_stack);
   const changes = Array.isArray(synthesis.what_would_change_decision)
     ? synthesis.what_would_change_decision
@@ -1035,6 +1036,8 @@ function renderFinalDecisionCard(synthesis = {}) {
   const headingGroup = document.createElement("div");
   headingGroup.append(textBlock("p", "Backend final decision", "decision-eyebrow"));
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
+  const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
+  headingGroup.append(textBlock("p", `Reliability: ${reliabilityStatus}`, "muted"));
   header.append(headingGroup);
   header.append(
     decisionBadge(
