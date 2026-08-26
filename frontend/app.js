@@ -2061,6 +2061,29 @@ function setWatchlistStatus(status) {
     : "Watchlist persistence: OK";
 }
 
+function watchlistFailureMessage(status) {
+  if (status === 401) {
+    return "Your session is not authorized. Sign in and try the watchlist change again.";
+  }
+  if (status === 422) {
+    return "The watchlist change was not accepted. Check the entry and try again.";
+  }
+  if (status === 429) {
+    return "Too many watchlist changes were requested. Wait a moment and try again.";
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "The watchlist change could not be saved. Try again shortly.";
+}
+
+function renderWatchlistMutationFailure(status) {
+  const target = document.querySelector("#watchlistStatus");
+  updatePersistenceStatus("UNAVAILABLE");
+  target.textContent = `Watchlist persistence: WRITE FAILED. ${watchlistFailureMessage(status)}`;
+  target.title = "";
+}
+
 function renderWatchlist(symbols, status) {
   const target = document.querySelector("#watchlistList");
   setWatchlistStatus(status);
@@ -2107,28 +2130,54 @@ async function loadWatchlist() {
 }
 
 async function addWatchlistSymbol(symbol) {
-  const payload = await api("/v1/watchlist", {
-    method: "POST",
-    body: JSON.stringify({ symbol }),
-  });
-  let symbols = payload.symbols || [];
-  if (payload.persistence_status !== "OK") {
-    symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
-    writeLocalWatchlist(symbols);
+  try {
+    const payload = await api("/v1/watchlist", {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
+    });
+    const envelope =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    let symbols = Array.isArray(envelope.symbols)
+      ? envelope.symbols.filter((item) => typeof item === "string")
+      : [];
+    const persistenceStatus =
+      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
+        ? envelope.persistence_status
+        : "UNAVAILABLE";
+    if (persistenceStatus !== "OK") {
+      symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
+      writeLocalWatchlist(symbols);
+    }
+    renderWatchlist(symbols, persistenceStatus);
+  } catch (error) {
+    const failure = error && typeof error === "object" && !Array.isArray(error) ? error : null;
+    renderWatchlistMutationFailure(failure?.status);
   }
-  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
 }
 
 async function removeWatchlistSymbol(symbol) {
-  const payload = await api(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
-    method: "DELETE",
-  });
-  let symbols = payload.symbols || [];
-  if (payload.persistence_status !== "OK") {
-    symbols = readLocalWatchlist().filter((item) => item !== symbol);
-    writeLocalWatchlist(symbols);
+  try {
+    const payload = await api(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
+    });
+    const envelope =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    let symbols = Array.isArray(envelope.symbols)
+      ? envelope.symbols.filter((item) => typeof item === "string")
+      : [];
+    const persistenceStatus =
+      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
+        ? envelope.persistence_status
+        : "UNAVAILABLE";
+    if (persistenceStatus !== "OK") {
+      symbols = readLocalWatchlist().filter((item) => item !== symbol);
+      writeLocalWatchlist(symbols);
+    }
+    renderWatchlist(symbols, persistenceStatus);
+  } catch (error) {
+    const failure = error && typeof error === "object" && !Array.isArray(error) ? error : null;
+    renderWatchlistMutationFailure(failure?.status);
   }
-  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
 }
 
 async function openWatchlistSymbol(symbol) {

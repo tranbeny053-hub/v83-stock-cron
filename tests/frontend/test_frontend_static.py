@@ -55,7 +55,7 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
     assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260826-b"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260826-c"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -937,6 +937,74 @@ def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
     assert "/v1/watchlist" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
+
+
+def test_failed_watchlist_mutations_replace_stale_success_with_safe_failure() -> None:
+    source = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(source, name)
+        for name in (
+            "watchlistFailureMessage",
+            "renderWatchlistMutationFailure",
+            "addWatchlistSymbol",
+            "removeWatchlistSymbol",
+        )
+    )
+    sentinel = "SENTINEL-SUBMITTED-SYMBOL"
+    script = f"""
+{functions}
+const statusTarget = {{ textContent: "Watchlist persistence: OK", title: "stale" }};
+const persistenceStates = [];
+const document = {{
+  querySelector(selector) {{
+    if (selector === "#watchlistStatus") return statusTarget;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+}};
+const updatePersistenceStatus = (status) => persistenceStates.push(status);
+const readLocalWatchlist = () => [];
+const writeLocalWatchlist = () => {{}};
+const renderWatchlist = () => {{}};
+let callCount = 0;
+const api = async () => {{
+  callCount += 1;
+  throw {{
+    status: 422,
+    payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
+  }};
+}};
+(async () => {{
+  await addWatchlistSymbol("{sentinel}");
+  const add = {{ message: statusTarget.textContent, title: statusTarget.title }};
+  statusTarget.textContent = "Watchlist persistence: OK";
+  statusTarget.title = "stale";
+  await removeWatchlistSymbol("{sentinel}");
+  const remove = {{ message: statusTarget.textContent, title: statusTarget.title }};
+  console.log(JSON.stringify({{ add, remove, persistenceStates, callCount }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    states = json.loads(completed.stdout)
+
+    expected_message = (
+        "Watchlist persistence: WRITE FAILED. "
+        "The watchlist change was not accepted. Check the entry and try again."
+    )
+    assert states == {
+        "add": {"message": expected_message, "title": ""},
+        "remove": {"message": expected_message, "title": ""},
+        "persistenceStates": ["UNAVAILABLE", "UNAVAILABLE"],
+        "callCount": 2,
+    }
+    assert "persistence: OK" not in states["add"]["message"]
+    assert "persistence: OK" not in states["remove"]["message"]
+    assert sentinel not in states["add"]["message"]
+    assert sentinel not in states["remove"]["message"]
 
 
 def test_refresh_control_and_persistence_badge_are_visible() -> None:
