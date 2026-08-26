@@ -1,17 +1,21 @@
 # STATE
 
-Updated: 2026-08-25
+Updated: 2026-08-26
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — PROD-SAFE-2 deployed and closed. The section 5A envelope is frozen: the
+LOOP_STATE=IDLE — BOARD CLEAR PRE-T_close. Batches 1-10 are closed and the final
+  high-threshold pre-T_close audit is complete: Product/UX and Testing/Release-Control returned
+  BOARD CLEAR, and the one HIGH finding (auth 422 echoing a plaintext access value on a
+  top-level scalar body) is fixed and merged. No further audits are scheduled before T_close.
+  PROD-SAFE-2 remains the deployed build. The section 5A envelope is frozen: the
   holdout, its evaluation, candidate freeze, collector, outcome and holdout inspection,
   T_close itself, and any change to what the collector computes or persists. Ordinary safe work
   outside that envelope continues under normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
-CURRENT_BRANCH=docs/state-prod-safe-2 (this checkpoint). origin/main = d444c62.
-LAST_GREEN_SHA=d444c62
-LAST_VERIFY=PASS ruff ok | 1045 passed | schemas+smoke ok | scanners 3/3 · d444c62 · 2026-08-25
+CURRENT_BRANCH=docs/state-board-clear (this checkpoint). origin/main = b5be453.
+LAST_GREEN_SHA=b5be453
+LAST_VERIFY=PASS ruff ok | 1067 passed | schemas+smoke ok | scanners 3/3 · b5be453 · 2026-08-26
 PRODUCTION=hf/main = a89b45e (PROD-SAFE-2), deployed 2026-08-25T17:55:11Z from e9d549c by
   fast-forward. Guard #605 HEALTHY on d444c62, three rounds, critical source and frontend
   asset match both True. Pin on main describes the live build exactly. Rollback target if ever
@@ -32,8 +36,16 @@ OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-2 T3/T4 authorization is CONSUMED and mu
   reused. Standing prohibition while the holdout runs: no holdout or outcome inspection, no
   collector dispatch, no further deploy, no model change, no re-freeze.
 NEXT_ACTION=SECTION 5A ONLY: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
-  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled section-5A
-  action; permitted ordinary safe work outside the frozen envelope continues meanwhile.
+  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. No
+  further audit or feature work is planned before T_close; the board is clear.
+OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .work/, so it
+  scans gitignored scratch logs and can fail ./verify.sh on a clean tree from an untracked file.
+  Its own docstring says it scans committed files. Deliberately NOT changed before T_close,
+  because adding a skip narrows a mandatory scanner. Remedy meanwhile: delete stale .work/*.log.
+DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on frontend/app.js and
+  frontend/index.html (app.js token w4c1-ka1-20260826-c). The source-integrity guard reports
+  this as the benign STALE_FRONTEND posture. Three merged frontend improvements and the two
+  auth-redaction fixes are NOT in front of users until a future owner-authorized deploy.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
