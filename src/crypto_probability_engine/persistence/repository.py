@@ -157,11 +157,6 @@ class InMemoryPersistenceRepository:
 
     def __init__(self) -> None:
         self._runs: OrderedDict[str, dict] = OrderedDict()
-        self._timeframe_results: list[dict] = []
-        self._provider_observations: list[dict] = []
-        self._news_items: list[dict] = []
-        self._news_clusters: list[dict] = []
-        self._news_evidence_links: list[dict] = []
         self._predictions: OrderedDict[str, dict] = OrderedDict()
         self._feature_snapshots: OrderedDict[str, dict] = OrderedDict()
         self._derivatives_snapshots: OrderedDict[str, dict] = OrderedDict()
@@ -185,23 +180,18 @@ class InMemoryPersistenceRepository:
         return self.persistence_status()
 
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._timeframe_results.append(dict(row))
         return self.persistence_status()
 
     def save_provider_observation(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._provider_observations.append(dict(row))
         return self.persistence_status()
 
     def save_news_item(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._news_items.append(dict(row))
         return self.persistence_status()
 
     def save_news_cluster(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._news_clusters.append(dict(row))
         return self.persistence_status()
 
     def save_news_evidence_link(self, row: Mapping[str, Any]) -> PersistenceStatus:
-        self._news_evidence_links.append(dict(row))
         return self.persistence_status()
 
     def save_prediction(self, row: Mapping[str, Any]) -> PersistenceStatus:

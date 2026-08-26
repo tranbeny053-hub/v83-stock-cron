@@ -5,7 +5,11 @@ from pathlib import Path
 
 import httpx
 
-from crypto_probability_engine.api.analysis_service import PersistenceWork, _best_effort_persist
+from crypto_probability_engine.api.analysis_service import (
+    PersistenceWork,
+    _best_effort_persist,
+    _persist_work_confirmed,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import (
     InMemoryPersistenceRepository,
@@ -108,6 +112,86 @@ def test_in_memory_repository_watchlist_and_runs_are_stateless() -> None:
     )
     assert repo.get_run("run_test")["normalized_symbol"] == "BTC/USDT"
     assert repo.recent_runs(1)[0]["run_id"] == "run_test"
+
+
+def test_in_memory_auxiliary_writes_do_not_retain_unread_rows() -> None:
+    auxiliary_writes = (
+        ("save_timeframe_result", "_timeframe_results"),
+        ("save_provider_observation", "_provider_observations"),
+        ("save_news_item", "_news_items"),
+        ("save_news_cluster", "_news_clusters"),
+        ("save_news_evidence_link", "_news_evidence_links"),
+    )
+    probe_rows: list[dict] = []
+
+    def exercise_writes(repository, expected_status: str) -> None:
+        for sequence in range(25):
+            for method_name, retained_attribute in auxiliary_writes:
+                row = {
+                    "retention_probe": retained_attribute,
+                    "sequence": sequence,
+                }
+                probe_rows.append(row)
+                assert getattr(repository, method_name)(row) == expected_status
+
+    def assert_no_probe_rows(repository: InMemoryPersistenceRepository) -> None:
+        state = vars(repository)
+        retained_attributes = {attribute for _, attribute in auxiliary_writes}
+        assert retained_attributes.isdisjoint(state)
+        for value in state.values():
+            if isinstance(value, list):
+                assert not any(row in probe_rows for row in value)
+
+    in_memory = InMemoryPersistenceRepository()
+    exercise_writes(in_memory, "STATELESS")
+    assert_no_probe_rows(in_memory)
+
+    class SuccessfulPool:
+        def connection(self, timeout=None):
+            return FakeConnection()
+
+    postgres = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=SuccessfulPool,
+    )
+    exercise_writes(postgres, "OK")
+    assert_no_probe_rows(postgres._fallback)  # noqa: SLF001 - retention probe
+
+    def successful_rest(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json=[])
+
+    rest = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(successful_rest),
+    )
+    exercise_writes(rest, "OK")
+    assert_no_probe_rows(rest._fallback)  # noqa: SLF001 - retention probe
+
+
+def test_auxiliary_statuses_still_confirm_persist_analysis_now_style_work() -> None:
+    prediction_id = "retention-confirmation:4H"
+    work = PersistenceWork(
+        run_summary={"run_id": "retention-confirmation"},
+        timeframe_result={"run_id": "retention-confirmation", "timeframe": "4H"},
+        provider_observations=({"provider": "fixture"},),
+        news_items=({"item_id": "item"},),
+        news_clusters=({"cluster_id": "cluster"},),
+        news_evidence_links=({"item_id": "item", "cluster_id": "cluster"},),
+        prediction_rows=({"prediction_id": prediction_id},),
+        feature_snapshot_rows=(
+            {"prediction_id": prediction_id, "snapshot_hash": "snapshot-hash"},
+        ),
+    )
+
+    confirmation = _persist_work_confirmed(work, InMemoryPersistenceRepository())
+
+    assert confirmation.public_result() == {
+        "prediction": "STATELESS",
+        "feature_snapshot": "INSERTED",
+        "derivatives_snapshot": None,
+        "overall": "OK",
+    }
 
 
 def test_initial_migration_is_idempotent_and_contains_no_secret_values() -> None:
