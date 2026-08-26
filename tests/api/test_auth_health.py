@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 
+import pytest
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api import auth
@@ -145,6 +146,26 @@ def test_oversized_login_code_is_rejected_before_hashing(monkeypatch) -> None:
     assert response.status_code == 422
     assert submitted not in response.text
     assert str(len(submitted)) not in response.text
+
+
+@pytest.mark.parametrize(
+    ("submitted", "submitted_text"),
+    [
+        pytest.param({"value": "operator-access-code"}, "operator-access-code", id="object"),
+        pytest.param(["operator-access-code"], "operator-access-code", id="list"),
+        pytest.param(8675309, "8675309", id="integer"),
+        pytest.param(None, "null", id="null"),
+    ],
+)
+def test_malformed_login_code_is_not_echoed(
+    submitted: object, submitted_text: str
+) -> None:
+    client = make_client()
+
+    response = client.post("/v1/auth/login", json={"code": submitted})
+
+    assert response.status_code == 422
+    assert submitted_text not in response.text
 
 
 def test_login_code_at_maximum_length_still_works() -> None:
