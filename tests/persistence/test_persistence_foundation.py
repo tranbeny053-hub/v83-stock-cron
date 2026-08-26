@@ -12,6 +12,7 @@ from crypto_probability_engine.api.analysis_service import (
 )
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import (
+    RUN_SUMMARY_RETENTION_LIMIT,
     InMemoryPersistenceRepository,
     SupabasePersistenceRepository,
     SupabaseRestRepository,
@@ -112,6 +113,86 @@ def test_in_memory_repository_watchlist_and_runs_are_stateless() -> None:
     )
     assert repo.get_run("run_test")["normalized_symbol"] == "BTC/USDT"
     assert repo.recent_runs(1)[0]["run_id"] == "run_test"
+
+
+def test_in_memory_run_retention_keeps_only_newest_summaries() -> None:
+    repo = InMemoryPersistenceRepository()
+    saved_count = RUN_SUMMARY_RETENTION_LIMIT + 2
+
+    for sequence in range(saved_count):
+        assert repo.save_run(
+            {"run_id": f"run-{sequence}", "sequence": sequence}
+        ) == "STATELESS"
+
+    recent = repo.recent_runs(saved_count)
+    assert len(recent) == RUN_SUMMARY_RETENTION_LIMIT
+    assert [row["run_id"] for row in recent] == [
+        f"run-{sequence}"
+        for sequence in range(saved_count - 1, saved_count - 1 - RUN_SUMMARY_RETENTION_LIMIT, -1)
+    ]
+    assert repo.get_run("run-0") is None
+    assert repo.get_run("run-1") is None
+    assert repo.get_run("run-2") == {"run_id": "run-2", "sequence": 2}
+    assert repo.get_run(f"run-{saved_count - 1}") == {
+        "run_id": f"run-{saved_count - 1}",
+        "sequence": saved_count - 1,
+    }
+    assert repo.recent_runs(2) == [
+        {"run_id": f"run-{saved_count - 1}", "sequence": saved_count - 1},
+        {"run_id": f"run-{saved_count - 2}", "sequence": saved_count - 2},
+    ]
+
+
+def test_external_repository_fallback_run_retention_is_bounded() -> None:
+    class SuccessfulPool:
+        def connection(self, timeout=None):
+            return FakeConnection()
+
+    postgres = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=SuccessfulPool,
+    )
+
+    def successful_rest(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(201, json=[])
+
+    rest = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(successful_rest),
+    )
+
+    saved_count = RUN_SUMMARY_RETENTION_LIMIT + 1
+    for repository in (postgres, rest):
+        for sequence in range(saved_count):
+            assert repository.save_run({"run_id": f"run-{sequence}"}) == "OK"
+
+        fallback = repository._fallback  # noqa: SLF001 - bounded-retention probe
+        assert len(fallback.recent_runs(saved_count)) == RUN_SUMMARY_RETENTION_LIMIT
+        assert fallback.get_run("run-0") is None
+        assert fallback.get_run(f"run-{saved_count - 1}") == {
+            "run_id": f"run-{saved_count - 1}"
+        }
+
+
+def test_in_memory_save_methods_preserve_status_returns() -> None:
+    repo = InMemoryPersistenceRepository()
+    prediction = _sample_prediction()
+    snapshot = {
+        "prediction_id": prediction["prediction_id"],
+        "snapshot_hash": "status-probe-hash",
+    }
+
+    assert repo.save_run(_sample_run_summary()) == "STATELESS"
+    assert repo.save_timeframe_result(_sample_timeframe_result()) == "STATELESS"
+    assert repo.save_provider_observation(_sample_provider_observation()) == "STATELESS"
+    assert repo.save_news_item(_sample_news_item()) == "STATELESS"
+    assert repo.save_news_cluster(_sample_news_cluster()) == "STATELESS"
+    assert repo.save_news_evidence_link(_sample_news_link()) == "STATELESS"
+    assert repo.save_prediction(prediction) == "STATELESS"
+    assert repo.save_feature_snapshot(snapshot).value == "INSERTED"
+    assert repo.save_derivatives_snapshot(snapshot).value == "INSERTED"
+    assert repo.save_prediction_outcome(_sample_outcome()) == "STATELESS"
 
 
 def test_in_memory_auxiliary_writes_do_not_retain_unread_rows() -> None:

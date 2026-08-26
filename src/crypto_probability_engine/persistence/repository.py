@@ -27,6 +27,7 @@ from crypto_probability_engine.persistence.prediction_origin import (
 )
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
+RUN_SUMMARY_RETENTION_LIMIT = 100
 
 
 class OOSArmIdentityConflict(RuntimeError):
@@ -177,6 +178,8 @@ class InMemoryPersistenceRepository:
         if run_id:
             self._runs[run_id] = dict(summary)
             self._runs.move_to_end(run_id)
+            while len(self._runs) > RUN_SUMMARY_RETENTION_LIMIT:
+                self._runs.popitem(last=False)
         return self.persistence_status()
 
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
