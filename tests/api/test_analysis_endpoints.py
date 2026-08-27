@@ -12,6 +12,7 @@ from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api import analysis_service
+from crypto_probability_engine.api import app as app_module
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.api.schemas import validate_analysis_response
@@ -511,7 +512,18 @@ def test_news_provider_degradation_keeps_analysis_200(monkeypatch) -> None:
     assert "NEWSAPI_KEY" not in response.text
 
 
-def test_batch_partial_failure_is_isolated() -> None:
+def test_batch_partial_failure_preserves_identity_and_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyze_calls = 0
+    original_analyze_request = app_module.analyze_request
+
+    def counted_analyze_request(*args, **kwargs):
+        nonlocal analyze_calls
+        analyze_calls += 1
+        return original_analyze_request(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "analyze_request", counted_analyze_request)
     client = make_client()
     login(client)
     response = client.post(
@@ -519,15 +531,31 @@ def test_batch_partial_failure_is_isolated() -> None:
         json={
             "requests": [
                 {"symbol": "BTC", "analysis_mode": "METRICS_ONLY"},
-                    {"symbol": "$NOPE", "analysis_mode": "METRICS_ONLY"},
+                {"symbol": "$NOPE", "analysis_mode": "METRICS_ONLY"},
+                {"symbol": "eth/usdt", "analysis_mode": "METRICS_ONLY"},
             ]
         },
     )
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["results"]) == 1
+    assert analyze_calls == 3
+    assert [result["symbol"] for result in payload["results"]] == ["BTC", "eth/usdt"]
     assert len(payload["errors"]) == 1
-    assert payload["errors"][0]["detail"]["error"]["code"] == "INVALID_SYMBOL"
+    error = payload["errors"][0]
+    assert error["index"] == 1
+    assert error["symbol"] == "$NOPE"
+    assert error["detail"]["error"]["code"] == "INVALID_SYMBOL"
+
+    items = payload["items"]
+    assert [item["symbol"] for item in items] == ["BTC", "$NOPE", "eth/usdt"]
+    assert [item["status"] for item in items] == ["OK", "ERROR", "OK"]
+    assert [item["index"] for item in items] == [0, 1, 2]
+    assert items[0]["run_id"] == payload["results"][0]["run_id"]
+    assert items[2]["run_id"] == payload["results"][1]["run_id"]
+    assert "detail" not in items[0]
+    assert "detail" not in items[2]
+    assert items[1]["detail"] == error["detail"]
+    assert "run_id" not in items[1]
 
 
 def test_detail_lookup_returns_detail_view() -> None:

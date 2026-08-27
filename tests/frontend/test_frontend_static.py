@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260827-e"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260827-e"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-f"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-f"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -914,7 +914,7 @@ def test_batch_cards_reuse_structured_detail_renderer() -> None:
         'id="batchPanel"', maxsplit=1
     )[0]
     assert 'id="detailPanel"' not in single_section
-    assert "renderResults(target, payload.results, payload.errors)" in js
+    assert "renderResults(target, payload.results, payload.errors, payload.items)" in js
     assert "target.append(overviewCard(payload))" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js

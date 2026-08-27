@@ -199,6 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         results: list[dict] = []
         errors: list[dict] = []
+        items: list[dict] = []
         repository = app.state.persistence_repository
         prediction_origin = session_prediction_origin(session)
         for index, item in enumerate(body.requests):
@@ -217,25 +218,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     prediction_origin=prediction_origin,
                 )
                 results.append(result)
+                items.append(
+                    {
+                        "index": index,
+                        "symbol": item.symbol,
+                        "status": "OK",
+                        "run_id": result["run_id"],
+                    }
+                )
             except Exception as exc:
                 if hasattr(exc, "detail"):
-                    errors.append({"index": index, "detail": exc.detail})
+                    detail = exc.detail
                 else:
-                    errors.append(
-                        {
-                            "index": index,
-                            "detail": api_error(
-                                500,
-                                ErrorCode.BACKEND_TIMEOUT,
-                                "Batch item failed.",
-                            ).detail,
-                        }
-                    )
+                    detail = api_error(
+                        500,
+                        ErrorCode.BACKEND_TIMEOUT,
+                        "Batch item failed.",
+                    ).detail
+                errors.append({"index": index, "detail": detail, "symbol": item.symbol})
+                items.append(
+                    {
+                        "index": index,
+                        "symbol": item.symbol,
+                        "status": "ERROR",
+                        "detail": detail,
+                    }
+                )
         schedule_skill_evidence_refresh(
             background_tasks,
             app.state.skill_evidence_repository,
         )
-        return {"results": results, "errors": errors}
+        return {"results": results, "errors": errors, "items": items}
 
     @app.get("/v1/watchlist")
     def list_watchlist(session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
