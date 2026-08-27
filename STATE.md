@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #70)
+Updated: 2026-08-27 (post PR #72)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Nine product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Ten product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,14 +14,14 @@ LOOP_STATE=IDLE — no lane open. Nine product PRs are SHIPPED to main. PR #56 (
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-70 (this checkpoint). origin/main = 9923f33.
-LAST_GREEN_SHA=9923f33
-LAST_VERIFY=PASS ruff ok | 1105 passed | schemas+smoke ok | scanners 3/3 · 9923f33 · 2026-08-27
-MAIN_STATE=main = origin/main = 9923f33, clean, single worktree. It is the merge of PR #70
-  (parents 18e987a + 50e6879) and its tree is byte-identical to the reviewed head 50e6879, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #127 succeeded.
-  This checkpoint covers TWO merges, because the checkpoint after PR #69 was deliberately
-  deferred into this one: 18e987a (PR #69, post-merge CI run #125) and 9923f33 (PR #70).
+CURRENT_BRANCH=docs/state-post-72 (this checkpoint). origin/main = b8f5ff6.
+LAST_GREEN_SHA=b8f5ff6
+LAST_VERIFY=PASS ruff ok | 1106 passed | schemas+smoke ok | scanners 3/3 · b8f5ff6 · 2026-08-27
+MAIN_STATE=main = origin/main = b8f5ff6, clean, single worktree. It is the merge of PR #72
+  (parents 8bd8e78 + d3bdf61) and its tree is byte-identical to the reviewed head d3bdf61, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #131 succeeded.
+  8bd8e78 was the PR #71 STATE checkpoint, which recorded 18e987a (PR #69, CI #125) and
+  9923f33 (PR #70, CI #127).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -90,6 +90,25 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     and disagreed with the second "Live data" row that still went through formatValue. It is
     restored to main's behaviour — formatValue already renders null/undefined as "n/a",
     booleans as "yes"/"no", and arrays as joined or "none".
+  PR #72 (b8f5ff6): the global refresh control now actually refreshes Recent Analysis.
+    refreshCurrentView branched on the active tab for single, watchlist and batch and then
+    FELL THROUGH to loadSystemStatus() + markRefreshed(). The Recent tab (data-tab="recent")
+    had no branch, so clicking the control there pinged /v1/system_status, never called
+    loadRecentRuns(), and still stamped "last refreshed at ..." — the list stayed stale while
+    the UI claimed a refresh. Recent now reloads /v1/runs and NOTHING else: no analysis, no
+    write, no POST, no new endpoint, and the existing analysis-active and cooldown guard is
+    untouched. Three supporting changes keep the wording honest rather than moving the lie one
+    level down: loadRecentRuns swallows its own error, so it now REPORTS success and the stamp
+    is written only when the reload actually happened, while a failure still arms the cooldown
+    so the control cannot be hammered; markRefreshed takes an optional label and delegates the
+    cooldown to startRefreshCooldown, with the default reproducing the previous text exactly so
+    all four pre-existing call sites are unchanged; and the button reads "Refresh" on Recent
+    instead of "Re-analyze", still "Re-analyzing..." on every tab while an analysis genuinely
+    runs, with showPanel refreshing the label on a tab switch. The dev tab uses the same
+    fallback and has the same untruthful label; it was DELIBERATELY LEFT ALONE rather than
+    widening the task, and remains an open adjacent candidate. The new test executes the real
+    functions in node against a fake DOM, and was not taken at face value: each of the three
+    guards was reverted in turn and the test confirmed to fail.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -98,13 +117,13 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #70 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #72 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Nine T3 origin batches are CONSUMED and must not be reused: the PR
-  #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69 and PR #70 batches each
+OWNER_BOUNDARY=NONE OPEN. Ten T3 origin batches are CONSUMED and must not be reused: the PR
+  #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70 and PR #72 batches each
   authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
