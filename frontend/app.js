@@ -261,6 +261,7 @@ function showPanel(name) {
   if (name === "recent") {
     loadRecentRuns();
   }
+  updateRefreshButton();
 }
 
 function setLoading(id, active) {
@@ -272,6 +273,10 @@ function setAnalysisActive(active) {
   updateRefreshButton();
 }
 
+function refreshActionLabel() {
+  return activeTabName() === "recent" ? "Refresh" : "Re-analyze";
+}
+
 function updateRefreshButton() {
   const now = Date.now();
   const cooldownActive = now < refreshReadyAt;
@@ -279,9 +284,9 @@ function updateRefreshButton() {
   if (analysisActive) {
     refreshButton.textContent = "Re-analyzing...";
   } else if (cooldownActive) {
-    refreshButton.textContent = `Re-analyze (${Math.ceil((refreshReadyAt - now) / 1000)}s)`;
+    refreshButton.textContent = `${refreshActionLabel()} (${Math.ceil((refreshReadyAt - now) / 1000)}s)`;
   } else {
-    refreshButton.textContent = "Re-analyze";
+    refreshButton.textContent = refreshActionLabel();
   }
   if (refreshTimer) {
     clearTimeout(refreshTimer);
@@ -292,10 +297,14 @@ function updateRefreshButton() {
   }
 }
 
-function markRefreshed() {
-  lastRefreshed.textContent = `last refreshed at ${new Date().toLocaleTimeString()}`;
+function startRefreshCooldown() {
   refreshReadyAt = Date.now() + refreshCooldownMs;
   updateRefreshButton();
+}
+
+function markRefreshed(label = "last refreshed") {
+  lastRefreshed.textContent = `${label} at ${new Date().toLocaleTimeString()}`;
+  startRefreshCooldown();
 }
 
 function activeTabName() {
@@ -1022,9 +1031,11 @@ async function loadRecentRuns() {
     recentRunsSource = payload.source;
     populateRecentFilters(recentRuns);
     renderRecentRuns(filterRecentRuns(recentRuns, selectedRecentFilters()), recentRunsSource);
+    return true;
   } catch (error) {
     target.replaceChildren();
     status.textContent = `Recent analyses could not be loaded: ${error.message || "Request failed"}`;
+    return false;
   }
 }
 
@@ -2508,6 +2519,15 @@ async function refreshCurrentView() {
   if (tab === "batch") {
     const request = lastBatchRequest || batchRequestFromForm(new FormData(document.querySelector("#batchForm")));
     await runBatchAnalysis(request);
+    return;
+  }
+  if (tab === "recent") {
+    const reloaded = await loadRecentRuns();
+    if (reloaded) {
+      markRefreshed("history reloaded");
+    } else {
+      startRefreshCooldown();
+    }
     return;
   }
   await loadSystemStatus();
