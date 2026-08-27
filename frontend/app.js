@@ -190,7 +190,15 @@ function updateStatusFromPayload(payload = {}) {
 
 function updatePersistenceStatus(status) {
   const safeStatus = status || "UNKNOWN";
-  persistenceStatusBadge.textContent = `Persistence: ${safeStatus}`;
+  const statusText =
+    safeStatus === "OK"
+      ? "Storage available"
+      : safeStatus === "STATELESS"
+        ? "No storage configured — analyses are not retained and will not appear in Recent Analysis history"
+        : safeStatus === "UNAVAILABLE"
+          ? "Storage unavailable — this analysis is not being retained and will not appear in Recent Analysis history"
+          : "Storage status unknown";
+  persistenceStatusBadge.textContent = `Persistence: ${statusText}`;
   persistenceStatusBadge.dataset.persistenceStatus = safeStatus;
   persistenceStatusBadge.classList.remove("status-ok", "status-warn", "status-unknown");
   if (safeStatus === "OK") {
