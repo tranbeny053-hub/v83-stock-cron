@@ -1,43 +1,59 @@
 # STATE
 
-Updated: 2026-08-26
+Updated: 2026-08-27
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — BOARD CLEAR PRE-T_close. Batches 1-10 are closed and the final
-  high-threshold pre-T_close audit is complete: Product/UX and Testing/Release-Control returned
-  BOARD CLEAR, and the one HIGH finding (auth 422 echoing a plaintext access value on a
-  top-level scalar body) is fixed and merged. No further audits are scheduled before T_close.
-  PROD-SAFE-2 remains the deployed build. The section 5A envelope is frozen: the
-  holdout, its evaluation, candidate freeze, collector, outcome and holdout inspection,
-  T_close itself, and any change to what the collector computes or persists. Ordinary safe work
-  outside that envelope continues under normal risk tiers, with owner authorization for T3/T4.
-CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close
-CURRENT_BRANCH=docs/state-board-clear (this checkpoint). origin/main = b5be453.
-LAST_GREEN_SHA=b5be453
-LAST_VERIFY=PASS ruff ok | 1067 passed | schemas+smoke ok | scanners 3/3 · b5be453 · 2026-08-26
-PRODUCTION=hf/main = a89b45e (PROD-SAFE-2), deployed 2026-08-25T17:55:11Z from e9d549c by
-  fast-forward. Guard #605 HEALTHY on d444c62, three rounds, critical source and frontend
-  asset match both True. Pin on main describes the live build exactly. Rollback target if ever
-  needed: e9d549c.
-PRODUCTION_LINEAGE=Production is a CLEAN-ROOM lineage that diverged from main at 9933615 and
-  is NOT an ancestor path of main. main carries the section-5A / Change-B machinery —
-  quant/probability_distributional.py, oos/**, the arm dispatch in quant/pipeline.py, and OOS
-  evidence persistence — and production deliberately does NOT. Never deploy main directly, and
-  never "fix" the standing one-path deployment delta
-  (src/crypto_probability_engine/api/analysis_service.py) by deploying main: that delta is
-  structural, not drift. Future deploys backport behaviour onto the release lineage, as
-  PROD-SAFE-1 and PROD-SAFE-2 both did.
+LOOP_STATE=ACTIVE — ONE LANE OPEN, STOPPED AT T3. Recent Analysis History is built,
+  reviewed and green, and is waiting on owner authorization to push. Batches 1-10 remain
+  closed; the pre-T_close audit returned BOARD CLEAR. PROD-SAFE-2 remains the deployed build.
+  The section 5A envelope is UNCHANGED and still frozen: the holdout, its evaluation, the
+  candidate freeze, the collector, outcome and holdout inspection, T_close itself, and any
+  change to what the collector computes or persists. Ordinary safe work outside that envelope
+  continues under normal risk tiers, with owner authorization for T3/T4.
+CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
+  Product work outside section 5A continues in parallel; it never touches the envelope.
+CURRENT_BRANCH=feat/recent-analysis-history (this checkpoint). origin/main = acf5901.
+LAST_GREEN_SHA=68a6250 (the History product commit; this docs commit is its child and changes
+  no product blob)
+LAST_VERIFY=PASS ruff ok | 1073 passed | schemas+smoke ok | scanners 3/3 · 68a6250 · 2026-08-27
+MAIN_STATE=main = origin/main = acf5901, UNTOUCHED by every lane below. Working tree clean,
+  single worktree, VERIFY=PASS 1067 passed on acf5901. No lane has been merged to main and no
+  lane has been pushed to any remote.
+ACTIVE_LANE=feat/recent-analysis-history @ 68a6250 — the SOLE active lane, STOPPED AT THE T3
+  BOUNDARY. Read-only operator history over the existing in-process run store: new GET /v1/runs
+  behind the ordinary app session returning USER_REQUESTED rows only, plus a Recent Analysis
+  tab that opens the existing /v1/analyze/detail/{run_id} view. No database write, no DB schema,
+  no migration, no response-envelope change. Collector/OOS persistence semantics were proven
+  identical before and after by static AST comparison and a deterministic local differential
+  probe; no holdout or outcome evidence was inspected to establish it.
+FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
+  pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
+  them before T_close:
+    fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
+    fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
+    integration/b11-combined 1b10587  the two above merged, for integration evidence only
+  They were reviewed and green (1072 / 1071 / 1076 passed) but are deliberately NOT shipping
+  before T_close.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The PROD-SAFE-2 T3/T4 authorization is CONSUMED and must not be
-  reused. Standing prohibition while the holdout runs: no holdout or outcome inspection, no
-  collector dispatch, no further deploy, no model change, no re-freeze.
-NEXT_ACTION=SECTION 5A ONLY: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
-  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. No
-  further audit or feature work is planned before T_close; the board is clear.
+OWNER_BOUNDARY=1 OPEN — T3 authorization to push feat/recent-analysis-history to origin and
+  open its own PR. Nothing else is requested. The PROD-SAFE-2 T3/T4 authorization is CONSUMED
+  and must not be reused. Standing prohibition while the holdout runs: no holdout or outcome
+  inspection, no collector dispatch, no deploy, no model change, no re-freeze.
+DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
+  T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including any that is
+  merged to main. A push to origin is a separate, lesser action and never implies a deploy;
+  only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2).
+NEXT_ACTION=TWO ITEMS, in priority order.
+  (1) OWNER DECISION, not scheduled: authorize or decline the T3 push of
+      feat/recent-analysis-history. Work is stopped until this is answered.
+  (2) SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
+      V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This remains the single scheduled
+      section-5A action. The date is a contract instant, NOT a reminder or automation request:
+      create no timer, task, or schedule from it.
 OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .work/, so it
   scans gitignored scratch logs and can fail ./verify.sh on a clean tree from an untracked file.
   Its own docstring says it scans committed files. Deliberately NOT changed before T_close,
@@ -45,11 +61,44 @@ OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .w
 DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on frontend/app.js and
   frontend/index.html (app.js token w4c1-ka1-20260826-c). The source-integrity guard reports
   this as the benign STALE_FRONTEND posture. Three merged frontend improvements and the two
-  auth-redaction fixes are NOT in front of users until a future owner-authorized deploy.
+  auth-redaction fixes are NOT in front of users until a future owner-authorized deploy. If the
+  History lane is merged, the delta widens by two more guarded paths —
+  src/crypto_probability_engine/api/app.py and frontend/styles.css — and
+  CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py already records all five.
+  That is the guard's documented acknowledgement workflow, not a relaxation: the test still
+  asserts an exact list.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
+
+## Checkpoint — 2026-08-27: one lane open at T3, two lanes frozen local
+
+Three findings that had been excluded from every batch-4-to-6 task were taken up. Two are
+fixed and **frozen local**: R202-01 (provider bodies had no byte cap and no wall-clock
+deadline, so an allow-listed upstream could trickle forever or exhaust RAM) and A203-01
+(candle ordering and future-close boundaries failed open — a 4H series overlapping by 1h
+passed because only gaps >= one full bar were rejected, and a close after `now` passed on a
+negative age). Both are reviewed and green. Neither ships before `T_close`.
+
+The third lane, Recent Analysis History, is the only active one and is stopped at T3.
+
+**Why the History lane needed a persistence proof.** The section-5A collector passes a
+`run_store` into `analyze_request`, so the in-process run store sits on the collector's code
+path. The collector's *database* evidence, however, is written by `persist_analysis_now`,
+which contains zero `run_store` references. Identity was established two ways, on local
+deterministic evidence only, with no holdout or outcome inspection: every DB-write function in
+`analysis_service.py` is byte-identical by AST hash and `analyze_request` is the only function
+that changed; and a deterministic differential probe — validated against a same-commit
+stability control — produced identical hashes before and after for the validated payload,
+`analysis_hash`, prediction rows, feature snapshots, the persist result and its idempotent
+repeat. `schemas/response.schema.json` still matches its deployed pin digest, corroborating
+that the response envelope did not move.
+
+**A structural artefact to expect, not to misread.** This checkpoint names `68a6250` as
+`LAST_GREEN_SHA` while itself being a later commit. A docs checkpoint cannot name the commit
+that carries it. `68a6250` is the commit the work was verified on; this commit changes only
+`STATE.md` and no product blob, so the identity proof above still applies verbatim.
 
 ## Production — PROD-SAFE-2 IS DEPLOYED (2026-08-25)
 hf/main moved e9d549c -> a89b45e at 2026-08-25T17:55:11Z by fast-forward, one commit.
