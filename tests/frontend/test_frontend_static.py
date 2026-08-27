@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=w4c1-ka1-20260827-g"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260827-g"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-h"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-h"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
