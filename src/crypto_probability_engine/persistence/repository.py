@@ -41,6 +41,9 @@ class PersistenceRepository(Protocol):
     def save_run(self, summary: Mapping[str, Any]) -> PersistenceStatus:
         """Persist compact analysis run summary."""
 
+    def save_run_detail(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        """Persist a sanitized analysis Detail document."""
+
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist compact per-timeframe analysis result."""
 
@@ -157,12 +160,18 @@ class PersistenceRepository(Protocol):
     def get_run(self, run_id: str) -> dict | None:
         """Return compact run summary by id."""
 
+    def get_run_detail(
+        self, run_id: str, *, prediction_origin: str
+    ) -> dict | None:
+        """Return Detail only when prediction provenance matches."""
+
 
 class InMemoryPersistenceRepository:
     """Stateless process-memory repository used when external persistence is absent."""
 
     def __init__(self) -> None:
         self._runs: OrderedDict[str, dict] = OrderedDict()
+        self._run_details: OrderedDict[str, dict] = OrderedDict()
         self._predictions: OrderedDict[str, dict] = OrderedDict()
         self._feature_snapshots: OrderedDict[str, dict] = OrderedDict()
         self._derivatives_snapshots: OrderedDict[str, dict] = OrderedDict()
@@ -185,6 +194,12 @@ class InMemoryPersistenceRepository:
             self._runs.move_to_end(run_id)
             while len(self._runs) > RUN_SUMMARY_RETENTION_LIMIT:
                 self._runs.popitem(last=False)
+        return self.persistence_status()
+
+    def save_run_detail(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        run_id = str(row.get("run_id", ""))
+        if run_id:
+            self._run_details[run_id] = deepcopy(dict(row))
         return self.persistence_status()
 
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
@@ -510,6 +525,21 @@ class InMemoryPersistenceRepository:
         value = self._runs.get(run_id)
         return dict(value) if value else None
 
+    def get_run_detail(
+        self, run_id: str, *, prediction_origin: str
+    ) -> dict | None:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        if not any(
+            str(prediction.get("run_id")) == run_id
+            and prediction.get("prediction_origin") == prediction_origin
+            for prediction in self._predictions.values()
+        ):
+            return None
+        value = self._run_details.get(run_id)
+        if not value or not isinstance(value.get("detail_payload"), Mapping):
+            return None
+        return deepcopy(value["detail_payload"])
+
 
 class SupabasePersistenceRepository:
     """Postgres persistence adapter for Supabase direct database URL usage."""
@@ -673,6 +703,29 @@ class SupabasePersistenceRepository:
             )
         )
         return status
+
+    def save_run_detail(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        database_row = dict(row)
+        database_row["detail_payload"] = json.dumps(row.get("detail_payload"))
+        try:
+            with self._connection() as conn:
+                with conn.cursor() as cursor:
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    cursor.execute(
+                        """
+                        INSERT INTO analysis_run_details (
+                          run_id, analysis_hash, detail_payload
+                        )
+                        VALUES (%(run_id)s, %(analysis_hash)s, %(detail_payload)s::jsonb)
+                        ON CONFLICT (run_id) DO UPDATE SET
+                          analysis_hash = EXCLUDED.analysis_hash,
+                          detail_payload = EXCLUDED.detail_payload
+                        """,
+                        database_row,
+                    )
+        except Exception:
+            return "UNAVAILABLE"
+        return "OK"
 
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
         self._fallback.save_timeframe_result(row)
@@ -1205,6 +1258,26 @@ class SupabasePersistenceRepository:
             "created_at": row[11].isoformat() if row[11] else None,
         }
 
+    def get_run_detail(
+        self, run_id: str, *, prediction_origin: str
+    ) -> dict | None:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        try:
+            with self._connection() as conn:
+                with conn.cursor() as cursor:
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    row = _fetch_run_detail(
+                        cursor, run_id, prediction_origin=prediction_origin
+                    )
+        except Exception:
+            return None
+        if row is None:
+            return None
+        detail_payload = row[2]
+        if isinstance(detail_payload, str):
+            detail_payload = json.loads(detail_payload)
+        return dict(detail_payload) if isinstance(detail_payload, Mapping) else None
+
 
 class SupabaseRestRepository:
     """Supabase PostgREST persistence adapter for HTTPS-only runtimes."""
@@ -1292,6 +1365,19 @@ class SupabaseRestRepository:
             )
         )
         return status
+
+    def save_run_detail(self, row: Mapping[str, Any]) -> PersistenceStatus:
+        try:
+            self._request(
+                "POST",
+                "analysis_run_details",
+                json=dict(row),
+                params={"on_conflict": "run_id"},
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        except Exception:
+            return "UNAVAILABLE"
+        return "OK"
 
     def save_timeframe_result(self, row: Mapping[str, Any]) -> PersistenceStatus:
         self._fallback.save_timeframe_result(row)
@@ -1776,6 +1862,39 @@ class SupabaseRestRepository:
             return None
         return dict(rows[0])
 
+    def get_run_detail(
+        self, run_id: str, *, prediction_origin: str
+    ) -> dict | None:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        try:
+            predictions = self._request(
+                "GET",
+                "predictions",
+                params={
+                    "select": "run_id",
+                    "run_id": f"eq.{run_id}",
+                    "prediction_origin": f"eq.{prediction_origin}",
+                    "limit": "1",
+                },
+            )
+            if not isinstance(predictions, list) or not predictions:
+                return None
+            rows = self._request(
+                "GET",
+                "analysis_run_details",
+                params={
+                    "select": "run_id,analysis_hash,detail_payload,created_at",
+                    "run_id": f"eq.{run_id}",
+                    "limit": "1",
+                },
+            )
+        except Exception:
+            return None
+        if not isinstance(rows, list) or not rows:
+            return None
+        detail_payload = rows[0].get("detail_payload")
+        return dict(detail_payload) if isinstance(detail_payload, Mapping) else None
+
     def _run_rest(self, operation):
         if not self.maybe_can_attempt():
             return "UNAVAILABLE", None
@@ -1904,6 +2023,24 @@ def _fetch_run(cursor, run_id: str):
         WHERE run_id = %s
         """,
         (run_id,),
+    )
+    return cursor.fetchone()
+
+
+def _fetch_run_detail(cursor, run_id: str, *, prediction_origin: str):
+    cursor.execute(
+        """
+        SELECT d.run_id, d.analysis_hash, d.detail_payload, d.created_at
+        FROM analysis_run_details d
+        WHERE d.run_id = %s
+          AND EXISTS (
+              SELECT 1
+              FROM predictions p
+              WHERE p.run_id = d.run_id
+                AND p.prediction_origin = %s
+          )
+        """,
+        (run_id, prediction_origin),
     )
     return cursor.fetchone()
 

@@ -177,6 +177,107 @@ def test_supabase_recent_runs_for_origin_binds_origin_parameter() -> None:
     assert cursor.params[-1] == ("USER_REQUESTED", 7)
 
 
+def test_run_detail_read_is_guarded_by_prediction_origin() -> None:
+    repo = InMemoryPersistenceRepository()
+    repo.save_run_detail(
+        {
+            "run_id": "controlled-run",
+            "analysis_hash": "hash",
+            "detail_payload": {"run_id": "controlled-run"},
+        }
+    )
+    repo.save_prediction(
+        {
+            **_sample_prediction(),
+            "prediction_id": "controlled-run:4H",
+            "run_id": "controlled-run",
+            "prediction_origin": "CONTROLLED_SMOKE",
+        }
+    )
+
+    assert (
+        repo.get_run_detail(
+            "controlled-run",
+            prediction_origin="USER_REQUESTED",
+        )
+        is None
+    )
+    assert repo.get_run_detail(
+        "controlled-run",
+        prediction_origin="CONTROLLED_SMOKE",
+    ) == {"run_id": "controlled-run"}
+    with pytest.raises(TypeError):
+        repo.get_run_detail("controlled-run")  # type: ignore[call-arg]
+
+
+def test_supabase_run_detail_origin_guard_uses_predictions_exists() -> None:
+    cursor = FakeCursor(row=("run-detail", "hash", {"run_id": "run-detail"}, None))
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    assert repo.get_run_detail(
+        "run-detail",
+        prediction_origin="USER_REQUESTED",
+    ) == {"run_id": "run-detail"}
+    query = cursor.statements[-1]
+    assert "EXISTS" in query
+    assert "FROM predictions p" in query
+    assert "p.prediction_origin = %s" in query
+    assert cursor.params[-1] == ("run-detail", "USER_REQUESTED")
+
+
+def test_run_detail_write_failure_does_not_open_circuit_or_break_other_writes() -> None:
+    class MissingTableCursor(FakeCursor):
+        def execute(self, statement, params=None) -> None:
+            super().execute(statement, params)
+            if "INSERT INTO analysis_run_details" in str(statement):
+                raise RuntimeError("relation analysis_run_details does not exist")
+
+    connections = iter(
+        (
+            FakeConnection(MissingTableCursor()),
+            FakeConnection(FakeCursor()),
+        )
+    )
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return next(connections)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+    unavailable_marks = 0
+
+    def record_unavailable() -> str:
+        nonlocal unavailable_marks
+        unavailable_marks += 1
+        return "UNAVAILABLE"
+
+    repo.mark_unavailable = record_unavailable  # type: ignore[method-assign]
+    original_status = repo.persistence_status()
+
+    assert repo.save_run_detail(
+        {
+            "run_id": "run-detail",
+            "analysis_hash": "hash",
+            "detail_payload": {"run_id": "run-detail"},
+        }
+    ) == "UNAVAILABLE"
+    assert repo.persistence_status() == original_status
+    assert unavailable_marks == 0
+    assert repo.save_run({"run_id": "run-after-detail-failure"}) == "OK"
+    assert repo.persistence_status() == "OK"
+
+
 def test_supabase_rest_recent_runs_for_origin_filters_without_embed() -> None:
     seen: list[httpx.Request] = []
 
