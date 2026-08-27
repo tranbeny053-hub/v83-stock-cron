@@ -705,6 +705,9 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
                     "analysis_mode": "METRICS_ONLY",
                     "as_of_utc": "2026-08-27T00:00:00Z",
                     "analysis_hash": "restored-hash",
+                    "primary_timeframe": "1D",
+                    "data_source": "durable_feed",
+                    "is_live_data": False,
                 }
             ]
 
@@ -726,6 +729,9 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
                 "analysis_hash": "restored-hash",
                 "prediction_origin": "USER_REQUESTED",
                 "detail_available": False,
+                "primary_timeframe": "1D",
+                "data_source": "durable_feed",
+                "is_live_data": False,
             }
         ],
     }
@@ -772,6 +778,8 @@ def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
         "analysis_mode": "METRICS_ONLY",
         "as_of_utc": "2026-08-27T00:00:00Z",
         "analysis_hash": "hash",
+        "timeframes": {"primary": "4H"},
+        "data_quality": {"data_source": "in_process_feed", "is_live_data": True},
     }
     store.put("user-run", {**base, "run_id": "user-run"}, prediction_origin="USER_REQUESTED")
     store.put("smoke-run", {**base, "run_id": "smoke-run"}, prediction_origin="CONTROLLED_SMOKE")
@@ -786,6 +794,11 @@ def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
 
     assert payload["source"] == "in_process"
     assert [row["run_id"] for row in payload["runs"]] == ["user-run"]
+    assert payload["runs"][0]["primary_timeframe"] == "4H"
+    assert payload["runs"][0]["data_source"] == "in_process_feed"
+    assert payload["runs"][0]["is_live_data"] is True
+    assert payload["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+    assert payload["runs"][0]["detail_available"] is True
 
 
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:

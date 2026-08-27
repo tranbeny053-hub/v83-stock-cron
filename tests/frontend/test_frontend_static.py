@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260827-c"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260827-c"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-d"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-d"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -74,6 +74,72 @@ def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
     assert "No recent analyses yet." in js
     assert "Recent analyses could not be loaded:" in js
     assert 'target.replaceChildren();' in extract_javascript_function(js, "loadRecentRuns")
+
+
+def test_recent_analysis_filters_and_context_are_local_and_fail_closed() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(js, name)
+        for name in (
+            "uniqueRecentValues",
+            "filterRecentRuns",
+            "recentSourceLabel",
+            "recentEmptyMessage",
+        )
+    )
+    single_timeframes = next(
+        line for line in js.splitlines() if line.startswith("const singleTimeframes = ")
+    )
+    cases = """
+const runs = [
+  {symbol: "BTC", primary_timeframe: "2H", analysis_mode: "METRICS_ONLY"},
+  {symbol: "BTC", primary_timeframe: "1D", analysis_mode: "NEWS_ADDON"},
+  {symbol: "ETH", primary_timeframe: "15m", analysis_mode: "NEWS_ADDON"},
+  {symbol: "SOL", primary_timeframe: "4H", analysis_mode: "NEWS_ADDON"},
+  {symbol: "BTC", primary_timeframe: "1H", analysis_mode: "METRICS_ONLY"},
+];
+if (
+  JSON.stringify(uniqueRecentValues(runs, "symbol")) !== JSON.stringify(["BTC", "ETH", "SOL"])
+) process.exit(1);
+const filtered = filterRecentRuns(runs, {symbol: "BTC", timeframe: "1D", mode: "NEWS_ADDON"});
+if (filtered.length !== 1 || filtered[0].primary_timeframe !== "1D") process.exit(2);
+if (recentEmptyMessage(0, "") !== "No recent analyses yet.") process.exit(3);
+if (!recentEmptyMessage(3, "").includes("match the selected filters")) process.exit(4);
+if (
+  recentSourceLabel({data_source: "feed", is_live_data: false}) !== "feed · Not live data"
+) process.exit(5);
+if (recentSourceLabel({data_source: null, is_live_data: undefined}) !== "") process.exit(6);
+if (
+  !recentSourceLabel({data_source: "feed", is_live_data: true}).includes("Live data")
+) process.exit(7);
+if (recentSourceLabel({data_source: "feed"}).includes("Live data")) process.exit(8);
+if (
+  JSON.stringify(uniqueRecentValues(runs, "primary_timeframe", singleTimeframes)) !==
+  JSON.stringify(["15m", "1H", "4H", "1D", "2H"])
+) process.exit(9);
+"""
+    completed = subprocess.run(
+        ["node", "-e", f"{single_timeframes}\n{functions}\n{cases}"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert all(
+        filter_id in html
+        for filter_id in (
+            'id="recentSymbolFilter"',
+            'id="recentTimeframeFilter"',
+            'id="recentModeFilter"',
+            'id="clearRecentFilters"',
+        )
+    )
+    assert 'await api("/v1/runs")' in extract_javascript_function(js, "loadRecentRuns")
+    populate_filters = extract_javascript_function(js, "populateRecentFilters")
+    assert all(key in populate_filters for key in ("symbol", "primary_timeframe", "analysis_mode"))
+    assert 'uniqueRecentValues(runs, "primary_timeframe", singleTimeframes)' in populate_filters
+    assert "detail_available" not in extract_javascript_function(js, "filterRecentRuns")
 
 
 def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:

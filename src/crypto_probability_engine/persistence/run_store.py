@@ -43,6 +43,9 @@ class InMemoryRunStore:
                 "prediction_origin": self._prediction_origins.get(
                     payload["run_id"], UNCLASSIFIED_RUN_ORIGIN
                 ),
+                "primary_timeframe": payload.get("timeframes", {}).get("primary"),
+                "data_source": payload.get("data_quality", {}).get("data_source"),
+                "is_live_data": payload.get("data_quality", {}).get("is_live_data"),
             }
             for payload in reversed(self.runs.values())
         ]

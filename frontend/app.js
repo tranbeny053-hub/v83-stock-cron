@@ -69,6 +69,8 @@ let currentWatchlistSymbol = null;
 let calibrationDiagnosticsCache = null;
 let calibrationDiagnosticsCachedAt = 0;
 let calibrationDiagnosticsRequest = null;
+let recentRuns = [];
+let recentRunsSource = null;
 const scoreHeatBands = [
   {
     min: 86,
@@ -848,13 +850,100 @@ function formatRecentTime(value) {
     : parsed.toLocaleString();
 }
 
+function uniqueRecentValues(runs, key, preferredOrder = null) {
+  const values = [...new Set(runs.map((run) => run[key]).filter((value) => value != null))];
+  if (preferredOrder == null) {
+    return values.sort();
+  }
+  return values.sort((left, right) => {
+    const leftIndex = preferredOrder.indexOf(left);
+    const rightIndex = preferredOrder.indexOf(right);
+    if (leftIndex === -1 && rightIndex === -1) {
+      return left < right ? -1 : left > right ? 1 : 0;
+    }
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+}
+
+function filterRecentRuns(runs, filters) {
+  return runs.filter(
+    (run) =>
+      (!filters.symbol || run.symbol === filters.symbol) &&
+      (!filters.timeframe || run.primary_timeframe === filters.timeframe) &&
+      (!filters.mode || run.analysis_mode === filters.mode),
+  );
+}
+
+function recentSourceLabel(run) {
+  const parts = [];
+  if (run.data_source != null) {
+    parts.push(String(run.data_source));
+  }
+  if (run.is_live_data === true) {
+    parts.push("Live data");
+  } else if (run.is_live_data === false) {
+    parts.push("Not live data");
+  }
+  return parts.join(" · ");
+}
+
+function recentEmptyMessage(totalCount, sourceNote) {
+  return totalCount === 0
+    ? `No recent analyses yet.${sourceNote}`
+    : `No recent analyses match the selected filters.${sourceNote}`;
+}
+
+function setRecentFilterOptions(select, values, allLabel) {
+  const selected = select.value;
+  select.replaceChildren();
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = allLabel;
+  select.append(all);
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+  select.value = values.includes(selected) ? selected : "";
+}
+
+function populateRecentFilters(runs) {
+  setRecentFilterOptions(
+    document.querySelector("#recentSymbolFilter"),
+    uniqueRecentValues(runs, "symbol"),
+    "All symbols",
+  );
+  setRecentFilterOptions(
+    document.querySelector("#recentTimeframeFilter"),
+    uniqueRecentValues(runs, "primary_timeframe", singleTimeframes),
+    "All timeframes",
+  );
+  setRecentFilterOptions(
+    document.querySelector("#recentModeFilter"),
+    uniqueRecentValues(runs, "analysis_mode"),
+    "All modes",
+  );
+}
+
+function selectedRecentFilters() {
+  return {
+    symbol: document.querySelector("#recentSymbolFilter").value,
+    timeframe: document.querySelector("#recentTimeframeFilter").value,
+    mode: document.querySelector("#recentModeFilter").value,
+  };
+}
+
 function renderRecentRuns(runs, source) {
   const target = document.querySelector("#recentList");
   const status = document.querySelector("#recentStatus");
   target.replaceChildren();
   const sourceNote = source === "in_process" ? " History is not durable right now." : "";
   if (runs.length === 0) {
-    status.textContent = `No recent analyses yet.${sourceNote}`;
+    status.textContent = recentEmptyMessage(recentRuns.length, sourceNote);
     return;
   }
   status.textContent = `${runs.length} recent ${runs.length === 1 ? "analysis" : "analyses"}.${sourceNote}`;
@@ -862,13 +951,26 @@ function renderRecentRuns(runs, source) {
     const row = document.createElement(run.detail_available ? "button" : "div");
     const symbol = document.createElement("strong");
     const mode = document.createElement("span");
+    const timeframe = document.createElement("span");
+    const sourceIndicator = document.createElement("span");
     const time = document.createElement("time");
     row.className = "recent-row";
     symbol.textContent = run.symbol || "Symbol unavailable";
     mode.textContent = run.analysis_mode || "Mode unavailable";
+    if (run.primary_timeframe != null) {
+      timeframe.textContent = run.primary_timeframe;
+    }
+    sourceIndicator.textContent = recentSourceLabel(run);
     time.dateTime = run.as_of_utc || "";
     time.textContent = formatRecentTime(run.as_of_utc);
-    row.append(symbol, mode, time);
+    row.append(symbol, mode);
+    if (run.primary_timeframe != null) {
+      row.append(timeframe);
+    }
+    if (sourceIndicator.textContent) {
+      row.append(sourceIndicator);
+    }
+    row.append(time);
     if (run.detail_available) {
       row.type = "button";
       row.addEventListener("click", () => openDetail(run));
@@ -889,12 +991,28 @@ async function loadRecentRuns() {
   status.textContent = "Loading recent analyses…";
   try {
     const payload = await api("/v1/runs");
-    renderRecentRuns(Array.isArray(payload.runs) ? payload.runs : [], payload.source);
+    recentRuns = Array.isArray(payload.runs) ? payload.runs : [];
+    recentRunsSource = payload.source;
+    populateRecentFilters(recentRuns);
+    renderRecentRuns(filterRecentRuns(recentRuns, selectedRecentFilters()), recentRunsSource);
   } catch (error) {
     target.replaceChildren();
     status.textContent = `Recent analyses could not be loaded: ${error.message || "Request failed"}`;
   }
 }
+
+for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+  document.querySelector(selector).addEventListener("change", () => {
+    renderRecentRuns(filterRecentRuns(recentRuns, selectedRecentFilters()), recentRunsSource);
+  });
+}
+
+document.querySelector("#clearRecentFilters").addEventListener("click", () => {
+  for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+    document.querySelector(selector).value = "";
+  }
+  renderRecentRuns(recentRuns, recentRunsSource);
+});
 
 function hideDetail() {
   detailPanel.replaceChildren();
