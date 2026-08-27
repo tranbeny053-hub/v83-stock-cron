@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #63)
+Updated: 2026-08-27 (post PR #65)
 
 ## Recovery block — read this first on resume
 ```
@@ -14,12 +14,12 @@ LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-63 (this checkpoint). origin/main = 1668534.
-LAST_GREEN_SHA=1668534
-LAST_VERIFY=PASS ruff ok | 1100 passed | schemas+smoke ok | scanners 3/3 · 1668534 · 2026-08-27
-MAIN_STATE=main = origin/main = 1668534, clean, single worktree. It is the merge of PR #63
-  (parents 9e66c84 + bea1ad0) and its tree is byte-identical to the reviewed head bea1ad0, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #113 succeeded.
+CURRENT_BRANCH=docs/state-post-65 (this checkpoint). origin/main = 3eeeef6.
+LAST_GREEN_SHA=3eeeef6
+LAST_VERIFY=PASS ruff ok | 1102 passed | schemas+smoke ok | scanners 3/3 · 3eeeef6 · 2026-08-27
+MAIN_STATE=main = origin/main = 3eeeef6, clean, single worktree. It is the merge of PR #65
+  (parents b4c44bb + db1bae7) and its tree is byte-identical to the reviewed head db1bae7, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #117 succeeded.
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -53,6 +53,16 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     the cap, and — like save_run_detail and get_run_detail — uses its own connection and
     swallows its own failures so the absent table cannot open the persistence circuit breaker.
     get_run_detail is unchanged and still serves the single /v1/analyze/detail lookup.
+  PR #65 (3eeeef6): each watchlist symbol now shows its last analysis — when, primary
+    timeframe, and the same conservative source indicator — plus an "Open latest analysis"
+    action gated on detail_available. Joined in the browser from /v1/runs on NORMALIZED_SYMBOL,
+    not symbol: the watchlist stores symbol.display while a run row's symbol is the raw request
+    text, so joining on symbol would silently report analyzed symbols as never analyzed.
+    NAVIGATION ONLY: no score, disposition or probability, and the watchlist is never
+    reordered, ranked or badged. A symbol with no match reads "No recent analysis found." —
+    NOT "not analyzed yet" — because /v1/runs is BOUNDED recent history and absence there is
+    evidence about the window, not about the symbol. The watchlist renders symbols first and
+    enriches after, so a failing /v1/runs never empties it.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -66,9 +76,9 @@ CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Five T3 origin batches are CONSUMED and must not be reused: the PR
-  #56, PR #57, PR #59, PR #61 and PR #63 batches each authorized exactly one push, one PR and
-  one merge, and no deploy. No T4 has been authorized or consumed for migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
+OWNER_BOUNDARY=NONE OPEN. Six T3 origin batches are CONSUMED and must not be reused: the PR
+  #56, PR #57, PR #59, PR #61, PR #63 and PR #65 batches each authorized exactly one push, one
+  PR and one merge, and no deploy. No T4 has been authorized or consumed for migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
 DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
