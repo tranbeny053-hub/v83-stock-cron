@@ -340,6 +340,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 {
                     "run_id": row.get("run_id"),
                     "symbol": row.get("symbol"),
+                    "normalized_symbol": row.get("normalized_symbol"),
                     "analysis_mode": row.get("analysis_mode"),
                     "as_of_utc": row.get("as_of_utc"),
                     "analysis_hash": row.get("analysis_hash"),

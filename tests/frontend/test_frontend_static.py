@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260827-d"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260827-d"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-e"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-e"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -1020,6 +1020,147 @@ def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
     assert "/v1/watchlist" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
+
+
+def test_watchlist_analysis_context_joins_normalized_symbol_and_preserves_order() -> None:
+    js = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(js, name)
+        for name in (
+            "formatRecentTime",
+            "recentSourceLabel",
+            "latestRunsByNormalizedSymbol",
+            "appendWatchlistAnalysis",
+            "renderWatchlist",
+        )
+    )
+    script = f"""
+{functions}
+class Element {{
+  constructor(tag) {{
+    this.tag = tag;
+    this.children = [];
+    this.textContent = "";
+    this.className = "";
+    this.listeners = {{}};
+  }}
+  append(...children) {{ this.children.push(...children); }}
+  replaceChildren(...children) {{ this.children = children; }}
+  addEventListener(name, callback) {{ this.listeners[name] = callback; }}
+}}
+const target = new Element("div");
+const document = {{
+  createElement: (tag) => new Element(tag),
+  querySelector: (selector) => {{
+    if (selector === "#watchlistList") return target;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+}};
+const setWatchlistStatus = () => {{}};
+const openWatchlistSymbol = () => {{}};
+const removeWatchlistSymbol = () => {{}};
+const openDetail = () => {{}};
+const symbols = ["ETH/USDT", "BTC/USDT", "SOL/USDT"];
+const runs = [
+  {{
+    run_id: "btc-new",
+    symbol: "btc",
+    normalized_symbol: "BTC/USDT",
+    as_of_utc: "2026-08-27T01:00:00Z",
+    primary_timeframe: "4H",
+    data_source: "feed",
+    is_live_data: true,
+    detail_available: true,
+  }},
+  {{
+    run_id: "btc-old",
+    symbol: "BTCUSDT",
+    normalized_symbol: "BTC/USDT",
+    as_of_utc: "2026-08-26T01:00:00Z",
+    primary_timeframe: "1D",
+    detail_available: true,
+  }},
+  {{
+    run_id: "eth",
+    symbol: "eth",
+    normalized_symbol: "ETH/USDT",
+    as_of_utc: "2026-08-27T00:00:00Z",
+    primary_timeframe: "",
+    data_source: "feed",
+    is_live_data: false,
+    detail_available: false,
+  }},
+];
+renderWatchlist(symbols, "OK", runs);
+const rows = target.children;
+const summarize = (row) => ({{
+  symbol: row.children[0].textContent,
+  contextText: row.children[2].textContent,
+  contextChildren: row.children[2].children.map((child) => child.textContent),
+  contextTags: row.children[2].children.map((child) => child.tag),
+}});
+console.log(JSON.stringify(rows.map(summarize)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    rows = json.loads(completed.stdout)
+
+    assert [row["symbol"] for row in rows] == ["ETH/USDT", "BTC/USDT", "SOL/USDT"]
+    assert rows[0]["contextChildren"][0].startswith("Last analyzed: ")
+    assert rows[0]["contextChildren"][1:] == [
+        "feed · Not live data",
+        "Full breakdown not available after restart.",
+    ]
+    assert "button" not in rows[0]["contextTags"]
+    assert "Primary timeframe: 4H" in rows[1]["contextChildren"]
+    assert "feed · Live data" in rows[1]["contextChildren"]
+    assert "Open latest analysis" in rows[1]["contextChildren"]
+    assert rows[1]["contextTags"].count("button") == 1
+    assert rows[2]["contextText"] == "No recent analysis found."
+    assert "Not analyzed yet" not in rows[2]["contextText"]
+    assert "never" not in rows[2]["contextText"].lower()
+    assert "button" not in rows[2]["contextTags"]
+    assert rows[2]["contextChildren"] == []
+
+
+def test_watchlist_history_failure_does_not_block_symbol_rendering() -> None:
+    js = read_frontend("app.js")
+    load_watchlist = extract_javascript_function(js, "loadWatchlist")
+    script = f"""
+{load_watchlist}
+const calls = [];
+const renders = [];
+const api = async (path) => {{
+  calls.push(path);
+  if (path === "/v1/runs") throw new Error("history unavailable");
+  return {{ symbols: ["ETH/USDT", "BTC/USDT"], persistence_status: "OK" }};
+}};
+const renderWatchlist = (symbols, status, runs) =>
+  renders.push({{ symbols, status, hasRuns: runs !== undefined }});
+const readLocalWatchlist = () => ["LOCAL/USDT"];
+const writeLocalWatchlist = () => {{}};
+const document = {{ querySelector: () => ({{ title: "" }}) }};
+(async () => {{
+  await loadWatchlist();
+  console.log(JSON.stringify({{ calls, renders }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert sorted(result["calls"]) == ["/v1/runs", "/v1/watchlist"]
+    assert result["renders"] == [
+        {"symbols": ["ETH/USDT", "BTC/USDT"], "status": "OK", "hasRuns": False}
+    ]
 
 
 def test_failed_watchlist_mutations_replace_stale_success_with_safe_failure() -> None:

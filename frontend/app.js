@@ -878,8 +878,9 @@ function filterRecentRuns(runs, filters) {
 
 function recentSourceLabel(run) {
   const parts = [];
-  if (run.data_source != null) {
-    parts.push(String(run.data_source));
+  const dataSource = String(run.data_source || "").trim();
+  if (dataSource) {
+    parts.push(dataSource);
   }
   if (run.is_live_data === true) {
     parts.push("Live data");
@@ -2260,7 +2261,63 @@ function renderWatchlistMutationFailure(status) {
   target.title = "";
 }
 
-function renderWatchlist(symbols, status) {
+function latestRunsByNormalizedSymbol(runs) {
+  const latestBySymbol = new Map();
+  for (const run of runs) {
+    if (
+      typeof run.normalized_symbol === "string" &&
+      !latestBySymbol.has(run.normalized_symbol)
+    ) {
+      latestBySymbol.set(run.normalized_symbol, run);
+    }
+  }
+  return latestBySymbol;
+}
+
+function appendWatchlistAnalysis(row, run) {
+  const context = document.createElement("div");
+  context.className = "watchlist-analysis-context";
+  if (!run) {
+    context.textContent = "No recent analysis found.";
+    row.append(context);
+    return;
+  }
+
+  const lastAnalyzed = document.createElement("time");
+  lastAnalyzed.dateTime = run.as_of_utc || "";
+  lastAnalyzed.textContent = `Last analyzed: ${formatRecentTime(run.as_of_utc)}`;
+  context.append(lastAnalyzed);
+
+  const timeframe = String(run.primary_timeframe || "").trim();
+  if (timeframe) {
+    const timeframeLabel = document.createElement("span");
+    timeframeLabel.textContent = `Primary timeframe: ${timeframe}`;
+    context.append(timeframeLabel);
+  }
+
+  const source = recentSourceLabel(run);
+  if (source) {
+    const sourceIndicator = document.createElement("span");
+    sourceIndicator.textContent = source;
+    context.append(sourceIndicator);
+  }
+
+  if (run.detail_available === true) {
+    const openLatest = document.createElement("button");
+    openLatest.type = "button";
+    openLatest.className = "watchlist-open-latest";
+    openLatest.textContent = "Open latest analysis";
+    openLatest.addEventListener("click", () => openDetail(run));
+    context.append(openLatest);
+  } else {
+    const note = document.createElement("small");
+    note.textContent = "Full breakdown not available after restart.";
+    context.append(note);
+  }
+  row.append(context);
+}
+
+function renderWatchlist(symbols, status, runs = null) {
   const target = document.querySelector("#watchlistList");
   setWatchlistStatus(status);
   target.replaceChildren();
@@ -2271,6 +2328,7 @@ function renderWatchlist(symbols, status) {
     target.append(empty);
     return;
   }
+  const latestBySymbol = Array.isArray(runs) ? latestRunsByNormalizedSymbol(runs) : null;
   for (const symbol of symbols) {
     const row = document.createElement("article");
     row.className = "watchlist-row";
@@ -2285,11 +2343,17 @@ function renderWatchlist(symbols, status) {
     removeButton.textContent = "Remove";
     removeButton.addEventListener("click", () => removeWatchlistSymbol(symbol));
     row.append(symbolButton, removeButton);
+    if (latestBySymbol) {
+      appendWatchlistAnalysis(row, latestBySymbol.get(symbol));
+    }
     target.append(row);
   }
 }
 
 async function loadWatchlist() {
+  const historyRequest = api("/v1/runs")
+    .then((payload) => (Array.isArray(payload.runs) ? payload.runs : []))
+    .catch(() => null);
   try {
     const payload = await api("/v1/watchlist");
     let symbols = payload.symbols || [];
@@ -2298,7 +2362,12 @@ async function loadWatchlist() {
       symbols = localSymbols.length ? localSymbols : symbols;
       writeLocalWatchlist(symbols);
     }
-    renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
+    const status = payload.persistence_status || "UNAVAILABLE";
+    renderWatchlist(symbols, status);
+    const runs = await historyRequest;
+    if (runs !== null) {
+      renderWatchlist(symbols, status, runs);
+    }
   } catch (error) {
     renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
     document.querySelector("#watchlistStatus").title = error.message || "Watchlist unavailable";

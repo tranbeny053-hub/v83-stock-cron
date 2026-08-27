@@ -645,6 +645,7 @@ def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> N
     assert [row["run_id"] for row in response.json()["runs"]] == [analyzed["run_id"]]
     assert response.json()["runs"][0]["prediction_origin"] == "USER_REQUESTED"
     assert response.json()["runs"][0]["detail_available"] is True
+    assert response.json()["runs"][0]["normalized_symbol"] == analyzed["normalized_symbol"]
 
     smoke_detail = client.get("/v1/analyze/detail/smoke-run")
     assert smoke_detail.status_code == 404
@@ -702,6 +703,7 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
                 {
                     "run_id": "restored-run",
                     "symbol": "ETH",
+                    "normalized_symbol": "ETH/USDT",
                     "analysis_mode": "METRICS_ONLY",
                     "as_of_utc": "2026-08-27T00:00:00Z",
                     "analysis_hash": "restored-hash",
@@ -731,6 +733,7 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
             {
                 "run_id": "restored-run",
                 "symbol": "ETH",
+                "normalized_symbol": "ETH/USDT",
                 "analysis_mode": "METRICS_ONLY",
                 "as_of_utc": "2026-08-27T00:00:00Z",
                 "analysis_hash": "restored-hash",
@@ -811,6 +814,7 @@ def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
     store = client.app.state.run_store
     base = {
         "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
         "analysis_mode": "METRICS_ONLY",
         "as_of_utc": "2026-08-27T00:00:00Z",
         "analysis_hash": "hash",
@@ -831,6 +835,7 @@ def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
     assert payload["source"] == "in_process"
     assert [row["run_id"] for row in payload["runs"]] == ["user-run"]
     assert payload["runs"][0]["primary_timeframe"] == "4H"
+    assert payload["runs"][0]["normalized_symbol"] == "BTC/USDT"
     assert payload["runs"][0]["data_source"] == "in_process_feed"
     assert payload["runs"][0]["is_live_data"] is True
     assert payload["runs"][0]["prediction_origin"] == "USER_REQUESTED"
