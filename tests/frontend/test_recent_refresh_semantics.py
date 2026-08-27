@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def _refresh_states() -> dict[str, object]:
     functions = "\n".join(
         _extract_function(source, name)
         for name in (
+            "showPanel",
             "refreshCurrentView",
             "markRefreshed",
             "startRefreshCooldown",
@@ -46,6 +48,7 @@ let currentWatchlistSymbol = null;
 let lastBatchRequest = null;
 let reloadResult = true;
 const calls = {{
+  hideDetail: 0,
   loadRecentRuns: 0,
   loadSystemStatus: 0,
   runSingleAnalysis: 0,
@@ -56,10 +59,26 @@ const calls = {{
 const refreshButton = {{ disabled: false, textContent: "" }};
 const lastRefreshed = {{ textContent: "" }};
 const workspace = {{ classList: {{ contains: () => false }} }};
+const tabNames = ["single", "batch", "watchlist", "recent", "dev"];
+const tabs = tabNames.map((tab) => ({{
+  dataset: {{ tab }},
+  classList: {{
+    toggle(cls, on) {{
+      if (cls === "active" && on) activeTab = tab;
+    }},
+  }},
+}}));
 const document = {{
+  querySelectorAll(selector) {{
+    if (selector === ".tab") return tabs;
+    return [];
+  }},
   querySelector(selector) {{
     if (selector === ".tab.active") return {{ dataset: {{ tab: activeTab }} }};
     if (selector === "#watchlistView") return {{ classList: {{ contains: () => true }} }};
+    if (tabNames.some((tab) => selector === `#${{tab}}Panel`)) {{
+      return {{ classList: {{ toggle: () => {{}} }} }};
+    }}
     return {{}};
   }},
 }};
@@ -72,6 +91,7 @@ async function runSingleAnalysis() {{ calls.runSingleAnalysis += 1; }}
 async function runBatchAnalysis() {{ calls.runBatchAnalysis += 1; }}
 async function loadWatchlist() {{ calls.loadWatchlist += 1; }}
 async function openWatchlistSymbol() {{ calls.openWatchlistSymbol += 1; }}
+function hideDetail() {{ calls.hideDetail += 1; }}
 function batchRequestFromForm() {{ return {{}}; }}
 {functions}
 function reset(tab) {{
@@ -110,6 +130,22 @@ function reset(tab) {{
   updateRefreshButton();
   labels.recentWhileActive = refreshButton.textContent;
 
+  const cooldownLabels = {{}};
+  for (const tab of ["recent", "single"]) {{
+    reset(tab);
+    refreshReadyAt = Date.now() + refreshCooldownMs;
+    updateRefreshButton();
+    cooldownLabels[tab] = refreshButton.textContent;
+  }}
+
+  reset("single");
+  showPanel("recent");
+  const recentPanel = {{ label: refreshButton.textContent, calls: {{ ...calls }} }};
+
+  reset("recent");
+  showPanel("single");
+  const singlePanel = {{ label: refreshButton.textContent, calls: {{ ...calls }} }};
+
   reset("single");
   await refreshCurrentView();
   const single = {{ ...calls }};
@@ -123,7 +159,17 @@ function reset(tab) {{
   await refreshCurrentView();
   const guarded = {{ ...calls }};
 
-  console.log(JSON.stringify({{ recentSuccess, recentFailure, labels, single, dev, guarded }}));
+  console.log(JSON.stringify({{
+    recentSuccess,
+    recentFailure,
+    labels,
+    cooldownLabels,
+    recentPanel,
+    singlePanel,
+    single,
+    dev,
+    guarded,
+  }}));
 }})();
 """
     completed = subprocess.run(
@@ -159,6 +205,13 @@ def test_recent_refresh_semantics() -> None:
         "dev": "Re-analyze",
         "recentWhileActive": "Re-analyzing...",
     }
+    assert re.fullmatch(r"Refresh \(\d+s\)", states["cooldownLabels"]["recent"])
+    assert re.fullmatch(r"Re-analyze \(\d+s\)", states["cooldownLabels"]["single"])
+
+    assert states["recentPanel"]["label"] == "Refresh"
+    assert states["recentPanel"]["calls"]["loadRecentRuns"] == 1
+    assert states["singlePanel"]["label"] == "Re-analyze"
+    assert states["singlePanel"]["calls"]["loadRecentRuns"] == 0
 
     assert states["single"]["runSingleAnalysis"] == 1
     assert states["single"]["loadRecentRuns"] == 0
