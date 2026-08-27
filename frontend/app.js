@@ -2278,7 +2278,7 @@ function appendWatchlistAnalysis(row, run) {
   const context = document.createElement("div");
   context.className = "watchlist-analysis-context";
   if (!run) {
-    context.textContent = "Not analyzed yet.";
+    context.textContent = "No recent analysis found.";
     row.append(context);
     return;
   }

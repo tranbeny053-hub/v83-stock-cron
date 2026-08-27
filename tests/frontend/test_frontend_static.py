@@ -1120,7 +1120,10 @@ console.log(JSON.stringify(rows.map(summarize)));
     assert "feed · Live data" in rows[1]["contextChildren"]
     assert "Open latest analysis" in rows[1]["contextChildren"]
     assert rows[1]["contextTags"].count("button") == 1
-    assert rows[2]["contextText"] == "Not analyzed yet."
+    assert rows[2]["contextText"] == "No recent analysis found."
+    assert "Not analyzed yet" not in rows[2]["contextText"]
+    assert "never" not in rows[2]["contextText"].lower()
+    assert "button" not in rows[2]["contextTags"]
     assert rows[2]["contextChildren"] == []
 
 
