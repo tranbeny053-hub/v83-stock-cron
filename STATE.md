@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #57)
+Updated: 2026-08-27 (post PR #59)
 
 ## Recovery block — read this first on resume
 ```
@@ -14,12 +14,12 @@ LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-57 (this checkpoint). origin/main = 7299c6e.
-LAST_GREEN_SHA=7299c6e
-LAST_VERIFY=PASS ruff ok | 1083 passed | schemas+smoke ok | scanners 3/3 · 7299c6e · 2026-08-27
-MAIN_STATE=main = origin/main = 7299c6e, clean, single worktree. It is the merge of PR #57
-  (parents 2cdc06c + 45a246b) and its tree is byte-identical to the reviewed head 45a246b, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #101 succeeded.
+CURRENT_BRANCH=docs/state-post-59 (this checkpoint). origin/main = 690d756.
+LAST_GREEN_SHA=690d756
+LAST_VERIFY=PASS ruff ok | 1093 passed | schemas+smoke ok | scanners 3/3 · 690d756 · 2026-08-27
+MAIN_STATE=main = origin/main = 690d756, clean, single worktree. It is the merge of PR #59
+  (parents 4f3f4ef + 4e771a0) and its tree is byte-identical to the reviewed head 4e771a0, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #105 succeeded.
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -31,6 +31,14 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     "source" field. Rows carry detail_available, because the full detail_view is NOT persisted
     durably — only the run summary is — so a restored entry shows its summary and says the full
     breakdown is unavailable rather than firing a request that would 404.
+  PR #59 (690d756): durable sanitized Detail, so a restored USER_REQUESTED entry can REOPEN
+    full Detail. detail_view is ~7.4 KB and is not reconstructable from existing tables, so one
+    additive table was authored: migrations/0008_analysis_run_details.sql. The write lives in
+    schedule_best_effort_persist, which only the two analyze routes call, gated to
+    USER_REQUESTED and sanitized through sanitize_for_export. Reads reuse the same
+    EXISTS-over-predictions origin guard. save_run_detail uses its own connection and swallows
+    its own failures, so the absent table cannot call mark_unavailable, cannot open the
+    persistence circuit breaker, and cannot affect any other write.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -44,20 +52,26 @@ CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Both T3 origin batches are CONSUMED and must not be reused: the PR
-  #56 batch and the PR #57 batch each authorized exactly one push, one PR and one merge, and no
-  deploy. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
+OWNER_BOUNDARY=NONE OPEN. Three T3 origin batches are CONSUMED and must not be reused: the PR
+  #56, PR #57 and PR #59 batches each authorized exactly one push, one PR and one merge, and no
+  deploy. No T4 has been authorized or consumed for migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
 DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
   T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
-  confirmed unchanged immediately after both merges.
+  confirmed unchanged immediately after every merge.
 NEXT_ACTION=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
   schedule from it.
+MIGRATION_0008_NOT_APPLIED=migrations/0008_analysis_run_details.sql is MERGED AS CODE ONLY and
+  has NOT been applied to any database. Until an owner applies it (a T4 action, one-shot, with
+  raw capture before parsing), analysis_run_details does not exist, every durable Detail write
+  fails and is swallowed by design, and nothing else degrades: history still lists runs and
+  in-process Detail still works within a runtime. Applying it is what switches the feature on.
+  scripts/apply_migrations.py was NEVER run in this work.
 OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .work/, so it
   scans gitignored scratch logs and can fail ./verify.sh on a clean tree from an untracked file.
   Its own docstring says it scans committed files. Deliberately NOT changed before T_close,
@@ -69,12 +83,12 @@ RUN_PROVENANCE=FAIL CLOSED, in both the in-process and the durable path. put() r
   queried and can never be persisted. A run with no prediction of the requested origin is
   EXCLUDED, so the durable list can legitimately be shorter than the in-process one. /v1/runs
   keeps an explicit USER_REQUESTED allow-list. Any successor MUST preserve this.
-DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on FIVE guarded paths:
+DEPLOY_POSTURE=Recomputed against ops/hf_runtime_baseline.json on 690d756: GitHub main is
+  ahead of the deployed bundle on FIVE guarded paths, unchanged by PR #59 —
   frontend/app.js, frontend/index.html, frontend/styles.css,
   src/crypto_probability_engine/api/analysis_service.py and
   src/crypto_probability_engine/api/app.py. Recomputed against ops/hf_runtime_baseline.json on
-  7299c6e: exactly those five diverge. PR #57 added no new guarded path — it touched only paths
-  already in the delta. CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py
+  CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py
   records all five exactly. analysis_service.py is the structural clean-room delta and never
   clears. None of it is in front of users until a future owner-authorized deploy.
 ```
