@@ -23,7 +23,10 @@ def _extract_function(source: str, name: str) -> str:
 
 def _rendered_states() -> list[dict[str, object]]:
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
-    function = _extract_function(source, "updatePersistenceStatus")
+    functions = "\n".join(
+        _extract_function(source, name)
+        for name in ("persistenceStatusText", "updatePersistenceStatus")
+    )
     script = f"""
 const persistenceStatusBadge = {{
   textContent: "",
@@ -34,7 +37,7 @@ const persistenceStatusBadge = {{
     remove(...values) {{ values.forEach((value) => this.values.delete(value)); }},
   }},
 }};
-{function}
+{functions}
 const cases = ["OK", "STATELESS", "UNAVAILABLE", "FUTURE_STATUS", undefined];
 const rendered = cases.map((status) => {{
   updatePersistenceStatus(status);
@@ -43,6 +46,60 @@ const rendered = cases.map((status) => {{
     rawStatus: persistenceStatusBadge.dataset.persistenceStatus,
     classes: [...persistenceStatusBadge.classList.values].sort(),
   }};
+}});
+console.log(JSON.stringify(rendered));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
+def _rendered_detail_overviews() -> list[list[list[object]]]:
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    functions = "\n".join(
+        _extract_function(source, name)
+        for name in ("persistenceStatusText", "renderStructuredDetail")
+    )
+    script = f"""
+{functions}
+const overviewRows = [];
+const element = () => ({{
+  append() {{}},
+  classList: {{ remove() {{}} }},
+  className: "",
+  textContent: "",
+}});
+const document = {{ createElement: element }};
+const detailPanel = {{ replaceChildren() {{}}, classList: {{ remove() {{}} }} }};
+const keyValueTable = (values) => {{ overviewRows.push(values); return element(); }};
+const section = () => element();
+const downloadJsonButton = () => element();
+const renderDecisionSynthesis = () => element();
+const renderModelQualitySection = () => element();
+const renderDecisionBrief = () => element();
+const objectTable = () => element();
+const formatPct = (value) => value;
+const modelReadinessCopy = "";
+const cases = [
+  {{ status: "OK", live: true, includeLive: true }},
+  {{ status: "STATELESS", live: false, includeLive: true }},
+  {{ status: "UNAVAILABLE", live: null, includeLive: false }},
+  {{ status: "FUTURE_STATUS", live: "true", includeLive: true }},
+  {{ status: "OK", live: 1, includeLive: true }},
+];
+const rendered = cases.map((item) => {{
+  overviewRows.length = 0;
+  const frontend_display = {{}};
+  if (item.includeLive) frontend_display.is_live_data = item.live;
+  renderStructuredDetail(
+    {{ frontend_display, debug: {{ persistence_status: item.status }} }},
+    {{}},
+  );
+  return overviewRows[0];
 }});
 console.log(JSON.stringify(rendered));
 """
@@ -97,3 +154,19 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
         text = str(unknown["text"]).lower()
         assert "retained" not in text
         assert "history" not in text
+
+
+def test_detail_uses_badge_persistence_wording_and_conservative_live_labels() -> None:
+    badge_states = _rendered_states()
+    detail_overviews = _rendered_detail_overviews()
+
+    for badge, overview in zip(badge_states[:4], detail_overviews[:4], strict=True):
+        rows = dict(overview)
+        assert rows["Persistence"] == str(badge["text"]).removeprefix("Persistence: ")
+
+    assert dict(detail_overviews[0])["Live data"] == "Yes"
+    assert dict(detail_overviews[1])["Live data"] == "No"
+    assert dict(detail_overviews[2])["Live data"] == ""
+    assert dict(detail_overviews[3])["Live data"] == ""
+    assert dict(detail_overviews[4])["Live data"] == ""
+    assert "saved" not in dict(detail_overviews[0])["Persistence"].lower()

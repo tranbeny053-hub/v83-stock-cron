@@ -188,16 +188,19 @@ function updateStatusFromPayload(payload = {}) {
   }
 }
 
-function updatePersistenceStatus(status) {
-  const safeStatus = status || "UNKNOWN";
-  const statusText =
-    safeStatus === "OK"
+function persistenceStatusText(status) {
+  return status === "OK"
       ? "Storage available"
-      : safeStatus === "STATELESS"
+      : status === "STATELESS"
         ? "No storage configured — analyses are not retained and will not appear in Recent Analysis history"
-        : safeStatus === "UNAVAILABLE"
+        : status === "UNAVAILABLE"
           ? "Storage unavailable — this analysis is not being retained and will not appear in Recent Analysis history"
           : "Storage status unknown";
+}
+
+function updatePersistenceStatus(status) {
+  const safeStatus = status || "UNKNOWN";
+  const statusText = persistenceStatusText(safeStatus);
   persistenceStatusBadge.textContent = `Persistence: ${statusText}`;
   persistenceStatusBadge.dataset.persistenceStatus = safeStatus;
   persistenceStatusBadge.classList.remove("status-ok", "status-warn", "status-unknown");
@@ -2082,8 +2085,16 @@ function renderStructuredDetail(payload, detailView) {
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
         ["Data source", display.data_source],
-        ["Live data", display.is_live_data],
-        ["Persistence", payload.debug?.persistence_status || details.debug_lite?.persistence_status],
+        [
+          "Live data",
+          display.is_live_data === true ? "Yes" : display.is_live_data === false ? "No" : "",
+        ],
+        [
+          "Persistence",
+          persistenceStatusText(
+            payload.debug?.persistence_status || details.debug_lite?.persistence_status,
+          ),
+        ],
       ]),
     ]),
     renderDecisionBrief(decisionBrief, display.blocking_reasons),
