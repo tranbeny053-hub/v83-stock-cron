@@ -14,19 +14,30 @@ LOOP_STATE=ACTIVE — ONE LANE OPEN, STOPPED AT T3. Recent Analysis History is b
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
 CURRENT_BRANCH=feat/recent-analysis-history (this checkpoint). origin/main = acf5901.
-LAST_GREEN_SHA=68a6250 (the History product commit; this docs commit is its child and changes
-  no product blob)
-LAST_VERIFY=PASS ruff ok | 1073 passed | schemas+smoke ok | scanners 3/3 · 68a6250 · 2026-08-27
+LAST_GREEN_SHA=8f74194 (the latest History product commit; any docs commit after it changes no
+  product blob, so the collector/OOS identity proof carries forward verbatim)
+LAST_VERIFY=PASS ruff ok | 1076 passed | schemas+smoke ok | scanners 3/3 · 8f74194 · 2026-08-27
 MAIN_STATE=main = origin/main = acf5901, UNTOUCHED by every lane below. Working tree clean,
   single worktree, VERIFY=PASS 1067 passed on acf5901. No lane has been merged to main and no
   lane has been pushed to any remote.
-ACTIVE_LANE=feat/recent-analysis-history @ 68a6250 — the SOLE active lane, STOPPED AT THE T3
+ACTIVE_LANE=feat/recent-analysis-history @ 8f74194 — the SOLE active lane, STOPPED AT THE T3
   BOUNDARY. Read-only operator history over the existing in-process run store: new GET /v1/runs
   behind the ordinary app session returning USER_REQUESTED rows only, plus a Recent Analysis
   tab that opens the existing /v1/analyze/detail/{run_id} view. No database write, no DB schema,
   no migration, no response-envelope change. Collector/OOS persistence semantics were proven
   identical before and after by static AST comparison and a deterministic local differential
   probe; no holdout or outcome evidence was inspected to establish it.
+RUN_PROVENANCE=FAIL CLOSED. The run store does not default a missing origin to USER_REQUESTED.
+  put() requires prediction_origin as a keyword-only argument with no default, so omitting it
+  raises TypeError; list_runs() falls back to a local UNCLASSIFIED sentinel; and the
+  DEFAULT_PREDICTION_ORIGIN import was removed from the module so the fail-open value is not in
+  scope there at all. The sentinel is deliberately NOT a PredictionOrigin member — that enum is
+  the database provenance contract enforced by predictions_prediction_origin_chk in
+  migrations/0007_prediction_origin.sql — and a regression test pins that
+  validate_prediction_origin rejects it, so it can never be persisted. /v1/runs keeps an
+  explicit USER_REQUESTED allow-list, so unclassified, CONTROLLED_SMOKE and
+  SCHEDULED_SHADOW_EVIDENCE runs are all excluded from the operator list while remaining stored
+  and retrievable via /v1/analyze/detail/{run_id} exactly as before.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
   pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
   them before T_close:
@@ -71,6 +82,21 @@ DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on frontend/app.js an
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
+
+## Provenance repair — 2026-08-27, before any T3
+
+The first History build defaulted a missing run origin to `USER_REQUESTED`. My review cleared
+it by checking only the *currently reachable* callers, which was too lenient: `InMemoryRunStore`
+is a dataclass whose `runs` field is an init parameter, so a store constructed directly holds
+runs that never passed through `put()` and were reported as the operator's own. The owner
+caught it and held T3.
+
+It now fails closed on both halves — `put()` requires an explicit origin, and anything
+unrecorded reads as a local `UNCLASSIFIED` sentinel that `validate_prediction_origin` rejects,
+so it can never reach the `prediction_origin` CHECK constraint. Regression coverage pins all
+seven cases: omitted at construction, omitted at call, smoke, shadow evidence, operator,
+non-persistability of the sentinel, and eviction. Collector/OOS identity was re-established
+after the repair, on local deterministic evidence only.
 
 ## Checkpoint — 2026-08-27: one lane open at T3, two lanes frozen local
 
