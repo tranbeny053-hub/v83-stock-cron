@@ -337,6 +337,25 @@ input:disabled {
   background: transparent;
 }
 
+.watchlist-analysis-context {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.watchlist-analysis-context small {
+  flex-basis: 100%;
+}
+
+.watchlist-open-latest {
+  margin-left: auto;
+  border-color: var(--line);
+  background: transparent;
+}
+
 .watchlist-view {
   margin-top: 16px;
 }

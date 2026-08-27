@@ -50,6 +50,7 @@ def test_list_runs_projects_context_without_mutating_payload() -> None:
     store = InMemoryRunStore()
     original = {
         **payload("context"),
+        "normalized_symbol": "BTC/USDT",
         "timeframes": {"primary": "4H"},
         "data_quality": {"data_source": "exchange_feed", "is_live_data": True},
     }
@@ -59,6 +60,7 @@ def test_list_runs_projects_context_without_mutating_payload() -> None:
     assert store.list_runs()[0] == {
         "run_id": "context",
         "symbol": "BTC/USDT",
+        "normalized_symbol": "BTC/USDT",
         "analysis_mode": "METRICS_ONLY",
         "as_of_utc": "2026-08-27T00:00:00Z",
         "analysis_hash": "hash-context",
@@ -76,6 +78,7 @@ def test_list_runs_missing_context_is_none_and_existing_fallback_is_unchanged() 
     assert store.list_runs()[0] == {
         "run_id": "legacy",
         "symbol": "BTC/USDT",
+        "normalized_symbol": None,
         "analysis_mode": "METRICS_ONLY",
         "as_of_utc": "2026-08-27T00:00:00Z",
         "analysis_hash": "hash-legacy",

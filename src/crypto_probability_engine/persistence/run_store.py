@@ -37,6 +37,7 @@ class InMemoryRunStore:
             {
                 "run_id": payload["run_id"],
                 "symbol": payload["symbol"],
+                "normalized_symbol": payload.get("normalized_symbol"),
                 "analysis_mode": payload["analysis_mode"],
                 "as_of_utc": payload["as_of_utc"],
                 "analysis_hash": payload["analysis_hash"],
