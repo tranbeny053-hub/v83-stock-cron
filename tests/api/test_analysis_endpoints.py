@@ -557,8 +557,10 @@ def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> N
     response = client.get("/v1/runs")
 
     assert response.status_code == 200
+    assert response.json()["source"] == "in_process"
     assert [row["run_id"] for row in response.json()["runs"]] == [analyzed["run_id"]]
     assert response.json()["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+    assert response.json()["runs"][0]["detail_available"] is True
 
     smoke_detail = client.get("/v1/analyze/detail/smoke-run")
     assert smoke_detail.status_code == 200
@@ -581,7 +583,7 @@ def test_recent_runs_excludes_constructor_run_without_recorded_origin(
     login(client)
 
     assert store.list_runs()[0]["prediction_origin"] == "UNCLASSIFIED"
-    assert client.get("/v1/runs").json() == {"runs": []}
+    assert client.get("/v1/runs").json() == {"source": "in_process", "runs": []}
 
 
 def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> None:
@@ -600,10 +602,76 @@ def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> No
 
     assert store.get("scheduled-run") is scheduled
     assert scheduled == expected
-    assert client.get("/v1/runs").json() == {"runs": []}
+    assert client.get("/v1/runs").json() == {"source": "in_process", "runs": []}
     detail = client.get("/v1/analyze/detail/scheduled-run")
     assert detail.status_code == 200
     assert detail.json() == analyzed["detail_view"]
+
+
+def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
+    client = make_client()
+    login(client)
+
+    class DurableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            assert limit == 100
+            assert prediction_origin == "USER_REQUESTED"
+            return [
+                {
+                    "run_id": "restored-run",
+                    "symbol": "ETH",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "restored-hash",
+                }
+            ]
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+    client.app.state.persistence_repository = DurableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload == {
+        "source": "durable",
+        "runs": [
+            {
+                "run_id": "restored-run",
+                "symbol": "ETH",
+                "analysis_mode": "METRICS_ONLY",
+                "as_of_utc": "2026-08-27T00:00:00Z",
+                "analysis_hash": "restored-hash",
+                "prediction_origin": "USER_REQUESTED",
+                "detail_available": False,
+            }
+        ],
+    }
+
+
+def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
+    client = make_client()
+    login(client)
+    store = client.app.state.run_store
+    base = {
+        "symbol": "BTC",
+        "analysis_mode": "METRICS_ONLY",
+        "as_of_utc": "2026-08-27T00:00:00Z",
+        "analysis_hash": "hash",
+    }
+    store.put("user-run", {**base, "run_id": "user-run"}, prediction_origin="USER_REQUESTED")
+    store.put("smoke-run", {**base, "run_id": "smoke-run"}, prediction_origin="CONTROLLED_SMOKE")
+
+    class UnavailableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            raise RuntimeError("unavailable")
+
+    client.app.state.persistence_repository = UnavailableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload["source"] == "in_process"
+    assert [row["run_id"] for row in payload["runs"]] == ["user-run"]
 
 
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:

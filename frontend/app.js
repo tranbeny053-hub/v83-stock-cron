@@ -848,29 +848,37 @@ function formatRecentTime(value) {
     : parsed.toLocaleString();
 }
 
-function renderRecentRuns(runs) {
+function renderRecentRuns(runs, source) {
   const target = document.querySelector("#recentList");
   const status = document.querySelector("#recentStatus");
   target.replaceChildren();
+  const sourceNote = source === "in_process" ? " History is not durable right now." : "";
   if (runs.length === 0) {
-    status.textContent = "No recent analyses yet.";
+    status.textContent = `No recent analyses yet.${sourceNote}`;
     return;
   }
-  status.textContent = `${runs.length} recent ${runs.length === 1 ? "analysis" : "analyses"}.`;
+  status.textContent = `${runs.length} recent ${runs.length === 1 ? "analysis" : "analyses"}.${sourceNote}`;
   for (const run of runs) {
-    const button = document.createElement("button");
+    const row = document.createElement(run.detail_available ? "button" : "div");
     const symbol = document.createElement("strong");
     const mode = document.createElement("span");
     const time = document.createElement("time");
-    button.type = "button";
-    button.className = "recent-row";
+    row.className = "recent-row";
     symbol.textContent = run.symbol || "Symbol unavailable";
     mode.textContent = run.analysis_mode || "Mode unavailable";
     time.dateTime = run.as_of_utc || "";
     time.textContent = formatRecentTime(run.as_of_utc);
-    button.append(symbol, mode, time);
-    button.addEventListener("click", () => openDetail(run));
-    target.append(button);
+    row.append(symbol, mode, time);
+    if (run.detail_available) {
+      row.type = "button";
+      row.addEventListener("click", () => openDetail(run));
+    } else {
+      row.classList.add("recent-row-disabled");
+      const note = document.createElement("small");
+      note.textContent = "Full breakdown not available after restart.";
+      row.append(note);
+    }
+    target.append(row);
   }
 }
 
@@ -881,7 +889,7 @@ async function loadRecentRuns() {
   status.textContent = "Loading recent analyses…";
   try {
     const payload = await api("/v1/runs");
-    renderRecentRuns(Array.isArray(payload.runs) ? payload.runs : []);
+    renderRecentRuns(Array.isArray(payload.runs) ? payload.runs : [], payload.source);
   } catch (error) {
     target.replaceChildren();
     status.textContent = `Recent analyses could not be loaded: ${error.message || "Request failed"}`;

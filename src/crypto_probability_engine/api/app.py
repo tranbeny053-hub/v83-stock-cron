@@ -277,13 +277,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/runs")
     def recent_runs(_session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
-        return {
-            "runs": [
+        origin = PredictionOrigin.USER_REQUESTED.value
+        repository = app.state.persistence_repository
+        source = "durable"
+        try:
+            rows = repository.recent_runs_for_origin(
+                app_settings.recent_run_limit,
+                prediction_origin=origin,
+            )
+            if repository.persistence_status() != "OK":
+                raise RuntimeError("durable persistence is unavailable")
+        except Exception:
+            source = "in_process"
+            rows = [
                 row
                 for row in run_store.list_runs()
-                if row["prediction_origin"] == PredictionOrigin.USER_REQUESTED.value
+                if row.get("prediction_origin") == origin
             ]
-        }
+
+        normalized = [
+            {
+                "run_id": row.get("run_id"),
+                "symbol": row.get("symbol"),
+                "analysis_mode": row.get("analysis_mode"),
+                "as_of_utc": row.get("as_of_utc"),
+                "analysis_hash": row.get("analysis_hash"),
+                "prediction_origin": origin,
+                "detail_available": run_store.get(str(row.get("run_id"))) is not None,
+            }
+            for row in rows
+        ]
+        return {"source": source, "runs": normalized}
 
     @app.get("/v1/debug/runs")
     def debug_runs(_session: dict = Depends(require_app_dev_session)) -> dict:  # noqa: B008

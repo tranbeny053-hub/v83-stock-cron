@@ -149,6 +149,11 @@ class PersistenceRepository(Protocol):
     def recent_runs(self, limit: int) -> list[dict]:
         """Return compact recent run summaries."""
 
+    def recent_runs_for_origin(
+        self, limit: int, *, prediction_origin: str
+    ) -> list[dict]:
+        """Return recent runs joined to predictions of the required origin."""
+
     def get_run(self, run_id: str) -> dict | None:
         """Return compact run summary by id."""
 
@@ -483,6 +488,23 @@ class InMemoryPersistenceRepository:
     def recent_runs(self, limit: int) -> list[dict]:
         values = list(reversed(self._runs.values()))
         return [dict(item) for item in values[:limit]]
+
+    def recent_runs_for_origin(
+        self, limit: int, *, prediction_origin: str
+    ) -> list[dict]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        matching_run_ids = {
+            str(prediction.get("run_id"))
+            for prediction in self._predictions.values()
+            if prediction.get("prediction_origin") == prediction_origin
+            and prediction.get("run_id")
+        }
+        values = (
+            run
+            for run in reversed(self._runs.values())
+            if run.get("run_id") and str(run.get("run_id")) in matching_run_ids
+        )
+        return [dict(item) for item in list(values)[:limit]]
 
     def get_run(self, run_id: str) -> dict | None:
         value = self._runs.get(run_id)
@@ -1131,6 +1153,37 @@ class SupabasePersistenceRepository:
             for row in rows
         ]
 
+    def recent_runs_for_origin(
+        self, limit: int, *, prediction_origin: str
+    ) -> list[dict]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        status, rows = self._run_db(
+            lambda cursor: _fetch_recent_runs_for_origin(
+                cursor, limit, prediction_origin=prediction_origin
+            )
+        )
+        if status == "UNAVAILABLE" or rows is None:
+            return self._fallback.recent_runs_for_origin(
+                limit, prediction_origin=prediction_origin
+            )
+        return [
+            {
+                "run_id": row[0],
+                "symbol": row[1],
+                "normalized_symbol": row[2],
+                "analysis_mode": row[3],
+                "primary_timeframe": row[4],
+                "disposition": row[5],
+                "total_score": float(row[6]) if row[6] is not None else None,
+                "data_source": row[7],
+                "is_live_data": row[8],
+                "analysis_hash": row[9],
+                "as_of_utc": row[10].isoformat() if row[10] else None,
+                "created_at": row[11].isoformat() if row[11] else None,
+            }
+            for row in rows
+        ]
+
     def get_run(self, run_id: str) -> dict | None:
         status, row = self._run_db(lambda cursor: _fetch_run(cursor, run_id))
         if status == "UNAVAILABLE":
@@ -1636,6 +1689,71 @@ class SupabaseRestRepository:
             return self._fallback.recent_runs(limit)
         return [dict(row) for row in rows]
 
+    def recent_runs_for_origin(
+        self, limit: int, *, prediction_origin: str
+    ) -> list[dict]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        candidate_limit = min(max(limit * 5, limit), 500)
+        status, candidates = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "analysis_runs",
+                params={
+                    "select": (
+                        "run_id,symbol,normalized_symbol,analysis_mode,primary_timeframe,"
+                        "disposition,total_score,data_source,is_live_data,analysis_hash,"
+                        "as_of_utc,created_at"
+                    ),
+                    "order": "created_at.desc",
+                    "limit": str(candidate_limit),
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(candidates, list):
+            return self._fallback.recent_runs_for_origin(
+                limit, prediction_origin=prediction_origin
+            )
+        if not candidates:
+            return []
+
+        candidate_ids = [
+            str(row["run_id"])
+            for row in candidates
+            if isinstance(row, Mapping) and row.get("run_id") is not None
+        ]
+        if not candidate_ids:
+            return []
+        escaped_ids = ",".join(
+            _quote_postgrest_filter_value(run_id) for run_id in candidate_ids
+        )
+        status, predictions = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "predictions",
+                params={
+                    "select": "run_id",
+                    "prediction_origin": f"eq.{prediction_origin}",
+                    "run_id": f"in.({escaped_ids})",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(predictions, list):
+            return self._fallback.recent_runs_for_origin(
+                limit, prediction_origin=prediction_origin
+            )
+        matching_ids = {
+            str(row["run_id"])
+            for row in predictions
+            if isinstance(row, Mapping) and row.get("run_id") is not None
+        }
+        # Bounded approximation: older matches outside the candidate window are omitted;
+        # only runs proven to have a prediction of this origin can be returned.
+        return [
+            dict(row)
+            for row in candidates
+            if isinstance(row, Mapping) and str(row.get("run_id")) in matching_ids
+        ][:limit]
+
     def get_run(self, run_id: str) -> dict | None:
         status, rows = self._run_rest(
             lambda: self._request(
@@ -1744,6 +1862,34 @@ def _fetch_recent_runs(cursor, limit: int):
         LIMIT %s
         """,
         (limit,),
+    )
+    return cursor.fetchall()
+
+
+def _quote_postgrest_filter_value(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _fetch_recent_runs_for_origin(
+    cursor, limit: int, *, prediction_origin: str
+):
+    cursor.execute(
+        """
+        SELECT run_id, symbol, normalized_symbol, analysis_mode,
+               primary_timeframe, disposition, total_score, data_source,
+               is_live_data, analysis_hash, as_of_utc, created_at
+        FROM analysis_runs
+        WHERE EXISTS (
+            SELECT 1
+            FROM predictions p
+            WHERE p.run_id = analysis_runs.run_id
+              AND p.prediction_origin = %s
+        )
+        ORDER BY created_at DESC
+        LIMIT %s
+        """,
+        (prediction_origin, limit),
     )
     return cursor.fetchall()
 

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+import pytest
 
 from crypto_probability_engine.api.analysis_service import (
     PersistenceWork,
@@ -113,6 +114,153 @@ def test_in_memory_repository_watchlist_and_runs_are_stateless() -> None:
     )
     assert repo.get_run("run_test")["normalized_symbol"] == "BTC/USDT"
     assert repo.recent_runs(1)[0]["run_id"] == "run_test"
+
+
+def test_recent_runs_for_origin_is_fail_closed_newest_first_and_bounded() -> None:
+    repo = InMemoryPersistenceRepository()
+    origins = (
+        ("controlled", "CONTROLLED_SMOKE"),
+        ("scheduled", "SCHEDULED_SHADOW_EVIDENCE"),
+        ("user-old", "USER_REQUESTED"),
+        ("user-new", "USER_REQUESTED"),
+    )
+    repo.save_run({"run_id": "no-prediction"})
+    for run_id, prediction_origin in origins:
+        repo.save_run({"run_id": run_id})
+        repo.save_prediction(
+            {
+                **_sample_prediction(),
+                "prediction_id": f"{run_id}:4H",
+                "run_id": run_id,
+                "prediction_origin": prediction_origin,
+            }
+        )
+
+    rows = repo.recent_runs_for_origin(1, prediction_origin="USER_REQUESTED")
+
+    assert [row["run_id"] for row in rows] == ["user-new"]
+    assert [
+        row["run_id"]
+        for row in repo.recent_runs_for_origin(
+            10, prediction_origin="USER_REQUESTED"
+        )
+    ] == ["user-new", "user-old"]
+    assert repo.recent_runs_for_origin(
+        10, prediction_origin="CONTROLLED_SMOKE"
+    ) == [{"run_id": "controlled"}]
+    assert repo.recent_runs_for_origin(
+        10, prediction_origin="SCHEDULED_SHADOW_EVIDENCE"
+    ) == [{"run_id": "scheduled"}]
+    with pytest.raises(TypeError):
+        repo.recent_runs_for_origin(10)  # type: ignore[call-arg]
+
+
+def test_supabase_recent_runs_for_origin_binds_origin_parameter() -> None:
+    cursor = FakeCursor(rows=[])
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    assert repo.recent_runs_for_origin(
+        7, prediction_origin="USER_REQUESTED"
+    ) == []
+    query = cursor.statements[-1]
+    assert "EXISTS" in query
+    assert "p.prediction_origin = %s" in query
+    assert "USER_REQUESTED" not in query
+    assert cursor.params[-1] == ("USER_REQUESTED", 7)
+
+
+def test_supabase_rest_recent_runs_for_origin_filters_without_embed() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path.endswith("/analysis_runs"):
+            return httpx.Response(
+                200,
+                json=[
+                    {"run_id": "new-user"},
+                    {"run_id": "controlled-only"},
+                    {"run_id": "old-user"},
+                    {"run_id": "scheduled-only"},
+                    {"run_id": "oldest-user"},
+                ],
+            )
+        return httpx.Response(
+            200,
+            json=[
+                {"run_id": "new-user"},
+                {"run_id": "old-user"},
+                {"run_id": "oldest-user"},
+            ],
+        )
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.recent_runs_for_origin(
+        2, prediction_origin="USER_REQUESTED"
+    ) == [{"run_id": "new-user"}, {"run_id": "old-user"}]
+    assert len(seen) == 2
+    candidate_params = seen[0].url.params
+    prediction_params = seen[1].url.params
+    assert "predictions!inner" not in candidate_params["select"]
+    assert all(not key.startswith("predictions.") for key in candidate_params.keys())
+    assert candidate_params["limit"] == "10"
+    assert prediction_params["prediction_origin"] == "eq.USER_REQUESTED"
+    assert repo.persistence_status() != "UNAVAILABLE"
+
+
+def test_supabase_rest_recent_runs_for_origin_stops_after_empty_candidates() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.recent_runs_for_origin(5, prediction_origin="USER_REQUESTED") == []
+    assert len(seen) == 1
+    assert seen[0].url.path.endswith("/analysis_runs")
+
+
+def test_supabase_rest_recent_runs_for_origin_escapes_candidate_ids() -> None:
+    seen: list[httpx.Request] = []
+    candidate_ids = ["ordinary", "comma,value", 'quote"value']
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path.endswith("/analysis_runs"):
+            return httpx.Response(
+                200, json=[{"run_id": run_id} for run_id in candidate_ids]
+            )
+        return httpx.Response(200, json=[])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.recent_runs_for_origin(3, prediction_origin="USER_REQUESTED") == []
+    sent_filter = seen[1].url.params["run_id"]
+    assert sent_filter == 'in.("ordinary","comma,value","quote\\"value")'
+    assert sent_filter.count('","') == len(candidate_ids) - 1
 
 
 def test_in_memory_run_retention_keeps_only_newest_summaries() -> None:
