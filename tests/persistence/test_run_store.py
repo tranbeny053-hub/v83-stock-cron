@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from crypto_probability_engine.persistence.run_store import InMemoryRunStore
+from collections import OrderedDict
+
+import pytest
+
+from crypto_probability_engine.persistence.prediction_origin import (
+    ALLOWED_PREDICTION_ORIGINS,
+    validate_prediction_origin,
+)
+from crypto_probability_engine.persistence.run_store import (
+    UNCLASSIFIED_RUN_ORIGIN,
+    InMemoryRunStore,
+)
 
 
 def payload(run_id: str) -> dict:
@@ -14,16 +25,31 @@ def payload(run_id: str) -> dict:
     }
 
 
-def test_put_default_preserves_user_requested_behavior_without_mutating_payload() -> None:
+def test_put_requires_explicit_origin_without_mutating_payload() -> None:
     store = InMemoryRunStore()
     original = payload("default")
     expected = original.copy()
 
-    store.put("default", original)
+    with pytest.raises(TypeError):
+        store.put("default", original)  # type: ignore[call-arg]
+
+    store.put("default", original, prediction_origin="USER_REQUESTED")
 
     assert store.get("default") is original
     assert original == expected
     assert store.list_runs()[0]["prediction_origin"] == "USER_REQUESTED"
+
+
+def test_constructor_runs_without_recorded_origin_are_unclassified() -> None:
+    store = InMemoryRunStore(runs=OrderedDict([("legacy", payload("legacy"))]))
+
+    assert store.list_runs()[0]["prediction_origin"] == UNCLASSIFIED_RUN_ORIGIN
+
+
+def test_unclassified_origin_is_not_persistable() -> None:
+    assert UNCLASSIFIED_RUN_ORIGIN not in ALLOWED_PREDICTION_ORIGINS
+    with pytest.raises(ValueError, match="Unsupported prediction origin"):
+        validate_prediction_origin(UNCLASSIFIED_RUN_ORIGIN)
 
 
 def test_list_runs_reports_each_recorded_origin() -> None:
@@ -47,11 +73,12 @@ def test_retention_and_refresh_order_are_unchanged() -> None:
     store = InMemoryRunStore(limit=2)
     first = payload("first")
     store.put("first", first, prediction_origin="CONTROLLED_SMOKE")
-    store.put("second", payload("second"))
+    store.put("second", payload("second"), prediction_origin="USER_REQUESTED")
     store.put("first", first, prediction_origin="SCHEDULED_SHADOW_EVIDENCE")
-    store.put("third", payload("third"))
+    store.put("third", payload("third"), prediction_origin="USER_REQUESTED")
 
     assert list(store.runs) == ["first", "third"]
     assert store.get("second") is None
+    assert "second" not in store._prediction_origins  # noqa: SLF001
     assert [row["run_id"] for row in store.list_runs()] == ["third", "first"]
     assert store.list_runs()[1]["prediction_origin"] == "SCHEDULED_SHADOW_EVIDENCE"

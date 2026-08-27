@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
-from crypto_probability_engine.persistence.prediction_origin import DEFAULT_PREDICTION_ORIGIN
+UNCLASSIFIED_RUN_ORIGIN = "UNCLASSIFIED"
 
 
 @dataclass
@@ -19,7 +19,7 @@ class InMemoryRunStore:
         run_id: str,
         payload: dict,
         *,
-        prediction_origin: str = DEFAULT_PREDICTION_ORIGIN,
+        prediction_origin: str,
     ) -> None:
         self.runs[run_id] = payload
         self._prediction_origins[run_id] = prediction_origin
@@ -41,7 +41,7 @@ class InMemoryRunStore:
                 "as_of_utc": payload["as_of_utc"],
                 "analysis_hash": payload["analysis_hash"],
                 "prediction_origin": self._prediction_origins.get(
-                    payload["run_id"], DEFAULT_PREDICTION_ORIGIN
+                    payload["run_id"], UNCLASSIFIED_RUN_ORIGIN
                 ),
             }
             for payload in reversed(self.runs.values())
