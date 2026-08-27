@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #61)
+Updated: 2026-08-27 (post PR #63)
 
 ## Recovery block — read this first on resume
 ```
@@ -14,12 +14,12 @@ LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-61 (this checkpoint). origin/main = b8d81d3.
-LAST_GREEN_SHA=b8d81d3
-LAST_VERIFY=PASS ruff ok | 1096 passed | schemas+smoke ok | scanners 3/3 · b8d81d3 · 2026-08-27
-MAIN_STATE=main = origin/main = b8d81d3, clean, single worktree. It is the merge of PR #61
-  (parents 39be571 + 1ec7d28) and its tree is byte-identical to the reviewed head 1ec7d28, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #109 succeeded.
+CURRENT_BRANCH=docs/state-post-63 (this checkpoint). origin/main = 1668534.
+LAST_GREEN_SHA=1668534
+LAST_VERIFY=PASS ruff ok | 1100 passed | schemas+smoke ok | scanners 3/3 · 1668534 · 2026-08-27
+MAIN_STATE=main = origin/main = 1668534, clean, single worktree. It is the merge of PR #63
+  (parents 9e66c84 + bea1ad0) and its tree is byte-identical to the reviewed head bea1ad0, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #113 succeeded.
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -46,6 +46,13 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     no analysis value. The indicator claims "Live data" only when is_live_data is exactly true.
     disposition and total_score are deliberately NOT surfaced: they are decision claims that
     belong in Detail. Filtered-empty is reported distinctly from genuinely-empty.
+  PR #63 (1668534): the history detail-availability read is BATCHED. /v1/runs now issues ONE
+    run_ids_with_detail query for all durable-only rows instead of one get_run_detail call per
+    row. It reuses the same EXISTS-over-predictions origin guard, takes a required validated
+    keyword-only origin, issues no query on empty input, caps its input and fails closed beyond
+    the cap, and — like save_run_detail and get_run_detail — uses its own connection and
+    swallows its own failures so the absent table cannot open the persistence circuit breaker.
+    get_run_detail is unchanged and still serves the single /v1/analyze/detail lookup.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -59,9 +66,9 @@ CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Four T3 origin batches are CONSUMED and must not be reused: the PR
-  #56, PR #57, PR #59 and PR #61 batches each authorized exactly one push, one PR and one
-  merge, and no deploy. No T4 has been authorized or consumed for migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
+OWNER_BOUNDARY=NONE OPEN. Five T3 origin batches are CONSUMED and must not be reused: the PR
+  #56, PR #57, PR #59, PR #61 and PR #63 batches each authorized exactly one push, one PR and
+  one merge, and no deploy. No T4 has been authorized or consumed for migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
 DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
@@ -73,12 +80,11 @@ NEXT_ACTION=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
   schedule from it.
-BLOCKER_BEFORE_0008_T4=MANDATORY, owner-directed. /v1/runs calls get_run_detail ONCE PER ROW
-  for any run absent from the in-process store. After a restart that is every row, so a single
-  history load issues up to recent_run_limit (100) separate detail queries. It is INERT today
-  because 0008 is unapplied and the call fails fast, but it becomes real the moment 0008 is
-  applied. A batched existence read MUST land before any 0008 T4 is authorized. Do not apply
-  0008 while this stands.
+BLOCKER_BEFORE_0008_T4=CLOSED by PR #63 (merged 1668534). The owner-directed prerequisite is
+  satisfied: /v1/runs no longer issues one detail query per row. It now issues exactly one
+  batched run_ids_with_detail call for all durable-only rows, bounded and fail-closed, and the
+  behaviour of detail_available is identical per row. No blocker now stands against migration
+  0008. Applying it remains a separate T4 decision that has NOT been authorized or taken.
 MIGRATION_0008_NOT_APPLIED=migrations/0008_analysis_run_details.sql is MERGED AS CODE ONLY and
   has NOT been applied to any database. Until an owner applies it (a T4 action, one-shot, with
   raw capture before parsing), analysis_run_details does not exist, every durable Detail write
