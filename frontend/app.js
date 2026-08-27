@@ -242,8 +242,10 @@ function updateDevModeUx(devMode = {}) {
 async function loadSystemStatus() {
   try {
     await api("/v1/system_status");
+    return true;
   } catch {
     updatePersistenceStatus("UNKNOWN");
+    return false;
   }
 }
 
@@ -274,7 +276,10 @@ function setAnalysisActive(active) {
 }
 
 function refreshActionLabel() {
-  return activeTabName() === "recent" ? "Refresh" : "Re-analyze";
+  const tab = activeTabName();
+  if (tab === "recent") return "Refresh";
+  if (tab === "dev") return "Refresh status";
+  return "Re-analyze";
 }
 
 function updateRefreshButton() {
@@ -2530,8 +2535,21 @@ async function refreshCurrentView() {
     }
     return;
   }
-  await loadSystemStatus();
-  markRefreshed();
+  if (tab === "dev") {
+    const refreshed = await loadSystemStatus();
+    if (refreshed) {
+      markRefreshed("status refreshed");
+    } else {
+      startRefreshCooldown();
+    }
+    return;
+  }
+  const refreshed = await loadSystemStatus();
+  if (refreshed) {
+    markRefreshed();
+  } else {
+    startRefreshCooldown();
+  }
 }
 
 refreshButton.addEventListener("click", async () => {
