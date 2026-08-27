@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api import analysis_service
@@ -539,6 +540,89 @@ def test_detail_lookup_returns_detail_view() -> None:
     assert detail.json()["run_id"] == run_id
 
 
+@pytest.mark.parametrize(
+    ("prediction_origin", "expected_detail_tasks"),
+    [
+        ("USER_REQUESTED", 1),
+        ("CONTROLLED_SMOKE", 0),
+        ("SCHEDULED_SHADOW_EVIDENCE", 0),
+    ],
+)
+def test_detail_write_is_scheduled_only_for_user_requested(
+    prediction_origin: str,
+    expected_detail_tasks: int,
+) -> None:
+    class DetailRepository:
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def save_run_detail(self, _row: dict) -> str:
+            return "OK"
+
+    payload = {
+        "run_id": "run-detail",
+        "analysis_hash": "analysis-hash",
+        "detail_view": {
+            "run_id": "run-detail",
+            "article_body": "full article body",
+            "api_secret_key": "highly-sensitive",
+        },
+    }
+    background_tasks = BackgroundTasks()
+
+    analysis_service.schedule_best_effort_persist(
+        background_tasks,
+        DetailRepository(),
+        payload,
+        prediction_origin=prediction_origin,
+    )
+
+    detail_tasks = [
+        task for task in background_tasks.tasks if task.func.__name__ == "save_run_detail"
+    ]
+    assert len(detail_tasks) == expected_detail_tasks
+    if detail_tasks:
+        stored = detail_tasks[0].args[0]
+        assert stored["run_id"] == "run-detail"
+        assert stored["analysis_hash"] == "analysis-hash"
+        assert stored["detail_payload"]["article_body"] == "[removed]"
+        assert stored["detail_payload"]["api_secret_key"] == "set (****)"
+        assert "full article body" not in json.dumps(stored)
+        assert "highly-sensitive" not in json.dumps(stored)
+
+
+def test_schedule_best_effort_persist_requires_prediction_origin() -> None:
+    with pytest.raises(TypeError):
+        analysis_service.schedule_best_effort_persist(  # type: ignore[call-arg]
+            BackgroundTasks(),
+            None,
+            {},
+        )
+
+
+def test_detail_lookup_uses_durable_user_requested_detail_after_restart() -> None:
+    class DurableDetailRepository:
+        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
+            assert prediction_origin == "USER_REQUESTED"
+            if run_id == "durable-run":
+                return {"run_id": run_id, "sections": {"score": "restored"}}
+            return None
+
+    client = make_client()
+    client.app.state.persistence_repository = DurableDetailRepository()
+    login(client)
+
+    restored = client.get("/v1/analyze/detail/durable-run")
+    missing = client.get("/v1/analyze/detail/missing-run")
+
+    assert restored.status_code == 200
+    assert restored.json() == {
+        "run_id": "durable-run",
+        "sections": {"score": "restored"},
+    }
+    assert missing.status_code == 404
+
+
 def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> None:
     client = make_client()
     assert client.get("/v1/runs").status_code == 401
@@ -563,8 +647,7 @@ def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> N
     assert response.json()["runs"][0]["detail_available"] is True
 
     smoke_detail = client.get("/v1/analyze/detail/smoke-run")
-    assert smoke_detail.status_code == 200
-    assert smoke_detail.json() == analyzed["detail_view"]
+    assert smoke_detail.status_code == 404
 
 
 def test_recent_runs_excludes_constructor_run_without_recorded_origin(
@@ -604,8 +687,7 @@ def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> No
     assert scheduled == expected
     assert client.get("/v1/runs").json() == {"source": "in_process", "runs": []}
     detail = client.get("/v1/analyze/detail/scheduled-run")
-    assert detail.status_code == 200
-    assert detail.json() == analyzed["detail_view"]
+    assert detail.status_code == 404
 
 
 def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
@@ -647,6 +729,38 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
             }
         ],
     }
+
+
+def test_recent_runs_marks_durable_only_detail_available() -> None:
+    client = make_client()
+    login(client)
+
+    class DurableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            return [
+                {
+                    "run_id": "durable-only",
+                    "symbol": "BTC",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "durable-hash",
+                }
+            ]
+
+        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
+            assert run_id == "durable-only"
+            assert prediction_origin == "USER_REQUESTED"
+            return {"run_id": run_id}
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+    client.app.state.persistence_repository = DurableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload["source"] == "durable"
+    assert payload["runs"][0]["detail_available"] is True
 
 
 def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:

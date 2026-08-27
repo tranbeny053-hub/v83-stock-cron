@@ -70,7 +70,11 @@ def _record_analysis_origins(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         return {"run_id": f"run-{len(origins)}"}
 
     monkeypatch.setattr(app_module, "analyze_request", fake_analyze_request)
-    monkeypatch.setattr(app_module, "schedule_best_effort_persist", lambda *_args: None)
+    monkeypatch.setattr(
+        app_module,
+        "schedule_best_effort_persist",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(app_module, "schedule_skill_evidence_refresh", lambda *_args: None)
     return origins
 

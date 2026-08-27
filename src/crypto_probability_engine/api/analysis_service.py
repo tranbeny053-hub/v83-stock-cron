@@ -542,12 +542,28 @@ def schedule_best_effort_persist(
     background_tasks: BackgroundTasks,
     repository: PersistenceRepository | None,
     payload: dict,
+    *,
+    prediction_origin: str,
 ) -> str:
+    from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
+    from crypto_probability_engine.utils.sanitize import sanitize_for_export
+
     status = current_persistence_status(repository)
     if repository is None:
         return status
     work = _persistence_work(payload, status)
     background_tasks.add_task(_submit_persistence_work, repository, work)
+    if prediction_origin == PredictionOrigin.USER_REQUESTED.value:
+        save_run_detail = getattr(repository, "save_run_detail", None)
+        if callable(save_run_detail):
+            background_tasks.add_task(
+                save_run_detail,
+                {
+                    "run_id": payload["run_id"],
+                    "analysis_hash": payload.get("analysis_hash"),
+                    "detail_payload": sanitize_for_export(payload["detail_view"]),
+                },
+            )
     return status
 
 

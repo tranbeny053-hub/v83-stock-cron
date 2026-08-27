@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260827-b"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260827-b"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-c"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-c"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 

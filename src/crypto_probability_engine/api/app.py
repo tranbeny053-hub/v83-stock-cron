@@ -170,14 +170,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         repository = app.state.persistence_repository
+        prediction_origin = session_prediction_origin(session)
         result = analyze_request(
             body,
             settings=app_settings,
             run_store=run_store,
             persistence_status=current_persistence_status(repository),
-            prediction_origin=session_prediction_origin(session),
+            prediction_origin=prediction_origin,
         )
-        schedule_best_effort_persist(background_tasks, repository, result)
+        schedule_best_effort_persist(
+            background_tasks,
+            repository,
+            result,
+            prediction_origin=prediction_origin,
+        )
         schedule_skill_evidence_refresh(
             background_tasks,
             app.state.skill_evidence_repository,
@@ -194,6 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         results: list[dict] = []
         errors: list[dict] = []
         repository = app.state.persistence_repository
+        prediction_origin = session_prediction_origin(session)
         for index, item in enumerate(body.requests):
             try:
                 result = analyze_request(
@@ -201,9 +208,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     settings=app_settings,
                     run_store=run_store,
                     persistence_status=current_persistence_status(repository),
-                    prediction_origin=session_prediction_origin(session),
+                    prediction_origin=prediction_origin,
                 )
-                schedule_best_effort_persist(background_tasks, repository, result)
+                schedule_best_effort_persist(
+                    background_tasks,
+                    repository,
+                    result,
+                    prediction_origin=prediction_origin,
+                )
                 results.append(result)
             except Exception as exc:
                 if hasattr(exc, "detail"):
@@ -271,8 +283,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         payload = run_store.get(run_id)
-        if not payload:
+        if payload and not any(
+            row.get("run_id") == run_id
+            and row.get("prediction_origin") == PredictionOrigin.USER_REQUESTED.value
+            for row in run_store.list_runs()
+        ):
             raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+        if not payload:
+            durable = app.state.persistence_repository.get_run_detail(
+                run_id,
+                prediction_origin=PredictionOrigin.USER_REQUESTED.value,
+            )
+            if not durable:
+                raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+            return durable
         return payload["detail_view"]
 
     @app.get("/v1/runs")
@@ -295,18 +319,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if row.get("prediction_origin") == origin
             ]
 
-        normalized = [
-            {
-                "run_id": row.get("run_id"),
-                "symbol": row.get("symbol"),
-                "analysis_mode": row.get("analysis_mode"),
-                "as_of_utc": row.get("as_of_utc"),
-                "analysis_hash": row.get("analysis_hash"),
-                "prediction_origin": origin,
-                "detail_available": run_store.get(str(row.get("run_id"))) is not None,
-            }
-            for row in rows
-        ]
+        normalized = []
+        for row in rows:
+            run_id = str(row.get("run_id"))
+            in_process_detail = run_store.get(run_id) is not None
+            durable_detail = None
+            if not in_process_detail:
+                try:
+                    durable_detail = repository.get_run_detail(
+                        run_id,
+                        prediction_origin=origin,
+                    )
+                except Exception:
+                    durable_detail = None
+            normalized.append(
+                {
+                    "run_id": row.get("run_id"),
+                    "symbol": row.get("symbol"),
+                    "analysis_mode": row.get("analysis_mode"),
+                    "as_of_utc": row.get("as_of_utc"),
+                    "analysis_hash": row.get("analysis_hash"),
+                    "prediction_origin": origin,
+                    "detail_available": in_process_detail or durable_detail is not None,
+                }
+            )
         return {"source": source, "runs": normalized}
 
     @app.get("/v1/debug/runs")
