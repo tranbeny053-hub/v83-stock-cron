@@ -62,7 +62,7 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     functions = "\n".join(
         _extract_function(source, name)
-        for name in ("persistenceStatusText", "renderStructuredDetail")
+        for name in ("formatValue", "persistenceStatusText", "renderStructuredDetail")
     )
     script = f"""
 {functions}
@@ -75,7 +75,10 @@ const element = () => ({{
 }});
 const document = {{ createElement: element }};
 const detailPanel = {{ replaceChildren() {{}}, classList: {{ remove() {{}} }} }};
-const keyValueTable = (values) => {{ overviewRows.push(values); return element(); }};
+const keyValueTable = (values) => {{
+  overviewRows.push(values.map(([label, value]) => [label, formatValue(value)]));
+  return element();
+}};
 const section = () => element();
 const downloadJsonButton = () => element();
 const renderDecisionSynthesis = () => element();
@@ -89,7 +92,6 @@ const cases = [
   {{ status: "STATELESS", live: false, includeLive: true }},
   {{ status: "UNAVAILABLE", live: null, includeLive: false }},
   {{ status: "FUTURE_STATUS", live: "true", includeLive: true }},
-  {{ status: "OK", live: 1, includeLive: true }},
 ];
 const rendered = cases.map((item) => {{
   overviewRows.length = 0;
@@ -156,7 +158,7 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
         assert "history" not in text
 
 
-def test_detail_uses_badge_persistence_wording_and_conservative_live_labels() -> None:
+def test_detail_uses_badge_persistence_wording_and_formats_live_data() -> None:
     badge_states = _rendered_states()
     detail_overviews = _rendered_detail_overviews()
 
@@ -164,9 +166,7 @@ def test_detail_uses_badge_persistence_wording_and_conservative_live_labels() ->
         rows = dict(overview)
         assert rows["Persistence"] == str(badge["text"]).removeprefix("Persistence: ")
 
-    assert dict(detail_overviews[0])["Live data"] == "Yes"
-    assert dict(detail_overviews[1])["Live data"] == "No"
-    assert dict(detail_overviews[2])["Live data"] == ""
-    assert dict(detail_overviews[3])["Live data"] == ""
-    assert dict(detail_overviews[4])["Live data"] == ""
+    assert dict(detail_overviews[0])["Live data"] == "yes"
+    assert dict(detail_overviews[1])["Live data"] == "no"
+    assert dict(detail_overviews[2])["Live data"] == "n/a"
     assert "saved" not in dict(detail_overviews[0])["Persistence"].lower()

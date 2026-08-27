@@ -2085,10 +2085,7 @@ function renderStructuredDetail(payload, detailView) {
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
         ["Data source", display.data_source],
-        [
-          "Live data",
-          display.is_live_data === true ? "Yes" : display.is_live_data === false ? "No" : "",
-        ],
+        ["Live data", display.is_live_data],
         [
           "Persistence",
           persistenceStatusText(
