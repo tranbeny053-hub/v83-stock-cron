@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #67)
+Updated: 2026-08-27 (post PR #70)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Nine product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,12 +14,14 @@ LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-67 (this checkpoint). origin/main = 17ca9e1.
-LAST_GREEN_SHA=17ca9e1
-LAST_VERIFY=PASS ruff ok | 1103 passed | schemas+smoke ok | scanners 3/3 · 17ca9e1 · 2026-08-27
-MAIN_STATE=main = origin/main = 17ca9e1, clean, single worktree. It is the merge of PR #67
-  (parents 48c3dad + db3107a) and its tree is byte-identical to the reviewed head db3107a, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #121 succeeded.
+CURRENT_BRANCH=docs/state-post-70 (this checkpoint). origin/main = 9923f33.
+LAST_GREEN_SHA=9923f33
+LAST_VERIFY=PASS ruff ok | 1105 passed | schemas+smoke ok | scanners 3/3 · 9923f33 · 2026-08-27
+MAIN_STATE=main = origin/main = 9923f33, clean, single worktree. It is the merge of PR #70
+  (parents 18e987a + 50e6879) and its tree is byte-identical to the reviewed head 50e6879, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #127 succeeded.
+  This checkpoint covers TWO merges, because the checkpoint after PR #69 was deliberately
+  deferred into this one: 18e987a (PR #69, post-merge CI run #125) and 9923f33 (PR #70).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -73,6 +75,21 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     symbol-normalization rejection there is no normalized symbol, so it is the only honest
     identifier. The frontend renders in request order and falls back to successes-then-errors
     when items is absent.
+  PR #69 (18e987a): the persistence status line now states its CONSEQUENCE instead of naming a
+    state. STATELESS and UNAVAILABLE each say that the analysis is not retained and will not
+    appear in Recent Analysis history; OK says storage is available and deliberately does NOT
+    say "saved", because the write is best-effort and fire-and-forget, so claiming a completed
+    save at render time would be a claim the frontend cannot support. Wording only: the status
+    values, the API and the persistence path are unchanged.
+  PR #70 (9923f33): the SAME wording now serves both places. The Detail "Persistence" row was
+    carrying its own second copy of the status text, so PR #69 moved the header badge and left
+    Detail behind; persistenceStatusText is now extracted once and used by both, and an
+    executable test pins them equal for all four statuses. Also reverts a regression this lane
+    introduced in its first commit: Detail's "Live data" row had been changed to a raw boolean,
+    which made a missing value render blank instead of "n/a", capitalised only that one row,
+    and disagreed with the second "Live data" row that still went through formatValue. It is
+    restored to main's behaviour — formatValue already renders null/undefined as "n/a",
+    booleans as "yes"/"no", and arrays as joined or "none".
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -81,14 +98,14 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #57 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #70 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Seven T3 origin batches are CONSUMED and must not be reused: the PR
-  #56, PR #57, PR #59, PR #61, PR #63, PR #65 and PR #67 batches each authorized exactly one
-  push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
+OWNER_BOUNDARY=NONE OPEN. Nine T3 origin batches are CONSUMED and must not be reused: the PR
+  #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69 and PR #70 batches each
+  authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
