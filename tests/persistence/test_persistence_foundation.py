@@ -233,6 +233,161 @@ def test_supabase_run_detail_origin_guard_uses_predictions_exists() -> None:
     assert cursor.params[-1] == ("run-detail", "USER_REQUESTED")
 
 
+def test_run_ids_with_detail_is_origin_guarded_bounded_and_keyword_only() -> None:
+    repo = InMemoryPersistenceRepository()
+    for sequence in range(502):
+        run_id = f"run-{sequence}"
+        repo.save_run_detail(
+            {
+                "run_id": run_id,
+                "analysis_hash": "hash",
+                "detail_payload": {"run_id": run_id},
+            }
+        )
+        repo.save_prediction(
+            {
+                **_sample_prediction(),
+                "prediction_id": f"{run_id}:4H",
+                "run_id": run_id,
+                "prediction_origin": (
+                    "USER_REQUESTED"
+                    if sequence not in (1, 2)
+                    else (
+                        "CONTROLLED_SMOKE"
+                        if sequence == 1
+                        else "SCHEDULED_SHADOW_EVIDENCE"
+                    )
+                ),
+            }
+        )
+
+    available = repo.run_ids_with_detail(
+        [f"run-{sequence}" for sequence in range(502)],
+        prediction_origin="USER_REQUESTED",
+    )
+
+    assert "run-0" in available
+    assert "run-1" not in available
+    assert "run-2" not in available
+    assert "run-499" in available
+    assert "run-500" not in available
+    assert "run-501" not in available
+    with pytest.raises(TypeError):
+        repo.run_ids_with_detail(["run-0"])  # type: ignore[call-arg]
+
+
+def test_supabase_run_ids_with_detail_is_one_bound_query_and_empty_skips_query() -> None:
+    cursor = FakeCursor(rows=[("ordinary",), ('quote"value',)])
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(cursor)
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+
+    assert repo.run_ids_with_detail([], prediction_origin="USER_REQUESTED") == set()
+    assert cursor.statements == []
+    assert repo.run_ids_with_detail(
+        ["ordinary", "comma,value", 'quote"value'],
+        prediction_origin="USER_REQUESTED",
+    ) == {"ordinary", 'quote"value'}
+    query = cursor.statements[-1]
+    assert "d.run_id = ANY(%s)" in query
+    assert "EXISTS" in query
+    assert "p.prediction_origin = %s" in query
+    assert "ordinary" not in query
+    assert cursor.params[-1] == (
+        ["ordinary", "comma,value", 'quote"value'],
+        "USER_REQUESTED",
+    )
+
+
+def test_run_ids_with_detail_failure_does_not_change_repository_status() -> None:
+    class MissingTableCursor(FakeCursor):
+        def execute(self, statement, params=None) -> None:
+            super().execute(statement, params)
+            if "FROM analysis_run_details" in str(statement):
+                raise RuntimeError("relation analysis_run_details does not exist")
+
+    class StaticPool:
+        def connection(self, timeout=None):
+            return FakeConnection(MissingTableCursor())
+
+    repo = SupabasePersistenceRepository(
+        "postgresql://example.invalid/db",
+        pool_factory=lambda: StaticPool(),
+    )
+    unavailable_marks = 0
+
+    def record_unavailable() -> str:
+        nonlocal unavailable_marks
+        unavailable_marks += 1
+        return "UNAVAILABLE"
+
+    repo.mark_unavailable = record_unavailable  # type: ignore[method-assign]
+    original_status = repo.persistence_status()
+
+    assert repo.run_ids_with_detail(
+        ["run-detail"], prediction_origin="USER_REQUESTED"
+    ) == set()
+    assert repo.persistence_status() == original_status
+    assert unavailable_marks == 0
+
+
+def test_supabase_rest_run_ids_with_detail_is_escaped_and_fail_safe() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path.endswith("/predictions"):
+            return httpx.Response(200, json=[{"run_id": 'quote"value'}])
+        return httpx.Response(200, json=[{"run_id": 'quote"value'}])
+
+    repo = SupabaseRestRepository(
+        "https://project.example.supabase.co",
+        "test-service-role-key",
+        client=rest_client(handler),
+    )
+
+    assert repo.run_ids_with_detail([], prediction_origin="USER_REQUESTED") == set()
+    assert seen == []
+    assert repo.run_ids_with_detail(
+        ["ordinary", "comma,value", 'quote"value'],
+        prediction_origin="USER_REQUESTED",
+    ) == {'quote"value'}
+    assert len(seen) == 2
+    prediction_params = seen[0].url.params
+    detail_params = seen[1].url.params
+    assert prediction_params["select"] == "run_id"
+    assert prediction_params["prediction_origin"] == "eq.USER_REQUESTED"
+    assert prediction_params["run_id"] == (
+        'in.("ordinary","comma,value","quote\\"value")'
+    )
+    assert detail_params["select"] == "run_id"
+    assert detail_params["run_id"] == 'in.("quote\\"value")'
+
+    original_status = repo.persistence_status()
+    unavailable_marks = 0
+
+    def record_unavailable() -> str:
+        nonlocal unavailable_marks
+        unavailable_marks += 1
+        return "UNAVAILABLE"
+
+    repo.mark_unavailable = record_unavailable  # type: ignore[method-assign]
+    repo._client = rest_client(  # type: ignore[attr-defined]
+        lambda request: httpx.Response(404, json={"message": "missing table"})
+    )
+    assert repo.run_ids_with_detail(
+        ["missing"], prediction_origin="USER_REQUESTED"
+    ) == set()
+    assert repo.persistence_status() == original_status
+    assert unavailable_marks == 0
+
+
 def test_run_detail_write_failure_does_not_open_circuit_or_break_other_writes() -> None:
     class MissingTableCursor(FakeCursor):
         def execute(self, statement, params=None) -> None:

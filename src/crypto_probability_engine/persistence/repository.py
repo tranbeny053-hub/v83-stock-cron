@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
@@ -28,6 +28,7 @@ from crypto_probability_engine.persistence.prediction_origin import (
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
 RUN_SUMMARY_RETENTION_LIMIT = 100
+RUN_DETAIL_AVAILABILITY_LIMIT = 500
 
 
 class OOSArmIdentityConflict(RuntimeError):
@@ -164,6 +165,11 @@ class PersistenceRepository(Protocol):
         self, run_id: str, *, prediction_origin: str
     ) -> dict | None:
         """Return Detail only when prediction provenance matches."""
+
+    def run_ids_with_detail(
+        self, run_ids: Sequence[str], *, prediction_origin: str
+    ) -> set[str]:
+        """Return bounded run ids with Detail and matching prediction provenance."""
 
 
 class InMemoryPersistenceRepository:
@@ -539,6 +545,21 @@ class InMemoryPersistenceRepository:
         if not value or not isinstance(value.get("detail_payload"), Mapping):
             return None
         return deepcopy(value["detail_payload"])
+
+    def run_ids_with_detail(
+        self, run_ids: Sequence[str], *, prediction_origin: str
+    ) -> set[str]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        candidate_ids = set(run_ids[:RUN_DETAIL_AVAILABILITY_LIMIT])
+        if not candidate_ids:
+            return set()
+        predicted_ids = {
+            str(prediction.get("run_id"))
+            for prediction in self._predictions.values()
+            if prediction.get("prediction_origin") == prediction_origin
+            and prediction.get("run_id")
+        }
+        return candidate_ids.intersection(self._run_details, predicted_ids)
 
 
 class SupabasePersistenceRepository:
@@ -1278,6 +1299,26 @@ class SupabasePersistenceRepository:
             detail_payload = json.loads(detail_payload)
         return dict(detail_payload) if isinstance(detail_payload, Mapping) else None
 
+    def run_ids_with_detail(
+        self, run_ids: Sequence[str], *, prediction_origin: str
+    ) -> set[str]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        candidate_ids = list(run_ids[:RUN_DETAIL_AVAILABILITY_LIMIT])
+        if not candidate_ids:
+            return set()
+        try:
+            with self._connection() as conn:
+                with conn.cursor() as cursor:
+                    _set_local_statement_timeout(cursor, self._statement_timeout_ms)
+                    rows = _fetch_run_ids_with_detail(
+                        cursor,
+                        candidate_ids,
+                        prediction_origin=prediction_origin,
+                    )
+        except Exception:
+            return set()
+        return {str(row[0]) for row in rows if row and row[0] is not None}
+
 
 class SupabaseRestRepository:
     """Supabase PostgREST persistence adapter for HTTPS-only runtimes."""
@@ -1895,6 +1936,59 @@ class SupabaseRestRepository:
         detail_payload = rows[0].get("detail_payload")
         return dict(detail_payload) if isinstance(detail_payload, Mapping) else None
 
+    def run_ids_with_detail(
+        self, run_ids: Sequence[str], *, prediction_origin: str
+    ) -> set[str]:
+        prediction_origin = validate_prediction_origin(prediction_origin)
+        candidate_ids = list(run_ids[:RUN_DETAIL_AVAILABILITY_LIMIT])
+        if not candidate_ids:
+            return set()
+        escaped_ids = ",".join(
+            _quote_postgrest_filter_value(run_id) for run_id in candidate_ids
+        )
+        try:
+            predictions = self._request(
+                "GET",
+                "predictions",
+                params={
+                    "select": "run_id",
+                    "run_id": f"in.({escaped_ids})",
+                    "prediction_origin": f"eq.{prediction_origin}",
+                },
+            )
+            if not isinstance(predictions, list):
+                return set()
+            matching_ids = {
+                str(row["run_id"])
+                for row in predictions
+                if isinstance(row, Mapping) and row.get("run_id") is not None
+            }
+            predicted_ids = [
+                run_id for run_id in candidate_ids if run_id in matching_ids
+            ]
+            if not predicted_ids:
+                return set()
+            escaped_predicted_ids = ",".join(
+                _quote_postgrest_filter_value(run_id) for run_id in predicted_ids
+            )
+            details = self._request(
+                "GET",
+                "analysis_run_details",
+                params={
+                    "select": "run_id",
+                    "run_id": f"in.({escaped_predicted_ids})",
+                },
+            )
+        except Exception:
+            return set()
+        if not isinstance(details, list):
+            return set()
+        return {
+            str(row["run_id"])
+            for row in details
+            if isinstance(row, Mapping) and row.get("run_id") is not None
+        }
+
     def _run_rest(self, operation):
         if not self.maybe_can_attempt():
             return "UNAVAILABLE", None
@@ -2043,6 +2137,26 @@ def _fetch_run_detail(cursor, run_id: str, *, prediction_origin: str):
         (run_id, prediction_origin),
     )
     return cursor.fetchone()
+
+
+def _fetch_run_ids_with_detail(
+    cursor, run_ids: Sequence[str], *, prediction_origin: str
+):
+    cursor.execute(
+        """
+        SELECT d.run_id
+        FROM analysis_run_details d
+        WHERE d.run_id = ANY(%s)
+          AND EXISTS (
+              SELECT 1
+              FROM predictions p
+              WHERE p.run_id = d.run_id
+                AND p.prediction_origin = %s
+          )
+        """,
+        (list(run_ids), prediction_origin),
+    )
+    return cursor.fetchall()
 
 
 def _set_local_statement_timeout(cursor, timeout_ms: int) -> None:

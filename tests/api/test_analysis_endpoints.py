@@ -714,6 +714,13 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
         def persistence_status(self) -> str:
             return "OK"
 
+        def run_ids_with_detail(
+            self, run_ids: list[str], *, prediction_origin: str
+        ) -> set[str]:
+            assert run_ids == ["restored-run"]
+            assert prediction_origin == "USER_REQUESTED"
+            return set()
+
     client.app.state.persistence_repository = DurableRepository()
 
     payload = client.get("/v1/runs").json()
@@ -737,26 +744,43 @@ def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
     }
 
 
-def test_recent_runs_marks_durable_only_detail_available() -> None:
+def test_recent_runs_batches_detail_availability_and_preserves_mixed_truth() -> None:
     client = make_client()
     login(client)
+    in_process = client.post("/v1/analyze", json={"symbol": "ETH"}).json()
+    availability_calls: list[tuple[list[str], str]] = []
 
     class DurableRepository:
         def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
             return [
                 {
-                    "run_id": "durable-only",
+                    "run_id": in_process["run_id"],
+                    "symbol": "ETH",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": in_process["analysis_hash"],
+                },
+                {
+                    "run_id": "durable-with-detail",
                     "symbol": "BTC",
                     "analysis_mode": "METRICS_ONLY",
                     "as_of_utc": "2026-08-27T00:00:00Z",
                     "analysis_hash": "durable-hash",
-                }
+                },
+                {
+                    "run_id": "durable-without-detail",
+                    "symbol": "SOL",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "missing-hash",
+                },
             ]
 
-        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
-            assert run_id == "durable-only"
-            assert prediction_origin == "USER_REQUESTED"
-            return {"run_id": run_id}
+        def run_ids_with_detail(
+            self, run_ids: list[str], *, prediction_origin: str
+        ) -> set[str]:
+            availability_calls.append((run_ids, prediction_origin))
+            return {"durable-with-detail"}
 
         def persistence_status(self) -> str:
             return "OK"
@@ -766,7 +790,19 @@ def test_recent_runs_marks_durable_only_detail_available() -> None:
     payload = client.get("/v1/runs").json()
 
     assert payload["source"] == "durable"
-    assert payload["runs"][0]["detail_available"] is True
+    assert availability_calls == [
+        (
+            ["durable-with-detail", "durable-without-detail"],
+            "USER_REQUESTED",
+        )
+    ]
+    assert {
+        row["run_id"]: row["detail_available"] for row in payload["runs"]
+    } == {
+        in_process["run_id"]: True,
+        "durable-with-detail": True,
+        "durable-without-detail": False,
+    }
 
 
 def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
