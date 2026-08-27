@@ -341,6 +341,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "analysis_hash": row.get("analysis_hash"),
                     "prediction_origin": origin,
                     "detail_available": in_process_detail or durable_detail is not None,
+                    "primary_timeframe": row.get("primary_timeframe"),
+                    "data_source": row.get("data_source"),
+                    "is_live_data": row.get("is_live_data"),
                 }
             )
         return {"source": source, "runs": normalized}

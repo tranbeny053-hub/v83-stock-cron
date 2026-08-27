@@ -46,6 +46,46 @@ def test_constructor_runs_without_recorded_origin_are_unclassified() -> None:
     assert store.list_runs()[0]["prediction_origin"] == UNCLASSIFIED_RUN_ORIGIN
 
 
+def test_list_runs_projects_context_without_mutating_payload() -> None:
+    store = InMemoryRunStore()
+    original = {
+        **payload("context"),
+        "timeframes": {"primary": "4H"},
+        "data_quality": {"data_source": "exchange_feed", "is_live_data": True},
+    }
+    expected = original.copy()
+    store.put("context", original, prediction_origin="USER_REQUESTED")
+
+    assert store.list_runs()[0] == {
+        "run_id": "context",
+        "symbol": "BTC/USDT",
+        "analysis_mode": "METRICS_ONLY",
+        "as_of_utc": "2026-08-27T00:00:00Z",
+        "analysis_hash": "hash-context",
+        "prediction_origin": "USER_REQUESTED",
+        "primary_timeframe": "4H",
+        "data_source": "exchange_feed",
+        "is_live_data": True,
+    }
+    assert original == expected
+
+
+def test_list_runs_missing_context_is_none_and_existing_fallback_is_unchanged() -> None:
+    store = InMemoryRunStore(runs=OrderedDict([("legacy", payload("legacy"))]))
+
+    assert store.list_runs()[0] == {
+        "run_id": "legacy",
+        "symbol": "BTC/USDT",
+        "analysis_mode": "METRICS_ONLY",
+        "as_of_utc": "2026-08-27T00:00:00Z",
+        "analysis_hash": "hash-legacy",
+        "prediction_origin": UNCLASSIFIED_RUN_ORIGIN,
+        "primary_timeframe": None,
+        "data_source": None,
+        "is_live_data": None,
+    }
+
+
 def test_unclassified_origin_is_not_persistable() -> None:
     assert UNCLASSIFIED_RUN_ORIGIN not in ALLOWED_PREDICTION_ORIGINS
     with pytest.raises(ValueError, match="Unsupported prediction origin"):

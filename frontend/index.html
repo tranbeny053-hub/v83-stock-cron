@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ultimate Crypto Probability Engine</title>
-    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260827-c" />
+    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260827-d" />
   </head>
   <body>
     <main class="shell">
@@ -148,6 +148,18 @@
         </section>
 
         <section class="panel hidden" id="recentPanel">
+          <div class="recent-filters" id="recentFilters" aria-label="Recent analysis filters">
+            <label for="recentSymbolFilter">Symbol
+              <select id="recentSymbolFilter"><option value="">All symbols</option></select>
+            </label>
+            <label for="recentTimeframeFilter">Timeframe
+              <select id="recentTimeframeFilter"><option value="">All timeframes</option></select>
+            </label>
+            <label for="recentModeFilter">Mode
+              <select id="recentModeFilter"><option value="">All modes</option></select>
+            </label>
+            <button id="clearRecentFilters" type="button">Clear filters</button>
+          </div>
           <p class="muted" id="recentStatus" role="status" aria-live="polite">
             Recent analyses not loaded yet.
           </p>
@@ -181,6 +193,6 @@
         <p class="news-note"></p>
       </article>
     </template>
-    <script src="/app.js?v=w4c1-ka1-20260827-c" type="module"></script>
+    <script src="/app.js?v=w4c1-ka1-20260827-d" type="module"></script>
   </body>
 </html>

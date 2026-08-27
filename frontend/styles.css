@@ -272,9 +272,24 @@ input:disabled {
   margin-top: 16px;
 }
 
+.recent-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.recent-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .recent-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(180px, 1fr) minmax(180px, auto);
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(110px, 1fr)) minmax(180px, auto);
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -1425,6 +1440,10 @@ pre {
   }
 
   .recent-row {
+    grid-template-columns: 1fr;
+  }
+
+  .recent-filters {
     grid-template-columns: 1fr;
   }
 
