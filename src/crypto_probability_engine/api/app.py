@@ -319,19 +319,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if row.get("prediction_origin") == origin
             ]
 
+        durable_only_ids = [
+            str(row.get("run_id"))
+            for row in rows
+            if run_store.get(str(row.get("run_id"))) is None
+        ]
+        try:
+            durable_detail_ids = repository.run_ids_with_detail(
+                durable_only_ids,
+                prediction_origin=origin,
+            )
+        except Exception:
+            durable_detail_ids = set()
+
         normalized = []
         for row in rows:
             run_id = str(row.get("run_id"))
             in_process_detail = run_store.get(run_id) is not None
-            durable_detail = None
-            if not in_process_detail:
-                try:
-                    durable_detail = repository.get_run_detail(
-                        run_id,
-                        prediction_origin=origin,
-                    )
-                except Exception:
-                    durable_detail = None
             normalized.append(
                 {
                     "run_id": row.get("run_id"),
@@ -340,7 +344,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "as_of_utc": row.get("as_of_utc"),
                     "analysis_hash": row.get("analysis_hash"),
                     "prediction_origin": origin,
-                    "detail_available": in_process_detail or durable_detail is not None,
+                    "detail_available": in_process_detail
+                    or run_id in durable_detail_ids,
                     "primary_timeframe": row.get("primary_timeframe"),
                     "data_source": row.get("data_source"),
                     "is_live_data": row.get("is_live_data"),
