@@ -219,6 +219,82 @@ function reset(tab) {{
     return json.loads(completed.stdout)
 
 
+def _loader_contract() -> dict[str, object]:
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    functions = "\n".join(
+        _extract_function(source, name)
+        for name in ("loadSystemStatus", "loadRecentRuns")
+    )
+    script = f"""
+let apiRejects = false;
+let apiPayload = {{}};
+let recentRuns = [];
+let recentRunsSource = null;
+const persistenceStatuses = [];
+const calls = {{
+  populateRecentFilters: [],
+  renderRecentRuns: [],
+  filterRecentRuns: [],
+  selectedRecentFilters: 0,
+}};
+const recentList = {{ replaceChildren() {{}}, textContent: "" }};
+const recentStatus = {{ replaceChildren() {{}}, textContent: "" }};
+const document = {{
+  querySelector(selector) {{
+    if (selector === "#recentList") return recentList;
+    if (selector === "#recentStatus") return recentStatus;
+    return {{ replaceChildren() {{}}, textContent: "" }};
+  }},
+}};
+async function api() {{
+  if (apiRejects) throw new Error("request failed");
+  return apiPayload;
+}}
+function updatePersistenceStatus(status) {{ persistenceStatuses.push(status); }}
+function populateRecentFilters(runs) {{ calls.populateRecentFilters.push(runs); }}
+function selectedRecentFilters() {{
+  calls.selectedRecentFilters += 1;
+  return {{}};
+}}
+function filterRecentRuns(runs, filters) {{
+  calls.filterRecentRuns.push([runs, filters]);
+  return runs;
+}}
+function renderRecentRuns(runs, source) {{ calls.renderRecentRuns.push([runs, source]); }}
+{functions}
+(async () => {{
+  apiRejects = false;
+  apiPayload = {{}};
+  const systemSuccess = await loadSystemStatus();
+
+  apiRejects = true;
+  const systemFailure = await loadSystemStatus();
+
+  apiRejects = false;
+  apiPayload = {{ runs: [{{ run_id: "run-1" }}], source: "test" }};
+  const recentSuccess = await loadRecentRuns();
+
+  apiRejects = true;
+  const recentFailure = await loadRecentRuns();
+
+  console.log(JSON.stringify({{
+    systemSuccess,
+    systemFailure,
+    persistenceStatuses,
+    recentSuccess,
+    recentFailure,
+  }}));
+}})();
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def test_recent_refresh_semantics() -> None:
     states = _refresh_states()
 
@@ -270,3 +346,13 @@ def test_recent_refresh_semantics() -> None:
     assert states["unknownFailure"]["cooldownArmed"] is True
     assert states["guarded"]["loadRecentRuns"] == 0
     assert states["devGuarded"]["loadSystemStatus"] == 0
+
+
+def test_loader_success_failure_contract() -> None:
+    contract = _loader_contract()
+
+    assert contract["systemSuccess"] is True
+    assert contract["systemFailure"] is False
+    assert contract["persistenceStatuses"] == ["UNKNOWN"]
+    assert contract["recentSuccess"] is True
+    assert contract["recentFailure"] is False
