@@ -45,6 +45,12 @@ def test_stale_candles_fail_closed() -> None:
     assert excinfo.value.code == ErrorCode.STALE_CANDLES
 
 
+def test_adjacent_non_future_candles_pass() -> None:
+    candles = make_candles(count=3)
+
+    validate_candles(candles, "4H", now_utc=FIXED_NOW, min_bars=3)
+
+
 def test_gap_in_candles_fails_closed() -> None:
     candles = list(make_candles(count=3))
     candles[1] = replace(
@@ -52,8 +58,43 @@ def test_gap_in_candles_fails_closed() -> None:
         open_time_utc=candles[1].open_time_utc + timedelta(hours=4),
         close_time_utc=candles[1].close_time_utc + timedelta(hours=4),
     )
-    with pytest.raises(DataValidationError):
+    with pytest.raises(DataValidationError) as excinfo:
         validate_candles(tuple(candles), "4H", now_utc=FIXED_NOW, min_bars=3)
+    assert excinfo.value.code == ErrorCode.SCHEMA_VALIDATION_FAILED
+
+
+def test_four_hour_candles_overlapping_by_one_hour_fail_closed() -> None:
+    candles = list(make_candles(count=3))
+    candles[1] = replace(
+        candles[1],
+        open_time_utc=candles[1].open_time_utc - timedelta(hours=1),
+        close_time_utc=candles[1].close_time_utc - timedelta(hours=1),
+    )
+
+    with pytest.raises(DataValidationError) as excinfo:
+        validate_candles(tuple(candles), "4H", now_utc=FIXED_NOW, min_bars=3)
+    assert excinfo.value.code == ErrorCode.SCHEMA_VALIDATION_FAILED
+
+
+def test_out_of_chronological_order_candles_fail_closed() -> None:
+    candles = list(make_candles(count=3))
+    candles[0], candles[1] = candles[1], candles[0]
+
+    with pytest.raises(DataValidationError) as excinfo:
+        validate_candles(tuple(candles), "4H", now_utc=FIXED_NOW, min_bars=3)
+    assert excinfo.value.code == ErrorCode.SCHEMA_VALIDATION_FAILED
+
+
+def test_latest_candle_closing_in_future_fails_closed() -> None:
+    candles = list(make_candles(count=3))
+    candles[-1] = replace(
+        candles[-1],
+        close_time_utc=candles[-1].close_time_utc + timedelta(seconds=1),
+    )
+
+    with pytest.raises(DataValidationError) as excinfo:
+        validate_candles(tuple(candles), "4H", now_utc=FIXED_NOW, min_bars=3)
+    assert excinfo.value.code == ErrorCode.SCHEMA_VALIDATION_FAILED
 
 
 def test_duplicate_candles_fail_closed() -> None:
