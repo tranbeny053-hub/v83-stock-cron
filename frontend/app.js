@@ -238,12 +238,15 @@ function showPanel(name) {
   for (const button of document.querySelectorAll(".tab")) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
-  for (const panel of ["single", "batch", "watchlist", "dev"]) {
+  for (const panel of ["single", "batch", "watchlist", "recent", "dev"]) {
     document.querySelector(`#${panel}Panel`).classList.toggle("hidden", panel !== name);
   }
   hideDetail();
   if (name === "watchlist") {
     loadWatchlist();
+  }
+  if (name === "recent") {
+    loadRecentRuns();
   }
 }
 
@@ -836,6 +839,53 @@ async function openDetail(payload) {
   }
   renderStructuredDetail(payload, detailView);
   detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function formatRecentTime(value) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? String(value || "Time unavailable")
+    : parsed.toLocaleString();
+}
+
+function renderRecentRuns(runs) {
+  const target = document.querySelector("#recentList");
+  const status = document.querySelector("#recentStatus");
+  target.replaceChildren();
+  if (runs.length === 0) {
+    status.textContent = "No recent analyses yet.";
+    return;
+  }
+  status.textContent = `${runs.length} recent ${runs.length === 1 ? "analysis" : "analyses"}.`;
+  for (const run of runs) {
+    const button = document.createElement("button");
+    const symbol = document.createElement("strong");
+    const mode = document.createElement("span");
+    const time = document.createElement("time");
+    button.type = "button";
+    button.className = "recent-row";
+    symbol.textContent = run.symbol || "Symbol unavailable";
+    mode.textContent = run.analysis_mode || "Mode unavailable";
+    time.dateTime = run.as_of_utc || "";
+    time.textContent = formatRecentTime(run.as_of_utc);
+    button.append(symbol, mode, time);
+    button.addEventListener("click", () => openDetail(run));
+    target.append(button);
+  }
+}
+
+async function loadRecentRuns() {
+  const target = document.querySelector("#recentList");
+  const status = document.querySelector("#recentStatus");
+  target.replaceChildren();
+  status.textContent = "Loading recent analyses…";
+  try {
+    const payload = await api("/v1/runs");
+    renderRecentRuns(Array.isArray(payload.runs) ? payload.runs : []);
+  } catch (error) {
+    target.replaceChildren();
+    status.textContent = `Recent analyses could not be loaded: ${error.message || "Request failed"}`;
+  }
 }
 
 function hideDetail() {
@@ -1873,7 +1923,7 @@ function renderStructuredDetail(payload, detailView) {
     section("Overview", [
       downloadJsonButton(payload),
       keyValueTable([
-        ["Symbol", payload.normalized_symbol],
+        ["Symbol", payload.normalized_symbol || payload.symbol || details.symbol],
         ["Timeframe", payload.timeframes?.timeframe_label || payload.timeframes?.primary],
         ["Horizon", payload.timeframes?.horizon_label],
         ["Analysis mode", payload.analysis_mode],

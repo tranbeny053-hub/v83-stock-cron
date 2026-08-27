@@ -54,9 +54,22 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260826-c"' in html
+    assert 'href="/styles.css?v=w4c1-ka1-20260827-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260827-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
+
+
+def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+
+    assert 'data-tab="recent">Recent Analysis' in html
+    assert 'id="recentPanel"' in html
+    assert 'await api("/v1/runs")' in js
+    assert 'button.addEventListener("click", () => openDetail(run))' in js
+    assert "No recent analyses yet." in js
+    assert "Recent analyses could not be loaded:" in js
+    assert 'target.replaceChildren();' in extract_javascript_function(js, "loadRecentRuns")
 
 
 def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:

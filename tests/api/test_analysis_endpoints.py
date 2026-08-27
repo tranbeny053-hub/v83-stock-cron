@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import OrderedDict
 from datetime import UTC, datetime
 
 import httpx
@@ -15,6 +16,7 @@ from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_l
 from crypto_probability_engine.api.schemas import validate_analysis_response
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import SupabaseRestRepository
+from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 
 
 def make_client() -> TestClient:
@@ -535,6 +537,73 @@ def test_detail_lookup_returns_detail_view() -> None:
     detail = client.get(f"/v1/analyze/detail/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run_id"] == run_id
+
+
+def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> None:
+    client = make_client()
+    assert client.get("/v1/runs").status_code == 401
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    smoke = {**analyzed, "run_id": "smoke-run", "analysis_hash": "smoke-hash"}
+    scheduled = {**analyzed, "run_id": "scheduled-run", "analysis_hash": "scheduled-hash"}
+    store.put("smoke-run", smoke, prediction_origin="CONTROLLED_SMOKE")
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    response = client.get("/v1/runs")
+
+    assert response.status_code == 200
+    assert [row["run_id"] for row in response.json()["runs"]] == [analyzed["run_id"]]
+    assert response.json()["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+
+    smoke_detail = client.get("/v1/analyze/detail/smoke-run")
+    assert smoke_detail.status_code == 200
+    assert smoke_detail.json() == analyzed["detail_view"]
+
+
+def test_recent_runs_excludes_constructor_run_without_recorded_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_client = make_client()
+    login(source_client)
+    analyzed = source_client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    legacy = {**analyzed, "run_id": "legacy-run", "analysis_hash": "legacy-hash"}
+    store = InMemoryRunStore(runs=OrderedDict([("legacy-run", legacy)]))
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.app.InMemoryRunStore",
+        lambda *, limit: store,
+    )
+    client = make_client()
+    login(client)
+
+    assert store.list_runs()[0]["prediction_origin"] == "UNCLASSIFIED"
+    assert client.get("/v1/runs").json() == {"runs": []}
+
+
+def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> None:
+    client = make_client()
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    store.runs.clear()
+    scheduled = {**analyzed, "run_id": "scheduled-run"}
+    expected = scheduled.copy()
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    assert store.get("scheduled-run") is scheduled
+    assert scheduled == expected
+    assert client.get("/v1/runs").json() == {"runs": []}
+    detail = client.get("/v1/analyze/detail/scheduled-run")
+    assert detail.status_code == 200
+    assert detail.json() == analyzed["detail_view"]
 
 
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:

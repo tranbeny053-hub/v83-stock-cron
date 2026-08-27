@@ -402,7 +402,7 @@ def analyze_request(
             derivatives_snapshot_required=derivatives_snapshot_required,
         )
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
-    run_store.put(run_id, validated)
+    run_store.put(run_id, validated, prediction_origin=prediction_origin)
     return validated
 
 
