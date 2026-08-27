@@ -1,83 +1,82 @@
 # STATE
 
-Updated: 2026-08-27
+Updated: 2026-08-27 (post PR #57)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=ACTIVE — ONE LANE OPEN, STOPPED AT T3. Recent Analysis History is built,
-  reviewed and green, and is waiting on owner authorization to push. Batches 1-10 remain
-  closed; the pre-T_close audit returned BOARD CLEAR. PROD-SAFE-2 remains the deployed build.
-  The section 5A envelope is UNCHANGED and still frozen: the holdout, its evaluation, the
-  candidate freeze, the collector, outcome and holdout inspection, T_close itself, and any
-  change to what the collector computes or persists. Ordinary safe work outside that envelope
-  continues under normal risk tiers, with owner authorization for T3/T4.
+LOOP_STATE=IDLE — both history lanes SHIPPED to main; no lane open. PR #56 (in-process
+  Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
+  2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
+  CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
+  section 5A envelope is UNCHANGED and still frozen: the holdout, its evaluation, the candidate
+  freeze, the collector, outcome and holdout inspection, T_close itself, and any change to what
+  the collector computes or persists. Ordinary safe work outside that envelope continues under
+  normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=feat/recent-analysis-history (this checkpoint). origin/main = acf5901.
-LAST_GREEN_SHA=8f74194 (the latest History product commit; any docs commit after it changes no
-  product blob, so the collector/OOS identity proof carries forward verbatim)
-LAST_VERIFY=PASS ruff ok | 1076 passed | schemas+smoke ok | scanners 3/3 · 8f74194 · 2026-08-27
-MAIN_STATE=main = origin/main = acf5901, UNTOUCHED by every lane below. Working tree clean,
-  single worktree, VERIFY=PASS 1067 passed on acf5901. No lane has been merged to main and no
-  lane has been pushed to any remote.
-ACTIVE_LANE=feat/recent-analysis-history @ 8f74194 — the SOLE active lane, STOPPED AT THE T3
-  BOUNDARY. Read-only operator history over the existing in-process run store: new GET /v1/runs
-  behind the ordinary app session returning USER_REQUESTED rows only, plus a Recent Analysis
-  tab that opens the existing /v1/analyze/detail/{run_id} view. No database write, no DB schema,
-  no migration, no response-envelope change. Collector/OOS persistence semantics were proven
-  identical before and after by static AST comparison and a deterministic local differential
-  probe; no holdout or outcome evidence was inspected to establish it.
-RUN_PROVENANCE=FAIL CLOSED. The run store does not default a missing origin to USER_REQUESTED.
-  put() requires prediction_origin as a keyword-only argument with no default, so omitting it
-  raises TypeError; list_runs() falls back to a local UNCLASSIFIED sentinel; and the
-  DEFAULT_PREDICTION_ORIGIN import was removed from the module so the fail-open value is not in
-  scope there at all. The sentinel is deliberately NOT a PredictionOrigin member — that enum is
-  the database provenance contract enforced by predictions_prediction_origin_chk in
-  migrations/0007_prediction_origin.sql — and a regression test pins that
-  validate_prediction_origin rejects it, so it can never be persisted. /v1/runs keeps an
-  explicit USER_REQUESTED allow-list, so unclassified, CONTROLLED_SMOKE and
-  SCHEDULED_SHADOW_EVIDENCE runs are all excluded from the operator list while remaining stored
-  and retrievable via /v1/analyze/detail/{run_id} exactly as before.
+CURRENT_BRANCH=docs/state-post-57 (this checkpoint). origin/main = 7299c6e.
+LAST_GREEN_SHA=7299c6e
+LAST_VERIFY=PASS ruff ok | 1083 passed | schemas+smoke ok | scanners 3/3 · 7299c6e · 2026-08-27
+MAIN_STATE=main = origin/main = 7299c6e, clean, single worktree. It is the merge of PR #57
+  (parents 2cdc06c + 45a246b) and its tree is byte-identical to the reviewed head 45a246b, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #101 succeeded.
+SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
+  PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
+    Analysis tab, and fail-closed run provenance in the in-process store.
+  PR #57 (7299c6e): the same history made DURABLE. A new read-only
+    recent_runs_for_origin(limit, *, prediction_origin) on the protocol and all three
+    repository implementations derives origin by joining analysis_runs to predictions on
+    run_id, because analysis_runs carries no prediction_origin column. /v1/runs now prefers
+    durable rows, falls back to the in-process store, and reports which in a top-level
+    "source" field. Rows carry detail_available, because the full detail_view is NOT persisted
+    durably — only the run summary is — so a restored entry shows its summary and says the full
+    breakdown is unavailable rather than firing a request that would 404.
+  MERGED IS NOT DEPLOYED: none of this is in front of users.
+ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
   pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
   them before T_close:
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  They were reviewed and green (1072 / 1071 / 1076 passed) but are deliberately NOT shipping
-  before T_close.
+  Re-verified after the PR #57 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=1 OPEN — T3 authorization to push feat/recent-analysis-history to origin and
-  open its own PR. Nothing else is requested. The PROD-SAFE-2 T3/T4 authorization is CONSUMED
-  and must not be reused. Standing prohibition while the holdout runs: no holdout or outcome
-  inspection, no collector dispatch, no deploy, no model change, no re-freeze.
+OWNER_BOUNDARY=NONE OPEN. Both T3 origin batches are CONSUMED and must not be reused: the PR
+  #56 batch and the PR #57 batch each authorized exactly one push, one PR and one merge, and no
+  deploy. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
+  holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
+  change, no re-freeze.
 DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
-  T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including any that is
+  T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
-  only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2).
-NEXT_ACTION=TWO ITEMS, in priority order.
-  (1) OWNER DECISION, not scheduled: authorize or decline the T3 push of
-      feat/recent-analysis-history. Work is stopped until this is answered.
-  (2) SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
-      V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This remains the single scheduled
-      section-5A action. The date is a contract instant, NOT a reminder or automation request:
-      create no timer, task, or schedule from it.
+  only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
+  confirmed unchanged immediately after both merges.
+NEXT_ACTION=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
+  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
+  date is a contract instant, NOT a reminder or automation request: create no timer, task, or
+  schedule from it.
 OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .work/, so it
   scans gitignored scratch logs and can fail ./verify.sh on a clean tree from an untracked file.
   Its own docstring says it scans committed files. Deliberately NOT changed before T_close,
   because adding a skip narrows a mandatory scanner. Remedy meanwhile: delete stale .work/*.log.
-DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on frontend/app.js and
-  frontend/index.html (app.js token w4c1-ka1-20260826-c). The source-integrity guard reports
-  this as the benign STALE_FRONTEND posture. Three merged frontend improvements and the two
-  auth-redaction fixes are NOT in front of users until a future owner-authorized deploy. If the
-  History lane is merged, the delta widens by two more guarded paths —
-  src/crypto_probability_engine/api/app.py and frontend/styles.css — and
-  CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py already records all five.
-  That is the guard's documented acknowledgement workflow, not a relaxation: the test still
-  asserts an exact list.
+RUN_PROVENANCE=FAIL CLOSED, in both the in-process and the durable path. put() requires an
+  explicit prediction_origin; list_runs() falls back to a local UNCLASSIFIED sentinel, never
+  USER_REQUESTED. recent_runs_for_origin() takes prediction_origin as a required keyword-only
+  argument and passes it through validate_prediction_origin, so the sentinel can never be
+  queried and can never be persisted. A run with no prediction of the requested origin is
+  EXCLUDED, so the durable list can legitimately be shorter than the in-process one. /v1/runs
+  keeps an explicit USER_REQUESTED allow-list. Any successor MUST preserve this.
+DEPLOY_POSTURE=GitHub main is ahead of the deployed bundle on FIVE guarded paths:
+  frontend/app.js, frontend/index.html, frontend/styles.css,
+  src/crypto_probability_engine/api/analysis_service.py and
+  src/crypto_probability_engine/api/app.py. Recomputed against ops/hf_runtime_baseline.json on
+  7299c6e: exactly those five diverge. PR #57 added no new guarded path — it touched only paths
+  already in the delta. CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py
+  records all five exactly. analysis_service.py is the structural clean-room delta and never
+  clears. None of it is in front of users until a future owner-authorized deploy.
 ```
 Update this block on every pause, every milestone change, and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
