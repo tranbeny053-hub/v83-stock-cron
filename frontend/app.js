@@ -734,8 +734,23 @@ function renderBatchFailure(target, message) {
   target.replaceChildren(node);
 }
 
-function renderResults(target, payloads, errors = []) {
+function renderResults(target, payloads, errors = [], items) {
   target.replaceChildren();
+  if (Array.isArray(items)) {
+    const payloadsByRunId = new Map(payloads.map((payload) => [payload.run_id, payload]));
+    for (const item of items) {
+      if (item.status === "OK") {
+        const payload = payloadsByRunId.get(item.run_id);
+        if (payload) target.append(overviewCard(payload));
+      } else if (item.status === "ERROR") {
+        const node = document.createElement("article");
+        node.className = "result-card";
+        node.textContent = batchErrorMessage(item);
+        target.append(node);
+      }
+    }
+    return;
+  }
   for (const payload of payloads) {
     target.append(overviewCard(payload));
   }
@@ -2200,7 +2215,7 @@ async function runBatchAnalysis(batchRequest) {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
-    renderResults(target, payload.results, payload.errors);
+    renderResults(target, payload.results, payload.errors, payload.items);
     updateStatusFromPayload(payload.results?.[0] || {});
     markRefreshed();
   } catch (error) {
