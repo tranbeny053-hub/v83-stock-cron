@@ -23,11 +23,14 @@ DRIFT_SHA = "d" * 40
 # entries emptied when PROD-SAFE-2 shipped the UI changes. analysis_service.py does not
 # clear and is not expected to: main carries the section-5A arm machinery that the deployed
 # clean-room candidate deliberately does not, so this entry stands until that code is either
-# retired or deliberately deployed.
+# retired or deliberately deployed. api/app.py and frontend/styles.css entered the delta with
+# the Recent Analysis History feature, which is merged but deliberately not deployed.
 CURRENT_DELTA_PATHS = [
     "frontend/app.js",
     "frontend/index.html",
+    "frontend/styles.css",
     "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the

@@ -537,6 +537,50 @@ def test_detail_lookup_returns_detail_view() -> None:
     assert detail.json()["run_id"] == run_id
 
 
+def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> None:
+    client = make_client()
+    assert client.get("/v1/runs").status_code == 401
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    smoke = {**analyzed, "run_id": "smoke-run", "analysis_hash": "smoke-hash"}
+    scheduled = {**analyzed, "run_id": "scheduled-run", "analysis_hash": "scheduled-hash"}
+    store.put("smoke-run", smoke, prediction_origin="CONTROLLED_SMOKE")
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    response = client.get("/v1/runs")
+
+    assert response.status_code == 200
+    assert [row["run_id"] for row in response.json()["runs"]] == [analyzed["run_id"]]
+    assert response.json()["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+
+
+def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> None:
+    client = make_client()
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    store.runs.clear()
+    scheduled = {**analyzed, "run_id": "scheduled-run"}
+    expected = scheduled.copy()
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    assert store.get("scheduled-run") is scheduled
+    assert scheduled == expected
+    assert client.get("/v1/runs").json() == {"runs": []}
+    detail = client.get("/v1/analyze/detail/scheduled-run")
+    assert detail.status_code == 200
+    assert detail.json() == analyzed["detail_view"]
+
+
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:
     client = make_client()
     login(client)

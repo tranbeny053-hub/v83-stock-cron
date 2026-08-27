@@ -43,6 +43,7 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.repository import (
     build_operator_repository,
     build_persistence_repository,
@@ -273,6 +274,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not payload:
             raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
         return payload["detail_view"]
+
+    @app.get("/v1/runs")
+    def recent_runs(_session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
+        return {
+            "runs": [
+                row
+                for row in run_store.list_runs()
+                if row["prediction_origin"] == PredictionOrigin.USER_REQUESTED.value
+            ]
+        }
 
     @app.get("/v1/debug/runs")
     def debug_runs(_session: dict = Depends(require_app_dev_session)) -> dict:  # noqa: B008

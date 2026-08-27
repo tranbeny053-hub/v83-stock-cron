@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ultimate Crypto Probability Engine</title>
-    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260824-a" />
+    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260827-a" />
   </head>
   <body>
     <main class="shell">
@@ -34,6 +34,7 @@
           <button class="tab active" data-tab="single">Single Crypto Analysis</button>
           <button class="tab" data-tab="batch">Batch Crypto Analysis</button>
           <button class="tab" data-tab="watchlist">Watchlist</button>
+          <button class="tab" data-tab="recent">Recent Analysis</button>
           <button class="tab" data-tab="dev">Dev Mode</button>
         </nav>
 
@@ -146,6 +147,13 @@
 
         </section>
 
+        <section class="panel hidden" id="recentPanel">
+          <p class="muted" id="recentStatus" role="status" aria-live="polite">
+            Recent analyses not loaded yet.
+          </p>
+          <div id="recentList" class="recent-list" aria-label="Recent analyses"></div>
+        </section>
+
         <section class="panel hidden" id="devPanel">
           <p class="muted dev-mode-status" id="devModeStatus">Dev Mode is disabled in this deployment.</p>
           <form id="devForm" class="control-row">
@@ -173,6 +181,6 @@
         <p class="news-note"></p>
       </article>
     </template>
-    <script src="/app.js?v=w4c1-ka1-20260826-c" type="module"></script>
+    <script src="/app.js?v=w4c1-ka1-20260827-a" type="module"></script>
   </body>
 </html>
