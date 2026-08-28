@@ -65,7 +65,7 @@ def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
 
     assert 'data-tab="recent">Recent Analysis' in html
     assert 'id="recentPanel"' in html
-    assert 'await api("/v1/runs")' in js
+    assert 'await sessionApi("/v1/runs")' in js
     assert 'if (run.detail_available)' in js
     assert 'row.addEventListener("click", () => openDetail(run))' in js
     assert 'document.createElement(run.detail_available ? "button" : "div")' in js
@@ -135,7 +135,7 @@ if (
             'id="clearRecentFilters"',
         )
     )
-    assert 'await api("/v1/runs")' in extract_javascript_function(js, "loadRecentRuns")
+    assert 'await sessionApi("/v1/runs")' in extract_javascript_function(js, "loadRecentRuns")
     populate_filters = extract_javascript_function(js, "populateRecentFilters")
     assert all(key in populate_filters for key in ("symbol", "primary_timeframe", "analysis_mode"))
     assert 'uniqueRecentValues(runs, "primary_timeframe", singleTimeframes)' in populate_filters
@@ -672,7 +672,7 @@ def test_ui_d1_4b_fetches_all_calibration_diagnostics_once_with_cache() -> None:
     load_chunk = js.split("async function loadCalibrationDiagnostics", maxsplit=1)[1].split(
         "function formatCalibrationMetric", maxsplit=1
     )[0]
-    assert js.count('api("/v1/calibration")') == 1
+    assert js.count('sessionApi("/v1/calibration")') == 1
     assert js.count("/v1/calibration") == 1
     assert "singleTimeframes" not in load_chunk
     assert "include_buckets" not in load_chunk
@@ -964,6 +964,7 @@ const api = async () => {{
     payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
   }};
 }};
+const sessionApi = api;
 (async () => {{
   await runBatchAnalysis({{ symbols: ["BTC"], analysisMode: "METRICS_ONLY", timeframe: "4H" }});
   const rejected = {{
@@ -1139,6 +1140,7 @@ const api = async (path) => {{
   if (path === "/v1/runs") throw new Error("history unavailable");
   return {{ symbols: ["ETH/USDT", "BTC/USDT"], persistence_status: "OK" }};
 }};
+const sessionApi = api;
 const renderWatchlist = (symbols, status, runs) =>
   renders.push({{ symbols, status, hasRuns: runs !== undefined }});
 const readLocalWatchlist = () => ["LOCAL/USDT"];
@@ -1197,6 +1199,7 @@ const api = async () => {{
     payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
   }};
 }};
+const sessionApi = api;
 (async () => {{
   await addWatchlistSymbol("{sentinel}");
   const add = {{ message: statusTarget.textContent, title: statusTarget.title }};
