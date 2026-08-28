@@ -250,6 +250,7 @@ async function api() {{
   if (apiRejects) throw new Error("request failed");
   return apiPayload;
 }}
+const sessionApi = api;
 function updatePersistenceStatus(status) {{ persistenceStatuses.push(status); }}
 function populateRecentFilters(runs) {{ calls.populateRecentFilters.push(runs); }}
 function selectedRecentFilters() {{

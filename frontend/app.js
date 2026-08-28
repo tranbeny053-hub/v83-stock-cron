@@ -71,6 +71,7 @@ let calibrationDiagnosticsCachedAt = 0;
 let calibrationDiagnosticsRequest = null;
 let recentRuns = [];
 let recentRunsSource = null;
+let sessionGeneration = 0;
 const scoreHeatBands = [
   {
     min: 86,
@@ -135,6 +136,18 @@ async function api(path, options = {}) {
     throw error;
   }
   return payload;
+}
+
+async function sessionApi(path, options = {}) {
+  const generation = sessionGeneration;
+  try {
+    return await api(path, options);
+  } catch (error) {
+    if (error?.status === 401) {
+      handleSessionExpired(generation);
+    }
+    throw error;
+  }
 }
 
 function loginFailureMessage(status, payload) {
@@ -241,7 +254,7 @@ function updateDevModeUx(devMode = {}) {
 
 async function loadSystemStatus() {
   try {
-    await api("/v1/system_status");
+    await sessionApi("/v1/system_status");
     return true;
   } catch {
     updatePersistenceStatus("UNKNOWN");
@@ -820,7 +833,7 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
   try {
     const requests = singleTimeframes.map(async (timeframe) => {
       try {
-        const payload = await api("/v1/analyze", {
+        const payload = await sessionApi("/v1/analyze", {
           method: "POST",
           body: JSON.stringify({
             symbol,
@@ -867,7 +880,7 @@ async function openDetail(payload) {
   let detailView = null;
   if (payload.run_id && payload.frontend_display?.detail_available !== false) {
     try {
-      detailView = await api(`/v1/analyze/detail/${payload.run_id}`);
+      detailView = await sessionApi(`/v1/analyze/detail/${payload.run_id}`);
     } catch {
       detailView = null;
     }
@@ -1031,7 +1044,7 @@ async function loadRecentRuns() {
   target.replaceChildren();
   status.textContent = "Loading recent analyses…";
   try {
-    const payload = await api("/v1/runs");
+    const payload = await sessionApi("/v1/runs");
     recentRuns = Array.isArray(payload.runs) ? payload.runs : [];
     recentRunsSource = payload.source;
     populateRecentFilters(recentRuns);
@@ -1500,7 +1513,7 @@ async function loadCalibrationDiagnostics() {
     return calibrationDiagnosticsRequest;
   }
 
-  calibrationDiagnosticsRequest = api("/v1/calibration")
+  calibrationDiagnosticsRequest = sessionApi("/v1/calibration")
     .catch(() => ({
       status: "UNAVAILABLE",
       timeframes: [],
@@ -2195,6 +2208,7 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
       method: "POST",
       body: JSON.stringify({ code }),
     });
+    sessionGeneration += 1;
     loginPanel.classList.add("hidden");
     clearOperatorData();
     workspace.classList.remove("hidden");
@@ -2242,6 +2256,13 @@ function resetToLoggedOut() {
   updateDevModeUx({ enabled: false, configured: false });
   showPanel("single");
   updateRefreshButton();
+}
+
+function handleSessionExpired(generation) {
+  if (generation !== sessionGeneration) return;
+  if (workspace.classList.contains("hidden")) return;
+  resetToLoggedOut();
+  loginStatus.textContent = "Your session expired. Please sign in again.";
 }
 
 document.querySelector("#logoutButton").addEventListener("click", async () => {
@@ -2295,7 +2316,7 @@ async function runBatchAnalysis(batchRequest) {
       analysis_mode: batchRequest.analysisMode,
       timeframe: batchRequest.timeframe,
     }));
-    const payload = await api("/v1/analyze_batch", {
+    const payload = await sessionApi("/v1/analyze_batch", {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
@@ -2450,11 +2471,11 @@ function renderWatchlist(symbols, status, runs = null) {
 }
 
 async function loadWatchlist() {
-  const historyRequest = api("/v1/runs")
+  const historyRequest = sessionApi("/v1/runs")
     .then((payload) => (Array.isArray(payload.runs) ? payload.runs : []))
     .catch(() => null);
   try {
-    const payload = await api("/v1/watchlist");
+    const payload = await sessionApi("/v1/watchlist");
     let symbols = payload.symbols || [];
     if (payload.persistence_status !== "OK") {
       const localSymbols = readLocalWatchlist();
@@ -2475,7 +2496,7 @@ async function loadWatchlist() {
 
 async function addWatchlistSymbol(symbol) {
   try {
-    const payload = await api("/v1/watchlist", {
+    const payload = await sessionApi("/v1/watchlist", {
       method: "POST",
       body: JSON.stringify({ symbol }),
     });
@@ -2501,7 +2522,7 @@ async function addWatchlistSymbol(symbol) {
 
 async function removeWatchlistSymbol(symbol) {
   try {
-    const payload = await api(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
+    const payload = await sessionApi(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
       method: "DELETE",
     });
     const envelope =
