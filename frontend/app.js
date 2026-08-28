@@ -2199,6 +2199,20 @@ function renderStructuredDetail(payload, detailView) {
   detailPanel.classList.remove("hidden");
 }
 
+async function restoreSession() {
+  if (!(await loadSystemStatus())) {
+    return false;
+  }
+  sessionGeneration += 1;
+  loginPanel.classList.add("hidden");
+  clearOperatorData();
+  workspace.classList.remove("hidden");
+  document.querySelector("#logoutButton").classList.remove("hidden");
+  sessionStatus.textContent = "Ready";
+  updateRefreshButton();
+  return true;
+}
+
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
@@ -2669,3 +2683,4 @@ void loadBuildFingerprint();
 updatePersistenceStatus("UNKNOWN");
 updateDevModeUx({ enabled: false, configured: false });
 updateRefreshButton();
+void restoreSession();
