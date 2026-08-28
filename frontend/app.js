@@ -2647,7 +2647,7 @@ refreshButton.addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#devForm").addEventListener("submit", async (event) => {
+async function handleDevFormSubmit(event) {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
   try {
@@ -2657,26 +2657,59 @@ document.querySelector("#devForm").addEventListener("submit", async (event) => {
     });
     document.querySelector("#devResult").textContent = "Dev Mode ready.";
   } catch (error) {
-    document.querySelector("#devResult").textContent =
-      devModeStatus.textContent || error.message || "Dev Mode unavailable.";
+    document.querySelector("#devResult").textContent = loginFailureMessage(
+      error?.status,
+      error?.payload,
+    );
   }
-});
+}
 
-document.querySelector("#loadRuns").addEventListener("click", async () => {
-  const runs = await api("/v1/debug/runs");
-  const target = document.querySelector("#devResult");
-  target.textContent = JSON.stringify(runs, null, 2);
-  for (const run of runs.runs) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = `Export ${run.run_id}`;
-    button.addEventListener("click", async () => {
-      const exported = await api(`/v1/debug/export/${run.run_id}`);
-      target.textContent = JSON.stringify(exported, null, 2);
-    });
-    target.append(document.createElement("br"), button);
+function devToolFailureMessage(action, status, payload) {
+  const failure = loginFailureMessage(status, payload);
+  if (status === 401) {
+    return `${action} failed: Dev Mode re-auth is needed; your normal session remains active. ${failure}`;
   }
-});
+  return `${action} failed: ${failure}`;
+}
+
+async function exportDebugRun(run, target) {
+  try {
+    const exported = await api(`/v1/debug/export/${run.run_id}`);
+    target.textContent = JSON.stringify(exported, null, 2);
+  } catch (error) {
+    target.textContent = devToolFailureMessage(
+      `Exporting run ${run.run_id}`,
+      error?.status,
+      error?.payload,
+    );
+  }
+}
+
+async function loadDebugRuns() {
+  const target = document.querySelector("#devResult");
+  try {
+    const runs = await api("/v1/debug/runs");
+    target.textContent = JSON.stringify(runs, null, 2);
+    for (const run of runs.runs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `Export ${run.run_id}`;
+      button.addEventListener("click", async () => {
+        await exportDebugRun(run, target);
+      });
+      target.append(document.createElement("br"), button);
+    }
+  } catch (error) {
+    target.textContent = devToolFailureMessage(
+      "Loading the run list",
+      error?.status,
+      error?.payload,
+    );
+  }
+}
+
+document.querySelector("#devForm").addEventListener("submit", handleDevFormSubmit);
+document.querySelector("#loadRuns").addEventListener("click", loadDebugRuns);
 
 renderTimeframePlaceholders(singleResult);
 void loadBuildFingerprint();
