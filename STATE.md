@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-28 (post PR #76)
+Updated: 2026-08-28 (post PR #78)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Twelve product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Thirteen product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,13 +14,13 @@ LOOP_STATE=IDLE — no lane open. Twelve product PRs are SHIPPED to main. PR #56
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-76 (this checkpoint). origin/main = b7d4657.
-LAST_GREEN_SHA=b7d4657
-LAST_VERIFY=PASS ruff ok | 1123 passed | schemas+smoke ok | scanners 3/3 · b7d4657 · 2026-08-28
-MAIN_STATE=main = origin/main = b7d4657, clean, single worktree. It is the merge of PR #76
-  (parents ffe047a + 3a7163e) and its tree is byte-identical to the reviewed head 3a7163e, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #139 succeeded.
-  ffe047a was the PR #75 STATE checkpoint, which recorded 4af3bfd (PR #74, CI #135).
+CURRENT_BRANCH=docs/state-post-78 (this checkpoint). origin/main = 7ab92ab.
+LAST_GREEN_SHA=7ab92ab
+LAST_VERIFY=PASS ruff ok | 1125 passed | schemas+smoke ok | scanners 3/3 · 7ab92ab · 2026-08-28
+MAIN_STATE=main = origin/main = 7ab92ab, clean, single worktree. It is the merge of PR #78
+  (parents e7f5e31 + 44d4377) and its tree is byte-identical to the reviewed head 44d4377, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #143 succeeded.
+  e7f5e31 was the PR #77 STATE checkpoint, which recorded b7d4657 (PR #76, CI #139).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -156,6 +156,41 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     existing auth check, limiter or comparison was touched. api/auth.py is NOT a guarded source
     path; app.py, index.html and app.js are, but all three were already in CURRENT_DELTA_PATHS,
     so the guard's delta set is unchanged.
+  PR #78 (7ab92ab): SESSION EXPIRY RECOVERY. A normal authenticated request that 401s because
+    the session is no longer valid used to leave the UI claiming to be signed in, with every
+    later action failing under its own local error message. It now returns the UI to the
+    locked/login state and clears operator data.
+  THE CLASSIFICATION IS THE WHOLE POINT — DO NOT BLANKET ALL 401s. Recovery is OPT-IN through
+    a sessionApi wrapper; api() itself is unchanged. Classification follows the endpoint's
+    BACKEND GUARD, never the 401 message text, because verify_session_token emits three
+    different messages ("Session expired.", "Valid session is required.", "Dev Mode re-auth is
+    required.") and none is a stable contract. TEN sites guarded by require_app_session
+    recover: /v1/system_status, /v1/analyze, /v1/analyze/detail/{id}, /v1/runs twice
+    (loadRecentRuns and the watchlist enrichment), /v1/calibration, /v1/analyze_batch, and GET,
+    POST and DELETE on /v1/watchlist. FIVE are excluded and MUST STAY EXCLUDED: POST
+    /v1/auth/login and POST /v1/auth/dev are PUBLIC routes where a 401 means the code typed was
+    wrong, not that a session ended; GET /v1/debug/runs and GET /v1/debug/export/{id} are
+    guarded by require_app_dev_session, which reads ONLY the dev cookie, so a 401 there means
+    Dev re-auth is needed while the normal session is perfectly valid; POST /v1/auth/logout
+    handles its own 401. The URL namespace mirrors the guard boundary exactly, which is what
+    makes the map stable. Opt-in is the safe default: a future normal-session call that forgets
+    the wrapper merely misses the recovery, while a future dev call inheriting a global rule
+    would destroy a valid session.
+    The wrapper recovers BEFORE rethrowing, because three of the ten sites swallow their own
+    errors, and rethrowing keeps existing finally blocks such as setAnalysisActive(false)
+    running. A sessionGeneration counter, incremented ONLY on successful login, stops a 401 from
+    an old session locking a session that has since been signed back in; handleSessionExpired
+    also returns early when the workspace is already hidden, so concurrent 401s — routine, since
+    loadWatchlist fires two requests in parallel — recover exactly once. An earlier revision
+    incremented that counter inside resetToLoggedOut, which was both unnecessary and destructive
+    to three existing tests; resetToLoggedOut is byte-identical to what preceded it.
+    Eight mutations were confirmed to break the suite, including the three forbidden ones: the
+    dev debug route recovering, dev login recovering, and an invalid access code logging the
+    operator out. The test file also carries a COVERAGE GUARD that extracts every call site from
+    app.js and asserts each is in the RECOVER or the EXCLUDE set, so a new unclassified call
+    site fails the build instead of silently inheriting a default.
+    src/, schemas/, migrations/, frontend/index.html and frontend/styles.css are byte-identical
+    to the previous main: no backend change, no auth weakening, no retries, no writes.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -164,14 +199,14 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #76 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #78 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Twelve T3 origin batches are CONSUMED and must not be reused: the
-  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74 and
-  PR #76 batches each authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
+OWNER_BOUNDARY=NONE OPEN. Thirteen T3 origin batches are CONSUMED and must not be reused: the
+  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
+  PR #76 and PR #78 batches each authorized exactly one push, one PR and one merge, no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
