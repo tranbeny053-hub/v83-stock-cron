@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-28 (post PR #74)
+Updated: 2026-08-28 (post PR #76)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Eleven product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Twelve product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,13 +14,13 @@ LOOP_STATE=IDLE — no lane open. Eleven product PRs are SHIPPED to main. PR #56
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-74 (this checkpoint). origin/main = 4af3bfd.
-LAST_GREEN_SHA=4af3bfd
-LAST_VERIFY=PASS ruff ok | 1107 passed | schemas+smoke ok | scanners 3/3 · 4af3bfd · 2026-08-28
-MAIN_STATE=main = origin/main = 4af3bfd, clean, single worktree. It is the merge of PR #74
-  (parents c755817 + 172d475) and its tree is byte-identical to the reviewed head 172d475, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #135 succeeded.
-  c755817 was the PR #73 STATE checkpoint, which recorded b8f5ff6 (PR #72, CI #131).
+CURRENT_BRANCH=docs/state-post-76 (this checkpoint). origin/main = b7d4657.
+LAST_GREEN_SHA=b7d4657
+LAST_VERIFY=PASS ruff ok | 1123 passed | schemas+smoke ok | scanners 3/3 · b7d4657 · 2026-08-28
+MAIN_STATE=main = origin/main = b7d4657, clean, single worktree. It is the merge of PR #76
+  (parents ffe047a + 3a7163e) and its tree is byte-identical to the reviewed head 3a7163e, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #139 succeeded.
+  ffe047a was the PR #75 STATE checkpoint, which recorded 4af3bfd (PR #74, CI #135).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -127,6 +127,35 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     carries every honesty guarantee in both refresh lanes. A second test now executes the real
     functions with api stubbed and pins all four outcomes plus the UNKNOWN degradation. The
     loadRecentRuns half shipped in PR #72 with the same hole and is closed here too.
+  PR #76 (b7d4657): OPERATOR LOGOUT — the first T2 lane in this run. There was no way to end
+    a session: the operator could only wait for the cookie to expire, and an elevated Dev Mode
+    cookie outlived any intent to stop working. POST /v1/auth/logout is authenticated by the
+    existing app session and deletes BOTH cookies with the exact attributes they were set with
+    (path=/, HttpOnly, SameSite=lax, Secure when configured) so the browser actually matches
+    and drops them. It clears the Dev cookie UNCONDITIONALLY — a logout that leaves an elevated
+    session behind is the bug the route exists to prevent. No DB, no write, no analysis, no run.
+    POST ONLY, deliberately, and NO MIDDLEWARE: a GET reaches the StaticFiles mount and 404s,
+    so logout is unreachable by navigation, and SameSite=lax means a cross-site POST carries no
+    cookie and fails the session check. An earlier revision added a global http middleware that
+    ran on EVERY request just to turn that 404 into a 405; it was removed in review, because the
+    status code was a test preference and 404 already satisfies the security requirement. Do not
+    reintroduce it — the test now pins the real property, that a GET does not end the session.
+  TTL MISMATCH FIXED (proven, not speculative): create_session_token has always expired the
+    token at now + settings.session_ttl_seconds, from the operator-settable
+    UCPE_SESSION_TTL_SECONDS, while set_session_cookie hardcoded max_age=3600. They agreed ONLY
+    at the default. Above 3600 the browser dropped a still-valid cookie and logged the operator
+    out early; below it the browser kept a cookie the server already rejected, so the UI looked
+    signed in while every call returned 401. The cookie lifetime now follows the configured TTL,
+    and a regression test asserts the real numbers (900 and 7200), not 3600.
+    The UI's Log out control returns to a freshly-loaded state. The cookies are HttpOnly, so the
+    browser cannot clear them itself: a FAILED request does NOT show a logged-out state, it says
+    the operator is still signed in. A 401 is the exception and counts as logged out.
+    clearOperatorData runs on LOGIN as well as logout, so a response still in flight when logout
+    is clicked cannot leave the previous session's results in the DOM for the next login.
+    Exactly one line was removed from auth.py (max_age=3600); app.py is purely additive; no
+    existing auth check, limiter or comparison was touched. api/auth.py is NOT a guarded source
+    path; app.py, index.html and app.js are, but all three were already in CURRENT_DELTA_PATHS,
+    so the guard's delta set is unchanged.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -135,14 +164,14 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #74 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #76 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Eleven T3 origin batches are CONSUMED and must not be reused: the
-  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72 and PR #74
-  batches each authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
+OWNER_BOUNDARY=NONE OPEN. Twelve T3 origin batches are CONSUMED and must not be reused: the
+  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74 and
+  PR #76 batches each authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
