@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-27 (post PR #72)
+Updated: 2026-08-28 (post PR #74)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Ten product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Eleven product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,14 +14,13 @@ LOOP_STATE=IDLE — no lane open. Ten product PRs are SHIPPED to main. PR #56 (i
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-72 (this checkpoint). origin/main = b8f5ff6.
-LAST_GREEN_SHA=b8f5ff6
-LAST_VERIFY=PASS ruff ok | 1106 passed | schemas+smoke ok | scanners 3/3 · b8f5ff6 · 2026-08-27
-MAIN_STATE=main = origin/main = b8f5ff6, clean, single worktree. It is the merge of PR #72
-  (parents 8bd8e78 + d3bdf61) and its tree is byte-identical to the reviewed head d3bdf61, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #131 succeeded.
-  8bd8e78 was the PR #71 STATE checkpoint, which recorded 18e987a (PR #69, CI #125) and
-  9923f33 (PR #70, CI #127).
+CURRENT_BRANCH=docs/state-post-74 (this checkpoint). origin/main = 4af3bfd.
+LAST_GREEN_SHA=4af3bfd
+LAST_VERIFY=PASS ruff ok | 1107 passed | schemas+smoke ok | scanners 3/3 · 4af3bfd · 2026-08-28
+MAIN_STATE=main = origin/main = 4af3bfd, clean, single worktree. It is the merge of PR #74
+  (parents c755817 + 172d475) and its tree is byte-identical to the reviewed head 172d475, so
+  the merge introduced nothing beyond what was reviewed. Post-merge CI run #135 succeeded.
+  c755817 was the PR #73 STATE checkpoint, which recorded b8f5ff6 (PR #72, CI #131).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -109,6 +108,25 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     widening the task, and remains an open adjacent candidate. The new test executes the real
     functions in node against a fake DOM, and was not taken at face value: each of the three
     guards was reverted in turn and the test confirmed to fail.
+  PR #74 (4af3bfd): the Dev tab refresh now says what it actually refreshes — the adjacent
+    candidate PR #72 deliberately left open. The Dev tab used the same fallback, but unlike
+    Recent its ACTION was already legitimate and is unchanged: /v1/system_status is a
+    read-only GET, and on success api() feeds updateStatusFromPayload, which refreshes the
+    persistence badge and Dev Mode availability. Only the wording lied. The button now reads
+    "Refresh status" instead of "Re-analyze", and loadSystemStatus — which catches its own
+    error and degrades the badge to UNKNOWN — now REPORTS success, so a failed refresh is no
+    longer stamped "last refreshed at ...". A failure still arms the cooldown and still
+    degrades the badge. The trailing fallback for an unrecognised tab got the same treatment
+    and keeps the generic wording. NO AUTH-SEMANTIC CHANGE: zero diff lines touch
+    updateDevModeUx, #devModeStatus, #devCode, #devForm, /v1/auth/dev, #loadRuns or
+    /v1/debug/*, and no refresh message is ever written into the Dev Mode status line.
+    MUTATION TESTING FOUND A REAL HOLE, now closed: the behaviour test STUBS loadSystemStatus
+    and loadRecentRuns, so their real bodies never ran, and making loadSystemStatus's catch
+    return true instead of false left the whole suite GREEN while silently restoring the very
+    bug being fixed. That one-line contract — resolve true on success, false in the catch —
+    carries every honesty guarantee in both refresh lanes. A second test now executes the real
+    functions with api stubbed and pins all four outcomes plus the UNKNOWN degradation. The
+    loadRecentRuns half shipped in PR #72 with the same hole and is closed here too.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -117,14 +135,14 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #72 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #74 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Ten T3 origin batches are CONSUMED and must not be reused: the PR
-  #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70 and PR #72 batches each
-  authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
+OWNER_BOUNDARY=NONE OPEN. Eleven T3 origin batches are CONSUMED and must not be reused: the
+  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72 and PR #74
+  batches each authorized exactly one push, one PR and one merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
