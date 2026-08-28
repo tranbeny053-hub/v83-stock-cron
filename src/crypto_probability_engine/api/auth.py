@@ -302,8 +302,21 @@ def set_session_cookie(
     response.set_cookie(
         DEV_SESSION_COOKIE if dev else SESSION_COOKIE,
         token,
+        path="/",
         httponly=True,
         samesite="lax",
         secure=settings.session_cookie_secure,
-        max_age=3600,
+        max_age=settings.session_ttl_seconds,
     )
+
+
+def clear_session_cookies(response: Response, settings: Settings) -> None:
+    """Delete both session cookies with the exact attributes they were set with."""
+    for name in (SESSION_COOKIE, DEV_SESSION_COOKIE):
+        response.delete_cookie(
+            name,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_cookie_secure,
+        )

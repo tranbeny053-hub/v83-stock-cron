@@ -23,6 +23,7 @@ from crypto_probability_engine.api.auth import (
     LoginRequest,
     authenticate_dev,
     authenticate_login,
+    clear_session_cookies,
     session_prediction_origin,
     set_session_cookie,
     verify_session_token,
@@ -145,6 +146,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def login(body: LoginRequest, request: Request, response: Response) -> dict:
         token = authenticate_login(request, body, app_settings)
         set_session_cookie(response, token, app_settings)
+        return {"ok": True}
+
+    @app.post("/v1/auth/logout")
+    def logout(
+        response: Response,
+        _session: dict = Depends(require_app_session),  # noqa: B008
+    ) -> dict:
+        clear_session_cookies(response, app_settings)
         return {"ok": True}
 
     @app.post("/v1/auth/dev")

@@ -2196,12 +2196,64 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
       body: JSON.stringify({ code }),
     });
     loginPanel.classList.add("hidden");
+    clearOperatorData();
     workspace.classList.remove("hidden");
+    document.querySelector("#logoutButton").classList.remove("hidden");
     sessionStatus.textContent = "Ready";
     updateRefreshButton();
     await loadSystemStatus();
   } catch (error) {
     loginStatus.textContent = loginFailureMessage(error?.status, error?.payload);
+  }
+});
+
+function clearOperatorData() {
+  hideDetail();
+  singleResult.replaceChildren();
+  renderTimeframePlaceholders(singleResult);
+  for (const selector of ["#batchResult", "#recentList", "#watchlistList", "#devResult"]) {
+    document.querySelector(selector).replaceChildren();
+  }
+  document.querySelector("#recentStatus").textContent = "Recent analyses not loaded yet.";
+  for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+    document.querySelector(selector).value = "";
+  }
+  recentRuns = [];
+  recentRunsSource = null;
+  lastBatchRequest = null;
+  currentWatchlistSymbol = null;
+  calibrationDiagnosticsCache = null;
+  calibrationDiagnosticsCachedAt = 0;
+  calibrationDiagnosticsRequest = null;
+}
+
+function resetToLoggedOut() {
+  loginPanel.classList.remove("hidden");
+  workspace.classList.add("hidden");
+  document.querySelector("#logoutButton").classList.add("hidden");
+  sessionStatus.textContent = "Locked";
+  loginStatus.textContent = "";
+  document.querySelector("#accessCode").value = "";
+  clearOperatorData();
+  analysisActive = false;
+  refreshReadyAt = 0;
+  lastRefreshed.textContent = "last refreshed: never";
+  updatePersistenceStatus("UNKNOWN");
+  updateDevModeUx({ enabled: false, configured: false });
+  showPanel("single");
+  updateRefreshButton();
+}
+
+document.querySelector("#logoutButton").addEventListener("click", async () => {
+  try {
+    await api("/v1/auth/logout", { method: "POST" });
+    resetToLoggedOut();
+  } catch (error) {
+    if (error?.status === 401) {
+      resetToLoggedOut();
+      return;
+    }
+    sessionStatus.textContent = "Log out failed — you are still signed in.";
   }
 });
 
