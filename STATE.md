@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-08-28 (post PR #78)
+Updated: 2026-08-28 (post PR #80 and #81)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Thirteen product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — no lane open. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,13 +14,17 @@ LOOP_STATE=IDLE — no lane open. Thirteen product PRs are SHIPPED to main. PR #
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-78 (this checkpoint). origin/main = 7ab92ab.
-LAST_GREEN_SHA=7ab92ab
-LAST_VERIFY=PASS ruff ok | 1125 passed | schemas+smoke ok | scanners 3/3 · 7ab92ab · 2026-08-28
-MAIN_STATE=main = origin/main = 7ab92ab, clean, single worktree. It is the merge of PR #78
-  (parents e7f5e31 + 44d4377) and its tree is byte-identical to the reviewed head 44d4377, so
-  the merge introduced nothing beyond what was reviewed. Post-merge CI run #143 succeeded.
-  e7f5e31 was the PR #77 STATE checkpoint, which recorded b7d4657 (PR #76, CI #139).
+CURRENT_BRANCH=docs/state-post-81 (this checkpoint). origin/main = 0f9fe93.
+LAST_GREEN_SHA=0f9fe93
+LAST_VERIFY=PASS ruff ok | 1132 passed | schemas+smoke ok | scanners 3/3 · 0f9fe93 · 2026-08-28
+MAIN_STATE=main = origin/main = 0f9fe93, clean, single worktree. This checkpoint covers a TWO
+  LANE BATCH merged in order: PR #80 (d790569, exact-main CI #147, tree byte-identical to the
+  reviewed head b91b318) then PR #81 (0f9fe93, exact-main CI #149). Before merging the second
+  lane its reviewed head, tree and diff were re-verified unchanged, and the tree that resulted
+  from merging it onto the NEW main was proven BIT-IDENTICAL to the composition preflight tree
+  eefb993e228e11ca7147ea0363b03bcc09ac9b79, so what shipped is exactly what was reviewed
+  together. Test arithmetic reconciles exactly: 1125 base + 3 + 4 = 1132.
+  b4333ee was the PR #79 STATE checkpoint, which recorded 7ab92ab (PR #78, CI #143).
 SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
   PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
     Analysis tab, and fail-closed run provenance in the in-process store.
@@ -191,6 +195,40 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     site fails the build instead of silently inheriting a default.
     src/, schemas/, migrations/, frontend/index.html and frontend/styles.css are byte-identical
     to the previous main: no backend change, no auth weakening, no retries, no writes.
+  PR #80 (d790569): SESSION RESTORE ON LOAD. The session cookie is HttpOnly, so the page
+    cannot read it, and nothing asked the server whether it was still valid. Every reload
+    showed the login panel and made the operator retype the access code even when the cookie
+    was good — and it is good for the full configured UCPE_SESSION_TTL_SECONDS since PR #76
+    aligned the cookie lifetime to the token TTL. Boot now probes with loadSystemStatus, which
+    already performs a read-only GET on the session-guarded route and already reports success.
+    REUSING IT ADDS NO CALL SITE, which is why the PR #78 401-classification coverage guard
+    stays green and untouched; do not replace this with a new api() call without classifying
+    it there. A 401 at boot routes to handleSessionExpired, which returns immediately because
+    the workspace is still hidden, so nothing is reset and no expiry message appears. Success
+    mirrors the login path exactly, including the sessionGeneration bump and clearOperatorData
+    before unhiding. A FAILED PROBE SAYS NOTHING: not being signed in is the default state, and
+    announcing a failed session check on every first visit would be noise and wrong.
+  PR #81 (0f9fe93): DEV MODE REPORTS WHAT ACTUALLY FAILED. Two defects. A failed Dev auth
+    rendered devModeStatus.textContent — the AVAILABILITY line owned by updateDevModeUx, which
+    reads "Dev Mode is available. Re-auth to load debug tools." Being truthy it always won, so
+    a wrong Dev code, a rate limit and Dev Mode being disabled all produced that same sentence;
+    typing the wrong code looked like nothing had happened. The backend distinguishes all three
+    (401 "Invalid Dev Mode code.", 429 with retry_after_seconds 60, 403 "Dev Mode is disabled.")
+    and every one was discarded. loginFailureMessage already handled them, including the retry
+    hint, so the handler now uses it; devModeStatus keeps its own job and is never overwritten.
+    Separately, Load Runs and the per-run Export buttons had NO error handling at all, so a
+    failure — most often an expired Dev session — became an unhandled promise rejection and the
+    operator saw nothing happen. Both now report, naming which action failed, and a 401 says Dev
+    re-auth is needed WHILE STATING THE NORMAL SESSION REMAINS ACTIVE, which is true because
+    those routes are guarded by require_app_dev_session and read only the dev cookie. No retry
+    and no automatic re-auth. The three Dev and debug call sites DELIBERATELY keep plain api
+    rather than sessionApi, so a Dev 401 still cannot end the normal session.
+  SWEEP RESULT, so it is not redone blindly: /v1/system_status returns shelter_mode,
+    kill_switch, circuit_state, repository_type, provider_mode, store_status,
+    news_sources_status and last_calibration_utc that the UI drops. All are CONSTANTS today, so
+    surfacing them would be speculative UI rather than user value — rejected, same call as the
+    news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
+    states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
 ACTIVE_LANE=NONE. No lane is open.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
@@ -199,14 +237,15 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #78 merge: still absent from origin, still unreachable from main.
+  Re-verified after the PR #81 merge: still absent from origin, still unreachable from main.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Thirteen T3 origin batches are CONSUMED and must not be reused: the
+OWNER_BOUNDARY=NONE OPEN. Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
-  PR #76 and PR #78 batches each authorized exactly one push, one PR and one merge, no deploy. No T4 has been authorized or consumed for
+  PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
+  its own push, PR and merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
