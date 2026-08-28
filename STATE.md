@@ -1,10 +1,13 @@
 # STATE
 
-Updated: 2026-08-28 (post PR #80 and #81)
+Updated: 2026-08-28 (FINAL PRE-T_CLOSE CHECKPOINT — post PR #82)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — no lane open. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
+LOOP_STATE=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
+  the owner closed the last two open candidates (see OWNER_PRODUCT_DECISIONS) and put the loop
+  on standby until a NEW genuine product issue arrives or the governed section 5A T_close
+  boundary is reached. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
   Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
   2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
   CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
@@ -14,12 +17,14 @@ LOOP_STATE=IDLE — no lane open. Fifteen product PRs are SHIPPED to main. PR #5
   normal risk tiers, with owner authorization for T3/T4.
 CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-81 (this checkpoint). origin/main = 0f9fe93.
-LAST_GREEN_SHA=0f9fe93
-LAST_VERIFY=PASS ruff ok | 1132 passed | schemas+smoke ok | scanners 3/3 · 0f9fe93 · 2026-08-28
-MAIN_STATE=main = origin/main = 0f9fe93, clean, single worktree. This checkpoint covers a TWO
-  LANE BATCH merged in order: PR #80 (d790569, exact-main CI #147, tree byte-identical to the
-  reviewed head b91b318) then PR #81 (0f9fe93, exact-main CI #149). Before merging the second
+CURRENT_BRANCH=docs/state-pre-tclose (this checkpoint). origin/main = 200d822.
+LAST_GREEN_SHA=200d822
+LAST_VERIFY=PASS ruff ok | 1132 passed | schemas+smoke ok | scanners 3/3 · 200d822 · 2026-08-28
+MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
+  merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
+  0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
+  exact-main CI #147, tree byte-identical to the reviewed head b91b318) then PR #81
+  (0f9fe93, exact-main CI #149). Before merging the second
   lane its reviewed head, tree and diff were re-verified unchanged, and the tree that resulted
   from merging it onto the NEW main was proven BIT-IDENTICAL to the composition preflight tree
   eefb993e228e11ca7147ea0363b03bcc09ac9b79, so what shipped is exactly what was reviewed
@@ -230,14 +235,30 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
     states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=NONE. No lane is open.
+ACTIVE_LANE=NONE. No lane is open and none is queued.
+OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
+  defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
+  repeatedly as the only remaining candidates once the board was otherwise clear, so they are
+  written here to stop that loop.
+  1. RECENT HISTORY STAYS FIXED AND BOUNDED FOR v1. Do NOT add an operator-adjustable
+     /v1/runs limit. What "recent" should mean is a product question the owner has answered,
+     not an implementation gap. /v1/runs remains bounded recent history, which is also why the
+     watchlist says "No recent analysis found." rather than claiming a symbol was never
+     analyzed — absence there is evidence about the window, not about the symbol.
+  2. CONSTANT system_status FIELDS STAY HIDDEN absent a real operator use case. The UI
+     deliberately drops shelter_mode, kill_switch, circuit_state, repository_type,
+     provider_mode, store_status, news_sources_status and last_calibration_utc. Every one is a
+     CONSTANT in the current build, so rendering them would be speculative UI rather than user
+     value. Surface one only if the owner raises a concrete operator need, or if that field
+     actually starts to vary.
 FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
   pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
   them before T_close:
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
     fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified after the PR #81 merge: still absent from origin, still unreachable from main.
+  Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
+  from main, still frozen.
 CODEX_PENDING=NONE
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
