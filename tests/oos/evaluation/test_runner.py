@@ -17,14 +17,24 @@ from tests.oos.evaluation.conftest import T_CLOSE, daily_4h_evidence, evidence_r
 AFTER_CLOSE = T_CLOSE + timedelta(hours=2)
 
 
+@pytest.fixture(autouse=True)
+def _clear_durable_seal():
+    FakeRepository.durable_seal = None
+    yield
+    FakeRepository.durable_seal = None
+
+
 class FakeRepository:
     """Records how it was called. Never touches a database."""
+
+    durable_seal: dict | None = None
 
     def __init__(self, rows=None, *, origin_anomalies: int = 0, features=()):
         self._rows = list(rows if rows is not None else daily_4h_evidence())
         self._origin_anomalies = origin_anomalies
         self._features = list(features)
         self.calls: list[bool] = []
+        self.seal: dict | None = None
 
     def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
         self.calls.append(include_probabilities)
@@ -43,6 +53,25 @@ class FakeRepository:
 
     def fetch_oos_feature_diagnostics(self):
         return list(self._features)
+
+    # The durable seal is the cross-run authority (finding F2). The fake models it as
+    # process state SHARED between instances via the class attribute below, because the
+    # real defect was that a fresh runner got a fresh filesystem.
+    def claim_section_5a_seal(self, payload) -> bool:
+        if type(self).durable_seal is not None:
+            return False
+        type(self).durable_seal = dict(payload)
+        return True
+
+    def fetch_section_5a_seal(self):
+        seal = type(self).durable_seal
+        return None if seal is None else dict(seal)
+
+    def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+        if type(self).durable_seal is None:
+            raise RuntimeError("no seal to advance")
+        type(self).durable_seal["state"] = state
+        type(self).durable_seal["state_detail"] = detail
 
 
 # --------------------------- readiness ---------------------------
@@ -175,8 +204,107 @@ def test_the_real_committed_pin_lets_consumption_proceed(tmp_path: Path) -> None
 
 def test_G2_refuses_a_second_look(tmp_path: Path) -> None:
     _consume(FakeRepository(), tmp_path)
-    with pytest.raises(runner.OneLookAlreadyConsumed, match="refusing a second look"):
+    with pytest.raises(runner.OneLookAlreadyConsumed, match="durable section 5A seal"):
         _consume(FakeRepository(), tmp_path)
+
+
+def test_G2_refuses_across_a_FRESH_workspace(tmp_path: Path) -> None:
+    """FINDING F2. The workflow gets a new runner per dispatch, so a filesystem seal is
+    always empty. The refusal must come from the durable authority, not the disk."""
+
+    first = tmp_path / "run-one"
+    second = tmp_path / "run-two"
+    _consume(FakeRepository(), first)
+    assert not (second / runner.SNAPSHOT_FILENAME).exists(), "second workspace is clean"
+    with pytest.raises(runner.OneLookAlreadyConsumed, match="durable section 5A seal"):
+        _consume(FakeRepository(), second)
+
+
+def test_a_failing_secondary_read_cannot_spend_the_look(tmp_path: Path) -> None:
+    """FINDING F3. The non-consequential reads now precede the probabilities, so a
+    failure there happens BEFORE consumption rather than inside an unsealed interval."""
+
+    class BrokenDiagnostics(FakeRepository):
+        def fetch_oos_feature_diagnostics(self):
+            raise RuntimeError("diagnostics read failed")
+
+    repo = BrokenDiagnostics()
+    with pytest.raises(RuntimeError, match="diagnostics read failed"):
+        _consume(repo, tmp_path)
+    assert repo.calls == [], "the probabilities were never read"
+    assert FakeRepository.durable_seal is None, "no seal, because no look was spent"
+    assert not (tmp_path / runner.SNAPSHOT_FILENAME).exists()
+
+
+def test_the_seal_and_the_raw_capture_are_one_atomic_write(tmp_path: Path) -> None:
+    """The claim carries the snapshot, so there is no state where one exists alone."""
+
+    _consume(FakeRepository(), tmp_path)
+    seal = FakeRepository.durable_seal
+    assert seal is not None
+    assert seal["snapshot_payload"]["rows"], "the seal carries the raw evidence itself"
+    assert seal["evidence_snapshot_id"] == seal["snapshot_payload"]["evidence_snapshot_id"]
+
+
+def test_recompute_refuses_a_tampered_snapshot(tmp_path: Path) -> None:
+    """FINDING F4. An edited row must not be silently rescored under a stale id."""
+
+    _consume(FakeRepository(), tmp_path)
+    path = tmp_path / runner.SNAPSHOT_FILENAME
+    snapshot = json.loads(path.read_text())
+    snapshot["rows"][0]["candidate_p_up_frac"] = 0.99
+    snapshot["rows"][0]["candidate_p_down_frac"] = 0.005
+    snapshot["rows"][0]["candidate_p_timeout_frac"] = 0.005
+    path.write_text(json.dumps(snapshot))
+    with pytest.raises(runner.SnapshotTampered, match="does not match its recorded snapshot id"):
+        runner.recompute_from_snapshot(tmp_path, verify_pin=False)
+
+
+def test_recompute_refuses_when_the_rules_have_drifted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FINDING F4. Recomputing under a changed evaluator would be retuning."""
+
+    _consume(FakeRepository(), tmp_path)
+    monkeypatch.setattr(
+        runner, "current_pin_artifacts", lambda: {"closure_digest": "drifted"}
+    )
+    with pytest.raises(runner.SnapshotTampered, match="evaluator has changed"):
+        runner.recompute_from_snapshot(tmp_path, verify_pin=False)
+
+
+def test_snapshot_identity_covers_diagnostics_inputs(tmp_path: Path) -> None:
+    """FINDING F5. Two captures differing only in feature rows are different evidence."""
+
+    rows = daily_4h_evidence()
+    base = runner.evidence_snapshot_id(rows)
+    with_features = runner.evidence_snapshot_id(
+        rows, feature_rows=[{"prediction_id": "x", "regime": "CALM"}]
+    )
+    with_anomalies = runner.evidence_snapshot_id(rows, origin_anomalies=3)
+    assert len({base, with_features, with_anomalies}) == 3
+
+
+def test_result_binds_the_rules_as_well_as_the_evidence(tmp_path: Path) -> None:
+    result = _consume(FakeRepository(), tmp_path)
+    assert result["evaluator_pin_digest"]
+    assert result["result_inputs_digest"]
+    assert result["result_inputs_digest"] != result["evidence_snapshot_id"]
+
+
+def test_readiness_also_verifies_the_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI reaches readiness directly, so the ordering must be enforced here."""
+
+    from crypto_probability_engine.oos.evaluation import evaluator_pin
+
+    def _mismatch():
+        raise evaluator_pin.EvaluatorPinMismatch("simulated drift")
+
+    monkeypatch.setattr(runner, "assert_evaluator_pin", _mismatch)
+    repo = FakeRepository()
+    with pytest.raises(evaluator_pin.EvaluatorPinMismatch):
+        runner.run_readiness(repo)
+    assert repo.calls == []
 
 
 def test_G2_refuses_even_when_the_first_run_produced_no_result(tmp_path: Path) -> None:
@@ -248,7 +376,9 @@ def test_consumption_output_states_the_convention_and_the_licence(tmp_path: Path
     assert "significant" not in rendered
     assert "error rate" in rendered
     assert "no profitability claim" in rendered
-    assert result["per_timeframe"]["4H"]["state"] == "PASS"
+    assert result["per_timeframe"]["4H"]["state"] == "A_AND_B_HELD_FAIL_UNVERIFIED"
+    assert result["per_timeframe"]["4H"]["authorized"] is False
+    assert result["authorized_cells"] == []
     assert result["diagnostics"]["per_timeframe"]["4H"]["admitted_pairs"] == 22
 
 

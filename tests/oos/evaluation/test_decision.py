@@ -26,15 +26,51 @@ def _evaluate(rows, timeframe: str = "4H"):
 # --- the evaluator must be ABLE to pass, or every negative test below is vacuous ---
 
 
-def test_a_genuinely_better_candidate_reaches_PASS() -> None:
+def test_a_genuinely_better_candidate_clears_A_and_B() -> None:
+    """A and B must be reachable, or every negative test below is vacuous."""
+
     result = _evaluate(daily_4h_evidence())
-    assert result.state == decision.PASS, result.reason
     assert result.a_holds and result.b_holds
     assert [c.usable_windows for c in result.coarsenings] == [11, 7, 5]
     assert all(c.holds for c in result.coarsenings)
 
 
-def test_pass_authorizes_only_covered_symbols_that_clear_C() -> None:
+def test_clearing_A_and_B_does_NOT_reach_contract_PASS_while_FAIL_is_unverified() -> None:
+    """OWNER RULING F1. Three FAIL predicates cannot be reconstructed from the ledger,
+    so "no FAIL" is unverified and the contract token PASS is not earned."""
+
+    result = _evaluate(daily_4h_evidence())
+    assert result.state == decision.A_AND_B_HELD_FAIL_UNVERIFIED
+    assert result.state != decision.PASS
+    assert result.authorized_cells == (), "the unverified state authorizes NOTHING"
+    assert "authorizes nothing" in result.reason
+    assert "cannot be reconstructed" in result.reason
+
+
+def _all_fail_checks_clean(rows):
+    return (
+        decision.FailCheck("probability_triplet_sums_to_one", decision.OBSERVABLE_PASS),
+        decision.FailCheck("hard_gate_not_overridden_by_score_or_news", decision.OBSERVABLE_PASS),
+        decision.FailCheck("gated_when_evidence_is_thin", decision.OBSERVABLE_PASS),
+        decision.FailCheck("no_sentiment_only_action", decision.OBSERVABLE_PASS),
+    )
+
+
+def test_contract_PASS_is_reachable_only_when_no_FAIL_is_affirmatively_established(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PASS must not become unreachable-by-construction: prove it still exists."""
+
+    monkeypatch.setattr(decision, "_fail_checks", _all_fail_checks_clean)
+    result = _evaluate(daily_4h_evidence())
+    assert result.state == decision.PASS
+    assert "affirmatively established" in result.reason
+
+
+def test_pass_authorizes_only_covered_symbols_that_clear_C(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(decision, "_fail_checks", _all_fail_checks_clean)
     result = _evaluate(daily_4h_evidence())
     assert result.authorized_cells == ("BTC/USDT|4H",)
     assert result.per_symbol["ETH/USDT"].covered is False

@@ -188,3 +188,39 @@ def test_feature_diagnostics_tolerate_a_missing_snapshot() -> None:
     rows = repo.fetch_oos_feature_diagnostics()
     assert len(rows) == 2
     assert all(row["regime"] is None for row in rows)
+
+
+def test_the_rest_fallback_refuses_to_claim_the_one_look_seal() -> None:
+    """Only Postgres can provide an atomic durable claim, so only Postgres may seal."""
+
+    from crypto_probability_engine.persistence import repository as module
+
+    for name in (
+        "claim_section_5a_seal",
+        "fetch_section_5a_seal",
+        "advance_section_5a_seal_state",
+    ):
+        method = getattr(module.SupabaseRestRepository, name)
+        source = inspect.getsource(method)
+        assert "_SEAL_POSTGRES_ONLY" in source, name
+    assert "must never be used to spend the look" in module._SEAL_POSTGRES_ONLY
+
+
+def test_the_seal_claim_is_a_single_conditional_insert() -> None:
+    """Claim and raw capture must be ONE write: an INSERT that conflicts on a singleton."""
+
+    from crypto_probability_engine.persistence import repository as module
+
+    sql = inspect.getsource(module._claim_section_5a_seal_row)
+    assert "INSERT INTO public.section_5a_evaluation_seal" in sql
+    assert "ON CONFLICT (seal_id) DO NOTHING" in sql
+    assert "snapshot_payload" in sql, "the raw evidence rides along with the claim"
+    assert sql.count("cursor.execute") == 1, "one statement, no window between two writes"
+
+
+def test_in_memory_seal_is_claimed_exactly_once() -> None:
+    repo = InMemoryPersistenceRepository()
+    assert repo.fetch_section_5a_seal() is None
+    assert repo.claim_section_5a_seal({"evidence_snapshot_id": "abc"}) is True
+    assert repo.claim_section_5a_seal({"evidence_snapshot_id": "def"}) is False
+    assert repo.fetch_section_5a_seal()["evidence_snapshot_id"] == "abc"

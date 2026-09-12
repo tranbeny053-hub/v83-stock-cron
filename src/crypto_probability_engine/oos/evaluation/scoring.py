@@ -8,6 +8,7 @@ from typing import Any
 from crypto_probability_engine.calibration.metrics import (
     brier_score,
     compute_calibration_metrics,
+    normalize_probabilities,
 )
 from crypto_probability_engine.calibration.schemas import OutcomeLabel
 
@@ -17,11 +18,19 @@ def per_row_d(
     baseline_probabilities: Mapping[OutcomeLabel, float],
     realized_label: OutcomeLabel,
 ) -> float:
-    """Return candidate Brier minus baseline Brier; negative favors candidate."""
+    """Return candidate Brier minus baseline Brier; negative favors candidate.
 
-    return brier_score(candidate_probabilities, realized_label) - brier_score(
-        baseline_probabilities, realized_label
-    )
+    Both arms are NORMALIZED first. §5A.4 defines Brier against one-hot on normalized
+    probabilities, and the ECE path normalizes internally, so scoring raw values here
+    would treat a tolerance-admitted row (sum within 1e-6 of 1.0) differently in the two
+    statistics.
+    """
+
+    candidate = normalize_probabilities(candidate_probabilities)
+    baseline = normalize_probabilities(baseline_probabilities)
+    if candidate is None or baseline is None:
+        raise ValueError("per-row d requires normalizable probabilities for both arms")
+    return brier_score(candidate, realized_label) - brier_score(baseline, realized_label)
 
 
 def window_mean(d_values: Iterable[float]) -> float:

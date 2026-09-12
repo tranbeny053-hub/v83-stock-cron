@@ -53,7 +53,10 @@ jobs:
           --artifact-dir .work/section_5a
           | tee section-5a-report.json
 
-      - name: Upload the artifact
+      # SECONDARY ONLY. The durable one-shot seal and the raw capture live in Postgres
+      # (migrations/0009). This upload is convenience and audit trail; it is never the
+      # authority, because a fresh runner per dispatch makes a filesystem seal useless.
+      - name: Upload the artifact (secondary; the durable seal is in Postgres)
         if: always()
         uses: actions/upload-artifact@v4
         with:

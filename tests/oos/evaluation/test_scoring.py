@@ -6,7 +6,12 @@ import pytest
 
 from crypto_probability_engine.calibration.metrics import compute_calibration_metrics
 from crypto_probability_engine.oos.evaluation import scoring
-from crypto_probability_engine.oos.evaluation.scoring import ece, per_row_d, window_mean
+from crypto_probability_engine.oos.evaluation.scoring import (
+    ece,
+    normalize_probabilities,  # noqa: F401
+    per_row_d,
+    window_mean,
+)
 
 
 def _row(
@@ -111,3 +116,35 @@ def test_evaluation_package_does_not_reach_filtered_shadow_metrics() -> None:
     assert "shadow_validation.metrics" not in source
     assert "MIN_CELL_COUNT" not in source
 
+
+
+def test_per_row_d_normalizes_both_arms_before_scoring() -> None:
+    """FINDING F8. §5A.4 defines Brier on NORMALIZED probabilities, and the ECE path
+    normalizes internally, so scoring raw values treated a tolerance-admitted row
+    (sum within the 1e-6 invariant tolerance) inconsistently across the two statistics."""
+
+    from crypto_probability_engine.calibration.metrics import brier_score
+
+    raw = {"UP": 0.6000005, "DOWN": 0.24, "TIMEOUT": 0.16}
+    exact = {"UP": 0.6, "DOWN": 0.24, "TIMEOUT": 0.16}
+
+    # Raw scoring would differ from normalized scoring on this admitted row.
+    assert brier_score(raw, "UP") != pytest.approx(
+        brier_score(scoring.normalize_probabilities(raw), "UP"), abs=0.0
+    )
+
+    # per_row_d must use the normalized value.
+    d = scoring.per_row_d(raw, exact, "UP")
+    expected = brier_score(scoring.normalize_probabilities(raw), "UP") - brier_score(
+        scoring.normalize_probabilities(exact), "UP"
+    )
+    assert d == pytest.approx(expected, abs=0.0)
+
+
+def test_per_row_d_refuses_unnormalizable_probabilities() -> None:
+    with pytest.raises(ValueError, match="normalizable"):
+        scoring.per_row_d(
+            {"UP": 0.0, "DOWN": 0.0, "TIMEOUT": 0.0},
+            {"UP": 1.0, "DOWN": 0.0, "TIMEOUT": 0.0},
+            "UP",
+        )

@@ -20,7 +20,10 @@ from typing import Any
 from crypto_probability_engine.oos.evaluation import diagnostics as diagnostics_module
 from crypto_probability_engine.oos.evaluation.admission import admit
 from crypto_probability_engine.oos.evaluation.decision import evaluate_timeframe
-from crypto_probability_engine.oos.evaluation.evaluator_pin import assert_evaluator_pin
+from crypto_probability_engine.oos.evaluation.evaluator_pin import (
+    assert_evaluator_pin,
+    current_pin_artifacts,
+)
 from crypto_probability_engine.oos.evaluation.lattice import window_count
 
 MODE_READINESS = "readiness"
@@ -53,16 +56,59 @@ class ConsumptionRefused(RuntimeError):
     """A consumption guard refused before anything was read."""
 
 
-def evidence_snapshot_id(rows: Sequence[Mapping[str, Any]]) -> str:
-    """SHA-256 over a canonical serialization of the raw evidence (§11)."""
+class SnapshotTampered(RuntimeError):
+    """The stored evidence or the rules changed since the seal was claimed."""
 
-    return hashlib.sha256(_canonical_json(list(rows))).hexdigest()
+
+def evidence_snapshot_id(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    feature_rows: Sequence[Mapping[str, Any]] = (),
+    origin_anomalies: int = 0,
+) -> str:
+    """SHA-256 over ALL captured evidence, not only the scored rows (§11, finding F5).
+
+    Feature rows and the anomaly count determine mandatory §5A.10 output, so two captures
+    differing only in those are genuinely different evidence and must not share an id.
+    """
+
+    return hashlib.sha256(
+        _canonical_json(
+            {
+                "rows": list(rows),
+                "feature_rows": list(feature_rows),
+                "origin_anomalies": int(origin_anomalies),
+            }
+        )
+    ).hexdigest()
+
+
+def result_inputs_digest(snapshot_id: str, pin_digest: str) -> str:
+    """Bind the evidence to the RULES and the contract instants that scored it.
+
+    Kept separate from ``evidence_snapshot_id`` deliberately: the evidence identity must
+    stay stable when the evaluator changes, or drift could not be detected by comparison.
+    """
+
+    return hashlib.sha256(
+        _canonical_json(
+            {
+                "evidence_snapshot_id": snapshot_id,
+                "evaluator_pin_digest": pin_digest,
+                "t_freeze": T_FREEZE.isoformat(),
+                "t0": T0.isoformat(),
+                "t_close": T_CLOSE.isoformat(),
+                "timeframes": list(TIMEFRAMES),
+            }
+        )
+    ).hexdigest()
 
 
 def run_readiness(
     repository,
     *,
     now_utc: datetime | None = None,
+    verify_pin: bool = True,
 ) -> dict[str, Any]:
     """Answer whether the evidence is adequate. Repeatable; never consumes the look.
 
@@ -70,18 +116,26 @@ def run_readiness(
     ``d``, or an ECE even by mistake.
     """
 
+    # The pre-registration's freeze ordering says readiness may touch live data only
+    # under a verified pin. The CLI reaches this directly, so the check belongs HERE and
+    # not only in the workflow.
+    if verify_pin:
+        assert_evaluator_pin()
+
     evidence = repository.fetch_oos_paired_evidence(include_probabilities=False)
     _reject_any_probability(evidence)
     admission = admit(evidence, t0=T0, t_close=T_CLOSE)
 
+    feature_rows = repository.fetch_oos_feature_diagnostics()
+    origin_anomalies = repository.count_oos_origin_anomalies()
     block = diagnostics_module.build(
         admission,
         t0=T0,
         t_close=T_CLOSE,
         t_freeze=T_FREEZE,
         timeframes=TIMEFRAMES,
-        feature_rows=repository.fetch_oos_feature_diagnostics(),
-        origin_anomalies=repository.count_oos_origin_anomalies(),
+        feature_rows=feature_rows,
+        origin_anomalies=origin_anomalies,
     )
     attainability = {
         timeframe: _attainability(timeframe, admission)
@@ -91,7 +145,9 @@ def run_readiness(
         "mode": MODE_READINESS,
         "generated_at_utc": (now_utc or datetime.now(UTC)).isoformat(),
         "consumes_one_look": False,
-        "evidence_snapshot_id": evidence_snapshot_id(evidence),
+        "evidence_snapshot_id": evidence_snapshot_id(
+            evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
+        ),
         "attainability": attainability,
         "diagnostics": block,
         "note": (
@@ -114,30 +170,76 @@ def run_consumption(
     moment = now_utc or datetime.now(UTC)
     artifact_dir = Path(artifact_dir)
 
-    # G5, G1, G3, G2 — all strictly before anything is read.
+    # G5, G1, G3 — strictly before anything is read.
     if moment < T_CLOSE:
         raise ConsumptionRefused(f"T_close has not passed: {T_CLOSE.isoformat()}")
+    pin = current_pin_artifacts()
     if verify_pin:
         assert_evaluator_pin()
     if confirmation != CONFIRMATION_TOKEN:
         raise ConsumptionRefused("confirmation token absent or wrong; run is inert")
+
+    # G2 — the DURABLE cross-run seal. A filesystem check is useless here: the workflow
+    # gets a fresh runner per dispatch, so a local seal is always empty (finding F2).
+    existing = repository.fetch_section_5a_seal()
+    if existing is not None:
+        raise OneLookAlreadyConsumed(
+            "a durable section 5A seal already exists "
+            f"(state={existing.get('state')}, evidence={existing.get('evidence_snapshot_id')}); "
+            "the holdout is evaluated exactly once"
+        )
     refuse_existing(artifact_dir)
+
+    # Non-consequential reads happen BEFORE the probabilities, so that no fallible call
+    # sits between the consumption and the seal (finding F3).
+    origin_anomalies = repository.count_oos_origin_anomalies()
+    feature_rows = repository.fetch_oos_feature_diagnostics()
 
     # Reading the probabilities IS the consumption.
     evidence = repository.fetch_oos_paired_evidence(include_probabilities=True)
 
-    # G4 — raw before parsed, and the seal arms with it.
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_id = evidence_snapshot_id(
+        evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
+    )
+    pin_digest = str(pin["closure_digest"])
     snapshot = {
         "captured_at_utc": moment.isoformat(),
-        "evidence_snapshot_id": evidence_snapshot_id(evidence),
+        "evidence_snapshot_id": snapshot_id,
+        "result_inputs_digest": result_inputs_digest(snapshot_id, pin_digest),
+        "evaluator_pin_digest": pin_digest,
         "t_freeze": T_FREEZE.isoformat(),
         "t0": T0.isoformat(),
         "t_close": T_CLOSE.isoformat(),
-        "origin_anomalies": repository.count_oos_origin_anomalies(),
-        "feature_rows": repository.fetch_oos_feature_diagnostics(),
+        "timeframes": list(TIMEFRAMES),
+        "origin_anomalies": origin_anomalies,
+        "feature_rows": feature_rows,
         "rows": list(evidence),
     }
+
+    # G4 — ONE atomic write claims the seal and captures the raw evidence together.
+    # There is no interval in which the look is spent but unrecorded.
+    claimed = repository.claim_section_5a_seal(
+        {
+            "sealed_at_utc": moment.isoformat(),
+            "evidence_snapshot_id": snapshot_id,
+            "result_inputs_digest": snapshot["result_inputs_digest"],
+            "evaluator_pin_digest": pin_digest,
+            "contract_instants": {
+                "t_freeze": T_FREEZE.isoformat(),
+                "t0": T0.isoformat(),
+                "t_close": T_CLOSE.isoformat(),
+                "timeframes": list(TIMEFRAMES),
+            },
+            "snapshot_payload": snapshot,
+        }
+    )
+    if not claimed:
+        raise OneLookAlreadyConsumed(
+            "another run claimed the durable seal first; refusing a second look"
+        )
+
+    # The local artifact is SECONDARY: convenience and upload, never the authority.
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     _write(artifact_dir / SNAPSHOT_FILENAME, snapshot)
     _write_state(artifact_dir, STATE_SEALED_RAW_CAPTURED)
 
@@ -145,13 +247,17 @@ def run_consumption(
         result = compute_from_snapshot(snapshot, now_utc=moment)
     except Exception as exc:
         _write_state(artifact_dir, STATE_SEALED_NO_RESULT, detail=repr(exc))
+        repository.advance_section_5a_seal_state(STATE_SEALED_NO_RESULT, repr(exc))
         raise
     _write(artifact_dir / RESULT_FILENAME, result)
     _write_state(artifact_dir, STATE_COMPLETE)
+    repository.advance_section_5a_seal_state(STATE_COMPLETE)
     return result
 
 
-def recompute_from_snapshot(artifact_dir: Path, *, now_utc: datetime | None = None) -> dict:
+def recompute_from_snapshot(
+    artifact_dir: Path, *, now_utc: datetime | None = None, verify_pin: bool = True
+) -> dict:
     """Recompute the decision from the immutable snapshot. NO database access.
 
     This is the recovery path for ``SEALED_NO_RESULT`` (§12): a statistics defect costs
@@ -160,6 +266,28 @@ def recompute_from_snapshot(artifact_dir: Path, *, now_utc: datetime | None = No
 
     artifact_dir = Path(artifact_dir)
     snapshot = json.loads((artifact_dir / SNAPSHOT_FILENAME).read_text(encoding="utf-8"))
+
+    # "Same evidence, same rules" must be ENFORCED, not asserted (finding F4).
+    if verify_pin:
+        assert_evaluator_pin()
+    recomputed = evidence_snapshot_id(
+        snapshot["rows"],
+        feature_rows=snapshot.get("feature_rows", ()),
+        origin_anomalies=int(snapshot.get("origin_anomalies", 0)),
+    )
+    if recomputed != snapshot.get("evidence_snapshot_id"):
+        raise SnapshotTampered(
+            "stored evidence does not match its recorded snapshot id; recomputation "
+            f"refused (recorded={snapshot.get('evidence_snapshot_id')}, actual={recomputed})"
+        )
+    pin_digest = str(current_pin_artifacts()["closure_digest"])
+    recorded_pin = snapshot.get("evaluator_pin_digest")
+    if recorded_pin is not None and recorded_pin != pin_digest:
+        raise SnapshotTampered(
+            "the evaluator has changed since this snapshot was sealed; recomputing "
+            "under different rules would be retuning against a holdout already seen"
+        )
+
     result = compute_from_snapshot(snapshot, now_utc=now_utc)
     _write(artifact_dir / RESULT_FILENAME, result)
     _write_state(artifact_dir, STATE_COMPLETE)
@@ -191,6 +319,8 @@ def compute_from_snapshot(
         "generated_at_utc": (now_utc or datetime.now(UTC)).isoformat(),
         "consumes_one_look": True,
         "evidence_snapshot_id": snapshot["evidence_snapshot_id"],
+        "result_inputs_digest": snapshot.get("result_inputs_digest"),
+        "evaluator_pin_digest": snapshot.get("evaluator_pin_digest"),
         "boundary_convention": 0.05,
         "boundary_convention_note": (
             "A pre-committed decision boundary, not a hypothesis test. It has no error "
@@ -271,6 +401,7 @@ def _reject_any_probability(rows: Sequence[Mapping[str, Any]]) -> None:
 def _render(result) -> dict[str, Any]:
     return {
         "state": result.state,
+        "authorized": bool(result.authorized_cells),
         "reason": result.reason,
         "admitted_pairs": result.admitted_pairs,
         "a_holds": result.a_holds,

@@ -38,8 +38,20 @@ ORDERED_COARSENINGS = tuple(sorted(COARSENINGS))
 TRANCHE_1_SYMBOLS = ("BTC/USDT", "ETH/USDT")
 
 PASS = "PASS"
+A_AND_B_HELD_FAIL_UNVERIFIED = "A_AND_B_HELD_FAIL_UNVERIFIED"
 NOT_PASS = "NOT_PASS"
 FAIL = "FAIL"
+
+# OWNER RULING (2026-09-12), closing verification finding F1.
+#
+# §5A.7 defines PASS as "A and B hold with no FAIL". Three of the four FAIL predicates
+# cannot be reconstructed from the ledger, so "no FAIL" is UNVERIFIED, not verified.
+# Treating unknown as clean would make PASS easier to reach than the contract allows.
+#
+# The contract token PASS is therefore reserved for A and B holding AND every FAIL
+# predicate being AFFIRMATIVELY established as clean. When any required predicate is
+# unverified the terminal state is A_AND_B_HELD_FAIL_UNVERIFIED, which authorizes
+# NOTHING. It is not a lesser PASS; it is a different, honest statement.
 
 OBSERVABLE_PASS = "OBSERVABLE_PASS"
 OBSERVABLE_BREACH = "OBSERVABLE_BREACH"
@@ -154,10 +166,25 @@ def evaluate_timeframe(
         for symbol in TRANCHE_1_SYMBOLS
     }
 
-    state = PASS if (a_holds and b_holds) else NOT_PASS
-    reason = "A and B hold with no observable FAIL" if state == PASS else _not_pass_reason(
-        a_holds, b1_holds, b2_holds
-    )
+    unverified = [
+        check.name for check in fail_checks if check.status == NOT_OBSERVABLE
+    ]
+    if not (a_holds and b_holds):
+        state = NOT_PASS
+        reason = _not_pass_reason(a_holds, b1_holds, b2_holds)
+    elif unverified:
+        state = A_AND_B_HELD_FAIL_UNVERIFIED
+        reason = (
+            "A and B hold and the probability invariant shows no detected breach, but "
+            "§5A's no-FAIL condition is NOT established: "
+            + ", ".join(unverified)
+            + " cannot be reconstructed from the persisted ledger. This authorizes nothing."
+        )
+    else:
+        state = PASS
+        reason = "A and B hold and every FAIL predicate is affirmatively established clean"
+
+    # AUTHORIZED requires the contract PASS, never the unverified state.
     authorized = (
         tuple(
             f"{symbol}|{timeframe}"

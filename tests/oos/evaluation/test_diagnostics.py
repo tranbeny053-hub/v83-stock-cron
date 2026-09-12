@@ -80,3 +80,59 @@ def test_numeric_summary_handles_absent_and_present_values() -> None:
 
 def test_distribution_reports_absent_features_rather_than_dropping_them() -> None:
     assert diagnostics.distribution(["UP", "UP", None]) == {"UNKNOWN": 1, "UP": 2}
+
+
+def test_missed_attempts_is_reported_absent_not_zero() -> None:
+    """FINDING F7. No attempt ledger exists in the database, so zero would be fabricated.
+
+    "Never convert NOT_RUN into PASS" applies to counts as much as to gates.
+    """
+
+    block = diagnostics.build(
+        _admission(), t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=["4H"]
+    )
+    tf = block["per_timeframe"]["4H"]
+    assert tf["missed_attempts"] == diagnostics.UNMEASURED
+    assert tf["missed_attempts"] != 0
+    assert "not derivable" in tf["missed_attempts_basis"]
+
+
+def test_a_supplied_attempt_ledger_is_reported_as_measured() -> None:
+    block = diagnostics.build(
+        _admission(),
+        t0=T0,
+        t_close=T_CLOSE,
+        t_freeze=T_FREEZE,
+        timeframes=["4H"],
+        missed_attempts={"4H": 41},
+    )
+    tf = block["per_timeframe"]["4H"]
+    assert tf["missed_attempts"] == 41
+    assert "attempt ledger" in tf["missed_attempts_basis"]
+
+
+def test_dropped_windows_are_reported_per_coarsening() -> None:
+    """FINDING F7. §5A.10 requires the dropped-window count, which was absent."""
+
+    block = diagnostics.build(
+        _admission(), t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=["4H"]
+    )
+    tf = block["per_timeframe"]["4H"]
+    assert tf["usable_windows"] == {"1": 11, "2": 7, "4": 5}
+    assert tf["dropped_windows"] == {"1": 0, "2": 0, "4": 0}
+
+
+def test_diagnostics_are_reported_PER_CELL_not_only_per_timeframe() -> None:
+    """FINDING F7. §5A.10 says "per timeframe AND per cell"."""
+
+    block = diagnostics.build(
+        _admission(), t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=["4H"]
+    )
+    cell = block["per_timeframe"]["4H"]["per_symbol"]["BTC/USDT"]
+    for key in (
+        "admitted_pairs", "usable_windows", "dropped_windows",
+        "realized_label_distribution",
+        "first_reference_close_utc", "last_reference_close_utc",
+    ):
+        assert key in cell, key
+    assert cell["usable_windows"] == {"1": 11, "2": 7, "4": 5}

@@ -350,3 +350,99 @@ any live read, any T3, and the final consolidated review.
 Until that verification completes, the work carries the marker
 **`CLAUDE_AUTHORED_PENDING_CODEX_INDEPENDENT_VERIFICATION`**, and it is not eligible for a live
 readiness run, a pin that authorizes one, a push, or a merge.
+
+---
+
+# Addendum 2, 2026-09-12 — owner rulings closing verification findings F1, F2, F9
+
+Codex returned **NOT_VERIFIED** on the first implementation (report at
+`.work/805/5a-verification.md`). All 20 named mutations were caught, so the test suite was
+sound; nine findings addressed things no test covered. Three were owner decisions rather than
+repairs, and the owner has ruled. These rulings **supersede** the affected parts of the
+original pre-registration.
+
+## 15. F1 — `PASS` is reserved; the honest state is named
+
+**SUPERSEDES §6.** The original resolution declared `FAIL(t)` only on `OBSERVABLE_BREACH` and
+let A and B alone reach `PASS`. That treats *unknown* as *clean* and makes PASS easier to reach
+than §5A.7 allows, which is precisely the class this document forbids.
+
+**Ruling.** The contract token `PASS` is emitted **only** when A and B hold **and every** FAIL
+predicate is **affirmatively established** clean. While any required predicate is unverified,
+the terminal state is:
+
+    A_AND_B_HELD_FAIL_UNVERIFIED      AUTHORIZED = false
+
+It is not a lesser PASS. It authorizes nothing, and `AUTHORIZED(s,t)` continues to require the
+contract `PASS`. The reason string names every unverified predicate.
+
+**Consequence, stated plainly.** Three of the four FAIL predicates cannot be reconstructed from
+the ledger today, so **with the current persisted data the best attainable outcome is
+`A_AND_B_HELD_FAIL_UNVERIFIED` and no cell can be authorized.** That is the honest position, not
+a defect: §5A's PASS was defined against a verifiability the ledger does not provide.
+
+## 16. F2 — Postgres is the durable seal authority
+
+**SUPERSEDES §3 G2.** The original seal checked the local filesystem. The evaluation workflow
+runs on a **fresh GitHub runner per dispatch** and uploads its artifact only *after* the job, so
+that seal is empty on every run and a second consumption simply succeeded. "Structurally
+impossible" was true locally and false in the deployment.
+
+**Ruling.** The durable cross-run authority is **Supabase/Postgres**. GitHub artifacts are
+**secondary only** — convenience and audit trail, never the authority.
+
+**Atomic durable capture.** `migrations/0009_section_5a_evaluation_seal.sql` (authored, **not
+applied**) defines a singleton-constrained table whose row carries the raw snapshot. Claiming
+the seal and capturing the evidence are therefore **one `INSERT ... ON CONFLICT DO NOTHING`**:
+there is no interval in which the look is spent but unrecorded, and a race resolves in the
+database rather than in application logic. An `UPDATE` trigger makes the captured evidence
+immutable; only the state may advance. The REST fallback **refuses** to claim the seal, because
+it cannot offer an atomic durable claim.
+
+This also closes **F3**: the non-consequential reads now precede the probability read, so no
+fallible call sits between consumption and the seal.
+
+### Migration-ordering audit, as instructed
+
+**The hazard is real.** `scripts/apply_migrations.py` has **no migration ledger**. It globs
+every `*.sql`, sorts, and applies them **all** in one transaction, relying only on each file
+being idempotent. There is no way to apply a subset — so authoring `0009` and running the
+default path would **force the deliberately unapplied `0008_analysis_run_details.sql`**,
+consuming a T4 that has never been authorized.
+
+An additive `--only NAME` selection was added for exactly this reason. **Default behaviour is
+unchanged**, and the script now prints what it will apply before applying it. Applying `0009`
+must use `--only`; a test asserts that path never pulls in `0008`.
+
+## 17. F9 — membership stays as pre-registered
+
+**CONFIRMS §9, adds the limitation.** Membership remains `T0 <= reference_close_utc < T_close`,
+unchanged for this tranche. It was fixed before any live read, and changing it now could move
+the result either way — which is retuning, whatever the motive.
+
+**The limitation, recorded rather than fixed.** This reading admits pairs whose
+`horizon_end_utc` falls after `T_close`, and therefore can incorporate outcomes that were not
+knowable at the close. A `horizon_end_utc <= T_close` population would exclude them. Both
+readings are defensible from the contract text, which does not uniquely define B1's "whole
+holdout". The count of admitted pairs resolving after the close is reported as a diagnostic, so
+the exposure is visible in the output rather than buried. **No retrospective change is made.**
+
+## 18. Repairs closing the remaining findings
+
+- **F4** — `recompute_from_snapshot` now verifies the pin, recomputes the evidence digest from
+  the stored rows and refuses a mismatch, and refuses when the recorded pin digest differs.
+  "Same evidence, same rules" is enforced rather than asserted.
+- **F5** — `evidence_snapshot_id` now covers the feature rows and the anomaly count, not just
+  the scored rows. A separate `result_inputs_digest` binds the evidence to the pin digest, the
+  contract instants and the timeframe set — kept separate so the evidence identity stays stable
+  when the evaluator changes, which is what makes drift detectable by comparison.
+- **F6** — the pin now includes `persistence/repository.py`, where the Tier-1 rule, the SQL, the
+  projection and the origin handling live. Omitting it left the code that **selects every
+  analysed row** outside the pin, which defeated the pin's purpose. Readiness now verifies the
+  pin itself, so the CLI path enforces the freeze ordering rather than relying on the workflow.
+- **F7** — dropped-window counts and the full per-cell diagnostic block are reported, and
+  `missed_attempts` is reported as **`UNMEASURED`** with its basis rather than as `0`. No
+  attempt ledger exists in the database; zero would have been a fabricated number.
+- **F8** — `per_row_d` normalizes both arms before scoring. §5A.4 defines Brier on normalized
+  probabilities and the ECE path normalizes internally, so scoring raw values treated a
+  tolerance-admitted row inconsistently between the two statistics.

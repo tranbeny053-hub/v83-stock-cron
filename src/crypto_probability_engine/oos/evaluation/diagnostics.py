@@ -15,7 +15,15 @@ from crypto_probability_engine.oos.evaluation.admission import (
     AdmissionResult,
     realized_label,
 )
-from crypto_probability_engine.oos.evaluation.lattice import window_count
+from crypto_probability_engine.oos.evaluation.lattice import (
+    assign_window_index,
+    window_count,
+)
+
+UNMEASURED = "UNMEASURED"
+"""§5A.10 requires a missed-attempt count. It is NOT derivable from the persisted ledger:
+the collector's attempt outcomes live in GitHub Actions run logs, not the database.
+Reporting 0 would be a fabricated number, so the absence is reported as absence."""
 
 ORDERED_COARSENINGS = (1, 2, 4)
 OUTCOME_LABELS = ("UP", "DOWN", "TIMEOUT")
@@ -73,7 +81,11 @@ def build(
             t0=t0,
             t_close=t_close,
             features_by_prediction=features_by_prediction,
-            missed_attempts=(missed_attempts or {}).get(timeframe, 0),
+            missed_attempts=(
+                UNMEASURED
+                if missed_attempts is None or timeframe not in missed_attempts
+                else missed_attempts[timeframe]
+            ),
         )
         for timeframe in timeframes
     }
@@ -100,7 +112,7 @@ def _timeframe_block(
     t0: datetime,
     t_close: datetime,
     features_by_prediction: Mapping[str, Mapping[str, Any]],
-    missed_attempts: int,
+    missed_attempts: int | str,
 ) -> dict[str, Any]:
     closes = sorted(row["reference_close_utc"] for row in rows)
     feature_values: dict[str, list[Any]] = {
@@ -121,7 +133,15 @@ def _timeframe_block(
         "k_pre_drop": {
             str(c): window_count(timeframe, c, t0, t_close) for c in ORDERED_COARSENINGS
         },
+        "usable_windows": _window_counts(timeframe, rows, t0=t0, t_close=t_close),
+        "dropped_windows": _dropped_counts(timeframe, rows, t0=t0, t_close=t_close),
         "missed_attempts": missed_attempts,
+        "missed_attempts_basis": (
+            "not derivable from the persisted ledger; collector attempt outcomes live in "
+            "workflow run logs. Reported as absent rather than as zero."
+            if missed_attempts == UNMEASURED
+            else "supplied by an attempt ledger"
+        ),
         "realized_label_distribution": distribution(
             [realized_label(row) for row in rows]
         ),
@@ -135,15 +155,53 @@ def _timeframe_block(
             int((closes[-1] - closes[0]).total_seconds()) if len(closes) > 1 else 0
         ),
         "per_symbol": {
-            symbol: {
-                "admitted_pairs": sum(
-                    1 for row in rows if row.get("normalized_symbol") == symbol
-                )
-            }
-            for symbol in sorted(
-                {str(row.get("normalized_symbol")) for row in rows}
-            )
+            symbol: _cell_block(timeframe, symbol, rows, t0=t0, t_close=t_close)
+            for symbol in sorted({str(row.get("normalized_symbol")) for row in rows})
         },
+    }
+
+
+def _usable(timeframe, rows, c, *, t0, t_close) -> int:
+    indices = {
+        assign_window_index(row["reference_close_utc"], timeframe, c, t0, t_close)
+        for row in rows
+    }
+    indices.discard(None)
+    return len(indices)
+
+
+def _window_counts(timeframe, rows, *, t0, t_close) -> dict[str, int]:
+    return {
+        str(c): _usable(timeframe, rows, c, t0=t0, t_close=t_close)
+        for c in ORDERED_COARSENINGS
+    }
+
+
+def _dropped_counts(timeframe, rows, *, t0, t_close) -> dict[str, int]:
+    return {
+        str(c): max(
+            0,
+            window_count(timeframe, c, t0, t_close)
+            - _usable(timeframe, rows, c, t0=t0, t_close=t_close),
+        )
+        for c in ORDERED_COARSENINGS
+    }
+
+
+def _cell_block(timeframe, symbol, rows, *, t0, t_close) -> dict[str, Any]:
+    """§5A.10 requires the diagnostics PER CELL, not only per timeframe."""
+
+    cell_rows = [row for row in rows if row.get("normalized_symbol") == symbol]
+    closes = sorted(row["reference_close_utc"] for row in cell_rows)
+    return {
+        "admitted_pairs": len(cell_rows),
+        "usable_windows": _window_counts(timeframe, cell_rows, t0=t0, t_close=t_close),
+        "dropped_windows": _dropped_counts(timeframe, cell_rows, t0=t0, t_close=t_close),
+        "realized_label_distribution": distribution(
+            [realized_label(row) for row in cell_rows]
+        ),
+        "first_reference_close_utc": closes[0].isoformat() if closes else None,
+        "last_reference_close_utc": closes[-1].isoformat() if closes else None,
     }
 
 

@@ -113,6 +113,20 @@ class PersistenceRepository(Protocol):
     def fetch_oos_feature_diagnostics(self) -> list[dict]:
         """Return the four persisted quant_v2 diagnostic values per OOS prediction."""
 
+    def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
+        """Atomically claim the one-look seal AND durably capture the raw evidence.
+
+        Returns ``True`` when this call claimed it, ``False`` when a seal already
+        existed. Claim and capture are ONE write: split apart, a crash between them
+        would spend the look and leave no record of it.
+        """
+
+    def fetch_section_5a_seal(self) -> dict | None:
+        """Return the durable seal row, or ``None`` when the look is unspent."""
+
+    def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+        """Advance the seal state. The captured evidence stays immutable."""
+
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction outcome row."""
 
@@ -196,6 +210,7 @@ class InMemoryPersistenceRepository:
         self._derivatives_snapshots: OrderedDict[str, dict] = OrderedDict()
         self._prediction_outcomes: OrderedDict[str, dict] = OrderedDict()
         self._watchlists: dict[str, OrderedDict[str, None]] = {}
+        self._section_5a_seal: dict | None = None
 
     def persistence_status(self) -> PersistenceStatus:
         return "STATELESS"
@@ -362,6 +377,21 @@ class InMemoryPersistenceRepository:
         return _oos_feature_diagnostics_from_rows(
             self._predictions.values(), self._feature_snapshots.get
         )
+
+    def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
+        if self._section_5a_seal is not None:
+            return False
+        self._section_5a_seal = dict(payload)
+        return True
+
+    def fetch_section_5a_seal(self) -> dict | None:
+        return None if self._section_5a_seal is None else dict(self._section_5a_seal)
+
+    def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+        if self._section_5a_seal is None:
+            raise RuntimeError("no section 5A seal to advance")
+        self._section_5a_seal["state"] = state
+        self._section_5a_seal["state_detail"] = detail
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         prediction_id = str(row.get("prediction_id", ""))
@@ -1057,6 +1087,25 @@ class SupabasePersistenceRepository:
     def fetch_oos_feature_diagnostics(self) -> list[dict]:
         return self._run_required_oos_read(
             "OOS feature diagnostics", _fetch_oos_feature_diagnostic_rows
+        )
+
+    def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
+        return bool(
+            self._run_required_oos_read(
+                "section 5A seal claim",
+                lambda cursor: _claim_section_5a_seal_row(cursor, payload),
+            )
+        )
+
+    def fetch_section_5a_seal(self) -> dict | None:
+        return self._run_required_oos_read(
+            "section 5A seal read", _fetch_section_5a_seal_row
+        )
+
+    def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+        self._run_required_oos_read(
+            "section 5A seal state",
+            lambda cursor: _advance_section_5a_seal_state_row(cursor, state, detail),
         )
 
     def _run_required_oos_read(self, label: str, operation):
@@ -1787,6 +1836,15 @@ class SupabaseRestRepository:
                     snapshots[str(row["prediction_id"])] = dict(row)
         return _oos_feature_diagnostics_from_rows(rows, snapshots.get)
 
+    def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
+        raise RuntimeError(_SEAL_POSTGRES_ONLY)
+
+    def fetch_section_5a_seal(self) -> dict | None:
+        raise RuntimeError(_SEAL_POSTGRES_ONLY)
+
+    def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+        raise RuntimeError(_SEAL_POSTGRES_ONLY)
+
     def _fetch_oos_outcome_labels(self, prediction_ids: list[str]) -> dict[str, dict]:
         identifiers = [identifier for identifier in prediction_ids if identifier]
         if not identifiers:
@@ -2446,6 +2504,78 @@ def _fetch_oos_feature_diagnostic_rows(cursor) -> list[dict]:
         )
         snapshots[identifier] = {"snapshot_payload": payload}
     return _oos_feature_diagnostics_from_rows(predictions, snapshots.get)
+
+
+_SEAL_POSTGRES_ONLY = (
+    "the section 5A one-look seal requires the Postgres authority; the REST fallback "
+    "cannot provide an atomic durable claim and must never be used to spend the look"
+)
+
+
+def _claim_section_5a_seal_row(cursor, payload: Mapping[str, Any]) -> bool:
+    """One statement: claim the singleton and store the raw evidence together."""
+
+    cursor.execute(
+        """
+        INSERT INTO public.section_5a_evaluation_seal (
+          seal_id, sealed_at_utc, evidence_snapshot_id, result_inputs_digest,
+          evaluator_pin_digest, contract_instants, snapshot_payload, state
+        ) VALUES (
+          'SINGLETON', %(sealed_at_utc)s, %(evidence_snapshot_id)s,
+          %(result_inputs_digest)s, %(evaluator_pin_digest)s,
+          %(contract_instants)s::jsonb, %(snapshot_payload)s::jsonb,
+          'SEALED_RAW_CAPTURED'
+        )
+        ON CONFLICT (seal_id) DO NOTHING
+        RETURNING seal_id
+        """,
+        {
+            "sealed_at_utc": payload["sealed_at_utc"],
+            "evidence_snapshot_id": payload["evidence_snapshot_id"],
+            "result_inputs_digest": payload["result_inputs_digest"],
+            "evaluator_pin_digest": payload["evaluator_pin_digest"],
+            "contract_instants": json.dumps(
+                payload["contract_instants"], sort_keys=True, allow_nan=False
+            ),
+            "snapshot_payload": json.dumps(
+                payload["snapshot_payload"], sort_keys=True, allow_nan=False
+            ),
+        },
+    )
+    return cursor.fetchone() is not None
+
+
+def _fetch_section_5a_seal_row(cursor):
+    cursor.execute(
+        """
+        SELECT seal_id, sealed_at_utc, evidence_snapshot_id, result_inputs_digest,
+               evaluator_pin_digest, contract_instants, snapshot_payload, state,
+               state_detail
+        FROM public.section_5a_evaluation_seal
+        WHERE seal_id = 'SINGLETON'
+        """
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    columns = (
+        "seal_id", "sealed_at_utc", "evidence_snapshot_id", "result_inputs_digest",
+        "evaluator_pin_digest", "contract_instants", "snapshot_payload", "state",
+        "state_detail",
+    )
+    return dict(zip(columns, row, strict=True))
+
+
+def _advance_section_5a_seal_state_row(cursor, state: str, detail: str) -> bool:
+    cursor.execute(
+        """
+        UPDATE public.section_5a_evaluation_seal
+        SET state = %(state)s, state_detail = %(detail)s, updated_at_utc = now()
+        WHERE seal_id = 'SINGLETON'
+        """,
+        {"state": state, "detail": detail},
+    )
+    return True
 
 
 def _fetch_oos_t0_row(cursor):

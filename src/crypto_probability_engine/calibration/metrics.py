@@ -109,6 +109,32 @@ def top_prediction_label(probs: dict[OutcomeLabel, float]) -> OutcomeLabel:
     return best
 
 
+def normalize_probabilities(
+    probabilities: Mapping[OutcomeLabel, float],
+) -> dict[OutcomeLabel, float] | None:
+    """Return probabilities divided by their sum, or ``None`` when unusable.
+
+    THE SINGLE NORMALIZER. ``brier_score`` is defined against one-hot on NORMALIZED
+    probabilities (V1_QUANT_CONTRACT §5A.4), and the calibration enumeration normalizes
+    internally, so any caller scoring raw values would treat a tolerance-admitted row
+    differently from the calibration path. Exposed for exactly that reason.
+    """
+
+    raw: dict[OutcomeLabel, float] = {}
+    for label_name in OUTCOME_LABELS:
+        try:
+            value = float(probabilities[label_name])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not math.isfinite(value) or value < 0.0 or value > 1.0:
+            return None
+        raw[label_name] = value
+    total = sum(raw.values())
+    if not math.isfinite(total) or total <= 0.0:
+        return None
+    return {label_name: raw[label_name] / total for label_name in OUTCOME_LABELS}
+
+
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any] | None:
     label = str(row.get("realized_label", ""))
     if label not in OUTCOME_LABELS:

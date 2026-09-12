@@ -25,6 +25,11 @@ _REUSED_DEFINITIONS = (
     "src/crypto_probability_engine/calibration/metrics.py",
     "src/crypto_probability_engine/calibration/schemas.py",
     "src/crypto_probability_engine/utils/invariants.py",
+    # F6: the Tier-1 qualification rule, the SQL, the outcome join, the probability
+    # projection and the origin handling all live here, so this file SELECTS EVERY ROW
+    # the evaluator ever sees. Omitting it left the population choosable by unpinned
+    # code, which defeated the pin's entire purpose.
+    "src/crypto_probability_engine/persistence/repository.py",
 )
 
 
