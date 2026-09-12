@@ -5,6 +5,9 @@ already cannot parse the existing collector workflow, so these contracts are ass
 on the file text — the same approach ``tests/scripts/test_source_integrity_guard.py``
 takes. The trigger extraction below is deliberately small and exact rather than a
 general YAML parser.
+
+This file asserts nothing about the collector workflow's CONTENT. Doing so would couple
+this lane to the separate lane that stops the collector.
 """
 
 from __future__ import annotations
@@ -13,7 +16,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EVALUATION = ROOT / ".github/workflows/section-5a-evaluation.yml"
-COLLECTOR = ROOT / ".github/workflows/oos-pair-evidence.yml"
+
+# A literal fixture, deliberately NOT the live collector workflow. Asserting on the
+# collector's content here would couple this lane to the independent lane that stops
+# the collector, and would fail the moment that lane lands.
+_TRIGGER_FIXTURE = """name: Example
+
+"on":
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+"""
 
 
 def trigger_keys(text: str) -> set[str]:
@@ -42,10 +62,7 @@ def trigger_keys(text: str) -> set[str]:
 def test_trigger_extraction_is_itself_correct() -> None:
     """Guard the guard: a helper that silently returned nothing would pass everything."""
 
-    assert trigger_keys(COLLECTOR.read_text(encoding="utf-8")) == {
-        "schedule",
-        "workflow_dispatch",
-    }
+    assert trigger_keys(_TRIGGER_FIXTURE) == {"schedule", "workflow_dispatch"}
 
 
 def test_evaluation_workflow_has_no_schedule_trigger() -> None:
@@ -71,9 +88,3 @@ def test_evaluation_workflow_requires_the_confirmation_token_to_be_passed() -> N
     text = EVALUATION.read_text(encoding="utf-8")
     assert "--confirm" in text
     assert "CONSUME-SECTION-5A-ONE-LOOK" in text
-
-
-def test_this_lane_leaves_the_collector_schedule_alone() -> None:
-    """Stopping the collector is an independent lane needing its own authorization."""
-
-    assert "schedule" in trigger_keys(COLLECTOR.read_text(encoding="utf-8"))
