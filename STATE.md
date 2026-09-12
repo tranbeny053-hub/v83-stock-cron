@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-12 (POST-T_close — evaluator NOT_VERIFIED by Codex; one-look NOT consumed)
+Updated: 2026-09-12 (POST-T_close — repairs landed; RE-VERIFICATION INCOMPLETE; one-look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -339,7 +339,35 @@ CODEX_VERIFICATION=COMPLETE, VERDICT **NOT_VERIFIED**. task-805 ran 2026-09-12 i
   fetched artifact), F9 (membership stays as pre-registered, or the alternative is
   acknowledged). Codex marks changing membership or the ECE metric NOT ADOPTABLE for this
   tranche.
-CODEX_PENDING=NONE — task-805 consumed. Repairs are NOT started, pending owner decisions.
+CODEX_REVERIFICATION=INCOMPLETE — quota exhausted mid-run at 233,412 tokens (resets ~23:55
+  local). Run 2 wrote THREE adversarial probe files but produced NEITHER a Part III report NOR
+  a fresh result JSON. HARNESS HAZARD RECORDED: delegate.sh reported DELEGATE=OK because a
+  STALE non-empty result-805.json from run 1 was still on disk; the run-1 verdict could easily
+  have been mistaken for a run-2 verdict. Timestamps are the tell (result 19:18, log 20:01).
+  THE PARTIAL OUTPUT IS STILL DECISIVE: the probes pass, and several pass by ASSERTING THE
+  CURRENT DEFECTIVE BEHAVIOUR. They are preserved in .work/805/ and DELIBERATELY NOT added to
+  tests/, because a test that asserts a defect would fight its own repair.
+  SEVEN NEW FINDINGS, all siblings of the classes repaired in the first round:
+  G1 CRITICAL — Postgres NUMERIC arrives as Decimal, and _canonical_json's default handles only
+    datetime, so evidence_snapshot_id RAISES. It is computed after the probability read and
+    before the seal claim, so ON THE REAL DATABASE THE FIRST CONSUMPTION WOULD HAVE READ THE
+    HOLDOUT AND CRASHED WITH NO SEAL. The F3 repair was structurally right and defeated by the
+    actual data type. Confirmed by Opus directly.
+  G2 CRITICAL — deleting evaluator_pin_digest from a snapshot bypasses the drift check, because
+    the guard reads `if recorded_pin is not None`. Absence is not treated as tampering.
+  G3 HIGH — two concurrent consumptions both READ the probabilities before one loses the
+    singleton INSERT race, so the look is spent twice though only one seals.
+  G4 HIGH — scripts/evaluate_section_5a.py is NOT pinned and can pass verify_pin=False.
+  G5 MEDIUM — the feature-diagnostics query has no ORDER BY, so snapshot identity is
+    nondeterministic; feature-row order changes the digest without changing meaning.
+  G6 MEDIUM — F7 is only partially closed; mandatory per-cell diagnostics remain incomplete.
+  G7 MEDIUM — _oos_arm accepts an explicit `arm` field the Postgres SQL cannot see, so the
+    in-memory and Postgres Tier-1 qualifiers are not exactly equivalent.
+CODEX_PENDING=task-805 run 3 (Part III unfinished). Repairs for G1-G7 NOT started.
+ESCALATION=Two repair rounds on the seal/capture causal class have now both been defeated by
+  siblings. CLAUDE.md bounds this at two attempts per causal class, then escalate. Stopping
+  here rather than authoring a third unilateral round while independent verification is
+  unavailable.
   Fire it the moment quota returns (exhausted 2026-09-12, resets ~17:39 local). It is written
   so it CANNOT be satisfied by agreeing: 20 named mutations that must each break the suite,
   independent re-derivation of every known answer from the contract rather than from the tests,
@@ -372,8 +400,9 @@ DEPLOY_PROHIBITED=EXTENDED BY OWNER 2026-09-12. The original prohibition was sco
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=OWNER DECISIONS on F1, F2 and F9, then one repair batch, then re-verification, then
-  a consolidated review, then a T3 request. NO T3 REQUEST IS MADE: NOT_VERIFIED withdraws it.
+NEXT_ACTION=OWNER DECISION on how to proceed after two defeated repair rounds. NO T3 REQUEST
+  IS MADE and no consolidated review is offered as final: the precondition "all findings
+  repaired and reverified" is not met.
   DO NOT run readiness or consumption with this implementation — F6 alone means the code that
   selects every analysed row is outside the pin, so the pre-registration's freeze-ordering
   guarantee does not currently hold.
