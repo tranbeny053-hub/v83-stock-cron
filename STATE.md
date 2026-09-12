@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-12 (POST-T_close — evaluator BUILT, awaiting Codex verification; one-look NOT consumed)
+Updated: 2026-09-12 (POST-T_close — evaluator NOT_VERIFIED by Codex; one-look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -313,7 +313,33 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
   Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
   from main, still frozen.
-CODEX_PENDING=ONE TASK QUEUED — .work/task-805.md, INDEPENDENT ADVERSARIAL VERIFICATION.
+CODEX_VERIFICATION=COMPLETE, VERDICT **NOT_VERIFIED**. task-805 ran 2026-09-12 in a DETACHED
+  worktree at c99f279, so the branch ref never moved and no production byte survives the
+  mutation campaign. Report preserved at .work/805/5a-verification.md with two new adversarial
+  test files. DO NOT SPEND THE ONE LOOK WITH THIS IMPLEMENTATION.
+  POSITIVE SIGNAL: all 20 named mutations were caught RED. Two (B2 and C tie handling) were
+  caught only by the digest pin and lacked a direct behavioural assertion; Codex added one.
+  NINE FINDINGS. Five CRITICAL: F1 a reported PASS does not establish §5A's "no FAIL" because
+  three of four predicates are unverifiable, and my pre-registration §6 treated unknown as
+  sufficient — the exact "makes PASS easier" class I asked Codex to hunt, and I committed it.
+  F2 the one-shot seal is FILESYSTEM-LOCAL while the workflow runs on a fresh runner each
+  dispatch, so a second consumption succeeds — "structurally impossible" was true locally and
+  false in the deployment I designed. F3 two fallible repository reads sit between the
+  probability read and the snapshot write, so a crash there spends the look and leaves NO seal.
+  F4 H1+H2 confirmed, plus snapshot tampering accepted on recompute. F6 the pin OMITS
+  persistence/repository.py, where the Tier-1 rule, SQL, projection and origin handling live —
+  every row the evaluator sees is chosen by unpinned code.
+  Three HIGH: F5 snapshot id omits result-determining content; F7 diagnostics lack dropped-window
+  and per-cell detail and missed_attempts silently defaults to 0, a fabricated number; F9
+  reference-close membership can admit post-close outcomes. One MEDIUM: F8 Brier scores RAW
+  probabilities while ECE normalizes, so a tolerance-admitted row is treated inconsistently.
+  ALL VERIFIED INDEPENDENTLY BY OPUS on F3, F6, F7 and F8 by direct inspection; they hold.
+  THREE FINDINGS ARE OWNER DECISIONS, NOT REPAIRS: F1 (how the terminal state may be named
+  given unverifiable FAIL), F2 (where a durable cross-run seal lives — git, database, or
+  fetched artifact), F9 (membership stays as pre-registered, or the alternative is
+  acknowledged). Codex marks changing membership or the ECE metric NOT ADOPTABLE for this
+  tranche.
+CODEX_PENDING=NONE — task-805 consumed. Repairs are NOT started, pending owner decisions.
   Fire it the moment quota returns (exhausted 2026-09-12, resets ~17:39 local). It is written
   so it CANNOT be satisfied by agreeing: 20 named mutations that must each break the suite,
   independent re-derivation of every known answer from the contract rather than from the tests,
@@ -346,10 +372,19 @@ DEPLOY_PROHIBITED=EXTENDED BY OWNER 2026-09-12. The original prohibition was sco
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=FIRE .work/task-805.md when Codex quota returns, then act on its findings, then
-  ONE consolidated MAX diff review, then return a single T3 batch request. DO NOT run the
-  evaluation: the one look stays unconsumed until verification returns clean, the owner
-  authorizes, and the run happens in GitHub Actions where the secret lives.
+NEXT_ACTION=OWNER DECISIONS on F1, F2 and F9, then one repair batch, then re-verification, then
+  a consolidated review, then a T3 request. NO T3 REQUEST IS MADE: NOT_VERIFIED withdraws it.
+  DO NOT run readiness or consumption with this implementation — F6 alone means the code that
+  selects every analysed row is outside the pin, so the pre-registration's freeze-ordering
+  guarantee does not currently hold.
+PARALLEL_LANES_READY=Four local branches from exact d52e9ae, none pushed, all verify PASS:
+  fix/r202-provider-http-bounds ce2dc44 (1137) and fix/a203-candle-boundaries 27e81e2 (1136),
+  each replayed independently onto current main after being 63 commits stale; their ephemeral
+  composition verified 1141 = 1132+5+4 and was DESTROYED, and integration/b11-combined is
+  unused as a release candidate. Plus docs/post-one-look-dependency-map 9a7fe7b and
+  docs/r2-zero-drift-gate-and-display aeb7133. NOTE: A203 makes candle validation strictly
+  stricter (exact adjacency, future closes rejected), so previously tolerated provider data
+  will now fail closed — an operational change, not just a safety margin.
   ORDERING IS THE SAFETY PROPERTY (docs/SECTION_5A_EVALUATION_PREREGISTRATION.md §2): synthetic
   proof, then diff review, then pin commit, and ONLY THEN may readiness touch live data.
   Readiness is repeatable and cannot consume the look, because in readiness mode the projection
