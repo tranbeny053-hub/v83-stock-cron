@@ -237,3 +237,116 @@ date, so the cause is GitHub Actions scheduled-workflow throttling, not the coll
 evidence about the **frame**, not the candidate, and can never create a PASS. A NOT PASS on
 attainability would be correct self-gating, and is recorded here as an anticipated and
 acceptable outcome so that it cannot later be treated as a surprise requiring a remedy.
+
+---
+
+# Addendum, 2026-09-12 — four semantics pinned before implementation
+
+Added after the §5A re-audit and before any of the implementation it governs. Each item below
+resolves something §5A leaves undefined. **None of them is a new acceptance rule**, and each is
+checked against one test: *can this choice ever make PASS easier to reach?* If it could, it
+would be an amendment to the contract and would need the owner. Every resolution here is
+neutral or strictly stricter, and §13 records that check per item.
+
+## 9. `T_close` inclusion semantics
+
+**Holdout membership is `T0 <= reference_close_utc < T_close`** — half-open, on
+`reference_close_utc`, matching §5A.6's "rows are assigned by `reference_close_utc`" and the
+half-open convention the lattice already uses. A row whose `reference_close_utc` is exactly
+`T_close` is **excluded**.
+
+This is load-bearing because the collector **kept running after `T_close`**: it fired at
+05:55Z on 2026-09-12, nearly two hours past the close. Those rows are outside the holdout and
+must not enter any statistic. Without an explicit rule they would silently enter B1, whose
+population §5A.7 defines as "the whole holdout for that timeframe" rather than by the lattice.
+
+For the lattice this rule is **already implied and changes nothing**: with
+`j_max = floor((T_close - T0 - 2*E_t) / P_c)`, the last window ends at
+`j_max*P_c + E_t <= T_close - E_t`, so no window ever reaches `T_close`. The rule therefore
+binds only B1's wider population, which is exactly where it was missing.
+
+**Resolution timing is deliberately NOT a membership criterion.** Membership is fixed by a
+quantity known at prediction time. Bounding by `horizon_end_utc` or by resolution time instead
+would let the analysed population depend on when the resolver happened to run — the sampling
+frame would then be shaped by infrastructure timing rather than by the contract.
+
+Because a row admitted under this rule may nonetheless have resolved after the declared close,
+the evaluator **reports** the count of admitted pairs with `horizon_end_utc > T_close`, per
+timeframe and per cell. It is a §5A.10-style diagnostic: reported always, gating never.
+
+## 10. Zero and subset ECE behaviour
+
+Both of these are review findings on already-committed code (see `0e4c8e8`), pinned here as
+required behaviour rather than left to implementation taste.
+
+- **`ece([])` raises.** It must never return `0.0`. On an empty input both arms would tie and
+  B1 would read as "non-degradation satisfied" on no evidence at all.
+- **`ece(rows)` raises when its population is a strict subset of `rows`.** `compute_calibration_metrics`
+  silently drops rows its normalizer rejects, so the bucket counts can total fewer than the
+  input. Scoring a one-shot decision over a silently narrowed population is a change of
+  estimand. The evaluator asserts the totals match and raises on any shortfall.
+- **A timeframe with zero Tier-2 admitted pairs is an explicit NOT PASS**, decided and reported
+  *before* A or B is attempted, with the reason stated.
+
+## 11. Immutable evidence-snapshot identity
+
+The consumption run computes `evidence_snapshot_id` — SHA-256 over a canonical, deterministically
+sorted serialization of the **raw** evidence rows, taken before any statistic touches them.
+The same identity is computed in readiness mode.
+
+It does three things:
+
+1. **Binds a result to its evidence.** A recorded verdict is meaningless without knowing exactly
+   which rows produced it; the id makes that checkable rather than asserted.
+2. **Detects drift between readiness and consumption.** The collector is still running, so the
+   evidence can change under us. A differing id between a readiness run and the consumption run
+   is surfaced loudly.
+3. **Makes recomputation possible without a second look** (see §12).
+
+## 12. One-shot failure states
+
+**The look is consumed the moment the holdout's probabilities are read** — not when a result is
+successfully produced. A crash after reading has still spent it, and pretending otherwise would
+be the exact self-deception §5A exists to prevent. The seal is therefore armed immediately after
+the raw capture and **before** any statistic runs.
+
+States, each recorded in the artifact:
+
+    NOT_STARTED           no consumption has begun
+    SEALED_RAW_CAPTURED   raw evidence captured and sealed; the look IS consumed
+    COMPLETE              statistics computed and the result written
+    SEALED_NO_RESULT      raw captured and sealed, but the statistics failed
+
+`SEALED_NO_RESULT` is recoverable **without a second look**, and this is the whole point of
+doctrine rule 1 ("a parser failure must never be a reason to repeat a consequential action").
+The evaluator provides a recompute path that reads the immutable snapshot from disk, performs
+**no database access whatsoever**, and may be run any number of times. Fixing a statistics
+defect therefore costs a recomputation, never the holdout.
+
+A second *consumption* run is refused unconditionally while any snapshot exists.
+
+## 13. Invented-nothing check, per item
+
+| Pinned item | Could it make PASS easier? |
+|---|---|
+| Holdout `[T0, T_close)` | No — strictly narrows the population by excluding post-close rows |
+| Lattice unchanged by §9 | No — the last window already ends at or before `T_close - E_t` |
+| `horizon_end > T_close` count | No — reported only, gates nothing |
+| `ece([])` raises | No — removes an outcome where B1 held on no evidence |
+| `ece` subset raises | No — removes a silently narrowed, unrepresentative population |
+| Zero admitted → NOT PASS | No — that is the stricter outcome |
+| Snapshot identity | No — records evidence; computes no statistic |
+| Seal before statistics | No — makes consumption harder to repeat, never easier |
+| Recompute from snapshot | No — same evidence, same rules, no new read |
+
+## 14. Authorship and pending independent verification
+
+The implementation of the paired read, admission, decision, diagnostics, runner and guards was
+**authored by Claude Opus**, not by Codex, because Codex quota was exhausted and the owner chose
+not to wait. The owner preserved review independence by **reordering** rather than dropping it:
+Codex will **independently verify** this work — adversarially, not as a rubber stamp — before
+any live read, any T3, and the final consolidated review.
+
+Until that verification completes, the work carries the marker
+**`CLAUDE_AUTHORED_PENDING_CODEX_INDEPENDENT_VERIFICATION`**, and it is not eligible for a live
+readiness run, a pin that authorizes one, a push, or a merge.
