@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-12 (POST-T_close — repairs landed; RE-VERIFICATION INCOMPLETE; one-look NOT consumed)
+Updated: 2026-09-12 (POST-T_close — evaluator FROZEN pending Codex-first red team; one-look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -363,7 +363,30 @@ CODEX_REVERIFICATION=INCOMPLETE — quota exhausted mid-run at 233,412 tokens (r
   G6 MEDIUM — F7 is only partially closed; mandatory per-cell diagnostics remain incomplete.
   G7 MEDIUM — _oos_arm accepts an explicit `arm` field the Postgres SQL cannot see, so the
     in-memory and Postgres Tier-1 qualifiers are not exactly equivalent.
-CODEX_PENDING=task-805 run 3 (Part III unfinished). Repairs for G1-G7 NOT started.
+EVALUATOR_FROZEN=feat/5a-evaluator@2b31832. NO third unilateral repair. Owner accepted the
+  escalation and inverted the loop: Codex authors FAILING tests for G1-G7 FIRST, against the
+  frozen tree, with no production-code change; only then may Opus repair; then a COMPLETELY
+  FRESH full adversarial verification, not a re-run of those targeted tests; then one
+  consolidated MAX review.
+CODEX_PENDING=task-806 — AUTHOR FAILING TESTS ONLY. Ready to fire the moment quota returns
+  (~23:55 local). Spec is docs/SECTION_5A_G1_G7_ACCEPTANCE_MATRIX.md, which states each
+  finding as an OBSERVABLE PROPERTY and deliberately prescribes no implementation, so the
+  repair cannot inherit the blind spot the pass exists to remove. Governing rule, drawn from
+  run 2's mistake: every test must be RED now and GREEN when repaired, never a
+  "documents-the-defect" test that fights its own fix. A property that already holds is
+  reported REFUTED, which is an equally valid result.
+  RED-TEAM WORKTREE PREPARED at scratchpad/redteam-806, detached at the frozen 2b31832 with
+  exactly three deliberate deviations, none of them the implementation under test: the
+  hardened delegate.sh, its tests, and the acceptance matrix. verify PASS 1331.
+STALE_RESULT_HAZARD=CLOSED on branch chore/delegate-fresh-result-identity. delegate.sh's
+  completion check was `[ ! -s "$RESULT" ]`, which a leftover file from an earlier run of the
+  same task satisfies — that is how run 2 reported OK while writing no result, leaving run 1's
+  verdict looking like run 2's. It now ROTATES any existing result and log to .prev-<ts>
+  (preserved, not destroyed) and afterwards requires the result to be no older than the
+  invocation. Proven by driving the real script with a stub codex, not by asserting on its
+  text; the functional test immediately caught that my first `-nt` comparison rejected honest
+  fast runs at filesystem timestamp granularity. task-806 also uses an identity never used
+  before, so staleness is impossible twice over.
 ESCALATION=Two repair rounds on the seal/capture causal class have now both been defeated by
   siblings. CLAUDE.md bounds this at two attempts per causal class, then escalate. Stopping
   here rather than authoring a third unilateral round while independent verification is
@@ -406,6 +429,11 @@ NEXT_ACTION=OWNER DECISION on how to proceed after two defeated repair rounds. N
   DO NOT run readiness or consumption with this implementation — F6 alone means the code that
   selects every analysed row is outside the pin, so the pre-registration's freeze-ordering
   guarantee does not currently hold.
+NON_EVALUATOR_COMPOSITION=All SEVEN non-evaluator lanes merge cleanly onto d52e9ae and verify
+  PASS at 1150 = 1132 + 5 (r202) + 4 (a203) + 5 (collector) + 4 (delegate). Arithmetic
+  reconciles exactly, so no lane's tests are swallowed or duplicated. The composition was
+  EPHEMERAL and has been destroyed; it is not a release candidate. This set is independent of
+  the §5A result AND of the frozen evaluator, so it could form a T3 batch on its own timing.
 PARALLEL_LANES_READY=Four local branches from exact d52e9ae, none pushed, all verify PASS:
   fix/r202-provider-http-bounds ce2dc44 (1137) and fix/a203-candle-boundaries 27e81e2 (1136),
   each replayed independently onto current main after being 63 commits stale; their ephemeral
