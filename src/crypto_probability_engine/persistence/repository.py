@@ -100,6 +100,19 @@ class PersistenceRepository(Protocol):
     def fetch_oos_t0(self) -> datetime | None:
         """Return the first exact, same-run baseline/candidate OOS pair close."""
 
+    def fetch_oos_paired_evidence(self, *, include_probabilities: bool) -> list[dict]:
+        """Return Tier-1 qualifying OOS pairs with outcomes joined.
+
+        ``include_probabilities=False`` omits every probability field so a readiness
+        run cannot compute a score at all.
+        """
+
+    def count_oos_origin_anomalies(self) -> int:
+        """Count OOS-namespace rows whose prediction_origin is unexpected."""
+
+    def fetch_oos_feature_diagnostics(self) -> list[dict]:
+        """Return the four persisted quant_v2 diagnostic values per OOS prediction."""
+
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction outcome row."""
 
@@ -334,6 +347,21 @@ class InMemoryPersistenceRepository:
 
     def fetch_oos_t0(self) -> datetime | None:
         return _oos_t0_from_rows(self._predictions.values())
+
+    def fetch_oos_paired_evidence(self, *, include_probabilities: bool) -> list[dict]:
+        return _oos_paired_evidence_from_rows(
+            self._predictions.values(),
+            self._prediction_outcomes.get,
+            include_probabilities=include_probabilities,
+        )
+
+    def count_oos_origin_anomalies(self) -> int:
+        return _oos_origin_anomalies_from_rows(self._predictions.values())
+
+    def fetch_oos_feature_diagnostics(self) -> list[dict]:
+        return _oos_feature_diagnostics_from_rows(
+            self._predictions.values(), self._feature_snapshots.get
+        )
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         prediction_id = str(row.get("prediction_id", ""))
@@ -1012,6 +1040,25 @@ class SupabasePersistenceRepository:
         value = _first_db_value(row)
         return _to_utc_datetime(value) if value is not None else None
 
+    def fetch_oos_paired_evidence(self, *, include_probabilities: bool) -> list[dict]:
+        return self._run_required_oos_read(
+            "OOS paired evidence",
+            lambda cursor: _fetch_oos_paired_evidence_rows(
+                cursor, include_probabilities=include_probabilities
+            ),
+        )
+
+    def count_oos_origin_anomalies(self) -> int:
+        row = self._run_required_oos_read(
+            "OOS origin anomalies", _fetch_oos_origin_anomaly_row
+        )
+        return int(_first_db_value(row) or 0)
+
+    def fetch_oos_feature_diagnostics(self) -> list[dict]:
+        return self._run_required_oos_read(
+            "OOS feature diagnostics", _fetch_oos_feature_diagnostic_rows
+        )
+
     def _run_required_oos_read(self, label: str, operation):
         if not self.maybe_can_attempt():
             raise RuntimeError(f"SUPABASE_POSTGRES {label} failed: circuit open")
@@ -1687,6 +1734,81 @@ class SupabaseRestRepository:
         )
         return _oos_t0_from_rows(rows)
 
+    def fetch_oos_paired_evidence(self, *, include_probabilities: bool) -> list[dict]:
+        select = (
+            "prediction_id,run_id,normalized_symbol,timeframe,reference_close_utc,"
+            "predicted_at_utc,horizon_end_utc,prediction_origin,methodology_version"
+        )
+        if include_probabilities:
+            select += "," + ",".join(OOS_PROBABILITY_FIELDS)
+        rows = self._required_oos_rows(
+            params={"select": select, "run_id": "like.oosb-*"},
+            label="OOS paired evidence",
+        )
+        outcomes = self._fetch_oos_outcome_labels(
+            [str(row.get("prediction_id", "")) for row in rows]
+        )
+        return _oos_paired_evidence_from_rows(
+            rows, outcomes.get, include_probabilities=include_probabilities
+        )
+
+    def count_oos_origin_anomalies(self) -> int:
+        rows = self._required_oos_rows(
+            params={"select": "run_id,prediction_origin", "run_id": "like.oosb-*"},
+            label="OOS origin anomalies",
+        )
+        return _oos_origin_anomalies_from_rows(rows)
+
+    def fetch_oos_feature_diagnostics(self) -> list[dict]:
+        rows = self._required_oos_rows(
+            params={
+                "select": (
+                    "prediction_id,run_id,normalized_symbol,timeframe,reference_close_utc"
+                ),
+                "run_id": "like.oosb-*",
+            },
+            label="OOS feature diagnostics",
+        )
+        identifiers = [str(row.get("prediction_id", "")) for row in rows]
+        status, snapshot_rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "prediction_feature_snapshots",
+                params={
+                    "select": "prediction_id,snapshot_payload",
+                    "prediction_id": f"in.({_postgrest_csv(identifiers)})",
+                },
+            )
+        )
+        snapshots: dict[str, dict] = {}
+        if status != "UNAVAILABLE" and isinstance(snapshot_rows, list):
+            for row in snapshot_rows:
+                if isinstance(row, Mapping) and row.get("prediction_id"):
+                    snapshots[str(row["prediction_id"])] = dict(row)
+        return _oos_feature_diagnostics_from_rows(rows, snapshots.get)
+
+    def _fetch_oos_outcome_labels(self, prediction_ids: list[str]) -> dict[str, dict]:
+        identifiers = [identifier for identifier in prediction_ids if identifier]
+        if not identifiers:
+            return {}
+        status, rows = self._run_rest(
+            lambda: self._request(
+                "GET",
+                "prediction_outcomes",
+                params={
+                    "select": "prediction_id,realized_label",
+                    "prediction_id": f"in.({_postgrest_csv(identifiers)})",
+                },
+            )
+        )
+        if status == "UNAVAILABLE" or not isinstance(rows, list):
+            raise RuntimeError("SUPABASE_REST OOS outcome labels read failed")
+        return {
+            str(row["prediction_id"]): dict(row)
+            for row in rows
+            if isinstance(row, Mapping) and row.get("prediction_id")
+        }
+
     def _required_oos_rows(
         self, *, params: Mapping[str, str], label: str
     ) -> list[dict]:
@@ -2226,6 +2348,104 @@ def _fetch_oos_occasion_count_row(
         },
     )
     return cursor.fetchone()
+
+
+OOS_EVIDENCE_BASE_COLUMNS = (
+    "prediction_id",
+    "run_id",
+    "normalized_symbol",
+    "timeframe",
+    "reference_close_utc",
+    "predicted_at_utc",
+    "horizon_end_utc",
+    "prediction_origin",
+    "methodology_version",
+)
+
+
+def _fetch_oos_prediction_rows(cursor, *, include_probabilities: bool) -> list[dict]:
+    """Read every OOS-namespace prediction row, with or without probabilities.
+
+    Columns are zipped against an explicit tuple rather than relying on a row factory,
+    so the projection is identical whatever psycopg returns.
+    """
+
+    columns = list(OOS_EVIDENCE_BASE_COLUMNS)
+    if include_probabilities:
+        columns.extend(OOS_PROBABILITY_FIELDS)
+    cursor.execute(
+        f"""
+        SELECT {", ".join(columns)}
+        FROM public.predictions
+        WHERE run_id ~ '^oosb-[0-9a-f]{{32}}$'
+        """
+    )
+    return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+
+
+def _fetch_oos_outcome_labels(cursor) -> dict[str, Any]:
+    cursor.execute(
+        """
+        SELECT o.prediction_id, o.realized_label
+        FROM public.prediction_outcomes AS o
+        JOIN public.predictions AS p ON p.prediction_id = o.prediction_id
+        WHERE p.run_id ~ '^oosb-[0-9a-f]{32}$'
+        """
+    )
+    return {
+        str(row[0]): {"realized_label": row[1]} for row in cursor.fetchall()
+    }
+
+
+def _fetch_oos_paired_evidence_rows(cursor, *, include_probabilities: bool) -> list[dict]:
+    predictions = _fetch_oos_prediction_rows(
+        cursor, include_probabilities=include_probabilities
+    )
+    outcomes = _fetch_oos_outcome_labels(cursor)
+    return _oos_paired_evidence_from_rows(
+        predictions, outcomes.get, include_probabilities=include_probabilities
+    )
+
+
+def _fetch_oos_origin_anomaly_row(cursor):
+    cursor.execute(
+        """
+        SELECT count(*)
+        FROM public.predictions
+        WHERE run_id ~ '^oosb-[0-9a-f]{32}$'
+          AND (prediction_origin IS DISTINCT FROM %(expected_origin)s)
+        """,
+        {"expected_origin": OOS_EXPECTED_ORIGIN},
+    )
+    return cursor.fetchone()
+
+
+def _fetch_oos_feature_diagnostic_rows(cursor) -> list[dict]:
+    cursor.execute(
+        """
+        SELECT p.prediction_id, p.normalized_symbol, p.timeframe,
+               p.reference_close_utc, s.snapshot_payload
+        FROM public.predictions AS p
+        LEFT JOIN public.prediction_feature_snapshots AS s
+               ON s.prediction_id = p.prediction_id
+        WHERE p.run_id ~ '^oosb-[0-9a-f]{32}$'
+        """
+    )
+    predictions: list[dict] = []
+    snapshots: dict[str, dict] = {}
+    for prediction_id, symbol, timeframe, reference_close, payload in cursor.fetchall():
+        identifier = str(prediction_id)
+        predictions.append(
+            {
+                "prediction_id": identifier,
+                "run_id": "oosb-" + "0" * 32,
+                "normalized_symbol": symbol,
+                "timeframe": timeframe,
+                "reference_close_utc": reference_close,
+            }
+        )
+        snapshots[identifier] = {"snapshot_payload": payload}
+    return _oos_feature_diagnostics_from_rows(predictions, snapshots.get)
 
 
 def _fetch_oos_t0_row(cursor):
@@ -2921,7 +3141,21 @@ def _is_oos_run_id(value: object) -> bool:
     )
 
 
-def _oos_t0_from_rows(rows) -> datetime | None:
+OOS_BASELINE_METHODOLOGY = "heuristic-v1-wave4b0"
+OOS_CANDIDATE_METHODOLOGY = "distributional-v1"
+OOS_PROBABILITY_FIELDS = ("p_up_frac", "p_down_frac", "p_timeout_frac")
+OOS_EXPECTED_ORIGIN = "SCHEDULED_SHADOW_EVIDENCE"
+
+
+def _oos_qualifying_pairs(rows) -> list[dict[str, Any]]:
+    """Return every Tier-1 qualifying OOS pair (V1_QUANT_CONTRACT §5A.4).
+
+    THIS IS THE SINGLE DEFINITION OF TIER-1 ELIGIBILITY.  ``fetch_oos_t0`` derives T0
+    from it and the paired-evidence read analyses exactly the same population, so the
+    analysed set can never drift from the set that fixed T0.  Do not add a second
+    qualification rule anywhere.
+    """
+
     groups: dict[tuple[object, object, object, object], list[Mapping[str, Any]]] = {}
     for raw_row in rows:
         if not isinstance(raw_row, Mapping) or not _is_oos_run_id(raw_row.get("run_id")):
@@ -2933,23 +3167,157 @@ def _oos_t0_from_rows(rows) -> datetime | None:
             raw_row.get("reference_close_utc"),
         )
         groups.setdefault(key, []).append(raw_row)
-    qualifying: list[datetime] = []
+
+    pairs: list[dict[str, Any]] = []
     for key, pair_rows in groups.items():
-        if len(pair_rows) != 2:
+        if len(pair_rows) != 2 or key[3] is None:
             continue
-        baseline = sum(
-            _oos_arm(row) == "BASELINE"
-            and row.get("methodology_version") == "heuristic-v1-wave4b0"
+        baseline = [
+            row
             for row in pair_rows
-        )
-        candidate = sum(
-            _oos_arm(row) == "CANDIDATE"
-            and row.get("methodology_version") == "distributional-v1"
+            if _oos_arm(row) == "BASELINE"
+            and row.get("methodology_version") == OOS_BASELINE_METHODOLOGY
+        ]
+        candidate = [
+            row
             for row in pair_rows
+            if _oos_arm(row) == "CANDIDATE"
+            and row.get("methodology_version") == OOS_CANDIDATE_METHODOLOGY
+        ]
+        if len(baseline) != 1 or len(candidate) != 1:
+            continue
+        pairs.append(
+            {
+                "run_id": key[0],
+                "normalized_symbol": key[1],
+                "timeframe": key[2],
+                "reference_close_utc": _to_utc_datetime(key[3]),
+                "baseline": baseline[0],
+                "candidate": candidate[0],
+            }
         )
-        if baseline == candidate == 1 and key[3] is not None:
-            qualifying.append(_to_utc_datetime(key[3]))
-    return min(qualifying, default=None)
+    return pairs
+
+
+def _oos_paired_evidence_from_rows(
+    prediction_rows,
+    outcome_for,
+    *,
+    include_probabilities: bool,
+) -> list[dict[str, Any]]:
+    """Project Tier-1 pairs into flat evidence rows, in a deterministic order.
+
+    ``include_probabilities`` is a STRUCTURAL SAFETY BOUNDARY, not a convenience.  When
+    it is ``False`` no probability reaches the caller at all, so no Brier, ``d`` or ECE
+    is computable from what a readiness run holds
+    (``docs/SECTION_5A_EVALUATION_PREREGISTRATION.md`` §1).
+    """
+
+    evidence: list[dict[str, Any]] = []
+    for pair in _oos_qualifying_pairs(prediction_rows):
+        row: dict[str, Any] = {
+            "run_id": pair["run_id"],
+            "normalized_symbol": pair["normalized_symbol"],
+            "timeframe": pair["timeframe"],
+            "reference_close_utc": pair["reference_close_utc"],
+        }
+        for arm_name in ("baseline", "candidate"):
+            arm_row = pair[arm_name]
+            prediction_id = str(arm_row.get("prediction_id", ""))
+            outcome = outcome_for(prediction_id)
+            row[f"{arm_name}_prediction_id"] = prediction_id
+            row[f"{arm_name}_predicted_at_utc"] = arm_row.get("predicted_at_utc")
+            row[f"{arm_name}_horizon_end_utc"] = arm_row.get("horizon_end_utc")
+            row[f"{arm_name}_prediction_origin"] = arm_row.get("prediction_origin")
+            row[f"{arm_name}_realized_label"] = (
+                outcome.get("realized_label") if isinstance(outcome, Mapping) else None
+            )
+            if include_probabilities:
+                for field in OOS_PROBABILITY_FIELDS:
+                    row[f"{arm_name}_{field}"] = arm_row.get(field)
+        evidence.append(row)
+
+    evidence.sort(
+        key=lambda item: (
+            str(item["timeframe"]),
+            str(item["normalized_symbol"]),
+            item["reference_close_utc"],
+            str(item["run_id"]),
+        )
+    )
+    return evidence
+
+
+def _oos_origin_anomalies_from_rows(rows) -> int:
+    """Count OOS-namespace rows whose origin is not the expected shadow origin.
+
+    Reported, never filtered: none of the existing OOS queries predicates on origin, and
+    adding one now would silently change the population that fixed T0
+    (pre-registration §4.3).
+    """
+
+    return sum(
+        1
+        for row in rows
+        if isinstance(row, Mapping)
+        and _is_oos_run_id(row.get("run_id"))
+        and row.get("prediction_origin") != OOS_EXPECTED_ORIGIN
+    )
+
+
+OOS_DIAGNOSTIC_FEATURES = {
+    "regime": "quant_v2.regime_2state",
+    "realized_vol": "quant_v2.realized_volatility",
+    "trend_mtf": "quant_v2.trend_mtf",
+    "volume_anomaly": "quant_v2.volume_anomaly",
+}
+
+
+def _oos_feature_diagnostics_from_rows(prediction_rows, snapshot_for) -> list[dict]:
+    """Return the four persisted quant_v2 values per OOS prediction (§5A.10).
+
+    Diagnostics only.  A missing feature yields ``None`` and never raises: a diagnostic
+    must not be able to break, let alone gate, an evaluation.
+    """
+
+    diagnostics: list[dict[str, Any]] = []
+    for row in prediction_rows:
+        if not isinstance(row, Mapping) or not _is_oos_run_id(row.get("run_id")):
+            continue
+        prediction_id = str(row.get("prediction_id", ""))
+        timeframe = row.get("timeframe")
+        entry: dict[str, Any] = {
+            "prediction_id": prediction_id,
+            "normalized_symbol": row.get("normalized_symbol"),
+            "timeframe": timeframe,
+            "reference_close_utc": row.get("reference_close_utc"),
+        }
+        snapshot = snapshot_for(prediction_id)
+        payload = snapshot.get("snapshot_payload") if isinstance(snapshot, Mapping) else None
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                payload = None
+        features = payload.get("features") if isinstance(payload, Mapping) else None
+        by_id: dict[str, Any] = {}
+        if isinstance(features, list):
+            for feature in features:
+                if isinstance(feature, Mapping) and feature.get("feature_id") is not None:
+                    by_id[str(feature["feature_id"])] = feature.get("raw_value")
+        for name, prefix in OOS_DIAGNOSTIC_FEATURES.items():
+            entry[name] = by_id.get(f"{prefix}:{timeframe}")
+        diagnostics.append(entry)
+
+    diagnostics.sort(key=lambda item: str(item["prediction_id"]))
+    return diagnostics
+
+
+def _oos_t0_from_rows(rows) -> datetime | None:
+    return min(
+        (pair["reference_close_utc"] for pair in _oos_qualifying_pairs(rows)),
+        default=None,
+    )
 
 
 def _oos_arm(row: Mapping[str, Any]) -> str | None:

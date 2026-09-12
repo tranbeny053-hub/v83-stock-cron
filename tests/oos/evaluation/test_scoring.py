@@ -67,8 +67,28 @@ def test_perfectly_calibrated_rows_have_exactly_zero_ece() -> None:
     assert ece(rows) == 0.0
 
 
-def test_empty_ece_is_zero() -> None:
-    assert ece([]) == 0.0
+def test_empty_ece_raises_instead_of_affirming_on_no_evidence() -> None:
+    """Pre-registration §10: returning 0.0 would let both arms tie, so B1 would read as
+    non-degradation satisfied on no evidence at all."""
+
+    with pytest.raises(scoring.EceEvidenceError, match="empty evidence set"):
+        ece([])
+
+
+def test_ece_refuses_a_silently_narrowed_population() -> None:
+    """Pre-registration §10: compute_calibration_metrics drops rows its normalizer
+    rejects, so scoring the remainder would silently change the estimand."""
+
+    valid = _row("UP", 0.6, 0.2, 0.2)
+    unnormalizable = _row("UP", 0.0, 0.0, 0.0)
+    with pytest.raises(scoring.EceEvidenceError, match="strict subset"):
+        ece([valid, unnormalizable])
+
+
+def test_ece_reports_the_exact_shortfall_it_refused() -> None:
+    rows = [_row("UP", 0.6, 0.2, 0.2), _row("UP", 0.0, 0.0, 0.0), _row("DOWN", 0.0, 0.0, 0.0)]
+    with pytest.raises(scoring.EceEvidenceError, match=r"1 of 3 rows were scored"):
+        ece(rows)
 
 
 def test_ece_raises_for_impossible_nonempty_bucket_without_gap(
