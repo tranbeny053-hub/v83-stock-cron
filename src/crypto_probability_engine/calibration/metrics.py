@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from statistics import median
 from typing import Any
 
@@ -14,6 +15,21 @@ from crypto_probability_engine.calibration.schemas import (
 )
 
 EPS = 1e-12
+
+
+def brier_score(
+    probabilities: Mapping[OutcomeLabel, float], realized_label: OutcomeLabel
+) -> float:
+    """Return the three-class Brier score for normalized probabilities."""
+
+    if realized_label not in OUTCOME_LABELS:
+        raise ValueError(f"unsupported realized label: {realized_label!r}")
+    one_hot = {
+        outcome: 1.0 if outcome == realized_label else 0.0 for outcome in OUTCOME_LABELS
+    }
+    return sum(
+        (probabilities[outcome] - one_hot[outcome]) ** 2 for outcome in OUTCOME_LABELS
+    )
 
 
 def compute_calibration_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -43,10 +59,7 @@ def compute_calibration_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         probs = row["probs"]
         label = row["realized_label"]
         outcome_distribution[label] += 1
-        one_hot = {outcome: 1.0 if outcome == label else 0.0 for outcome in OUTCOME_LABELS}
-        brier_values.append(
-            sum((probs[outcome] - one_hot[outcome]) ** 2 for outcome in OUTCOME_LABELS)
-        )
+        brier_values.append(brier_score(probs, label))
         log_loss_values.append(-math.log(max(probs[label], EPS)))
         top_label = top_prediction_label(probs)
         if top_label == label:
