@@ -1,0 +1,64 @@
+name: Section 5A evaluation (MANUAL DISPATCH ONLY)
+
+# DELIBERATELY NO `schedule:` TRIGGER.
+# A cron here could consume the one-look holdout unattended. The evaluation is run once,
+# by hand, under owner authorization. See V1_QUANT_CONTRACT.md §5A.9 and
+# docs/SECTION_5A_EVALUATION_PREREGISTRATION.md §1-§3.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: readiness is repeatable and safe; consume takes THE ONE LOOK
+        required: true
+        type: choice
+        default: readiness
+        options:
+          - readiness
+          - consume
+      confirm:
+        description: required for consume; exactly CONSUME-SECTION-5A-ONE-LOOK
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: section-5a-evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Verify the evaluator matches its reviewed pin
+        run: PYTHONPATH=src python -c "from crypto_probability_engine.oos.evaluation.evaluator_pin import assert_evaluator_pin; assert_evaluator_pin(); print('evaluator pin OK')"
+
+      - name: Run the evaluation
+        env:
+          SUPABASE_DB_URL: "${{ secrets.SUPABASE_DB_URL }}"
+        run: >-
+          PYTHONPATH=src python scripts/evaluate_section_5a.py
+          --mode ${{ inputs.mode }}
+          --confirm '${{ inputs.confirm }}'
+          --artifact-dir .work/section_5a
+          | tee section-5a-report.json
+
+      - name: Upload the artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: "section-5a-${{ inputs.mode }}"
+          path: |
+            section-5a-report.json
+            .work/section_5a/
+          if-no-files-found: warn
