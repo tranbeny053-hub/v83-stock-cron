@@ -1,13 +1,19 @@
 # STATE
 
-Updated: 2026-09-12 (POST-T_close — evaluator lane open, one-look NOT consumed)
+Updated: 2026-09-12 (POST-T_close — evaluator BUILT, awaiting Codex verification; one-look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=LANE OPEN — building the section 5A EVALUATOR on feat/5a-evaluator. T_close PASSED
-  at 2026-09-12T04:00:00Z. THE ONE-LOOK IS NOT CONSUMED: no live DB read has occurred, no §5A
-  statistic has been computed, no holdout row has been inspected. BLOCKED mid-batch on Codex
-  quota exhaustion (see CODEX_PENDING); tasks 803 and 804 are written and ready to fire.
+LOOP_STATE=BUILT, AWAITING INDEPENDENT VERIFICATION. The section 5A evaluator is complete on
+  feat/5a-evaluator and the collector-stop lane is prepared on ops/stop-post-tclose-collector.
+  T_close PASSED at 2026-09-12T04:00:00Z. THE ONE-LOOK IS NOT CONSUMED: no live DB read has
+  occurred, no §5A statistic has been computed, no holdout row has been inspected, nothing is
+  pushed. ./verify.sh PASS, 1297 tests (1132 baseline + 165 new).
+  AUTHORSHIP: Opus authored the implementation because Codex quota was exhausted and the owner
+  chose not to wait. Independence was REORDERED, not dropped — Codex verifies adversarially
+  before any live read or T3. Everything carries the marker
+  CLAUDE_AUTHORED_PENDING_CODEX_INDEPENDENT_VERIFICATION and is NOT eligible for a live
+  readiness run, a push, or a merge until that verification returns.
   Recovery audit found the previous recovery block STALE — it recorded origin/main = 200d822
   when main is d52e9ae (PR #83); corrected below. Historical standby narrative retained:
 LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
@@ -26,9 +32,27 @@ CURRENT_MILESTONE=Section 5A EVALUATION — collection CLOSED at T_close; the ev
   the evaluator; live DB access is GitHub Actions only via the existing SUPABASE_DB_URL secret;
   deploys stay held until the one-look result is captured and checkpointed; prepare stopping the
   post-T_close collector but cross no T3; leave research/r2-frontier untouched.
-CURRENT_BRANCH=feat/5a-evaluator, cut from EXACT main d52e9ae. Two commits, NOT pushed.
-  0eaf550 pre-registration (committed BEFORE the evaluator existed)
+CURRENT_BRANCH=feat/5a-evaluator, cut from EXACT main d52e9ae. Seven commits, NOT pushed.
+  0eaf550 pre-registration, committed BEFORE the evaluator existed
   0e4c8e8 pure math core, proven on known answers only
+  b0a03f9 post-T_close STATE checkpoint
+  d4c4da7 pinned T_close inclusion, ECE edges, snapshot identity, one-shot states
+  54f5635 paired-evidence read, admission, decision, diagnostics
+  4b6ad94 runner, five consumption guards, evaluator pin, manual-only workflow
+  7c4679a decoupled this lane from the collector-stop lane
+SECOND_LANE=ops/stop-post-tclose-collector at 7ffc6f2, in a SEPARATE WORKTREE under the
+  session scratchpad, also cut from d52e9ae, also NOT pushed. Genuinely independent: no shared
+  file, no shared test helper, either merge order works. It removes ONLY the collector's
+  schedule trigger; what the collector writes is unchanged and asserted so. The §5A.5
+  pre-registered cadence assertion was INVERTED, not deleted, so re-enabling collection under
+  the retired pre-registration fails the build.
+EVALUATOR_SEMANTICS=Readiness is repeatable and CANNOT score: the projection omits the
+  probability columns, so nothing it holds can produce a Brier, d or ECE. Consumption is
+  guarded by T_close, the evaluator pin, a confirmation token and a one-shot seal, all of which
+  run BEFORE any read; the seal arms at the raw capture, before any statistic, because the look
+  is spent the moment the probabilities are read. A crashed run lands in SEALED_NO_RESULT and is
+  recovered by recomputing from the immutable snapshot with NO database access, so a statistics
+  defect costs a recomputation rather than the holdout.
 R2_BRANCH=research/r2-frontier at ba27691 — UNTOUCHED this session, still local-only, still on
   no remote. Its STATE.md carries the R2_MILESTONE block; main's does not, because that branch
   is unmerged by owner instruction. Audited read-only: committed evidence is byte-identical to
@@ -289,18 +313,18 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
   Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
   from main, still frozen.
-CODEX_PENDING=BLOCKED — Codex quota exhausted mid-batch on task-803 (ChatGPT usage limit,
-  resets ~17:39 local 2026-09-12). NO partial writes landed; the tree was clean of 803 work and
-  is committed at 0e4c8e8. NO MODEL SUBSTITUTION WAS MADE: Opus did not implement in Codex's
-  place, because Opus owns the T2 diff review and doing both would collapse the separation that
-  protects a one-shot irreversible decision. That trade is the owner's to make, not mine.
-  READY TO FIRE, unchanged, on resume:
-    .work/task-803.md  paired-evidence read + admission + decision + diagnostics,
-                       INCLUDING two mandatory repairs from the task-802 review (§E)
-    .work/task-804.md  runner with readiness/consume modes, the five consumption guards,
-                       the manual-dispatch-only evaluation workflow, and the PREPARED
-                       (not enabled) collector schedule removal
-  Budget deviation recorded: this batch will exceed the default 4-delegation ceiling. The owner
+CODEX_PENDING=ONE TASK QUEUED — .work/task-805.md, INDEPENDENT ADVERSARIAL VERIFICATION.
+  Fire it the moment quota returns (exhausted 2026-09-12, resets ~17:39 local). It is written
+  so it CANNOT be satisfied by agreeing: 20 named mutations that must each break the suite,
+  independent re-derivation of every known answer from the contract rather than from the tests,
+  outside-in attempts to consume the look twice or to score from a readiness run, and a read of
+  the Postgres SQL that no test can execute. It verifies against V1_QUANT_CONTRACT §5A as the
+  authority and treats the pre-registration as a claim to be checked — a resolution that could
+  make PASS EASIER is a finding.
+  MODEL SUBSTITUTION RECORDED (CLAUDE.md requires this): Opus performed implementation that
+  routes to Codex. The owner authorized it explicitly and preserved independence by reordering
+  verification after authoring rather than dropping it.
+  Budget deviation recorded: this batch exceeded the default 4-delegation ceiling. The owner
   directed a batch of this size explicitly; 801 was spent twice because the first run was given
   a read-only sandbox and could not write its own output file.
 GPT_REQUEST_ID=NONE
@@ -322,10 +346,10 @@ DEPLOY_PROHIBITED=EXTENDED BY OWNER 2026-09-12. The original prohibition was sco
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=RESUME THE EVALUATOR BATCH when Codex quota returns: fire .work/task-803.md, then
-  .work/task-804.md, then ONE consolidated MAX diff review, then return a single T3 batch
-  request to the owner. DO NOT run the evaluation itself: the one look stays unconsumed until
-  the evaluator is built, reviewed and pinned, and the owner authorizes the run.
+NEXT_ACTION=FIRE .work/task-805.md when Codex quota returns, then act on its findings, then
+  ONE consolidated MAX diff review, then return a single T3 batch request. DO NOT run the
+  evaluation: the one look stays unconsumed until verification returns clean, the owner
+  authorizes, and the run happens in GitHub Actions where the secret lives.
   ORDERING IS THE SAFETY PROPERTY (docs/SECTION_5A_EVALUATION_PREREGISTRATION.md §2): synthetic
   proof, then diff review, then pin commit, and ONLY THEN may readiness touch live data.
   Readiness is repeatable and cannot consume the look, because in readiness mode the projection
