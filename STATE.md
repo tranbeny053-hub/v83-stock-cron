@@ -1,10 +1,16 @@
 # STATE
 
-Updated: 2026-08-28 (FINAL PRE-T_CLOSE CHECKPOINT — post PR #82)
+Updated: 2026-09-12 (POST-T_close — evaluator lane open, one-look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
+LOOP_STATE=LANE OPEN — building the section 5A EVALUATOR on feat/5a-evaluator. T_close PASSED
+  at 2026-09-12T04:00:00Z. THE ONE-LOOK IS NOT CONSUMED: no live DB read has occurred, no §5A
+  statistic has been computed, no holdout row has been inspected. BLOCKED mid-batch on Codex
+  quota exhaustion (see CODEX_PENDING); tasks 803 and 804 are written and ready to fire.
+  Recovery audit found the previous recovery block STALE — it recorded origin/main = 200d822
+  when main is d52e9ae (PR #83); corrected below. Historical standby narrative retained:
+LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
   the owner closed the last two open candidates (see OWNER_PRODUCT_DECISIONS) and put the loop
   on standby until a NEW genuine product issue arrives or the governed section 5A T_close
   boundary is reached. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
@@ -15,11 +21,35 @@ LOOP_STATE=IDLE — STANDBY. No lane open, no candidate open. The product board 
   freeze, the collector, outcome and holdout inspection, T_close itself, and any change to what
   the collector computes or persists. Ordinary safe work outside that envelope continues under
   normal risk tiers, with owner authorization for T3/T4.
-CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
-  Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-pre-tclose (this checkpoint). origin/main = 200d822.
-LAST_GREEN_SHA=200d822
-LAST_VERIFY=PASS ruff ok | 1132 passed | schemas+smoke ok | scanners 3/3 · 200d822 · 2026-08-28
+CURRENT_MILESTONE=Section 5A EVALUATION — collection CLOSED at T_close; the evaluator is being
+  built so the one look can be taken once, correctly. Owner decisions taken 2026-09-12: build
+  the evaluator; live DB access is GitHub Actions only via the existing SUPABASE_DB_URL secret;
+  deploys stay held until the one-look result is captured and checkpointed; prepare stopping the
+  post-T_close collector but cross no T3; leave research/r2-frontier untouched.
+CURRENT_BRANCH=feat/5a-evaluator, cut from EXACT main d52e9ae. Two commits, NOT pushed.
+  0eaf550 pre-registration (committed BEFORE the evaluator existed)
+  0e4c8e8 pure math core, proven on known answers only
+R2_BRANCH=research/r2-frontier at ba27691 — UNTOUCHED this session, still local-only, still on
+  no remote. Its STATE.md carries the R2_MILESTONE block; main's does not, because that branch
+  is unmerged by owner instruction. Audited read-only: committed evidence is byte-identical to
+  the .work/research2 scratch outputs, the pre-registration commit precedes every experiment
+  output, and the sealed look is consumed and structurally unrepeatable.
+LAST_GREEN_SHA=0e4c8e8
+LAST_VERIFY=PASS ruff ok | 1220 passed | schemas+smoke ok | scanners 3/3 · 0e4c8e8 · 2026-09-12
+  (1132 baseline + 88 new evaluator tests)
+T_CLOSE_STATUS=PASSED 2026-09-12T04:00:00Z. T_freeze 2026-08-20T11:35:56Z (commit 61e9796,
+  intact and reachable from origin/main). T0 2026-08-21T04:00:00Z. CANDIDATE NEVER DRIFTED: all
+  EIGHT freeze-closure files have ZERO commits since T_freeze on origin/main, the freeze guard
+  passes on the current tree, and the collector calls it before constructing any write-capable
+  repository — so every holdout write used the frozen candidate.
+FRAME_LIMITATION=Collector ran at ~13% of its scheduled rate: 21-40 runs/day through 2026-08-26,
+  collapsing to 2-9/day from 08-27 (mean 12.8/day vs 96 scheduled). CAUSE IS NOT UCPE — the
+  unrelated hourly keepalive workflow collapsed identically on the same date, so it is GitHub
+  Actions scheduled-workflow throttling. Resolver likewise 215 runs vs 528 scheduled, with
+  capacity still exceeding demand. The four collector 'failures' were all BACKFILL_REFUSED
+  partial failures with orphans=0 — the no-backfill rule working, not data loss. 4H drives
+  T_close with k_4 = 5 EXACTLY, no slack: one empty 24h window makes A2 unreachable and the
+  result NOT PASS. Recorded BEFORE the look so that outcome reads as correct self-gating.
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -235,7 +265,7 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
     states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=NONE. No lane is open and none is queued.
+ACTIVE_LANE=feat/5a-evaluator — the section 5A evaluator. Blocked on Codex quota, not on a defect.
 OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
   defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
   repeatedly as the only remaining candidates once the board was otherwise clear, so they are
@@ -259,7 +289,20 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
   Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
   from main, still frozen.
-CODEX_PENDING=NONE
+CODEX_PENDING=BLOCKED — Codex quota exhausted mid-batch on task-803 (ChatGPT usage limit,
+  resets ~17:39 local 2026-09-12). NO partial writes landed; the tree was clean of 803 work and
+  is committed at 0e4c8e8. NO MODEL SUBSTITUTION WAS MADE: Opus did not implement in Codex's
+  place, because Opus owns the T2 diff review and doing both would collapse the separation that
+  protects a one-shot irreversible decision. That trade is the owner's to make, not mine.
+  READY TO FIRE, unchanged, on resume:
+    .work/task-803.md  paired-evidence read + admission + decision + diagnostics,
+                       INCLUDING two mandatory repairs from the task-802 review (§E)
+    .work/task-804.md  runner with readiness/consume modes, the five consumption guards,
+                       the manual-dispatch-only evaluation workflow, and the PREPARED
+                       (not enabled) collector schedule removal
+  Budget deviation recorded: this batch will exceed the default 4-delegation ceiling. The owner
+  directed a batch of this size explicitly; 801 was spent twice because the first run was given
+  a read-only sandbox and could not write its own output file.
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
@@ -270,15 +313,25 @@ OWNER_BOUNDARY=NONE OPEN. Fourteen T3 origin batches are CONSUMED and must not b
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
-DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
+DEPLOY_PROHIBITED=EXTENDED BY OWNER 2026-09-12. The original prohibition was scoped 'through
+  T_close' and would have lapsed silently by its own terms when T_close passed. The owner has
+  instead HELD IT until the one-look result is captured and checkpointed. Production stays at
+  hf/main = a89b45e (PROD-SAFE-2), now 166 commits behind main. Original wording follows:
+  NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
   T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
-  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
-  date is a contract instant, NOT a reminder or automation request: create no timer, task, or
-  schedule from it.
+NEXT_ACTION=RESUME THE EVALUATOR BATCH when Codex quota returns: fire .work/task-803.md, then
+  .work/task-804.md, then ONE consolidated MAX diff review, then return a single T3 batch
+  request to the owner. DO NOT run the evaluation itself: the one look stays unconsumed until
+  the evaluator is built, reviewed and pinned, and the owner authorizes the run.
+  ORDERING IS THE SAFETY PROPERTY (docs/SECTION_5A_EVALUATION_PREREGISTRATION.md §2): synthetic
+  proof, then diff review, then pin commit, and ONLY THEN may readiness touch live data.
+  Readiness is repeatable and cannot consume the look, because in readiness mode the projection
+  omits the probability columns entirely, so no Brier, d or ECE is computable from what it
+  holds. Attainability (k_4 >= 5) may legitimately establish NOT PASS without consuming the
+  look, since it follows from the lattice and the frame alone and can never create a PASS.
 BLOCKER_BEFORE_0008_T4=CLOSED by PR #63 (merged 1668534). The owner-directed prerequisite is
   satisfied: /v1/runs no longer issues one detail query per row. It now issues exactly one
   batched run_ids_with_detail call for all durable-only rows, bounded and fail-closed, and the
