@@ -584,7 +584,7 @@ def test_max_one_consumes_attempt_when_first_due_selection_fails() -> None:
     assert all(cell["classification"] == "SKIPPED_CAP" for cell in result["cells"][1:])
 
 
-def test_workflow_has_preregistered_schedule_and_manual_defaults() -> None:
+def test_workflow_cadence_is_retired_and_manual_defaults_are_intact() -> None:
     path = (
         Path(__file__).resolve().parents[2]
         / ".github/workflows/oos-pair-evidence.yml"
@@ -605,13 +605,29 @@ def test_workflow_has_preregistered_schedule_and_manual_defaults() -> None:
         ).stdout
     )
     triggers = parsed["on"]
-    assert triggers["schedule"] == [{"cron": "7,22,37,52 * * * *"}]
+    # THE PRE-REGISTERED CADENCE IS RETIRED, NOT WEAKENED.
+    #
+    # "7,22,37,52 * * * *" was the §5A.5 pre-registered cadence and it governed the
+    # whole collection window [T0, T_close). That window closed at
+    # T_close = 2026-09-12T04:00:00Z, and rows collected after it fall outside the
+    # section 5A lattice and are discarded. Removing the trigger therefore ends a
+    # completed cadence; it cannot alter, extend or reinterpret the evidence the
+    # cadence already produced.
+    #
+    # This assertion is deliberately inverted rather than deleted, so that silently
+    # re-enabling collection under the retired pre-registration fails the build.
+    assert "schedule" not in triggers, (
+        "the pre-registered cadence ended at T_close; restoring it needs a NEW "
+        "pre-registration, a new candidate freeze, a new T0 and a new holdout (§5A.9)"
+    )
     assert "workflow_dispatch" in triggers
     for forbidden in ("push", "pull_request", "repository_dispatch"):
         assert forbidden not in triggers
     inputs = triggers["workflow_dispatch"]["inputs"]
     assert inputs["dry_run"]["default"] is True
     assert inputs["max_occasions"]["default"] == 6
+    # The scheduled step is retained but now unreachable, so restoring collection is a
+    # one-line revert of the trigger block rather than a reconstruction.
     scheduled_step, manual_step = parsed["jobs"]["collect"]["steps"][-2:]
     assert scheduled_step["if"] == "github.event_name == 'schedule'"
     assert scheduled_step["env"]["UCPE_OOS_PAIR_EVIDENCE_ENABLED"] == "true"
