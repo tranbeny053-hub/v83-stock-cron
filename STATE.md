@@ -1,10 +1,30 @@
 # STATE
 
-Updated: 2026-08-28 (FINAL PRE-T_CLOSE CHECKPOINT — post PR #82)
+Updated: 2026-09-13 (POST T3 BATCH #84-#90 — seven lanes merged; §5A evaluator frozen off-main under a Codex-first red team; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
+LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
+  no live DB read, no readiness run, no evaluation, no holdout row inspected.
+  This checkpoint CORRECTS a stale recovery block. Until now main's STATE recorded
+  origin/main = 200d822 when main was d52e9ae, so a resume from main reconstructed the wrong
+  base; the fields below are re-anchored to the post-batch main.
+  T3 BATCH #84-#90 MERGED 2026-09-13, owner-authorized, seven INDEPENDENT PRs, each with
+  exact-head CI green, a --match-head-commit merge, parents verified (previous main, lane
+  head), the merged tree proven bit-identical to a local composition, and exact-main CI green
+  after every merge; the batch was armed to stop on the first mismatch and none occurred:
+    #84 docs/post-one-look-dependency-map     9a7fe7b -> 7c24989
+    #85 docs/r2-zero-drift-gate-and-display   aeb7133 -> 0fca908
+    #86 docs/g1-g7-acceptance-matrix          f471695 -> 4c2aa4d
+    #87 chore/delegate-fresh-result-identity  a6fa2de -> d11bee6
+    #88 ops/stop-post-tclose-collector        7ffc6f2 -> 651c63e
+    #89 fix/r202-provider-http-bounds         ce2dc44 -> 068900d
+    #90 fix/a203-candle-boundaries            27e81e2 -> 68b4c8e
+  The final main tree e1042da is BIT-IDENTICAL to the composition of the seven reviewed heads
+  computed in a different merge order, so what shipped is exactly what was reviewed,
+  independent of order. Test arithmetic reconciles: 1150 = 1132 + 5 + 4 + 5 + 4.
+  Historical standby narrative from 2026-08-28 is retained below for provenance:
+LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
   the owner closed the last two open candidates (see OWNER_PRODUCT_DECISIONS) and put the loop
   on standby until a NEW genuine product issue arrives or the governed section 5A T_close
   boundary is reached. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
@@ -15,11 +35,30 @@ LOOP_STATE=IDLE — STANDBY. No lane open, no candidate open. The product board 
   freeze, the collector, outcome and holdout inspection, T_close itself, and any change to what
   the collector computes or persists. Ordinary safe work outside that envelope continues under
   normal risk tiers, with owner authorization for T3/T4.
-CURRENT_MILESTONE=Change B tranche 1 — collection running, evaluation pending at T_close.
+CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluator is being made safe
+  to take the one look exactly once. It lives on feat/5a-evaluator, which is LOCAL, NOT
+  PUSHED, and NOT on main. Its implementation is FROZEN at 2b31832 (branch ref cb6edf7 carries
+  STATE-only commits above it; src/ tree hash is identical).
+  VERIFICATION HISTORY. task-805 run 1 returned NOT_VERIFIED with nine findings F1-F9; the
+  owner ruled on F1, F2 and F9 and Opus repaired F3-F8. task-805 run 2 exhausted Codex quota
+  before reporting but its probes established seven sibling findings G1-G7, the worst being G1:
+  Postgres NUMERIC arrives as Decimal, the serializer handled only datetime, and the digest ran
+  after the probability read and before the seal claim, so on real data the FIRST consumption
+  would have read the holdout and crashed with no seal. After two repair rounds on the same
+  causal class were each defeated by siblings, the owner accepted the escalation and INVERTED
+  THE LOOP: the verifier authors failing tests first, against the frozen implementation.
+  task-806 RED TEAM RETURNED 2026-09-13 (result verified fresh; production code untouched):
+  17 properties RED, 4 REFUTED with evidence (G3.2, G3.3, G4.2, G5.1), plus four NEW sibling
+  findings, all RED — G8 the runner accepts a process-local in-memory repository as a seal
+  authority; G9 the Postgres seal claim uses plain json.dumps and raises on datetime, a SECOND
+  independent route to reading the holdout without sealing it, even once G1 is fixed; G10
+  recompute treats deleted feature_rows and origin_anomalies as empty/zero; G11 an empty
+  population reports a measured-looking zero-second span. Evidence at .work/806/.
+  Product work outside §5A continues in parallel; it never touches the envelope.
   Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-pre-tclose (this checkpoint). origin/main = 200d822.
-LAST_GREEN_SHA=200d822
-LAST_VERIFY=PASS ruff ok | 1132 passed | schemas+smoke ok | scanners 3/3 · 200d822 · 2026-08-28
+CURRENT_BRANCH=docs/state-post-t3-batch-84-90 (this checkpoint). origin/main = 68b4c8e before it merges.
+LAST_GREEN_SHA=68b4c8e
+LAST_VERIFY=PASS ruff ok | 1150 passed | schemas+smoke ok | scanners 3/3 · 68b4c8e · 2026-09-13 (exact-main CI green on every batch merge)
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -235,7 +274,7 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
     states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=NONE. No lane is open and none is queued.
+ACTIVE_LANE=feat/5a-evaluator (LOCAL, FROZEN impl 2b31832) — the §5A evaluator, under a Codex-first red team.
 OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
   defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
   repeatedly as the only remaining candidates once the board was otherwise clear, so they are
@@ -251,7 +290,15 @@ OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. T
      CONSTANT in the current build, so rendering them would be speculative UI rather than user
      value. Surface one only if the owner raises a concrete operator need, or if that field
      actually starts to vary.
-FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
+SUPERSEDED_FROZEN_LANES=The T_close freeze on the three lanes below LAPSED BY ITS OWN TERMS when
+  T_close passed. fix/r202-01 (2c35ab2) and fix/a203-01 (b5310dc) were 63 commits stale; they were
+  REPLAYED onto exact main d52e9ae in fresh worktrees, revalidated independently, and shipped as
+  #89 and #90. The originals are SUPERSEDED and kept only for provenance. integration/b11-combined
+  (1b10587) was deliberately NOT used as a release candidate and is superseded too.
+  OPERATIONAL NOTE ON #90: A203 makes candle validation STRICTLY STRICTER — exact adjacency and
+  rejection of a future latest close — so provider data previously tolerated with small gaps now
+  fails analysis rather than proceeding. It is merged, NOT deployed.
+FROZEN_POST_T_CLOSE_PRIOR=Three branches are LOCAL-ONLY and frozen until after T_close. None is
   pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
   them before T_close:
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
@@ -259,23 +306,45 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
   Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
   from main, still frozen.
-CODEX_PENDING=NONE
+COLLECTOR=STOPPED on main as of #88 (651c63e): the schedule trigger is removed, workflow_dispatch
+  retained, and WHAT the collector writes is unchanged. The §5A.5 pre-registered cadence
+  assertion was INVERTED rather than deleted, so restoring a schedule fails the build. The
+  OUTCOME RESOLVER IS STILL SCHEDULED (resolve-outcomes.yml, cron "17 * * * *"), which matters:
+  outstanding predictions still need outcomes.
+DELEGATE_HAZARD=CLOSED by #87. delegate.sh rotates any existing result and log to .prev-<ts> and
+  refuses a result older than the invocation, so a stale verdict can no longer satisfy
+  completion. That exact failure happened once and was nearly reported as a fresh verdict.
+CODEX_PENDING=NONE. task-806 has returned. Next Codex task is the COMPLETELY FRESH full
+  adversarial verification after repair, not a re-run of the targeted red tests.
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Fourteen T3 origin batches are CONSUMED and must not be reused: the
+OWNER_BOUNDARY=NONE OPEN. The T3 batch #84-#90 is CONSUMED and must not be reused; this STATE
+  checkpoint PR is its closing step. It authorized exactly those seven pushes, PRs and merges and
+  NO deploy. No T4 has been authorized: migration 0008 remains unapplied, and migration 0009 (the
+  durable §5A seal) exists only on the unpushed evaluator branch and is unapplied. Earlier:
+OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
   its own push, PR and merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
-DEPLOY_PROHIBITED=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
+DEPLOY_PROHIBITED=HELD BY OWNER RULING until the §5A one-look result is captured and checkpointed.
+  The original wording below was scoped "through T_close" and would have lapsed silently when
+  T_close passed; the owner extended it instead. Production stays at hf/main = a89b45e
+  (PROD-SAFE-2), re-confirmed unchanged after the batch. No workflow deploys to Hugging Face, so
+  no merge can deploy. Original wording:
+DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
   T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
+NEXT_ACTION=Opus repairs G1-G11 on feat/5a-evaluator AGAINST THE RED TESTS it did not author, now
+  permitted because Codex has reported. Then a COMPLETELY FRESH full adversarial verification by
+  Codex (not merely the targeted tests), then ONE consolidated MAX review, then a T3 request for
+  the evaluator lane. DO NOT run readiness or consumption, and do not apply 0008 or 0009.
+NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
   schedule from it.
