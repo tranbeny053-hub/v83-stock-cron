@@ -2,12 +2,21 @@
 
 Contract: ``V1_QUANT_CONTRACT.md`` §5A.10.  Declared there so the list cannot be chosen
 after seeing results.  Nothing in this module may influence a verdict.
+
+Two rules govern every value emitted here:
+
+- **Per timeframe AND per cell.** §5A.10 says both, so the timeframe block and each cell block
+  carry the same complete set (finding G6.1).
+- **Absence is reported as absence.** A quantity that was not measured is ``UNMEASURED`` or
+  ``None``, never ``0``. A zero that nothing measured is a fabricated number (G6.2, G11).
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from decimal import Decimal
 from statistics import median
 from typing import Any
 
@@ -21,21 +30,32 @@ from crypto_probability_engine.oos.evaluation.lattice import (
 )
 
 UNMEASURED = "UNMEASURED"
-"""§5A.10 requires a missed-attempt count. It is NOT derivable from the persisted ledger:
-the collector's attempt outcomes live in GitHub Actions run logs, not the database.
-Reporting 0 would be a fabricated number, so the absence is reported as absence."""
+"""Reported in place of a quantity that no ledger measured. ``missed_attempts`` is the
+standing case: collector attempt outcomes live in workflow run logs, not the database."""
 
 ORDERED_COARSENINGS = (1, 2, 4)
 OUTCOME_LABELS = ("UP", "DOWN", "TIMEOUT")
 
+_MISSED_ATTEMPTS_ABSENT_BASIS = (
+    "not derivable from the persisted ledger; collector attempt outcomes live in workflow run "
+    "logs. Reported as absent rather than as zero."
+)
 
-def numeric_summary(values: Sequence[Any]) -> dict[str, float | None]:
-    """Median and IQR of the finite numeric values, or ``None`` when there are none."""
+
+def numeric_summary(values: Sequence[Any]) -> dict[str, float | int | None]:
+    """Median and IQR of the finite numeric values, or ``None`` when there are none.
+
+    ``Decimal`` counts as numeric: a snapshot read back from disk or from Postgres carries
+    exact decimals, and the summary must be the same whether it was computed at consumption
+    or at recomputation.
+    """
 
     numbers = sorted(
         float(value)
         for value in values
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
+        if isinstance(value, (int, float, Decimal))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
     )
     if not numbers:
         return {"median": None, "p25": None, "p75": None, "iqr": None, "count": 0}
@@ -58,6 +78,21 @@ def distribution(values: Sequence[Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def label_distribution(labels: Sequence[str]) -> dict[str, int]:
+    """Every declared outcome label, including those with a zero count.
+
+    Dropping a zero-count label would hide that a label never occurred — which is exactly the
+    TIMEOUT-heavy (or TIMEOUT-free) composition §5A.10 exists to expose.
+    """
+
+    counts = dict.fromkeys(OUTCOME_LABELS, 0)
+    for label in labels:
+        if label not in counts:
+            raise ValueError(f"undeclared realized label in admitted evidence: {label!r}")
+        counts[label] += 1
+    return counts
+
+
 def build(
     admission: AdmissionResult,
     *,
@@ -66,69 +101,70 @@ def build(
     t_freeze: datetime,
     timeframes: Sequence[str],
     feature_rows: Sequence[Mapping[str, Any]] = (),
-    origin_anomalies: int = 0,
+    origin_anomalies: int | Decimal | None = None,
     missed_attempts: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """Assemble the pre-declared diagnostic block."""
 
-    features_by_prediction = {
-        str(row.get("prediction_id")): row for row in feature_rows
-    }
+    features_by_prediction = {str(row.get("prediction_id")): row for row in feature_rows}
+    contract = _contract_fields(t0=t0, t_freeze=t_freeze)
     per_timeframe = {
-        timeframe: _timeframe_block(
+        timeframe: _block(
             timeframe,
             [row for row in admission.admitted if row.get("timeframe") == timeframe],
             t0=t0,
             t_close=t_close,
+            contract=contract,
             features_by_prediction=features_by_prediction,
             missed_attempts=(
                 UNMEASURED
                 if missed_attempts is None or timeframe not in missed_attempts
                 else missed_attempts[timeframe]
             ),
+            with_cells=True,
         )
         for timeframe in timeframes
     }
     return {
-        "t_freeze": t_freeze.isoformat(),
-        "t0": t0.isoformat(),
+        **contract,
         "t_close": t_close.isoformat(),
-        "activation_gap_seconds": int((t0 - t_freeze).total_seconds()),
         "tier1_in_holdout": admission.tier1_in_holdout,
         "tier1_outside_holdout": admission.tier1_outside_holdout,
         "tier2_admitted": admission.admitted_count,
         "tier2_rejections": dict(admission.rejections),
         "admitted_resolved_after_t_close": admission.resolved_after_close,
-        "origin_anomalies": origin_anomalies,
+        "origin_anomalies": UNMEASURED if origin_anomalies is None else int(origin_anomalies),
         "per_timeframe": per_timeframe,
         "gating": "NONE — diagnostics are reported with every outcome and gate nothing",
     }
 
 
-def _timeframe_block(
+def _contract_fields(*, t0: datetime, t_freeze: datetime) -> dict[str, Any]:
+    return {
+        "t_freeze": t_freeze.isoformat(),
+        "t0": t0.isoformat(),
+        "activation_gap_seconds": int((t0 - t_freeze).total_seconds()),
+    }
+
+
+def _block(
     timeframe: str,
     rows: Sequence[Mapping[str, Any]],
     *,
     t0: datetime,
     t_close: datetime,
+    contract: Mapping[str, Any],
     features_by_prediction: Mapping[str, Mapping[str, Any]],
     missed_attempts: int | str,
+    with_cells: bool,
 ) -> dict[str, Any]:
-    closes = sorted(row["reference_close_utc"] for row in rows)
-    feature_values: dict[str, list[Any]] = {
-        "regime": [],
-        "realized_vol": [],
-        "trend_mtf": [],
-        "volume_anomaly": [],
-    }
-    for row in rows:
-        snapshot = features_by_prediction.get(str(row.get("candidate_prediction_id")))
-        for name in feature_values:
-            feature_values[name].append(
-                snapshot.get(name) if isinstance(snapshot, Mapping) else None
-            )
+    """One diagnostic block. The timeframe and every cell use this same function, so the
+    two scopes cannot drift apart in what they report."""
 
-    return {
+    closes = sorted(row["reference_close_utc"] for row in rows)
+    features = _feature_values(rows, features_by_prediction)
+    block: dict[str, Any] = {
+        **contract,
         "admitted_pairs": len(rows),
         "k_pre_drop": {
             str(c): window_count(timeframe, c, t0, t_close) for c in ORDERED_COARSENINGS
@@ -137,28 +173,58 @@ def _timeframe_block(
         "dropped_windows": _dropped_counts(timeframe, rows, t0=t0, t_close=t_close),
         "missed_attempts": missed_attempts,
         "missed_attempts_basis": (
-            "not derivable from the persisted ledger; collector attempt outcomes live in "
-            "workflow run logs. Reported as absent rather than as zero."
+            _MISSED_ATTEMPTS_ABSENT_BASIS
             if missed_attempts == UNMEASURED
             else "supplied by an attempt ledger"
         ),
-        "realized_label_distribution": distribution(
+        "realized_label_distribution": label_distribution(
             [realized_label(row) for row in rows]
         ),
-        "regime_distribution": distribution(feature_values["regime"]),
-        "trend_mtf_distribution": distribution(feature_values["trend_mtf"]),
-        "realized_vol_summary": numeric_summary(feature_values["realized_vol"]),
-        "volume_anomaly_summary": numeric_summary(feature_values["volume_anomaly"]),
+        "regime_distribution": distribution(features["regime"]),
+        "trend_mtf_distribution": distribution(features["trend_mtf"]),
+        "realized_vol_summary": numeric_summary(features["realized_vol"]),
+        "volume_anomaly_summary": numeric_summary(features["volume_anomaly"]),
         "first_reference_close_utc": closes[0].isoformat() if closes else None,
         "last_reference_close_utc": closes[-1].isoformat() if closes else None,
+        # No closes means no span was measured: None, not a fabricated zero (G6.2, G11).
+        # A single close is a MEASURED zero-second span, and is reported as 0.
         "realised_span_seconds": (
-            int((closes[-1] - closes[0]).total_seconds()) if len(closes) > 1 else 0
+            int((closes[-1] - closes[0]).total_seconds()) if closes else None
         ),
-        "per_symbol": {
-            symbol: _cell_block(timeframe, symbol, rows, t0=t0, t_close=t_close)
-            for symbol in sorted({str(row.get("normalized_symbol")) for row in rows})
-        },
     }
+    if with_cells:
+        block["per_symbol"] = {
+            symbol: _block(
+                timeframe,
+                [row for row in rows if row.get("normalized_symbol") == symbol],
+                t0=t0,
+                t_close=t_close,
+                contract=contract,
+                features_by_prediction=features_by_prediction,
+                # Attempts are not ledgered per cell either.
+                missed_attempts=UNMEASURED,
+                with_cells=False,
+            )
+            for symbol in sorted({str(row.get("normalized_symbol")) for row in rows})
+        }
+    return block
+
+
+def _feature_values(
+    rows: Sequence[Mapping[str, Any]],
+    features_by_prediction: Mapping[str, Mapping[str, Any]],
+) -> dict[str, list[Any]]:
+    values: dict[str, list[Any]] = {
+        "regime": [],
+        "realized_vol": [],
+        "trend_mtf": [],
+        "volume_anomaly": [],
+    }
+    for row in rows:
+        snapshot = features_by_prediction.get(str(row.get("candidate_prediction_id")))
+        for name in values:
+            values[name].append(snapshot.get(name) if isinstance(snapshot, Mapping) else None)
+    return values
 
 
 def _usable(timeframe, rows, c, *, t0, t_close) -> int:
@@ -185,23 +251,6 @@ def _dropped_counts(timeframe, rows, *, t0, t_close) -> dict[str, int]:
             - _usable(timeframe, rows, c, t0=t0, t_close=t_close),
         )
         for c in ORDERED_COARSENINGS
-    }
-
-
-def _cell_block(timeframe, symbol, rows, *, t0, t_close) -> dict[str, Any]:
-    """§5A.10 requires the diagnostics PER CELL, not only per timeframe."""
-
-    cell_rows = [row for row in rows if row.get("normalized_symbol") == symbol]
-    closes = sorted(row["reference_close_utc"] for row in cell_rows)
-    return {
-        "admitted_pairs": len(cell_rows),
-        "usable_windows": _window_counts(timeframe, cell_rows, t0=t0, t_close=t_close),
-        "dropped_windows": _dropped_counts(timeframe, cell_rows, t0=t0, t_close=t_close),
-        "realized_label_distribution": distribution(
-            [realized_label(row) for row in cell_rows]
-        ),
-        "first_reference_close_utc": closes[0].isoformat() if closes else None,
-        "last_reference_close_utc": closes[-1].isoformat() if closes else None,
     }
 
 

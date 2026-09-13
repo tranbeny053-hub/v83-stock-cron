@@ -25,27 +25,64 @@ def _clear_durable_seal():
 
 
 class FakeRepository:
-    """Records how it was called. Never touches a database."""
+    """A faithful model of the DURABLE POSTGRES seal contract. Never touches a database.
 
+    It enforces what migration 0009 and the Postgres repository enforce, so the runner is
+    tested against the real rules rather than a permissive stand-in:
+
+    - it declares itself ``POSTGRES_DURABLE``;
+    - the seal is a singleton shared ACROSS instances (the class attribute), because the
+      original defect was that a fresh runner got a fresh filesystem;
+    - a claim carries no evidence (the table's CHECK refuses it);
+    - probabilities are returned ONLY under a CLAIMED, uncaptured seal, and are captured into it
+      BEFORE they are returned — capture-before-exposure;
+    - the snapshot can only be recorded after that raw capture, once, under the claimed pin;
+    - state transitions are restricted exactly as the trigger restricts them.
+    """
+
+    # ONE durable authority for every instance AND every subclass. Referencing it as
+    # FakeRepository.durable_seal (never type(self).durable_seal) matters: a subclass writing
+    # type(self).durable_seal would create its own private seal, silently making assertions
+    # like "FakeRepository.durable_seal is None" vacuous and leaking state between tests.
     durable_seal: dict | None = None
+    _LEGAL = {
+        "CLAIMED": {"CLAIMED", "SEALED_RAW_CAPTURED", "CAPTURE_FAILED"},
+        "SEALED_RAW_CAPTURED": {"SEALED_RAW_CAPTURED", "COMPLETE", "SEALED_NO_RESULT"},
+        "SEALED_NO_RESULT": {"SEALED_NO_RESULT", "COMPLETE"},
+        "COMPLETE": {"COMPLETE"},
+        "CAPTURE_FAILED": {"CAPTURE_FAILED"},
+    }
 
     def __init__(self, rows=None, *, origin_anomalies: int = 0, features=()):
         self._rows = list(rows if rows is not None else daily_4h_evidence())
         self._origin_anomalies = origin_anomalies
         self._features = list(features)
         self.calls: list[bool] = []
-        self.seal: dict | None = None
+        self.events: list[str] = []
+
+    def section_5a_seal_authority(self) -> str:
+        return runner.SEAL_AUTHORITY_POSTGRES
 
     def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
         self.calls.append(include_probabilities)
-        rows = []
-        for row in self._rows:
-            copy = dict(row)
-            if not include_probabilities:
-                for key in list(copy):
-                    if key.endswith(("_p_up_frac", "_p_down_frac", "_p_timeout_frac")):
-                        del copy[key]
-            rows.append(copy)
+        if not include_probabilities:
+            self.events.append("read_projection")
+            return [
+                {
+                    key: value
+                    for key, value in row.items()
+                    if not key.endswith(("_p_up_frac", "_p_down_frac", "_p_timeout_frac"))
+                }
+                for row in self._rows
+            ]
+        seal = FakeRepository.durable_seal
+        if seal is None or seal["state"] != "CLAIMED" or seal.get("raw_evidence") is not None:
+            raise RuntimeError(
+                "section 5A probabilities may be read only under a CLAIMED, uncaptured seal"
+            )
+        rows = [dict(row) for row in self._rows]
+        seal["raw_evidence"] = [dict(row) for row in rows]  # captured BEFORE it is returned
+        self.events.append("read_probabilities")
         return rows
 
     def count_oos_origin_anomalies(self) -> int:
@@ -54,24 +91,51 @@ class FakeRepository:
     def fetch_oos_feature_diagnostics(self):
         return list(self._features)
 
-    # The durable seal is the cross-run authority (finding F2). The fake models it as
-    # process state SHARED between instances via the class attribute below, because the
-    # real defect was that a fresh runner got a fresh filesystem.
     def claim_section_5a_seal(self, payload) -> bool:
-        if type(self).durable_seal is not None:
+        if payload.get("snapshot_payload") is not None:
+            raise RuntimeError("CHECK section_5a_claimed_has_no_snapshot violated")
+        if FakeRepository.durable_seal is not None:
             return False
-        type(self).durable_seal = dict(payload)
+        FakeRepository.durable_seal = {**dict(payload), "state": "CLAIMED", "state_detail": ""}
+        self.events.append("claim")
         return True
 
+    def capture_section_5a_snapshot(self, snapshot) -> None:
+        seal = FakeRepository.durable_seal
+        if (
+            seal is None
+            or seal["state"] != "CLAIMED"
+            or seal.get("raw_evidence") is None
+            or seal.get("snapshot_payload") is not None
+            or seal["evaluator_pin_digest"] != snapshot["evaluator_pin_digest"]
+        ):
+            raise RuntimeError("section 5A snapshot capture did not land")
+        seal.update(
+            snapshot_payload=dict(snapshot),
+            evidence_snapshot_id=snapshot["evidence_snapshot_id"],
+            result_inputs_digest=snapshot["result_inputs_digest"],
+            state="SEALED_RAW_CAPTURED",
+        )
+        self.events.append("capture")
+
     def fetch_section_5a_seal(self):
-        seal = type(self).durable_seal
-        return None if seal is None else dict(seal)
+        seal = FakeRepository.durable_seal
+        if seal is None:
+            return None
+        copy = dict(seal)
+        raw = copy.pop("raw_evidence", None)
+        if raw is not None:
+            copy["captured_rows"] = [dict(row) for row in raw]
+        return copy
 
     def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
-        if type(self).durable_seal is None:
+        seal = FakeRepository.durable_seal
+        if seal is None:
             raise RuntimeError("no seal to advance")
-        type(self).durable_seal["state"] = state
-        type(self).durable_seal["state_detail"] = detail
+        if state not in self._LEGAL[seal["state"]]:
+            raise RuntimeError(f"illegal section 5A seal transition {seal['state']} -> {state}")
+        seal["state"] = state
+        seal["state_detail"] = detail
 
 
 # --------------------------- readiness ---------------------------
@@ -236,8 +300,10 @@ def test_a_failing_secondary_read_cannot_spend_the_look(tmp_path: Path) -> None:
     assert not (tmp_path / runner.SNAPSHOT_FILENAME).exists()
 
 
-def test_the_seal_and_the_raw_capture_are_one_atomic_write(tmp_path: Path) -> None:
-    """The claim carries the snapshot, so there is no state where one exists alone."""
+def test_after_capture_the_durable_seal_carries_the_evidence_and_its_identity(
+    tmp_path: Path,
+) -> None:
+    """The claim carries no evidence; the capture that follows the read records it."""
 
     _consume(FakeRepository(), tmp_path)
     seal = FakeRepository.durable_seal
@@ -388,3 +454,175 @@ def test_diagnostics_accompany_a_not_pass_outcome_too(tmp_path: Path) -> None:
     assert result["per_timeframe"]["4H"]["state"] == "NOT_PASS"
     assert result["diagnostics"]["per_timeframe"]["4H"]["admitted_pairs"] == 22
     assert result["authorized_cells"] == []
+
+
+# --------------------------- claim before exposure ---------------------------
+
+
+def test_the_durable_claim_precedes_the_probability_read(tmp_path: Path) -> None:
+    """G1.1, G3.1. Order is the safety property: guard, CLAIM, then read, then capture."""
+
+    repo = FakeRepository()
+    _consume(repo, tmp_path)
+    assert repo.events.index("claim") < repo.events.index("read_probabilities")
+    assert repo.events.index("read_probabilities") < repo.events.index("capture")
+
+
+def test_the_claim_itself_carries_no_evidence(tmp_path: Path) -> None:
+    """Evidence handed to a claim would reintroduce read-before-claim; the fake's CHECK refuses."""
+
+    repo = FakeRepository()
+    _consume(repo, tmp_path)
+    seal = FakeRepository.durable_seal
+    assert seal["sealed_at_utc"] and seal["evaluator_pin_digest"]
+    assert "contract_instants" in seal
+
+
+def test_a_failure_after_the_claim_is_durably_recorded_and_spends_the_look(
+    tmp_path: Path,
+) -> None:
+    """If capture fails, the look is still recorded as spent and cannot be taken again."""
+
+    class CaptureFails(FakeRepository):
+        def capture_section_5a_snapshot(self, snapshot) -> None:
+            raise RuntimeError("capture write failed")
+
+    repo = CaptureFails()
+    with pytest.raises(RuntimeError, match="capture write failed"):
+        _consume(repo, tmp_path / "one")
+    assert repo.calls.count(True) == 1, "the probabilities were read exactly once"
+    assert FakeRepository.durable_seal["state"] == runner.STATE_CAPTURE_FAILED
+    with pytest.raises(runner.OneLookAlreadyConsumed):
+        _consume(FakeRepository(), tmp_path / "two")
+
+
+@pytest.mark.parametrize("authority", ["PROCESS_LOCAL", "REST_NOT_A_SEAL_AUTHORITY", "anything"])
+def test_a_non_durable_authority_is_refused_before_any_claim_or_read(
+    tmp_path: Path, authority: str
+) -> None:
+    """G8."""
+
+    class Declares(FakeRepository):
+        def section_5a_seal_authority(self) -> str:
+            return authority
+
+    repo = Declares()
+    with pytest.raises(runner.ConsumptionRefused, match="durable Postgres"):
+        _consume(repo, tmp_path)
+    assert repo.calls == [] and repo.events == []
+    assert FakeRepository.durable_seal is None
+
+
+def test_an_unmeasured_anomaly_count_is_refused_before_the_claim(tmp_path: Path) -> None:
+    repo = FakeRepository(origin_anomalies=None)
+    with pytest.raises(runner.ConsumptionRefused, match="not a measured integer"):
+        _consume(repo, tmp_path)
+    assert FakeRepository.durable_seal is None
+
+
+# --------------------------- anti-vacuity: valid evidence must pass ---------------------------
+
+
+def test_a_valid_snapshot_written_to_disk_recomputes_successfully(tmp_path: Path) -> None:
+    """Guards the tamper tests against passing VACUOUSLY.
+
+    Built exactly as the pinned red tests build theirs: raw datetime and float rows, digests
+    computed over the raw values, written with runner._pretty_json. If a valid snapshot could
+    not survive that round trip, every "refuses tampering" test would pass for the wrong reason.
+    """
+
+    from crypto_probability_engine.oos.evaluation import evaluator_pin
+    from tests.oos.evaluation.conftest import T0, T_FREEZE
+
+    rows = daily_4h_evidence()
+    features = [
+        {"prediction_id": r["candidate_prediction_id"], "realized_vol": 0.2} for r in rows
+    ]
+    pin = str(evaluator_pin.current_pin_artifacts()["closure_digest"])
+    evidence = runner.evidence_snapshot_id(rows, feature_rows=features, origin_anomalies=0)
+    snapshot = {
+        "evidence_snapshot_id": evidence,
+        "result_inputs_digest": runner.result_inputs_digest(evidence, pin),
+        "evaluator_pin_digest": pin,
+        "t_freeze": T_FREEZE.isoformat(),
+        "t0": T0.isoformat(),
+        "t_close": T_CLOSE.isoformat(),
+        "timeframes": list(runner.TIMEFRAMES),
+        "origin_anomalies": 0,
+        "feature_rows": features,
+        "rows": rows,
+    }
+    tmp_path.mkdir(exist_ok=True)
+    (tmp_path / runner.SNAPSHOT_FILENAME).write_bytes(runner._pretty_json(snapshot))
+
+    result = runner.recompute_from_snapshot(tmp_path, verify_pin=False)
+    assert result["evidence_snapshot_id"] == evidence
+    direct = runner.compute_from_snapshot(snapshot, now_utc=AFTER_CLOSE)
+    assert result["per_timeframe"] == direct["per_timeframe"], (
+        "recomputing from disk must give the same decision as computing from memory"
+    )
+    assert result["diagnostics"]["per_timeframe"] == direct["diagnostics"]["per_timeframe"]
+
+
+def test_consume_then_recompute_from_the_local_artifact_is_identical(tmp_path: Path) -> None:
+    first = _consume(FakeRepository(), tmp_path)
+    again = runner.recompute_from_snapshot(tmp_path, verify_pin=False)
+    assert again["per_timeframe"] == first["per_timeframe"]
+    assert again["evidence_snapshot_id"] == first["evidence_snapshot_id"]
+
+
+# --------------------------- recovery from the durable seal ---------------------------
+
+
+def test_recompute_from_seal_matches_consumption_and_never_rereads(tmp_path: Path) -> None:
+    first = _consume(FakeRepository(), tmp_path)
+    repo = FakeRepository()
+    again = runner.recompute_from_seal(repo, verify_pin=False)
+    assert again["per_timeframe"] == first["per_timeframe"]
+    assert repo.calls == [], "recovery reads the captured evidence, never the predictions"
+
+
+def test_recompute_from_seal_refuses_a_snapshot_that_diverges_from_the_raw_capture(
+    tmp_path: Path,
+) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["raw_evidence"][0]["candidate_p_up_frac"] = 0.11
+    with pytest.raises(runner.SnapshotTampered, match="captured before exposure"):
+        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+
+
+def test_recompute_from_seal_refuses_a_seal_without_its_raw_capture(tmp_path: Path) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal.pop("raw_evidence")
+    with pytest.raises(runner.SnapshotTampered, match="lacks the raw capture"):
+        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+
+
+def test_recompute_from_seal_refuses_disagreeing_seal_columns(tmp_path: Path) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["evidence_snapshot_id"] = "f" * 64
+    with pytest.raises(runner.SnapshotTampered, match="disagrees with its captured snapshot"):
+        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+
+
+def test_a_seal_that_never_captured_cannot_be_recovered_by_rereading(tmp_path: Path) -> None:
+    class CaptureFails(FakeRepository):
+        def capture_section_5a_snapshot(self, snapshot) -> None:
+            raise RuntimeError("capture write failed")
+
+    with pytest.raises(RuntimeError):
+        _consume(CaptureFails(), tmp_path)
+    repo = FakeRepository()
+    with pytest.raises(runner.ConsumptionRefused, match="owner decision"):
+        runner.recompute_from_seal(repo, verify_pin=False)
+    assert repo.calls == []
+
+
+def test_recompute_from_seal_after_a_statistics_failure_completes_the_seal(
+    tmp_path: Path,
+) -> None:
+    broken = FakeRepository([evidence_row(T_CLOSE - timedelta(days=1))])
+    broken._rows[0].pop("candidate_p_up_frac")
+    with pytest.raises(KeyError):
+        _consume(broken, tmp_path)
+    assert FakeRepository.durable_seal["state"] == runner.STATE_SEALED_NO_RESULT

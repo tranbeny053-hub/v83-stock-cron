@@ -25,6 +25,7 @@ from crypto_probability_engine.persistence.prediction_origin import (
     DEFAULT_PREDICTION_ORIGIN,
     validate_prediction_origin,
 )
+from crypto_probability_engine.utils import canonical_json
 
 PersistenceStatus = Literal["STATELESS", "OK", "UNAVAILABLE"]
 RUN_SUMMARY_RETENTION_LIMIT = 100
@@ -126,6 +127,16 @@ class PersistenceRepository(Protocol):
 
     def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
         """Advance the seal state. The captured evidence stays immutable."""
+
+    def capture_section_5a_snapshot(self, snapshot: Mapping[str, Any]) -> None:
+        """Durably record the canonical snapshot and its digests, exactly once."""
+
+    def section_5a_seal_authority(self) -> str:
+        """Declare what kind of one-look seal this repository can provide.
+
+        Only ``POSTGRES_DURABLE`` is a cross-process, durable authority. Anything else must be
+        refused for consumption (finding G8).
+        """
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         """Persist immutable prediction outcome row."""
@@ -392,6 +403,23 @@ class InMemoryPersistenceRepository:
             raise RuntimeError("no section 5A seal to advance")
         self._section_5a_seal["state"] = state
         self._section_5a_seal["state_detail"] = detail
+
+    def capture_section_5a_snapshot(self, snapshot: Mapping[str, Any]) -> None:
+        seal = self._section_5a_seal
+        if seal is None or seal.get("state") != SECTION_5A_STATE_CLAIMED:
+            raise RuntimeError("no CLAIMED section 5A seal to capture into")
+        if seal.get("snapshot_payload") is not None:
+            raise RuntimeError("section 5A snapshot is already captured")
+        seal.update(
+            snapshot_payload=dict(snapshot),
+            evidence_snapshot_id=snapshot["evidence_snapshot_id"],
+            result_inputs_digest=snapshot["result_inputs_digest"],
+            state="SEALED_RAW_CAPTURED",
+        )
+
+    def section_5a_seal_authority(self) -> str:
+        # Its seal dies with this object. It can never be the one-look authority (G8).
+        return "PROCESS_LOCAL"
 
     def save_prediction_outcome(self, row: Mapping[str, Any]) -> PersistenceStatus:
         prediction_id = str(row.get("prediction_id", ""))
@@ -1071,11 +1099,16 @@ class SupabasePersistenceRepository:
         return _to_utc_datetime(value) if value is not None else None
 
     def fetch_oos_paired_evidence(self, *, include_probabilities: bool) -> list[dict]:
+        if include_probabilities:
+            # Never a plain read: probabilities leave Postgres only after they are durably
+            # captured into a CLAIMED seal, inside the same transaction.
+            return self._run_required_oos_read(
+                "OOS paired evidence (capture-before-exposure)",
+                _fetch_oos_paired_evidence_for_consumption,
+            )
         return self._run_required_oos_read(
             "OOS paired evidence",
-            lambda cursor: _fetch_oos_paired_evidence_rows(
-                cursor, include_probabilities=include_probabilities
-            ),
+            lambda cursor: _fetch_oos_paired_evidence_rows(cursor, include_probabilities=False),
         )
 
     def count_oos_origin_anomalies(self) -> int:
@@ -1103,10 +1136,24 @@ class SupabasePersistenceRepository:
         )
 
     def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
-        self._run_required_oos_read(
+        if not self._run_required_oos_read(
             "section 5A seal state",
             lambda cursor: _advance_section_5a_seal_state_row(cursor, state, detail),
-        )
+        ):
+            raise RuntimeError("section 5A seal state did not advance; no seal row exists")
+
+    def capture_section_5a_snapshot(self, snapshot: Mapping[str, Any]) -> None:
+        if not self._run_required_oos_read(
+            "section 5A snapshot capture",
+            lambda cursor: _capture_section_5a_snapshot_row(cursor, snapshot),
+        ):
+            raise RuntimeError(
+                "section 5A snapshot capture did not land: the seal is not CLAIMED with raw "
+                "evidence, is already captured, or was claimed under a different pin"
+            )
+
+    def section_5a_seal_authority(self) -> str:
+        return SECTION_5A_SEAL_AUTHORITY_POSTGRES
 
     def _run_required_oos_read(self, label: str, operation):
         if not self.maybe_can_attempt():
@@ -1845,6 +1892,12 @@ class SupabaseRestRepository:
     def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
         raise RuntimeError(_SEAL_POSTGRES_ONLY)
 
+    def capture_section_5a_snapshot(self, snapshot: Mapping[str, Any]) -> None:
+        raise RuntimeError(_SEAL_POSTGRES_ONLY)
+
+    def section_5a_seal_authority(self) -> str:
+        return "REST_NOT_A_SEAL_AUTHORITY"
+
     def _fetch_oos_outcome_labels(self, prediction_ids: list[str]) -> dict[str, dict]:
         identifiers = [identifier for identifier in prediction_ids if identifier]
         if not identifiers:
@@ -2436,6 +2489,7 @@ def _fetch_oos_prediction_rows(cursor, *, include_probabilities: bool) -> list[d
         SELECT {", ".join(columns)}
         FROM public.predictions
         WHERE run_id ~ '^oosb-[0-9a-f]{{32}}$'
+        ORDER BY prediction_id
         """
     )
     return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
@@ -2448,6 +2502,7 @@ def _fetch_oos_outcome_labels(cursor) -> dict[str, Any]:
         FROM public.prediction_outcomes AS o
         JOIN public.predictions AS p ON p.prediction_id = o.prediction_id
         WHERE p.run_id ~ '^oosb-[0-9a-f]{32}$'
+        ORDER BY o.prediction_id
         """
     )
     return {
@@ -2487,6 +2542,7 @@ def _fetch_oos_feature_diagnostic_rows(cursor) -> list[dict]:
         LEFT JOIN public.prediction_feature_snapshots AS s
                ON s.prediction_id = p.prediction_id
         WHERE p.run_id ~ '^oosb-[0-9a-f]{32}$'
+        ORDER BY p.prediction_id
         """
     )
     predictions: list[dict] = []
@@ -2512,34 +2568,128 @@ _SEAL_POSTGRES_ONLY = (
 )
 
 
-def _claim_section_5a_seal_row(cursor, payload: Mapping[str, Any]) -> bool:
-    """One statement: claim the singleton and store the raw evidence together."""
+SECTION_5A_SEAL_AUTHORITY_POSTGRES = "POSTGRES_DURABLE"
+SECTION_5A_STATE_CLAIMED = "CLAIMED"
 
+
+def _canonical_text(value: Any) -> str:
+    """THE serializer for every section 5A JSON column (finding G9).
+
+    The same encoder backs the evidence digest, so the seal can never refuse a value the digest
+    accepted — the gap that let a timestamp-bearing snapshot pass the digest and then crash the
+    claim.
+    """
+
+    return canonical_json.dumps(value).decode("utf-8")
+
+
+def _decode_json_column(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        value = bytes(value).decode("utf-8")
+    if isinstance(value, str):
+        return canonical_json.loads(value)
+    return canonical_json.decode(value)
+
+
+def _claim_section_5a_seal_row(cursor, payload: Mapping[str, Any]) -> bool:
+    """Claim the one-look singleton. Runs BEFORE any probability is exposed (G1.1, G3).
+
+    Always inserts state CLAIMED. Every JSON-bearing field is serialized with the canonical
+    encoder, including a snapshot if a caller supplies one; the table's CHECK constraint is the
+    authority that refuses evidence on a CLAIMED row, so claim-before-read cannot be bypassed by
+    handing evidence to the claim.
+    """
+
+    snapshot = payload.get("snapshot_payload")
     cursor.execute(
         """
         INSERT INTO public.section_5a_evaluation_seal (
-          seal_id, sealed_at_utc, evidence_snapshot_id, result_inputs_digest,
-          evaluator_pin_digest, contract_instants, snapshot_payload, state
+          seal_id, sealed_at_utc, evaluator_pin_digest, contract_instants, state,
+          evidence_snapshot_id, result_inputs_digest, snapshot_payload
         ) VALUES (
-          'SINGLETON', %(sealed_at_utc)s, %(evidence_snapshot_id)s,
-          %(result_inputs_digest)s, %(evaluator_pin_digest)s,
-          %(contract_instants)s::jsonb, %(snapshot_payload)s::jsonb,
-          'SEALED_RAW_CAPTURED'
+          'SINGLETON', %(sealed_at_utc)s, %(evaluator_pin_digest)s,
+          %(contract_instants)s::jsonb, 'CLAIMED',
+          %(evidence_snapshot_id)s, %(result_inputs_digest)s, %(snapshot_payload)s::jsonb
         )
         ON CONFLICT (seal_id) DO NOTHING
         RETURNING seal_id
         """,
         {
             "sealed_at_utc": payload["sealed_at_utc"],
-            "evidence_snapshot_id": payload["evidence_snapshot_id"],
-            "result_inputs_digest": payload["result_inputs_digest"],
             "evaluator_pin_digest": payload["evaluator_pin_digest"],
-            "contract_instants": json.dumps(
-                payload["contract_instants"], sort_keys=True, allow_nan=False
-            ),
-            "snapshot_payload": json.dumps(
-                payload["snapshot_payload"], sort_keys=True, allow_nan=False
-            ),
+            "contract_instants": _canonical_text(payload["contract_instants"]),
+            "evidence_snapshot_id": payload.get("evidence_snapshot_id"),
+            "result_inputs_digest": payload.get("result_inputs_digest"),
+            "snapshot_payload": None if snapshot is None else _canonical_text(snapshot),
+        },
+    )
+    return cursor.fetchone() is not None
+
+
+def _fetch_oos_paired_evidence_for_consumption(cursor) -> list[dict]:
+    """The ONLY Postgres path that returns probabilities: capture-before-exposure.
+
+    In one transaction: lock the seal and require it CLAIMED and uncaptured; read the
+    predictions and outcomes; write them verbatim, canonically encoded, into the seal's
+    raw_evidence; and only then return. The caller receives probabilities strictly after they
+    are durably captured, so there is no state in which the look was exposed but unrecorded. If
+    anything fails, the transaction rolls back and nothing is returned.
+    """
+
+    cursor.execute(
+        """
+        SELECT state, raw_evidence IS NULL
+        FROM public.section_5a_evaluation_seal
+        WHERE seal_id = 'SINGLETON'
+        FOR UPDATE
+        """
+    )
+    seal = cursor.fetchone()
+    if seal is None or seal[0] != SECTION_5A_STATE_CLAIMED or seal[1] is not True:
+        raise RuntimeError(
+            "section 5A probabilities may be read only under a CLAIMED, uncaptured seal"
+        )
+    predictions = _fetch_oos_prediction_rows(cursor, include_probabilities=True)
+    outcomes = _fetch_oos_outcome_labels(cursor)
+    cursor.execute(
+        """
+        UPDATE public.section_5a_evaluation_seal
+        SET raw_evidence = %(raw_evidence)s::jsonb, updated_at_utc = now()
+        WHERE seal_id = 'SINGLETON' AND state = 'CLAIMED' AND raw_evidence IS NULL
+        RETURNING seal_id
+        """,
+        {"raw_evidence": _canonical_text({"predictions": predictions, "outcomes": outcomes})},
+    )
+    if cursor.fetchone() is None:
+        raise RuntimeError("section 5A raw evidence capture did not land; nothing is returned")
+    return _oos_paired_evidence_from_rows(predictions, outcomes.get, include_probabilities=True)
+
+
+def _capture_section_5a_snapshot_row(cursor, snapshot: Mapping[str, Any]) -> bool:
+    """Record the canonical snapshot and its digests, once, after the raw capture."""
+
+    cursor.execute(
+        """
+        UPDATE public.section_5a_evaluation_seal
+        SET snapshot_payload = %(snapshot_payload)s::jsonb,
+            evidence_snapshot_id = %(evidence_snapshot_id)s,
+            result_inputs_digest = %(result_inputs_digest)s,
+            state = 'SEALED_RAW_CAPTURED',
+            updated_at_utc = now()
+        WHERE seal_id = 'SINGLETON'
+          AND state = 'CLAIMED'
+          AND raw_evidence IS NOT NULL
+          AND snapshot_payload IS NULL
+          AND evaluator_pin_digest = %(evaluator_pin_digest)s
+        RETURNING seal_id
+        """,
+        {
+            "snapshot_payload": _canonical_text(snapshot),
+            "evidence_snapshot_id": snapshot["evidence_snapshot_id"],
+            "result_inputs_digest": snapshot["result_inputs_digest"],
+            "evaluator_pin_digest": snapshot["evaluator_pin_digest"],
         },
     )
     return cursor.fetchone() is not None
@@ -2549,8 +2699,8 @@ def _fetch_section_5a_seal_row(cursor):
     cursor.execute(
         """
         SELECT seal_id, sealed_at_utc, evidence_snapshot_id, result_inputs_digest,
-               evaluator_pin_digest, contract_instants, snapshot_payload, state,
-               state_detail
+               evaluator_pin_digest, contract_instants, snapshot_payload, raw_evidence,
+               state, state_detail
         FROM public.section_5a_evaluation_seal
         WHERE seal_id = 'SINGLETON'
         """
@@ -2560,10 +2710,20 @@ def _fetch_section_5a_seal_row(cursor):
         return None
     columns = (
         "seal_id", "sealed_at_utc", "evidence_snapshot_id", "result_inputs_digest",
-        "evaluator_pin_digest", "contract_instants", "snapshot_payload", "state",
-        "state_detail",
+        "evaluator_pin_digest", "contract_instants", "snapshot_payload", "raw_evidence",
+        "state", "state_detail",
     )
-    return dict(zip(columns, row, strict=True))
+    seal = dict(zip(columns, row, strict=True))
+    for column in ("contract_instants", "snapshot_payload", "raw_evidence"):
+        seal[column] = _decode_json_column(seal[column])
+    raw = seal.pop("raw_evidence")
+    if isinstance(raw, Mapping):
+        seal["captured_rows"] = _oos_paired_evidence_from_rows(
+            raw.get("predictions", ()),
+            dict(raw.get("outcomes", {})).get,
+            include_probabilities=True,
+        )
+    return seal
 
 
 def _advance_section_5a_seal_state_row(cursor, state: str, detail: str) -> bool:
@@ -2572,10 +2732,11 @@ def _advance_section_5a_seal_state_row(cursor, state: str, detail: str) -> bool:
         UPDATE public.section_5a_evaluation_seal
         SET state = %(state)s, state_detail = %(detail)s, updated_at_utc = now()
         WHERE seal_id = 'SINGLETON'
+        RETURNING seal_id
         """,
         {"state": state, "detail": detail},
     )
-    return True
+    return cursor.fetchone() is not None
 
 
 def _fetch_oos_t0_row(cursor):
@@ -3451,9 +3612,13 @@ def _oos_t0_from_rows(rows) -> datetime | None:
 
 
 def _oos_arm(row: Mapping[str, Any]) -> str | None:
-    explicit = row.get("arm")
-    if explicit in {"BASELINE", "CANDIDATE"}:
-        return str(explicit)
+    """Derive the arm from the prediction_id suffix ONLY (finding G7).
+
+    The Postgres qualifier can see nothing but prediction_id, so an arm read from any other
+    field would let the in-memory and Postgres paths admit different populations — silently,
+    and in exactly the rows that decide the answer. There is no second source of arm.
+    """
+
     prediction_id = row.get("prediction_id")
     if isinstance(prediction_id, str):
         suffix = prediction_id.rsplit(":", maxsplit=1)[-1]

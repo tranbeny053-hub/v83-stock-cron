@@ -31,3 +31,34 @@ def test_recompute_mode_is_available_for_the_sealed_no_result_state() -> None:
 def test_cli_rejects_an_unknown_mode() -> None:
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(["--mode", "definitely-not-a-mode"])
+
+
+def test_recovery_modes_are_available() -> None:
+    parser = cli.build_parser()
+    assert parser.parse_args(["--mode", "recompute"]).mode == "recompute"
+    assert parser.parse_args(["--mode", "recompute-artifact"]).mode == "recompute-artifact"
+
+
+def test_the_cli_requires_a_positive_durable_postgres_declaration() -> None:
+    """G8. build_operator_repository silently falls back to in-memory without a database URL;
+    a missing secret must refuse rather than seal process-locally."""
+
+    from crypto_probability_engine.persistence import repository as module
+
+    with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
+        cli.require_durable_authority(module.InMemoryPersistenceRepository())
+    rest = module.SupabaseRestRepository.__new__(module.SupabaseRestRepository)
+    with pytest.raises(runner.ConsumptionRefused, match="SUPABASE_DB_URL"):
+        cli.require_durable_authority(rest)
+    cli.require_durable_authority(
+        module.SupabasePersistenceRepository("postgresql://never-connected")
+    )
+
+
+def test_consume_without_a_database_refuses_before_any_read(monkeypatch) -> None:
+    """End to end through main(): no SUPABASE_DB_URL means in-memory, which must refuse."""
+
+    for name in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
+        cli.main(["--mode", "consume", "--confirm", runner.CONFIRMATION_TOKEN])

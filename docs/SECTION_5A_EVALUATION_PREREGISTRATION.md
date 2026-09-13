@@ -446,3 +446,59 @@ the exposure is visible in the output rather than buried. **No retrospective cha
 - **F8** — `per_row_d` normalizes both arms before scoring. §5A.4 defines Brier on normalized
   probabilities and the ECE path normalizes internally, so scoring raw values treated a
   tolerance-admitted row inconsistently between the two statistics.
+
+---
+
+# Addendum 3, 2026-09-13 — repair of G1–G11 against the Codex-authored red tests
+
+The failing tests were authored by Codex against the frozen implementation `2b31832` **before**
+any repair, and pinned by SHA-256
+`efe36649582ecbfe3a9835d159bd3ea1bd54befe4a55269dd165084d265f07df` in their own commit ahead of
+the repair. They were not edited to obtain green. This addendum **supersedes §16's claim design**.
+
+## 19. The one look is claimed before any probability is exposed
+
+**SUPERSEDES the atomic claim-with-snapshot of §16.** That design put the evidence in the claim,
+which required reading the probabilities first. Two concurrent consumers could therefore both
+read before one lost the singleton insert (G3), and a serialization failure between read and
+claim spent the look with no seal (G1, G9).
+
+The order is now fixed as: every guard → a **durable, atomic CLAIM** carrying no evidence → the
+probability read → capture of the snapshot and its digests. Only the claimant may read. A failure
+after the claim leaves the look durably recorded as spent (`CAPTURE_FAILED`); a failure before it
+spends nothing.
+
+On Postgres the probability read is itself **capture-before-exposure**: one transaction locks the
+seal, requires it `CLAIMED` and uncaptured, reads, writes the rows verbatim into `raw_evidence`,
+and only then returns. Probabilities never leave the database except as rows already durably
+captured. Migration 0009 enforces the lifecycle in the database — a `CLAIMED` row cannot carry
+evidence, a captured state requires the raw capture, claim fields are immutable, captured
+evidence is write-once, transitions are restricted, and the seal cannot be deleted.
+
+## 20. One lossless canonical serializer
+
+Every evidence digest and every seal column uses `utils/canonical_json.py`. It is total over the
+types the driver returns, lossless in value (a `Decimal` is formatted exactly, never through
+`normalize()`, whose 28-digit context would round), driver-independent (`Decimal("0.6")` and
+`0.6` are one value), timezone-independent, and round-trip stable, so a snapshot read back from
+disk digests exactly as captured. Rows and feature rows are hashed as multisets, so driver order
+cannot change an identity.
+
+## 21. Seal authority
+
+A repository declares its seal authority. The consumption library refuses any declaration other
+than `POSTGRES_DURABLE`. The production entrypoint additionally requires a **positive**
+declaration, because `build_operator_repository` silently falls back to an in-memory repository
+when no database is configured — a missing secret must refuse, not seal process-locally. Both the
+CLI and the canonical serializer are inside the evaluator pin.
+
+## 22. A contradiction in the pinned red tests, recorded rather than resolved
+
+**G3.4 is unsatisfiable under its own test double, and remains RED.** The double's probability
+read waits on a two-party `threading.Barrier` with a 5-second timeout. G3.1 requires at most one
+read; G3.4 requires exactly one read **and** a successful consumption. A lone reader raises
+`BrokenBarrierError` after 5.0 s — proven empirically before the repair, independent of any
+design. Under the repair every G3.4 assertion that can hold does hold: one consumer is refused
+before reading, exactly one read occurs, and the durable seal records the spent look. Only "one
+success" is blocked, by the barrier. The test was not edited and was not gamed; amending it is for
+the owner and Codex.

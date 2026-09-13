@@ -1,11 +1,13 @@
 """Readiness and consumption runs for the section 5A evaluation.
 
 Semantics are pre-registered in ``docs/SECTION_5A_EVALUATION_PREREGISTRATION.md``
-§1 (readiness vs consumption), §3 (the five guards), §11 (snapshot identity) and
-§12 (one-shot failure states).
+§1 (readiness vs consumption), §3 (the guards), §11 (snapshot identity) and §12 (one-shot
+failure states), as amended by the owner rulings of Addendum 2.
 
-THE LOOK IS CONSUMED WHEN THE PROBABILITIES ARE READ, not when a result is produced.
-The seal is therefore armed immediately after the raw capture and before any statistic.
+THE LOOK IS SPENT WHEN THE PROBABILITIES ARE EXPOSED. So the one-shot seal is claimed,
+durably and atomically, BEFORE any probability is exposed — never after (findings G1.1, G3).
+On Postgres the probabilities are additionally returned only once they are durably captured
+into that claimed seal, so there is no state in which the look was exposed but unrecorded.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -24,17 +27,26 @@ from crypto_probability_engine.oos.evaluation.evaluator_pin import (
     assert_evaluator_pin,
     current_pin_artifacts,
 )
-from crypto_probability_engine.oos.evaluation.lattice import window_count
+from crypto_probability_engine.oos.evaluation.lattice import (
+    assign_window_index,
+    window_count,
+)
+from crypto_probability_engine.utils import canonical_json
+from crypto_probability_engine.utils.canonical_json import CanonicalEncodingError
 
 MODE_READINESS = "readiness"
 MODE_CONSUME = "consume"
 
 CONFIRMATION_TOKEN = "CONSUME-SECTION-5A-ONE-LOOK"
 
+SEAL_AUTHORITY_POSTGRES = "POSTGRES_DURABLE"
+
 STATE_NOT_STARTED = "NOT_STARTED"
+STATE_CLAIMED = "CLAIMED"
 STATE_SEALED_RAW_CAPTURED = "SEALED_RAW_CAPTURED"
 STATE_COMPLETE = "COMPLETE"
 STATE_SEALED_NO_RESULT = "SEALED_NO_RESULT"
+STATE_CAPTURE_FAILED = "CAPTURE_FAILED"
 
 # Contract instants (V1_QUANT_CONTRACT §5A.2). Not configurable: they are the contract.
 T_FREEZE = datetime(2026, 8, 20, 11, 35, 56, tzinfo=UTC)
@@ -47,51 +59,69 @@ SNAPSHOT_FILENAME = "snapshot.json"
 RESULT_FILENAME = "result.json"
 STATE_FILENAME = "state.json"
 
+# Every field recomputation trusts. Absence is tampering, never permission (G2.1, G10).
+REQUIRED_SNAPSHOT_FIELDS = (
+    "evidence_snapshot_id",
+    "result_inputs_digest",
+    "evaluator_pin_digest",
+    "t_freeze",
+    "t0",
+    "t_close",
+    "timeframes",
+    "origin_anomalies",
+    "feature_rows",
+    "rows",
+)
+_DIGEST_FIELDS = ("evidence_snapshot_id", "result_inputs_digest", "evaluator_pin_digest")
+
 
 class OneLookAlreadyConsumed(RuntimeError):
-    """A consumption artifact already exists; the holdout is evaluated exactly once."""
+    """A durable seal already exists; the holdout is evaluated exactly once."""
 
 
 class ConsumptionRefused(RuntimeError):
-    """A consumption guard refused before anything was read."""
+    """A consumption guard refused before any probability was exposed."""
 
 
 class SnapshotTampered(RuntimeError):
-    """The stored evidence or the rules changed since the seal was claimed."""
+    """Captured evidence, its digests, or the rules differ from what was sealed."""
+
+
+# --------------------------------------------------------------------------- identity
 
 
 def evidence_snapshot_id(
     rows: Sequence[Mapping[str, Any]],
     *,
     feature_rows: Sequence[Mapping[str, Any]] = (),
-    origin_anomalies: int = 0,
+    origin_anomalies: int | Decimal = 0,
 ) -> str:
-    """SHA-256 over ALL captured evidence, not only the scored rows (§11, finding F5).
+    """SHA-256 over ALL captured evidence, canonically and order-independently.
 
-    Feature rows and the anomaly count determine mandatory §5A.10 output, so two captures
-    differing only in those are genuinely different evidence and must not share an id.
+    - Rows and feature rows are MULTISETS: driver order carries no meaning and cannot change
+      the identity (G5.3).
+    - Values are canonicalized losslessly and driver-independently, so ``Decimal`` from psycopg
+      and ``float`` hash identically when they are the same value (G1.3, G1.4), and a snapshot
+      read back from disk digests exactly as it did when captured.
     """
 
-    return hashlib.sha256(
-        _canonical_json(
-            {
-                "rows": list(rows),
-                "feature_rows": list(feature_rows),
-                "origin_anomalies": int(origin_anomalies),
-            }
-        )
-    ).hexdigest()
+    body = {
+        "rows": canonical_json.canonical_multiset(rows),
+        "feature_rows": canonical_json.canonical_multiset(feature_rows),
+        "origin_anomalies": canonical_json.encode(origin_anomalies),
+    }
+    return hashlib.sha256(canonical_json.serialize(body)).hexdigest()
 
 
 def result_inputs_digest(snapshot_id: str, pin_digest: str) -> str:
-    """Bind the evidence to the RULES and the contract instants that scored it.
+    """Bind the evidence to the RULES and contract instants that scored it.
 
-    Kept separate from ``evidence_snapshot_id`` deliberately: the evidence identity must
-    stay stable when the evaluator changes, or drift could not be detected by comparison.
+    Separate from ``evidence_snapshot_id`` on purpose: the evidence identity must stay stable
+    when the evaluator changes, or drift could not be detected by comparison.
     """
 
     return hashlib.sha256(
-        _canonical_json(
+        canonical_json.dumps(
             {
                 "evidence_snapshot_id": snapshot_id,
                 "evaluator_pin_digest": pin_digest,
@@ -104,6 +134,9 @@ def result_inputs_digest(snapshot_id: str, pin_digest: str) -> str:
     ).hexdigest()
 
 
+# --------------------------------------------------------------------------- readiness
+
+
 def run_readiness(
     repository,
     *,
@@ -112,13 +145,10 @@ def run_readiness(
 ) -> dict[str, Any]:
     """Answer whether the evidence is adequate. Repeatable; never consumes the look.
 
-    The probabilities are never loaded, so nothing here can compute a Brier value, a
-    ``d``, or an ECE even by mistake.
+    The probabilities are never loaded, so nothing here can compute a Brier value, a ``d``,
+    or an ECE even by mistake.
     """
 
-    # The pre-registration's freeze ordering says readiness may touch live data only
-    # under a verified pin. The CLI reaches this directly, so the check belongs HERE and
-    # not only in the workflow.
     if verify_pin:
         assert_evaluator_pin()
 
@@ -127,7 +157,7 @@ def run_readiness(
     admission = admit(evidence, t0=T0, t_close=T_CLOSE)
 
     feature_rows = repository.fetch_oos_feature_diagnostics()
-    origin_anomalies = repository.count_oos_origin_anomalies()
+    origin_anomalies = _measured_count(repository.count_oos_origin_anomalies())
     block = diagnostics_module.build(
         admission,
         t0=T0,
@@ -137,10 +167,6 @@ def run_readiness(
         feature_rows=feature_rows,
         origin_anomalies=origin_anomalies,
     )
-    attainability = {
-        timeframe: _attainability(timeframe, admission)
-        for timeframe in TIMEFRAMES
-    }
     return {
         "mode": MODE_READINESS,
         "generated_at_utc": (now_utc or datetime.now(UTC)).isoformat(),
@@ -148,13 +174,18 @@ def run_readiness(
         "evidence_snapshot_id": evidence_snapshot_id(
             evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
         ),
-        "attainability": attainability,
+        "attainability": {
+            timeframe: _attainability(timeframe, admission) for timeframe in TIMEFRAMES
+        },
         "diagnostics": block,
         "note": (
-            "Readiness omits every probability column by construction, so no Brier, d "
-            "or ECE is computable from what this run held."
+            "Readiness omits every probability column by construction, so no Brier, d or ECE "
+            "is computable from what this run held."
         ),
     }
+
+
+# --------------------------------------------------------------------------- consumption
 
 
 def run_consumption(
@@ -165,72 +196,47 @@ def run_consumption(
     now_utc: datetime | None = None,
     verify_pin: bool = True,
 ) -> dict[str, Any]:
-    """Take the one look. Guards run first; the seal arms before any statistic."""
+    """Take the one look.
+
+    Order is the safety property: every guard, then a DURABLE ATOMIC CLAIM, then — and only
+    then — the probability read. A failure after the claim leaves the look durably recorded as
+    spent; a failure before it spends nothing.
+    """
 
     moment = now_utc or datetime.now(UTC)
+    if moment.tzinfo is None:
+        raise ConsumptionRefused("now_utc must be timezone-aware")
     artifact_dir = Path(artifact_dir)
 
-    # G5, G1, G3 — strictly before anything is read.
+    # Guards, strictly before anything is claimed or read.
     if moment < T_CLOSE:
         raise ConsumptionRefused(f"T_close has not passed: {T_CLOSE.isoformat()}")
-    pin = current_pin_artifacts()
+    pin_digest = str(current_pin_artifacts()["closure_digest"])
     if verify_pin:
         assert_evaluator_pin()
     if confirmation != CONFIRMATION_TOKEN:
         raise ConsumptionRefused("confirmation token absent or wrong; run is inert")
+    _refuse_non_durable_authority(repository)
 
-    # G2 — the DURABLE cross-run seal. A filesystem check is useless here: the workflow
-    # gets a fresh runner per dispatch, so a local seal is always empty (finding F2).
     existing = repository.fetch_section_5a_seal()
     if existing is not None:
         raise OneLookAlreadyConsumed(
             "a durable section 5A seal already exists "
-            f"(state={existing.get('state')}, evidence={existing.get('evidence_snapshot_id')}); "
-            "the holdout is evaluated exactly once"
+            f"(state={existing.get('state')}); the holdout is evaluated exactly once"
         )
     refuse_existing(artifact_dir)
 
-    # Non-consequential reads happen BEFORE the probabilities, so that no fallible call
-    # sits between the consumption and the seal (finding F3).
-    origin_anomalies = repository.count_oos_origin_anomalies()
-    feature_rows = repository.fetch_oos_feature_diagnostics()
+    # Non-consequential reads: no probability is exposed by either.
+    origin_anomalies = _measured_count(repository.count_oos_origin_anomalies())
+    feature_rows = list(repository.fetch_oos_feature_diagnostics())
 
-    # Reading the probabilities IS the consumption.
-    evidence = repository.fetch_oos_paired_evidence(include_probabilities=True)
-
-    snapshot_id = evidence_snapshot_id(
-        evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
-    )
-    pin_digest = str(pin["closure_digest"])
-    snapshot = {
-        "captured_at_utc": moment.isoformat(),
-        "evidence_snapshot_id": snapshot_id,
-        "result_inputs_digest": result_inputs_digest(snapshot_id, pin_digest),
-        "evaluator_pin_digest": pin_digest,
-        "t_freeze": T_FREEZE.isoformat(),
-        "t0": T0.isoformat(),
-        "t_close": T_CLOSE.isoformat(),
-        "timeframes": list(TIMEFRAMES),
-        "origin_anomalies": origin_anomalies,
-        "feature_rows": feature_rows,
-        "rows": list(evidence),
-    }
-
-    # G4 — ONE atomic write claims the seal and captures the raw evidence together.
-    # There is no interval in which the look is spent but unrecorded.
+    # THE CLAIM — durable and atomic, BEFORE any probability exposure. Only the claimant may
+    # read, so two concurrent consumers can never both see the holdout (G3.1).
     claimed = repository.claim_section_5a_seal(
         {
             "sealed_at_utc": moment.isoformat(),
-            "evidence_snapshot_id": snapshot_id,
-            "result_inputs_digest": snapshot["result_inputs_digest"],
             "evaluator_pin_digest": pin_digest,
-            "contract_instants": {
-                "t_freeze": T_FREEZE.isoformat(),
-                "t0": T0.isoformat(),
-                "t_close": T_CLOSE.isoformat(),
-                "timeframes": list(TIMEFRAMES),
-            },
-            "snapshot_payload": snapshot,
+            "contract_instants": _contract_instants(),
         }
     )
     if not claimed:
@@ -238,68 +244,160 @@ def run_consumption(
             "another run claimed the durable seal first; refusing a second look"
         )
 
+    # From here the look is durably recorded as spent, whatever happens next.
+    try:
+        evidence = list(repository.fetch_oos_paired_evidence(include_probabilities=True))
+        snapshot = _build_snapshot(
+            moment=moment,
+            pin_digest=pin_digest,
+            evidence=evidence,
+            feature_rows=feature_rows,
+            origin_anomalies=origin_anomalies,
+        )
+        repository.capture_section_5a_snapshot(snapshot)
+    except Exception as exc:
+        _record_terminal_state(repository, STATE_CAPTURE_FAILED, exc)
+        raise
+
     # The local artifact is SECONDARY: convenience and upload, never the authority.
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    _write(artifact_dir / SNAPSHOT_FILENAME, snapshot)
+    (artifact_dir / SNAPSHOT_FILENAME).write_bytes(_pretty_json(snapshot))
     _write_state(artifact_dir, STATE_SEALED_RAW_CAPTURED)
 
     try:
         result = compute_from_snapshot(snapshot, now_utc=moment)
     except Exception as exc:
         _write_state(artifact_dir, STATE_SEALED_NO_RESULT, detail=repr(exc))
-        repository.advance_section_5a_seal_state(STATE_SEALED_NO_RESULT, repr(exc))
+        _record_terminal_state(repository, STATE_SEALED_NO_RESULT, exc)
         raise
-    _write(artifact_dir / RESULT_FILENAME, result)
+    _write_report(artifact_dir / RESULT_FILENAME, result)
     _write_state(artifact_dir, STATE_COMPLETE)
     repository.advance_section_5a_seal_state(STATE_COMPLETE)
     return result
 
 
+# --------------------------------------------------------------------------- recovery
+
+
+def verify_snapshot_integrity(snapshot: Any, *, verify_pin: bool = True) -> None:
+    """Fail closed unless the snapshot is complete, untampered, and scored by today's rules.
+
+    Every trusted field is checked (G2.3). A missing field is tampering, not a default (G2.1,
+    G10). The recorded pin is compared with the running evaluator regardless of
+    ``verify_pin``, which only additionally checks the on-disk files against the committed pin.
+    """
+
+    if not isinstance(snapshot, Mapping):
+        raise SnapshotTampered("snapshot is not a mapping")
+    missing = [field for field in REQUIRED_SNAPSHOT_FIELDS if field not in snapshot]
+    if missing:
+        raise SnapshotTampered(f"snapshot is missing trusted field(s) {missing}; refused")
+    for field in _DIGEST_FIELDS:
+        if not _is_sha256_hex(snapshot[field]):
+            raise SnapshotTampered(f"snapshot {field} is not a SHA-256 digest; refused")
+    for field, expected in _contract_instants().items():
+        if snapshot[field] != expected:
+            raise SnapshotTampered(
+                f"snapshot {field} is {snapshot[field]!r}, not the contract's {expected!r}"
+            )
+    if not isinstance(snapshot["rows"], list) or not isinstance(snapshot["feature_rows"], list):
+        raise SnapshotTampered("snapshot rows and feature_rows must be lists; refused")
+    anomalies = _measured_count(snapshot["origin_anomalies"], tampered=True)
+
+    if verify_pin:
+        assert_evaluator_pin()
+    current_pin = str(current_pin_artifacts()["closure_digest"])
+    if snapshot["evaluator_pin_digest"] != current_pin:
+        raise SnapshotTampered(
+            "the evaluator has changed since this snapshot was sealed; recomputing under "
+            "different rules would be retuning against a holdout already seen"
+        )
+    recomputed = evidence_snapshot_id(
+        snapshot["rows"], feature_rows=snapshot["feature_rows"], origin_anomalies=anomalies
+    )
+    if recomputed != snapshot["evidence_snapshot_id"]:
+        raise SnapshotTampered(
+            "stored evidence does not match its recorded snapshot id; recomputation refused "
+            f"(recorded={snapshot['evidence_snapshot_id']}, actual={recomputed})"
+        )
+    expected_inputs = result_inputs_digest(recomputed, snapshot["evaluator_pin_digest"])
+    if expected_inputs != snapshot["result_inputs_digest"]:
+        raise SnapshotTampered(
+            "result_inputs_digest does not bind this evidence to these rules; it is "
+            "recomputed and compared, never trusted as recorded"
+        )
+
+
 def recompute_from_snapshot(
     artifact_dir: Path, *, now_utc: datetime | None = None, verify_pin: bool = True
 ) -> dict:
-    """Recompute the decision from the immutable snapshot. NO database access.
+    """Offline audit: recompute from a local artifact. NO database access.
 
-    This is the recovery path for ``SEALED_NO_RESULT`` (§12): a statistics defect costs
-    a recomputation, never the holdout. It may be run any number of times.
+    The local artifact is secondary; the durable authority is the Postgres seal, which
+    :func:`recompute_from_seal` reads. Both apply identical integrity verification.
     """
 
     artifact_dir = Path(artifact_dir)
-    snapshot = json.loads((artifact_dir / SNAPSHOT_FILENAME).read_text(encoding="utf-8"))
-
-    # "Same evidence, same rules" must be ENFORCED, not asserted (finding F4).
-    if verify_pin:
-        assert_evaluator_pin()
-    recomputed = evidence_snapshot_id(
-        snapshot["rows"],
-        feature_rows=snapshot.get("feature_rows", ()),
-        origin_anomalies=int(snapshot.get("origin_anomalies", 0)),
-    )
-    if recomputed != snapshot.get("evidence_snapshot_id"):
-        raise SnapshotTampered(
-            "stored evidence does not match its recorded snapshot id; recomputation "
-            f"refused (recorded={snapshot.get('evidence_snapshot_id')}, actual={recomputed})"
-        )
-    pin_digest = str(current_pin_artifacts()["closure_digest"])
-    recorded_pin = snapshot.get("evaluator_pin_digest")
-    if recorded_pin is not None and recorded_pin != pin_digest:
-        raise SnapshotTampered(
-            "the evaluator has changed since this snapshot was sealed; recomputing "
-            "under different rules would be retuning against a holdout already seen"
-        )
-
+    raw = (artifact_dir / SNAPSHOT_FILENAME).read_bytes()
+    try:
+        snapshot = canonical_json.loads(raw)
+    except (ValueError, CanonicalEncodingError) as exc:
+        raise SnapshotTampered(f"snapshot cannot be decoded canonically: {exc}") from exc
+    verify_snapshot_integrity(snapshot, verify_pin=verify_pin)
     result = compute_from_snapshot(snapshot, now_utc=now_utc)
-    _write(artifact_dir / RESULT_FILENAME, result)
+    _write_report(artifact_dir / RESULT_FILENAME, result)
     _write_state(artifact_dir, STATE_COMPLETE)
+    return result
+
+
+def recompute_from_seal(
+    repository, *, now_utc: datetime | None = None, verify_pin: bool = True
+) -> dict:
+    """Recover from the DURABLE seal. Reads the captured evidence, never the predictions.
+
+    Recomputing from captured evidence under verified-identical rules is the same look, not a
+    second one. It also cross-checks the snapshot against the raw rows Postgres captured
+    before exposure, so a snapshot that diverges from what was actually read is refused.
+    """
+
+    _refuse_non_durable_authority(repository)
+    seal = repository.fetch_section_5a_seal()
+    if seal is None:
+        raise ConsumptionRefused("no section 5A seal exists; there is nothing to recompute")
+    snapshot = seal.get("snapshot_payload")
+    if snapshot is None:
+        raise ConsumptionRefused(
+            f"the seal is {seal.get('state')} with no captured snapshot; recovery needs an "
+            "owner decision and must not re-read the holdout"
+        )
+    verify_snapshot_integrity(snapshot, verify_pin=verify_pin)
+    for field in _DIGEST_FIELDS:
+        if seal.get(field) != snapshot[field]:
+            raise SnapshotTampered(f"seal {field} disagrees with its captured snapshot")
+    captured = seal.get("captured_rows")
+    if captured is None:
+        raise SnapshotTampered("the durable seal lacks the raw capture it was exposed from")
+    if canonical_json.canonical_multiset(captured) != canonical_json.canonical_multiset(
+        snapshot["rows"]
+    ):
+        raise SnapshotTampered(
+            "the snapshot's rows differ from what Postgres captured before exposure"
+        )
+    result = compute_from_snapshot(snapshot, now_utc=now_utc)
+    if seal.get("state") in {STATE_SEALED_RAW_CAPTURED, STATE_SEALED_NO_RESULT}:
+        repository.advance_section_5a_seal_state(STATE_COMPLETE)
     return result
 
 
 def compute_from_snapshot(
     snapshot: Mapping[str, Any], *, now_utc: datetime | None = None
 ) -> dict[str, Any]:
-    """Pure: snapshot in, decision out. Touches no repository and no clock-dependent state."""
+    """Pure: snapshot in, decision out. Touches no repository."""
 
-    rows = [_revive(row) for row in snapshot["rows"]]
+    missing = [field for field in REQUIRED_SNAPSHOT_FIELDS if field not in snapshot]
+    if missing:
+        raise SnapshotTampered(f"snapshot is missing trusted field(s) {missing}; refused")
+    rows = [dict(row) for row in snapshot["rows"]]
     admission = admit(rows, t0=T0, t_close=T_CLOSE)
     per_timeframe = {
         timeframe: evaluate_timeframe(timeframe, admission, t0=T0, t_close=T_CLOSE)
@@ -311,33 +409,31 @@ def compute_from_snapshot(
         t_close=T_CLOSE,
         t_freeze=T_FREEZE,
         timeframes=TIMEFRAMES,
-        feature_rows=snapshot.get("feature_rows", ()),
-        origin_anomalies=int(snapshot.get("origin_anomalies", 0)),
+        feature_rows=snapshot["feature_rows"],
+        origin_anomalies=_measured_count(snapshot["origin_anomalies"], tampered=True),
     )
     return {
         "mode": MODE_CONSUME,
         "generated_at_utc": (now_utc or datetime.now(UTC)).isoformat(),
         "consumes_one_look": True,
         "evidence_snapshot_id": snapshot["evidence_snapshot_id"],
-        "result_inputs_digest": snapshot.get("result_inputs_digest"),
-        "evaluator_pin_digest": snapshot.get("evaluator_pin_digest"),
+        "result_inputs_digest": snapshot["result_inputs_digest"],
+        "evaluator_pin_digest": snapshot["evaluator_pin_digest"],
         "boundary_convention": 0.05,
         "boundary_convention_note": (
-            "A pre-committed decision boundary, not a hypothesis test. It has no error "
-            "rate and no reported quantity is a probability of being wrong."
+            "A pre-committed decision boundary, not a hypothesis test. It has no error rate "
+            "and no reported quantity is a probability of being wrong."
         ),
         "per_timeframe": {
             timeframe: _render(result) for timeframe, result in per_timeframe.items()
         },
         "authorized_cells": sorted(
-            cell
-            for result in per_timeframe.values()
-            for cell in result.authorized_cells
+            cell for result in per_timeframe.values() for cell in result.authorized_cells
         ),
         "diagnostics": block,
         "licence_note": (
-            "A PASS authorizes only the listed cells. No profitability claim, no "
-            "per-asset superiority claim, and no claim beyond an authorized cell."
+            "A PASS authorizes only the listed cells. No profitability claim, no per-asset "
+            "superiority claim, and no claim beyond an authorized cell."
         ),
     }
 
@@ -357,33 +453,108 @@ def read_state(artifact_dir: Path) -> str:
     return str(json.loads(path.read_text(encoding="utf-8")).get("state", STATE_NOT_STARTED))
 
 
+# --------------------------------------------------------------------------- helpers
+
+
+def _refuse_non_durable_authority(repository) -> None:
+    """Refuse any repository that declares itself something other than durable Postgres (G8).
+
+    The production entrypoint additionally requires a POSITIVE declaration, so an undeclared
+    repository cannot reach consumption through the CLI; see ``scripts/evaluate_section_5a.py``.
+    """
+
+    declare = getattr(repository, "section_5a_seal_authority", None)
+    if declare is None:
+        return
+    authority = declare()
+    if authority != SEAL_AUTHORITY_POSTGRES:
+        raise ConsumptionRefused(
+            f"repository declares seal authority {authority!r}; the one-look seal must be a "
+            "durable Postgres authority, so consumption is refused"
+        )
+
+
+def _contract_instants() -> dict[str, Any]:
+    return {
+        "t_freeze": T_FREEZE.isoformat(),
+        "t0": T0.isoformat(),
+        "t_close": T_CLOSE.isoformat(),
+        "timeframes": list(TIMEFRAMES),
+    }
+
+
+def _build_snapshot(
+    *,
+    moment: datetime,
+    pin_digest: str,
+    evidence: list[Mapping[str, Any]],
+    feature_rows: list[Mapping[str, Any]],
+    origin_anomalies: int,
+) -> dict[str, Any]:
+    snapshot_id = evidence_snapshot_id(
+        evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
+    )
+    return {
+        "captured_at_utc": moment.isoformat(),
+        "evidence_snapshot_id": snapshot_id,
+        "result_inputs_digest": result_inputs_digest(snapshot_id, pin_digest),
+        "evaluator_pin_digest": pin_digest,
+        **_contract_instants(),
+        "origin_anomalies": origin_anomalies,
+        "feature_rows": feature_rows,
+        "rows": evidence,
+    }
+
+
+def _record_terminal_state(repository, state: str, exc: BaseException) -> None:
+    """Record a failure on the durable seal without masking the failure that caused it."""
+
+    try:
+        repository.advance_section_5a_seal_state(state, repr(exc))
+    except Exception as secondary:  # the seal remains CLAIMED at minimum: still recorded
+        exc.add_note(f"additionally, recording state {state} failed: {secondary!r}")
+
+
+def _measured_count(value: Any, *, tampered: bool = False) -> int:
+    """A count that was actually measured: a non-negative integer, never a stand-in."""
+
+    error = SnapshotTampered if tampered else ConsumptionRefused
+    if isinstance(value, bool) or not isinstance(value, (int, Decimal)):
+        raise error(f"origin anomaly count is not a measured integer: {value!r}")
+    if isinstance(value, Decimal) and (not value.is_finite() or value != value.to_integral()):
+        raise error(f"origin anomaly count is not an integer: {value!r}")
+    if value < 0:
+        raise error(f"origin anomaly count is negative: {value!r}")
+    return int(value)
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _attainability(timeframe: str, admission) -> dict[str, Any]:
-    k4 = window_count(timeframe, 4, T0, T_CLOSE)
     usable = len(
         {
-            _window_key(row, timeframe)
+            assign_window_index(row["reference_close_utc"], timeframe, 4, T0, T_CLOSE)
             for row in admission.admitted
             if row.get("timeframe") == timeframe
         }
         - {None}
     )
-    verdict = "ATTAINABLE" if usable >= ATTAINABILITY_FLOOR_K4 else "PASS_UNATTAINABLE"
     return {
-        "k_4_pre_drop": k4,
+        "k_4_pre_drop": window_count(timeframe, 4, T0, T_CLOSE),
         "usable_windows_c4": usable,
         "floor": ATTAINABILITY_FLOOR_K4,
-        "verdict": verdict,
+        "verdict": "ATTAINABLE" if usable >= ATTAINABILITY_FLOOR_K4 else "PASS_UNATTAINABLE",
         "basis": (
-            "Follows from the lattice and the sampling frame alone (§5A.8); it cannot "
-            "depend on candidate performance and can never create a PASS."
+            "Follows from the lattice and the sampling frame alone (§5A.8); it cannot depend on "
+            "candidate performance and can never create a PASS."
         ),
     }
-
-
-def _window_key(row: Mapping[str, Any], timeframe: str) -> int | None:
-    from crypto_probability_engine.oos.evaluation.lattice import assign_window_index
-
-    return assign_window_index(row["reference_close_utc"], timeframe, 4, T0, T_CLOSE)
 
 
 def _reject_any_probability(rows: Sequence[Mapping[str, Any]]) -> None:
@@ -393,8 +564,8 @@ def _reject_any_probability(rows: Sequence[Mapping[str, Any]]) -> None:
         for key in row:
             if key.endswith(("_p_up_frac", "_p_down_frac", "_p_timeout_frac")):
                 raise RuntimeError(
-                    "readiness evidence carries a probability column; the structural "
-                    "boundary that prevents a readiness run from scoring has been broken"
+                    "readiness evidence carries a probability column; the structural boundary "
+                    "that prevents a readiness run from scoring has been broken"
                 )
 
 
@@ -443,45 +614,26 @@ def _render(result) -> dict[str, Any]:
     }
 
 
-def _revive(row: Mapping[str, Any]) -> dict[str, Any]:
-    revived = dict(row)
-    for key, value in list(revived.items()):
-        if key.endswith("_utc") or key == "reference_close_utc":
-            revived[key] = _parse(value)
-    return revived
-
-
-def _parse(value: Any) -> Any:
-    if isinstance(value, datetime) or value is None:
-        return value
-    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-
-
-def _write(path: Path, payload: Any) -> None:
-    path.write_bytes(_pretty_json(payload))
-
-
-def _write_state(artifact_dir: Path, state: str, *, detail: str = "") -> None:
-    _write(Path(artifact_dir) / STATE_FILENAME, {"state": state, "detail": detail})
-
-
-def _default(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    raise TypeError(f"unserializable value in evidence: {type(value)!r}")
-
-
 def _canonical_json(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-        default=_default,
-    ).encode("utf-8")
+    """The single evidence serializer (shared with the Postgres seal; finding G9)."""
+
+    return canonical_json.dumps(value)
 
 
 def _pretty_json(value: Any) -> bytes:
-    return json.dumps(value, indent=2, sort_keys=True, default=_default).encode("utf-8")
+    """Canonical, round-trip-stable snapshot text: a written snapshot digests as captured."""
+
+    return canonical_json.pretty(value)
+
+
+def _write_state(artifact_dir: Path, state: str, *, detail: str = "") -> None:
+    _write_report(Path(artifact_dir) / STATE_FILENAME, {"state": state, "detail": detail})
+
+
+def _write_report(path: Path, payload: Any) -> None:
+    """Human-readable report JSON. Not part of the integrity chain; the snapshot is."""
+
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )

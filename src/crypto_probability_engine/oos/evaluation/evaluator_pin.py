@@ -30,6 +30,12 @@ _REUSED_DEFINITIONS = (
     # the evaluator ever sees. Omitting it left the population choosable by unpinned
     # code, which defeated the pin's entire purpose.
     "src/crypto_probability_engine/persistence/repository.py",
+    # G1/G9: the ONE serializer behind every evidence digest and every seal column. A change
+    # here changes identities and what the seal can store, so it must be under the pin.
+    "src/crypto_probability_engine/utils/canonical_json.py",
+    # G4: the production entrypoint decides which repository consumes and whether a durable
+    # authority is required. Anything that can steer the answer is inside the pin.
+    "scripts/evaluate_section_5a.py",
 )
 
 
