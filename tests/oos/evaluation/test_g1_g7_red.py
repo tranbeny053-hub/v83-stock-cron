@@ -52,6 +52,11 @@ class _DriverRepository:
         self.probability_reads = 0
         self.seal = None
 
+    # AMENDMENT (owner ruling D3): a fail-closed runner refuses undeclared authorities, so
+    # the double declares itself durable in order to keep exercising claim-before-read.
+    def section_5a_seal_authority(self) -> str:
+        return runner.SEAL_AUTHORITY_POSTGRES
+
     def fetch_section_5a_seal(self):
         return deepcopy(self.seal)
 
@@ -85,7 +90,7 @@ def _consume(repository, artifact_dir: Path):
         confirmation=runner.CONFIRMATION_TOKEN,
         artifact_dir=artifact_dir,
         now_utc=AFTER_CLOSE,
-        verify_pin=False,
+        # AMENDMENT (owner ruling D3): no verify_pin=False — consumption verifies the pin.
     )
 
 
@@ -271,9 +276,20 @@ class _ConcurrentRepository:
     def fresh_handle(self):
         return _ConcurrentRepository(self.store)
 
+    # AMENDMENT (owner ruling D3): declared durable authority.
+    def section_5a_seal_authority(self) -> str:
+        return runner.SEAL_AUTHORITY_POSTGRES
+
+    # AMENDMENT (owner ruling D2): the two-party barrier moved PRE-CLAIM. Both consumers
+    # synchronize after observing the unclaimed seal, then genuinely race the atomic claim.
+    # A read that observes an existing seal (including the post-hoc assertion) never waits.
+    # With barrier=None the double serves the separate single-reader success proof.
     def fetch_section_5a_seal(self):
         with self.store["lock"]:
-            return deepcopy(self.store["seal"])
+            observed = deepcopy(self.store["seal"])
+        if observed is None and self.store.get("barrier") is not None:
+            self.store["barrier"].wait(timeout=5)
+        return observed
 
     def count_oos_origin_anomalies(self) -> int:
         return 0
@@ -285,7 +301,8 @@ class _ConcurrentRepository:
         if include_probabilities:
             with self.store["lock"]:
                 self.store["probability_reads"] += 1
-            self.store["barrier"].wait(timeout=5)
+            # AMENDMENT (owner ruling D2): no barrier here. A lone reader waiting on a
+            # two-party barrier could never succeed, which made G3.4 unsatisfiable.
         return deepcopy(self.rows)
 
     def claim_section_5a_seal(self, payload) -> bool:
@@ -299,6 +316,12 @@ class _ConcurrentRepository:
         with self.store["lock"]:
             self.store["seal"]["state"] = state
             self.store["seal"]["state_detail"] = detail
+
+    # AMENDMENT (owner ruling D2): the winner must be able to capture, or success is impossible.
+    def capture_section_5a_snapshot(self, snapshot) -> None:
+        with self.store["lock"]:
+            self.store["seal"]["snapshot_payload"] = deepcopy(dict(snapshot))
+            self.store["seal"]["state"] = runner.STATE_SEALED_RAW_CAPTURED
 
 
 def _concurrent_consumptions(tmp_path: Path):
@@ -344,6 +367,24 @@ def test_g3_4_concurrency_preserves_durability_and_no_read_without_a_seal(
     assert len(refusals) == 1
     assert repository.store["probability_reads"] == 1
     assert durable is not None and durable["snapshot_payload"]["rows"]
+
+
+def test_g3_4b_a_single_reader_completes_the_one_look(tmp_path: Path) -> None:
+    """AMENDMENT (owner ruling D2): the single-reader success proof, separate from the race.
+
+    One consumer, no contention: it reads exactly once, captures durably, and completes.
+    """
+
+    repository = _ConcurrentRepository(
+        {"lock": threading.Lock(), "barrier": None, "seal": None, "probability_reads": 0}
+    )
+    result = _consume(repository, tmp_path)
+
+    assert isinstance(result, dict) and result["consumes_one_look"] is True
+    assert repository.store["probability_reads"] == 1
+    durable = repository.fresh_handle().fetch_section_5a_seal()
+    assert durable["state"] == runner.STATE_COMPLETE
+    assert durable["snapshot_payload"]["rows"]
 
 
 def _mirrored_pin_root(tmp_path: Path) -> tuple[Path, Path]:
