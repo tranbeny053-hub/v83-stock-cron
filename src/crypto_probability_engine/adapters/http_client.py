@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
@@ -13,6 +14,9 @@ import httpx
 
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.config.settings import Settings
+
+MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+REQUEST_DEADLINE_SECONDS = 10.0
 
 ALLOWED_PUBLIC_HOSTS = frozenset(
     {
@@ -58,13 +62,57 @@ class PublicHttpClient:
         last_error: ProviderError | None = None
         for attempt in range(self.max_retries + 1):
             self._check_rate_limit(host, provider)
+            attempt_started = time.monotonic()
             try:
-                response = self._client().get(
+                with self._client().stream(
+                    "GET",
                     url,
                     params=dict(params),
                     headers=dict(headers or {}),
-                )
-            except httpx.TimeoutException as exc:
+                    timeout=min(self.timeout_seconds, REQUEST_DEADLINE_SECONDS),
+                ) as response:
+                    body = _read_bounded_body(response, attempt_started=attempt_started)
+                    if response.status_code in {400, 404} and provider not in {
+                        "gdelt",
+                        "fred",
+                        "newsapi",
+                    }:
+                        raise ProviderError(
+                            "INVALID_SYMBOL",
+                            "Provider rejected symbol.",
+                            provider=provider,
+                            http_status=response.status_code,
+                            error_code="INVALID_SYMBOL",
+                            error_type="REQUEST",
+                            operation=f"GET {path}",
+                        )
+                    if response.status_code >= 400:
+                        last_error = _provider_error_from_response(
+                            response,
+                            body=body,
+                            provider=provider,
+                            operation=f"GET {path}",
+                        )
+                        _raise_if_deadline_exceeded(attempt_started)
+                        if attempt >= self.max_retries:
+                            raise last_error
+                    else:
+                        try:
+                            payload = json.loads(body)
+                        except ValueError as exc:
+                            _raise_if_deadline_exceeded(attempt_started)
+                            raise ProviderError(
+                                "SCHEMA_VALIDATION_FAILED",
+                                "Provider returned malformed JSON.",
+                                provider=provider,
+                                http_status=response.status_code,
+                                error_code="MALFORMED_JSON",
+                                error_type="SCHEMA",
+                                operation=f"GET {path}",
+                            ) from exc
+                        _raise_if_deadline_exceeded(attempt_started)
+                        return payload
+            except (httpx.TimeoutException, _ResponseBoundExceeded) as exc:
                 last_error = ProviderError(
                     "PROVIDER_DEGRADED",
                     "Provider public request timed out.",
@@ -80,42 +128,6 @@ class PublicHttpClient:
                 )
                 if attempt >= self.max_retries:
                     raise last_error from exc
-            else:
-                if response.status_code in {400, 404} and provider not in {
-                    "gdelt",
-                    "fred",
-                    "newsapi",
-                }:
-                    raise ProviderError(
-                        "INVALID_SYMBOL",
-                        "Provider rejected symbol.",
-                        provider=provider,
-                        http_status=response.status_code,
-                        error_code="INVALID_SYMBOL",
-                        error_type="REQUEST",
-                        operation=f"GET {path}",
-                    )
-                if response.status_code >= 400:
-                    last_error = _provider_error_from_response(
-                        response,
-                        provider=provider,
-                        operation=f"GET {path}",
-                    )
-                    if attempt >= self.max_retries:
-                        raise last_error
-                else:
-                    try:
-                        return response.json()
-                    except ValueError as exc:
-                        raise ProviderError(
-                            "SCHEMA_VALIDATION_FAILED",
-                            "Provider returned malformed JSON.",
-                            provider=provider,
-                            http_status=response.status_code,
-                            error_code="MALFORMED_JSON",
-                            error_type="SCHEMA",
-                            operation=f"GET {path}",
-                        ) from exc
             self.sleep_func(0.25 * (attempt + 1))
         if last_error is not None:
             raise last_error
@@ -177,11 +189,12 @@ class PublicHttpClient:
 def _provider_error_from_response(
     response: httpx.Response,
     *,
+    body: bytes,
     provider: str,
     operation: str,
 ) -> ProviderError:
     status = response.status_code
-    provider_code = _extract_provider_error_code(response)
+    provider_code = _extract_provider_error_code(body)
     if status in {418, 429}:
         return ProviderError(
             "PROVIDER_DEGRADED",
@@ -224,9 +237,9 @@ def _provider_error_from_response(
     )
 
 
-def _extract_provider_error_code(response: httpx.Response) -> str | None:
+def _extract_provider_error_code(body: bytes) -> str | None:
     try:
-        payload = response.json()
+        payload = json.loads(body)
     except ValueError:
         return None
     if not isinstance(payload, dict):
@@ -235,6 +248,25 @@ def _extract_provider_error_code(response: httpx.Response) -> str | None:
     if isinstance(code, str) and code.strip():
         return code.strip()
     return None
+
+
+class _ResponseBoundExceeded(Exception):
+    pass
+
+
+def _read_bounded_body(response: httpx.Response, *, attempt_started: float) -> bytes:
+    body = bytearray()
+    for chunk in response.iter_bytes():
+        if len(body) + len(chunk) > MAX_RESPONSE_BYTES:
+            raise _ResponseBoundExceeded
+        body.extend(chunk)
+        _raise_if_deadline_exceeded(attempt_started)
+    return bytes(body)
+
+
+def _raise_if_deadline_exceeded(attempt_started: float) -> None:
+    if time.monotonic() - attempt_started > REQUEST_DEADLINE_SECONDS:
+        raise _ResponseBoundExceeded
 
 
 def _retry_after_seconds(response: httpx.Response) -> float | None:

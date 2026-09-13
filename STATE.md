@@ -1,21 +1,29 @@
 # STATE
 
-Updated: 2026-09-12 (POST-T_close — evaluator FROZEN pending Codex-first red team; one-look NOT consumed)
+Updated: 2026-09-13 (§5A evaluator REPAIRED against pinned red tests and RECOMPOSED onto main; fresh Codex verification pending; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=BUILT, AWAITING INDEPENDENT VERIFICATION. The section 5A evaluator is complete on
-  feat/5a-evaluator and the collector-stop lane is prepared on ops/stop-post-tclose-collector.
-  T_close PASSED at 2026-09-12T04:00:00Z. THE ONE-LOOK IS NOT CONSUMED: no live DB read has
-  occurred, no §5A statistic has been computed, no holdout row has been inspected, nothing is
-  pushed. ./verify.sh PASS, 1297 tests (1132 baseline + 165 new).
-  AUTHORSHIP: Opus authored the implementation because Codex quota was exhausted and the owner
-  chose not to wait. Independence was REORDERED, not dropped — Codex verifies adversarially
-  before any live read or T3. Everything carries the marker
-  CLAUDE_AUTHORED_PENDING_CODEX_INDEPENDENT_VERIFICATION and is NOT eligible for a live
-  readiness run, a push, or a merge until that verification returns.
-  Recovery audit found the previous recovery block STALE — it recorded origin/main = 200d822
-  when main is d52e9ae (PR #83); corrected below. Historical standby narrative retained:
+LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
+  no live DB read, no readiness run, no evaluation, no holdout row inspected.
+  This checkpoint CORRECTS a stale recovery block. Until now main's STATE recorded
+  origin/main = 200d822 when main was d52e9ae, so a resume from main reconstructed the wrong
+  base; the fields below are re-anchored to the post-batch main.
+  T3 BATCH #84-#90 MERGED 2026-09-13, owner-authorized, seven INDEPENDENT PRs, each with
+  exact-head CI green, a --match-head-commit merge, parents verified (previous main, lane
+  head), the merged tree proven bit-identical to a local composition, and exact-main CI green
+  after every merge; the batch was armed to stop on the first mismatch and none occurred:
+    #84 docs/post-one-look-dependency-map     9a7fe7b -> 7c24989
+    #85 docs/r2-zero-drift-gate-and-display   aeb7133 -> 0fca908
+    #86 docs/g1-g7-acceptance-matrix          f471695 -> 4c2aa4d
+    #87 chore/delegate-fresh-result-identity  a6fa2de -> d11bee6
+    #88 ops/stop-post-tclose-collector        7ffc6f2 -> 651c63e
+    #89 fix/r202-provider-http-bounds         ce2dc44 -> 068900d
+    #90 fix/a203-candle-boundaries            27e81e2 -> 68b4c8e
+  The final main tree e1042da is BIT-IDENTICAL to the composition of the seven reviewed heads
+  computed in a different merge order, so what shipped is exactly what was reviewed,
+  independent of order. Test arithmetic reconciles: 1150 = 1132 + 5 + 4 + 5 + 4.
+  Historical standby narrative from 2026-08-28 is retained below for provenance:
 LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
   the owner closed the last two open candidates (see OWNER_PRODUCT_DECISIONS) and put the loop
   on standby until a NEW genuine product issue arrives or the governed section 5A T_close
@@ -27,53 +35,42 @@ LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product 
   freeze, the collector, outcome and holdout inspection, T_close itself, and any change to what
   the collector computes or persists. Ordinary safe work outside that envelope continues under
   normal risk tiers, with owner authorization for T3/T4.
-CURRENT_MILESTONE=Section 5A EVALUATION — collection CLOSED at T_close; the evaluator is being
-  built so the one look can be taken once, correctly. Owner decisions taken 2026-09-12: build
-  the evaluator; live DB access is GitHub Actions only via the existing SUPABASE_DB_URL secret;
-  deploys stay held until the one-look result is captured and checkpointed; prepare stopping the
-  post-T_close collector but cross no T3; leave research/r2-frontier untouched.
-CURRENT_BRANCH=feat/5a-evaluator, cut from EXACT main d52e9ae. Seven commits, NOT pushed.
-  0eaf550 pre-registration, committed BEFORE the evaluator existed
-  0e4c8e8 pure math core, proven on known answers only
-  b0a03f9 post-T_close STATE checkpoint
-  d4c4da7 pinned T_close inclusion, ECE edges, snapshot identity, one-shot states
-  54f5635 paired-evidence read, admission, decision, diagnostics
-  4b6ad94 runner, five consumption guards, evaluator pin, manual-only workflow
-  7c4679a decoupled this lane from the collector-stop lane
-SECOND_LANE=ops/stop-post-tclose-collector at 7ffc6f2, in a SEPARATE WORKTREE under the
-  session scratchpad, also cut from d52e9ae, also NOT pushed. Genuinely independent: no shared
-  file, no shared test helper, either merge order works. It removes ONLY the collector's
-  schedule trigger; what the collector writes is unchanged and asserted so. The §5A.5
-  pre-registered cadence assertion was INVERTED, not deleted, so re-enabling collection under
-  the retired pre-registration fails the build.
-EVALUATOR_SEMANTICS=Readiness is repeatable and CANNOT score: the projection omits the
-  probability columns, so nothing it holds can produce a Brier, d or ECE. Consumption is
-  guarded by T_close, the evaluator pin, a confirmation token and a one-shot seal, all of which
-  run BEFORE any read; the seal arms at the raw capture, before any statistic, because the look
-  is spent the moment the probabilities are read. A crashed run lands in SEALED_NO_RESULT and is
-  recovered by recomputing from the immutable snapshot with NO database access, so a statistics
-  defect costs a recomputation rather than the holdout.
-R2_BRANCH=research/r2-frontier at ba27691 — UNTOUCHED this session, still local-only, still on
-  no remote. Its STATE.md carries the R2_MILESTONE block; main's does not, because that branch
-  is unmerged by owner instruction. Audited read-only: committed evidence is byte-identical to
-  the .work/research2 scratch outputs, the pre-registration commit precedes every experiment
-  output, and the sealed look is consumed and structurally unrepeatable.
-LAST_GREEN_SHA=0e4c8e8
-LAST_VERIFY=PASS ruff ok | 1220 passed | schemas+smoke ok | scanners 3/3 · 0e4c8e8 · 2026-09-12
-  (1132 baseline + 88 new evaluator tests)
-T_CLOSE_STATUS=PASSED 2026-09-12T04:00:00Z. T_freeze 2026-08-20T11:35:56Z (commit 61e9796,
-  intact and reachable from origin/main). T0 2026-08-21T04:00:00Z. CANDIDATE NEVER DRIFTED: all
-  EIGHT freeze-closure files have ZERO commits since T_freeze on origin/main, the freeze guard
-  passes on the current tree, and the collector calls it before constructing any write-capable
-  repository — so every holdout write used the frozen candidate.
-FRAME_LIMITATION=Collector ran at ~13% of its scheduled rate: 21-40 runs/day through 2026-08-26,
-  collapsing to 2-9/day from 08-27 (mean 12.8/day vs 96 scheduled). CAUSE IS NOT UCPE — the
-  unrelated hourly keepalive workflow collapsed identically on the same date, so it is GitHub
-  Actions scheduled-workflow throttling. Resolver likewise 215 runs vs 528 scheduled, with
-  capacity still exceeding demand. The four collector 'failures' were all BACKFILL_REFUSED
-  partial failures with orphans=0 — the no-backfill rule working, not data loss. 4H drives
-  T_close with k_4 = 5 EXACTLY, no slack: one empty 24h window makes A2 unreachable and the
-  result NOT PASS. Recorded BEFORE the look so that outcome reads as correct self-gating.
+CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluator is being made safe
+  to take the one look exactly once. It lives on feat/5a-evaluator, which is LOCAL, NOT
+  PUSHED, and NOT on main. Its implementation is FROZEN at 2b31832 (branch ref cb6edf7 carries
+  STATE-only commits above it; src/ tree hash is identical).
+  VERIFICATION HISTORY. task-805 run 1 returned NOT_VERIFIED with nine findings F1-F9; the
+  owner ruled on F1, F2 and F9 and Opus repaired F3-F8. task-805 run 2 exhausted Codex quota
+  before reporting but its probes established seven sibling findings G1-G7, the worst being G1:
+  Postgres NUMERIC arrives as Decimal, the serializer handled only datetime, and the digest ran
+  after the probability read and before the seal claim, so on real data the FIRST consumption
+  would have read the holdout and crashed with no seal. After two repair rounds on the same
+  causal class were each defeated by siblings, the owner accepted the escalation and INVERTED
+  THE LOOP: the verifier authors failing tests first, against the frozen implementation.
+  task-806 RED TEAM RETURNED 2026-09-13 (result verified fresh; production code untouched):
+  17 properties RED, 4 REFUTED with evidence (G3.2, G3.3, G4.2, G5.1), plus four NEW sibling
+  findings, all RED — G8 the runner accepts a process-local in-memory repository as a seal
+  authority; G9 the Postgres seal claim uses plain json.dumps and raises on datetime, a SECOND
+  independent route to reading the holdout without sealing it, even once G1 is fixed; G10
+  recompute treats deleted feature_rows and origin_anomalies as empty/zero; G11 an empty
+  population reports a measured-looking zero-second span. Evidence at .work/806/.
+  REPAIR LANDED 2026-09-13 at 0bbcdd5, against the task-806 red tests pinned by SHA-256 efe36649...
+  in their own commit 80a95f6 BEFORE the repair and never edited. 20 of 21 pass. G3.4 stays RED:
+  it is UNSATISFIABLE under its own double — its probability read waits on a two-party Barrier with
+  a 5 s timeout, so the lone reader G3.1 requires raises BrokenBarrierError. Proven empirically
+  before the repair; left for the owner and Codex to amend, neither edited nor gamed.
+  THE DESIGN CHANGED: the one look is now CLAIMED, durably and atomically, BEFORE any probability
+  is exposed, and on Postgres the read itself captures raw evidence into the claimed seal inside
+  one transaction before returning. One lossless canonical serializer backs every digest and seal
+  column. Migration 0009 enforces the lifecycle in the database. Addendum 3 of the pre-registration
+  records it.
+  RECOMPOSED onto main 5f36126 as branch feat/5a-evaluator-on-main; STATE.md was the only file
+  changed on both sides and the only conflict.
+  Product work outside §5A continues in parallel; it never touches the envelope.
+  Product work outside section 5A continues in parallel; it never touches the envelope.
+CURRENT_BRANCH=docs/state-post-t3-batch-84-90 (this checkpoint). origin/main = 68b4c8e before it merges.
+LAST_GREEN_SHA=68b4c8e
+LAST_VERIFY=PASS ruff ok | 1150 passed | schemas+smoke ok | scanners 3/3 · 68b4c8e · 2026-09-13 (exact-main CI green on every batch merge)
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -289,7 +286,8 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
     states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=feat/5a-evaluator — the section 5A evaluator. Blocked on Codex quota, not on a defect.
+ACTIVE_LANE=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED) — the repaired §5A evaluator recomposed onto
+  main. Implementation 0bbcdd5; fresh full Codex adversarial verification task-807 in progress.
 OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
   defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
   repeatedly as the only remaining candidates once the board was otherwise clear, so they are
@@ -305,7 +303,15 @@ OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. T
      CONSTANT in the current build, so rendering them would be speculative UI rather than user
      value. Surface one only if the owner raises a concrete operator need, or if that field
      actually starts to vary.
-FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close. None is
+SUPERSEDED_FROZEN_LANES=The T_close freeze on the three lanes below LAPSED BY ITS OWN TERMS when
+  T_close passed. fix/r202-01 (2c35ab2) and fix/a203-01 (b5310dc) were 63 commits stale; they were
+  REPLAYED onto exact main d52e9ae in fresh worktrees, revalidated independently, and shipped as
+  #89 and #90. The originals are SUPERSEDED and kept only for provenance. integration/b11-combined
+  (1b10587) was deliberately NOT used as a release candidate and is superseded too.
+  OPERATIONAL NOTE ON #90: A203 makes candle validation STRICTLY STRICTER — exact adjacency and
+  rejection of a future latest close — so provider data previously tolerated with small gaps now
+  fails analysis rather than proceeding. It is merged, NOT deployed.
+FROZEN_POST_T_CLOSE_PRIOR=Three branches are LOCAL-ONLY and frozen until after T_close. None is
   pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
   them before T_close:
     fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
@@ -313,141 +319,47 @@ FROZEN_POST_T_CLOSE=Three branches are LOCAL-ONLY and frozen until after T_close
     integration/b11-combined 1b10587  the two above merged, for integration evidence only
   Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
   from main, still frozen.
-CODEX_VERIFICATION=COMPLETE, VERDICT **NOT_VERIFIED**. task-805 ran 2026-09-12 in a DETACHED
-  worktree at c99f279, so the branch ref never moved and no production byte survives the
-  mutation campaign. Report preserved at .work/805/5a-verification.md with two new adversarial
-  test files. DO NOT SPEND THE ONE LOOK WITH THIS IMPLEMENTATION.
-  POSITIVE SIGNAL: all 20 named mutations were caught RED. Two (B2 and C tie handling) were
-  caught only by the digest pin and lacked a direct behavioural assertion; Codex added one.
-  NINE FINDINGS. Five CRITICAL: F1 a reported PASS does not establish §5A's "no FAIL" because
-  three of four predicates are unverifiable, and my pre-registration §6 treated unknown as
-  sufficient — the exact "makes PASS easier" class I asked Codex to hunt, and I committed it.
-  F2 the one-shot seal is FILESYSTEM-LOCAL while the workflow runs on a fresh runner each
-  dispatch, so a second consumption succeeds — "structurally impossible" was true locally and
-  false in the deployment I designed. F3 two fallible repository reads sit between the
-  probability read and the snapshot write, so a crash there spends the look and leaves NO seal.
-  F4 H1+H2 confirmed, plus snapshot tampering accepted on recompute. F6 the pin OMITS
-  persistence/repository.py, where the Tier-1 rule, SQL, projection and origin handling live —
-  every row the evaluator sees is chosen by unpinned code.
-  Three HIGH: F5 snapshot id omits result-determining content; F7 diagnostics lack dropped-window
-  and per-cell detail and missed_attempts silently defaults to 0, a fabricated number; F9
-  reference-close membership can admit post-close outcomes. One MEDIUM: F8 Brier scores RAW
-  probabilities while ECE normalizes, so a tolerance-admitted row is treated inconsistently.
-  ALL VERIFIED INDEPENDENTLY BY OPUS on F3, F6, F7 and F8 by direct inspection; they hold.
-  THREE FINDINGS ARE OWNER DECISIONS, NOT REPAIRS: F1 (how the terminal state may be named
-  given unverifiable FAIL), F2 (where a durable cross-run seal lives — git, database, or
-  fetched artifact), F9 (membership stays as pre-registered, or the alternative is
-  acknowledged). Codex marks changing membership or the ECE metric NOT ADOPTABLE for this
-  tranche.
-CODEX_REVERIFICATION=INCOMPLETE — quota exhausted mid-run at 233,412 tokens (resets ~23:55
-  local). Run 2 wrote THREE adversarial probe files but produced NEITHER a Part III report NOR
-  a fresh result JSON. HARNESS HAZARD RECORDED: delegate.sh reported DELEGATE=OK because a
-  STALE non-empty result-805.json from run 1 was still on disk; the run-1 verdict could easily
-  have been mistaken for a run-2 verdict. Timestamps are the tell (result 19:18, log 20:01).
-  THE PARTIAL OUTPUT IS STILL DECISIVE: the probes pass, and several pass by ASSERTING THE
-  CURRENT DEFECTIVE BEHAVIOUR. They are preserved in .work/805/ and DELIBERATELY NOT added to
-  tests/, because a test that asserts a defect would fight its own repair.
-  SEVEN NEW FINDINGS, all siblings of the classes repaired in the first round:
-  G1 CRITICAL — Postgres NUMERIC arrives as Decimal, and _canonical_json's default handles only
-    datetime, so evidence_snapshot_id RAISES. It is computed after the probability read and
-    before the seal claim, so ON THE REAL DATABASE THE FIRST CONSUMPTION WOULD HAVE READ THE
-    HOLDOUT AND CRASHED WITH NO SEAL. The F3 repair was structurally right and defeated by the
-    actual data type. Confirmed by Opus directly.
-  G2 CRITICAL — deleting evaluator_pin_digest from a snapshot bypasses the drift check, because
-    the guard reads `if recorded_pin is not None`. Absence is not treated as tampering.
-  G3 HIGH — two concurrent consumptions both READ the probabilities before one loses the
-    singleton INSERT race, so the look is spent twice though only one seals.
-  G4 HIGH — scripts/evaluate_section_5a.py is NOT pinned and can pass verify_pin=False.
-  G5 MEDIUM — the feature-diagnostics query has no ORDER BY, so snapshot identity is
-    nondeterministic; feature-row order changes the digest without changing meaning.
-  G6 MEDIUM — F7 is only partially closed; mandatory per-cell diagnostics remain incomplete.
-  G7 MEDIUM — _oos_arm accepts an explicit `arm` field the Postgres SQL cannot see, so the
-    in-memory and Postgres Tier-1 qualifiers are not exactly equivalent.
-EVALUATOR_FROZEN=feat/5a-evaluator@2b31832. NO third unilateral repair. Owner accepted the
-  escalation and inverted the loop: Codex authors FAILING tests for G1-G7 FIRST, against the
-  frozen tree, with no production-code change; only then may Opus repair; then a COMPLETELY
-  FRESH full adversarial verification, not a re-run of those targeted tests; then one
-  consolidated MAX review.
-CODEX_PENDING=task-806 — AUTHOR FAILING TESTS ONLY. Ready to fire the moment quota returns
-  (~23:55 local). Spec is docs/SECTION_5A_G1_G7_ACCEPTANCE_MATRIX.md, which states each
-  finding as an OBSERVABLE PROPERTY and deliberately prescribes no implementation, so the
-  repair cannot inherit the blind spot the pass exists to remove. Governing rule, drawn from
-  run 2's mistake: every test must be RED now and GREEN when repaired, never a
-  "documents-the-defect" test that fights its own fix. A property that already holds is
-  reported REFUTED, which is an equally valid result.
-  RED-TEAM WORKTREE PREPARED at scratchpad/redteam-806, detached at the frozen 2b31832 with
-  exactly three deliberate deviations, none of them the implementation under test: the
-  hardened delegate.sh, its tests, and the acceptance matrix. verify PASS 1331.
-STALE_RESULT_HAZARD=CLOSED on branch chore/delegate-fresh-result-identity. delegate.sh's
-  completion check was `[ ! -s "$RESULT" ]`, which a leftover file from an earlier run of the
-  same task satisfies — that is how run 2 reported OK while writing no result, leaving run 1's
-  verdict looking like run 2's. It now ROTATES any existing result and log to .prev-<ts>
-  (preserved, not destroyed) and afterwards requires the result to be no older than the
-  invocation. Proven by driving the real script with a stub codex, not by asserting on its
-  text; the functional test immediately caught that my first `-nt` comparison rejected honest
-  fast runs at filesystem timestamp granularity. task-806 also uses an identity never used
-  before, so staleness is impossible twice over.
-ESCALATION=Two repair rounds on the seal/capture causal class have now both been defeated by
-  siblings. CLAUDE.md bounds this at two attempts per causal class, then escalate. Stopping
-  here rather than authoring a third unilateral round while independent verification is
-  unavailable.
-  Fire it the moment quota returns (exhausted 2026-09-12, resets ~17:39 local). It is written
-  so it CANNOT be satisfied by agreeing: 20 named mutations that must each break the suite,
-  independent re-derivation of every known answer from the contract rather than from the tests,
-  outside-in attempts to consume the look twice or to score from a readiness run, and a read of
-  the Postgres SQL that no test can execute. It verifies against V1_QUANT_CONTRACT §5A as the
-  authority and treats the pre-registration as a claim to be checked — a resolution that could
-  make PASS EASIER is a finding.
-  MODEL SUBSTITUTION RECORDED (CLAUDE.md requires this): Opus performed implementation that
-  routes to Codex. The owner authorized it explicitly and preserved independence by reordering
-  verification after authoring rather than dropping it.
-  Budget deviation recorded: this batch exceeded the default 4-delegation ceiling. The owner
-  directed a batch of this size explicitly; 801 was spent twice because the first run was given
-  a read-only sandbox and could not write its own output file.
+COLLECTOR=STOPPED on main as of #88 (651c63e): the schedule trigger is removed, workflow_dispatch
+  retained, and WHAT the collector writes is unchanged. The §5A.5 pre-registered cadence
+  assertion was INVERTED rather than deleted, so restoring a schedule fails the build. The
+  OUTCOME RESOLVER IS STILL SCHEDULED (resolve-outcomes.yml, cron "17 * * * *"), which matters:
+  outstanding predictions still need outcomes.
+DELEGATE_HAZARD=CLOSED by #87. delegate.sh rotates any existing result and log to .prev-<ts> and
+  refuses a result older than the invocation, so a stale verdict can no longer satisfy
+  completion. That exact failure happened once and was nearly reported as a fresh verdict.
+CODEX_PENDING=task-807 — COMPLETELY FRESH full adversarial verification of 0bbcdd5, unique identity
+  result-807/codex-807, running against the hardened delegate.sh. It is not a re-run of task-806.
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. Fourteen T3 origin batches are CONSUMED and must not be reused: the
+OWNER_BOUNDARY=NONE OPEN. The T3 batch #84-#90 is CONSUMED and must not be reused; this STATE
+  checkpoint PR is its closing step. It authorized exactly those seven pushes, PRs and merges and
+  NO deploy. No T4 has been authorized: migration 0008 remains unapplied, and migration 0009 (the
+  durable §5A seal) exists only on the unpushed evaluator branch and is unapplied. Earlier:
+OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
   its own push, PR and merge, and no deploy. No T4 has been authorized or consumed for
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
-DEPLOY_PROHIBITED=EXTENDED BY OWNER 2026-09-12. The original prohibition was scoped 'through
-  T_close' and would have lapsed silently by its own terms when T_close passed. The owner has
-  instead HELD IT until the one-look result is captured and checkpointed. Production stays at
-  hf/main = a89b45e (PROD-SAFE-2), now 166 commits behind main. Original wording follows:
-  NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
+DEPLOY_PROHIBITED=HELD BY OWNER RULING until the §5A one-look result is captured and checkpointed.
+  The original wording below was scoped "through T_close" and would have lapsed silently when
+  T_close passed; the owner extended it instead. Production stays at hf/main = a89b45e
+  (PROD-SAFE-2), re-confirmed unchanged after the batch. No workflow deploys to Hugging Face, so
+  no merge can deploy. Original wording:
+DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
   T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=OWNER DECISION on how to proceed after two defeated repair rounds. NO T3 REQUEST
-  IS MADE and no consolidated review is offered as final: the precondition "all findings
-  repaired and reverified" is not met.
-  DO NOT run readiness or consumption with this implementation — F6 alone means the code that
-  selects every analysed row is outside the pin, so the pre-registration's freeze-ordering
-  guarantee does not currently hold.
-NON_EVALUATOR_COMPOSITION=All SEVEN non-evaluator lanes merge cleanly onto d52e9ae and verify
-  PASS at 1150 = 1132 + 5 (r202) + 4 (a203) + 5 (collector) + 4 (delegate). Arithmetic
-  reconciles exactly, so no lane's tests are swallowed or duplicated. The composition was
-  EPHEMERAL and has been destroyed; it is not a release candidate. This set is independent of
-  the §5A result AND of the frozen evaluator, so it could form a T3 batch on its own timing.
-PARALLEL_LANES_READY=Four local branches from exact d52e9ae, none pushed, all verify PASS:
-  fix/r202-provider-http-bounds ce2dc44 (1137) and fix/a203-candle-boundaries 27e81e2 (1136),
-  each replayed independently onto current main after being 63 commits stale; their ephemeral
-  composition verified 1141 = 1132+5+4 and was DESTROYED, and integration/b11-combined is
-  unused as a release candidate. Plus docs/post-one-look-dependency-map 9a7fe7b and
-  docs/r2-zero-drift-gate-and-display aeb7133. NOTE: A203 makes candle validation strictly
-  stricter (exact adjacency, future closes rejected), so previously tolerated provider data
-  will now fail closed — an operational change, not just a safety margin.
-  ORDERING IS THE SAFETY PROPERTY (docs/SECTION_5A_EVALUATION_PREREGISTRATION.md §2): synthetic
-  proof, then diff review, then pin commit, and ONLY THEN may readiness touch live data.
-  Readiness is repeatable and cannot consume the look, because in readiness mode the projection
-  omits the probability columns entirely, so no Brier, d or ECE is computable from what it
-  holds. Attainability (k_4 >= 5) may legitimately establish NOT PASS without consuming the
-  look, since it follows from the lattice and the frame alone and can never create a PASS.
+NEXT_ACTION=Await task-807, then ONE consolidated MAX review, then the T3/T4 blocker. G3.4 must be
+  amended by owner decision before any gate can be green. DO NOT run readiness or consumption, and
+  do not apply 0008 or 0009.
+NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
+  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
+  date is a contract instant, NOT a reminder or automation request: create no timer, task, or
+  schedule from it.
 BLOCKER_BEFORE_0008_T4=CLOSED by PR #63 (merged 1668534). The owner-directed prerequisite is
   satisfied: /v1/runs no longer issues one detail query per row. It now issues exactly one
   batched run_ids_with_detail call for all durable-only rows, bounded and fail-closed, and the

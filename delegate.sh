@@ -42,6 +42,27 @@ cat > "$SCHEMA" <<'EOF'
 EOF
 
 BASE="$(git rev-parse --short HEAD)"
+
+# A STALE RESULT MUST NEVER SATISFY COMPLETION.
+#
+# The completion check below is `[ ! -s "$RESULT" ]`, which a leftover file from an
+# EARLIER run of the same task satisfies. That happened: a re-run whose model exhausted
+# its quota wrote no result, the previous run's verdict was still on disk, and the
+# delegation reported OK. The old verdict was very nearly read as the new one.
+#
+# So: rotate any existing result out of the way first, and afterwards require the result
+# to be strictly newer than this invocation.
+START_MARKER="$(mktemp)"
+trap 'rm -f "$START_MARKER"' EXIT
+if [ -e "$RESULT" ]; then
+  PREVIOUS="${RESULT%.json}.prev-$(date -u +%Y%m%dT%H%M%SZ).json"
+  mv "$RESULT" "$PREVIOUS"
+  echo "DELEGATE rotated stale result -> $PREVIOUS" >&2
+fi
+if [ -e "$LOG" ]; then
+  mv "$LOG" "${LOG%.log}.prev-$(date -u +%Y%m%dT%H%M%SZ).log"
+fi
+
 echo "DELEGATE start task=$N base=$BASE sandbox=$SANDBOX effort=$EFFORT" >&2
 
 # stdin redirection is MANDATORY: without it codex exec blocks forever on
@@ -57,6 +78,16 @@ RC=$?
 
 if [ $RC -ne 0 ] || [ ! -s "$RESULT" ]; then
   echo "DELEGATE=FAIL rc=$RC (see $LOG)"
+  exit 1
+fi
+
+# The result must have been written by THIS invocation, not left behind by an earlier one.
+# Rotating the old file away already guarantees that; this is defence in depth. Uses
+# "not older than" rather than "newer than", because a fast run can share the marker's
+# mtime at filesystem granularity and would otherwise be rejected as stale.
+if [ "$RESULT" -ot "$START_MARKER" ]; then
+  echo "DELEGATE=FAIL result is not newer than this invocation; refusing to report a"
+  echo "               possibly stale verdict (see $LOG)"
   exit 1
 fi
 
