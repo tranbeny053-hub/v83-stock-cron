@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-13 (§5A evaluator NOT_VERIFIED by task-807 — CRITICAL scope contamination; three causal classes at the repair bound; ESCALATED; one look NOT consumed)
+Updated: 2026-09-13 (§5A evaluator REPAIRED under rulings D1-D4, gate GREEN; PAUSED on Codex quota before fresh verification; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -66,11 +66,14 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluato
   records it.
   RECOMPOSED onto main 5f36126 as branch feat/5a-evaluator-on-main; STATE.md was the only file
   changed on both sides and the only conflict.
+  CURRENT IMPLEMENTATION: fd8239a on feat/5a-evaluator-on-main. It carries the owner rulings D1-D4
+  and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
+  LOCAL and NOT PUSHED; task-808 has NOT verified it yet (see CODEX_PENDING).
   Product work outside §5A continues in parallel; it never touches the envelope.
-  Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-t3-batch-84-90 (this checkpoint). origin/main = 68b4c8e before it merges.
-LAST_GREEN_SHA=68b4c8e
-LAST_VERIFY=PASS ruff ok | 1150 passed | schemas+smoke ok | scanners 3/3 · 68b4c8e · 2026-09-13 (exact-main CI green on every batch merge)
+CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED; STATE-only commits above fd8239a).
+  main = origin/main = 5f36126. feat/5a-evaluator = 0bbcdd5 is superseded, but kept for provenance.
+LAST_GREEN_SHA=fd8239a (local lane gate; this is not CI — nothing was pushed). main: 5f36126, CI green.
+LAST_VERIFY=PASS ruff ok | 1476 passed | schemas+smoke ok | scanners 3/3 · fd8239a · 2026-09-13 (local)
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -341,8 +344,30 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE.
-ESCALATION_807=Three causal classes have now been defeated twice each and are AT CLAUDE.md's
+CODEX_PENDING=task-808 — COMPLETELY FRESH full adversarial verification of fd8239a. NOT RUN: Codex usage
+  limit on dispatch (DELEGATE=FAIL rc=1, no result-808, no report, zero files changed). The hardened
+  delegate reported FAIL instead of a false OK, which is the #87 guard working in real use.
+  Quota resets 2026-09-14 00:31 local (+07). Resume by re-running, unchanged, inside a detached
+  worktree at EXACTLY fd8239a with zero tracked deviations. This session's worktree is
+  scratchpad/verify-808, which is session-scoped; if it is gone, recreate it with
+  `git worktree add --detach <dir> fd8239a`, copy .work/task-808.md into it, then run
+  ./delegate.sh .work/task-808.md. Task file preserved at .work/task-808.md.
+OWNER_RULINGS_D1_D4=Applied 2026-09-13. D1 pin derived from the entrypoint's full first-party import
+  closure plus declared rule/runtime surfaces (67 files; does not reach the HF app surface). D2 G3.4
+  amended — barrier moved pre-claim, separate single-reader proof — in its own commit c44e416 with the
+  amendment chained from the Codex original hash. D3 fail closed unless durable authority AND pin are
+  positively verified; verify_pin removed from consumption and seal recovery. D4
+  decision_population_id, probability-free, distinct from evidence_snapshot_id.
+REPAIR_808_BASE=fd8239a. ./verify.sh PASS 1476. All 807 structural repairs applied: F1 scope at
+  admission (CRITICAL), F3 Settings.from_env, R4 workflow recompute, F6 materialized cells + declared
+  schema, F8 TRUNCATE guard, F10 contract-instants cross-check, R2 ReadinessRefused. Behavioural
+  mutations with the mutant re-pinned: all four new critical guarantees KILLED.
+OPUS_FINDING_R5=MEDIUM, recorded at .work/808/opus-independent-review.md BEFORE any task-808 result
+  existed and deliberately NOT fixed (new this round, outside the D1-D4 envelope): requirements.txt is
+  pinned as a runtime surface but specifies version RANGES and the interpreter differs across
+  workflow/CI/local, so the pin does not bind the runtime that produced G1's psycopg behaviour.
+ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As originally escalated:
+  three causal classes have now been defeated twice each and are AT CLAUDE.md's
   two-attempt bound: pin scope (F6 -> G4 -> F7), diagnostics completeness (F7 -> G6 -> F6), authority
   surface (F2 -> G8 -> F4). No repair was started. Root cause for pin scope is measured: the CLI's
   first-party import closure is 23 files and 8 are unpinned, including config/settings.py, which
@@ -350,8 +375,10 @@ ESCALATION_807=Three causal classes have now been defeated twice each and are AT
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The T3 batch #84-#90 is CONSUMED and must not be reused; this STATE
-  checkpoint PR is its closing step. It authorized exactly those seven pushes, PRs and merges and
+OWNER_BOUNDARY=NONE OPEN. The next boundary is a T3 push of this evaluator lane, which may be
+  requested only after task-808 verifies clean and the consolidated MAX review is done. Applying 0009
+  (with --only), readiness, and consumption are each separate T4 authorizations. Earlier: the T3
+  batch #84-#90 is CONSUMED and must not be reused; its STATE checkpoint PR was its closing step. It authorized exactly those seven pushes, PRs and merges and
   NO deploy. No T4 has been authorized: migration 0008 remains unapplied, and migration 0009 (the
   durable §5A seal) exists only on the unpushed evaluator branch and is unapplied. Earlier:
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
@@ -371,10 +398,9 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=OWNER DECISIONS D1 pin derivation, D2 G3.4 amendment, D3 library fail-closed policy,
-  D4 identity-drift guarantee; then ONE consolidated repair batch; then fresh verification. The
-  mechanical repairs (F1, F3, R4, F6, F8, F10, R2) are specified in .work/807/consolidated-max-review.md.
-  DO NOT run readiness or consumption, do not apply 0008 or 0009, and do not push.
+NEXT_ACTION=After 00:31 on 2026-09-14, re-run task-808 unchanged. Then ONE consolidated MAX review
+  reconciling task-808 with R5, then the T3/T4 blocker if verification is clean. DO NOT run readiness or
+  consumption, do not apply 0008 or 0009, and do not push.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
