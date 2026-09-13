@@ -88,3 +88,12 @@ def test_evaluation_workflow_requires_the_confirmation_token_to_be_passed() -> N
     text = EVALUATION.read_text(encoding="utf-8")
     assert "--confirm" in text
     assert "CONSUME-SECTION-5A-ONE-LOOK" in text
+
+
+def test_seal_recovery_is_dispatchable_where_the_secret_lives() -> None:
+    """V807-R4. Recovery needs the database secret, which exists only in this workflow."""
+
+    text = EVALUATION.read_text(encoding="utf-8")
+    options = text.split("options:", 1)[1].split("confirm:", 1)[0]
+    assert "- recompute" in options
+    assert "- readiness" in options and "- consume" in options

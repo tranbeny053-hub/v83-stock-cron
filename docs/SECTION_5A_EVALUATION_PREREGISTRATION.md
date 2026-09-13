@@ -502,3 +502,70 @@ design. Under the repair every G3.4 assertion that can hold does hold: one consu
 before reading, exactly one read occurs, and the durable seal records the spent look. Only "one
 success" is blocked, by the barrier. The test was not edited and was not gamed; amending it is for
 the owner and Codex.
+
+---
+
+# Addendum 4, 2026-09-13 — owner rulings D1–D4 and the task-807 structural repairs
+
+Codex task-807 returned NOT_VERIFIED with 40 of 40 mutations killed. The repair's mechanisms held;
+fresh outside-in attacks found defects no earlier round reached, and three causal classes reached
+the two-attempt repair bound. The owner ruled D1–D4. This addendum **supersedes §2's declared pin
+set, §11's drift claim, and §21's authority policy**.
+
+## 23. Scope is enforced at admission (V807-F1)
+
+Scope was applied only at authorization, after A and B were computed, so an out-of-tranche asset
+was pooled into both: losing BTC evidence alone was NOT_PASS, and adding favourable SOL/USDT
+flipped A and B to true. That made PASS easier and is corrected, not reinterpreted: the tranche-1
+scope (15m, 1H, 4H × BTC/USDT, ETH/USDT; §5A.1) has one definition and gates admission BEFORE any
+statistic, attainability verdict, diagnostic or identity. Out-of-scope rows are counted globally
+with a per-cell breakdown, and a row that reaches the decision out of scope fails closed.
+
+## 24. The pin is derived mechanically (ruling D1; supersedes §2's declared set)
+
+The pinned set is the full first-party import closure of the production entrypoint — module-level
+and function-level imports, with every parent package `__init__` — plus declared non-imported
+surfaces: `V1_QUANT_CONTRACT.md`, this document, migration 0009, the evaluation workflow, and
+`requirements.txt`. A declared list was incomplete in three consecutive rounds; §2 had rejected
+closure derivation expecting it to sweep in most of the application, and the measured closure is
+bounded and does not reach the Hugging Face application surface. Because this document is now a
+pinned surface, any later addendum changes the pin, which makes rule changes visible by
+construction.
+
+## 25. Fail closed unless authority and pin are positively verified (ruling D3; supersedes §21)
+
+Consumption and seal recovery refuse an undeclared repository and have no switch to skip pin
+verification. Every live CLI mode, readiness included, requires a positive durable Postgres
+declaration. The red-test doubles now declare the durable authority, by owner amendment, so they
+keep exercising claim-before-read under the fail-closed rule. Offline recomputation of a local
+artifact keeps its pin flag: its rules are bound unconditionally to the RECORDED pin, which a
+drifted evaluator cannot match.
+
+## 26. Two identities with two purposes (ruling D4; corrects §11)
+
+§11 claimed `evidence_snapshot_id` detects drift between readiness and consumption. **That claim
+was false**: readiness hashes a probability-free projection and consumption hashes probabilities,
+so the two never matched. It is withdrawn.
+
+- `evidence_snapshot_id` authenticates everything a consumption captured. It is an integrity
+  identity and is not comparable with anything readiness computes.
+- `decision_population_id` is canonical and probability-free over exactly the population admission
+  can admit — in scope and in the holdout — including outcome labels, and excluding post-close
+  rows, other assets, feature rows and the anomaly count. Readiness and consumption compute it
+  identically, so comparing them is a genuine drift check that cannot fire when no decision input
+  changed.
+
+## 27. The remaining structural repairs
+
+- **V807-F3** — the entrypoint built `Settings()`, which ignores the environment, so with the
+  database secret set it still produced an empty in-memory repository, and readiness would have
+  reported zero evidence rather than refusing. Settings now come from the environment.
+- **V807-R4** — the evaluation workflow gains `recompute`, since recovery from the durable seal
+  needs the secret that exists only there.
+- **V807-F6** — every tranche cell is materialized even when empty, per-scope counts are reported,
+  and completeness is checked against a declared schema for populated and empty evidence in both
+  modes.
+- **V807-F8** — a statement-level trigger refuses `TRUNCATE`. Residual limit, stated: `DROP TABLE`
+  or a superuser disabling triggers is outside what a table trigger can prevent.
+- **V807-F10** — seal recovery cross-checks the seal's claimed contract instants.
+- **V807-R2** — readiness raises `ReadinessRefused`, not a consumption error.

@@ -210,7 +210,6 @@ def _consume(repo, tmp_path, **kwargs):
         "confirmation": runner.CONFIRMATION_TOKEN,
         "artifact_dir": tmp_path,
         "now_utc": AFTER_CLOSE,
-        "verify_pin": False,
     }
     params.update(kwargs)
     return runner.run_consumption(repo, **params)
@@ -247,21 +246,19 @@ def test_G1_pin_mismatch_refuses_before_anything_is_read(
             confirmation=runner.CONFIRMATION_TOKEN,
             artifact_dir=tmp_path,
             now_utc=AFTER_CLOSE,
-            verify_pin=True,
         )
     assert repo.calls == [], "the pin is verified before the holdout is touched"
     assert not (tmp_path / runner.SNAPSHOT_FILENAME).exists()
 
 
 def test_the_real_committed_pin_lets_consumption_proceed(tmp_path: Path) -> None:
-    """Guard the guard: verify_pin=True must not be permanently broken."""
+    """Guard the guard: mandatory pin verification must not be permanently broken."""
 
     result = runner.run_consumption(
         FakeRepository(),
         confirmation=runner.CONFIRMATION_TOKEN,
         artifact_dir=tmp_path,
         now_utc=AFTER_CLOSE,
-        verify_pin=True,
     )
     assert result["consumes_one_look"] is True
 
@@ -577,7 +574,7 @@ def test_consume_then_recompute_from_the_local_artifact_is_identical(tmp_path: P
 def test_recompute_from_seal_matches_consumption_and_never_rereads(tmp_path: Path) -> None:
     first = _consume(FakeRepository(), tmp_path)
     repo = FakeRepository()
-    again = runner.recompute_from_seal(repo, verify_pin=False)
+    again = runner.recompute_from_seal(repo)
     assert again["per_timeframe"] == first["per_timeframe"]
     assert repo.calls == [], "recovery reads the captured evidence, never the predictions"
 
@@ -588,21 +585,21 @@ def test_recompute_from_seal_refuses_a_snapshot_that_diverges_from_the_raw_captu
     _consume(FakeRepository(), tmp_path)
     FakeRepository.durable_seal["raw_evidence"][0]["candidate_p_up_frac"] = 0.11
     with pytest.raises(runner.SnapshotTampered, match="captured before exposure"):
-        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+        runner.recompute_from_seal(FakeRepository())
 
 
 def test_recompute_from_seal_refuses_a_seal_without_its_raw_capture(tmp_path: Path) -> None:
     _consume(FakeRepository(), tmp_path)
     FakeRepository.durable_seal.pop("raw_evidence")
     with pytest.raises(runner.SnapshotTampered, match="lacks the raw capture"):
-        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+        runner.recompute_from_seal(FakeRepository())
 
 
 def test_recompute_from_seal_refuses_disagreeing_seal_columns(tmp_path: Path) -> None:
     _consume(FakeRepository(), tmp_path)
     FakeRepository.durable_seal["evidence_snapshot_id"] = "f" * 64
     with pytest.raises(runner.SnapshotTampered, match="disagrees with its captured snapshot"):
-        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+        runner.recompute_from_seal(FakeRepository())
 
 
 def test_a_seal_that_never_captured_cannot_be_recovered_by_rereading(tmp_path: Path) -> None:
@@ -614,7 +611,7 @@ def test_a_seal_that_never_captured_cannot_be_recovered_by_rereading(tmp_path: P
         _consume(CaptureFails(), tmp_path)
     repo = FakeRepository()
     with pytest.raises(runner.ConsumptionRefused, match="owner decision"):
-        runner.recompute_from_seal(repo, verify_pin=False)
+        runner.recompute_from_seal(repo)
     assert repo.calls == []
 
 
@@ -626,3 +623,201 @@ def test_recompute_from_seal_after_a_statistics_failure_completes_the_seal(
     with pytest.raises(KeyError):
         _consume(broken, tmp_path)
     assert FakeRepository.durable_seal["state"] == runner.STATE_SEALED_NO_RESULT
+
+
+# --------------------------- D3: fail closed unless positively verified ---------------------------
+
+
+def test_an_undeclared_repository_is_refused_by_the_library_itself(tmp_path: Path) -> None:
+    """V807-F4. Absence of a declaration is refusal, never permission."""
+
+    class Undeclared(FakeRepository):
+        section_5a_seal_authority = None  # no declaration at all
+
+    repo = Undeclared()
+    with pytest.raises(runner.ConsumptionRefused, match="does not declare a seal authority"):
+        _consume(repo, tmp_path)
+    assert repo.calls == [] and repo.events == []
+    assert FakeRepository.durable_seal is None
+
+
+def test_there_is_no_switch_to_skip_pin_verification() -> None:
+    """V807-F5. The bypass flag does not exist, so no caller can consume under unverified rules."""
+
+    with pytest.raises(TypeError, match="verify_pin"):
+        runner.run_consumption(
+            FakeRepository(),
+            confirmation=runner.CONFIRMATION_TOKEN,
+            artifact_dir=Path("unused"),
+            now_utc=AFTER_CLOSE,
+            verify_pin=False,
+        )
+    with pytest.raises(TypeError, match="verify_pin"):
+        runner.recompute_from_seal(FakeRepository(), verify_pin=False)
+
+
+def test_seal_recovery_verifies_the_pin_positively(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from crypto_probability_engine.oos.evaluation import evaluator_pin
+
+    _consume(FakeRepository(), tmp_path)
+
+    def _mismatch():
+        raise evaluator_pin.EvaluatorPinMismatch("simulated drift")
+
+    monkeypatch.setattr(runner, "assert_evaluator_pin", _mismatch)
+    with pytest.raises(evaluator_pin.EvaluatorPinMismatch):
+        runner.recompute_from_seal(FakeRepository())
+
+
+def test_seal_recovery_refuses_an_undeclared_repository(tmp_path: Path) -> None:
+    class Undeclared(FakeRepository):
+        section_5a_seal_authority = None
+
+    with pytest.raises(runner.ConsumptionRefused, match="does not declare"):
+        runner.recompute_from_seal(Undeclared())
+
+
+# --------------------------- F1: scope enforced at admission ---------------------------
+
+
+def _out_of_tranche_attack():
+    """Codex V807-F1, reproduced: favourable SOL/USDT evidence beside losing BTC evidence."""
+
+    from tests.oos.evaluation.conftest import T0
+
+    days = range(22)
+    losing_btc = [
+        evidence_row(
+            T0 + timedelta(days=d),
+            symbol="BTC/USDT",
+            candidate_up=[0.40, 0.41, 0.39, 0.42, 0.38, 0.43, 0.375][d % 7],
+        )
+        for d in days
+    ]
+    favourable_sol = [
+        evidence_row(
+            T0 + timedelta(days=d, minutes=m),
+            symbol="SOL/USDT",
+            candidate_up=[0.90, 0.91, 0.89, 0.92, 0.88, 0.93, 0.875][d % 7],
+        )
+        for d in days
+        for m in (1, 2, 3, 4, 5)
+    ]
+    return losing_btc, favourable_sol
+
+
+def test_an_out_of_tranche_asset_cannot_change_the_tranche_verdict() -> None:
+    """V807-F1. The attack flipped A and B from False to True. It must change nothing now."""
+
+    from crypto_probability_engine.oos.evaluation import decision
+    from crypto_probability_engine.oos.evaluation.admission import admit
+    from tests.oos.evaluation.conftest import T0
+
+    losing_btc, favourable_sol = _out_of_tranche_attack()
+
+    def verdict(rows):
+        admission = admit(rows, t0=T0, t_close=T_CLOSE)
+        result = decision.evaluate_timeframe("4H", admission, t0=T0, t_close=T_CLOSE)
+        return result.state, result.a_holds, result.b_holds, result.admitted_pairs
+
+    clean = verdict(losing_btc)
+    attacked = verdict(losing_btc + favourable_sol)
+    assert clean == attacked == ("NOT_PASS", False, False, 22)
+
+
+def test_out_of_scope_rows_are_counted_not_silently_dropped() -> None:
+    from crypto_probability_engine.oos.evaluation import diagnostics
+    from crypto_probability_engine.oos.evaluation.admission import admit
+    from tests.oos.evaluation.conftest import T0, T_FREEZE
+
+    losing_btc, favourable_sol = _out_of_tranche_attack()
+    admission = admit(losing_btc + favourable_sol, t0=T0, t_close=T_CLOSE)
+    assert admission.tier1_out_of_scope == len(favourable_sol) == 110
+    block = diagnostics.build(
+        admission, t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=runner.TIMEFRAMES
+    )
+    assert block["tier1_out_of_scope"] == 110
+    assert block["out_of_scope_breakdown"] == {"4H|SOL/USDT": 110}
+
+
+def test_readiness_attainability_ignores_out_of_scope_evidence() -> None:
+    """Scope at admission also stops a foreign asset manufacturing an ATTAINABLE verdict."""
+
+    _, favourable_sol = _out_of_tranche_attack()
+    report = runner.run_readiness(FakeRepository(favourable_sol), verify_pin=False)
+    assert report["attainability"]["4H"]["verdict"] == "PASS_UNATTAINABLE"
+    assert report["attainability"]["4H"]["usable_windows_c4"] == 0
+
+
+# --------------------------- D4: decision_population_id ---------------------------
+
+
+def test_decision_population_id_is_identical_in_readiness_and_consumption(tmp_path: Path) -> None:
+    """The drift check §11 promised and never delivered: same state, same identity."""
+
+    repo = FakeRepository()
+    readiness = runner.run_readiness(repo, verify_pin=False)
+    result = _consume(FakeRepository(), tmp_path)
+    assert readiness["decision_population_id"] == result["decision_population_id"]
+    assert readiness["evidence_snapshot_id"] != result["evidence_snapshot_id"], (
+        "the integrity identity is not comparable across modes, by construction"
+    )
+
+
+def test_decision_population_id_changes_when_a_label_resolves() -> None:
+    from tests.oos.evaluation.conftest import T0
+
+    resolved = [evidence_row(T0 + timedelta(days=1))]
+    unresolved = [evidence_row(T0 + timedelta(days=1), candidate_label=None)]
+    assert runner.decision_population_id(resolved) != runner.decision_population_id(unresolved)
+
+
+def test_decision_population_id_ignores_everything_that_cannot_affect_the_decision() -> None:
+    """V807-F9. Post-close rows and other assets must not make the identity drift."""
+
+    from tests.oos.evaluation.conftest import T0
+
+    base = daily_4h_evidence()
+    noise = [
+        evidence_row(T_CLOSE + timedelta(hours=2)),
+        evidence_row(T0 - timedelta(days=1)),
+        evidence_row(T0 + timedelta(days=3), symbol="SOL/USDT"),
+        evidence_row(T0 + timedelta(days=3), timeframe="1D"),
+    ]
+    assert runner.decision_population_id(base) == runner.decision_population_id(base + noise)
+    assert runner.decision_population_id(base) == runner.decision_population_id(
+        list(reversed(base))
+    )
+
+
+def test_decision_population_id_is_probability_free() -> None:
+    from tests.oos.evaluation.conftest import T0
+
+    a = [evidence_row(T0 + timedelta(days=1), candidate_up=0.60)]
+    b = [evidence_row(T0 + timedelta(days=1), candidate_up=0.91)]
+    assert runner.decision_population_id(a) == runner.decision_population_id(b)
+    assert runner.evidence_snapshot_id(a) != runner.evidence_snapshot_id(b)
+
+
+# --------------------------- F10, R2 ---------------------------
+
+
+def test_seal_recovery_refuses_disagreeing_contract_instants(tmp_path: Path) -> None:
+    """V807-F10."""
+
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["contract_instants"] = {
+        **FakeRepository.durable_seal["contract_instants"],
+        "t0": "2026-08-22T04:00:00+00:00",
+    }
+    with pytest.raises(runner.SnapshotTampered, match="contract instants disagree"):
+        runner.recompute_from_seal(FakeRepository())
+
+
+def test_readiness_refuses_with_a_readiness_error_not_a_consumption_error() -> None:
+    """V807-R2."""
+
+    with pytest.raises(runner.ReadinessRefused, match="not a measured integer"):
+        runner.run_readiness(FakeRepository(origin_anomalies=None), verify_pin=False)

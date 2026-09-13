@@ -62,3 +62,37 @@ def test_consume_without_a_database_refuses_before_any_read(monkeypatch) -> None
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
         cli.main(["--mode", "consume", "--confirm", runner.CONFIRMATION_TOKEN])
+
+
+def test_the_cli_reads_its_database_configuration_from_the_environment(monkeypatch) -> None:
+    """V807-F3. Settings() ignores the environment; with the secret set, the CLI must still build
+    the Postgres repository. Constructing it never connects."""
+
+    from crypto_probability_engine.persistence import repository as module
+
+    monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://probe-only-never-connected")
+    repository = cli.build_repository()
+    assert isinstance(repository, module.SupabasePersistenceRepository)
+    cli.require_durable_authority(repository)
+
+
+def test_readiness_through_the_cli_refuses_instead_of_reporting_an_empty_store(monkeypatch) -> None:
+    """V807-F3. Without a database, readiness must refuse — never report zero evidence, which
+    would read as "the sampling frame failed"."""
+
+    for name in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
+        cli.main(["--mode", "readiness"])
+
+
+def test_seal_recovery_through_the_cli_refuses_without_a_durable_authority(monkeypatch) -> None:
+    for name in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
+        cli.main(["--mode", "recompute"])
+
+
+def test_an_undeclared_repository_is_refused_by_the_cli() -> None:
+    with pytest.raises(runner.ConsumptionRefused, match="None"):
+        cli.require_durable_authority(object())

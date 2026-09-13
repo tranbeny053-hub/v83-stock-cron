@@ -24,6 +24,7 @@ from crypto_probability_engine.oos.evaluation.lattice import (
     assign_window_index,
     window_count,
 )
+from crypto_probability_engine.oos.evaluation.scope import TRANCHE_1_SYMBOLS
 from crypto_probability_engine.oos.evaluation.scoring import ece, per_row_d, window_mean
 from crypto_probability_engine.oos.evaluation.stats_kernel import (
     sign_test_one_sided_p,
@@ -35,7 +36,6 @@ from crypto_probability_engine.utils.invariants import validate_probability_trip
 BOUNDARY_CONVENTION = 0.05
 
 ORDERED_COARSENINGS = tuple(sorted(COARSENINGS))
-TRANCHE_1_SYMBOLS = ("BTC/USDT", "ETH/USDT")
 
 PASS = "PASS"
 A_AND_B_HELD_FAIL_UNVERIFIED = "A_AND_B_HELD_FAIL_UNVERIFIED"
@@ -124,6 +124,14 @@ def evaluate_timeframe(
     """Return the §5A decision for one timeframe."""
 
     rows = [row for row in admission.admitted if row.get("timeframe") == timeframe]
+    # Defence in depth (V807-F1): admission already enforces scope; a row that is somehow out
+    # of scope here is a broken invariant, and it fails closed rather than joining A or B.
+    strays = [row for row in rows if row.get("normalized_symbol") not in TRANCHE_1_SYMBOLS]
+    if strays:
+        raise ValueError(
+            f"{len(strays)} out-of-tranche row(s) reached the decision for {timeframe}; "
+            "scope must be enforced at admission"
+        )
     fail_checks = _fail_checks(rows)
     breached = [check for check in fail_checks if check.status == OBSERVABLE_BREACH]
     if breached:

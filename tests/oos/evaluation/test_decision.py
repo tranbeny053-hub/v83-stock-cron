@@ -202,3 +202,21 @@ def test_output_never_claims_statistical_significance() -> None:
     assert "significant" not in rendered
     assert "p_value" not in rendered and "p-value" not in rendered
     assert "boundary_statistic" in rendered
+
+
+def test_an_out_of_scope_row_that_bypasses_admission_fails_closed_at_the_decision() -> None:
+    """Defence in depth for V807-F1, tested directly rather than assumed.
+
+    Admission enforces scope, so the decision's own guard is unreachable through admit(). It is
+    exercised here by constructing an AdmissionResult that smuggles an out-of-tranche row past
+    admission — the case the guard exists for.
+    """
+
+    from crypto_probability_engine.oos.evaluation.admission import AdmissionResult
+
+    smuggled = AdmissionResult(
+        admitted=tuple(daily_4h_evidence())
+        + (evidence_row(T0 + timedelta(days=1), symbol="SOL/USDT"),)
+    )
+    with pytest.raises(ValueError, match="out-of-tranche row"):
+        decision.evaluate_timeframe("4H", smuggled, t0=T0, t_close=T_CLOSE)

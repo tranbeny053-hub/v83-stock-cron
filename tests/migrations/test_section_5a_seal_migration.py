@@ -83,3 +83,15 @@ def test_it_is_idempotent_and_replaces_the_superseded_trigger() -> None:
 def test_it_records_that_it_is_not_applied_and_how_to_apply_it_safely() -> None:
     assert "AUTHORED, NOT APPLIED" in SQL
     assert "--only 0009_section_5a_evaluation_seal.sql" in SQL
+
+
+def test_the_seal_cannot_be_truncated() -> None:
+    """V807-F8. TRUNCATE fires no row-level trigger, so it needs its own statement-level guard."""
+
+    assert "BEFORE TRUNCATE ON section_5a_evaluation_seal" in FLAT
+    assert "FOR EACH STATEMENT EXECUTE FUNCTION section_5a_seal_truncate_guard()" in FLAT
+    assert "RAISE EXCEPTION 'section 5A seal cannot be truncated" in FLAT
+
+
+def test_the_residual_limit_is_stated_rather_than_hidden() -> None:
+    assert "DROP TABLE" in SQL and "outside what a table trigger can prevent" in SQL

@@ -9,6 +9,13 @@ Two rules govern every value emitted here:
   carry the same complete set (finding G6.1).
 - **Absence is reported as absence.** A quantity that was not measured is ``UNMEASURED`` or
   ``None``, never ``0``. A zero that nothing measured is a fabricated number (G6.2, G11).
+- **Every tranche cell is materialized, even when empty** (V807-F6). An absent cell is
+  indistinguishable from a forgotten one; a present cell with zero pairs is a measurement.
+
+WHY A DECLARED SCHEMA. Completeness was defeated in three consecutive rounds (F7, G6, V807-F6)
+because §5A.10 lived only in prose. ``REQUIRED_KEYS_PER_SCOPE`` is the machine-checked
+declaration: every timeframe block and every cell block must carry exactly these keys, in both
+modes, for populated and empty evidence.
 """
 
 from __future__ import annotations
@@ -21,13 +28,16 @@ from statistics import median
 from typing import Any
 
 from crypto_probability_engine.oos.evaluation.admission import (
+    REJECTION_CAUSES,
     AdmissionResult,
     realized_label,
+    resolved_after_close_row,
 )
 from crypto_probability_engine.oos.evaluation.lattice import (
     assign_window_index,
     window_count,
 )
+from crypto_probability_engine.oos.evaluation.scope import TRANCHE_1_SYMBOLS
 
 UNMEASURED = "UNMEASURED"
 """Reported in place of a quantity that no ledger measured. ``missed_attempts`` is the
@@ -35,6 +45,33 @@ standing case: collector attempt outcomes live in workflow run logs, not the dat
 
 ORDERED_COARSENINGS = (1, 2, 4)
 OUTCOME_LABELS = ("UP", "DOWN", "TIMEOUT")
+
+# §5A.10, per timeframe AND per cell, plus the per-scope counts pre-registration §9 requires.
+REQUIRED_KEYS_PER_SCOPE = frozenset(
+    {
+        "t_freeze",
+        "t0",
+        "activation_gap_seconds",
+        "admitted_pairs",
+        "k_pre_drop",
+        "usable_windows",
+        "dropped_windows",
+        "missed_attempts",
+        "missed_attempts_basis",
+        "realized_label_distribution",
+        "regime_distribution",
+        "trend_mtf_distribution",
+        "realized_vol_summary",
+        "volume_anomaly_summary",
+        "first_reference_close_utc",
+        "last_reference_close_utc",
+        "realised_span_seconds",
+        "admitted_resolved_after_t_close",
+        "tier1_in_holdout",
+        "tier1_outside_holdout",
+        "tier2_rejections",
+    }
+)
 
 _MISSED_ATTEMPTS_ABSENT_BASIS = (
     "not derivable from the persisted ledger; collector attempt outcomes live in workflow run "
@@ -111,7 +148,8 @@ def build(
     per_timeframe = {
         timeframe: _block(
             timeframe,
-            [row for row in admission.admitted if row.get("timeframe") == timeframe],
+            None,
+            admission,
             t0=t0,
             t_close=t_close,
             contract=contract,
@@ -130,6 +168,10 @@ def build(
         "t_close": t_close.isoformat(),
         "tier1_in_holdout": admission.tier1_in_holdout,
         "tier1_outside_holdout": admission.tier1_outside_holdout,
+        # Out-of-scope rows belong to no tranche cell, so they are reported globally with a
+        # breakdown, never folded silently into zero (V807-F1).
+        "tier1_out_of_scope": admission.tier1_out_of_scope,
+        "out_of_scope_breakdown": _cell_counts(admission.out_of_scope_cells),
         "tier2_admitted": admission.admitted_count,
         "tier2_rejections": dict(admission.rejections),
         "admitted_resolved_after_t_close": admission.resolved_after_close,
@@ -149,7 +191,8 @@ def _contract_fields(*, t0: datetime, t_freeze: datetime) -> dict[str, Any]:
 
 def _block(
     timeframe: str,
-    rows: Sequence[Mapping[str, Any]],
+    symbol: str | None,
+    admission: AdmissionResult,
     *,
     t0: datetime,
     t_close: datetime,
@@ -159,9 +202,18 @@ def _block(
     with_cells: bool,
 ) -> dict[str, Any]:
     """One diagnostic block. The timeframe and every cell use this same function, so the
-    two scopes cannot drift apart in what they report."""
+    two scopes cannot drift apart in what they report. ``symbol=None`` is the timeframe scope."""
 
+    def in_scope(tf: str, sym: str) -> bool:
+        return tf == timeframe and (symbol is None or sym == symbol)
+
+    rows = [
+        row
+        for row in admission.admitted
+        if in_scope(str(row.get("timeframe")), str(row.get("normalized_symbol")))
+    ]
     closes = sorted(row["reference_close_utc"] for row in rows)
+    rejected_here = [cause for tf, sym, cause in admission.rejected_cells if in_scope(tf, sym)]
     features = _feature_values(rows, features_by_prediction)
     block: dict[str, Any] = {
         **contract,
@@ -191,12 +243,24 @@ def _block(
         "realised_span_seconds": (
             int((closes[-1] - closes[0]).total_seconds()) if closes else None
         ),
+        "admitted_resolved_after_t_close": sum(
+            1 for row in rows if resolved_after_close_row(row, t_close)
+        ),
+        "tier1_in_holdout": sum(1 for tf, sym in admission.in_holdout_cells if in_scope(tf, sym)),
+        "tier1_outside_holdout": sum(
+            1 for tf, sym in admission.outside_holdout_cells if in_scope(tf, sym)
+        ),
+        "tier2_rejections": {
+            cause: rejected_here.count(cause) for cause in REJECTION_CAUSES
+        },
     }
     if with_cells:
+        # EVERY tranche cell, whether or not it holds evidence (V807-F6).
         block["per_symbol"] = {
-            symbol: _block(
+            cell_symbol: _block(
                 timeframe,
-                [row for row in rows if row.get("normalized_symbol") == symbol],
+                cell_symbol,
+                admission,
                 t0=t0,
                 t_close=t_close,
                 contract=contract,
@@ -205,9 +269,17 @@ def _block(
                 missed_attempts=UNMEASURED,
                 with_cells=False,
             )
-            for symbol in sorted({str(row.get("normalized_symbol")) for row in rows})
+            for cell_symbol in TRANCHE_1_SYMBOLS
         }
     return block
+
+
+def _cell_counts(cells: Sequence[tuple[str, str]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for timeframe, symbol in cells:
+        key = f"{timeframe}|{symbol}"
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _feature_values(

@@ -16,6 +16,9 @@ name: Section 5A evaluation (MANUAL DISPATCH ONLY)
         options:
           - readiness
           - consume
+          # V807-R4: recovery from the DURABLE seal needs the database secret, which exists only
+          # here. It reads the captured evidence, never the predictions, so it is not a second look.
+          - recompute
       confirm:
         description: required for consume; exactly CONSUME-SECTION-5A-ONE-LOOK
         required: false

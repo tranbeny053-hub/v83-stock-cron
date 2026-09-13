@@ -7,10 +7,14 @@
     --mode recompute-artifact  offline audit of a local artifact; no database access
     --write-pin                regenerate the reviewed evaluator pin
 
-Consumption and seal recovery require the repository to POSITIVELY declare itself a durable
-Postgres authority. ``build_operator_repository`` silently falls back to an in-memory
-repository when no database is configured; a missing secret must refuse, not quietly produce a
-process-local seal that dies with the job (finding G8).
+Every live mode — readiness, consumption and seal recovery — requires the repository to
+POSITIVELY declare itself a durable Postgres authority.
+
+V807-F3: this entrypoint used to build ``Settings()``, which does not read the environment, so
+even with SUPABASE_DB_URL set it silently constructed an EMPTY in-memory repository. Readiness
+would then have reported zero evidence everywhere — a false "the frame failed" rather than a
+refusal. Settings now come from the environment, exactly as every other production script does,
+and readiness refuses a non-durable repository instead of reporting on one.
 """
 
 from __future__ import annotations
@@ -57,14 +61,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def require_durable_authority(repository) -> None:
-    """Positive attestation: only a declared durable Postgres authority may seal or recover."""
+    """Positive attestation for every live mode; readiness included."""
 
-    authority = repository.section_5a_seal_authority()
+    declare = getattr(repository, "section_5a_seal_authority", None)
+    authority = declare() if callable(declare) else None
     if authority != runner.SEAL_AUTHORITY_POSTGRES:
         raise runner.ConsumptionRefused(
             f"the configured repository is {authority!r}, not a durable Postgres authority; "
-            "check that SUPABASE_DB_URL is set. Refusing rather than sealing process-locally."
+            "check that SUPABASE_DB_URL is set. Refusing rather than reading or sealing "
+            "process-locally."
         )
+
+
+def build_repository():
+    """The ONE way this entrypoint obtains its repository: from the environment (V807-F3)."""
+
+    return build_operator_repository(Settings.from_env())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,13 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(runner.recompute_from_snapshot(artifact_dir), indent=2))
         return 0
 
-    repository = build_operator_repository(Settings())
+    repository = build_repository()
+    require_durable_authority(repository)
 
     if args.mode == runner.MODE_READINESS:
         print(json.dumps(runner.run_readiness(repository), indent=2))
         return 0
-
-    require_durable_authority(repository)
 
     if args.mode == MODE_RECOMPUTE:
         print(json.dumps(runner.recompute_from_seal(repository), indent=2))

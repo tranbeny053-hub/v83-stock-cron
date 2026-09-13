@@ -96,3 +96,18 @@ DROP TRIGGER IF EXISTS section_5a_seal_guard ON section_5a_evaluation_seal;
 CREATE TRIGGER section_5a_seal_guard
   BEFORE UPDATE OR DELETE ON section_5a_evaluation_seal
   FOR EACH ROW EXECUTE FUNCTION section_5a_seal_guard();
+
+-- V807-F8: TRUNCATE does not fire row-level triggers, so the row guard above cannot stop it.
+-- A statement-level guard closes that route. Known residual limit, stated rather than hidden:
+-- DROP TABLE, or a superuser disabling triggers, is outside what a table trigger can prevent.
+CREATE OR REPLACE FUNCTION section_5a_seal_truncate_guard()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'section 5A seal cannot be truncated: the one look stays recorded';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS section_5a_seal_truncate_guard ON section_5a_evaluation_seal;
+CREATE TRIGGER section_5a_seal_truncate_guard
+  BEFORE TRUNCATE ON section_5a_evaluation_seal
+  FOR EACH STATEMENT EXECUTE FUNCTION section_5a_seal_truncate_guard();

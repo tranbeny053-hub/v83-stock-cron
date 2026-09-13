@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from crypto_probability_engine.oos.evaluation import decision, diagnostics
 from crypto_probability_engine.oos.evaluation.admission import admit
 from tests.oos.evaluation.conftest import T0, T_CLOSE, T_FREEZE, daily_4h_evidence
@@ -190,3 +192,72 @@ def test_numeric_summaries_are_identical_for_decimal_and_float_inputs() -> None:
     floats = diagnostics.numeric_summary([0.2, 0.4, 0.6])
     decimals = diagnostics.numeric_summary([Decimal("0.2"), Decimal("0.4"), Decimal("0.6")])
     assert floats == decimals
+
+
+@pytest.mark.parametrize("populated", [True, False])
+def test_every_scope_conforms_to_the_declared_schema_in_both_modes(populated: bool) -> None:
+    """V807-F6. The root-cause guard for a class defeated three times: completeness is a machine
+    check against a declared schema, for populated AND empty evidence, in readiness AND
+    consumption."""
+
+    from crypto_probability_engine.oos.evaluation import runner
+    from tests.oos.evaluation.test_runner import FakeRepository
+
+    rows = daily_4h_evidence() if populated else []
+    readiness = runner.run_readiness(FakeRepository(rows), verify_pin=False)
+    admission = admit(rows, t0=T0, t_close=T_CLOSE)
+    consumption = diagnostics.build(
+        admission,
+        t0=T0,
+        t_close=T_CLOSE,
+        t_freeze=T_FREEZE,
+        timeframes=runner.TIMEFRAMES,
+        origin_anomalies=0,
+    )
+    for mode, block in (("readiness", readiness["diagnostics"]), ("consumption", consumption)):
+        assert set(block["per_timeframe"]) == set(runner.TIMEFRAMES), mode
+        for timeframe, scope in block["per_timeframe"].items():
+            assert set(scope) - {"per_symbol"} == diagnostics.REQUIRED_KEYS_PER_SCOPE, (
+                mode,
+                timeframe,
+            )
+            assert set(scope["per_symbol"]) == {"BTC/USDT", "ETH/USDT"}, (mode, timeframe)
+            for symbol, cell in scope["per_symbol"].items():
+                assert set(cell) == diagnostics.REQUIRED_KEYS_PER_SCOPE, (mode, timeframe, symbol)
+
+
+def test_an_empty_tranche_cell_is_materialized_as_a_measurement() -> None:
+    """A present cell with zero pairs is a measurement; an absent cell looks forgotten."""
+
+    block = diagnostics.build(
+        _admission(), t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=["4H"]
+    )
+    eth = block["per_timeframe"]["4H"]["per_symbol"]["ETH/USDT"]
+    assert eth["admitted_pairs"] == 0
+    assert eth["realised_span_seconds"] is None
+    assert eth["realized_label_distribution"] == {"UP": 0, "DOWN": 0, "TIMEOUT": 0}
+
+
+def test_per_scope_counts_reconcile_with_the_global_counts() -> None:
+    from datetime import timedelta
+
+    from tests.oos.evaluation.conftest import evidence_row
+
+    rows = [
+        evidence_row(T0 + timedelta(days=1)),
+        evidence_row(T0 + timedelta(days=2), candidate_label=None),
+        evidence_row(T0 + timedelta(days=3), symbol="ETH/USDT", baseline_label="DOWN"),
+        evidence_row(T_CLOSE + timedelta(hours=1)),
+    ]
+    admission = admit(rows, t0=T0, t_close=T_CLOSE)
+    block = diagnostics.build(
+        admission, t0=T0, t_close=T_CLOSE, t_freeze=T_FREEZE, timeframes=["4H"]
+    )
+    tf = block["per_timeframe"]["4H"]
+    cells = tf["per_symbol"]
+    assert tf["tier1_in_holdout"] == block["tier1_in_holdout"] == 3
+    assert tf["tier1_outside_holdout"] == block["tier1_outside_holdout"] == 1
+    assert cells["BTC/USDT"]["tier2_rejections"]["UNRESOLVED_CANDIDATE"] == 1
+    assert cells["ETH/USDT"]["tier2_rejections"]["LABEL_DISAGREEMENT"] == 1
+    for cause, total in block["tier2_rejections"].items():
+        assert sum(cells[s]["tier2_rejections"][cause] for s in cells) == total
