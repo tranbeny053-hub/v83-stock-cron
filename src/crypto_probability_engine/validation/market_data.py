@@ -81,16 +81,19 @@ def validate_candles(
             )
         seen_opens.add(candle.open_time_utc)
         if last_close is not None and candle.open_time_utc != last_close:
-            gap_seconds = abs((candle.open_time_utc - last_close).total_seconds())
-            if gap_seconds >= expected_seconds:
-                raise DataValidationError(
-                    ErrorCode.SCHEMA_VALIDATION_FAILED,
-                    "Gap in candle series.",
-                )
+            raise DataValidationError(
+                ErrorCode.SCHEMA_VALIDATION_FAILED,
+                "Candles must be exactly adjacent.",
+            )
         last_close = candle.close_time_utc
 
     now = now_utc or datetime.now(UTC)
     _ensure_utc(now, "now_utc")
+    if candles[-1].close_time_utc > now:
+        raise DataValidationError(
+            ErrorCode.SCHEMA_VALIDATION_FAILED,
+            "Latest candle closes in the future.",
+        )
     age_seconds = (now - candles[-1].close_time_utc).total_seconds()
     if age_seconds > expected_seconds * DEFAULT_PHASE1A.freshness_multiplier:
         raise DataValidationError(ErrorCode.STALE_CANDLES, "Latest candle is stale.")
