@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-13 (§5A evaluator REPAIRED against pinned red tests and RECOMPOSED onto main; fresh Codex verification pending; one look NOT consumed)
+Updated: 2026-09-13 (§5A evaluator NOT_VERIFIED by task-807 — CRITICAL scope contamination; three causal classes at the repair bound; ESCALATED; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -327,8 +327,26 @@ COLLECTOR=STOPPED on main as of #88 (651c63e): the schedule trigger is removed, 
 DELEGATE_HAZARD=CLOSED by #87. delegate.sh rotates any existing result and log to .prev-<ts> and
   refuses a result older than the invocation, so a stale verdict can no longer satisfy
   completion. That exact failure happened once and was nearly reported as a fresh verdict.
-CODEX_PENDING=task-807 — COMPLETELY FRESH full adversarial verification of 0bbcdd5, unique identity
-  result-807/codex-807, running against the hardened delegate.sh. It is not a re-run of task-806.
+CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; Opus's independent
+  review was written earlier at 13:47:32Z). 40 of 40 mutations KILLED, so the repair's mechanisms
+  hold; G3.4 unsatisfiability independently CONFIRMED. Evidence and the consolidated MAX review are
+  at .work/807/.
+  CRITICAL F1 — out-of-tranche symbols are pooled into A and B. Verified by Opus: losing BTC alone
+  is NOT_PASS (A=F, B=F); adding SOL/USDT flips it to A=T, B=T. Scope was enforced at authorization,
+  never at admission. This makes PASS easier and has existed since the original decision layer.
+  HIGH F3 — the CLI builds Settings(), which ignores the environment, so in Actions readiness would
+  report an EMPTY in-memory store: a false "frame failed". Verified by Opus. Every other script uses
+  Settings.from_env().
+  HIGH R4 (Opus) — the workflow offers readiness and consume only, so seal recovery is unreachable
+  where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
+  verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
+  LOW F10, R2.
+CODEX_PENDING=NONE.
+ESCALATION_807=Three causal classes have now been defeated twice each and are AT CLAUDE.md's
+  two-attempt bound: pin scope (F6 -> G4 -> F7), diagnostics completeness (F7 -> G6 -> F6), authority
+  surface (F2 -> G8 -> F4). No repair was started. Root cause for pin scope is measured: the CLI's
+  first-party import closure is 23 files and 8 are unpinned, including config/settings.py, which
+  undercuts the pre-registration's reason for rejecting closure-based pinning.
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
@@ -353,9 +371,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Await task-807, then ONE consolidated MAX review, then the T3/T4 blocker. G3.4 must be
-  amended by owner decision before any gate can be green. DO NOT run readiness or consumption, and
-  do not apply 0008 or 0009.
+NEXT_ACTION=OWNER DECISIONS D1 pin derivation, D2 G3.4 amendment, D3 library fail-closed policy,
+  D4 identity-drift guarantee; then ONE consolidated repair batch; then fresh verification. The
+  mechanical repairs (F1, F3, R4, F6, F8, F10, R2) are specified in .work/807/consolidated-max-review.md.
+  DO NOT run readiness or consumption, do not apply 0008 or 0009, and do not push.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
