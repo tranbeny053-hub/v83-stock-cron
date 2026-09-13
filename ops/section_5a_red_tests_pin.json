@@ -1,0 +1,6 @@
+{
+  "file": "tests/oos/evaluation/test_g1_g7_red.py",
+  "sha256": "efe36649582ecbfe3a9835d159bd3ea1bd54befe4a55269dd165084d265f07df",
+  "authored_by": "Codex task-806, against the frozen evaluator 2b31832",
+  "rule": "These tests are the repair contract. They must not be edited to obtain green. Any change to this file or this pin is visible in review and must be justified there."
+}
