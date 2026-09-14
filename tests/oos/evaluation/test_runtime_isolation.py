@@ -792,7 +792,18 @@ def test_one_driver_extension_is_not_the_driver(layout) -> None:
         )
 
 
-@pytest.mark.parametrize("name", ["_cython_3_2_5", "_cython_3_2_4x", "cython_runtime2", "_cython"])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "_cython_3_2_5",
+        "_cython_3_2_4x",
+        "cython_runtime2",
+        "_cython",
+        "cyth\u043en_runtime",  # a Cyrillic look-alike (task-813)
+        "cython_runtime ",  # trailing whitespace (task-813)
+        "psycopg_binary.cython_runtime",  # a dotted key (task-813)
+    ],
+)
 def test_no_other_file_less_name_is_ever_a_helper(layout, name: str) -> None:
     report, extensions = _driver_layout(layout)
     with pytest.raises(iso.IsolationRefused) as exc:
@@ -827,6 +838,14 @@ def _shape(variant: str) -> types.ModuleType:
         module.__name__ = "something_else"
     elif variant == "python-class":
         module.generator = type("generator", (), {"send": lambda self, value: value})
+    elif variant == "str-subclass":
+        module.note = type("text", (str,), {"shout": lambda self: self.upper()})("x")
+    elif variant == "builtin-descriptor":
+        module.upper = str.upper
+    elif variant == "spec-set-after-creation":
+        module.__spec__ = importlib.machinery.ModuleSpec("cython_runtime", loader=None)
+    elif variant == "not-a-module":
+        module = SimpleNamespace(**vars(_cython_runtime()))
     return module
 
 
@@ -836,6 +855,10 @@ def _shape(variant: str) -> types.ModuleType:
         ("python-function", "structural fingerprint"),
         ("extra-string", "structural fingerprint"),
         ("python-class", "structural fingerprint"),
+        ("str-subclass", "structural fingerprint"),
+        ("builtin-descriptor", "structural fingerprint"),
+        ("spec-set-after-creation", "spec, loader, file or path"),
+        ("not-a-module", "not a plain module"),
         ("subclass", "not a plain module"),
         ("loader", "spec, loader, file or path"),
         ("path", "spec, loader, file or path"),
@@ -854,6 +877,27 @@ def test_a_pinned_helper_name_with_any_other_shape_refuses(
             modules={**extensions, "cython_runtime": _shape(variant)},
         )
     assert fragment in str(exc.value)
+
+
+def test_a_driver_extension_without_an_extension_suffix_is_not_the_driver(layout) -> None:
+    """task-813: an authenticated file that is not a compiled extension does not load the driver."""
+
+    import dataclasses
+
+    report, extensions = _driver_layout(layout)
+    impostor = layout.site / "psycopg_binary/pq.py"
+    impostor.write_text("")
+    extensions["psycopg_binary.pq"] = _module("psycopg_binary.pq", origin=str(impostor))
+    report = dataclasses.replace(
+        report, locked_files=frozenset({*report.locked_files, str(impostor.resolve())})
+    )
+    with pytest.raises(iso.IsolationRefused, match="driver is not loaded"):
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={**extensions, "cython_runtime": _cython_runtime()},
+        )
 
 
 def test_a_refused_fingerprint_names_the_digest_it_saw() -> None:

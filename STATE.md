@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (T4 APPLY OF 0009 CONSUMED and REFUSED BEFORE ANY DATABASE ACCESS — run 34851608514: loaded-module attestation rejects Cython's runtime pseudo-modules; no DB contact; rulings L1-L3 requested; one look NOT consumed)
+Updated: 2026-09-14 (repair lane E VERIFIED: exact driver-helper attestation, bf93028, gate 1846; task-813 16/16 attacks refused, Finding 1 recompute; T3 + decision M1 pending; 0009 unapplied; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -526,7 +526,26 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=RULINGS L1-L3 REQUESTED (.work/812/t4-apply-0009/diagnosis.md §4).
+OWNER_RULINGS_L1_L3=Ruled 2026-09-14:
+  - L1=A strengthened: only _cython_3_2_4 and cython_runtime; only while the authenticated locked
+    driver is loaded; truly file- and loader-less; an exact pinned structural fingerprint;
+    everything else refuses.
+  - L1b.
+  - L2: Opus implements, and Codex runs at most 5 bounded attacks.
+  - L3: repair, then T3 merge, then a fresh T4 apply.
+  No dispatch, DB, readiness or one look.
+LANE_E=fix/5a-driver-helper-attestation (LOCAL). The repair bf93028 is gated at 1846.
+  - L1b is delivered through the attest steps: attest loads the driver without connecting and
+    attests again, before the tests and the secret. The in-job test would have had to skip, which
+    tests/test_no_silent_skips.py bans.
+  - The local end-to-end run (.work/813/e2e): BEFORE, 3dc545c apply REFUSED exactly as on GitHub.
+    AFTER, both attest modes PASS at the pinned digests, and apply passes attestation and stops at
+    a nonexistent socket.
+  - Codex task-813 VERIFIED_WITH_FINDINGS: 16/16 attacks refused; 8 uncovered variants are now
+    pinned by tests.
+  - Finding 1: recompute can advance the seal with no post-driver attestation. Decision M1.
+  Review: .work/813/final-review.md.
+OWNER_BOUNDARY_PRIOR_L=RULINGS L1-L3 were requested (.work/812/t4-apply-0009/diagnosis.md §4), then RULED.
   - L1, what the attestation accepts. A (recommended): accept an origin-less module ONLY IF all hold:
     - its exact name is in {cython_runtime, _cython_3_2_4}, tied to the locked driver build;
     - it is a plain module with no spec, loader, file or path;
@@ -579,8 +598,9 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=WAIT for rulings L1-L3. NEVER rerun run 34851608514 or re-dispatch the apply without a
-  NEW T4. After the ruling, build the repair lane from main 3dc545c, gate it, and request its T3.
+NEXT_ACTION=Request lane E's T3 together with decision M1 (recompute guard: A fold into lane E as one extra
+  verified commit, recommended; B a follow-up before readiness). NEVER rerun run 34851608514 or
+  re-dispatch the apply without a NEW T4.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
   to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
