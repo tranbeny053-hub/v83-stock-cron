@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A task-810 NOT_VERIFIED — V810-F1 CRITICAL installed-RECORD authority; runtime-identity class AT BOUND; owner rulings J1-J3 requested; one look NOT consumed)
+Updated: 2026-09-14 (§5A J1=B trust boundary implemented; end-to-end on toolcache-shaped CPython proven; composition GREEN 1739; task-811 mechanical spot-check in flight; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -71,18 +71,20 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluato
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
 CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED). Lane heads, all local:
-  A feat/5a-evaluator-on-main 273508e: G1=A strengthened plus G2 at 2342e68, flake fix 077f260,
-    STATE commits above.
-  B test/resolver-pipefail-regression 8ce93c4 (resolver tests plus G2 reader).
-  C fix/oos-workflow-input-transport 8d6e26e (OOS input transport plus G2 reader).
-  Composition of A 077f260, B and C = 3c2c98f, tree 5d0d5331, identical in either merge order,
-  gate 1718.
+  A feat/5a-evaluator-on-main: the J1=B implementation is a6332d7; STATE commits sit above it.
+  B test/resolver-pipefail-regression 8ce93c4.
+  C fix/oos-workflow-input-transport 8d6e26e.
+  Composition of A a6332d7, B and C = 02d5844, tree f75fd138, identical in either order, gate 1739.
   main = origin/main = 5f36126.
-LAST_GREEN_SHA=077f260 (lane A, local gate 1699). Composition 3c2c98f is green at 1718. Nothing pushed.
-LAST_VERIFY=PASS ruff ok | 1718 passed | schemas+smoke ok | scanners 3/3 · composition 3c2c98f ·
-  2026-09-14 (local, and Codex task-810). The end-to-end run on a toolcache-shaped CPython 3.13.14
-  covered isolated attest, 532 in-job tests with no bytecode left, and readiness reaching the
-  authority refusal; 8 negative refusals proven.
+LAST_GREEN_SHA=a6332d7 (lane A, local gate 1720). Composition 02d5844 is green at 1739. Nothing pushed.
+LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
+  2026-09-14 (local). End-to-end on a toolcache-shaped CPython 3.13.14, using the workflow's own step
+  text:
+  - install removed the floating pip unrun and installed 19 authenticated wheels with CPython's
+    bundled pip;
+  - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
+  - 553 in-job tests passed, leaving no bytecode;
+  - readiness reached the authority refusal, and with the driver loaded both origin checks passed.
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -353,7 +355,10 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE. task-810 COMPLETE (fresh: fired 05:42:57Z, report 05:52:25Z; no tracked change).
+CODEX_PENDING=task-811 — the ONE mechanical spot-check of at most 5 mutants on the J1=B trust boundary.
+  Composition 02d5844 (tree f75fd138) of A a6332d7, B 8ce93c4 and C 8d6e26e. Task file
+  .work/task-811.md, run in worktree scratchpad/compose4-abc. If that worktree is gone, recompose
+  those exact SHAs and check the tree is f75fd138.
 CODEX_VERIFICATION_810=NOT_VERIFIED. 5 of 5 mutants KILLED by committed tests. Bypass hunt:
   - CRITICAL V810-F1: the installed RECORD is trusted. A file tampered together with its RECORD
     passes; Opus REPRODUCED it on the toolcache-shaped interpreter.
@@ -421,17 +426,14 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=OWNER RULINGS J1-J3 REQUESTED (.work/810/final-max-review.md):
-  J1 remedy:
-    B (recommended): install with the interpreter's bundled pip (never the floating pip), from a
-      hash-verified wheelhouse; attest installed bytes against the WHEEL RECORDs; refuse symlinks;
-      Addendum 7.
-    A: B plus a verify-at-load import finder.
-    C: accept the residuals and narrow the claims.
-  J2 verification: A (recommended) Opus plus the F1/F3 reproductions as negative controls plus ONE
-    Codex spot-check of at most 5 mutants; B Opus only.
-  J3 T3: unchanged — ONE batch for A, B and C after J1.
-  The earlier rulings G1-G4, E1-E3 and D1-D4 are applied. T4 remains separate.
+OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14:
+  - J1=B, with a closed trust base: exact CPython 3.13.14, pinned Actions, CPython's bundled pip;
+    wheels authenticated against the lock; installed bytes against the wheel's own RECORD;
+    symlinks and unexpected import surfaces refused; no unverified code after attestation;
+    Addendum 7; no import hook.
+  - J2=A: Codex runs one mechanical spot-check of at most 5 mutants.
+  - J3: after 5/5 killed and a green composition, return ONE T3 batch for A, B and C.
+  In parallel: a READ-ONLY proof and runbook that 0009 applies with --only, without 0008.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -449,8 +451,9 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=WAIT for owner rulings J1-J3. DO NOT run readiness or consumption, apply 0008 or 0009,
-  push, or deploy.
+NEXT_ACTION=Read task-811's result. If 5/5 are killed and the composition is green, request the ONE T3
+  batch for A, B and C, with the 0009 --only runbook. DO NOT run readiness or consumption, apply
+  0008 or 0009, push, or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
