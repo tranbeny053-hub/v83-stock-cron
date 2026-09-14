@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A E1/E2=A/E3=A repaired and composed GREEN across three local lanes; task-809 bounded Codex verification in flight; one look NOT consumed)
+Updated: 2026-09-14 (§5A task-809 VERIFIED_WITH_FINDINGS — 15/15 committed-suite kills; F809-1 MEDIUM runtime identity, F809-2 LOW; owner rulings G1-G4 requested; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -353,12 +353,20 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=task-809 — SMALL BOUNDED verification of composition faaed6d. It covers E1/E2/E3 plus
-  lanes B and C, at most 15 mutants, kills credited to the COMMITTED suite only. Task file
-  .work/task-809.md, run in worktree scratchpad/compose-abc (detached faaed6d). If that worktree is
-  gone, recompose main + A + B + C and check the tree is 993fc5dd. Delegation:
-  ./delegate.sh .work/task-809.md workspace-write high. Under the owner's resource policy this is the
-  ONE Codex pass for the batch.
+CODEX_PENDING=NONE. task-809 COMPLETE (fresh: fired 03:44:58Z, report 04:02:40Z; no tracked change).
+CODEX_VERIFICATION_809=VERIFIED_WITH_FINDINGS on composition faaed6d (tree 993fc5dd). Committed suite:
+  15/15 mutants KILLED, 0 SURVIVED, no new tests. Gate 1652. Red tests (c7e5d4c6...) and the adopted
+  808 tests (b88f1838...) intact. Migration 0009 REVIEWED BUT UNEXECUTED: NULL, precedence and key
+  spelling verified. The library provenance=None allowance is not permission on any real path.
+  The resolver claim (§33) was proven by execution.
+  MEDIUM F809-1, found independently by Opus as O809-1 15 minutes before Codex's report: the runtime
+  identity binds distribution METADATA, not import ORIGINS. Codex's shadow certifi.py was imported
+  under locked metadata; Opus's committed scripts/platform.py executed while the pin passed.
+  Causes: module-level imports run before attestation; scripts/ is sys.path[0]; PYTHONPATH=src;
+  untracked files are ignored; same-version duplicate distributions collapse. Not reachable through
+  dispatch input.
+  LOW F809-2: the workflow step reader silently drops workflow-level env.
+  Consolidated MAX review: .work/809/consolidated-max-review.md. Evidence: .work/809/.
 CODEX_VERIFICATION_808=NOT_VERIFIED. Consolidated MAX review: .work/808/consolidated-max-review.md.
   Evidence: .work/808/codex/ and .work/808/opus/.
   CRITICAL V808-F1 (Codex; Opus reproduced it harmlessly with a stub): the evaluation workflow puts
@@ -402,12 +410,17 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14: E1 APPROVED; E2=A; E3=A. The resolver lane
-  and the OOS workflow input lane were authorized in parallel, with no cron restored. Resource
-  policy: Claude owns critical reasoning AND implementation; Codex only for bounded
-  mechanical/adversarial verification. The next boundary is a T3 push of these lanes after task-809
-  and the consolidated MAX review. Applying 0009 (--only), readiness and consume are each separate
-  T4 actions. Earlier: the T3 batch #84-#90 is CONSUMED.
+OWNER_BOUNDARY=OWNER RULINGS G1-G4 REQUESTED (.work/809/consolidated-max-review.md):
+  G1 F809-1: A (recommended) bind import origins with fail-closed checks, `python -P`, attestation
+    before the heavy imports, refusal of duplicates and of untracked .py/.pth, Addendum 6;
+    B static collision check plus -P; C accept and narrow wording.
+  G2 F809-2: the reader raises on a workflow-level env (recommended: approve).
+  G3 verification: A (recommended) Opus with negative controls plus ONE Codex spot-check of at most
+    5 mutants; B Opus only.
+  G4 T3 timing: A (recommended) land G1/G2 first, then ONE T3 batch for A, B and C; B T3 for B and C
+    now.
+  The earlier rulings E1, E2=A and E3=A are applied. T4 remains separate: apply 0009 --only, then
+  readiness, then consume.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -425,9 +438,8 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Read task-809's result. Then ONE consolidated Opus MAX review over A, B, C and the
-  composition, then report the next T3/T4 blocker. DO NOT run readiness or consumption, do not apply
-  0008 or 0009, and do not push.
+NEXT_ACTION=WAIT for owner rulings G1-G4. DO NOT run readiness or consumption, do not apply 0008 or
+  0009, and do not push.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
