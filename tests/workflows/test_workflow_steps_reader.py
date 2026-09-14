@@ -104,6 +104,7 @@ def test_the_reader_agrees_with_a_real_yaml_parser() -> None:
     ("snippet", "fragment"),
     [
         ("defaults:\n  run:\n    shell: sh\n", "top-level 'defaults'"),
+        ("env:\n  INHERITED: ${{ inputs.hostile }}\n", "top-level 'env'"),  # V809-F2
         ("      - run: echo x\n        continue-on-error: true\n", "continue-on-error"),
         ("      - run: echo x\n        working-directory: sub\n", "working-directory"),
         ("      - run: echo a: b\n", "not allowed in a plain scalar"),
@@ -118,8 +119,9 @@ def test_the_reader_agrees_with_a_real_yaml_parser() -> None:
 )
 def test_unsupported_constructs_raise_instead_of_being_skipped(snippet: str, fragment: str) -> None:
     head = "jobs:\n  only:\n    runs-on: ubuntu-24.04\n    steps:\n"
-    source = snippet if snippet.startswith("defaults") else head + snippet
-    if snippet.startswith("defaults"):
+    workflow_level = snippet.startswith(("defaults", "env"))
+    source = snippet if workflow_level else head + snippet
+    if workflow_level:
         source += head + "      - run: echo x\n"
     with pytest.raises(WorkflowStepsError, match=fragment):
         read_jobs(source)
