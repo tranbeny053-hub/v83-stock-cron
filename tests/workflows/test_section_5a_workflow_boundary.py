@@ -72,6 +72,7 @@ def _contexts(value: str) -> dict[str, str]:
         "inputs.mode": value,
         "inputs.expected_sha": value,
         "inputs.confirm": value,
+        "inputs.expected_population_id": value,
         "secrets.SUPABASE_DB_URL": "postgresql://stub-never-contacted.invalid/none",
     }
 
@@ -138,6 +139,7 @@ def test_the_evaluation_takes_every_input_from_the_environment() -> None:
         "SECTION_5A_MODE": "${{ inputs.mode }}",
         "SECTION_5A_EXPECTED_SHA": "${{ inputs.expected_sha }}",
         "SECTION_5A_CONFIRM": "${{ inputs.confirm }}",
+        "SECTION_5A_EXPECTED_POPULATION_ID": "${{ inputs.expected_population_id }}",
     }
     assert ATTEST.env == {"SECTION_5A_EXPECTED_SHA": "${{ inputs.expected_sha }}"}
     assert INSTALL.env == {}
@@ -262,6 +264,7 @@ def test_hostile_inputs_reach_the_evaluator_as_inert_arguments(
             f"--mode={hostile}",
             f"--expected-sha={hostile}",
             f"--confirm={hostile}",
+            f"--expected-population-id={hostile}",
             f"--wheelhouse={WHEELHOUSE}",
             "--artifact-dir=.work/section_5a",
             "--report=section-5a-report.json",
@@ -285,6 +288,7 @@ def test_the_real_parser_binds_each_hostile_value_to_its_own_option(
     args = cli.build_parser().parse_args(call["argv"][len(ISOLATED_ENTRYPOINT) :])
     assert args.mode == runner.MODE_CONSUME
     assert args.confirm == hostile and args.expected_sha == hostile
+    assert args.expected_population_id == hostile
     assert args.wheelhouse == WHEELHOUSE
     assert args.write_pin is False and args.remove_floating_installer is False
 

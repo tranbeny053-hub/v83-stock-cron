@@ -26,6 +26,7 @@ from crypto_probability_engine.oos.evaluation import provenance, runner
 from scripts import evaluate_section_5a as cli
 from tests.oos.evaluation.conftest import (
     SYNTHETIC_SHA,
+    daily_4h_evidence,
     synthetic_dispatch,
     synthetic_isolation,
     synthetic_runtime,
@@ -45,6 +46,8 @@ def _live_argv(mode: str) -> list[str]:
         f"--confirm={runner.CONFIRMATION_TOKEN}",
         f"--expected-sha={SYNTHETIC_SHA}",
         f"--wheelhouse={SYNTHETIC_WHEELHOUSE}",
+        # Addendum 10: the readiness population of the fake repository's default evidence.
+        f"--expected-population-id={runner.decision_population_id(daily_4h_evidence())}",
     ]
 
 
@@ -617,3 +620,65 @@ def test_nothing_third_party_loads_before_an_isolation_refusal() -> None:
         ]
     else:  # the evaluation runner: isolation passed, so the dispatch attestation refused
         assert observed["outcome"] == "ProvenanceRefused"
+
+
+# --------------------------------------------------------------------------- Addendum 10
+
+
+def test_a_consumption_without_the_readiness_population_refuses_before_the_claim(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The workflow input is empty unless the owner supplies it; empty refuses, spending nothing."""
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    argv = [
+        arg for arg in _live_argv("consume") if not arg.startswith("--expected-population-id=")
+    ]
+    report = tmp_path / "report.json"
+    argv += [
+        "--expected-population-id=",
+        f"--artifact-dir={tmp_path / 'art'}",
+        f"--report={report}",
+    ]
+    with pytest.raises(runner.ConsumptionRefused, match="must name the FULL"):
+        cli.main(argv, environ={})
+    assert fake_seal.durable_seal is None, "nothing was claimed"
+    assert "claim" not in calls
+    written = json.loads(report.read_text(encoding="utf-8"))
+    assert written["outcome"] == "REFUSED" and written["error_type"] == "ConsumptionRefused"
+
+
+def test_a_consumption_whose_population_differs_from_readiness_stops_unconsumed(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    argv = [
+        arg for arg in _live_argv("consume") if not arg.startswith("--expected-population-id=")
+    ]
+    report = tmp_path / "report.json"
+    argv += [
+        f"--expected-population-id={'0' * 64}",
+        f"--artifact-dir={tmp_path / 'art'}",
+        f"--report={report}",
+    ]
+    with pytest.raises(runner.ReadinessPopulationMismatch, match="STOPPED UNCONSUMED"):
+        cli.main(argv, environ={})
+    assert fake_seal.durable_seal is None, "nothing was claimed"
+    written = json.loads(report.read_text(encoding="utf-8"))
+    assert written["outcome"] == "REFUSED"
+    assert written["error_type"] == "ReadinessPopulationMismatch"
+
+
+def test_the_population_flag_reaches_the_parser_unchanged() -> None:
+    flag = f"--expected-population-id={'a' * 64}"
+    args = cli.build_parser().parse_args(["--mode=consume", flag])
+    assert args.expected_population_id == "a" * 64
+    assert cli.build_parser().parse_args(["--mode=consume"]).expected_population_id == ""

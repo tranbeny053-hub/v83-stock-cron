@@ -70,6 +70,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="required for --mode consume: the exact confirmation token",
     )
     parser.add_argument(
+        "--expected-population-id",
+        default="",
+        help=(
+            "required for --mode consume: the FULL decision_population_id of the readiness run on "
+            "this commit (pre-registration Addendum 10)"
+        ),
+    )
+    parser.add_argument(
         "--expected-sha",
         default="",
         help="required for every live mode: the full commit SHA the owner reviewed and dispatched",
@@ -273,6 +281,8 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
         artifact_dir=artifact_dir,
         provenance=record,
         runtime_guard=lambda: attest_loaded_modules(isolation),
+        # Addendum 10: empty becomes absent, which a verified consumption refuses before any read.
+        expected_population_id=args.expected_population_id or None,
     )
 
 

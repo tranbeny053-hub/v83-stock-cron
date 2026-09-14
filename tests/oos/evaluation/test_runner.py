@@ -221,6 +221,8 @@ def _consume(repo, tmp_path, **kwargs):
         "artifact_dir": tmp_path,
         "now_utc": AFTER_CLOSE,
         "provenance": verified_provenance(),
+        # Addendum 10: a verified consumption names the readiness population of what it will read.
+        "expected_population_id": runner.decision_population_id(getattr(repo, "_rows", [])),
     }
     params.update(kwargs)
     return runner.run_consumption(repo, **params)
@@ -963,3 +965,105 @@ def test_a_refusing_runtime_guard_spends_nothing(tmp_path: Path) -> None:
         _consume(repo, tmp_path, runtime_guard=_refuse)
     assert FakeRepository.durable_seal is None, "no claim"
     assert True not in repo.calls, "no probability read"
+
+
+# --------------------------- Addendum 10: the readiness population guard (§2.6) ---------------
+
+
+def _population(rows) -> str:
+    return runner.decision_population_id(rows)
+
+
+def test_a_verified_consumption_that_names_no_population_refuses_before_any_read(
+    tmp_path: Path,
+) -> None:
+    repo = FakeRepository()
+    refusal = "must name the FULL decision_population_id"
+    with pytest.raises(runner.ConsumptionRefused, match=refusal):
+        _consume(repo, tmp_path, expected_population_id=None)
+    assert repo.calls == [] and repo.events == []
+    assert FakeRepository.durable_seal is None
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ["f83c31f7bd5a9a4d", "F" * 64, "f" * 63, "f" * 65, " " + "f" * 64, "g" * 64, ""],
+)
+def test_anything_but_the_full_identity_refuses_before_any_read(
+    tmp_path: Path, malformed: str
+) -> None:
+    repo = FakeRepository()
+    with pytest.raises(runner.ConsumptionRefused, match="FULL 64-character"):
+        _consume(repo, tmp_path, expected_population_id=malformed)
+    assert repo.calls == [] and repo.events == []
+    assert FakeRepository.durable_seal is None
+
+
+def test_a_population_mismatch_stops_unconsumed(tmp_path: Path) -> None:
+    """The owner's condition: a mismatch spends nothing and exposes no probability."""
+
+    repo = FakeRepository()
+    other = _population(daily_4h_evidence()[:-1])
+    assert other != _population(repo._rows)
+    with pytest.raises(runner.ReadinessPopulationMismatch, match="STOPPED UNCONSUMED"):
+        _consume(repo, tmp_path, expected_population_id=other)
+    assert repo.calls == [False], "only the probability-free projection was read"
+    assert "read_probabilities" not in repo.events
+    assert FakeRepository.durable_seal is None, "nothing was claimed"
+    assert not any(tmp_path.iterdir()), "no artifact was written"
+
+
+def test_the_population_is_checked_before_the_guard_the_claim_and_any_probability(
+    tmp_path: Path,
+) -> None:
+    order: list[str] = []
+
+    class Recording(FakeRepository):
+        def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
+            order.append("probabilities" if include_probabilities else "population")
+            return super().fetch_oos_paired_evidence(include_probabilities=include_probabilities)
+
+        def claim_section_5a_seal(self, payload) -> bool:
+            order.append("claim")
+            return super().claim_section_5a_seal(payload)
+
+    _consume(Recording(), tmp_path, runtime_guard=lambda: order.append("guard"))
+    assert order == ["population", "guard", "claim", "probabilities"]
+
+
+def test_the_pre_claim_identity_is_exactly_readiness_s(tmp_path: Path) -> None:
+    """Same function, same probability-free projection: readiness's ID is what consume accepts."""
+
+    readiness = runner.run_readiness(FakeRepository())
+    result = _consume(
+        FakeRepository(), tmp_path, expected_population_id=readiness["decision_population_id"]
+    )
+    assert result["population_matches_readiness"] is True
+    assert result["expected_decision_population_id"] == readiness["decision_population_id"]
+    assert result["decision_population_id"] == readiness["decision_population_id"]
+
+
+def test_population_drift_under_the_claim_computes_no_statistic(tmp_path: Path) -> None:
+    """The population actually read differs from what was checked: CAPTURE_FAILED, no result."""
+
+    class DriftsAfterTheCheck(FakeRepository):
+        def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
+            rows = super().fetch_oos_paired_evidence(include_probabilities=include_probabilities)
+            if include_probabilities:
+                rows = rows[:-1]  # one admitted pair vanished between the check and the read
+            return rows
+
+    repo = DriftsAfterTheCheck()
+    with pytest.raises(runner.ConsumedPopulationDrift, match="no statistic is computed"):
+        _consume(repo, tmp_path)
+    assert FakeRepository.durable_seal["state"] == runner.STATE_CAPTURE_FAILED
+    assert FakeRepository.durable_seal.get("snapshot_payload") is None
+    assert not (tmp_path / runner.RESULT_FILENAME).exists()
+    assert not (tmp_path / runner.SNAPSHOT_FILENAME).exists()
+    with pytest.raises(runner.ConsumptionRefused, match="owner decision"):
+        runner.recompute_from_seal(FakeRepository())
+
+
+def test_both_population_refusals_are_deliberate_consumption_refusals() -> None:
+    assert issubclass(runner.ReadinessPopulationMismatch, runner.ConsumptionRefused)
+    assert issubclass(runner.ConsumedPopulationDrift, runner.ConsumptionRefused)

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -86,6 +87,18 @@ class OneLookAlreadyConsumed(RuntimeError):
 
 class ConsumptionRefused(RuntimeError):
     """A consumption guard refused before any probability was exposed."""
+
+
+class ReadinessPopulationMismatch(ConsumptionRefused):
+    """The population about to be evaluated is not the one readiness measured. Nothing is spent."""
+
+
+class ConsumedPopulationDrift(ConsumptionRefused):
+    """The population actually read under the claim differs from readiness's. No statistic runs."""
+
+
+# Pre-registration Addendum 10 (§2.6 safety change): the FULL readiness identity, never a prefix.
+_FULL_POPULATION_ID = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ReadinessRefused(RuntimeError):
@@ -243,6 +256,7 @@ def run_consumption(
     now_utc: datetime | None = None,
     provenance: Mapping[str, Any] | None = None,
     runtime_guard: Callable[[], object] | None = None,
+    expected_population_id: str | None = None,
 ) -> dict[str, Any]:
     """Take the one look.
 
@@ -263,6 +277,14 @@ def run_consumption(
     OWNER RULING G1=A: ``runtime_guard`` re-verifies the origin of every loaded module. It runs
     after the reads that precede the claim, which may import driver code, and immediately before
     the claim, so the look can be spent only by verified code.
+
+    OWNER-AUTHORIZED §2.6 SAFETY CHANGE (pre-registration Addendum 10): ``expected_population_id``
+    is the FULL ``decision_population_id`` of the readiness run on this pin. A verified
+    consumption, the only kind the durable authority and migration 0009 accept, must name it.
+    - BEFORE the claim, the population is computed exactly as readiness computes it, from the
+      probability-free projection. A mismatch refuses, and nothing is claimed or read.
+    - AFTER the claim, the population actually read is re-checked before any snapshot or statistic.
+      Drift records CAPTURE_FAILED and computes nothing.
     """
 
     moment = now_utc or datetime.now(UTC)
@@ -280,6 +302,18 @@ def run_consumption(
         raise ConsumptionRefused("confirmation token absent or wrong; run is inert")
     if provenance is not None:
         provenance = require_verified_provenance(provenance)
+        if expected_population_id is None:
+            raise ConsumptionRefused(
+                "a verified consumption must name the FULL decision_population_id of the readiness "
+                "run on this pin (pre-registration Addendum 10); nothing was claimed or read"
+            )
+    if expected_population_id is not None and not _FULL_POPULATION_ID.fullmatch(
+        str(expected_population_id)
+    ):
+        raise ConsumptionRefused(
+            "expected_population_id must be the FULL 64-character lowercase decision_population_id "
+            "of the readiness run; nothing was claimed or read"
+        )
 
     existing = repository.fetch_section_5a_seal()
     if existing is not None:
@@ -292,6 +326,21 @@ def run_consumption(
     # Non-consequential reads: no probability is exposed by either.
     origin_anomalies = _measured_count(repository.count_oos_origin_anomalies())
     feature_rows = list(repository.fetch_oos_feature_diagnostics())
+    if expected_population_id is not None:
+        # Addendum 10: the population readiness measured, computed exactly as readiness computes
+        # it from the probability-free projection, BEFORE anything is claimed or read.
+        population_rows = list(repository.fetch_oos_paired_evidence(include_probabilities=False))
+        try:
+            _reject_any_probability(population_rows)
+        except RuntimeError as exc:
+            raise ConsumptionRefused(f"{exc}; nothing was claimed or read") from exc
+        observed_population_id = decision_population_id(population_rows)
+        if observed_population_id != expected_population_id:
+            raise ReadinessPopulationMismatch(
+                f"the population to be evaluated ({observed_population_id}) is not the readiness "
+                f"population ({expected_population_id}); STOPPED UNCONSUMED: nothing was claimed, "
+                "and no probability was read"
+            )
     if runtime_guard is not None:
         runtime_guard()
 
@@ -313,6 +362,14 @@ def run_consumption(
     # From here the look is durably recorded as spent, whatever happens next.
     try:
         evidence = list(repository.fetch_oos_paired_evidence(include_probabilities=True))
+        if expected_population_id is not None:
+            consumed_population_id = decision_population_id(evidence)
+            if consumed_population_id != expected_population_id:
+                raise ConsumedPopulationDrift(
+                    f"the population read under the claim ({consumed_population_id}) drifted from "
+                    f"the readiness population ({expected_population_id}); no statistic is "
+                    "computed, and the seal records CAPTURE_FAILED for an owner decision"
+                )
         snapshot = _build_snapshot(
             moment=moment,
             pin_digest=pin_digest,
@@ -337,6 +394,14 @@ def run_consumption(
         _write_state(artifact_dir, STATE_SEALED_NO_RESULT, detail=repr(exc))
         _record_terminal_state(repository, STATE_SEALED_NO_RESULT, exc)
         raise
+    if expected_population_id is not None:
+        # Addendum 10: the result states the equality it was computed under.
+        result = {
+            **result,
+            "expected_decision_population_id": expected_population_id,
+            "population_matches_readiness": result.get("decision_population_id")
+            == expected_population_id,
+        }
     _write_report(artifact_dir / RESULT_FILENAME, result)
     _write_state(artifact_dir, STATE_COMPLETE)
     repository.advance_section_5a_seal_state(STATE_COMPLETE)
