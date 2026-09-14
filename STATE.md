@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (repair lane E VERIFIED: exact driver-helper attestation, bf93028, gate 1846; task-813 16/16 attacks refused, Finding 1 recompute; T3 + decision M1 pending; 0009 unapplied; one look NOT consumed)
+Updated: 2026-09-14 (lane E MERGED as PR #96 — main 4b0a522, tree b34fa44e as authorized, M1=A; FRESH T4 apply of 0009 REQUESTED at exactly 4b0a522; 0009 unapplied; nothing deployed; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -116,9 +116,11 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-lane-d (LOCAL ONLY, never to be pushed before the apply), from main
-  3dc545c. It carries this STATE checkpoint alone. It stays LOCAL because any merge to main would
-  move main away from the SHA the T4 apply must name.
+CURRENT_BRANCH=chore/state-post-lane-e (LOCAL ONLY, never to be pushed before the apply), from main
+  4b0a522. It carries this STATE checkpoint alone. It stays LOCAL because any merge to main would
+  move main away from the SHA the fresh T4 apply must name.
+CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
+  STATE commits merged with #96.
 CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was branched from main 5940557.
   - bf31847: the post-batch STATE checkpoint.
   - de31d5a: THE LANE D IMPLEMENTATION, gated PASS: ruff, 1825 passed, schemas+smoke, scanners 3/3.
@@ -132,8 +134,10 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=3dc545c (main). Exact-main CI passed on Python 3.11/Linux, run 34850349141. The local
-  gate was 1825 on the identical tree (lane D 18a6447).
+LAST_GREEN_SHA=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
+  gate was 1857 on the identical tree (lane E 5d833de).
+LAST_GREEN_SHA_PRIOR_D=3dc545c (main). Exact-main CI run 34850349141; the local gate was 1825 (lane D
+  18a6447).
 LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local gate was 1739 on the
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
@@ -154,10 +158,11 @@ LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · comp
   - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
   - 553 in-job tests passed, leaving no bytecode;
   - readiness reached the authority refusal, and with the driver loaded both origin checks passed.
-MAIN_STATE=main = origin/main = 3dc545c, tree b58b7063, zero open PRs. It is the merge of PR #95 (lane D)
-  onto 5940557 (#94), onto #93 (86a5ed1), onto #92 (99e5499), onto 5f36126 (PR #91).
-  The SUPABASE_DB_URL repository secret exists (name checked only). Neither Section 5A workflow
-  has ever run.
+MAIN_STATE=main = origin/main = 4b0a522, tree b34fa44e, zero open PRs. It is the merge of PR #96 (lane E)
+  onto 3dc545c (#95, lane D), onto 5940557 (#94), onto #93, onto #92.
+  The SUPABASE_DB_URL repository secret exists (name checked only).
+  - The evaluation workflow has NEVER run.
+  - The apply workflow ran ONCE: run 34851608514, refused before any database access.
   Scratch worktrees remain under the session scratchpad; the repository checkout itself is single.
 MAIN_STATE_PRIOR=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
@@ -534,7 +539,19 @@ OWNER_RULINGS_L1_L3=Ruled 2026-09-14:
   - L2: Opus implements, and Codex runs at most 5 bounded attacks.
   - L3: repair, then T3 merge, then a fresh T4 apply.
   No dispatch, DB, readiness or one look.
-LANE_E=fix/5a-driver-helper-attestation (LOCAL). The repair bf93028 is gated at 1846.
+LANE_E=fix/5a-driver-helper-attestation, MERGED as PR #96, owner-authorized T3 with M1=A. It ran by
+  the same scripted procedure (.work/813/t3-lane-e/):
+  - exact-head CI green on 5d833de (run 34859880367);
+  - a --match-head-commit merge;
+  - parents (3dc545c, 5d833de);
+  - a merged tree b34fa44ec471846ec497cbb9ebfb20289d132f47 EQUAL to the authorized tree;
+  - exact-main CI green on 4b0a522 (run 34860237518);
+  - hf a89b45e, unchanged.
+  Contents:
+  - bf93028: the exact dynamic-helper rule;
+  - 064cfe0: attack-pinning tests and STATE;
+  - 5d833de: the M1=A recompute guard.
+  The prior local gate was 1846 at bf93028.
   - L1b is delivered through the attest steps: attest loads the driver without connecting and
     attests again, before the tests and the secret. The in-job test would have had to skip, which
     tests/test_no_silent_skips.py bans.
@@ -598,9 +615,18 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Request lane E's T3 together with decision M1 (recompute guard: A fold into lane E as one extra
-  verified commit, recommended; B a follow-up before readiness). NEVER rerun run 34851608514 or
-  re-dispatch the apply without a NEW T4.
+OWNER_BOUNDARY=A FRESH T4 REQUESTED: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
+  4b0a52209afd5ef3a9eb62b4da8cca126619befd, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
+  - The same procedure as run 34851608514: pre-checks (origin/main == SHA, hf unchanged, no active
+    runs, workflow active), one dispatch, raw capture of the run JSON, job log and report artifact
+    before parsing, then verification per .work/812/t4-apply-0009-runbook.md.
+  - NEW in the attest step: it now loads the driver without connecting, and its report names the
+    helper fingerprints. They must equal the pinned ones on Linux.
+  - NEVER rerun.
+  CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
+  T3 (#95); the T3 batch #92-#94.
+NEXT_ACTION=WAIT for the owner's fresh T4 authorization of the 0009 apply at 4b0a522. MERGE NOTHING to main
+  meanwhile. NEVER rerun run 34851608514.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
   to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
