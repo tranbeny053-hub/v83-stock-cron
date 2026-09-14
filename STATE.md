@@ -1,11 +1,24 @@
 # STATE
 
-Updated: 2026-09-15 (lane F MERGED as PR #97 — main 1d8f933, tree fc242d44 as authorized: consume now enforces the readiness population before claiming; NEW readiness T4 on 1d8f933 next (N3); one look NOT consumed)
+Updated: 2026-09-15 (NEW READINESS VERIFIED on 1d8f933 — run 34873105124: decision_population_id f83c31f7…d8a5f6, identical to the first readiness; all timeframes ATTAINABLE; consume T4 with that ID next; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
   no evaluation, no probability read, no score computed.
+  NEW READINESS ON THE GUARDED PIN (ruling N3), VERIFIED. This is the owner-authorized T4, CONSUMED; never rerun.
+  - The run. 34873105124, attempt 1, workflow_dispatch on main 1d8f933, mode=readiness, with no
+    confirm and no expected_population_id. Every step succeeded, and the in-job tests passed 621.
+    The readiness step ran 17:12:25Z -> 17:12:39Z.
+  - The raw report (.work/814/t4-readiness-2/, evidence.sha256):
+    - consumes_one_look FALSE; no probability, score or determination anywhere;
+    - run_provenance: the evaluation workflow at 1d8f933, pin b9d94a7d…;
+    - the attest step's driver_helpers equal the pinned fingerprints.
+  - THE CONSUMPTION IDENTITY. decision_population_id =
+    f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6, EQUAL to the first readiness
+    run's. The whole report is IDENTICAL to the first apart from generated_at_utc and run_provenance
+    (evidence_snapshot_id bf3fc0da… is unchanged too). Attainability: 15m 42, 1H 18, 4H 5 usable
+    4-windows, all ATTAINABLE.
   CONDITIONAL CONSUME AUTHORIZATION (2026-09-14): NOT EXERCISED. STOPPED UNCONSUMED, and nothing was
   dispatched.
   - The owner's condition: the frozen consume path at 4b0a522 must enforce equality with readiness
@@ -674,7 +687,13 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=A NEW READINESS T4 TO BE REQUESTED (ruling N3): dispatch section-5a-evaluation.yml ONCE with
+OWNER_BOUNDARY=T4 CONSUMPTION (THE ONE LOOK) TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with
+  mode=consume, confirm CONSUME-SECTION-5A-ONE-LOOK and
+  expected_population_id=f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 at main
+  1d8f933832a01a88f4d58183eae0bcf240eae6df. It is IRREVERSIBLE once claimed. A population mismatch
+  stops it unconsumed.
+  The new readiness T4 (run 34873105124) is CONSUMED.
+OWNER_BOUNDARY_PRIOR_READINESS2=A NEW READINESS T4 was requested (ruling N3): dispatch section-5a-evaluation.yml ONCE with
   mode=readiness at main 1d8f933832a01a88f4d58183eae0bcf240eae6df.
   - Its FULL decision_population_id becomes the ONLY identity consumption may use.
   - The old readiness identity f83c31f7… (run 34863318042, on 4b0a522) is historical. Compare it for
@@ -732,8 +751,8 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=Request the NEW readiness T4 at main 1d8f933. MERGE NOTHING to main. After a verified readiness,
-  request consume with THAT run's full decision_population_id.
+NEXT_ACTION=Request the consumption T4 at main 1d8f933, with expected_population_id f83c31f7…d8a5f6, the full
+  identity from run 34873105124. MERGE NOTHING to main.
   DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
