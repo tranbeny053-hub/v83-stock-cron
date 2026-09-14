@@ -1,11 +1,35 @@
 # STATE
 
-Updated: 2026-09-14 (MIGRATION 0009 APPLIED ONCE AND VERIFIED — run 34861816985 at main 4b0a522, 48/48 runbook checks; seal table exists, locked down, empty; 0008 unapplied; readiness T4 next; one look NOT consumed)
+Updated: 2026-09-14 (FIRST LIVE READINESS RUN VERIFIED — run 34863318042 at main 4b0a522: consumes_one_look=false, no score anywhere, all three timeframes ATTAINABLE; evaluator now FROZEN per pre-registration §2.6; consume T4 next; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
-  no readiness run, no evaluation, no holdout row inspected.
+  no evaluation, no probability read, no score computed.
+  FIRST LIVE READINESS RUN, VERIFIED. This is the owner-authorized T4, CONSUMED 2026-09-14, NEVER RERUN
+  without a new authorization.
+  - The run. 34863318042, attempt 1, workflow_dispatch on main 4b0a522, mode=readiness, no confirm.
+    Every step succeeded, and the in-job tests passed 595 on the real runner. The readiness step ran
+    15:38:51Z -> 15:39:06Z.
+  - The raw report, captured before parsing (.work/813/t4-readiness/, evidence.sha256):
+    - mode readiness; consumes_one_look FALSE;
+    - no probability, score, statistic or determination anywhere (pre-registration §1). The only
+      verdict is §1's attainability verdict;
+    - decision_population_id f83c31f7bd5a9a4d… and evidence_snapshot_id bf3fc0dadfa1103c…;
+    - run_provenance: the evaluation workflow on main, expected == sha == git_head == 4b0a522,
+      run 34863318042, CPython 3.13.14, isolated.
+  - The attest step's driver_helpers equal the pinned fingerprints, a second proof on Linux.
+  - Counts only; no score was ever loaded:
+    - 15m: 466 admitted pairs; usable windows k1/k2/k4 = 89/70/42, from 176/117/71 before the drop;
+      ATTAINABLE.
+    - 1H: 257 pairs; usable 40/28/18; ATTAINABLE.
+    - 4H: 86 pairs; usable 11/7/5, exactly at the floor of 5; ATTAINABLE.
+    - Origin anomalies 0; admitted_resolved_after_t_close 6; missed attempts UNMEASURED by design.
+  - PRE-REGISTRATION §2.6. The evaluator is now FROZEN. Any change after this first live readiness
+    run resets the pin and needs explicit owner authorization stating what changed and why.
+  - The checker (verify_readiness.py) returned VERIFIED. Its first pass flagged the §1 attainability
+    'verdict' keys, because its pattern was overbroad. That output is kept, and the pattern was
+    narrowed to exactly §1's allowance: ATTAINABLE or PASS_UNATTAINABLE at attainability.<timeframe>.
   MIGRATION 0009 APPLIED ONCE, VERIFIED. This is the owner-authorized FRESH T4, CONSUMED 2026-09-14,
   NEVER RERUN, and NEVER DISPATCH THE APPLY WORKFLOW AGAIN.
   - The run. 34861816985, attempt 1, workflow_dispatch on main 4b0a522, image ubuntu24
@@ -639,9 +663,11 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=T4 READINESS TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with mode=readiness at
-  main 4b0a522. It reads the evidence, never the probabilities, and claims nothing. It is its own
-  authorization, and consumption is a separate T4 after it.
+OWNER_BOUNDARY=T4 CONSUMPTION (THE ONE LOOK) TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with
+  mode=consume and confirm CONSUME-SECTION-5A-ONE-LOOK at main 4b0a522, the same pin as readiness.
+  - It is IRREVERSIBLE: the claim spends the look.
+  - Compare its decision_population_id with readiness's f83c31f7… to detect drift.
+  The readiness T4 (run 34863318042) is CONSUMED.
 OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and is DONE (see LOOP_STATE). Its
   request was: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
   4b0a52209afd5ef3a9eb62b4da8cca126619befd, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
@@ -653,8 +679,8 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=Request the readiness T4, section-5a-evaluation.yml mode=readiness at main 4b0a522. MERGE NOTHING to
-  main before readiness and consumption unless the owner decides otherwise.
+NEXT_ACTION=Request the consumption T4 (the one look) at main 4b0a522. MERGE NOTHING to main. The evaluator
+  is frozen (§2.6).
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
