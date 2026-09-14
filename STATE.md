@@ -1,12 +1,32 @@
 # STATE
 
-Updated: 2026-09-14 (lane D MERGED as PR #95 — main 3dc545c, tree b58b7063 as authorized; T4 apply of 0009 REQUESTED at exactly 3dc545c; nothing dispatched or deployed; one look NOT consumed)
+Updated: 2026-09-14 (T4 APPLY OF 0009 CONSUMED and REFUSED BEFORE ANY DATABASE ACCESS — run 34851608514: loaded-module attestation rejects Cython's runtime pseudo-modules; no DB contact; rulings L1-L3 requested; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
-  no live DB read, no readiness run, no evaluation, no holdout row inspected, and no workflow run
-  of either Section 5A workflow, ever.
+  no live DB read, no readiness run, no evaluation, no holdout row inspected.
+  T4 APPLY OF 0009, owner-authorized ONE SHOT, 2026-09-14. It is CONSUMED; NEVER RERUN.
+  - Dispatched once at 13:49:08Z: run 34851608514, attempt 1, main 3dc545c. The pre-dispatch
+    checks passed.
+  - checkout, setup-python 3.13.14, install (floating pip removed, authenticated wheels), attest and
+    in-job tests all PASSED on GitHub's real image.
+  - APPLY REFUSED, exit 2: "IsolationRefused: a loaded module is not verified code: module
+    _cython_3_2_4 has no verifiable origin; module cython_runtime has no verifiable origin".
+  - The report shows committed:false and captured:{}, so NO STATEMENT RAN. The DATABASE WAS NEVER
+    CONTACTED: the refusal is the post-driver-load attestation, before connect. 0009 is still
+    unapplied. hf/main a89b45e and origin/main 3dc545c are unchanged.
+  - ROOT CAUSE. Importing the locked psycopg loads its Cython extensions, and they create two
+    in-memory modules with no spec, loader, file or path, and no Python code:
+    - _cython_3_2_4 holds three C types;
+    - cython_runtime is empty.
+    attest_loaded_modules refuses every origin-less module. The sibling scan (no network) found these
+    two as the ONLY origin-less modules across both routes, and they reproduce on macOS.
+  - CORRECTION TO THE RECORD. The J1=B end-to-end claim "with the driver loaded both origin checks
+    passed" was WRONG. The driver is imported lazily at first connection, AFTER both checks, and
+    readiness makes no later check. So consume's pre-claim runtime_guard would ALSO have refused on
+    the real runner, safely before the claim.
+  - Diagnosis and raw evidence: .work/812/t4-apply-0009/ (diagnosis.md, evidence.sha256).
   LANE D T3 MERGED 2026-09-14, owner-authorized, by the same scripted procedure
   (.work/812/t3-lane-d/, SHA-256 manifest):
     #95 feat/5a-0009-hardening-apply-route  18a6447 -> 3dc545c
@@ -506,13 +526,21 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=T4 REQUESTED: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
-  3dc545c9db0e0cc5fdccf88d1b5d89b2b4dd29ff, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
-  Before dispatch, re-check: origin/main == that SHA, hf unchanged, nothing queued in the group.
-  Then capture the raw run JSON, log and report artifact before parsing, and verify per
-  .work/812/t4-apply-0009-runbook.md. It is NEVER rerun; any retry is a NEW T4.
-  The lane D T3 (#95) and the T3 batch #92-#94 are CONSUMED. Readiness and consumption each remain
-  a separate T4.
+OWNER_BOUNDARY=RULINGS L1-L3 REQUESTED (.work/812/t4-apply-0009/diagnosis.md §4).
+  - L1, what the attestation accepts. A (recommended): accept an origin-less module ONLY IF all hold:
+    - its exact name is in {cython_runtime, _cython_3_2_4}, tied to the locked driver build;
+    - it is a plain module with no spec, loader, file or path;
+    - it holds no Python code;
+    - an authenticated locked extension module is loaded.
+    B: name and structure only. C: attest only before the driver loads (not recommended).
+  - L1b: readiness repeats the post-read attestation; an in-job regression test imports the real
+    driver and attests; Addendum 9.
+  - L2, verification: Opus, the local end-to-end run before and after, and ONE Codex spot-check of at
+    most 5 mutants.
+  - L3, sequence: a T3 for the repair, then a NEW T4 apply at the new SHA, then readiness, then
+    consume.
+  CONSUMED: the T4 apply at 3dc545c (refused, no DB contact), the lane D T3 (#95), and the T3 batch
+  #92-#94.
 OWNER_BOUNDARY_CONSUMED_T3_92_94=The request as it was made (.work/811/final-max-review.md):
   - The batch: push the three branches to origin (NEVER hf), open three independent PRs, and merge
     in order A, B, C. Each merge needs exact-head CI green, a --match-head-commit merge, parents
@@ -551,10 +579,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=WAIT for the owner's T4 authorization of the 0009 apply at 3dc545c. MERGE NOTHING to main
-  meanwhile: main must stay 3dc545c, or attestation refuses. On authorization, run the runbook
-  exactly once, with the SHA read from git and never typed.
-  DO NOT run readiness, consumption or recompute; apply 0008; push to hf; or deploy.
+NEXT_ACTION=WAIT for rulings L1-L3. NEVER rerun run 34851608514 or re-dispatch the apply without a
+  NEW T4. After the ruling, build the repair lane from main 3dc545c, gate it, and request its T3.
+  DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
+  to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
