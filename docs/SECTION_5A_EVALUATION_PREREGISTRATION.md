@@ -861,3 +861,85 @@ Everything the evaluator imports beyond that base is authenticated, not inventor
   (Addendum 5 §30).
 - **The first real proof on GitHub's runner image** is the readiness dispatch, which is T4. An
   unexpected file there refuses safely, before any database access.
+
+# Addendum 8, 2026-09-14 — the seal is locked down before it exists, and applied once (rulings K1=A, K2=A)
+
+A read-only review of migration 0009, made before its first application, found three gaps:
+
+- **F-0009-A (HIGH).** The seal table got neither row-level security nor revoked grants, unlike
+  0005 and 0006. On Supabase, tables in `public` inherit grants for the PostgREST roles. An anon-key
+  `INSERT` could therefore squat the singleton seal with forgeable provenance. The real consumption
+  would then refuse, and the guards would keep the forged row. That is a denial of service against
+  the one look.
+- **F-0009-B (MEDIUM).** No approved route applied it: database access is GitHub Actions only, and
+  no workflow ran a migration.
+- **F-0009-C (MEDIUM).** There is no migration ledger, so `CREATE TABLE IF NOT EXISTS` would keep
+  any stale table. The default migration runner would also drag in the unapplied 0008.
+
+The owner ruled K1=A and K2=A. **No evaluation rule changes. The evaluator's behaviour is
+unchanged.** What changes is the seal's DDL before its first application, and the one route that
+applies it.
+
+## 44. The seal is locked down (F-0009-A)
+
+- **Schema-qualified.** Every object 0009 creates is qualified as `public.`: the table, both guard
+  functions and both triggers. The repository already reads `public.section_5a_evaluation_seal`, so
+  a search path can no longer split the two.
+- **Row-level security** is enabled on the table, and **every privilege is revoked** from
+  `PUBLIC, anon, authenticated, service_role`. Nothing is granted.
+- **Row-level security is not forced.** The evaluator connects as the table's owner, and an owner is
+  not restricted by row-level security that is not forced. The REST repository refuses every seal
+  operation, so no API role needs any access.
+- **The lock-down follows the table and both guards**, in the same file, so the table never exists
+  without it.
+
+## 45. One route applies it, once (F-0009-B, F-0009-C)
+
+- **The route.** `.github/workflows/section-5a-apply-seal-migration.yml` is manual dispatch only,
+  with two required inputs, `expected_sha` and `confirm` (exactly
+  `APPLY-SECTION-5A-SEAL-MIGRATION-ONCE`). It shares the evaluation's concurrency group, so it
+  never runs beside a readiness, consumption or recovery run.
+- **The runtime is the evaluation's**, with its install step verbatim and the same pinned Actions,
+  interpreter and image. `scripts/apply_section_5a_seal.py` runs as `python -I -S -B` and enters the
+  isolated runtime before anything third-party can load.
+- **The attestation is the evaluation's, bound to this workflow.**
+  `provenance.attest(..., workflow=SEAL_MIGRATION_WORKFLOW)` verifies a manual dispatch of THIS
+  workflow on `main`, at exactly `expected_sha`, on a clean checkout, under the pinned runtime and
+  pin. Only the two workflows in `ATTESTABLE_WORKFLOWS` can be named.
+- **A record from this route can never claim or recover the look.** Three separate checks accept
+  only the evaluation workflow: `require_verified_provenance`, the durable authority, and 0009's own
+  CHECK.
+- **The apply script is bound by the reviewed commit, not by the evaluator pin.** The pin stays
+  exactly what the evaluation executes. The script is added only to the set of files whose loaded
+  modules count as verified.
+- **One transaction.** It runs under `lock_timeout`, `statement_timeout` and an advisory lock:
+  1. **Pre-checks**, read-only. Refuse unless no seal table, guard function or guard trigger exists
+     in any schema. Record whether 0008's table exists.
+  2. **The migration.** Execute exactly the pinned bytes of 0009, with no parameters.
+  3. **Post-checks**, read-only. Refuse unless the table has exactly the reviewed columns, all three
+     named CHECK constraints, one primary key and exactly both guard triggers, and unless:
+     - row-level security is on and not forced;
+     - neither PUBLIC nor any API role holds any privilege;
+     - the applying role owns the table;
+     - it holds zero rows;
+     - 0008's table is unchanged.
+  4. **Commit** only if everything passed. Any refusal or error rolls the whole transaction back,
+     so nothing is applied.
+- **One shot.** A second dispatch refuses at the pre-check, so the one-shot property is enforced by
+  the database, not by memory.
+- **Evidence.** Every raw result is captured before it is judged, and written to the uploaded
+  report on success and on refusal. The report and logs never contain the database URL. An
+  unexpected failure is reported by type only, because driver messages can name the host.
+- **The default runner stays forbidden for 0009.** `scripts/apply_migrations.py` without `--only`
+  would apply 0008 too.
+
+## 46. Residuals, stated rather than hidden
+
+- **0009 has never executed on a real Postgres.** No local database exists, and none was
+  downloaded. A SQL error at application rolls the single transaction back and changes nothing.
+  That failure costs a fresh T4 authorization after diagnosis, never a partial schema.
+- **The role names are Supabase's.** If `anon`, `authenticated` or `service_role` did not exist,
+  the REVOKE, or the post-check's privilege test, would error, and the transaction would roll back.
+- **Outside this route.** A database owner or superuser can still alter the table or disable its
+  triggers. The residual stated in §27 (V807-F8) stands.
+- **The trusted base is Addendum 7's**, and the owner-credential residual is Addendum 5 §30's.

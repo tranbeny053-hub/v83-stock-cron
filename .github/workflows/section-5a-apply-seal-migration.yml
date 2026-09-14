@@ -1,0 +1,107 @@
+name: Section 5A seal migration 0009 (MANUAL DISPATCH ONLY, ONE SHOT)
+
+# DELIBERATELY NO `schedule:` OR `push:` TRIGGER. Applying migration 0009 is a T4 action. The owner
+# authorizes ONE dispatch, and it is never rerun. See docs/SECTION_5A_EVALUATION_PREREGISTRATION.md
+# Addendum 8 (owner rulings K1=A, K2=A).
+#
+# WHAT IT DOES. scripts/apply_section_5a_seal.py applies exactly migrations/0009 in ONE transaction:
+# - read-only pre-checks refuse if any seal object already exists, so a second dispatch changes
+#   nothing;
+# - then the migration;
+# - then read-only post-checks: columns, constraints, triggers, row-level security, no API-role
+#   privilege, ownership, zero rows, and 0008 untouched.
+# Any refusal rolls everything back.
+#
+# THE SAME TRUST BOUNDARY AS THE EVALUATION (Addenda 5-7):
+# - exact CPython 3.13.14 and the pinned Actions;
+# - CPython's bundled pip, installing lock-authenticated wheels;
+# - `python -I -S -B`;
+# - an attestation bound to THIS workflow, on main, at exactly expected_sha. Its record can never
+#   claim or recover the one look.
+# Inputs reach the shell ONLY through `env:`, expanded in double quotes (V808-F1). Every step
+# declares `shell: bash` (V808-R6). Only the apply step receives the database secret.
+#
+# CONCURRENCY. It shares the evaluation's concurrency group, so it never runs beside a readiness,
+# consumption or recovery run.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: REQUIRED. The full 40-character commit SHA on main that the owner reviewed
+        required: true
+        type: string
+      confirm:
+        description: REQUIRED. Exactly APPLY-SECTION-5A-SEAL-MIGRATION-ONCE
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: section-5a-evaluation
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install the exact pinned interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+
+      - name: Install the hash-locked set with CPython's bundled pip, from authenticated wheels
+        shell: bash
+        # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
+        run: |
+          python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer
+          bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"
+          python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: --dest "$RUNNER_TEMP/section-5a-wheels" \
+            -r ops/section_5a_evaluator_requirements.lock
+          python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check \
+            --no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile \
+            --require-hashes --no-deps --only-binary=:all: \
+            -r ops/section_5a_evaluator_requirements.lock
+
+      - name: Attest isolation, pin, dispatch and runtime for this workflow (no database)
+        shell: bash
+        env:
+          SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: python -I -S -B scripts/apply_section_5a_seal.py --mode=attest --expected-sha="$SECTION_5A_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels"
+
+      - name: Run the seal migration's tests under this exact runtime (no secret)
+        shell: bash
+        env:
+          # Inherited by every subprocess a test starts. No test may leave bytecode in the checkout,
+          # which the apply step's isolation audit would refuse, or import user site-packages.
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_apply_section_5a_seal.py tests/migrations/test_section_5a_seal_migration.py tests/workflows/test_section_5a_seal_migration_workflow.py tests/workflows/test_workflow_steps_reader.py tests/oos/evaluation/test_provenance.py
+
+      - name: Apply migration 0009 once (the ONLY step that receives the database secret)
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          SECTION_5A_CONFIRM: ${{ inputs.confirm }}
+        run: python -I -S -B scripts/apply_section_5a_seal.py --mode=apply --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=section-5a-seal-migration-report.json
+
+      # The raw pre- and post-check results, on success and on refusal. Never the database URL.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: section-5a-seal-migration-report
+          path: section-5a-seal-migration-report.json
+          if-no-files-found: warn

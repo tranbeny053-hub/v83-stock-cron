@@ -57,6 +57,12 @@ from crypto_probability_engine.runtime_isolation import (
 
 PROVENANCE_SCHEMA_VERSION = "section-5a-run-provenance.v1"
 EVALUATION_WORKFLOW = ".github/workflows/section-5a-evaluation.yml"
+# Owner ruling K2=A (pre-registration Addendum 8). Migration 0009 is applied once, by its own
+# dispatch-only workflow, under this same attestation. A record that workflow produces verifies ONLY
+# as that workflow, and it can never claim or recover the look: require_verified_provenance, the
+# durable authority and the 0009 CHECK all accept the evaluation workflow alone.
+SEAL_MIGRATION_WORKFLOW = ".github/workflows/section-5a-apply-seal-migration.yml"
+ATTESTABLE_WORKFLOWS = (EVALUATION_WORKFLOW, SEAL_MIGRATION_WORKFLOW)
 REQUIRED_EVENT = "workflow_dispatch"
 REQUIRED_REF = "refs/heads/main"
 
@@ -195,8 +201,12 @@ def verify_run_provenance(
     *,
     expected_sha: str,
     lock_pins: Mapping[str, str],
+    workflow: str = EVALUATION_WORKFLOW,
 ) -> dict[str, Any]:
-    """Pure: observed facts in, a verified record out, or a refusal naming EVERY failed check."""
+    """Pure: observed facts in, a verified record out, or a refusal naming EVERY failed check.
+
+    ``workflow`` names the one workflow this run must be; it is never inferred from the dispatch.
+    """
 
     failures: list[str] = []
 
@@ -205,6 +215,7 @@ def verify_run_provenance(
             failures.append(message)
 
     repository = str(dispatch.get("repository", ""))
+    need(workflow in ATTESTABLE_WORKFLOWS, f"{workflow!r} is not an attestable workflow")
     need(dispatch.get("github_actions") == "true", "not running inside GitHub Actions")
     need(
         dispatch.get("event_name") == REQUIRED_EVENT,
@@ -213,9 +224,9 @@ def verify_run_provenance(
     need(dispatch.get("ref") == REQUIRED_REF, f"ref is {dispatch.get('ref')!r}, not {REQUIRED_REF}")
     need(
         bool(repository)
-        and dispatch.get("workflow_ref") == f"{repository}/{EVALUATION_WORKFLOW}@{REQUIRED_REF}",
-        f"workflow is {dispatch.get('workflow_ref')!r}, "
-        f"not {EVALUATION_WORKFLOW} on {REQUIRED_REF}",
+        and workflow in ATTESTABLE_WORKFLOWS
+        and dispatch.get("workflow_ref") == f"{repository}/{workflow}@{REQUIRED_REF}",
+        f"workflow is {dispatch.get('workflow_ref')!r}, not {workflow} on {REQUIRED_REF}",
     )
     sha_is_canonical = isinstance(expected_sha, str) and bool(_COMMIT_SHA.match(expected_sha))
     need(
@@ -300,11 +311,13 @@ def attest(
     environ: Mapping[str, str],
     root: Path | None = None,
     isolation: runtime_isolation.IsolationReport | None = None,
+    workflow: str = EVALUATION_WORKFLOW,
 ) -> dict[str, Any]:
     """Verify the pin, the dispatch and the runtime of THIS process. Touches no repository.
 
     ``isolation`` is the report of :func:`runtime_isolation.enter`, which must already have run in
-    this process (owner ruling G1=A). Without it nothing is attested.
+    this process (owner ruling G1=A). Without it nothing is attested. ``workflow`` is the one
+    workflow the dispatch must be (:data:`ATTESTABLE_WORKFLOWS`).
     """
 
     if isolation is None:
@@ -320,6 +333,7 @@ def attest(
         observe_runtime(repository_root, isolation),
         expected_sha=expected_sha,
         lock_pins=read_lock(repository_root),
+        workflow=workflow,
     )
 
 
