@@ -943,3 +943,92 @@ applies it.
 - **Outside this route.** A database owner or superuser can still alter the table or disable its
   triggers. The residual stated in §27 (V807-F8) stands.
 - **The trusted base is Addendum 7's**, and the owner-credential residual is Addendum 5 §30's.
+
+# Addendum 9, 2026-09-14 — the driver's dynamic helpers, and a correction (rulings L1=A strengthened, L1b, L2, L3)
+
+**The owner-authorized, one-shot apply of 0009 refused before touching the database** (run
+`34851608514`, main `3dc545c`).
+- Install, attestation and the in-job tests all passed on GitHub's real image.
+- The apply step then refused at the loaded-module attestation it makes after importing the driver
+  and before connecting:
+
+  > module _cython_3_2_4 has no verifiable origin; module cython_runtime has no verifiable origin
+
+- The report shows no statement ran (`captured: {}`, `committed: false`). The authorization is
+  consumed, and the run is never repeated.
+
+**No evaluation rule changes.**
+
+## 47. Cause, and a correction to the record
+
+**The cause.**
+- Importing the locked `psycopg` loads its Cython-compiled extensions, `psycopg_binary._psycopg` and
+  `psycopg_binary.pq`, which are authenticated files.
+- Cython's runtime then creates two modules in memory, with no spec, loader, file or path:
+  - `_cython_3_2_4` holds exactly three C-level types;
+  - `cython_runtime` is empty.
+- The attestation refused every module without an origin.
+- A scan of everything either route loads found these two as the only such modules. It covered the
+  pinned first-party closure, `psycopg`, `psycopg_pool`, failed direct and pool connections, and
+  both entrypoints. They reproduce on macOS too.
+
+**The correction.** The J1=B end-to-end record said the origin checks passed with the driver loaded.
+**That was wrong.** The evaluator imports the driver lazily, at its first connection, after both of
+those checks. No test or run had attested loaded modules after the real driver was imported. So
+consumption's check immediately before the claim would also have refused on the real runner: safely
+before the claim, but blocking the look.
+
+## 48. What the attestation now accepts
+
+A module without an origin is accepted ONLY IF all of these hold:
+1. its name is exactly `_cython_3_2_4` or `cython_runtime`;
+2. both compiled extensions of the locked Postgres driver are loaded, each from an
+   **authenticated locked file** with an extension-module suffix;
+3. it is a plain module (`type(module) is types.ModuleType`) whose namespace has no spec, no loader,
+   no `__file__` and no `__path__`, and whose `__name__` is the name it is loaded under;
+4. its namespace matches an **exact pinned structural fingerprint**
+   (`DYNAMIC_HELPER_FINGERPRINTS`).
+   - The fingerprint is a SHA-256 over canonical JSON of the module's type and every namespace
+     entry.
+   - Strings are kept verbatim.
+   - Each type is described by its metatype, name, qualified name, bases and the kind of each of its
+     own attributes, so any Python function or class in it changes the fingerprint.
+
+**Any other file-less module, or any other shape, refuses.** A refusal names the fingerprint it saw
+and the pinned one.
+
+**The fingerprints were computed with the real locked driver** on the pinned CPython 3.13.14, both
+isolated and unisolated, and they agree. A driver rebuilt with another Cython changes these names or
+fingerprints, and refuses until reviewed again.
+
+## 49. The gap that hid it is closed (L1b)
+
+- **Readiness now repeats the loaded-module attestation after its reads**, with the driver loaded.
+  A readiness dispatch therefore rehearses consumption's pre-claim check faithfully.
+- **Both entrypoints' `attest` mode now loads the locked driver WITHOUT connecting**, then attests
+  loaded modules again, and records the fingerprints of the helpers it saw.
+  - `scripts/evaluate_section_5a.py` loads `psycopg` and `psycopg_pool`.
+  - `scripts/apply_section_5a_seal.py` loads the same two.
+  - The attest step runs on the real runner BEFORE the test step and before any step that holds the
+    secret, in both workflows. So the post-driver check is proven where it matters before a
+    connection, or the claim, ever depends on it. Neither workflow file changes.
+- **Why a step, not an in-job test.** The ruling proposed an in-job test. The repository bans every
+  skipped test (`tests/test_no_silent_skips.py`), and a test that can run only inside the job would
+  have to skip everywhere else. The attest step achieves the same purpose, one step earlier, and the
+  ban stays intact.
+- **Committed tests** (never skipped):
+  - the accept/refuse matrix for synthetic helpers;
+  - the real installed driver judged by the pinned rule in a fresh process, with exact equality on
+    the pinned interpreter and locked build;
+  - a driver import that opens no socket;
+  - the new call orders of attest and readiness.
+
+## 50. Residuals, stated rather than hidden
+
+- **The fingerprints were computed on macOS arm64.** Linux x86_64 builds of the same driver release
+  against the same CPython are expected to be identical, but this is **not yet proven on Linux**.
+  The attest step proves or refutes it, before the tests and the secret. A mismatch stops that job
+  there, and names both fingerprints.
+- **The fingerprint is a structural cross-check, not a defence against code already running
+  in-process.** Such code could build a matching module; that residual is Addendum 7 §43's. No
+  unverified code runs after attestation.

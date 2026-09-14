@@ -19,6 +19,7 @@ import csv
 import hashlib
 import importlib.machinery
 import io
+import json
 import subprocess
 import sys
 import types
@@ -708,3 +709,220 @@ def test_site_packages_inside_the_stdlib_tree_is_not_standard_library(layout) ->
             root=layout.root,
             modules={"certifi": _module("certifi", origin=str(layout.site / "certifi.py"))},
         )
+
+
+# --------------------------------------------------------------------------- dynamic helpers
+
+
+def _driver_layout(layout, *, authenticated: bool = True):
+    """The locked Postgres driver's compiled extensions, installed and optionally authenticated."""
+
+    import dataclasses
+
+    suffix = importlib.machinery.EXTENSION_SUFFIXES[0]
+    extensions = {}
+    for name in iso.DYNAMIC_HELPER_DRIVER_EXTENSIONS:
+        path = layout.site / (name.replace(".", "/") + suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"\x7fELF compiled")
+        extensions[name] = _module(name, origin=str(path))
+    locked = set(layout.report.locked_files)
+    if authenticated:
+        locked |= {str(Path(module.__spec__.origin).resolve()) for module in extensions.values()}
+    report = dataclasses.replace(layout.report, locked_files=frozenset(locked))
+    return report, extensions
+
+
+def _cython_runtime() -> types.ModuleType:
+    """Exactly the module Cython's runtime creates: a bare module, nothing in it."""
+
+    return _module("cython_runtime")
+
+
+def test_exactly_two_helpers_are_pinned_each_by_a_sha256_fingerprint() -> None:
+    assert set(iso.DYNAMIC_HELPER_FINGERPRINTS) == {"_cython_3_2_4", "cython_runtime"}
+    assert all(
+        len(v) == 64 and set(v) <= set("0123456789abcdef")
+        for v in iso.DYNAMIC_HELPER_FINGERPRINTS.values()
+    )
+    assert iso.DYNAMIC_HELPER_DRIVER_EXTENSIONS == ("psycopg_binary._psycopg", "psycopg_binary.pq")
+    with pytest.raises(TypeError):
+        iso.DYNAMIC_HELPER_FINGERPRINTS["_cython_9_9_9"] = "0" * 64  # type: ignore[index]
+
+
+def test_a_pinned_helper_passes_only_while_the_authenticated_driver_is_loaded(layout) -> None:
+    report, extensions = _driver_layout(layout)
+    modules = {**extensions, "cython_runtime": _cython_runtime()}
+    verified = iso.attest_loaded_modules(
+        report, pinned=layout.pinned, root=layout.root, modules=modules
+    )
+    assert verified == 3
+
+    with pytest.raises(iso.IsolationRefused, match="driver is not loaded"):
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={"cython_runtime": _cython_runtime()},
+        )
+
+
+def test_driver_extensions_outside_the_authenticated_files_do_not_count(layout) -> None:
+    report, extensions = _driver_layout(layout, authenticated=False)
+    with pytest.raises(iso.IsolationRefused) as exc:
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={**extensions, "cython_runtime": _cython_runtime()},
+        )
+    assert "driver is not loaded" in str(exc.value)
+    assert "psycopg_binary._psycopg was loaded from" in str(exc.value)
+
+
+def test_one_driver_extension_is_not_the_driver(layout) -> None:
+    report, extensions = _driver_layout(layout)
+    extensions.pop("psycopg_binary.pq")
+    with pytest.raises(iso.IsolationRefused, match="driver is not loaded"):
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={**extensions, "cython_runtime": _cython_runtime()},
+        )
+
+
+@pytest.mark.parametrize("name", ["_cython_3_2_5", "_cython_3_2_4x", "cython_runtime2", "_cython"])
+def test_no_other_file_less_name_is_ever_a_helper(layout, name: str) -> None:
+    report, extensions = _driver_layout(layout)
+    with pytest.raises(iso.IsolationRefused) as exc:
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={**extensions, name: _module(name)},
+        )
+    assert f"module {name} has no verifiable origin" in str(exc.value)
+    assert "pinned dynamic helper" not in str(exc.value)
+
+
+class _ModuleSubclass(types.ModuleType):
+    pass
+
+
+def _shape(variant: str) -> types.ModuleType:
+    module = _cython_runtime()
+    if variant == "python-function":
+        module.hook = lambda: None
+    elif variant == "extra-string":
+        module.note = "text"
+    elif variant == "subclass":
+        module = _ModuleSubclass("cython_runtime")
+        module.__spec__ = None
+    elif variant == "loader":
+        module.__loader__ = object()
+    elif variant == "path":
+        module.__path__ = []
+    elif variant == "renamed":
+        module.__name__ = "something_else"
+    elif variant == "python-class":
+        module.generator = type("generator", (), {"send": lambda self, value: value})
+    return module
+
+
+@pytest.mark.parametrize(
+    ("variant", "fragment"),
+    [
+        ("python-function", "structural fingerprint"),
+        ("extra-string", "structural fingerprint"),
+        ("python-class", "structural fingerprint"),
+        ("subclass", "not a plain module"),
+        ("loader", "spec, loader, file or path"),
+        ("path", "spec, loader, file or path"),
+        ("renamed", "its own name is not the one it is loaded under"),
+    ],
+)
+def test_a_pinned_helper_name_with_any_other_shape_refuses(
+    layout, variant: str, fragment: str
+) -> None:
+    report, extensions = _driver_layout(layout)
+    with pytest.raises(iso.IsolationRefused) as exc:
+        iso.attest_loaded_modules(
+            report,
+            pinned=layout.pinned,
+            root=layout.root,
+            modules={**extensions, "cython_runtime": _shape(variant)},
+        )
+    assert fragment in str(exc.value)
+
+
+def test_a_refused_fingerprint_names_the_digest_it_saw() -> None:
+    """A platform whose helper differs must be diagnosable from the refusal alone."""
+
+    shaped = _shape("extra-string")
+    refusal = iso._dynamic_helper_refusal("cython_runtime", shaped, driver_loaded=True)
+    assert iso.dynamic_helper_fingerprint(shaped) in refusal
+    assert iso.DYNAMIC_HELPER_FINGERPRINTS["cython_runtime"] in refusal
+
+
+def test_the_fingerprint_ignores_insertion_order_and_sees_python_code() -> None:
+    first, second = types.ModuleType("probe"), types.ModuleType("probe")
+    first.a, first.b = 1, "x"
+    second.b, second.a = "x", 1
+    assert iso.dynamic_helper_fingerprint(first) == iso.dynamic_helper_fingerprint(second)
+
+    carrier = types.ModuleType("probe")
+    carrier.kind = type("kind", (), {"run": lambda self: None})
+    described = iso.describe_dynamic_helper(carrier)["namespace"]["kind"]
+    assert described["attributes"]["run"] == "function"
+    assert described["metatype"] == "type" and described["bases"] == ["object"]
+
+
+def test_the_installed_driver_s_helpers_are_judged_by_the_pinned_rule() -> None:
+    """The REAL driver, imported in a fresh process, never skipped (tests/test_no_silent_skips.py).
+
+    Every file-less module its import creates is judged by the pinned rule. On the pinned
+    interpreter with the locked driver build, both helpers must be accepted with exactly the pinned
+    fingerprints. On any other build, a helper is accepted only with the pinned fingerprint, and
+    otherwise refused with both digests named. The Section 5A jobs prove the pinned case on the real
+    runner in their secret-free attest step.
+    """
+
+    probe = (
+        "import json, platform, sys\n"
+        "from importlib import metadata\n"
+        f"sys.path.append({str(ROOT / 'src')!r})\n"
+        "from crypto_probability_engine import runtime_isolation as iso\n"
+        "before = set(sys.modules)\n"
+        "import psycopg\n"
+        "judged = {}\n"
+        "for name in sorted(set(sys.modules) - before):\n"
+        "    module = sys.modules[name]\n"
+        "    spec = getattr(module, '__spec__', None)\n"
+        "    if spec is not None or getattr(module, '__file__', None) is not None:\n"
+        "        continue\n"
+        "    judged[name] = {'fingerprint': iso.dynamic_helper_fingerprint(module),\n"
+        "        'refusal': iso._dynamic_helper_refusal(name, module, driver_loaded=True)}\n"
+        "print(json.dumps({'python': platform.python_version(),\n"
+        "    'driver': metadata.version('psycopg-binary'), 'judged': judged}))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", probe],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    seen = json.loads(completed.stdout.strip().splitlines()[-1])
+    pinned = iso.DYNAMIC_HELPER_FINGERPRINTS
+    for name, verdict in seen["judged"].items():
+        if verdict["refusal"] is None:
+            assert verdict["fingerprint"] == pinned[name], name
+        elif verdict["refusal"]:
+            assert verdict["fingerprint"] in verdict["refusal"], name
+            assert pinned[name] in verdict["refusal"], name
+    locked_driver = provenance.read_lock(ROOT)["psycopg-binary"]
+    if seen["python"] == provenance.PINNED_PYTHON_VERSION and seen["driver"] == locked_driver:
+        assert {name: v["fingerprint"] for name, v in seen["judged"].items()} == dict(pinned)
+        assert all(v["refusal"] is None for v in seen["judged"].values())

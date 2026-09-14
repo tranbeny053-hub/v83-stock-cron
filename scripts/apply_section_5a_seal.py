@@ -195,9 +195,10 @@ def attest_loaded_modules(isolation) -> int:
 
 
 def load_driver():
-    """The locked driver. enter() authenticated its files before anything could import it."""
+    """The locked driver, imported WITHOUT connecting. enter() authenticated its files first."""
 
     import psycopg
+    import psycopg_pool  # noqa: F401 - loaded as the evaluator loads it, so the check sees both
 
     return psycopg
 
@@ -237,7 +238,18 @@ def _run(
         "run_provenance": record,
     }
     if args.mode == MODE_ATTEST:
-        return {**base, "mode": MODE_ATTEST, "touches_database": False}
+        # Owner ruling L1b: load the driver WITHOUT connecting, and attest again, in the step that
+        # runs before any step holds the secret. The real runner proves the post-driver check first.
+        load_driver()
+        attest_loaded_modules(isolation)
+        from crypto_probability_engine import runtime_isolation
+
+        return {
+            **base,
+            "mode": MODE_ATTEST,
+            "touches_database": False,
+            "driver_helpers": runtime_isolation.loaded_dynamic_helpers(),
+        }
 
     database_url = environ.get("SUPABASE_DB_URL", "")
     if not database_url:

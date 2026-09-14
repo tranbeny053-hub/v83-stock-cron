@@ -424,10 +424,18 @@ def test_attest_mode_touches_no_database(
         _argv("attest", tmp_path, confirm=""), environ={"SUPABASE_DB_URL": DATABASE_URL}
     )
     assert code == 0
-    assert calls == ["enter:/synthetic/runner-temp/section-5a-wheels", f"attest:{SHA}", "modules"]
+    # L1b: the secret-free attest step loads the driver WITHOUT connecting, then attests again.
+    assert calls == [
+        "enter:/synthetic/runner-temp/section-5a-wheels",
+        f"attest:{SHA}",
+        "modules",
+        "driver",
+        "modules",
+    ]
     assert database.connects == [] and database.statements == []
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert report["touches_database"] is False
+    assert set(report["driver_helpers"]) <= {"_cython_3_2_4", "cython_runtime"}
     assert report["migration_sha256"] == hashlib.sha256(MIGRATION_BYTES).hexdigest()
 
 

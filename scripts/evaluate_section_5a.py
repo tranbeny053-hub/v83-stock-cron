@@ -139,6 +139,21 @@ def attest_loaded_modules(isolation) -> int:
     )
 
 
+def load_database_driver() -> dict[str, str]:
+    """Import the locked database driver WITHOUT connecting; name the dynamic helpers it created.
+
+    Owner ruling L1b. The attest step runs on the real runner before any step holds the secret, so
+    the loaded-module check that guards every connection and the claim is proven there first.
+    """
+
+    import psycopg  # noqa: F401
+    import psycopg_pool  # noqa: F401
+
+    from crypto_probability_engine import runtime_isolation
+
+    return runtime_isolation.loaded_dynamic_helpers()
+
+
 def require_durable_authority(repository) -> None:
     """Positive attestation for every live mode; readiness included."""
 
@@ -226,14 +241,25 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
     record = provenance.attest(args.expected_sha, environ=environ, isolation=isolation)
     attest_loaded_modules(isolation)
     if args.mode == MODE_ATTEST:
-        return {"mode": MODE_ATTEST, "touches_repository": False, "run_provenance": record}
+        driver_helpers = load_database_driver()
+        attest_loaded_modules(isolation)
+        return {
+            "mode": MODE_ATTEST,
+            "touches_repository": False,
+            "driver_helpers": driver_helpers,
+            "run_provenance": record,
+        }
 
     repository = build_repository()
     require_durable_authority(repository)
     attest_loaded_modules(isolation)
 
     if args.mode == MODE_READINESS:
-        return {**runner.run_readiness(repository), "run_provenance": record}
+        outcome = runner.run_readiness(repository)
+        # Owner ruling L1b: the reads load the database driver, so readiness repeats the loaded-code
+        # check consume makes before its claim. A readiness run rehearses that guard faithfully.
+        attest_loaded_modules(isolation)
+        return {**outcome, "run_provenance": record}
 
     if args.mode == MODE_RECOMPUTE:
         return {**runner.recompute_from_seal(repository), "recovery_run_provenance": record}
