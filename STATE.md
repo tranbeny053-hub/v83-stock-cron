@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (T3 BATCH #92-#94 MERGED — §5A evaluator ON MAIN 5940557, tree 249e6499 as authorized; lane D (0009 hardening + apply route, K1=A K2=A) in progress; nothing deployed; one look NOT consumed)
+Updated: 2026-09-14 (lane D VERIFIED — task-812 5/5 KILLED on de31d5a, gate 1825; ONE T3 for lane D REQUESTED; T4 apply of 0009 follows separately; nothing deployed; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -90,8 +90,18 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
 CURRENT_BRANCH=feat/5a-0009-hardening-apply-route (LOCAL, NOT PUSHED), branched from main 5940557.
-  Its first commit is this post-batch STATE checkpoint. The lanes A, B and C are MERGED (#92-#94).
-  main = origin/main = 5940557.
+  - bf31847: the post-batch STATE checkpoint.
+  - de31d5a: THE LANE D IMPLEMENTATION, gated PASS: ruff, 1825 passed, schemas+smoke, scanners 3/3.
+    - 0009: public.-qualified, row-level security on, REVOKE ALL FROM PUBLIC, anon, authenticated,
+      service_role.
+    - scripts/apply_section_5a_seal.py: one transaction, with pre-checks, the exact bytes of 0009,
+      post-checks, and rollback on any refusal.
+    - .github/workflows/section-5a-apply-seal-migration.yml: dispatch-only.
+    - provenance.attest(workflow=...), with require_verified_provenance still evaluation-only.
+    - Addendum 8, and a re-pin to 0911c9bd (69 files).
+    - The in-job selection passes 195 tests under -s -B.
+  - STATE commits above.
+  The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
 LAST_GREEN_SHA=5940557 (main). Exact-main CI passed on Python 3.11/Linux, run 34824354602. The local
   gate was 1739 on the identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
@@ -385,7 +395,21 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE. task-811 COMPLETE. It is fresh: fired 06:44:29Z, delegate exit 06:53:47Z, base
+CODEX_PENDING=NONE. task-812 COMPLETE. It is fresh: fired 09:13:53Z, delegate exit 09:20:32Z, base
+  de31d5a, no tracked change, and every restored file matches its committed blob.
+CODEX_VERIFICATION_812=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1825 before and
+  after.
+  - M1: the pre-check stale refusal was disabled. 5 committed tests killed it: the four F-0009-C
+    cases and the refused-apply report.
+  - M2: the row-level-security post-check was skipped. 2 killed it.
+  - M3: post-check failures were allowed to reach commit(). 16 of the 17 difference cases killed
+    it; the 17th refuses earlier, in _row.
+  - M4: service_role was dropped from 0009's REVOKE. The migration text test killed it.
+  - M5: require_verified_provenance accepted any attestable workflow. The never-claims test killed
+    it.
+  Opus cross-check against the raw log: 25 FAILED lines = 5+2+16+1+1, exactly the credited tests.
+  Evidence: .work/812/codex/.
+CODEX_DONE_811=task-811 COMPLETE. It is fresh: fired 06:44:29Z, delegate exit 06:53:47Z, base
   02d5844, tree f75fd138, no tracked change, and every restored file matches its committed blob.
 CODEX_VERIFICATION_811=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1739 both
   before and after the mutants.
@@ -468,10 +492,17 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The T3 batch #92-#94 is CONSUMED; the owner authorized it on 2026-09-14,
-  and it was executed exactly. K1=A and K2=A were ruled with it.
-  Lane D needs its OWN T3 once it is built and verified. Applying 0009, readiness and consumption
-  are each a SEPARATE T4.
+OWNER_BOUNDARY=ONE T3 REQUESTED for lane D (.work/812/final-review.md): push
+  feat/5a-0009-hardening-apply-route to origin (never hf); ONE PR; exact-head CI green; a
+  --match-head-commit merge; parents verified; a merged tree equal to the lane head's tree;
+  exact-main CI green; stop on any mismatch.
+  Merging ENABLES a dispatch-only workflow that holds the database secret. It is never dispatched
+  without a separate T4.
+  THEN a SEPARATE T4, with the exact merged main SHA: dispatch section-5a-apply-seal-migration.yml
+  ONCE (.work/812/t4-apply-0009-runbook.md). After that come readiness and consumption, each its
+  own T4.
+  The T3 batch #92-#94 is CONSUMED; the owner authorized it on 2026-09-14, and K1=A and K2=A were
+  ruled with it.
 OWNER_BOUNDARY_CONSUMED_T3_92_94=The request as it was made (.work/811/final-max-review.md):
   - The batch: push the three branches to origin (NEVER hf), open three independent PRs, and merge
     in order A, B, C. Each merge needs exact-head CI green, a --match-head-commit merge, parents
@@ -510,12 +541,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Build lane D on feat/5a-0009-hardening-apply-route, following .work/812/lane-d-design.md:
-  - D1: amend 0009, add text tests, re-pin, and a pre-registration addendum;
-  - D2: a one-transaction apply script with pre- and post-checks and a fake-driver suite;
-  - D3: a dispatch-only workflow, with contract and executed-boundary tests.
-  Then ./verify.sh, a fake-driver end-to-end run, ONE Codex spot-check of at most 5 mutants, and an
-  Opus diff review; then request lane D's T3.
+NEXT_ACTION=WAIT for the owner's T3 authorization of lane D, at the head named in
+  .work/812/final-review.md. On authorization, run the scripted single-lane procedure
+  (.work/811/t3-batch/lane.sh pattern), with every SHA read from a manifest and none typed. Then
+  report, and request the T4 apply with the exact merged main SHA.
   DO NOT run readiness, consumption or recompute; dispatch any workflow; apply 0008 or 0009; push
   to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
