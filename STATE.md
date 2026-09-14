@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A J1=B trust boundary implemented; end-to-end on toolcache-shaped CPython proven; composition GREEN 1739; task-811 mechanical spot-check in flight; one look NOT consumed)
+Updated: 2026-09-14 (§5A task-811 VERIFIED 5/5 KILLED; J1=B closed; CI-portability reviewed; ONE T3 batch for lanes A/B/C REQUESTED with 0009 decisions K1/K2; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -75,11 +75,22 @@ CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED). Lane heads, all lo
   B test/resolver-pipefail-regression 8ce93c4.
   C fix/oos-workflow-input-transport 8d6e26e.
   Composition of A a6332d7, B and C = 02d5844, tree f75fd138, identical in either order, gate 1739.
+  The T3 request uses lane A's head AFTER this STATE commit. Its composition with B and C is
+  recomputed and gated; its SHA, tree and gate are in .work/811/final-max-review.md. It may
+  differ from f75fd138 ONLY in STATE.md.
   main = origin/main = 5f36126.
 LAST_GREEN_SHA=a6332d7 (lane A, local gate 1720). Composition 02d5844 is green at 1739. Nothing pushed.
 LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
-  2026-09-14 (local). End-to-end on a toolcache-shaped CPython 3.13.14, using the workflow's own step
-  text:
+  2026-09-14 (local, and Codex task-811 before and after its mutants).
+  CI portability: CI runs the suite on Python 3.11 on Linux, but every local gate ran 3.13.14 on macOS.
+  - ruff reports no 3.12-only syntax; a probe proves ruff 0.16.3 would flag it.
+  - The 45 changed Python files use no stdlib API newer than 3.11.
+  - The full composition suite passed 1739 with builtins.sum replaced by 3.11's naive float
+    summation; 2379 of 36594 calls really differed.
+  - The libm-dependent t-CDF is asserted only within tolerances, and recompute binds evidence and
+    rule digests, never float results.
+  - The first real 3.11/Linux run is the PR's exact-head CI.
+  End-to-end on a toolcache-shaped CPython 3.13.14, using the workflow's own step text:
   - install removed the floating pip unrun and installed 19 authenticated wheels with CPython's
     bundled pip;
   - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
@@ -355,10 +366,22 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=task-811 — the ONE mechanical spot-check of at most 5 mutants on the J1=B trust boundary.
-  Composition 02d5844 (tree f75fd138) of A a6332d7, B 8ce93c4 and C 8d6e26e. Task file
-  .work/task-811.md, run in worktree scratchpad/compose4-abc. If that worktree is gone, recompose
-  those exact SHAs and check the tree is f75fd138.
+CODEX_PENDING=NONE. task-811 COMPLETE. It is fresh: fired 06:44:29Z, delegate exit 06:53:47Z, base
+  02d5844, tree f75fd138, no tracked change, and every restored file matches its committed blob.
+CODEX_VERIFICATION_811=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1739 both
+  before and after the mutants.
+  - M1: the wheel-digest check in audit_site_packages was disabled (the V810-F1 regression). Killed
+    by test_a_tampered_file_with_a_rewritten_installed_record_refuses.
+  - M2: the site-packages symlink refusal was disabled (the V810-F3 regression). Killed by
+    test_a_symlinked_package_directory_refuses.
+  - M3: lock-hash membership was disabled. Killed by test_a_wheel_the_lock_does_not_authenticate_refuses.
+  - M4: pip, setuptools and wheel were allowed beside the lock. Killed by
+    test_not_even_the_installer_may_sit_beside_the_lock.
+  - M5: the install ran the floating `python -B -m pip`. Three workflow-boundary tests killed it.
+  Opus cross-check: the raw pytest output has exactly 7 FAILED lines, which are the credited tests
+  (3777 run - 3770 passed). Each mutant disabled a single guard, and every sibling test passed.
+  Evidence: .work/811/codex/, with a SHA-256 manifest in .work/811/evidence.sha256.
+  Final MAX review: .work/811/final-max-review.md.
 CODEX_VERIFICATION_810=NOT_VERIFIED. 5 of 5 mutants KILLED by committed tests. Bypass hunt:
   - CRITICAL V810-F1: the installed RECORD is trusted. A file tampered together with its RECORD
     passes; Opus REPRODUCED it on the toolcache-shaped interpreter.
@@ -426,14 +449,28 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14:
+OWNER_BOUNDARY=ONE T3 BATCH REQUESTED for lanes A, B and C, with owner decisions K1 and K2 on
+  migration 0009 (.work/811/final-max-review.md).
+  - The batch: push the three branches to origin (NEVER hf), open three independent PRs, and merge
+    in order A, B, C. Each merge needs exact-head CI green, a --match-head-commit merge, parents
+    verified and exact-main CI green. The merged main tree must equal the gated local composition.
+    Stop on the first mismatch.
+  - Merging runs only ci.yml, which uses no secrets. The evaluation workflow is dispatch-only, and
+    no dispatch is authorized.
+  - K1 (F-0009-A HIGH, no RLS or REVOKE on the seal table). A (recommended): amend in a follow-up
+    lane D before any apply. B: fold into lane A before the push.
+  - K2 (F-0009-B, no apply route). A (recommended): a dedicated manual-dispatch workflow for 0009
+    alone, with the F-0009-C pre-checks. B: an apply mode in the evaluation workflow.
+  Runbook: .work/811/0009-apply-only-runbook.md. Every T4 stays separate.
+OWNER_RULINGS_J1_J3=Ruled 2026-09-14, now APPLIED and VERIFIED:
   - J1=B, with a closed trust base: exact CPython 3.13.14, pinned Actions, CPython's bundled pip;
     wheels authenticated against the lock; installed bytes against the wheel's own RECORD;
     symlinks and unexpected import surfaces refused; no unverified code after attestation;
     Addendum 7; no import hook.
-  - J2=A: Codex runs one mechanical spot-check of at most 5 mutants.
+  - J2=A: Codex ran one mechanical spot-check of 5 mutants, all killed.
   - J3: after 5/5 killed and a green composition, return ONE T3 batch for A, B and C.
-  In parallel: a READ-ONLY proof and runbook that 0009 applies with --only, without 0008.
+  In parallel: the READ-ONLY proof and runbook that 0009 applies with --only, without 0008 (done).
+  The T3 batch #84-#90 of 2026-09-13 is CONSUMED as well.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -451,9 +488,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Read task-811's result. If 5/5 are killed and the composition is green, request the ONE T3
-  batch for A, B and C, with the 0009 --only runbook. DO NOT run readiness or consumption, apply
-  0008 or 0009, push, or deploy.
+NEXT_ACTION=WAIT for the owner's T3 authorization of the A/B/C batch and rulings K1 and K2. On
+  authorization, execute exactly the batch in OWNER_BOUNDARY against the lane heads named in
+  .work/811/final-max-review.md. DO NOT run readiness, consumption or recompute; apply 0008 or 0009;
+  push to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
