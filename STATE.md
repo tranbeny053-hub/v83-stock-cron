@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A task-808 NOT_VERIFIED — CRITICAL workflow shell injection; entrypoint class AT BOUND; owner rulings E1-E3 requested; one look NOT consumed)
+Updated: 2026-09-14 (§5A E1/E2=A/E3=A repaired and composed GREEN across three local lanes; task-809 bounded Codex verification in flight; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -70,10 +70,19 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED; STATE-only commits above fd8239a).
-  main = origin/main = 5f36126. feat/5a-evaluator = 0bbcdd5 is superseded, but kept for provenance.
-LAST_GREEN_SHA=fd8239a (local lane gate; this is not CI — nothing was pushed). main: 5f36126, CI green.
-LAST_VERIFY=PASS ruff ok | 1476 passed | schemas+smoke ok | scanners 3/3 · fd8239a · 2026-09-13 (local)
+CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED). Lane heads, all local:
+  A feat/5a-evaluator-on-main 32ebfcf (6ff7c30 adopts the seven 808 tests unchanged; 32ebfcf is the
+    E1/E2/E3 repair), plus STATE-only commits above it.
+  B test/resolver-pipefail-regression e806ec0 (tests only; resolver never false-green).
+  C fix/oos-workflow-input-transport aadbbf7 (OOS dispatch inputs via env; cron stays removed).
+  Composition of main + A + B + C = faaed6d, tree 993fc5dd, bit-identical in either merge order.
+  main = origin/main = 5f36126. feat/5a-evaluator = 0bbcdd5 is superseded, kept for provenance.
+LAST_GREEN_SHA=32ebfcf (lane A, local gate). Composition faaed6d is green too. Nothing is pushed; this is not
+  CI. main: 5f36126, CI green.
+LAST_VERIFY=PASS ruff ok | 1652 passed | schemas+smoke ok | scanners 3/3 · composition faaed6d · 2026-09-14
+  (local). Lane gates: A 1633, B 1171, C 1178, arithmetic reconciled. The in-job test command passes
+  466 under a venv built from the lock with CPython 3.13.14. End-to-end attest with REAL observation:
+  PASS under the locked runtime; REFUSED under the dev venv, a wrong sha, or a modified tracked file.
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -344,9 +353,12 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE. task-808 COMPLETE. It first failed at dispatch on Codex quota; it was re-fired
-  unchanged after the reset at 17:33:32Z and returned 18:23:25Z. The result is fresh (the delegate
-  rotated the failed log), and the only change to the tree is one untracked test file.
+CODEX_PENDING=task-809 — SMALL BOUNDED verification of composition faaed6d. It covers E1/E2/E3 plus
+  lanes B and C, at most 15 mutants, kills credited to the COMMITTED suite only. Task file
+  .work/task-809.md, run in worktree scratchpad/compose-abc (detached faaed6d). If that worktree is
+  gone, recompose main + A + B + C and check the tree is 993fc5dd. Delegation:
+  ./delegate.sh .work/task-809.md workspace-write high. Under the owner's resource policy this is the
+  ONE Codex pass for the batch.
 CODEX_VERIFICATION_808=NOT_VERIFIED. Consolidated MAX review: .work/808/consolidated-max-review.md.
   Evidence: .work/808/codex/ and .work/808/opus/.
   CRITICAL V808-F1 (Codex; Opus reproduced it harmlessly with a stub): the evaluation workflow puts
@@ -390,18 +402,12 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=OWNER RULINGS E1-E3 REQUESTED (.work/808/consolidated-max-review.md):
-  E1 authorize one structural repair batch — inputs only via env; shell: bash with pipefail; an
-  executed-boundary workflow test; adopt test_adversarial_808.py; Addendum 5.
-  E2 dispatch residual/provenance: A (recommended) documented residual + main/expected_sha
-  mis-dispatch guards + snapshot provenance; B guards without provenance; C residual only.
-  E3 runtime: A (recommended) hash-locked deps + pinned interpreter + in-job evaluator tests;
-  B record the runtime only; C narrow §24 only.
-  A T3 push of this lane may be requested only after a clean fresh verification. Applying 0009
-  (with --only), readiness, and consumption are each separate T4 authorizations. Earlier: the T3
-  batch #84-#90 is CONSUMED and must not be reused; its STATE checkpoint PR was its closing step. It authorized exactly those seven pushes, PRs and merges and
-  NO deploy. No T4 has been authorized: migration 0008 remains unapplied, and migration 0009 (the
-  durable §5A seal) exists only on the unpushed evaluator branch and is unapplied. Earlier:
+OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14: E1 APPROVED; E2=A; E3=A. The resolver lane
+  and the OOS workflow input lane were authorized in parallel, with no cron restored. Resource
+  policy: Claude owns critical reasoning AND implementation; Codex only for bounded
+  mechanical/adversarial verification. The next boundary is a T3 push of these lanes after task-809
+  and the consolidated MAX review. Applying 0009 (--only), readiness and consume are each separate
+  T4 actions. Earlier: the T3 batch #84-#90 is CONSUMED.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -419,10 +425,9 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=WAIT for owner rulings E1-E3. Then ONE consolidated repair batch; then task-809, a
-  completely fresh full adversarial verification crediting committed-test kills separately; then ONE
-  consolidated MAX review. DO NOT run readiness or consumption, do not apply 0008 or 0009, and do not
-  push.
+NEXT_ACTION=Read task-809's result. Then ONE consolidated Opus MAX review over A, B, C and the
+  composition, then report the next T3/T4 blocker. DO NOT run readiness or consumption, do not apply
+  0008 or 0009, and do not push.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
