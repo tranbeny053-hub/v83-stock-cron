@@ -638,9 +638,14 @@ def test_workflow_cadence_is_retired_and_manual_defaults_are_intact() -> None:
     assert manual_step["env"]["UCPE_OOS_PAIR_EVIDENCE_ENABLED"] == (
         "${{ inputs.dry_run == false && 'true' || 'false' }}"
     )
-    assert "--dry-run ${{ inputs.dry_run }}" in manual_step["run"]
-    assert "--max-occasions ${{ inputs.max_occasions }}" in manual_step["run"]
-    assert (
-        "--confirm-write ${{ inputs.dry_run == false && "
-        "'WRITE-OOS-PAIR-EVIDENCE' || 'DRY-RUN' }}"
-    ) in manual_step["run"]
+    # The inputs still drive the run, but only through env, never as shell source (V808-F1).
+    assert "${{" not in manual_step["run"]
+    assert manual_step["shell"] == "bash"
+    assert manual_step["env"]["COLLECTOR_DRY_RUN"] == "${{ inputs.dry_run }}"
+    assert manual_step["env"]["COLLECTOR_MAX_OCCASIONS"] == "${{ inputs.max_occasions }}"
+    assert manual_step["env"]["COLLECTOR_CONFIRM_WRITE"] == (
+        "${{ inputs.dry_run == false && 'WRITE-OOS-PAIR-EVIDENCE' || 'DRY-RUN' }}"
+    )
+    assert '--dry-run="$COLLECTOR_DRY_RUN"' in manual_step["run"]
+    assert '--max-occasions="$COLLECTOR_MAX_OCCASIONS"' in manual_step["run"]
+    assert '--confirm-write="$COLLECTOR_CONFIRM_WRITE"' in manual_step["run"]
