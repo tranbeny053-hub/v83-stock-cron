@@ -262,7 +262,10 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
         return {**outcome, "run_provenance": record}
 
     if args.mode == MODE_RECOMPUTE:
-        return {**runner.recompute_from_seal(repository), "recovery_run_provenance": record}
+        recovered = runner.recompute_from_seal(
+            repository, runtime_guard=lambda: attest_loaded_modules(isolation)
+        )
+        return {**recovered, "recovery_run_provenance": record}
 
     return runner.run_consumption(
         repository,

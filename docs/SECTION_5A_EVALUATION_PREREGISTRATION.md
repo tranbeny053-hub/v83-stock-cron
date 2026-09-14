@@ -1032,3 +1032,18 @@ fingerprints, and refuses until reviewed again.
 - **The fingerprint is a structural cross-check, not a defence against code already running
   in-process.** Such code could build a matching module; that residual is Addendum 7 §43's. No
   unverified code runs after attestation.
+
+## 51. Recovery repeats the same check (task-813 Finding 1; ruling M1=A)
+
+- **The gap.** Codex's bounded check found one live path where the driver loads and a durable write
+  can follow with no later loaded-module attestation. `recompute` reads the seal, which loads the
+  driver, and may then advance it to COMPLETE.
+- **The fix.** `runner.recompute_from_seal` takes the same `runtime_guard` consumption uses before
+  its claim. It runs after the seal is read, and before any result is computed or the seal is
+  advanced. The CLI passes `attest_loaded_modules`.
+- **The paths now.** Every live path loads the driver only to be attested again before it acts:
+  - attest attests after loading;
+  - readiness attests after its reads;
+  - consumption attests before its claim;
+  - recovery attests before its result or write;
+  - the seal migration attests before connecting.

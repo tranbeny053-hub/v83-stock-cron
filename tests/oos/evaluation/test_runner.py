@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from crypto_probability_engine.oos.evaluation import runner
+from crypto_probability_engine.runtime_isolation import ProvenanceRefused
 from tests.oos.evaluation.conftest import (
     T_CLOSE,
     daily_4h_evidence,
@@ -587,6 +588,40 @@ def test_recompute_from_seal_matches_consumption_and_never_rereads(tmp_path: Pat
     again = runner.recompute_from_seal(repo)
     assert again["per_timeframe"] == first["per_timeframe"]
     assert repo.calls == [], "recovery reads the captured evidence, never the predictions"
+
+
+def test_recompute_from_seal_reverifies_loaded_code_after_its_read_and_before_advancing(
+    tmp_path: Path,
+) -> None:
+    """M1=A. The read loads the driver; the guard runs before any result or durable write."""
+
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["state"] = runner.STATE_SEALED_RAW_CAPTURED
+    order: list[str] = []
+
+    class Recording(FakeRepository):
+        def fetch_section_5a_seal(self):
+            order.append("read")
+            return super().fetch_section_5a_seal()
+
+        def advance_section_5a_seal_state(self, state: str, detail: str = "") -> None:
+            order.append(f"advance:{state}")
+            super().advance_section_5a_seal_state(state, detail)
+
+    runner.recompute_from_seal(Recording(), runtime_guard=lambda: order.append("guard"))
+    assert order == ["read", "guard", f"advance:{runner.STATE_COMPLETE}"]
+
+
+def test_a_recovery_guard_refusal_advances_nothing(tmp_path: Path) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["state"] = runner.STATE_SEALED_RAW_CAPTURED
+
+    def _refuse() -> None:
+        raise ProvenanceRefused("a module came from an unverified origin")
+
+    with pytest.raises(ProvenanceRefused, match="unverified origin"):
+        runner.recompute_from_seal(FakeRepository(), runtime_guard=_refuse)
+    assert FakeRepository.durable_seal["state"] == runner.STATE_SEALED_RAW_CAPTURED
 
 
 def test_recompute_from_seal_refuses_a_snapshot_that_diverges_from_the_raw_capture(

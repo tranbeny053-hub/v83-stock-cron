@@ -410,6 +410,34 @@ def test_a_readiness_whose_post_read_check_refuses_is_reported_refused(
     assert written["outcome"] == "REFUSED" and written["error_type"] == "IsolationRefused"
 
 
+def test_a_verified_recovery_reverifies_loaded_code_before_it_computes_or_advances(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M1=A. The recovery process repeats the loaded-code check after reading the seal."""
+
+    def _recompute(repository, *, runtime_guard):
+        calls.append("seal-read")
+        runtime_guard()
+        calls.append("advance")
+        return {"mode": "recompute"}
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    monkeypatch.setattr(runner, "recompute_from_seal", _recompute)
+    assert cli.main(_live_argv("recompute"), environ={}) == 0
+    assert calls == [
+        "isolation",
+        "attest",
+        "loaded-modules",  # after the evaluator's imports
+        "loaded-modules",  # after the repository is built
+        "seal-read",
+        "loaded-modules",  # after the read, with the driver loaded, before any result or write
+        "advance",
+    ]
+
+
 def test_a_loaded_module_refusal_before_the_claim_spends_nothing(
     calls: list[str],
     verified_dispatch,
