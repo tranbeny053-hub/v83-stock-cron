@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-13 (POST T3 BATCH #84-#90 — seven lanes merged; §5A evaluator frozen off-main under a Codex-first red team; one look NOT consumed)
+Updated: 2026-09-14 (§5A task-811 VERIFIED 5/5 KILLED; J1=B closed; CI-portability reviewed; ONE T3 batch for lanes A/B/C REQUESTED with 0009 decisions K1/K2; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -54,11 +54,48 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluato
   independent route to reading the holdout without sealing it, even once G1 is fixed; G10
   recompute treats deleted feature_rows and origin_anomalies as empty/zero; G11 an empty
   population reports a measured-looking zero-second span. Evidence at .work/806/.
+  REPAIR LANDED 2026-09-13 at 0bbcdd5, against the task-806 red tests pinned by SHA-256 efe36649...
+  in their own commit 80a95f6 BEFORE the repair and never edited. 20 of 21 pass. G3.4 stays RED:
+  it is UNSATISFIABLE under its own double — its probability read waits on a two-party Barrier with
+  a 5 s timeout, so the lone reader G3.1 requires raises BrokenBarrierError. Proven empirically
+  before the repair; left for the owner and Codex to amend, neither edited nor gamed.
+  THE DESIGN CHANGED: the one look is now CLAIMED, durably and atomically, BEFORE any probability
+  is exposed, and on Postgres the read itself captures raw evidence into the claimed seal inside
+  one transaction before returning. One lossless canonical serializer backs every digest and seal
+  column. Migration 0009 enforces the lifecycle in the database. Addendum 3 of the pre-registration
+  records it.
+  RECOMPOSED onto main 5f36126 as branch feat/5a-evaluator-on-main; STATE.md was the only file
+  changed on both sides and the only conflict.
+  CURRENT IMPLEMENTATION: fd8239a on feat/5a-evaluator-on-main. It carries the owner rulings D1-D4
+  and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
+  LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-  Product work outside section 5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=docs/state-post-t3-batch-84-90 (this checkpoint). origin/main = 68b4c8e before it merges.
-LAST_GREEN_SHA=68b4c8e
-LAST_VERIFY=PASS ruff ok | 1150 passed | schemas+smoke ok | scanners 3/3 · 68b4c8e · 2026-09-13 (exact-main CI green on every batch merge)
+CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED). Lane heads, all local:
+  A feat/5a-evaluator-on-main: the J1=B implementation is a6332d7; STATE commits sit above it.
+  B test/resolver-pipefail-regression 8ce93c4.
+  C fix/oos-workflow-input-transport 8d6e26e.
+  Composition of A a6332d7, B and C = 02d5844, tree f75fd138, identical in either order, gate 1739.
+  The T3 request uses lane A's head AFTER this STATE commit. Its composition with B and C is
+  recomputed and gated; its SHA, tree and gate are in .work/811/final-max-review.md. It may
+  differ from f75fd138 ONLY in STATE.md.
+  main = origin/main = 5f36126.
+LAST_GREEN_SHA=a6332d7 (lane A, local gate 1720). Composition 02d5844 is green at 1739. Nothing pushed.
+LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
+  2026-09-14 (local, and Codex task-811 before and after its mutants).
+  CI portability: CI runs the suite on Python 3.11 on Linux, but every local gate ran 3.13.14 on macOS.
+  - ruff reports no 3.12-only syntax; a probe proves ruff 0.16.3 would flag it.
+  - The 45 changed Python files use no stdlib API newer than 3.11.
+  - The full composition suite passed 1739 with builtins.sum replaced by 3.11's naive float
+    summation; 2379 of 36594 calls really differed.
+  - The libm-dependent t-CDF is asserted only within tolerances, and recompute binds evidence and
+    rule digests, never float results.
+  - The first real 3.11/Linux run is the PR's exact-head CI.
+  End-to-end on a toolcache-shaped CPython 3.13.14, using the workflow's own step text:
+  - install removed the floating pip unrun and installed 19 authenticated wheels with CPython's
+    bundled pip;
+  - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
+  - 553 in-job tests passed, leaving no bytecode;
+  - readiness reached the authority refusal, and with the driver loaded both origin checks passed.
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -274,7 +311,8 @@ SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
     news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
     states and the build fingerprint were audited and are already correct.
   MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=feat/5a-evaluator (LOCAL, FROZEN impl 2b31832) — the §5A evaluator, under a Codex-first red team.
+ACTIVE_LANE=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED) — the repaired §5A evaluator recomposed onto
+  main. Implementation 0bbcdd5; fresh full Codex adversarial verification task-807 in progress.
 OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
   defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
   repeatedly as the only remaining candidates once the board was otherwise clear, so they are
@@ -314,15 +352,125 @@ COLLECTOR=STOPPED on main as of #88 (651c63e): the schedule trigger is removed, 
 DELEGATE_HAZARD=CLOSED by #87. delegate.sh rotates any existing result and log to .prev-<ts> and
   refuses a result older than the invocation, so a stale verdict can no longer satisfy
   completion. That exact failure happened once and was nearly reported as a fresh verdict.
-CODEX_PENDING=NONE. task-806 has returned. Next Codex task is the COMPLETELY FRESH full
-  adversarial verification after repair, not a re-run of the targeted red tests.
+CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; Opus's independent
+  review was written earlier at 13:47:32Z). 40 of 40 mutations KILLED, so the repair's mechanisms
+  hold; G3.4 unsatisfiability independently CONFIRMED. Evidence and the consolidated MAX review are
+  at .work/807/.
+  CRITICAL F1 — out-of-tranche symbols are pooled into A and B. Verified by Opus: losing BTC alone
+  is NOT_PASS (A=F, B=F); adding SOL/USDT flips it to A=T, B=T. Scope was enforced at authorization,
+  never at admission. This makes PASS easier and has existed since the original decision layer.
+  HIGH F3 — the CLI builds Settings(), which ignores the environment, so in Actions readiness would
+  report an EMPTY in-memory store: a false "frame failed". Verified by Opus. Every other script uses
+  Settings.from_env().
+  HIGH R4 (Opus) — the workflow offers readiness and consume only, so seal recovery is unreachable
+  where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
+  verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
+  LOW F10, R2.
+CODEX_PENDING=NONE. task-811 COMPLETE. It is fresh: fired 06:44:29Z, delegate exit 06:53:47Z, base
+  02d5844, tree f75fd138, no tracked change, and every restored file matches its committed blob.
+CODEX_VERIFICATION_811=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1739 both
+  before and after the mutants.
+  - M1: the wheel-digest check in audit_site_packages was disabled (the V810-F1 regression). Killed
+    by test_a_tampered_file_with_a_rewritten_installed_record_refuses.
+  - M2: the site-packages symlink refusal was disabled (the V810-F3 regression). Killed by
+    test_a_symlinked_package_directory_refuses.
+  - M3: lock-hash membership was disabled. Killed by test_a_wheel_the_lock_does_not_authenticate_refuses.
+  - M4: pip, setuptools and wheel were allowed beside the lock. Killed by
+    test_not_even_the_installer_may_sit_beside_the_lock.
+  - M5: the install ran the floating `python -B -m pip`. Three workflow-boundary tests killed it.
+  Opus cross-check: the raw pytest output has exactly 7 FAILED lines, which are the credited tests
+  (3777 run - 3770 passed). Each mutant disabled a single guard, and every sibling test passed.
+  Evidence: .work/811/codex/, with a SHA-256 manifest in .work/811/evidence.sha256.
+  Final MAX review: .work/811/final-max-review.md.
+CODEX_VERIFICATION_810=NOT_VERIFIED. 5 of 5 mutants KILLED by committed tests. Bypass hunt:
+  - CRITICAL V810-F1: the installed RECORD is trusted. A file tampered together with its RECORD
+    passes; Opus REPRODUCED it on the toolcache-shaped interpreter.
+  - HIGH V810-F3: symlinked directories evade the walks; Opus REPRODUCED it.
+  - HIGH V810-F2: time of check to time of use — hashed once, loaded later by path.
+  - HIGH V810-F4: module origins are read from mutable attributes.
+  Root cause (Opus): the checks authenticate against mutable installed metadata, not the pinned
+  hashes; and the job runs one unverified piece of code, the floating pip that setup-python
+  force-reinstalls from PyPI and the install step executes. The runtime-identity class is at the
+  bound (E3 -> V809-F1 -> G1 -> V810). NO unilateral repair.
+  Final MAX review: .work/810/final-max-review.md. Evidence: .work/810/.
+CODEX_VERIFICATION_809=VERIFIED_WITH_FINDINGS on composition faaed6d (tree 993fc5dd). Committed suite:
+  15/15 mutants KILLED, 0 SURVIVED, no new tests. Gate 1652. Red tests (c7e5d4c6...) and the adopted
+  808 tests (b88f1838...) intact. Migration 0009 REVIEWED BUT UNEXECUTED: NULL, precedence and key
+  spelling verified. The library provenance=None allowance is not permission on any real path.
+  The resolver claim (§33) was proven by execution.
+  MEDIUM F809-1, found independently by Opus as O809-1 15 minutes before Codex's report: the runtime
+  identity binds distribution METADATA, not import ORIGINS. Codex's shadow certifi.py was imported
+  under locked metadata; Opus's committed scripts/platform.py executed while the pin passed.
+  Causes: module-level imports run before attestation; scripts/ is sys.path[0]; PYTHONPATH=src;
+  untracked files are ignored; same-version duplicate distributions collapse. Not reachable through
+  dispatch input.
+  LOW F809-2: the workflow step reader silently drops workflow-level env.
+  Consolidated MAX review: .work/809/consolidated-max-review.md. Evidence: .work/809/.
+CODEX_VERIFICATION_808=NOT_VERIFIED. Consolidated MAX review: .work/808/consolidated-max-review.md.
+  Evidence: .work/808/codex/ and .work/808/opus/.
+  CRITICAL V808-F1 (Codex; Opus reproduced it harmlessly with a stub): the evaluation workflow puts
+  `--confirm '${{ inputs.confirm }}'` into shell source AFTER the pin-check step, with
+  SUPABASE_DB_URL in the step env. A dispatcher can mutate the evaluator, re-pin, and consume under
+  altered rules. Needs write access: PUBLIC repo, exactly 1 push-capable account, 0 environments.
+  Not live — the workflow exists only on this unpushed lane.
+  HIGH R6 (Opus, new): the run step pipes into `| tee` under GitHub's default `bash -e` with no
+  pipefail (confirmed in GitHub docs; reproduced), so a refused or crashed readiness, consume or
+  recovery shows GREEN.
+  MEDIUM R7 (Opus, new): Codex's 40/0 holds only with its uncommitted test_adversarial_808.py.
+  Against the COMMITTED suite, mutants re-pinned: R01, R07, D08, D10, D12, S07 and S08 SURVIVE
+  (1476 passed). S07 and S08 count exact ties for the candidate in B2 and C, contrary to §5A's
+  "ties count as WORSE" — the implementation is correct, but nothing committed catches a regression.
+  MEDIUM R5 (Opus, pre-result; Codex silent): requirements ranges plus interpreter drift, so the
+  verified runtime is not the executed runtime.
+  HOLDING: amendment c44e416 faithful; guard order and D3; F1 scope; D4 identity; D1 closure; 0009
+  lifecycle (REVIEWED BUT UNEXECUTED); gates 1476 committed / 1483 with Codex's tests.
+  CLASS AT BOUND: V808-F1, R6 and R5 are the second defeat of the entrypoint class (a guarantee
+  true in the library, false at the production entrypoint; first defeat F3/R4). Root cause: the
+  workflow is only ever checked as text and never executed, and its runtime is unbound. NO
+  unilateral repair was made.
+  Out-of-lane, not acted on: resolve-outcomes.yml:64 has the same tee masking; oos-pair-evidence.yml
+  interpolates typed inputs into run (LOW).
+OWNER_RULINGS_D1_D4=Applied 2026-09-13. D1 pin derived from the entrypoint's full first-party import
+  closure plus declared rule/runtime surfaces (67 files; does not reach the HF app surface). D2 G3.4
+  amended — barrier moved pre-claim, separate single-reader proof — in its own commit c44e416 with the
+  amendment chained from the Codex original hash. D3 fail closed unless durable authority AND pin are
+  positively verified; verify_pin removed from consumption and seal recovery. D4
+  decision_population_id, probability-free, distinct from evidence_snapshot_id.
+REPAIR_808_BASE=fd8239a. ./verify.sh PASS 1476. All 807 structural repairs applied: F1 scope at
+  admission (CRITICAL), F3 Settings.from_env, R4 workflow recompute, F6 materialized cells + declared
+  schema, F8 TRUNCATE guard, F10 contract-instants cross-check, R2 ReadinessRefused. Behavioural
+  mutations with the mutant re-pinned: all four new critical guarantees KILLED.
+ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As originally escalated:
+  three causal classes have now been defeated twice each and are AT CLAUDE.md's
+  two-attempt bound: pin scope (F6 -> G4 -> F7), diagnostics completeness (F7 -> G6 -> F6), authority
+  surface (F2 -> G8 -> F4). No repair was started. Root cause for pin scope is measured: the CLI's
+  first-party import closure is 23 files and 8 are unpinned, including config/settings.py, which
+  undercuts the pre-registration's reason for rejecting closure-based pinning.
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The T3 batch #84-#90 is CONSUMED and must not be reused; this STATE
-  checkpoint PR is its closing step. It authorized exactly those seven pushes, PRs and merges and
-  NO deploy. No T4 has been authorized: migration 0008 remains unapplied, and migration 0009 (the
-  durable §5A seal) exists only on the unpushed evaluator branch and is unapplied. Earlier:
+OWNER_BOUNDARY=ONE T3 BATCH REQUESTED for lanes A, B and C, with owner decisions K1 and K2 on
+  migration 0009 (.work/811/final-max-review.md).
+  - The batch: push the three branches to origin (NEVER hf), open three independent PRs, and merge
+    in order A, B, C. Each merge needs exact-head CI green, a --match-head-commit merge, parents
+    verified and exact-main CI green. The merged main tree must equal the gated local composition.
+    Stop on the first mismatch.
+  - Merging runs only ci.yml, which uses no secrets. The evaluation workflow is dispatch-only, and
+    no dispatch is authorized.
+  - K1 (F-0009-A HIGH, no RLS or REVOKE on the seal table). A (recommended): amend in a follow-up
+    lane D before any apply. B: fold into lane A before the push.
+  - K2 (F-0009-B, no apply route). A (recommended): a dedicated manual-dispatch workflow for 0009
+    alone, with the F-0009-C pre-checks. B: an apply mode in the evaluation workflow.
+  Runbook: .work/811/0009-apply-only-runbook.md. Every T4 stays separate.
+OWNER_RULINGS_J1_J3=Ruled 2026-09-14, now APPLIED and VERIFIED:
+  - J1=B, with a closed trust base: exact CPython 3.13.14, pinned Actions, CPython's bundled pip;
+    wheels authenticated against the lock; installed bytes against the wheel's own RECORD;
+    symlinks and unexpected import surfaces refused; no unverified code after attestation;
+    Addendum 7; no import hook.
+  - J2=A: Codex ran one mechanical spot-check of 5 mutants, all killed.
+  - J3: after 5/5 killed and a green composition, return ONE T3 batch for A, B and C.
+  In parallel: the READ-ONLY proof and runbook that 0009 applies with --only, without 0008 (done).
+  The T3 batch #84-#90 of 2026-09-13 is CONSUMED as well.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -340,10 +488,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Opus repairs G1-G11 on feat/5a-evaluator AGAINST THE RED TESTS it did not author, now
-  permitted because Codex has reported. Then a COMPLETELY FRESH full adversarial verification by
-  Codex (not merely the targeted tests), then ONE consolidated MAX review, then a T3 request for
-  the evaluator lane. DO NOT run readiness or consumption, and do not apply 0008 or 0009.
+NEXT_ACTION=WAIT for the owner's T3 authorization of the A/B/C batch and rulings K1 and K2. On
+  authorization, execute exactly the batch in OWNER_BOUNDARY against the lane heads named in
+  .work/811/final-max-review.md. DO NOT run readiness, consumption or recompute; apply 0008 or 0009;
+  push to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
