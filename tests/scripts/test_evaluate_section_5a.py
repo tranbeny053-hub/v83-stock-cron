@@ -225,13 +225,55 @@ def test_attest_touches_no_repository_and_verifies_what_loaded(
     capsys: pytest.CaptureFixture,
 ) -> None:
     monkeypatch.setattr(cli, "build_repository", lambda: pytest.fail("repository built"))
+
+    def _driver():
+        calls.append("driver-loaded-without-connecting")
+        return {"cython_runtime": "f" * 64}
+
+    monkeypatch.setattr(cli, "load_database_driver", _driver)
     assert cli.main(["--mode", "attest", "--expected-sha", SYNTHETIC_SHA], environ={}) == 0
     printed = json.loads(capsys.readouterr().out)
     assert printed["touches_repository"] is False
+    assert printed["driver_helpers"] == {"cython_runtime": "f" * 64}
     record = printed["run_provenance"]
     assert record["dispatch_verified"] is True
     assert record["interpreter_flags"] == runtime_isolation.REQUIRED_FLAGS_TEXT
-    assert calls == ["isolation", "attest", "loaded-modules"]
+    # L1b: the secret-free attest step proves the post-driver check before anything connects.
+    assert calls == [
+        "isolation",
+        "attest",
+        "loaded-modules",
+        "driver-loaded-without-connecting",
+        "loaded-modules",
+    ]
+
+
+def test_loading_the_database_driver_connects_to_nothing_and_names_its_helpers() -> None:
+    """The real import, in a fresh process: no connection attempt, and only pinned-name helpers."""
+
+    probe = (
+        "import json, socket, sys\n"
+        f"sys.path[:0] = [{str(ROOT)!r}, {str(ROOT / 'src')!r}]\n"
+        "def _refuse(*args, **kwargs):\n"
+        "    raise AssertionError('the driver import opened a socket')\n"
+        "socket.socket.connect = _refuse\n"
+        "from scripts import evaluate_section_5a as cli\n"
+        "helpers = cli.load_database_driver()\n"
+        "print(json.dumps({'helpers': helpers, 'psycopg': 'psycopg' in sys.modules}))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-B", "-c", probe],
+        cwd=ROOT,
+        env=_scrubbed_environment(),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    seen = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert seen["psycopg"] is True
+    assert set(seen["helpers"]) <= set(runtime_isolation.DYNAMIC_HELPER_FINGERPRINTS)
 
 
 # --------------------------------------------------------------------------- then the authority
@@ -313,6 +355,87 @@ def test_a_verified_consumption_reverifies_loaded_code_immediately_before_the_cl
     written = json.loads(report.read_text(encoding="utf-8"))
     assert written["consumes_one_look"] is True
     assert written["run_provenance"] == record
+
+
+def test_readiness_repeats_the_loaded_code_check_after_its_reads(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """L1b. The reads load the driver; readiness then repeats consume's pre-claim check."""
+
+    def _readiness(repository):
+        calls.append("readiness-reads")
+        return {"mode": runner.MODE_READINESS}
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    monkeypatch.setattr(runner, "run_readiness", _readiness)
+    assert cli.main(_live_argv("readiness"), environ={}) == 0
+    assert calls == [
+        "isolation",
+        "attest",
+        "loaded-modules",  # after the evaluator's imports
+        "loaded-modules",  # after the repository is built
+        "readiness-reads",
+        "loaded-modules",  # after the reads, with the driver loaded: consume's pre-claim guard
+    ]
+    assert json.loads(capsys.readouterr().out)["run_provenance"]["dispatch_verified"] is True
+
+
+def test_a_readiness_whose_post_read_check_refuses_is_reported_refused(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen = {"count": 0}
+
+    def _refuse_after_the_reads(isolation):
+        seen["count"] += 1
+        if seen["count"] == 3:
+            raise runtime_isolation.IsolationRefused("a module came from an unverified origin")
+        return 0
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    monkeypatch.setattr(runner, "run_readiness", lambda repository: {"mode": "readiness"})
+    monkeypatch.setattr(cli, "attest_loaded_modules", _refuse_after_the_reads)
+    report = tmp_path / "report.json"
+    with pytest.raises(runtime_isolation.IsolationRefused):
+        cli.main([*_live_argv("readiness"), f"--report={report}"], environ={})
+    assert seen["count"] == 3
+    written = json.loads(report.read_text(encoding="utf-8"))
+    assert written["outcome"] == "REFUSED" and written["error_type"] == "IsolationRefused"
+
+
+def test_a_verified_recovery_reverifies_loaded_code_before_it_computes_or_advances(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M1=A. The recovery process repeats the loaded-code check after reading the seal."""
+
+    def _recompute(repository, *, runtime_guard):
+        calls.append("seal-read")
+        runtime_guard()
+        calls.append("advance")
+        return {"mode": "recompute"}
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    monkeypatch.setattr(runner, "recompute_from_seal", _recompute)
+    assert cli.main(_live_argv("recompute"), environ={}) == 0
+    assert calls == [
+        "isolation",
+        "attest",
+        "loaded-modules",  # after the evaluator's imports
+        "loaded-modules",  # after the repository is built
+        "seal-read",
+        "loaded-modules",  # after the read, with the driver loaded, before any result or write
+        "advance",
+    ]
 
 
 def test_a_loaded_module_refusal_before_the_claim_spends_nothing(

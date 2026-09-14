@@ -27,6 +27,11 @@ The process runs as ``python -I -S -B``:
 stdlib, then the authenticated site-packages, then ``src/``. :func:`attest_loaded_modules`
 cross-checks what actually loaded, and the CLI repeats it immediately before the claim.
 
+DYNAMIC HELPERS (owner ruling L1=A, strengthened; Addendum 9). The locked Postgres driver's
+Cython-compiled extensions create two modules in memory, with no file, no loader and no Python code.
+Each is accepted only while those authenticated extensions are loaded, and only if its namespace
+matches an exact pinned structural fingerprint. Every other file-less module still refuses.
+
 STANDARD LIBRARY IMPORTS ONLY, by contract and by test. ``crypto_probability_engine.oos`` imports
 pydantic when it loads, so nothing here may import from it.
 
@@ -43,7 +48,9 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import importlib.machinery
 import io
+import json
 import os
 import re
 import shutil
@@ -51,6 +58,7 @@ import stat
 import subprocess
 import sys
 import sysconfig
+import types
 import zipfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -87,6 +95,20 @@ INSTALLER_METADATA = frozenset({"INSTALLER", "REQUESTED", "RECORD", "direct_url.
 # Code, bytecode and path-configuration files: never untracked or ignored in the checkout.
 CODE_SUFFIXES = (".py", ".pyc", ".pyo", ".pyd", ".so", ".dylib", ".pth")
 COMPILED_SUFFIXES = (".pyc", ".pyo", ".pyd", ".so", ".dylib", ".pth")
+
+# Owner ruling L1=A, strengthened (pre-registration Addendum 9, run 34851608514). When the locked
+# Postgres driver's Cython-compiled extensions load, Cython's runtime creates these modules in
+# memory: no file, no loader, no Python code. Each is accepted ONLY while those authenticated
+# extensions are loaded, and ONLY if its namespace matches this exact structural fingerprint
+# (dynamic_helper_fingerprint). Any other file-less module, or any other shape, refuses. A driver
+# rebuilt with another Cython changes these names or fingerprints, and refuses until reviewed again.
+DYNAMIC_HELPER_DRIVER_EXTENSIONS = ("psycopg_binary._psycopg", "psycopg_binary.pq")
+DYNAMIC_HELPER_FINGERPRINTS: Mapping[str, str] = types.MappingProxyType(
+    {
+        "_cython_3_2_4": "41c2a9fd8b78a1f82451e2c801ceff1825beaec2910190c6c089445eccd5bf4e",
+        "cython_runtime": "038e7fe87415db6666732b95be8fbb36cc1960ade94ff139f67567c70765dd1a",
+    }
+)
 
 _LOCK_PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9.+!_-]+) \\$")
 _LOCK_HASH = re.compile(r"^    --hash=sha256:([0-9a-f]{64})( \\)?$")
@@ -638,9 +660,11 @@ def attest_loaded_modules(
             _is_within(path, site) for site in sites
         )
 
+    loaded = dict(modules if modules is not None else sys.modules)
+    driver_loaded = _authenticated_driver_extensions_loaded(loaded, locked)
     failures: list[str] = []
     verified = 0
-    for name, module in sorted(dict(modules if modules is not None else sys.modules).items()):
+    for name, module in sorted(loaded.items()):
         if module is None:
             continue
         spec = getattr(module, "__spec__", None)
@@ -659,7 +683,11 @@ def attest_loaded_modules(
             ):
                 verified += 1
                 continue
-            failures.append(f"module {name} has no verifiable origin")
+            refusal = _dynamic_helper_refusal(name, module, driver_loaded=driver_loaded)
+            if refusal is None:
+                verified += 1
+                continue
+            failures.append(f"module {name} has no verifiable origin{refusal}")
             continue
         path = Path(origin).resolve()
         if path in pinned_paths or path in locked or standard_library(path):
@@ -671,6 +699,100 @@ def attest_loaded_modules(
         )
     _refuse(failures, "a loaded module is not verified code")
     return verified
+
+
+def describe_dynamic_helper(module: Any) -> dict[str, Any]:
+    """What a file-less module's fingerprint is taken over: names and kinds, never identities.
+
+    The module's own type, and every namespace entry. A string is kept verbatim. A type is described
+    by its metatype, name, qualified name, bases and the KIND of each of its own attributes, so a
+    Python function anywhere in it changes the fingerprint.
+    """
+
+    namespace: dict[str, Any] = {}
+    for key, value in vars(module).items():
+        if isinstance(value, type):
+            namespace[key] = {
+                "kind": "type",
+                "metatype": type(value).__name__,
+                "name": value.__name__,
+                "qualname": value.__qualname__,
+                "bases": [base.__name__ for base in value.__bases__],
+                "attributes": {
+                    attribute: type(member).__name__ for attribute, member in vars(value).items()
+                },
+            }
+        elif type(value) is str:
+            namespace[key] = {"kind": "str", "value": value}
+        else:
+            namespace[key] = {"kind": type(value).__name__}
+    return {"module_type": type(module).__name__, "namespace": namespace}
+
+
+def dynamic_helper_fingerprint(module: Any) -> str:
+    text = json.dumps(describe_dynamic_helper(module), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def loaded_dynamic_helpers(modules: Mapping[str, Any] | None = None) -> dict[str, str]:
+    """The fingerprint of each pinned-name dynamic helper now loaded, for the run's record."""
+
+    loaded = modules if modules is not None else sys.modules
+    return {
+        name: dynamic_helper_fingerprint(loaded[name])
+        for name in sorted(DYNAMIC_HELPER_FINGERPRINTS)
+        if loaded.get(name) is not None
+    }
+
+
+def _authenticated_driver_extensions_loaded(
+    modules: Mapping[str, Any], locked: set[Path]
+) -> bool:
+    """Each compiled extension of the locked Postgres driver loaded from an authenticated file."""
+
+    suffixes = tuple(importlib.machinery.EXTENSION_SUFFIXES)
+    for name in DYNAMIC_HELPER_DRIVER_EXTENSIONS:
+        module = modules.get(name)
+        spec = getattr(module, "__spec__", None) if module is not None else None
+        origin = getattr(spec, "origin", None) if spec is not None else None
+        if not isinstance(origin, str):
+            return False
+        path = Path(origin).resolve()
+        if path not in locked or not path.name.endswith(suffixes):
+            return False
+    return True
+
+
+def _dynamic_helper_refusal(name: str, module: Any, *, driver_loaded: bool) -> str | None:
+    """None if ``module`` is a pinned dynamic helper; otherwise why not (empty if unrelated)."""
+
+    expected = DYNAMIC_HELPER_FINGERPRINTS.get(name)
+    if expected is None:
+        return ""
+    if not driver_loaded:
+        return (
+            " (a pinned dynamic helper name, but the authenticated locked Postgres driver is not "
+            "loaded)"
+        )
+    if type(module) is not types.ModuleType:
+        return " (a pinned dynamic helper name, but not a plain module)"
+    namespace = vars(module)
+    if (
+        namespace.get("__spec__") is not None
+        or namespace.get("__loader__") is not None
+        or "__file__" in namespace
+        or "__path__" in namespace
+    ):
+        return " (a pinned dynamic helper name, but it has a spec, loader, file or path)"
+    if namespace.get("__name__") != name:
+        return " (a pinned dynamic helper name, but its own name is not the one it is loaded under)"
+    actual = dynamic_helper_fingerprint(module)
+    if actual != expected:
+        return (
+            f" (a pinned dynamic helper name, but its structural fingerprint {actual} is not the "
+            f"pinned {expected})"
+        )
+    return None
 
 
 # --------------------------------------------------------------------------- helpers

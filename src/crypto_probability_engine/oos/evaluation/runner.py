@@ -417,12 +417,22 @@ def recompute_from_snapshot(
     return result
 
 
-def recompute_from_seal(repository, *, now_utc: datetime | None = None) -> dict:
+def recompute_from_seal(
+    repository,
+    *,
+    now_utc: datetime | None = None,
+    runtime_guard: Callable[[], object] | None = None,
+) -> dict:
     """Recover from the DURABLE seal. Reads the captured evidence, never the predictions.
 
     Recomputing from captured evidence under verified-identical rules is the same look, not a
     second one. It also cross-checks the snapshot against the raw rows Postgres captured
     before exposure, so a snapshot that diverges from what was actually read is refused.
+
+    OWNER RULING M1=A (pre-registration Addendum 9, task-813 Finding 1): ``runtime_guard``
+    re-verifies every loaded module after the seal is read, when the database driver is loaded,
+    and before any result is computed or the seal is advanced. It is the same guard consumption
+    runs immediately before its claim.
     """
 
     require_durable_authority(repository)
@@ -462,6 +472,8 @@ def recompute_from_seal(repository, *, now_utc: datetime | None = None) -> dict:
         raise SnapshotTampered(
             "the snapshot's rows differ from what Postgres captured before exposure"
         )
+    if runtime_guard is not None:
+        runtime_guard()
     result = compute_from_snapshot(snapshot, now_utc=now_utc)
     if seal.get("state") in {STATE_SEALED_RAW_CAPTURED, STATE_SEALED_NO_RESULT}:
         repository.advance_section_5a_seal_state(STATE_COMPLETE)
