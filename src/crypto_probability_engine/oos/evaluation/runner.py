@@ -31,6 +31,10 @@ from crypto_probability_engine.oos.evaluation.lattice import (
     assign_window_index,
     window_count,
 )
+from crypto_probability_engine.oos.evaluation.provenance import (
+    ProvenanceRefused,
+    require_verified_provenance,
+)
 from crypto_probability_engine.oos.evaluation.scope import TRANCHE_1_TIMEFRAMES
 from crypto_probability_engine.utils import canonical_json
 from crypto_probability_engine.utils.canonical_json import CanonicalEncodingError
@@ -237,6 +241,7 @@ def run_consumption(
     confirmation: str,
     artifact_dir: Path,
     now_utc: datetime | None = None,
+    provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Take the one look.
 
@@ -246,6 +251,13 @@ def run_consumption(
 
     OWNER RULING D3: there is no switch to skip pin verification and no acceptance of an
     undeclared authority. Both are verified positively, every time, before anything is claimed.
+
+    OWNER RULING E2=A: ``provenance`` is the verified dispatch record from
+    :func:`provenance.attest`. When given it is re-verified before the repository is touched,
+    then written into the durable claim and the snapshot. The production entrypoint always
+    supplies it, and the durable Postgres authority refuses a claim without it, so its absence
+    is permitted only for declared test doubles, exactly as D3 permits them to declare the
+    authority.
     """
 
     moment = now_utc or datetime.now(UTC)
@@ -261,6 +273,8 @@ def run_consumption(
     pin_digest = str(current_pin_artifacts()["closure_digest"])
     if confirmation != CONFIRMATION_TOKEN:
         raise ConsumptionRefused("confirmation token absent or wrong; run is inert")
+    if provenance is not None:
+        provenance = require_verified_provenance(provenance)
 
     existing = repository.fetch_section_5a_seal()
     if existing is not None:
@@ -281,6 +295,7 @@ def run_consumption(
             "sealed_at_utc": moment.isoformat(),
             "evaluator_pin_digest": pin_digest,
             "contract_instants": _contract_instants(),
+            "run_provenance": provenance,
         }
     )
     if not claimed:
@@ -297,6 +312,7 @@ def run_consumption(
             evidence=evidence,
             feature_rows=feature_rows,
             origin_anomalies=origin_anomalies,
+            provenance=provenance,
         )
         repository.capture_section_5a_snapshot(snapshot)
     except Exception as exc:
@@ -420,6 +436,16 @@ def recompute_from_seal(repository, *, now_utc: datetime | None = None) -> dict:
     # V807-F10: the durable claim's own contract instants must agree with the contract.
     if seal.get("contract_instants") != _contract_instants():
         raise SnapshotTampered("the seal's claimed contract instants disagree with the contract")
+    # E2=A: recovery blesses only a look taken by a verified dispatch, and the snapshot must name
+    # the same run the durable claim recorded.
+    try:
+        recorded_run = require_verified_provenance(seal.get("run_provenance"))
+    except ProvenanceRefused as exc:
+        raise SnapshotTampered(
+            f"the durable seal does not carry a verified run provenance: {exc}"
+        ) from exc
+    if canonical_json.dumps(snapshot.get("run_provenance")) != canonical_json.dumps(recorded_run):
+        raise SnapshotTampered("the snapshot's run provenance differs from the durable claim's")
     captured = seal.get("captured_rows")
     if captured is None:
         raise SnapshotTampered("the durable seal lacks the raw capture it was exposed from")
@@ -466,6 +492,7 @@ def compute_from_snapshot(
         "evidence_snapshot_id": snapshot["evidence_snapshot_id"],
         "result_inputs_digest": snapshot["result_inputs_digest"],
         "evaluator_pin_digest": snapshot["evaluator_pin_digest"],
+        "run_provenance": snapshot.get("run_provenance"),
         "boundary_convention": 0.05,
         "boundary_convention_note": (
             "A pre-committed decision boundary, not a hypothesis test. It has no error rate "
@@ -540,6 +567,7 @@ def _build_snapshot(
     evidence: list[Mapping[str, Any]],
     feature_rows: list[Mapping[str, Any]],
     origin_anomalies: int,
+    provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot_id = evidence_snapshot_id(
         evidence, feature_rows=feature_rows, origin_anomalies=origin_anomalies
@@ -553,6 +581,7 @@ def _build_snapshot(
         "origin_anomalies": origin_anomalies,
         "feature_rows": feature_rows,
         "rows": evidence,
+        "run_provenance": None if provenance is None else dict(provenance),
     }
 
 

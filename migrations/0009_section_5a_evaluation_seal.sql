@@ -17,12 +17,18 @@
 --   COMPLETE | SEALED_NO_RESULT   the result, or a statistics failure recoverable from the
 --                         captured evidence without re-reading the holdout.
 --   CAPTURE_FAILED        terminal; needs an owner decision.
+--
+-- WHO SPENT THE LOOK (owner ruling E2=A). Every claim carries the verified run provenance of the
+-- dispatch that made it: commit, workflow run, interpreter, dependency lock and evaluator pin. A
+-- claim without a verified record is refused here, so the look can only be spent by a verified
+-- dispatch of the evaluation workflow on main at the owner's expected commit.
 
 CREATE TABLE IF NOT EXISTS section_5a_evaluation_seal (
   seal_id                TEXT PRIMARY KEY CHECK (seal_id = 'SINGLETON'),
   sealed_at_utc          TIMESTAMPTZ NOT NULL,
   evaluator_pin_digest   TEXT NOT NULL,
   contract_instants      JSONB NOT NULL,
+  run_provenance         JSONB NOT NULL,
   raw_evidence           JSONB,
   snapshot_payload       JSONB,
   evidence_snapshot_id   TEXT,
@@ -40,6 +46,26 @@ CREATE TABLE IF NOT EXISTS section_5a_evaluation_seal (
     OR (snapshot_payload IS NULL AND evidence_snapshot_id IS NULL
         AND result_inputs_digest IS NULL)
   ),
+  -- The claim names a verified dispatch on main at the expected commit, under the claimed pin.
+  -- Application code verifies the full record first; this is the authority's own refusal.
+  -- COALESCE matters: a CHECK whose expression is NULL PASSES, and a missing key makes ->> NULL,
+  -- so without it an incomplete record would be accepted.
+  CONSTRAINT section_5a_claim_has_verified_provenance CHECK (COALESCE(
+    jsonb_typeof(run_provenance) = 'object'
+    AND run_provenance ->> 'schema_version' = 'section-5a-run-provenance.v1'
+    AND run_provenance -> 'dispatch_verified' = 'true'::jsonb
+    AND run_provenance ->> 'event_name' = 'workflow_dispatch'
+    AND run_provenance ->> 'ref' = 'refs/heads/main'
+    AND run_provenance ->> 'workflow_ref' = (run_provenance ->> 'repository')
+        || '/.github/workflows/section-5a-evaluation.yml@refs/heads/main'
+    AND run_provenance ->> 'expected_sha' ~ '^[0-9a-f]{40}$'
+    AND run_provenance ->> 'sha' = run_provenance ->> 'expected_sha'
+    AND run_provenance ->> 'git_head' = run_provenance ->> 'expected_sha'
+    AND run_provenance ->> 'run_id' ~ '^[0-9]+$'
+    AND run_provenance ->> 'python_version' ~ '^[0-9]+[.][0-9]+[.][0-9]+$'
+    AND run_provenance ->> 'lock_sha256' ~ '^[0-9a-f]{64}$'
+    AND run_provenance ->> 'pin_digest' = evaluator_pin_digest,
+    false)),
   -- A captured state requires the raw capture AND the snapshot AND both digests. A snapshot
   -- can never exist without the raw evidence it was exposed from.
   CONSTRAINT section_5a_captured_is_complete CHECK (
@@ -60,7 +86,8 @@ BEGIN
   IF NEW.seal_id IS DISTINCT FROM OLD.seal_id
      OR NEW.sealed_at_utc IS DISTINCT FROM OLD.sealed_at_utc
      OR NEW.evaluator_pin_digest IS DISTINCT FROM OLD.evaluator_pin_digest
-     OR NEW.contract_instants IS DISTINCT FROM OLD.contract_instants THEN
+     OR NEW.contract_instants IS DISTINCT FROM OLD.contract_instants
+     OR NEW.run_provenance IS DISTINCT FROM OLD.run_provenance THEN
     RAISE EXCEPTION 'section 5A seal claim fields are immutable';
   END IF;
 

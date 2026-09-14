@@ -569,3 +569,119 @@ so the two never matched. It is withdrawn.
   or a superuser disabling triggers is outside what a table trigger can prevent.
 - **V807-F10** — seal recovery cross-checks the seal's claimed contract instants.
 - **V807-R2** — readiness raises `ReadinessRefused`, not a consumption error.
+
+# Addendum 5, 2026-09-14 — the production entrypoint (owner rulings E1, E2=A, E3=A)
+
+Codex task-808 returned NOT_VERIFIED. The evaluator's logic, the seal lifecycle, the mechanical
+pin and the red-test amendment all held under attack; the production entrypoint did not. With
+V807-F3 and V807-R4 before them, V808-F1, V808-R6 and V808-R5 are the second defeat of one
+causal class: **a guarantee true in the library but false where the evaluation actually runs.**
+The root cause is that the workflow was only ever checked as text, never executed the way GitHub
+runs it, and the runtime it installed was unbound. This addendum **supersedes §24's claim that
+pinning `requirements.txt` pins the runtime** and records the owner's rulings.
+
+## 28. Dispatch inputs never reach shell source (V808-F1; ruling E1)
+
+The workflow built its shell script as `--confirm '${{ inputs.confirm }}'`. GitHub substitutes an
+expression into the script text before bash parses it, so a quote in the input ended the string
+and the rest ran as commands — after the pin check had passed, in the step holding the database
+secret. A dispatcher could have mutated the evaluator, re-pinned it, and consumed under rules
+nobody reviewed.
+
+Now no `${{ }}` appears in any `run:`. Inputs reach the shell only through `env:` and are expanded
+in double quotes as `--option="$VALUE"`, where bash never re-parses them and a value beginning with
+`-` stays bound to its option. The workflow's steps are EXECUTED in tests, as GitHub runs them,
+against a stub interpreter with hostile inputs (quotes, `$( )`, backticks, `;`, newlines, globs),
+and each must arrive as one inert argument. A negative control confirms the tests fail on the old
+workflow, on an unquoted expansion, and on a piped step without pipefail.
+
+## 29. A refusal can never show green (V808-R6; ruling E1)
+
+The evaluation step piped into `tee` and declared no shell. GitHub runs an unspecified shell as
+`bash -e`, without pipefail, so a refused or crashed readiness, consumption or recovery exited 0.
+Every step now declares `shell: bash` (`bash --noprofile --norc -eo pipefail`). No step pipes. The
+CLI writes its own `--report`: the outcome on success, and on refusal a record naming the refusal
+while the process still exits non-zero. An unexpected error is reported by type only, because the
+artifact is downloadable and a driver message can name a host.
+
+## 30. Dispatch provenance and its residual (ruling E2=A)
+
+Every live mode first ATTESTS the run, before any repository exists:
+
+- `GITHUB_ACTIONS`, a manual `workflow_dispatch` of `.github/workflows/section-5a-evaluation.yml`
+  on `refs/heads/main`;
+- `expected_sha` — a required dispatch input the owner copies from the authorization — is a full
+  lowercase commit SHA equal to the dispatched commit AND to the checked-out `HEAD`, with no
+  tracked file modified;
+- the runtime of §31.
+
+A refusal names every failed check. The verified record is written into the durable claim, and
+into the snapshot, so the run that spent the look is identified permanently: commit, workflow run
+and attempt, runner image, interpreter, lock digest, installed versions and pin digest.
+
+Enforcement is layered. The CLI attests every live mode. The durable Postgres repository refuses a
+claim without a verified record before any statement executes, and migration 0009 refuses it in
+SQL (`run_provenance JSONB NOT NULL`, a CHECK wrapped in `COALESCE(..., false)` because a CHECK
+whose expression is NULL passes, and immutability with the other claim fields). Seal recovery
+refuses a seal whose record does not verify, or whose snapshot names a different run. The library
+verifies a record whenever one is given. As with the durable-authority declaration of §25,
+declared test doubles may omit it, and a look taken that way can never be recovered.
+
+**Residual, stated rather than hidden.** Every fact is observed by code in the dispatcher's own
+tree. The single account with write access, or anything holding its credentials, can dispatch a
+branch whose evaluator skips all of this, and the repository-level database secret is readable
+from any branch that account pushes. These guards stop accidents, drift, mis-dispatch and the
+public. They do not stop a compromised owner credential. An environment approval gate was
+considered and rejected: on a one-account repository the approver is the dispatcher.
+
+## 31. The exact runtime (ruling E3=A; supersedes §24's runtime claim)
+
+`requirements.txt` specified ranges — `pydantic>=2,<3`, `psycopg[binary,pool]>=3,<4`, others
+unconstrained — and the workflow, CI and local verification used Python 3.12, 3.11 and 3.13, so the
+runtime that was verified was not the runtime that would execute. That matters concretely: G1 was
+psycopg's NUMERIC adaptation, exactly what a minor release can change.
+
+- **Interpreter:** CPython **3.13.14** exactly, the interpreter the verification ran under. The
+  workflow installs that exact version on a pinned `ubuntu-24.04` image, and the attestation
+  refuses any other interpreter.
+- **Dependencies:** `ops/section_5a_evaluator_requirements.lock` pins the complete transitive set
+  the evaluator and its in-job tests import — 19 distributions, the versions the full suite
+  verified — with every published SHA-256 hash for each version (209, cross-checked against the
+  package index). It is installed only with
+  `pip install --require-hashes --no-deps --only-binary=:all:`. The attestation refuses a runtime
+  whose installed versions differ from the lock, or that holds any distribution outside it except
+  the installer (`pip`, `setuptools`, `wheel`).
+- **Pin:** the lock replaces `requirements.txt` as the declared runtime surface, so any change to
+  the runtime changes the pin digest. The interpreter version lives in the pinned closure.
+- **Tests under that runtime, before exposure:** after attestation the job runs the evaluator's own
+  suite under exactly this interpreter and lock, in a step with no secret. Only a green suite
+  reaches the one step that receives the database secret.
+- **Actions** are pinned to full commit SHAs, never to movable tags; the checkout keeps no
+  credentials.
+
+Residual: the runner image is refreshed by GitHub weekly, and the installer is not itself locked.
+Neither can change an installed version without the attestation refusing.
+
+## 32. Committed tests now pin what the campaign claimed (V808-R7)
+
+Codex's "40 of 40 behavioural mutants killed" held only with tests it had just written. Against the
+committed suite, seven survived, re-pinned so the pin could not be the killer:
+
+- the naive-clock guard
+- the existing-local-snapshot guard
+- feature rows in `decision_population_id`
+- per-scope counts replaced by global counts
+- the closure skipping function-level imports
+- exact ties counted for the candidate in B2 and in C
+
+The last two contradict §5A.5, which counts ties as WORSE for both. The implementation was
+correct, but nothing committed would have caught a regression. Codex's seven tests are adopted
+unchanged, and future mutation campaigns credit kills by committed tests separately from kills by
+tests written in the same round.
+
+## 33. A correction to the record
+
+The task-808 review reported the outcome resolver's workflow as sharing R6's false green. It does
+not: its script begins with `set -euo pipefail`, which makes a failed resolver fail its pipeline
+and its step. That was verified by executing the step against failing and succeeding stubs, not
+asserted, and the resolver lane adds a regression test rather than a change.

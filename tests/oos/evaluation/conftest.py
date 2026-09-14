@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Any
 
 T0 = datetime(2026, 8, 21, 4, 0, 0, tzinfo=UTC)
@@ -82,3 +84,72 @@ def daily_4h_evidence(
         )
         for day in range(days)
     ]
+
+
+SYNTHETIC_REPOSITORY = "synthetic/ucpe"
+SYNTHETIC_SHA = "a" * 40
+
+
+def synthetic_dispatch(**overrides: str) -> dict[str, str]:
+    """GitHub dispatch facts for a verified evaluation run. Synthetic; nothing is dispatched."""
+
+    from crypto_probability_engine.oos.evaluation import provenance
+
+    facts = {
+        "github_actions": "true",
+        "event_name": provenance.REQUIRED_EVENT,
+        "repository": SYNTHETIC_REPOSITORY,
+        "workflow_ref": (
+            f"{SYNTHETIC_REPOSITORY}/{provenance.EVALUATION_WORKFLOW}@{provenance.REQUIRED_REF}"
+        ),
+        "ref": provenance.REQUIRED_REF,
+        "sha": SYNTHETIC_SHA,
+        "run_id": "123456789",
+        "run_attempt": "1",
+        "runner_os": "Linux",
+        "runner_arch": "X64",
+        "image_os": "ubuntu24",
+        "image_version": "20260907.1",
+    }
+    facts.update(overrides)
+    return facts
+
+
+def synthetic_runtime(**overrides: Any) -> dict[str, Any]:
+    """Runtime facts of the PINNED interpreter and lock, whatever interpreter runs the tests."""
+
+    from crypto_probability_engine.oos.evaluation import evaluator_pin, provenance
+
+    facts = {
+        "python_implementation": provenance.PINNED_PYTHON_IMPLEMENTATION,
+        "python_version": provenance.PINNED_PYTHON_VERSION,
+        "git_head": SYNTHETIC_SHA,
+        "tracked_tree_clean": True,
+        "lock_sha256": provenance.lock_sha256(),
+        "installed": {**provenance.read_lock(), "pip": "26.1.2"},
+        "pin_digest": str(evaluator_pin.current_pin_artifacts()["closure_digest"]),
+    }
+    facts.update(overrides)
+    return facts
+
+
+def verified_provenance() -> dict[str, Any]:
+    """A run provenance produced by the REAL verifier from synthetic facts, never hand-built.
+
+    Verified once per session (the pin cannot change inside one) and copied, so a test that
+    rewrites a record never alters another test's.
+    """
+
+    return deepcopy(_verified_provenance_once())
+
+
+@lru_cache(maxsize=1)
+def _verified_provenance_once() -> dict[str, Any]:
+    from crypto_probability_engine.oos.evaluation import provenance
+
+    return provenance.verify_run_provenance(
+        synthetic_dispatch(),
+        synthetic_runtime(),
+        expected_sha=SYNTHETIC_SHA,
+        lock_pins=provenance.read_lock(),
+    )

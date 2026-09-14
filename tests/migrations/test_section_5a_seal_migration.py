@@ -48,7 +48,7 @@ def test_every_lifecycle_state_is_declared_and_nothing_else() -> None:
 
 def test_claim_fields_are_immutable() -> None:
     assert "RAISE EXCEPTION 'section 5A seal claim fields are immutable'" in FLAT
-    for column in ("sealed_at_utc", "evaluator_pin_digest", "contract_instants"):
+    for column in ("sealed_at_utc", "evaluator_pin_digest", "contract_instants", "run_provenance"):
         assert f"NEW.{column} IS DISTINCT FROM OLD.{column}" in FLAT
 
 
@@ -95,3 +95,45 @@ def test_the_seal_cannot_be_truncated() -> None:
 
 def test_the_residual_limit_is_stated_rather_than_hidden() -> None:
     assert "DROP TABLE" in SQL and "outside what a table trigger can prevent" in SQL
+
+
+def test_every_claim_must_carry_a_verified_run_provenance() -> None:
+    """E2=A. The authority itself refuses a claim not made by a verified dispatch."""
+
+    assert "run_provenance JSONB NOT NULL" in FLAT
+    assert "CONSTRAINT section_5a_claim_has_verified_provenance CHECK (COALESCE(" in FLAT
+    for clause in (
+        "jsonb_typeof(run_provenance) = 'object'",
+        "run_provenance ->> 'schema_version' = 'section-5a-run-provenance.v1'",
+        "run_provenance -> 'dispatch_verified' = 'true'::jsonb",
+        "run_provenance ->> 'event_name' = 'workflow_dispatch'",
+        "run_provenance ->> 'ref' = 'refs/heads/main'",
+        "|| '/.github/workflows/section-5a-evaluation.yml@refs/heads/main'",
+        "run_provenance ->> 'expected_sha' ~ '^[0-9a-f]{40}$'",
+        "run_provenance ->> 'sha' = run_provenance ->> 'expected_sha'",
+        "run_provenance ->> 'git_head' = run_provenance ->> 'expected_sha'",
+        "run_provenance ->> 'pin_digest' = evaluator_pin_digest",
+    ):
+        assert clause in FLAT, clause
+
+
+def test_the_provenance_check_cannot_pass_on_null() -> None:
+    """A CHECK whose expression is NULL passes; a missing key makes ->> NULL. COALESCE closes it."""
+
+    constraint = FLAT.split("CONSTRAINT section_5a_claim_has_verified_provenance CHECK (", 1)[1]
+    condition, _, rest = constraint.partition(", false)),")
+    assert condition.startswith("COALESCE(") and rest, "the whole conjunction sits inside COALESCE"
+    assert "CONSTRAINT" not in condition
+    assert condition.rstrip().endswith("run_provenance ->> 'pin_digest' = evaluator_pin_digest")
+
+
+def test_the_sql_record_shape_matches_what_the_verifier_produces() -> None:
+    """Every key the CHECK reads is a key the verifier writes, spelled identically."""
+
+    import re
+
+    from tests.oos.evaluation.conftest import verified_provenance
+
+    record = verified_provenance()
+    keys = set(re.findall(r"run_provenance -(?:>>|>) '([a-z_0-9]+)'", FLAT))
+    assert keys and keys <= set(record), keys - set(record)

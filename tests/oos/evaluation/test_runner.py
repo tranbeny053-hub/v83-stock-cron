@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from crypto_probability_engine.oos.evaluation import runner
-from tests.oos.evaluation.conftest import T_CLOSE, daily_4h_evidence, evidence_row
+from tests.oos.evaluation.conftest import (
+    T_CLOSE,
+    daily_4h_evidence,
+    evidence_row,
+    verified_provenance,
+)
 
 AFTER_CLOSE = T_CLOSE + timedelta(hours=2)
 
@@ -206,10 +211,12 @@ def test_readiness_refuses_if_a_probability_ever_leaks_through() -> None:
 
 
 def _consume(repo, tmp_path, **kwargs):
+    # As production runs it: the CLI always hands consumption a verified dispatch record (E2=A).
     params = {
         "confirmation": runner.CONFIRMATION_TOKEN,
         "artifact_dir": tmp_path,
         "now_utc": AFTER_CLOSE,
+        "provenance": verified_provenance(),
     }
     params.update(kwargs)
     return runner.run_consumption(repo, **params)
@@ -821,3 +828,64 @@ def test_readiness_refuses_with_a_readiness_error_not_a_consumption_error() -> N
 
     with pytest.raises(runner.ReadinessRefused, match="not a measured integer"):
         runner.run_readiness(FakeRepository(origin_anomalies=None), verify_pin=False)
+
+
+# --------------------------- E2=A: the verified run provenance ---------------------------
+
+
+def test_consumption_records_the_verified_run_in_the_claim_and_the_snapshot(tmp_path: Path) -> None:
+    record = verified_provenance()
+    result = _consume(FakeRepository(), tmp_path, provenance=record)
+    seal = FakeRepository.durable_seal
+    assert seal["run_provenance"] == record, "the durable claim names the run that spent the look"
+    assert seal["snapshot_payload"]["run_provenance"] == record
+    assert result["run_provenance"] == record
+
+
+def test_an_unverifiable_provenance_is_refused_before_the_repository_is_touched(
+    tmp_path: Path,
+) -> None:
+    from crypto_probability_engine.oos.evaluation.provenance import ProvenanceRefused
+
+    for tamper in (
+        {"ref": "refs/heads/feature"},
+        {"sha": "b" * 40},
+        {"python_version": "3.12.11"},
+        {"pin_digest": "0" * 64},
+        {"dispatch_verified": False},
+    ):
+        repo = FakeRepository()
+        with pytest.raises(ProvenanceRefused):
+            _consume(repo, tmp_path, provenance={**verified_provenance(), **tamper})
+        assert repo.calls == [] and repo.events == [], tamper
+        assert FakeRepository.durable_seal is None, tamper
+
+
+def test_a_look_taken_without_provenance_can_never_be_recovered(tmp_path: Path) -> None:
+    """Declared doubles may omit the record (as D3 lets them declare the authority), but such a
+    look is not a verified one: recovery refuses to bless it."""
+
+    _consume(FakeRepository(), tmp_path, provenance=None)
+    assert FakeRepository.durable_seal["run_provenance"] is None
+    with pytest.raises(runner.SnapshotTampered, match="does not carry a verified run provenance"):
+        runner.recompute_from_seal(FakeRepository())
+
+
+def test_seal_recovery_refuses_a_snapshot_that_names_a_different_run(tmp_path: Path) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["snapshot_payload"]["run_provenance"] = {
+        **FakeRepository.durable_seal["run_provenance"],
+        "run_id": "987654321",
+    }
+    with pytest.raises(runner.SnapshotTampered, match="differs from the durable claim"):
+        runner.recompute_from_seal(FakeRepository())
+
+
+def test_seal_recovery_refuses_a_claim_whose_provenance_was_rewritten(tmp_path: Path) -> None:
+    _consume(FakeRepository(), tmp_path)
+    FakeRepository.durable_seal["run_provenance"] = {
+        **FakeRepository.durable_seal["run_provenance"],
+        "ref": "refs/heads/elsewhere",
+    }
+    with pytest.raises(runner.SnapshotTampered, match="does not carry a verified run provenance"):
+        runner.recompute_from_seal(FakeRepository())

@@ -42,7 +42,9 @@ DECLARED_SURFACES: tuple[str, ...] = (
     "docs/SECTION_5A_EVALUATION_PREREGISTRATION.md",  # the rules as resolved before the look
     "migrations/0009_section_5a_evaluation_seal.sql",  # the durable seal lifecycle, DB-enforced
     ".github/workflows/section-5a-evaluation.yml",  # where and how the evaluation executes
-    "requirements.txt",  # which third-party runtime is installed
+    # Which third-party runtime is installed: exact versions, every hash (owner ruling E3=A). It
+    # replaces requirements.txt, whose version ranges bound nothing (V808-R5).
+    "ops/section_5a_evaluator_requirements.lock",
 )
 
 

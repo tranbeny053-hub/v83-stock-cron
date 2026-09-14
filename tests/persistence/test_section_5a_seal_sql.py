@@ -11,8 +11,10 @@ from decimal import Decimal
 
 import pytest
 
+from crypto_probability_engine.oos.evaluation.provenance import ProvenanceRefused
 from crypto_probability_engine.persistence import repository as module
 from crypto_probability_engine.utils import canonical_json
+from tests.oos.evaluation.conftest import verified_provenance
 
 RUN = "oosb-" + "a" * 32
 REF = datetime(2026, 8, 21, 4, tzinfo=UTC)
@@ -131,6 +133,25 @@ def test_claim_always_inserts_claimed_with_canonical_json() -> None:
     assert "'CLAIMED'" in cursor.statements[0]
     assert cursor.params[0]["snapshot_payload"] is None
     assert canonical_json.loads(cursor.params[0]["contract_instants"]) == {"t0": REF}
+    assert cursor.params[0]["run_provenance"] is None, "absent stays NULL, which the table refuses"
+
+
+def test_claim_writes_the_run_provenance_canonically() -> None:
+    record = verified_provenance()
+    cursor = ScriptedCursor()
+    cursor.fetchone = lambda: ("SINGLETON",)
+    module._claim_section_5a_seal_row(
+        cursor,
+        {
+            "sealed_at_utc": REF.isoformat(),
+            "evaluator_pin_digest": record["pin_digest"],
+            "contract_instants": {"t0": REF},
+            "run_provenance": record,
+        },
+    )
+    assert "run_provenance" in cursor.statements[0]
+    assert "%(run_provenance)s::jsonb" in cursor.statements[0]
+    assert canonical_json.loads(cursor.params[0]["run_provenance"]) == record
 
 
 def test_snapshot_capture_requires_raw_evidence_an_empty_slot_and_the_claimed_pin() -> None:
@@ -178,8 +199,9 @@ def test_seal_read_decodes_json_losslessly_and_projects_the_raw_capture(encoded_
         text = canonical_json.dumps(value).decode()
         return text if encoded_as == "text" else __import__("json").loads(text)
 
+    record = verified_provenance()
     row = (
-        "SINGLETON", REF, None, None, PIN, column({"t0": "x"}), None, column(raw),
+        "SINGLETON", REF, None, None, PIN, column({"t0": "x"}), column(record), None, column(raw),
         "CLAIMED", "",
     )
     cursor = ScriptedCursor()
@@ -187,6 +209,7 @@ def test_seal_read_decodes_json_losslessly_and_projects_the_raw_capture(encoded_
     seal = module._fetch_section_5a_seal_row(cursor)
     assert "raw_evidence" not in seal
     assert seal["captured_rows"][0]["candidate_p_up_frac"] == Decimal("0.6")
+    assert seal["run_provenance"] == record
 
 
 class _Connection:
@@ -244,3 +267,65 @@ def test_tier1_arm_comes_only_from_the_prediction_id_suffix() -> None:
 
     assert module._oos_arm({"arm": "BASELINE", "prediction_id": f"{RUN}:4H:OTHER"}) is None
     assert module._oos_arm({"prediction_id": f"{RUN}:4H:CANDIDATE"}) == "CANDIDATE"
+
+
+class _RecordingConnection(_Connection):
+    """Counts every statement, so a refusal can be proven to precede all SQL."""
+
+
+def _claim_payload(**extra):
+    record = verified_provenance()
+    return {
+        "sealed_at_utc": REF.isoformat(),
+        "evaluator_pin_digest": record["pin_digest"],
+        "contract_instants": {"t0": REF},
+        **extra,
+    }
+
+
+@pytest.mark.parametrize(
+    "run_provenance",
+    [None, {}, {"dispatch_verified": True}, "verified"],
+)
+def test_the_durable_authority_refuses_an_unverified_claim_before_any_statement(
+    run_provenance,
+) -> None:
+    """E2=A. The look can be spent only by a verified dispatch, whoever calls the repository."""
+
+    cursor = ScriptedCursor()
+    repo = module.SupabasePersistenceRepository(
+        "postgresql://never-connected",
+        direct_connection_factory=lambda: _RecordingConnection(cursor),
+    )
+    with pytest.raises(ProvenanceRefused):
+        repo.claim_section_5a_seal(_claim_payload(run_provenance=run_provenance))
+    assert cursor.statements == [], "nothing may reach Postgres before provenance verifies"
+
+
+def test_the_durable_authority_refuses_a_rewritten_record_before_any_statement() -> None:
+    cursor = ScriptedCursor()
+    repo = module.SupabasePersistenceRepository(
+        "postgresql://never-connected",
+        direct_connection_factory=lambda: _RecordingConnection(cursor),
+    )
+    forged = {**verified_provenance(), "ref": "refs/heads/feature"}
+    with pytest.raises(ProvenanceRefused):
+        repo.claim_section_5a_seal(_claim_payload(run_provenance=forged))
+    assert cursor.statements == []
+
+
+def test_the_durable_authority_claims_with_a_verified_record() -> None:
+    cursor = ScriptedCursor()
+    cursor.fetchone = lambda: ("SINGLETON",)
+    repo = module.SupabasePersistenceRepository(
+        "postgresql://never-connected",
+        direct_connection_factory=lambda: _RecordingConnection(cursor),
+    )
+    record = verified_provenance()
+    assert repo.claim_section_5a_seal(_claim_payload(run_provenance=record)) is True
+    insert = next(
+        index
+        for index, sql in enumerate(cursor.statements)
+        if sql.startswith("INSERT INTO public.section_5a_evaluation_seal")
+    )
+    assert canonical_json.loads(cursor.params[insert]["run_provenance"]) == record

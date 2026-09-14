@@ -115,11 +115,11 @@ class PersistenceRepository(Protocol):
         """Return the four persisted quant_v2 diagnostic values per OOS prediction."""
 
     def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
-        """Atomically claim the one-look seal AND durably capture the raw evidence.
+        """Atomically claim the one-look seal, before any probability is exposed.
 
         Returns ``True`` when this call claimed it, ``False`` when a seal already
-        existed. Claim and capture are ONE write: split apart, a crash between them
-        would spend the look and leave no record of it.
+        existed. The payload carries no evidence. The durable authority requires a verified
+        ``run_provenance`` record in it (owner ruling E2=A).
         """
 
     def fetch_section_5a_seal(self) -> dict | None:
@@ -1123,6 +1123,15 @@ class SupabasePersistenceRepository:
         )
 
     def claim_section_5a_seal(self, payload: Mapping[str, Any]) -> bool:
+        # OWNER RULING E2=A. The durable authority itself refuses a claim that does not carry a
+        # verified run provenance, before any statement executes; migration 0009 refuses the same
+        # in SQL. The look can therefore be spent only by a verified dispatch, whichever caller
+        # reached this method.
+        from crypto_probability_engine.oos.evaluation.provenance import (
+            require_verified_provenance,
+        )
+
+        require_verified_provenance(payload.get("run_provenance"))
         return bool(
             self._run_required_oos_read(
                 "section 5A seal claim",
@@ -2603,14 +2612,15 @@ def _claim_section_5a_seal_row(cursor, payload: Mapping[str, Any]) -> bool:
     """
 
     snapshot = payload.get("snapshot_payload")
+    run_provenance = payload.get("run_provenance")
     cursor.execute(
         """
         INSERT INTO public.section_5a_evaluation_seal (
-          seal_id, sealed_at_utc, evaluator_pin_digest, contract_instants, state,
-          evidence_snapshot_id, result_inputs_digest, snapshot_payload
+          seal_id, sealed_at_utc, evaluator_pin_digest, contract_instants, run_provenance,
+          state, evidence_snapshot_id, result_inputs_digest, snapshot_payload
         ) VALUES (
           'SINGLETON', %(sealed_at_utc)s, %(evaluator_pin_digest)s,
-          %(contract_instants)s::jsonb, 'CLAIMED',
+          %(contract_instants)s::jsonb, %(run_provenance)s::jsonb, 'CLAIMED',
           %(evidence_snapshot_id)s, %(result_inputs_digest)s, %(snapshot_payload)s::jsonb
         )
         ON CONFLICT (seal_id) DO NOTHING
@@ -2620,6 +2630,8 @@ def _claim_section_5a_seal_row(cursor, payload: Mapping[str, Any]) -> bool:
             "sealed_at_utc": payload["sealed_at_utc"],
             "evaluator_pin_digest": payload["evaluator_pin_digest"],
             "contract_instants": _canonical_text(payload["contract_instants"]),
+            # E2=A: NULL here is refused by the table (NOT NULL plus a CHECK on the record).
+            "run_provenance": None if run_provenance is None else _canonical_text(run_provenance),
             "evidence_snapshot_id": payload.get("evidence_snapshot_id"),
             "result_inputs_digest": payload.get("result_inputs_digest"),
             "snapshot_payload": None if snapshot is None else _canonical_text(snapshot),
@@ -2699,8 +2711,8 @@ def _fetch_section_5a_seal_row(cursor):
     cursor.execute(
         """
         SELECT seal_id, sealed_at_utc, evidence_snapshot_id, result_inputs_digest,
-               evaluator_pin_digest, contract_instants, snapshot_payload, raw_evidence,
-               state, state_detail
+               evaluator_pin_digest, contract_instants, run_provenance, snapshot_payload,
+               raw_evidence, state, state_detail
         FROM public.section_5a_evaluation_seal
         WHERE seal_id = 'SINGLETON'
         """
@@ -2710,11 +2722,11 @@ def _fetch_section_5a_seal_row(cursor):
         return None
     columns = (
         "seal_id", "sealed_at_utc", "evidence_snapshot_id", "result_inputs_digest",
-        "evaluator_pin_digest", "contract_instants", "snapshot_payload", "raw_evidence",
-        "state", "state_detail",
+        "evaluator_pin_digest", "contract_instants", "run_provenance", "snapshot_payload",
+        "raw_evidence", "state", "state_detail",
     )
     seal = dict(zip(columns, row, strict=True))
-    for column in ("contract_instants", "snapshot_payload", "raw_evidence"):
+    for column in ("contract_instants", "run_provenance", "snapshot_payload", "raw_evidence"):
         seal[column] = _decode_json_column(seal[column])
     raw = seal.pop("raw_evidence")
     if isinstance(raw, Mapping):
