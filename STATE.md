@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A task-809 VERIFIED_WITH_FINDINGS — 15/15 committed-suite kills; F809-1 MEDIUM runtime identity, F809-2 LOW; owner rulings G1-G4 requested; one look NOT consumed)
+Updated: 2026-09-14 (§5A G1=A strengthened + G2 implemented; composition GREEN 1718; bounded task-810 spot-check in flight; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -353,7 +353,11 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE. task-809 COMPLETE (fresh: fired 03:44:58Z, report 04:02:40Z; no tracked change).
+CODEX_PENDING=task-810 — spot-check of at most 5 mutants on the G1 isolation mechanism and the G2 reader
+  refusal. Composition 171187a (tree dba9b2f5) of A 2342e68, B 8ce93c4 and C 8d6e26e. Task file
+  .work/task-810.md, run in worktree scratchpad/compose3-abc. If that worktree is gone, recompose
+  and check the tree is 5d0d5331. Delegation: ./delegate.sh .work/task-810.md workspace-write high.
+  task-809 (VERIFIED_WITH_FINDINGS) is COMPLETE.
 CODEX_VERIFICATION_809=VERIFIED_WITH_FINDINGS on composition faaed6d (tree 993fc5dd). Committed suite:
   15/15 mutants KILLED, 0 SURVIVED, no new tests. Gate 1652. Red tests (c7e5d4c6...) and the adopted
   808 tests (b88f1838...) intact. Migration 0009 REVIEWED BUT UNEXECUTED: NULL, precedence and key
@@ -410,17 +414,14 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=OWNER RULINGS G1-G4 REQUESTED (.work/809/consolidated-max-review.md):
-  G1 F809-1: A (recommended) bind import origins with fail-closed checks, `python -P`, attestation
-    before the heavy imports, refusal of duplicates and of untracked .py/.pth, Addendum 6;
-    B static collision check plus -P; C accept and narrow wording.
-  G2 F809-2: the reader raises on a workflow-level env (recommended: approve).
-  G3 verification: A (recommended) Opus with negative controls plus ONE Codex spot-check of at most
-    5 mutants; B Opus only.
-  G4 T3 timing: A (recommended) land G1/G2 first, then ONE T3 batch for A, B and C; B T3 for B and C
-    now.
-  The earlier rulings E1, E2=A and E3=A are applied. T4 remains separate: apply 0009 --only, then
-  readiness, then consume.
+OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14:
+  - G1=A strengthened: isolated -I start-up, controlled import paths, refusal of untracked,
+    duplicate, shadow and .pth code, and loaded-module origin attestation;
+  - G2: fail closed on a workflow-level env;
+  - G3: Opus implements and reviews; Codex spot-checks at most 5 mutants;
+  - G4: close G1/G2, then ONE T3 batch for A, B and C.
+  NEXT BOUNDARY: that T3 request, after task-810 and the final MAX review. T4 remains separate:
+  apply 0009 --only, then readiness, then consume.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -438,8 +439,8 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=WAIT for owner rulings G1-G4. DO NOT run readiness or consumption, do not apply 0008 or
-  0009, and do not push.
+NEXT_ACTION=Read task-810's result, then the final MAX review, then request the ONE T3 batch for A, B
+  and C. DO NOT run readiness or consumption, apply 0008 or 0009, push, or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
