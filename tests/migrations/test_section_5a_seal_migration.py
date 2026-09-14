@@ -113,6 +113,10 @@ def test_every_claim_must_carry_a_verified_run_provenance() -> None:
         "run_provenance ->> 'sha' = run_provenance ->> 'expected_sha'",
         "run_provenance ->> 'git_head' = run_provenance ->> 'expected_sha'",
         "run_provenance ->> 'pin_digest' = evaluator_pin_digest",
+        # G1=A: only an isolated start-up with verified installed files may spend the look
+        "run_provenance ->> 'interpreter_flags' = "
+        "'isolated,ignore_environment,no_user_site,safe_path,no_site,dont_write_bytecode'",
+        "run_provenance ->> 'installed_files_sha256' ~ '^[0-9a-f]{64}$'",
     ):
         assert clause in FLAT, clause
 
@@ -137,3 +141,9 @@ def test_the_sql_record_shape_matches_what_the_verifier_produces() -> None:
     record = verified_provenance()
     keys = set(re.findall(r"run_provenance -(?:>>|>) '([a-z_0-9]+)'", FLAT))
     assert keys and keys <= set(record), keys - set(record)
+
+
+def test_the_sql_flag_text_is_the_isolation_module_s() -> None:
+    from crypto_probability_engine.runtime_isolation import REQUIRED_FLAGS_TEXT
+
+    assert f"= '{REQUIRED_FLAGS_TEXT}'" in FLAT

@@ -685,3 +685,109 @@ The task-808 review reported the outcome resolver's workflow as sharing R6's fal
 not: its script begins with `set -euo pipefail`, which makes a failed resolver fail its pipeline
 and its step. That was verified by executing the step against failing and succeeding stubs, not
 asserted, and the resolver lane adds a regression test rather than a change.
+
+# Addendum 6, 2026-09-14 — isolated start-up and code-origin attestation (rulings G1=A, G2)
+
+Codex task-809 returned VERIFIED_WITH_FINDINGS: 15 of 15 mutants killed by committed tests, no
+injection, no false green, no provenance bypass on a real path. Two findings remained.
+
+- **V809-F1 (MEDIUM).** Opus found it independently, as O809-1, before Codex reported. Addendum 5
+  §31 bound the runtime's package METADATA, not the code Python actually imports. A shadow
+  `certifi.py` was imported under locked version numbers. A committed `scripts/platform.py` ran
+  inside the evaluator while the pin still passed.
+- **V809-F2 (LOW).** The workflow step reader silently dropped a workflow-level `env:`.
+
+The owner ruled G1=A, strengthened, and G2. This addendum **narrows §31's claim to what is now
+verified and supersedes §24's reach**: the pin binds the reviewed source, and this addendum binds
+what actually loads.
+
+## 34. Why the runtime identity was not the code identity
+
+Four causes, each confirmed:
+1. The CLI imported the evaluator, and with it psycopg, httpx and certifi, at module level, before
+   anything was attested.
+2. `python scripts/...` puts `scripts/` first on `sys.path`, and the workflow added
+   `PYTHONPATH=src`, so either could shadow a standard-library or locked module.
+3. The clean-tree check deliberately ignored untracked files.
+4. Two copies of one distribution at one version collapsed into one inventory entry.
+
+## 35. Isolated start-up: `python -I -S -B`
+
+The evaluator — attestation and evaluation alike — only ever runs as `python -I -S -B`. It refuses
+unless exactly those flags are in force:
+
+- `-I` ignores `PYTHON*` variables, keeps the script directory off `sys.path` and disables user
+  site-packages.
+- `-S` is added because `-I` alone still runs `site`, which executes `.pth` files and
+  `sitecustomize` BEFORE any evaluator code. Only with `-S` is refusing them a refusal rather than
+  a detection after the fact.
+- `-B` is added so nothing a run compiles can later stand in for a verified source.
+
+The CLI imports ONLY the standard library at module level. The first import beyond it is
+`crypto_probability_engine.runtime_isolation`, a standard-library-only module under the package's
+empty `__init__`. A real isolated process proves that nothing else has loaded when it refuses.
+
+## 36. The controlled import path and the pre-import audit
+
+With the path still limited to the interpreter's own library, `runtime_isolation.enter` refuses
+unless:
+
+- **The start-up path** is exactly the interpreter's zip, stdlib and lib-dynload: no current
+  directory, no script directory, no site-packages.
+- **site-packages is exactly the lock:**
+  - every locked distribution at its locked version;
+  - nothing else except the installer (`pip`, `setuptools`, `wheel`);
+  - no distribution present twice, whatever the version;
+  - no `.pth`, no `sitecustomize` or `usercustomize`, no egg metadata.
+- **Every file in site-packages is owned** by a distribution's RECORD, apart from CPython's own
+  `README.txt`.
+- **Every locked file matches its recorded SHA-256 and size.** Locked distributions carry no
+  bytecode, because the workflow installs with `--no-compile`.
+- **The checkout** holds:
+  - no untracked or ignored `.py`, `.pyc`, `.pyo`, `.pyd`, `.so`, `.dylib` or `.pth` file;
+  - no `__pycache__`;
+  - no tracked compiled or path-configuration file;
+  - nothing in `src/` except `crypto_probability_engine`.
+
+Only then is `sys.path` set: the interpreter's library, then the verified site-packages, then
+`src/`. First-party files come last, so they can never shadow a verified module.
+
+## 37. Code-origin attestation, and what the record carries
+
+Every module in `sys.modules` must come from one of:
+- the interpreter's standard library (site-packages below the stdlib root does NOT count);
+- a hash-verified locked file;
+- a file of the reviewed pin, the entrypoint included.
+
+Built-in and frozen modules are part of the interpreter itself. Any other origin, or no verifiable
+origin, refuses. The check runs three times, the last immediately before the claim:
+1. after the evaluator's imports;
+2. after the repository is built;
+3. after the reads that precede the claim, which may import driver code.
+
+A refusal at any point spends nothing.
+
+The run provenance gains two fields:
+- `interpreter_flags`, which must equal the isolated flag set;
+- `installed_files_sha256`, a digest of the exact bytes of every locked file.
+
+Migration 0009's CHECK requires both. The in-job test and attestation steps use `-B`, and pip
+uses `--no-compile`, so no step leaves bytecode in the checkout or site-packages. The separate
+non-isolated pin step is removed: the isolated attestation verifies the pin.
+
+## 38. The workflow reader refuses what it does not model (ruling G2)
+
+`tests/workflows/_workflow_steps.py` now refuses a workflow-level `env:`, as it already refused
+workflow-level `defaults:`. Both change every step. The change is identical in all three lanes
+that carry the reader.
+
+## 39. Residuals, stated rather than hidden
+
+- **The standard library** is trusted as installed by actions/setup-python.
+- **The installer** is inventoried, and must own its files, but is not hash-verified. It is never
+  a permitted module origin.
+- **`git`** is trusted to list tracked files.
+- **A compromised owner credential** remains out of reach (§30).
+- **The positive path** is proven locally with a toolcache-shaped interpreter. Its first proof on
+  GitHub's runner image is the readiness dispatch, which is T4. An unexpected file in the image's
+  site-packages refuses safely there, before any database access.

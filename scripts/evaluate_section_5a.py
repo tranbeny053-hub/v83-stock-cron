@@ -1,27 +1,38 @@
 #!/usr/bin/env python
 """Section 5A evaluation CLI.
 
-    --mode attest              verify dispatch, runtime and pin; touches no repository
+    --mode attest              verify isolation, dispatch, runtime and pin; touches no repository
     --mode readiness           repeatable; never consumes the one look
     --mode consume             THE ONE LOOK; requires the confirmation token
     --mode recompute           recover from the DURABLE Postgres seal; never re-reads the holdout
     --mode recompute-artifact  offline audit of a local artifact; no database access
     --write-pin                regenerate the reviewed evaluator pin
 
-Every live mode (attest, readiness, consumption and seal recovery) first ATTESTS the run: a manual
-dispatch of the evaluation workflow on main, at exactly ``--expected-sha``, under the pinned
-interpreter and the hash-locked dependency set (owner rulings E2=A, E3=A). Only then is a
-repository built, and it must POSITIVELY declare itself a durable Postgres authority.
+Every live mode (attest, readiness, consumption, seal recovery) runs in a process started as
+``python -I -S -B`` (owner ruling G1=A). Before any module beyond the standard library can load,
+:mod:`crypto_probability_engine.runtime_isolation` verifies:
+- the interpreter's isolation;
+- its import surface: exactly the hash-locked site-packages and a checkout with no untracked code;
+- the only import path: stdlib, then verified site-packages, then the reviewed source.
 
-V807-F3: this entrypoint used to build ``Settings()``, which does not read the environment, so
-even with SUPABASE_DB_URL set it silently constructed an EMPTY in-memory repository. Readiness
-would then have reported zero evidence everywhere — a false "the frame failed" rather than a
-refusal. Settings now come from the environment, exactly as every other production script does,
-and readiness refuses a non-durable repository instead of reporting on one.
+Only then are the evaluator and its dependencies imported. The run is then ATTESTED: a manual
+dispatch on main at exactly ``--expected-sha``, under the pinned interpreter and lock (E2=A, E3=A).
+The origin of every loaded module is verified, and verified again immediately before the one-look
+claim. Only then is a repository built, and it must POSITIVELY declare itself a durable Postgres
+authority.
+
+THIS FILE IMPORTS ONLY THE STANDARD LIBRARY AT MODULE LEVEL. Everything else is imported inside
+functions, after isolation is verified. V809-F1: importing the repository at module level ran
+third-party code before anything was checked.
+
+V807-F3: this entrypoint used to build ``Settings()``, which does not read the environment. With
+SUPABASE_DB_URL set it still silently constructed an EMPTY in-memory repository, and readiness
+would have reported zero evidence everywhere — a false "the frame failed" rather than a refusal.
+Settings now come from the environment, exactly as every other production script does.
 
 V808-R6: the workflow used to pipe this command into ``tee``. Without pipefail a refusal then
-exited 0 and the run showed green. The outcome is now written by ``--report``, with no pipe, and
-a refusal is both recorded in that report and a non-zero exit.
+exited 0 and the run showed green. The outcome is now written by ``--report``, with no pipe, and a
+refusal is both recorded in that report and a non-zero exit.
 """
 
 from __future__ import annotations
@@ -34,45 +45,29 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.oos.evaluation import provenance, runner
-from crypto_probability_engine.oos.evaluation.evaluator_pin import EvaluatorPinMismatch, write_pin
-from crypto_probability_engine.persistence.repository import build_operator_repository
-
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "src"
 DEFAULT_ARTIFACT_DIR = Path(".work/section_5a")
+
 MODE_ATTEST = "attest"
+MODE_READINESS = "readiness"  # runner.MODE_READINESS; equality is asserted by test
+MODE_CONSUME = "consume"  # runner.MODE_CONSUME; equality is asserted by test
 MODE_RECOMPUTE = "recompute"
 MODE_RECOMPUTE_ARTIFACT = "recompute-artifact"
-
-# Refusals this evaluator raises on purpose. Their messages name no secret, so the report may
-# carry them; any other failure is reported by type only, and its detail stays in the job log.
-_REFUSALS = (
-    provenance.ProvenanceRefused,
-    runner.ConsumptionRefused,
-    runner.ReadinessRefused,
-    runner.OneLookAlreadyConsumed,
-    runner.SnapshotTampered,
-    EvaluatorPinMismatch,
-)
+LIVE_MODES = (MODE_ATTEST, MODE_READINESS, MODE_CONSUME, MODE_RECOMPUTE)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--mode",
-        choices=[
-            MODE_ATTEST,
-            runner.MODE_READINESS,
-            runner.MODE_CONSUME,
-            MODE_RECOMPUTE,
-            MODE_RECOMPUTE_ARTIFACT,
-        ],
-        default=runner.MODE_READINESS,
+        choices=[*LIVE_MODES, MODE_RECOMPUTE_ARTIFACT],
+        default=MODE_READINESS,
     )
     parser.add_argument(
         "--confirm",
         default="",
-        help=f"required for --mode consume: {runner.CONFIRMATION_TOKEN}",
+        help="required for --mode consume: the exact confirmation token",
     )
     parser.add_argument(
         "--expected-sha",
@@ -93,8 +88,41 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def ensure_source_path() -> None:
+    """Make the first-party source importable, AFTER the interpreter's own library."""
+
+    if str(SOURCE) not in sys.path:
+        sys.path.append(str(SOURCE))
+
+
+def enter_isolated_runtime():
+    """G1=A: verify the isolated process and its import surface before anything else loads.
+
+    The source root is appended first, so that the standard-library-only isolation module itself
+    can be imported, and nothing else has been added to the import path.
+    """
+
+    ensure_source_path()
+    from crypto_probability_engine import runtime_isolation
+
+    return runtime_isolation.enter(ROOT)
+
+
+def attest_loaded_modules(isolation) -> int:
+    """G1=A: every module loaded so far came from the stdlib, a locked file, or the pin."""
+
+    from crypto_probability_engine import runtime_isolation
+    from crypto_probability_engine.oos.evaluation.evaluator_pin import pinned_files
+
+    return runtime_isolation.attest_loaded_modules(
+        isolation, pinned=pinned_files(ROOT), root=ROOT
+    )
+
+
 def require_durable_authority(repository) -> None:
     """Positive attestation for every live mode; readiness included."""
+
+    from crypto_probability_engine.oos.evaluation import runner
 
     declare = getattr(repository, "section_5a_seal_authority", None)
     authority = declare() if callable(declare) else None
@@ -109,6 +137,9 @@ def require_durable_authority(repository) -> None:
 def build_repository():
     """The ONE way this entrypoint obtains its repository: from the environment (V807-F3)."""
 
+    from crypto_probability_engine.config.settings import Settings
+    from crypto_probability_engine.persistence.repository import build_operator_repository
+
     return build_operator_repository(Settings.from_env())
 
 
@@ -116,6 +147,9 @@ def main(argv: list[str] | None = None, *, environ: Mapping[str, str] | None = N
     args = build_parser().parse_args(argv)
 
     if args.write_pin:
+        ensure_source_path()
+        from crypto_probability_engine.oos.evaluation.evaluator_pin import write_pin
+
         print(json.dumps({"wrote_pin": str(write_pin())}, indent=2))
         return 0
 
@@ -135,17 +169,27 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
     artifact_dir = Path(args.artifact_dir)
 
     if args.mode == MODE_RECOMPUTE_ARTIFACT:
+        ensure_source_path()
+        from crypto_probability_engine.oos.evaluation import runner
+
         return runner.recompute_from_snapshot(artifact_dir)
 
-    # E2=A, E3=A: every remaining mode is live. Attest BEFORE any repository exists.
-    record = provenance.attest(args.expected_sha, environ=environ)
+    # Every remaining mode is live. Isolation FIRST: nothing third-party may load before it.
+    isolation = enter_isolated_runtime()
+
+    from crypto_probability_engine.oos.evaluation import provenance, runner
+
+    # E2=A, E3=A: attest the dispatch and runtime, then verify what actually loaded.
+    record = provenance.attest(args.expected_sha, environ=environ, isolation=isolation)
+    attest_loaded_modules(isolation)
     if args.mode == MODE_ATTEST:
         return {"mode": MODE_ATTEST, "touches_repository": False, "run_provenance": record}
 
     repository = build_repository()
     require_durable_authority(repository)
+    attest_loaded_modules(isolation)
 
-    if args.mode == runner.MODE_READINESS:
+    if args.mode == MODE_READINESS:
         return {**runner.run_readiness(repository), "run_provenance": record}
 
     if args.mode == MODE_RECOMPUTE:
@@ -156,11 +200,14 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
         confirmation=args.confirm,
         artifact_dir=artifact_dir,
         provenance=record,
+        runtime_guard=lambda: attest_loaded_modules(isolation),
     )
 
 
 def _refusal_record(mode: str, exc: BaseException) -> dict[str, Any]:
-    refused = isinstance(exc, _REFUSALS)
+    """Deliberate refusals name no secret; any other failure is reported by type only."""
+
+    refused = _is_refusal(exc)
     return {
         "mode": mode,
         "outcome": "REFUSED" if refused else "FAILED",
@@ -169,6 +216,33 @@ def _refusal_record(mode: str, exc: BaseException) -> dict[str, Any]:
         if refused
         else "unexpected failure; the detail is withheld from this report, see the job log",
     }
+
+
+def _is_refusal(exc: BaseException) -> bool:
+    """Classify without importing anything new: an error path must not load unverified code."""
+
+    ensure_source_path()
+    from crypto_probability_engine.runtime_isolation import ProvenanceRefused  # stdlib-only
+
+    if isinstance(exc, ProvenanceRefused):
+        return True
+    deliberate = []
+    for module_name, names in (
+        (
+            "crypto_probability_engine.oos.evaluation.runner",
+            (
+                "ConsumptionRefused",
+                "ReadinessRefused",
+                "OneLookAlreadyConsumed",
+                "SnapshotTampered",
+            ),
+        ),
+        ("crypto_probability_engine.oos.evaluation.evaluator_pin", ("EvaluatorPinMismatch",)),
+    ):
+        module = sys.modules.get(module_name)
+        if module is not None:
+            deliberate.extend(getattr(module, name) for name in names)
+    return isinstance(exc, tuple(deliberate))
 
 
 def _write_report(path: Path, payload: Mapping[str, Any]) -> None:

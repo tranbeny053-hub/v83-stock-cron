@@ -889,3 +889,39 @@ def test_seal_recovery_refuses_a_claim_whose_provenance_was_rewritten(tmp_path: 
     }
     with pytest.raises(runner.SnapshotTampered, match="does not carry a verified run provenance"):
         runner.recompute_from_seal(FakeRepository())
+
+
+# --------------------------------------------------------------------------- G1=A: loaded code
+
+
+def test_the_runtime_guard_runs_after_the_pre_claim_reads_and_before_the_claim(
+    tmp_path: Path,
+) -> None:
+    """The reads before the claim may import driver code; the guard sees all of it."""
+
+    order: list[str] = []
+
+    class Recording(FakeRepository):
+        def fetch_oos_feature_diagnostics(self):
+            order.append("reads")
+            return super().fetch_oos_feature_diagnostics()
+
+        def claim_section_5a_seal(self, payload) -> bool:
+            order.append("claim")
+            return super().claim_section_5a_seal(payload)
+
+    _consume(Recording(), tmp_path, runtime_guard=lambda: order.append("guard"))
+    assert order == ["reads", "guard", "claim"]
+
+
+def test_a_refusing_runtime_guard_spends_nothing(tmp_path: Path) -> None:
+    from crypto_probability_engine.runtime_isolation import IsolationRefused
+
+    def _refuse() -> None:
+        raise IsolationRefused("a loaded module came from an unverified origin")
+
+    repo = FakeRepository()
+    with pytest.raises(IsolationRefused):
+        _consume(repo, tmp_path, runtime_guard=_refuse)
+    assert FakeRepository.durable_seal is None, "no claim"
+    assert True not in repo.calls, "no probability read"

@@ -14,6 +14,10 @@ that govern a live run POSITIVELY VERIFIED rather than assumed:
 :func:`attest` observes and verifies. Its record is written durably into the one-look claim, so
 the run that spent the look stays identified: commit, run, interpreter, lock and pin.
 
+ISOLATION (owner ruling G1=A). Nothing is attested unless the process was started as
+``python -I -S -B`` and :func:`runtime_isolation.enter` verified its import surface first; the
+record carries the interpreter flags and the digest of every verified installed file.
+
 ENFORCEMENT LAYERS. The CLI attests before any repository exists, for every live mode. The
 durable Postgres authority refuses a claim whose record does not verify (in Python, and in SQL
 by migration 0009). Seal recovery refuses a seal whose record does not verify. The library
@@ -37,10 +41,19 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+from crypto_probability_engine import runtime_isolation
 from crypto_probability_engine.oos.evaluation.evaluator_pin import (
     assert_evaluator_pin,
     current_pin_artifacts,
     project_root,
+)
+from crypto_probability_engine.runtime_isolation import (
+    EVALUATOR_LOCK,
+    INSTALLER_DISTRIBUTIONS,
+    REQUIRED_FLAGS_TEXT,
+    IsolationRefused,
+    ProvenanceRefused,
+    canonical_distribution_name,
 )
 
 PROVENANCE_SCHEMA_VERSION = "section-5a-run-provenance.v1"
@@ -49,14 +62,18 @@ REQUIRED_EVENT = "workflow_dispatch"
 REQUIRED_REF = "refs/heads/main"
 
 # E3=A. The exact runtime the evaluation executes under. The workflow installs exactly these; the
-# run refuses anything else. Both are pinned: this constant by the import closure, the lock as a
-# declared surface.
+# run refuses anything else. Both are pinned: this constant by the import closure, the lock
+# (runtime_isolation.EVALUATOR_LOCK) as a declared surface.
 PINNED_PYTHON_IMPLEMENTATION = "CPython"
 PINNED_PYTHON_VERSION = "3.13.14"
-EVALUATOR_LOCK = "ops/section_5a_evaluator_requirements.lock"
 
-# The installer is present in every interpreter image and is never imported by the evaluator.
-INSTALLER_DISTRIBUTIONS = frozenset({"pip", "setuptools", "wheel"})
+__all__ = [
+    "EVALUATOR_LOCK",
+    "INSTALLER_DISTRIBUTIONS",
+    "IsolationRefused",
+    "ProvenanceRefused",
+    "canonical_distribution_name",
+]
 
 _DISPATCH_VARIABLES = (
     ("github_actions", "GITHUB_ACTIONS"),
@@ -95,76 +112,23 @@ _RECORD_STRING_FIELDS = (
     "lock_path",
     "lock_sha256",
     "pin_digest",
+    "interpreter_flags",
+    "installed_files_sha256",
 )
 _RECORD_FIELDS = frozenset({*_RECORD_STRING_FIELDS, "dispatch_verified", "installed"})
 
 _COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _DIGITS = re.compile(r"^[0-9]+$")
-_LOCK_PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9.+!_-]+) \\$")
-_LOCK_HASH = re.compile(r"^    --hash=sha256:[0-9a-f]{64}( \\)?$")
-
-
-class ProvenanceRefused(RuntimeError):
-    """The run is not a verified dispatch under the pinned runtime; nothing was read or claimed."""
 
 
 # --------------------------------------------------------------------------- the lock
 
 
-def canonical_distribution_name(name: str) -> str:
-    """PEP 503 normalization, so ``Pygments`` and ``pygments`` are one distribution."""
-
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
 def read_lock(root: Path | None = None) -> dict[str, str]:
-    """Exact pins from the evaluator lock, fail-closed.
+    """Exact, hashed pins from the evaluator lock. See :func:`runtime_isolation.read_lock`."""
 
-    Every requirement must be ``name==version`` followed by at least one SHA-256 hash, which is
-    what ``pip --require-hashes`` enforces at install. A range, an unhashed pin, a duplicate or any
-    unrecognized line refuses: a lock that is not exact cannot bind the runtime (V808-R5).
-    """
-
-    path = (root or project_root()).resolve() / EVALUATOR_LOCK
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError) as exc:
-        raise ProvenanceRefused(
-            f"the evaluator lock is missing or unreadable: {EVALUATOR_LOCK}"
-        ) from exc
-
-    pins: dict[str, str] = {}
-    current: str | None = None
-    hashes = 0
-    continued = False
-    for number, line in enumerate(lines, start=1):
-        if continued:
-            if not _LOCK_HASH.match(line):
-                raise ProvenanceRefused(f"{EVALUATOR_LOCK}:{number}: expected a sha256 hash line")
-            hashes += 1
-            continued = line.endswith("\\")
-            continue
-        if current is not None and hashes == 0:
-            raise ProvenanceRefused(f"{EVALUATOR_LOCK}: {current} has no hash")
-        if not line.strip() or line.startswith("#"):
-            continue
-        match = _LOCK_PIN.match(line)
-        if match is None:
-            raise ProvenanceRefused(
-                f"{EVALUATOR_LOCK}:{number}: not an exact, hashed pin: {line.strip()!r}"
-            )
-        current = canonical_distribution_name(match.group(1))
-        if current in pins:
-            raise ProvenanceRefused(f"{EVALUATOR_LOCK}: {current} is pinned twice")
-        pins[current] = match.group(2)
-        hashes = 0
-        continued = True
-    if continued or (current is not None and hashes == 0):
-        raise ProvenanceRefused(f"{EVALUATOR_LOCK}: the last requirement is incomplete")
-    if not pins:
-        raise ProvenanceRefused(f"{EVALUATOR_LOCK}: the lock pins nothing")
-    return pins
+    return runtime_isolation.read_lock((root or project_root()).resolve())
 
 
 def lock_sha256(root: Path | None = None) -> str:
@@ -204,12 +168,16 @@ def installed_distributions() -> dict[str, str]:
     return dict(sorted(found.items()))
 
 
-def observe_runtime(root: Path | None = None) -> dict[str, Any]:
+def observe_runtime(
+    root: Path | None = None, isolation: runtime_isolation.IsolationReport | None = None
+) -> dict[str, Any]:
     """The facts of the process and checkout that will execute the evaluation."""
 
     repository_root = (root or project_root()).resolve()
     status = _git(repository_root, "status", "--porcelain=v1", "--untracked-files=no")
     return {
+        "interpreter_flags": runtime_isolation.interpreter_flags(),
+        "installed_files_sha256": "" if isolation is None else isolation.installed_files_sha256,
         "python_implementation": platform.python_implementation(),
         "python_version": platform.python_version(),
         "git_head": _git(repository_root, "rev-parse", "HEAD") or "",
@@ -286,6 +254,15 @@ def verify_run_provenance(
     need(bool(_DIGITS.match(str(dispatch.get("run_attempt", "")))), "run_attempt is not a number")
     need(bool(_SHA256.match(str(runtime.get("lock_sha256", "")))), "the lock digest is missing")
     need(bool(_SHA256.match(str(runtime.get("pin_digest", "")))), "the pin digest is missing")
+    need(
+        runtime.get("interpreter_flags") == REQUIRED_FLAGS_TEXT,
+        f"the evaluator did not start as `{runtime_isolation.ISOLATED_STARTUP}` "
+        f"(flags [{runtime.get('interpreter_flags')}])",
+    )
+    need(
+        bool(_SHA256.match(str(runtime.get("installed_files_sha256", "")))),
+        "the installed files were not verified against their records",
+    )
 
     if failures:
         raise ProvenanceRefused(
@@ -313,19 +290,35 @@ def verify_run_provenance(
         "lock_sha256": str(runtime["lock_sha256"]),
         "installed": {str(name): str(version) for name, version in sorted(installed.items())},
         "pin_digest": str(runtime["pin_digest"]),
+        "interpreter_flags": str(runtime["interpreter_flags"]),
+        "installed_files_sha256": str(runtime["installed_files_sha256"]),
     }
 
 
 def attest(
-    expected_sha: str, *, environ: Mapping[str, str], root: Path | None = None
+    expected_sha: str,
+    *,
+    environ: Mapping[str, str],
+    root: Path | None = None,
+    isolation: runtime_isolation.IsolationReport | None = None,
 ) -> dict[str, Any]:
-    """Verify the pin, the dispatch and the runtime of THIS process. Touches no repository."""
+    """Verify the pin, the dispatch and the runtime of THIS process. Touches no repository.
 
+    ``isolation`` is the report of :func:`runtime_isolation.enter`, which must already have run in
+    this process (owner ruling G1=A). Without it nothing is attested.
+    """
+
+    if isolation is None:
+        raise IsolationRefused(
+            "section 5A run refused before any database access: the process was not entered "
+            f"through the isolated runtime (`{runtime_isolation.ISOLATED_STARTUP}` and "
+            "runtime_isolation.enter)"
+        )
     repository_root = (root or project_root()).resolve()
     assert_evaluator_pin(root=repository_root)
     return verify_run_provenance(
         observe_dispatch(environ),
-        observe_runtime(repository_root),
+        observe_runtime(repository_root, isolation),
         expected_sha=expected_sha,
         lock_pins=read_lock(repository_root),
     )
@@ -401,6 +394,11 @@ def require_verified_provenance(record: Any, *, root: Path | None = None) -> dic
     )
     need(bool(_DIGITS.match(record["run_id"])), "run_id is not a GitHub run id")
     need(bool(_DIGITS.match(record["run_attempt"])), "run_attempt is not a number")
+    need(record["interpreter_flags"] == REQUIRED_FLAGS_TEXT, "not an isolated start-up")
+    need(
+        bool(_SHA256.match(record["installed_files_sha256"])),
+        "the installed files were not verified",
+    )
     if failures:
         raise ProvenanceRefused("run provenance does not verify: " + "; ".join(failures))
     return {**dict(record), "installed": dict(installed)}

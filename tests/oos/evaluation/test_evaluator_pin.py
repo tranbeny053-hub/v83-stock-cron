@@ -69,7 +69,12 @@ def test_everything_python_actually_loads_is_inside_the_static_closure() -> None
 import json, sys
 from pathlib import Path
 import scripts.evaluate_section_5a  # noqa: F401
+# The CLI imports these lazily, after isolation (V809-F1); import them as its live modes do.
+from crypto_probability_engine import runtime_isolation  # noqa: F401
+from crypto_probability_engine.config.settings import Settings  # noqa: F401
+from crypto_probability_engine.oos.evaluation import evaluator_pin, provenance  # noqa: F401
 from crypto_probability_engine.oos.evaluation import runner
+from crypto_probability_engine.persistence.repository import build_operator_repository  # noqa: F401
 from tests.oos.evaluation.conftest import daily_4h_evidence
 rows = daily_4h_evidence()
 runner.decision_population_id(rows)

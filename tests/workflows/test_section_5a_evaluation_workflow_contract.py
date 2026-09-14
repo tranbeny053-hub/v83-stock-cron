@@ -80,8 +80,10 @@ def test_evaluation_workflow_defaults_to_the_safe_mode() -> None:
 
 
 def test_evaluation_workflow_verifies_the_pin_before_it_runs() -> None:
+    """The attestation verifies the pin inside the isolated process, before the evaluation step."""
+
     text = EVALUATION.read_text(encoding="utf-8")
-    assert text.index("assert_evaluator_pin") < text.index("evaluate_section_5a.py")
+    assert text.index("--mode=attest") < text.index('--mode="$SECTION_5A_MODE"')
 
 
 def test_evaluation_workflow_requires_the_confirmation_token_to_be_passed() -> None:

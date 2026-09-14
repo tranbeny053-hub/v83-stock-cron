@@ -43,6 +43,9 @@ _JOB_KEYS = frozenset({"name", "runs-on", "timeout-minutes", "env", "steps", "if
 _REFUSED_KEYS = frozenset(
     {"defaults", "continue-on-error", "working-directory", "strategy", "container", "services"}
 )
+# Workflow-level keys that change EVERY step's environment or shell. Refused, not modelled
+# (V809-F2): a reader that dropped them would run steps under an environment GitHub never uses.
+_REFUSED_TOP_LEVEL_KEYS = _REFUSED_KEYS | {"env"}
 _KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*|\"[^\"]+\"|'[^']+'):(?: (.*))?$")
 _SIMPLE_EXPRESSION = re.compile(r"^\$\{\{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*\}\}$")
 
@@ -112,8 +115,11 @@ def read_jobs(source: str) -> dict[str, Job]:
     top = [line for line in lines if line.indent == 0 and _significant(line)]
     for line in top:
         key = _split_key(line)[0]
-        if key in _REFUSED_KEYS:
-            raise WorkflowStepsError(f"line {line.number}: top-level {key!r} is unsupported")
+        if key in _REFUSED_TOP_LEVEL_KEYS:
+            raise WorkflowStepsError(
+                f"line {line.number}: top-level {key!r} is unsupported: it changes every step, "
+                "and this reader does not model it"
+            )
     jobs_line = next((line for line in top if _split_key(line)[0] == "jobs"), None)
     if jobs_line is None:
         raise WorkflowStepsError("the workflow has no jobs")

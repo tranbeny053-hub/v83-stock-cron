@@ -10,9 +10,19 @@ name: Section 5A evaluation (MANUAL DISPATCH ONLY)
 # Inputs are passed ONLY through `env:` and expanded in double quotes, where bash never re-parses
 # them. Every step declares `shell: bash`, which is the only invocation with pipefail (V808-R6).
 #
-# ORDER IS THE SAFETY PROPERTY. Exact interpreter, then hash-locked dependencies, then the pin,
-# then the dispatch attestation (main, expected_sha, runtime), then the evaluator's own tests
-# under that exact runtime. Only the last step receives the database secret.
+# ORDER IS THE SAFETY PROPERTY. Exact interpreter, then hash-locked dependencies, then the
+# attestation, then the evaluator's own tests under that exact runtime. Only the last step receives
+# the database secret.
+#
+# The attestation covers isolation, pin, dispatch (main, expected_sha) and runtime.
+#
+# ISOLATED START-UP (owner ruling G1=A, V809-F1). The evaluator only ever runs as `python -I -S -B`.
+# There, before any module beyond the standard library loads, it verifies that:
+# - site-packages is exactly the hash-locked set;
+# - every loaded module comes from the stdlib, a verified locked file or the reviewed pin.
+# It refuses untracked code, `.pth` files, duplicates and shadows. So nothing here may leave
+# bytecode or code in the checkout: every Python step runs with -B, and pip installs with
+# --no-compile.
 
 "on":
   workflow_dispatch:
@@ -66,22 +76,22 @@ jobs:
         shell: bash
         # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
         run: |
-          python -m pip install --require-hashes --no-deps --only-binary=:all: \
+          python -B -m pip install --no-compile --require-hashes --no-deps --only-binary=:all: \
             -r ops/section_5a_evaluator_requirements.lock
 
-      - name: Verify the evaluator matches its reviewed pin
-        shell: bash
-        run: PYTHONPATH=src python -c "from crypto_probability_engine.oos.evaluation.evaluator_pin import assert_evaluator_pin; assert_evaluator_pin(); print('evaluator pin OK')"
-
-      - name: Attest the dispatch and runtime (main, expected_sha, interpreter, lock)
+      - name: Attest isolation, pin, dispatch and runtime (main, expected_sha, interpreter, lock)
         shell: bash
         env:
           SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: PYTHONPATH=src python scripts/evaluate_section_5a.py --mode=attest --expected-sha="$SECTION_5A_EXPECTED_SHA"
+        run: python -I -S -B scripts/evaluate_section_5a.py --mode=attest --expected-sha="$SECTION_5A_EXPECTED_SHA"
 
       - name: Run the evaluator's tests under this exact runtime (no secret)
         shell: bash
-        run: python -m pytest -q -p no:cacheprovider tests/oos/evaluation tests/persistence/test_section_5a_seal_sql.py tests/migrations/test_section_5a_seal_migration.py tests/scripts/test_evaluate_section_5a.py tests/workflows/test_section_5a_evaluation_workflow_contract.py tests/workflows/test_section_5a_workflow_boundary.py tests/workflows/test_workflow_steps_reader.py tests/utils/test_canonical_json.py
+        env:
+          # Inherited by every subprocess a test starts, so no test leaves bytecode in the checkout:
+          # the evaluation step's isolation audit would refuse it.
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -B -m pytest -q -p no:cacheprovider tests/oos/evaluation tests/persistence/test_section_5a_seal_sql.py tests/migrations/test_section_5a_seal_migration.py tests/scripts/test_evaluate_section_5a.py tests/workflows/test_section_5a_evaluation_workflow_contract.py tests/workflows/test_section_5a_workflow_boundary.py tests/workflows/test_workflow_steps_reader.py tests/utils/test_canonical_json.py
 
       - name: Run the evaluation (the ONLY step that receives the database secret)
         shell: bash
@@ -90,7 +100,7 @@ jobs:
           SECTION_5A_MODE: ${{ inputs.mode }}
           SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
           SECTION_5A_CONFIRM: ${{ inputs.confirm }}
-        run: PYTHONPATH=src python scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --artifact-dir=.work/section_5a --report=section-5a-report.json
+        run: python -I -S -B scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --artifact-dir=.work/section_5a --report=section-5a-report.json
 
       # SECONDARY ONLY. The durable one-shot seal and the raw capture live in Postgres
       # (migrations/0009). This upload is convenience and audit trail; it is never the

@@ -31,6 +31,8 @@ JOB = read_jobs(TEXT)["evaluate"]
 STEPS = JOB.steps
 RUN_STEPS = [step for step in STEPS if step.run is not None]
 
+ISOLATED_ENTRYPOINT = ("-I", "-S", "-B", "scripts/evaluate_section_5a.py")
+
 HOSTILE = (
     "'; touch INJECTED_SINGLE; #'",
     '"; touch INJECTED_DOUBLE; "',
@@ -50,7 +52,6 @@ def _step(fragment: str) -> Step:
 
 
 INSTALL = _step("hash-locked")
-PIN = _step("reviewed pin")
 ATTEST = _step("Attest")
 TESTS = _step("tests under this exact runtime")
 EVALUATE = _step("Run the evaluation")
@@ -105,6 +106,18 @@ def test_only_the_evaluation_step_receives_the_database_secret() -> None:
     assert TEXT.count("secrets.") == 1
 
 
+def test_the_evaluator_only_ever_runs_isolated_and_nothing_writes_bytecode() -> None:
+    """G1=A. `-I -S -B` for every evaluator process; `-B` for every other Python step."""
+
+    for step in (ATTEST, EVALUATE):
+        assert step.run.startswith("python -I -S -B scripts/evaluate_section_5a.py "), step.name
+    for step in RUN_STEPS:
+        assert "PYTHONPATH" not in step.run, step.name
+        for line in step.run.splitlines():
+            if line.lstrip().startswith("python "):
+                assert line.lstrip().startswith(("python -B ", "python -I -S -B ")), line
+
+
 def test_the_evaluation_takes_every_input_from_the_environment() -> None:
     assert EVALUATE.env == {
         "SUPABASE_DB_URL": "${{ secrets.SUPABASE_DB_URL }}",
@@ -113,18 +126,17 @@ def test_the_evaluation_takes_every_input_from_the_environment() -> None:
         "SECTION_5A_CONFIRM": "${{ inputs.confirm }}",
     }
     assert ATTEST.env == {"SECTION_5A_EXPECTED_SHA": "${{ inputs.expected_sha }}"}
-    for step in (INSTALL, PIN, TESTS):
-        assert step.env == {}, step.name
+    assert INSTALL.env == {}
+    assert TESTS.env == {"PYTHONDONTWRITEBYTECODE": "1"}, "subprocesses must not write bytecode"
 
 
 def test_the_steps_run_in_the_safety_order() -> None:
-    """Interpreter, lock, pin, attestation, tests under that runtime, and only then the secret."""
+    """Interpreter, lock, isolated attestation, tests under that runtime, then the secret."""
 
     order = [
         next(step.index for step in STEPS if step.uses and "actions/checkout@" in step.uses),
         next(step.index for step in STEPS if step.uses and "actions/setup-python@" in step.uses),
         INSTALL.index,
-        PIN.index,
         ATTEST.index,
         TESTS.index,
         EVALUATE.index,
@@ -151,9 +163,9 @@ def test_the_interpreter_is_exactly_the_one_the_evaluator_pins() -> None:
 def test_the_install_is_the_hash_locked_set_and_nothing_else() -> None:
     command = " ".join(INSTALL.run.replace("\\\n", " ").split())
     assert command == (
-        "python -m pip install --require-hashes --no-deps --only-binary=:all: "
+        "python -B -m pip install --no-compile --require-hashes --no-deps --only-binary=:all: "
         f"-r {provenance.EVALUATOR_LOCK}"
-    )
+    ), "no bytecode may be written into site-packages: it would be refused as unowned"
     assert "requirements.txt" not in TEXT
 
 
@@ -170,7 +182,7 @@ def test_expected_sha_is_a_required_dispatch_input() -> None:
 
 def test_the_in_job_tests_cover_the_evaluator_and_this_boundary() -> None:
     command = TESTS.run.split()
-    assert command[:5] == ["python", "-m", "pytest", "-q", "-p"]
+    assert command[:6] == ["python", "-B", "-m", "pytest", "-q", "-p"]
     paths = [part for part in command if part.startswith("tests/")]
     for required in (
         "tests/oos/evaluation",
@@ -210,9 +222,9 @@ def test_hostile_inputs_reach_the_evaluator_as_inert_arguments(
 
     calls = stub_calls(log)
     assert [call["argv"] for call in calls] == [
-        ["scripts/evaluate_section_5a.py", "--mode=attest", f"--expected-sha={hostile}"],
+        [*ISOLATED_ENTRYPOINT, "--mode=attest", f"--expected-sha={hostile}"],
         [
-            "scripts/evaluate_section_5a.py",
+            *ISOLATED_ENTRYPOINT,
             f"--mode={hostile}",
             f"--expected-sha={hostile}",
             f"--confirm={hostile}",
@@ -220,7 +232,7 @@ def test_hostile_inputs_reach_the_evaluator_as_inert_arguments(
             "--report=section-5a-report.json",
         ],
     ]
-    assert all(call["PYTHONPATH"] == "src" for call in calls)
+    assert all(call["PYTHONPATH"] is None for call in calls), "-I ignores it; it must not be set"
     assert not list(tmp_path.glob("INJECTED*")), "an input executed as a command"
 
 
@@ -234,7 +246,8 @@ def test_the_real_parser_binds_each_hostile_value_to_its_own_option(
     env = resolve_env(EVALUATE.env, contexts)
     run_step(EVALUATE, env=env, workdir=tmp_path, bin_dir=tmp_path / "bin")
     (call,) = stub_calls(log)
-    args = cli.build_parser().parse_args(call["argv"][1:])
+    assert call["argv"][: len(ISOLATED_ENTRYPOINT)] == list(ISOLATED_ENTRYPOINT)
+    args = cli.build_parser().parse_args(call["argv"][len(ISOLATED_ENTRYPOINT) :])
     assert args.mode == runner.MODE_CONSUME
     assert args.confirm == hostile and args.expected_sha == hostile
     assert args.write_pin is False

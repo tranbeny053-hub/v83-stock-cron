@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS section_5a_evaluation_seal (
     AND run_provenance ->> 'run_id' ~ '^[0-9]+$'
     AND run_provenance ->> 'python_version' ~ '^[0-9]+[.][0-9]+[.][0-9]+$'
     AND run_provenance ->> 'lock_sha256' ~ '^[0-9a-f]{64}$'
+    AND run_provenance ->> 'interpreter_flags'
+        = 'isolated,ignore_environment,no_user_site,safe_path,no_site,dont_write_bytecode'
+    AND run_provenance ->> 'installed_files_sha256' ~ '^[0-9a-f]{64}$'
     AND run_provenance ->> 'pin_digest' = evaluator_pin_digest,
     false)),
   -- A captured state requires the raw capture AND the snapshot AND both digests. A snapshot

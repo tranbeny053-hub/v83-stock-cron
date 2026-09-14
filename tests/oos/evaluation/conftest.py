@@ -128,9 +128,32 @@ def synthetic_runtime(**overrides: Any) -> dict[str, Any]:
         "lock_sha256": provenance.lock_sha256(),
         "installed": {**provenance.read_lock(), "pip": "26.1.2"},
         "pin_digest": str(evaluator_pin.current_pin_artifacts()["closure_digest"]),
+        "interpreter_flags": provenance.REQUIRED_FLAGS_TEXT,
+        "installed_files_sha256": SYNTHETIC_INSTALLED_FILES_SHA256,
     }
     facts.update(overrides)
     return facts
+
+
+SYNTHETIC_INSTALLED_FILES_SHA256 = "e" * 64
+
+
+def synthetic_isolation(**overrides: Any):
+    """An isolation report shaped as ``runtime_isolation.enter`` returns it; nothing was audited."""
+
+    from crypto_probability_engine import runtime_isolation
+
+    fields = {
+        "interpreter_flags": runtime_isolation.REQUIRED_FLAGS_TEXT,
+        "stdlib_roots": ("/synthetic/lib/python3.13",),
+        "site_dirs": ("/synthetic/lib/python3.13/site-packages",),
+        "source_root": "/synthetic/checkout/src",
+        "installed": {},
+        "installed_files_sha256": SYNTHETIC_INSTALLED_FILES_SHA256,
+        "locked_files": frozenset(),
+    }
+    fields.update(overrides)
+    return runtime_isolation.IsolationReport(**fields)
 
 
 def verified_provenance() -> dict[str, Any]:

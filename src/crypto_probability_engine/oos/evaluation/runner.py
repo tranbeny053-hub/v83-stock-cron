@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -242,6 +242,7 @@ def run_consumption(
     artifact_dir: Path,
     now_utc: datetime | None = None,
     provenance: Mapping[str, Any] | None = None,
+    runtime_guard: Callable[[], object] | None = None,
 ) -> dict[str, Any]:
     """Take the one look.
 
@@ -258,6 +259,10 @@ def run_consumption(
     supplies it, and the durable Postgres authority refuses a claim without it, so its absence
     is permitted only for declared test doubles, exactly as D3 permits them to declare the
     authority.
+
+    OWNER RULING G1=A: ``runtime_guard`` re-verifies the origin of every loaded module. It runs
+    after the reads that precede the claim, which may import driver code, and immediately before
+    the claim, so the look can be spent only by verified code.
     """
 
     moment = now_utc or datetime.now(UTC)
@@ -287,6 +292,8 @@ def run_consumption(
     # Non-consequential reads: no probability is exposed by either.
     origin_anomalies = _measured_count(repository.count_oos_origin_anomalies())
     feature_rows = list(repository.fetch_oos_feature_diagnostics())
+    if runtime_guard is not None:
+        runtime_guard()
 
     # THE CLAIM — durable and atomic, BEFORE any probability exposure. Only the claimant may
     # read, so two concurrent consumers can never both see the holdout (G3.1).

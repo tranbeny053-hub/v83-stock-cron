@@ -12,8 +12,10 @@ import pytest
 from crypto_probability_engine.oos.evaluation import evaluator_pin, provenance
 from crypto_probability_engine.utils import canonical_json
 from tests.oos.evaluation.conftest import (
+    SYNTHETIC_INSTALLED_FILES_SHA256,
     SYNTHETIC_SHA,
     synthetic_dispatch,
+    synthetic_isolation,
     synthetic_runtime,
     verified_provenance,
 )
@@ -81,6 +83,15 @@ def test_a_verified_dispatch_under_the_pinned_runtime_verifies() -> None:
         ({}, {"pin_digest": ""}, SYNTHETIC_SHA, "pin digest"),
         ({"run_id": "abc"}, {}, SYNTHETIC_SHA, "run_id"),
         ({"run_attempt": ""}, {}, SYNTHETIC_SHA, "run_attempt"),
+        # G1=A: an evaluator that did not start isolated, or whose installed files went unverified
+        ({}, {"interpreter_flags": ""}, SYNTHETIC_SHA, "did not start as `python -I -S -B`"),
+        (
+            {},
+            {"interpreter_flags": "isolated,ignore_environment,no_user_site,safe_path"},
+            SYNTHETIC_SHA,
+            "did not start as `python -I -S -B`",
+        ),
+        ({}, {"installed_files_sha256": ""}, SYNTHETIC_SHA, "not verified against their records"),
     ],
 )
 def test_every_unverified_fact_refuses(dispatch, runtime, expected_sha, fragment) -> None:
@@ -240,27 +251,52 @@ def test_runtime_facts_fail_closed_outside_a_checkout(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- attest
 
 
-def test_attest_outside_github_actions_refuses_before_anything_else(tmp_path: Path) -> None:
-    with pytest.raises(provenance.ProvenanceRefused) as exc:
+def test_nothing_is_attested_outside_the_isolated_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    """G1=A. Without runtime_isolation.enter's report, attestation refuses before anything else."""
+
+    def _never(**_):
+        raise AssertionError("the pin was checked before isolation was established")
+
+    monkeypatch.setattr(provenance, "assert_evaluator_pin", _never)
+    refusal = "not entered through the isolated runtime"
+    with pytest.raises(provenance.IsolationRefused, match=refusal):
         provenance.attest(SYNTHETIC_SHA, environ={})
+
+
+def test_attest_outside_github_actions_refuses(tmp_path: Path) -> None:
+    with pytest.raises(provenance.ProvenanceRefused) as exc:
+        provenance.attest(SYNTHETIC_SHA, environ={}, isolation=synthetic_isolation())
     assert "not running inside GitHub Actions" in str(exc.value)
 
 
-def test_attest_verifies_the_pin_first(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_attest_verifies_the_pin_before_the_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     def _drift(**_):
         raise evaluator_pin.EvaluatorPinMismatch("simulated drift")
 
     monkeypatch.setattr(provenance, "assert_evaluator_pin", _drift)
     with pytest.raises(evaluator_pin.EvaluatorPinMismatch):
-        provenance.attest(SYNTHETIC_SHA, environ={})
+        provenance.attest(SYNTHETIC_SHA, environ={}, isolation=synthetic_isolation())
 
 
 def test_attest_returns_the_verified_record_for_a_verified_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(provenance, "observe_dispatch", lambda environ: synthetic_dispatch())
-    monkeypatch.setattr(provenance, "observe_runtime", lambda root: synthetic_runtime())
-    assert provenance.attest(SYNTHETIC_SHA, environ={}) == verified_provenance()
+    monkeypatch.setattr(
+        provenance, "observe_runtime", lambda root, isolation=None: synthetic_runtime()
+    )
+    record = provenance.attest(SYNTHETIC_SHA, environ={}, isolation=synthetic_isolation())
+    assert record == verified_provenance()
+    assert record["interpreter_flags"] == provenance.REQUIRED_FLAGS_TEXT
+
+
+def test_runtime_facts_carry_the_live_flags_and_the_isolation_digest() -> None:
+    facts = provenance.observe_runtime(evaluator_pin.project_root(), synthetic_isolation())
+    from crypto_probability_engine import runtime_isolation
+
+    assert facts["interpreter_flags"] == runtime_isolation.interpreter_flags()
+    assert facts["installed_files_sha256"] == SYNTHETIC_INSTALLED_FILES_SHA256
+    assert provenance.observe_runtime(evaluator_pin.project_root())["installed_files_sha256"] == ""
 
 
 # --------------------------------------------------------------------------- consumed records
@@ -295,6 +331,8 @@ def test_no_record_is_refusal(record) -> None:
         ({"pin_digest": "0" * 64}, "evaluator pin"),
         ({"installed": {"pydantic": "2.13.4"}}, "locked dependency set"),
         ({"run_id": "12a"}, "run_id"),
+        ({"interpreter_flags": "isolated"}, "not an isolated start-up"),
+        ({"installed_files_sha256": "not-a-digest"}, "installed files were not verified"),
     ],
 )
 def test_a_rewritten_record_is_refused(change, fragment) -> None:

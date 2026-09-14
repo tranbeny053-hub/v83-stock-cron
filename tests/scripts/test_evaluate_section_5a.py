@@ -1,12 +1,18 @@
 """The section 5A evaluation CLI. No database is contacted and nothing is dispatched.
 
-Live modes are exercised through ``main()`` with an explicit environment, and once as the workflow
-runs it — a real subprocess — because a guarantee that holds in the library but not at the
-production entrypoint is exactly the class of defect V807-F3, V808-F1 and V808-R6 were.
+A guarantee that holds in the library but not at the production entrypoint is exactly the class of
+defect V807-F3, V808-F1, V808-R6 and V809-F1 were. So live modes are exercised through ``main()``
+with an explicit environment, AND as the workflow runs them: real ``python -I -S -B`` processes.
+
+In-process tests cannot be isolated, since pytest has already imported everything. Only there is
+the isolation step replaced, by a declared synthetic report, and every call is recorded so the
+ORDER is proven. The real isolation is proven in the subprocess tests below and in
+``tests/oos/evaluation/test_runtime_isolation.py``.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -15,16 +21,19 @@ from pathlib import Path
 
 import pytest
 
+from crypto_probability_engine import runtime_isolation
 from crypto_probability_engine.oos.evaluation import provenance, runner
 from scripts import evaluate_section_5a as cli
 from tests.oos.evaluation.conftest import (
     SYNTHETIC_SHA,
     synthetic_dispatch,
+    synthetic_isolation,
     synthetic_runtime,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 LIVE_MODES = ("attest", "readiness", "consume", "recompute")
+ISOLATED = ("-I", "-S", "-B")
 
 
 def _live_argv(mode: str) -> list[str]:
@@ -36,11 +45,40 @@ def _live_argv(mode: str) -> list[str]:
 
 
 @pytest.fixture
+def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Declared synthetic isolation for in-process tests; records the order of every guard."""
+
+    order: list[str] = []
+    report = synthetic_isolation()
+    real_attest = provenance.attest
+
+    def _enter():
+        order.append("isolation")
+        return report
+
+    def _modules(isolation):
+        assert isolation is report
+        order.append("loaded-modules")
+        return 0
+
+    def _attest(expected_sha, *, environ, isolation=None, root=None):
+        order.append("attest")
+        return real_attest(expected_sha, environ=environ, isolation=isolation, root=root)
+
+    monkeypatch.setattr(cli, "enter_isolated_runtime", _enter)
+    monkeypatch.setattr(cli, "attest_loaded_modules", _modules)
+    monkeypatch.setattr(provenance, "attest", _attest)
+    return order
+
+
+@pytest.fixture
 def verified_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     """A verified run: synthetic GitHub facts, the pinned runtime. The VERIFIER stays real."""
 
     monkeypatch.setattr(provenance, "observe_dispatch", lambda environ: synthetic_dispatch())
-    monkeypatch.setattr(provenance, "observe_runtime", lambda root: synthetic_runtime())
+    monkeypatch.setattr(
+        provenance, "observe_runtime", lambda root, isolation=None: synthetic_runtime()
+    )
 
 
 @pytest.fixture
@@ -56,6 +94,39 @@ def fake_seal():
     FakeRepository.durable_seal = None
     yield FakeRepository
     FakeRepository.durable_seal = None
+
+
+def _scrubbed_environment(extra: dict[str, str] | None = None) -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("GITHUB_", "RUNNER_", "SUPABASE_", "PYTHON")) and key != "ImageOS"
+    }
+    environment.update(extra or {})
+    return environment
+
+
+# --------------------------------------------------------------------------- the entrypoint itself
+
+
+def test_the_entrypoint_imports_only_the_standard_library_at_module_level() -> None:
+    """V809-F1: a module-level import of the evaluator ran third-party code before any check."""
+
+    tree = ast.parse((ROOT / "scripts/evaluate_section_5a.py").read_text(encoding="utf-8"))
+    imported = [
+        node.module if isinstance(node, ast.ImportFrom) else alias.name
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in (node.names if isinstance(node, ast.Import) else [None])
+    ]
+    assert imported, "the parse must find the imports, or this check is vacuous"
+    for module in imported:
+        assert module == "__future__" or module.split(".")[0] in sys.stdlib_module_names, module
+
+
+def test_the_cli_mode_names_are_the_runner_s() -> None:
+    assert cli.MODE_READINESS == runner.MODE_READINESS
+    assert cli.MODE_CONSUME == runner.MODE_CONSUME
 
 
 # --------------------------------------------------------------------------- parsing
@@ -98,25 +169,34 @@ def test_recovery_and_attestation_modes_are_available() -> None:
         assert parser.parse_args(["--mode", mode]).mode == mode
 
 
-# --------------------------------------------------------------------------- E2/E3 first
+# --------------------------------------------------------------------------- G1: isolation first
 
 
 @pytest.mark.parametrize("mode", LIVE_MODES)
-def test_every_live_mode_attests_before_any_repository_exists(
+def test_an_unisolated_process_is_refused_before_anything_is_attested_or_built(
     mode: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Outside a verified dispatch nothing is built, so nothing can be read or claimed."""
+    """The real isolation step, in this (unisolated) process: refusal precedes everything."""
 
-    def _forbidden():
-        raise AssertionError("a repository was built before the run was attested")
-
-    monkeypatch.setattr(cli, "build_repository", _forbidden)
-    with pytest.raises(provenance.ProvenanceRefused, match="not running inside GitHub Actions"):
+    monkeypatch.setattr(provenance, "attest", lambda *_, **__: pytest.fail("attested"))
+    monkeypatch.setattr(cli, "build_repository", lambda: pytest.fail("repository built"))
+    refusal = "must start as `python -I -S -B`"
+    with pytest.raises(runtime_isolation.IsolationRefused, match=refusal):
         cli.main(_live_argv(mode), environ={})
 
 
+@pytest.mark.parametrize("mode", LIVE_MODES)
+def test_every_live_mode_is_isolated_then_attested_before_any_repository_exists(
+    mode: str, calls: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "build_repository", lambda: pytest.fail("repository built"))
+    with pytest.raises(provenance.ProvenanceRefused, match="not running inside GitHub Actions"):
+        cli.main(_live_argv(mode), environ={})
+    assert calls == ["isolation", "attest"]
+
+
 def test_the_ambient_github_environment_is_not_trusted_by_tests(
-    monkeypatch: pytest.MonkeyPatch,
+    calls: list[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Facts are observed from the environment the entrypoint is GIVEN, not from os.environ."""
 
@@ -127,21 +207,27 @@ def test_the_ambient_github_environment_is_not_trusted_by_tests(
 
 
 def test_a_wrong_expected_sha_refuses_even_for_an_otherwise_verified_run(
-    verified_dispatch, monkeypatch: pytest.MonkeyPatch
+    calls: list[str], verified_dispatch, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(cli, "build_repository", lambda: pytest.fail("repository built"))
     with pytest.raises(provenance.ProvenanceRefused, match="not expected_sha"):
         cli.main(["--mode", "readiness", "--expected-sha", "b" * 40], environ={})
 
 
-def test_attest_touches_no_repository_and_reports_the_record(
-    verified_dispatch, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+def test_attest_touches_no_repository_and_verifies_what_loaded(
+    calls: list[str],
+    verified_dispatch,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
 ) -> None:
     monkeypatch.setattr(cli, "build_repository", lambda: pytest.fail("repository built"))
     assert cli.main(["--mode", "attest", "--expected-sha", SYNTHETIC_SHA], environ={}) == 0
     printed = json.loads(capsys.readouterr().out)
     assert printed["touches_repository"] is False
-    assert printed["run_provenance"]["dispatch_verified"] is True
+    record = printed["run_provenance"]
+    assert record["dispatch_verified"] is True
+    assert record["interpreter_flags"] == runtime_isolation.REQUIRED_FLAGS_TEXT
+    assert calls == ["isolation", "attest", "loaded-modules"]
 
 
 # --------------------------------------------------------------------------- then the authority
@@ -165,12 +251,13 @@ def test_the_cli_requires_a_positive_durable_postgres_declaration() -> None:
 
 @pytest.mark.parametrize("mode", ("readiness", "consume", "recompute"))
 def test_a_verified_run_without_a_database_still_refuses_at_the_authority(
-    mode: str, verified_dispatch, no_database
+    mode: str, calls: list[str], verified_dispatch, no_database
 ) -> None:
-    """V807-F3 and G8, after attestation: an empty store is refused, never reported on."""
+    """V807-F3 and G8, after isolation and attestation: an empty store is refused, never used."""
 
     with pytest.raises(runner.ConsumptionRefused, match="not a durable Postgres authority"):
         cli.main(_live_argv(mode), environ={})
+    assert calls == ["isolation", "attest", "loaded-modules"]
 
 
 def test_the_cli_reads_its_database_configuration_from_the_environment(monkeypatch) -> None:
@@ -193,24 +280,30 @@ def test_an_undeclared_repository_is_refused_by_the_cli() -> None:
 # --------------------------------------------------------------------------- the verified look
 
 
-def test_a_verified_consumption_records_its_run_in_the_claim_and_the_report(
-    verified_dispatch, fake_seal, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_a_verified_consumption_reverifies_loaded_code_immediately_before_the_claim(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    class Recording(fake_seal):
+        def claim_section_5a_seal(self, payload) -> bool:
+            calls.append("claim")
+            return super().claim_section_5a_seal(payload)
+
+    monkeypatch.setattr(cli, "build_repository", lambda: Recording())
     report = tmp_path / "report.json"
-    assert (
-        cli.main(
-            [
-                "--mode=consume",
-                f"--confirm={runner.CONFIRMATION_TOKEN}",
-                f"--expected-sha={SYNTHETIC_SHA}",
-                f"--artifact-dir={tmp_path / 'artifact'}",
-                f"--report={report}",
-            ],
-            environ={},
-        )
-        == 0
-    )
+    argv = [*_live_argv("consume"), f"--artifact-dir={tmp_path / 'art'}", f"--report={report}"]
+    assert cli.main(argv, environ={}) == 0
+    assert calls == [
+        "isolation",
+        "attest",
+        "loaded-modules",  # after the evaluator's imports
+        "loaded-modules",  # after the repository is built
+        "loaded-modules",  # after the pre-claim reads, IMMEDIATELY before the claim
+        "claim",
+    ]
     record = fake_seal.durable_seal["run_provenance"]
     assert record["dispatch_verified"] is True and record["expected_sha"] == SYNTHETIC_SHA
     written = json.loads(report.read_text(encoding="utf-8"))
@@ -218,21 +311,45 @@ def test_a_verified_consumption_records_its_run_in_the_claim_and_the_report(
     assert written["run_provenance"] == record
 
 
+def test_a_loaded_module_refusal_before_the_claim_spends_nothing(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen = {"count": 0}
+
+    def _refuse_before_the_claim(isolation):
+        seen["count"] += 1
+        if seen["count"] == 3:
+            raise runtime_isolation.IsolationRefused("a module came from an unverified origin")
+        return 0
+
+    monkeypatch.setattr(cli, "attest_loaded_modules", _refuse_before_the_claim)
+    repository = fake_seal()
+    monkeypatch.setattr(cli, "build_repository", lambda: repository)
+    with pytest.raises(runtime_isolation.IsolationRefused):
+        cli.main([*_live_argv("consume"), f"--artifact-dir={tmp_path}"], environ={})
+    assert fake_seal.durable_seal is None, "no claim was made"
+    assert True not in repository.calls, "no probability was read"
+
+
 # --------------------------------------------------------------------------- V808-R6 reports
 
 
 def test_a_refusal_is_written_to_the_report_and_still_fails_the_run(tmp_path: Path) -> None:
     report = tmp_path / "nested" / "report.json"
-    with pytest.raises(provenance.ProvenanceRefused):
+    with pytest.raises(runtime_isolation.IsolationRefused):
         cli.main(["--mode", "consume", f"--report={report}"], environ={})
     written = json.loads(report.read_text(encoding="utf-8"))
     assert written["outcome"] == "REFUSED"
-    assert written["error_type"] == "ProvenanceRefused"
-    assert "not running inside GitHub Actions" in written["detail"]
+    assert written["error_type"] == "IsolationRefused"
+    assert "python -I -S -B" in written["detail"]
 
 
 def test_an_unexpected_failure_withholds_its_detail_from_the_report(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    calls: list[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A driver error may name a host. The artifact is downloadable, so only the type is kept."""
 
@@ -248,40 +365,94 @@ def test_an_unexpected_failure_withholds_its_detail_from_the_report(
     assert "postgresql" not in json.dumps(written) and "example.invalid" not in json.dumps(written)
 
 
-def test_the_entrypoint_as_the_workflow_runs_it_refuses_with_a_nonzero_exit(tmp_path: Path) -> None:
-    """A real process, a scrubbed environment and a database URL that must never be used."""
+# ------------------------------------------------------------------------ as the workflow runs it
 
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("GITHUB_", "RUNNER_", "SUPABASE_")) and key not in {"ImageOS"}
-    }
-    environment.update(
-        {
-            "PYTHONPATH": "src",
-            # A syntactically valid URL that must never be contacted: refusal precedes any use.
-            "SUPABASE_DB_URL": "postgresql://must-never-be-contacted.invalid/none",
-        }
-    )
+
+def test_the_isolated_entrypoint_refuses_with_a_nonzero_exit(tmp_path: Path) -> None:
+    """A real `python -I -S -B` process, a scrubbed environment, a database URL never to be used."""
+
     report = tmp_path / "section-5a-report.json"
     completed = subprocess.run(
         [
             sys.executable,
+            *ISOLATED,
             "scripts/evaluate_section_5a.py",
-            "--mode=consume",
-            f"--confirm={runner.CONFIRMATION_TOKEN}",
-            f"--expected-sha={SYNTHETIC_SHA}",
+            *_live_argv("consume"),
             f"--artifact-dir={tmp_path / 'artifact'}",
             f"--report={report}",
         ],
         cwd=ROOT,
-        env=environment,
+        env=_scrubbed_environment(
+            # A syntactically valid URL that must never be contacted: refusal precedes any use.
+            {"SUPABASE_DB_URL": "postgresql://must-never-be-contacted.invalid/none"}
+        ),
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=180,
         check=False,
     )
     assert completed.returncode != 0
-    assert "ProvenanceRefused" in completed.stderr
-    assert json.loads(report.read_text(encoding="utf-8"))["outcome"] == "REFUSED"
+    written = json.loads(report.read_text(encoding="utf-8"))
+    assert written["outcome"] == "REFUSED"
+    # A development or CI interpreter's site-packages is refused by isolation. On the evaluation
+    # runner isolation passes, and the missing GitHub dispatch refuses instead.
+    assert written["error_type"] in {"IsolationRefused", "ProvenanceRefused"}
+    assert "refused before" in written["detail"]
     assert not (tmp_path / "artifact").exists(), "nothing was captured"
+
+
+def test_an_unisolated_entrypoint_process_is_refused() -> None:
+    completed = subprocess.run(
+        # -B: this process is deliberately unisolated, and must still leave no bytecode behind.
+        [sys.executable, "-B", "scripts/evaluate_section_5a.py", *_live_argv("attest")],
+        cwd=ROOT,
+        env=_scrubbed_environment(),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert completed.returncode != 0
+    assert "IsolationRefused" in completed.stderr and "python -I -S -B" in completed.stderr
+
+
+def test_nothing_third_party_loads_before_an_isolation_refusal() -> None:
+    """Observe the isolated process itself: if isolation refuses, only it had been imported."""
+
+    probe = (
+        "import json, runpy, sys, sysconfig\n"
+        "from pathlib import Path\n"
+        f"sys.argv = ['scripts/evaluate_section_5a.py', *{_live_argv('attest')!r}]\n"
+        "outcome = 'returned'\n"
+        "try:\n"
+        "    runpy.run_path('scripts/evaluate_section_5a.py', run_name='__main__')\n"
+        "except BaseException as exc:\n"
+        "    outcome = type(exc).__name__\n"
+        "lib = Path(sysconfig.get_paths()['stdlib']).resolve()\n"
+        "site = Path(sysconfig.get_paths()['purelib']).resolve()\n"
+        "def stdlib(path):\n"
+        "    path = Path(path).resolve()\n"
+        "    return path.is_relative_to(lib) and not path.is_relative_to(site)\n"
+        "loaded = sorted(\n"
+        "    name for name, module in list(sys.modules.items())\n"
+        "    if getattr(module, '__file__', None) and not stdlib(module.__file__)\n"
+        ")\n"
+        "print(json.dumps({'outcome': outcome, 'loaded': loaded}))\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, *ISOLATED, "-c", probe],
+        cwd=ROOT,
+        env=_scrubbed_environment(),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    observed = json.loads(completed.stdout.strip().splitlines()[-1])
+    if observed["outcome"] == "IsolationRefused":
+        assert observed["loaded"] == [
+            "crypto_probability_engine",
+            "crypto_probability_engine.runtime_isolation",
+        ]
+    else:  # the evaluation runner: isolation passed, so the dispatch attestation refused
+        assert observed["outcome"] == "ProvenanceRefused"
