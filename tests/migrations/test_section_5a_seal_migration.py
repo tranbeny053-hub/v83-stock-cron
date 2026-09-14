@@ -70,7 +70,7 @@ def test_only_legal_transitions_are_accepted() -> None:
 
 
 def test_the_seal_cannot_be_deleted() -> None:
-    assert "BEFORE UPDATE OR DELETE ON section_5a_evaluation_seal" in FLAT
+    assert "BEFORE UPDATE OR DELETE ON public.section_5a_evaluation_seal" in FLAT
     assert "RAISE EXCEPTION 'section 5A seal cannot be deleted" in FLAT
 
 
@@ -81,15 +81,20 @@ def test_it_is_idempotent_and_replaces_the_superseded_trigger() -> None:
 
 
 def test_it_records_that_it_is_not_applied_and_how_to_apply_it_safely() -> None:
+    """K2=A: one dispatch-only route applies it; the default runner would drag in 0008."""
+
     assert "AUTHORED, NOT APPLIED" in SQL
+    assert ".github/workflows/section-5a-apply-seal-migration.yml" in FLAT
+    assert "scripts/apply_section_5a_seal.py" in FLAT
     assert "--only 0009_section_5a_evaluation_seal.sql" in SQL
+    assert "must never be used for it" in FLAT
 
 
 def test_the_seal_cannot_be_truncated() -> None:
     """V807-F8. TRUNCATE fires no row-level trigger, so it needs its own statement-level guard."""
 
-    assert "BEFORE TRUNCATE ON section_5a_evaluation_seal" in FLAT
-    assert "FOR EACH STATEMENT EXECUTE FUNCTION section_5a_seal_truncate_guard()" in FLAT
+    assert "BEFORE TRUNCATE ON public.section_5a_evaluation_seal" in FLAT
+    assert "FOR EACH STATEMENT EXECUTE FUNCTION public.section_5a_seal_truncate_guard()" in FLAT
     assert "RAISE EXCEPTION 'section 5A seal cannot be truncated" in FLAT
 
 
@@ -147,3 +152,51 @@ def test_the_sql_flag_text_is_the_isolation_module_s() -> None:
     from crypto_probability_engine.runtime_isolation import REQUIRED_FLAGS_TEXT
 
     assert f"= '{REQUIRED_FLAGS_TEXT}'" in FLAT
+
+
+# --------------------------------------------------------------------------- no API role reaches it
+
+
+def _code() -> str:
+    """The DDL without comments, so prose can never satisfy a structural assertion."""
+
+    return " ".join(
+        " ".join(line.split("--", 1)[0] for line in SQL.splitlines()).split()
+    )
+
+
+def test_row_level_security_is_enabled_on_the_seal() -> None:
+    """F-0009-A, owner ruling K1=A. With RLS off, an anon-key INSERT could squat the singleton."""
+
+    assert "ALTER TABLE public.section_5a_evaluation_seal ENABLE ROW LEVEL SECURITY;" in _code()
+
+
+def test_every_api_role_loses_every_privilege_and_nothing_is_granted() -> None:
+    code = _code()
+    assert (
+        "REVOKE ALL ON TABLE public.section_5a_evaluation_seal "
+        "FROM PUBLIC, anon, authenticated, service_role;"
+    ) in code
+    assert "GRANT " not in code, "the seal has no REST path; no role is granted anything"
+    assert "FORCE ROW LEVEL SECURITY" not in code, "the owning evaluator must not be locked out"
+
+
+def test_the_lock_down_follows_everything_it_protects() -> None:
+    code = _code()
+    assert code.index("ENABLE ROW LEVEL SECURITY") > code.index("CREATE TABLE IF NOT EXISTS")
+    assert code.index("REVOKE ALL ON TABLE") > code.index("BEFORE TRUNCATE ON")
+
+
+def test_every_object_is_schema_qualified() -> None:
+    """The repository reads public.section_5a_evaluation_seal; the DDL must create exactly that."""
+
+    import re
+
+    code = _code()
+    table_references = re.findall(r"(\S*)section_5a_evaluation_seal\b", code)
+    assert table_references and all(prefix.endswith("public.") for prefix in table_references), (
+        table_references
+    )
+    for function in ("section_5a_seal_guard", "section_5a_seal_truncate_guard"):
+        assert f"CREATE OR REPLACE FUNCTION public.{function}()" in code
+        assert f"EXECUTE FUNCTION public.{function}()" in code

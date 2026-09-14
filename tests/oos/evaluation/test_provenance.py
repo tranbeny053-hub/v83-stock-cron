@@ -344,6 +344,90 @@ def test_a_rewritten_record_is_refused(change, fragment) -> None:
     assert fragment in str(exc.value)
 
 
+# --------------------------------------------------------------------------- the seal migration run
+
+
+def _seal_migration_dispatch() -> dict[str, str]:
+    repository = synthetic_dispatch()["repository"]
+    return synthetic_dispatch(
+        workflow_ref=(
+            f"{repository}/{provenance.SEAL_MIGRATION_WORKFLOW}@{provenance.REQUIRED_REF}"
+        )
+    )
+
+
+def test_the_seal_migration_run_attests_only_as_its_own_workflow() -> None:
+    """K2=A. The apply of 0009 runs under the same attestation, bound to its own workflow."""
+
+    record = provenance.verify_run_provenance(
+        _seal_migration_dispatch(),
+        synthetic_runtime(),
+        expected_sha=SYNTHETIC_SHA,
+        lock_pins=LOCK_PINS,
+        workflow=provenance.SEAL_MIGRATION_WORKFLOW,
+    )
+    assert record["workflow_ref"].endswith(
+        f"/{provenance.SEAL_MIGRATION_WORKFLOW}@{provenance.REQUIRED_REF}"
+    )
+    with pytest.raises(provenance.ProvenanceRefused, match="section-5a-evaluation.yml on"):
+        _verify(_seal_migration_dispatch())
+    with pytest.raises(provenance.ProvenanceRefused, match="apply-seal-migration.yml on"):
+        provenance.verify_run_provenance(
+            synthetic_dispatch(),
+            synthetic_runtime(),
+            expected_sha=SYNTHETIC_SHA,
+            lock_pins=LOCK_PINS,
+            workflow=provenance.SEAL_MIGRATION_WORKFLOW,
+        )
+
+
+@pytest.mark.parametrize(
+    "workflow", [".github/workflows/ci.yml", "", provenance.EVALUATION_WORKFLOW + " "]
+)
+def test_no_other_workflow_can_be_named_attestable(workflow: str) -> None:
+    repository = synthetic_dispatch()["repository"]
+    dispatch = synthetic_dispatch(workflow_ref=f"{repository}/{workflow}@{provenance.REQUIRED_REF}")
+    with pytest.raises(provenance.ProvenanceRefused, match="is not an attestable workflow"):
+        provenance.verify_run_provenance(
+            dispatch,
+            synthetic_runtime(),
+            expected_sha=SYNTHETIC_SHA,
+            lock_pins=LOCK_PINS,
+            workflow=workflow,
+        )
+
+
+def test_a_seal_migration_record_can_never_claim_or_recover_the_look() -> None:
+    """Where records are consumed, only the evaluation workflow is accepted."""
+
+    record = provenance.verify_run_provenance(
+        _seal_migration_dispatch(),
+        synthetic_runtime(),
+        expected_sha=SYNTHETIC_SHA,
+        lock_pins=LOCK_PINS,
+        workflow=provenance.SEAL_MIGRATION_WORKFLOW,
+    )
+    with pytest.raises(provenance.ProvenanceRefused, match="not the evaluation workflow on main"):
+        provenance.require_verified_provenance(record)
+
+
+def test_attest_passes_the_named_workflow_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(provenance, "assert_evaluator_pin", lambda **_: None)
+    monkeypatch.setattr(provenance, "observe_dispatch", lambda environ: _seal_migration_dispatch())
+    monkeypatch.setattr(
+        provenance, "observe_runtime", lambda root, isolation=None: synthetic_runtime()
+    )
+    record = provenance.attest(
+        SYNTHETIC_SHA,
+        environ={},
+        isolation=synthetic_isolation(),
+        workflow=provenance.SEAL_MIGRATION_WORKFLOW,
+    )
+    assert provenance.SEAL_MIGRATION_WORKFLOW in record["workflow_ref"]
+    with pytest.raises(provenance.ProvenanceRefused, match="section-5a-evaluation.yml on"):
+        provenance.attest(SYNTHETIC_SHA, environ={}, isolation=synthetic_isolation())
+
+
 def test_a_record_of_the_wrong_shape_is_refused() -> None:
     record = verified_provenance()
     missing = {k: v for k, v in record.items() if k != "run_attempt"}

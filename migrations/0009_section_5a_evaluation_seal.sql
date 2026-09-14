@@ -1,8 +1,12 @@
 -- Section 5A one-look durable seal (V1_QUANT_CONTRACT §5A.9).
 --
--- AUTHORED, NOT APPLIED. Applying this is a T4 action requiring owner authorization, and it
--- must be applied with `scripts/apply_migrations.py --only 0009_section_5a_evaluation_seal.sql`
--- so that the deliberately unapplied 0008 is not dragged in with it.
+-- AUTHORED, NOT APPLIED. Applying this is a T4 action requiring owner authorization. It is applied
+-- ONCE, and only by the dispatch-only workflow .github/workflows/section-5a-apply-seal-migration.yml
+-- (scripts/apply_section_5a_seal.py; owner ruling K2=A). That route executes exactly this file in ONE
+-- transaction, between read-only pre-checks and post-checks, and rolls back on any surprise. It never
+-- drags in the deliberately unapplied 0008. The default `scripts/apply_migrations.py` applies EVERY
+-- migration and must never be used for it; `--only 0009_section_5a_evaluation_seal.sql` is the only
+-- safe manual selection.
 --
 -- WHY THE DATABASE. The evaluation runs on a fresh GitHub runner per dispatch, so a filesystem
 -- seal is empty every time. Postgres is the only durable, atomic, cross-run authority here.
@@ -23,7 +27,7 @@
 -- claim without a verified record is refused here, so the look can only be spent by a verified
 -- dispatch of the evaluation workflow on main at the owner's expected commit.
 
-CREATE TABLE IF NOT EXISTS section_5a_evaluation_seal (
+CREATE TABLE IF NOT EXISTS public.section_5a_evaluation_seal (
   seal_id                TEXT PRIMARY KEY CHECK (seal_id = 'SINGLETON'),
   sealed_at_utc          TIMESTAMPTZ NOT NULL,
   evaluator_pin_digest   TEXT NOT NULL,
@@ -78,7 +82,7 @@ CREATE TABLE IF NOT EXISTS section_5a_evaluation_seal (
   )
 );
 
-CREATE OR REPLACE FUNCTION section_5a_seal_guard()
+CREATE OR REPLACE FUNCTION public.section_5a_seal_guard()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -121,23 +125,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS section_5a_seal_immutable ON section_5a_evaluation_seal;
-DROP TRIGGER IF EXISTS section_5a_seal_guard ON section_5a_evaluation_seal;
+DROP TRIGGER IF EXISTS section_5a_seal_immutable ON public.section_5a_evaluation_seal;
+DROP TRIGGER IF EXISTS section_5a_seal_guard ON public.section_5a_evaluation_seal;
 CREATE TRIGGER section_5a_seal_guard
-  BEFORE UPDATE OR DELETE ON section_5a_evaluation_seal
-  FOR EACH ROW EXECUTE FUNCTION section_5a_seal_guard();
+  BEFORE UPDATE OR DELETE ON public.section_5a_evaluation_seal
+  FOR EACH ROW EXECUTE FUNCTION public.section_5a_seal_guard();
 
 -- V807-F8: TRUNCATE does not fire row-level triggers, so the row guard above cannot stop it.
 -- A statement-level guard closes that route. Known residual limit, stated rather than hidden:
 -- DROP TABLE, or a superuser disabling triggers, is outside what a table trigger can prevent.
-CREATE OR REPLACE FUNCTION section_5a_seal_truncate_guard()
+CREATE OR REPLACE FUNCTION public.section_5a_seal_truncate_guard()
 RETURNS TRIGGER AS $$
 BEGIN
   RAISE EXCEPTION 'section 5A seal cannot be truncated: the one look stays recorded';
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS section_5a_seal_truncate_guard ON section_5a_evaluation_seal;
+DROP TRIGGER IF EXISTS section_5a_seal_truncate_guard ON public.section_5a_evaluation_seal;
 CREATE TRIGGER section_5a_seal_truncate_guard
-  BEFORE TRUNCATE ON section_5a_evaluation_seal
-  FOR EACH STATEMENT EXECUTE FUNCTION section_5a_seal_truncate_guard();
+  BEFORE TRUNCATE ON public.section_5a_evaluation_seal
+  FOR EACH STATEMENT EXECUTE FUNCTION public.section_5a_seal_truncate_guard();
+
+-- F-0009-A (owner ruling K1=A). No API role may reach the seal: the project's convention since 0005
+-- and 0006. On Supabase, tables in public inherit grants for the PostgREST roles. With row-level
+-- security off, an anon-key INSERT could squat the singleton and deny the one look, and the guards
+-- above would then keep that row. The evaluator connects as the table's owner, which row-level
+-- security that is not forced does not restrict, and the REST repository refuses every seal
+-- operation. So no GRANT follows.
+ALTER TABLE public.section_5a_evaluation_seal ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.section_5a_evaluation_seal
+FROM PUBLIC, anon, authenticated, service_role;
