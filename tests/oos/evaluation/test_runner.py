@@ -15,6 +15,7 @@ import pytest
 from crypto_probability_engine.oos.evaluation import runner
 from crypto_probability_engine.runtime_isolation import ProvenanceRefused
 from tests.oos.evaluation.conftest import (
+    T0,
     T_CLOSE,
     daily_4h_evidence,
     evidence_row,
@@ -987,7 +988,19 @@ def test_a_verified_consumption_that_names_no_population_refuses_before_any_read
 
 @pytest.mark.parametrize(
     "malformed",
-    ["f83c31f7bd5a9a4d", "F" * 64, "f" * 63, "f" * 65, " " + "f" * 64, "g" * 64, ""],
+    [
+        "f83c31f7bd5a9a4d",
+        "F" * 64,
+        "f" * 63,
+        "f" * 65,
+        " " + "f" * 64,
+        f" {'f' * 64} ",
+        "   ",
+        "g" * 64,
+        "",
+        "\u0660" * 64,  # Arabic-Indic digits (task-814)
+        "\uff46" * 64,  # full-width f (task-814)
+    ],
 )
 def test_anything_but_the_full_identity_refuses_before_any_read(
     tmp_path: Path, malformed: str
@@ -1043,15 +1056,29 @@ def test_the_pre_claim_identity_is_exactly_readiness_s(tmp_path: Path) -> None:
     assert result["decision_population_id"] == readiness["decision_population_id"]
 
 
-def test_population_drift_under_the_claim_computes_no_statistic(tmp_path: Path) -> None:
+def _remove_a_pair(rows):
+    return rows[:-1]
+
+
+def _add_a_pair(rows):
+    return [*rows, evidence_row(T0 + timedelta(hours=2))]
+
+
+def _relabel_a_pair(rows):
+    changed = [dict(row) for row in rows]
+    changed[0]["baseline_realized_label"] = "DOWN"
+    changed[0]["candidate_realized_label"] = "DOWN"
+    return changed
+
+
+@pytest.mark.parametrize("drift", [_remove_a_pair, _add_a_pair, _relabel_a_pair])
+def test_population_drift_under_the_claim_computes_no_statistic(tmp_path: Path, drift) -> None:
     """The population actually read differs from what was checked: CAPTURE_FAILED, no result."""
 
     class DriftsAfterTheCheck(FakeRepository):
         def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
             rows = super().fetch_oos_paired_evidence(include_probabilities=include_probabilities)
-            if include_probabilities:
-                rows = rows[:-1]  # one admitted pair vanished between the check and the read
-            return rows
+            return drift(rows) if include_probabilities else rows
 
     repo = DriftsAfterTheCheck()
     with pytest.raises(runner.ConsumedPopulationDrift, match="no statistic is computed"):
@@ -1067,3 +1094,37 @@ def test_population_drift_under_the_claim_computes_no_statistic(tmp_path: Path) 
 def test_both_population_refusals_are_deliberate_consumption_refusals() -> None:
     assert issubclass(runner.ReadinessPopulationMismatch, runner.ConsumptionRefused)
     assert issubclass(runner.ConsumedPopulationDrift, runner.ConsumptionRefused)
+
+
+def test_a_probability_column_in_the_pre_claim_projection_refuses_before_the_claim(
+    tmp_path: Path,
+) -> None:
+    """task-814: the consumption projection is held to readiness's structural boundary."""
+
+    class LeakyProjection(FakeRepository):
+        def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
+            self.calls.append(include_probabilities)
+            return [dict(row) for row in self._rows]  # ignores the flag
+
+    repo = LeakyProjection()
+    with pytest.raises(runner.ConsumptionRefused, match="structural boundary"):
+        _consume(repo, tmp_path)
+    assert repo.calls == [False]
+    assert FakeRepository.durable_seal is None
+
+
+def test_a_probability_only_difference_is_not_population_drift(tmp_path: Path) -> None:
+    """By §26's definition the identity is probability-free, so only the population can drift."""
+
+    class ProbabilityOnly(FakeRepository):
+        def fetch_oos_paired_evidence(self, *, include_probabilities: bool):
+            rows = super().fetch_oos_paired_evidence(include_probabilities=include_probabilities)
+            if include_probabilities:
+                rows[0]["candidate_p_up_frac"] = 0.2
+                rows[0]["candidate_p_down_frac"] = 0.3
+                rows[0]["candidate_p_timeout_frac"] = 0.5
+            return rows
+
+    result = _consume(ProbabilityOnly(), tmp_path)
+    assert result["population_matches_readiness"] is True
+    assert FakeRepository.durable_seal["state"] == runner.STATE_COMPLETE

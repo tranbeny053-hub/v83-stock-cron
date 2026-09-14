@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (CONDITIONAL CONSUME NOT EXERCISED — the frozen consume path has NO pre-claim population-ID guard; STOPPED UNCONSUMED per owner condition; rulings N1-N3 requested; one look NOT consumed)
+Updated: 2026-09-14 (§2.6 SAFETY CHANGE BUILT AND VERIFIED — consume enforces the readiness population before claiming, 4a0a908, gate 1873, Codex task-814 VERIFIED; ONE T3 for lane F requested; then a new readiness, then consume with that ID; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -674,7 +674,23 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=RULINGS N1-N3 REQUESTED (.work/814/consume-population-guard-missing.md).
+OWNER_BOUNDARY=ONE T3 REQUESTED for lane F, fix/5a-consume-population-guard. The head and tree are named in
+  .work/814/final-review.md.
+  - The owner authorized it as a §2.6 safety change on 2026-09-14: N1=A, N2, N3.
+  - It is built and verified:
+    - 4a0a908: the guard and Addendum 10, gate 1873;
+    - Codex task-814 VERIFIED: 5 attack groups, 19 variants held;
+    - probe-only variants are now committed tests.
+  - After merge (N3): a NEW, separately authorized readiness on the new pin, then consume ONLY with
+    that readiness run's decision_population_id.
+OWNER_RULINGS_N1_N3=Ruled 2026-09-14:
+  - N1=A: a required full expected decision_population_id for consume; the probability-free
+    readiness population check before the durable claim or probability exposure, where a mismatch
+    STOPS UNCONSUMED; a post-claim re-check that refuses statistics on drift.
+  - N2: Addendum 10, the full gate, bounded Codex verification.
+  - N3: after the T3 merge, a new separately authorized readiness on the new pin, then consume
+    only with that readiness ID.
+OWNER_BOUNDARY_PRIOR_N=RULINGS N1-N3 were requested (.work/814/consume-population-guard-missing.md).
   - N1, the guard. A (recommended):
     - a required expected_population_id input;
     - a pre-claim probability-free read with equality, refusing with nothing spent;
@@ -701,8 +717,9 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for rulings N1-N3. The evaluator is FROZEN: any change needs explicit owner authorization
-  (§2.6). DO NOT dispatch consume or any other Section 5A run.
+NEXT_ACTION=WAIT for the owner's T3 authorization of lane F. Then run the scripted single-lane merge, and after it
+  request a NEW readiness T4 on the new pin. DO NOT dispatch consume or any other Section 5A run until
+  it is separately authorized.
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push

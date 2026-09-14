@@ -682,3 +682,33 @@ def test_the_population_flag_reaches_the_parser_unchanged() -> None:
     args = cli.build_parser().parse_args(["--mode=consume", flag])
     assert args.expected_population_id == "a" * 64
     assert cli.build_parser().parse_args(["--mode=consume"]).expected_population_id == ""
+
+
+@pytest.mark.parametrize("mode", ["readiness", "recompute"])
+def test_modes_other_than_consume_never_pass_the_population_flag_on(
+    calls: list[str],
+    verified_dispatch,
+    fake_seal,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """task-814: the flag is consumption's alone; other modes run exactly as before."""
+
+    seen: dict[str, object] = {}
+
+    def _readiness(repository, **kwargs):
+        seen.update(kwargs, mode="readiness")
+        return {"mode": "readiness"}
+
+    def _recompute(repository, **kwargs):
+        seen.update(kwargs, mode="recompute")
+        return {"mode": "recompute"}
+
+    monkeypatch.setattr(cli, "build_repository", lambda: fake_seal())
+    monkeypatch.setattr(runner, "run_readiness", _readiness)
+    monkeypatch.setattr(runner, "recompute_from_seal", _recompute)
+    argv = [a for a in _live_argv(mode) if not a.startswith("--expected-population-id=")]
+    argv.append("--expected-population-id=$(touch INJECTED)")
+    assert cli.main(argv, environ={}) == 0
+    assert seen["mode"] == mode
+    assert "expected_population_id" not in seen
