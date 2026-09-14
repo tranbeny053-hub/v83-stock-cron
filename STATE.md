@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§5A G1=A strengthened + G2 implemented; composition GREEN 1718; bounded task-810 spot-check in flight; one look NOT consumed)
+Updated: 2026-09-14 (§5A task-810 NOT_VERIFIED — V810-F1 CRITICAL installed-RECORD authority; runtime-identity class AT BOUND; owner rulings J1-J3 requested; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -71,18 +71,18 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close; the evaluato
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
 CURRENT_BRANCH=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED). Lane heads, all local:
-  A feat/5a-evaluator-on-main 32ebfcf (6ff7c30 adopts the seven 808 tests unchanged; 32ebfcf is the
-    E1/E2/E3 repair), plus STATE-only commits above it.
-  B test/resolver-pipefail-regression e806ec0 (tests only; resolver never false-green).
-  C fix/oos-workflow-input-transport aadbbf7 (OOS dispatch inputs via env; cron stays removed).
-  Composition of main + A + B + C = faaed6d, tree 993fc5dd, bit-identical in either merge order.
-  main = origin/main = 5f36126. feat/5a-evaluator = 0bbcdd5 is superseded, kept for provenance.
-LAST_GREEN_SHA=32ebfcf (lane A, local gate). Composition faaed6d is green too. Nothing is pushed; this is not
-  CI. main: 5f36126, CI green.
-LAST_VERIFY=PASS ruff ok | 1652 passed | schemas+smoke ok | scanners 3/3 · composition faaed6d · 2026-09-14
-  (local). Lane gates: A 1633, B 1171, C 1178, arithmetic reconciled. The in-job test command passes
-  466 under a venv built from the lock with CPython 3.13.14. End-to-end attest with REAL observation:
-  PASS under the locked runtime; REFUSED under the dev venv, a wrong sha, or a modified tracked file.
+  A feat/5a-evaluator-on-main 273508e: G1=A strengthened plus G2 at 2342e68, flake fix 077f260,
+    STATE commits above.
+  B test/resolver-pipefail-regression 8ce93c4 (resolver tests plus G2 reader).
+  C fix/oos-workflow-input-transport 8d6e26e (OOS input transport plus G2 reader).
+  Composition of A 077f260, B and C = 3c2c98f, tree 5d0d5331, identical in either merge order,
+  gate 1718.
+  main = origin/main = 5f36126.
+LAST_GREEN_SHA=077f260 (lane A, local gate 1699). Composition 3c2c98f is green at 1718. Nothing pushed.
+LAST_VERIFY=PASS ruff ok | 1718 passed | schemas+smoke ok | scanners 3/3 · composition 3c2c98f ·
+  2026-09-14 (local, and Codex task-810). The end-to-end run on a toolcache-shaped CPython 3.13.14
+  covered isolated attest, 532 in-job tests with no bytecode left, and readiness reaching the
+  authority refusal; 8 negative refusals proven.
 MAIN_STATE=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
   0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
@@ -353,11 +353,18 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=task-810 — spot-check of at most 5 mutants on the G1 isolation mechanism and the G2 reader
-  refusal. Composition 171187a (tree dba9b2f5) of A 2342e68, B 8ce93c4 and C 8d6e26e. Task file
-  .work/task-810.md, run in worktree scratchpad/compose3-abc. If that worktree is gone, recompose
-  and check the tree is 5d0d5331. Delegation: ./delegate.sh .work/task-810.md workspace-write high.
-  task-809 (VERIFIED_WITH_FINDINGS) is COMPLETE.
+CODEX_PENDING=NONE. task-810 COMPLETE (fresh: fired 05:42:57Z, report 05:52:25Z; no tracked change).
+CODEX_VERIFICATION_810=NOT_VERIFIED. 5 of 5 mutants KILLED by committed tests. Bypass hunt:
+  - CRITICAL V810-F1: the installed RECORD is trusted. A file tampered together with its RECORD
+    passes; Opus REPRODUCED it on the toolcache-shaped interpreter.
+  - HIGH V810-F3: symlinked directories evade the walks; Opus REPRODUCED it.
+  - HIGH V810-F2: time of check to time of use — hashed once, loaded later by path.
+  - HIGH V810-F4: module origins are read from mutable attributes.
+  Root cause (Opus): the checks authenticate against mutable installed metadata, not the pinned
+  hashes; and the job runs one unverified piece of code, the floating pip that setup-python
+  force-reinstalls from PyPI and the install step executes. The runtime-identity class is at the
+  bound (E3 -> V809-F1 -> G1 -> V810). NO unilateral repair.
+  Final MAX review: .work/810/final-max-review.md. Evidence: .work/810/.
 CODEX_VERIFICATION_809=VERIFIED_WITH_FINDINGS on composition faaed6d (tree 993fc5dd). Committed suite:
   15/15 mutants KILLED, 0 SURVIVED, no new tests. Gate 1652. Red tests (c7e5d4c6...) and the adopted
   808 tests (b88f1838...) intact. Migration 0009 REVIEWED BUT UNEXECUTED: NULL, precedence and key
@@ -414,14 +421,17 @@ ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As ori
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NONE OPEN. The owner ruled on 2026-09-14:
-  - G1=A strengthened: isolated -I start-up, controlled import paths, refusal of untracked,
-    duplicate, shadow and .pth code, and loaded-module origin attestation;
-  - G2: fail closed on a workflow-level env;
-  - G3: Opus implements and reviews; Codex spot-checks at most 5 mutants;
-  - G4: close G1/G2, then ONE T3 batch for A, B and C.
-  NEXT BOUNDARY: that T3 request, after task-810 and the final MAX review. T4 remains separate:
-  apply 0009 --only, then readiness, then consume.
+OWNER_BOUNDARY=OWNER RULINGS J1-J3 REQUESTED (.work/810/final-max-review.md):
+  J1 remedy:
+    B (recommended): install with the interpreter's bundled pip (never the floating pip), from a
+      hash-verified wheelhouse; attest installed bytes against the WHEEL RECORDs; refuse symlinks;
+      Addendum 7.
+    A: B plus a verify-at-load import finder.
+    C: accept the residuals and narrow the claims.
+  J2 verification: A (recommended) Opus plus the F1/F3 reproductions as negative controls plus ONE
+    Codex spot-check of at most 5 mutants; B Opus only.
+  J3 T3: unchanged — ONE batch for A, B and C after J1.
+  The earlier rulings G1-G4, E1-E3 and D1-D4 are applied. T4 remains separate.
 OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
   PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
   PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
@@ -439,8 +449,8 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Read task-810's result, then the final MAX review, then request the ONE T3 batch for A, B
-  and C. DO NOT run readiness or consumption, apply 0008 or 0009, push, or deploy.
+NEXT_ACTION=WAIT for owner rulings J1-J3. DO NOT run readiness or consumption, apply 0008 or 0009,
+  push, or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
   V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
   date is a contract instant, NOT a reminder or automation request: create no timer, task, or
