@@ -9,7 +9,7 @@ that govern a live run POSITIVELY VERIFIED rather than assumed:
   E2  the run is a manual dispatch of THE evaluation workflow, on ``main``, at exactly the commit
       the owner named (``expected_sha``), with no tracked file modified since checkout;
   E3  it executes under exactly the pinned interpreter and exactly the hash-locked dependency
-      set, with nothing else installed but the installer itself.
+      set, with nothing else installed — not even the installer (owner ruling J1=B).
 
 :func:`attest` observes and verifies. Its record is written durably into the one-look claim, so
 the run that spent the look stays identified: commit, run, interpreter, lock and pin.
@@ -49,7 +49,6 @@ from crypto_probability_engine.oos.evaluation.evaluator_pin import (
 )
 from crypto_probability_engine.runtime_isolation import (
     EVALUATOR_LOCK,
-    INSTALLER_DISTRIBUTIONS,
     REQUIRED_FLAGS_TEXT,
     IsolationRefused,
     ProvenanceRefused,
@@ -69,7 +68,6 @@ PINNED_PYTHON_VERSION = "3.13.14"
 
 __all__ = [
     "EVALUATOR_LOCK",
-    "INSTALLER_DISTRIBUTIONS",
     "IsolationRefused",
     "ProvenanceRefused",
     "canonical_distribution_name",
@@ -247,7 +245,8 @@ def verify_run_provenance(
     mismatched = sorted(
         name for name, version in lock_pins.items() if installed.get(name) != version
     )
-    unexpected = sorted(set(installed) - set(lock_pins) - INSTALLER_DISTRIBUTIONS)
+    # J1=B: not even the installer may sit beside the lock; the floating pip is removed unrun.
+    unexpected = sorted(set(installed) - set(lock_pins))
     need(not mismatched, f"installed versions differ from the lock for {mismatched}")
     need(not unexpected, f"distributions outside the lock are installed: {unexpected}")
     need(bool(_DIGITS.match(str(dispatch.get("run_id", "")))), "run_id is not a GitHub run id")
@@ -389,7 +388,7 @@ def require_verified_provenance(record: Any, *, root: Path | None = None) -> dic
     )
     need(
         all(installed.get(name) == version for name, version in lock_pins.items())
-        and not set(installed) - set(lock_pins) - INSTALLER_DISTRIBUTIONS,
+        and not set(installed) - set(lock_pins),
         "the recorded runtime is not the locked dependency set",
     )
     need(bool(_DIGITS.match(record["run_id"])), "run_id is not a GitHub run id")

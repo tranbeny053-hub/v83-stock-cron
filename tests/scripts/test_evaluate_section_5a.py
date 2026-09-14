@@ -36,11 +36,15 @@ LIVE_MODES = ("attest", "readiness", "consume", "recompute")
 ISOLATED = ("-I", "-S", "-B")
 
 
+SYNTHETIC_WHEELHOUSE = "/synthetic/runner-temp/section-5a-wheels"
+
+
 def _live_argv(mode: str) -> list[str]:
     return [
         f"--mode={mode}",
         f"--confirm={runner.CONFIRMATION_TOKEN}",
         f"--expected-sha={SYNTHETIC_SHA}",
+        f"--wheelhouse={SYNTHETIC_WHEELHOUSE}",
     ]
 
 
@@ -52,7 +56,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     report = synthetic_isolation()
     real_attest = provenance.attest
 
-    def _enter():
+    def _enter(wheelhouse):
         order.append("isolation")
         return report
 
@@ -341,11 +345,45 @@ def test_a_loaded_module_refusal_before_the_claim_spends_nothing(
 def test_a_refusal_is_written_to_the_report_and_still_fails_the_run(tmp_path: Path) -> None:
     report = tmp_path / "nested" / "report.json"
     with pytest.raises(runtime_isolation.IsolationRefused):
-        cli.main(["--mode", "consume", f"--report={report}"], environ={})
+        cli.main([*_live_argv("consume"), f"--report={report}"], environ={})
     written = json.loads(report.read_text(encoding="utf-8"))
     assert written["outcome"] == "REFUSED"
     assert written["error_type"] == "IsolationRefused"
     assert "python -I -S -B" in written["detail"]
+
+
+@pytest.mark.parametrize("mode", LIVE_MODES)
+def test_every_live_mode_requires_the_authenticated_wheelhouse(
+    mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """J1=B: installed code is attested against lock-verified wheels, so they must be named."""
+
+    monkeypatch.setattr(provenance, "attest", lambda *_, **__: pytest.fail("attested"))
+    argv = [arg for arg in _live_argv(mode) if not arg.startswith("--wheelhouse")]
+    with pytest.raises(runtime_isolation.IsolationRefused, match="--wheelhouse is required"):
+        cli.main(argv, environ={})
+
+
+def test_the_bundled_pip_helper_names_cpython_s_own_wheel(capsys: pytest.CaptureFixture) -> None:
+    assert cli.main(["--bundled-pip"]) == 0
+    printed = Path(capsys.readouterr().out.strip())
+    assert printed.name.startswith("pip-") and printed.suffix == ".whl"
+    assert printed.parent.parts[-2:] == ("ensurepip", "_bundled")
+
+
+def test_the_floating_installer_is_never_removed_outside_the_isolated_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deleting pip must be impossible on a developer's or CI interpreter."""
+
+    monkeypatch.setattr(
+        runtime_isolation, "remove_floating_installer", lambda site: pytest.fail("removed")
+    )
+    with pytest.raises(runtime_isolation.IsolationRefused, match="python -I -S -B"):
+        cli.main(["--remove-floating-installer"], environ={"GITHUB_ACTIONS": "true"})
+    monkeypatch.setattr(runtime_isolation, "verify_interpreter_isolation", lambda: "isolated")
+    with pytest.raises(runtime_isolation.IsolationRefused, match="only inside the GitHub Actions"):
+        cli.main(["--remove-floating-installer"], environ={})
 
 
 def test_an_unexpected_failure_withholds_its_detail_from_the_report(

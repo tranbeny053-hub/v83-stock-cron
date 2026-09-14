@@ -81,9 +81,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="also write this run's outcome, success or refusal, as JSON to this path",
     )
     parser.add_argument(
+        "--wheelhouse",
+        default="",
+        help="required for every live mode: the directory of lock-authenticated wheels installed",
+    )
+    parser.add_argument(
         "--write-pin",
         action="store_true",
         help="regenerate ops/section_5a_evaluator_pin.json and exit",
+    )
+    parser.add_argument(
+        "--bundled-pip",
+        action="store_true",
+        help="print the pip wheel CPython bundles (the only trusted installer) and exit",
+    )
+    parser.add_argument(
+        "--remove-floating-installer",
+        action="store_true",
+        help="in the isolated evaluation job only: delete the runner's unverified pip, unrun",
     )
     return parser
 
@@ -95,8 +110,8 @@ def ensure_source_path() -> None:
         sys.path.append(str(SOURCE))
 
 
-def enter_isolated_runtime():
-    """G1=A: verify the isolated process and its import surface before anything else loads.
+def enter_isolated_runtime(wheelhouse: str):
+    """G1=A, J1=B: verify the isolated process and its authenticated import surface first.
 
     The source root is appended first, so that the standard-library-only isolation module itself
     can be imported, and nothing else has been added to the import path.
@@ -105,7 +120,12 @@ def enter_isolated_runtime():
     ensure_source_path()
     from crypto_probability_engine import runtime_isolation
 
-    return runtime_isolation.enter(ROOT)
+    if not wheelhouse:
+        raise runtime_isolation.IsolationRefused(
+            "section 5A run refused before the one look could be claimed: --wheelhouse is "
+            "required; installed code is authenticated against the lock-verified wheels"
+        )
+    return runtime_isolation.enter(ROOT, wheelhouse=Path(wheelhouse))
 
 
 def attest_loaded_modules(isolation) -> int:
@@ -153,6 +173,9 @@ def main(argv: list[str] | None = None, *, environ: Mapping[str, str] | None = N
         print(json.dumps({"wrote_pin": str(write_pin())}, indent=2))
         return 0
 
+    if args.bundled_pip or args.remove_floating_installer:
+        return _installer_action(args, os.environ if environ is None else environ)
+
     try:
         outcome = _run(args, os.environ if environ is None else environ)
     except Exception as exc:
@@ -162,6 +185,26 @@ def main(argv: list[str] | None = None, *, environ: Mapping[str, str] | None = N
     print(json.dumps(outcome, indent=2))
     if args.report:
         _write_report(Path(args.report), outcome)
+    return 0
+
+
+def _installer_action(args: argparse.Namespace, environ: Mapping[str, str]) -> int:
+    """J1=B install-step helpers. Standard library only; nothing third-party is imported."""
+
+    ensure_source_path()
+    from crypto_probability_engine import runtime_isolation
+
+    if args.bundled_pip:
+        print(runtime_isolation.bundled_pip_wheel())
+        return 0
+    # Deleting pip is safe only in the isolated evaluation job, never on a developer's interpreter.
+    runtime_isolation.verify_interpreter_isolation()
+    if environ.get("GITHUB_ACTIONS") != "true":
+        raise runtime_isolation.IsolationRefused(
+            "--remove-floating-installer runs only inside the GitHub Actions evaluation job"
+        )
+    site = runtime_isolation.single_site_directory()
+    print(json.dumps({"removed": runtime_isolation.remove_floating_installer(site)}))
     return 0
 
 
@@ -175,7 +218,7 @@ def _run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str, Any]
         return runner.recompute_from_snapshot(artifact_dir)
 
     # Every remaining mode is live. Isolation FIRST: nothing third-party may load before it.
-    isolation = enter_isolated_runtime()
+    isolation = enter_isolated_runtime(args.wheelhouse)
 
     from crypto_probability_engine.oos.evaluation import provenance, runner
 

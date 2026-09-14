@@ -119,9 +119,12 @@ def test_the_runtime_must_be_exactly_the_lock(installed, fragment) -> None:
     assert fragment in str(exc.value)
 
 
-def test_only_the_installer_may_sit_beside_the_lock() -> None:
-    installed = {**LOCK_PINS, "pip": "26.1.2", "setuptools": "80.0", "wheel": "0.45"}
-    assert _verify(runtime=synthetic_runtime(installed=installed))["dispatch_verified"] is True
+def test_not_even_the_installer_may_sit_beside_the_lock() -> None:
+    """J1=B: the runner's floating pip is deleted unrun; any installer left behind refuses."""
+
+    for installer in ("pip", "setuptools", "wheel"):
+        with pytest.raises(provenance.ProvenanceRefused, match="outside the lock"):
+            _verify(runtime=synthetic_runtime(installed={**LOCK_PINS, installer: "1.0"}))
 
 
 def test_every_failed_check_is_named_not_only_the_first() -> None:

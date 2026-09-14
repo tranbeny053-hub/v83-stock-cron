@@ -1,47 +1,41 @@
-"""Isolated startup and code-origin attestation for the section 5A evaluation.
+"""Isolated start-up and authenticated import surface for the section 5A evaluation.
 
-OWNER RULING G1=A, strengthened (2026-09-14; pre-registration Addendum 6), closing V809-F1.
+OWNER RULINGS G1=A (strengthened) and J1=B (2026-09-14; pre-registration Addenda 6 and 7).
 
-task-809 showed that the exact-runtime attestation bound package METADATA, not the code Python
-actually imports. A shadow module ran under locked version numbers, and a committed
-``scripts/platform.py`` ran inside the evaluator while the pin still passed. The evaluator imported
-third-party code before anything was attested, searched the script directory first, ignored
-untracked files, and could not tell two copies of one version apart.
+THE TRUST BOUNDARY (J1=B). Trusted, and nothing else: the exact CPython 3.13.14 installed by the
+pinned setup-python Action; the pinned Actions; and the pip wheel CPython itself bundles in
+``ensurepip/_bundled``. Everything the evaluator imports beyond the standard library is
+AUTHENTICATED, never merely inventoried:
 
-This module runs FIRST, in a process started as ``python -I -S -B``, before any module beyond the
-standard library and this package's empty ``__init__`` can load:
+- each downloaded wheel's SHA-256 must be one the hash lock pins for that exact version;
+- each installed importable file must match the digest and size recorded INSIDE its authenticated
+  wheel. V810-F1 showed the RECORD written next to installed files can be rewritten to bless
+  tampered code, so it is never the authority;
+- site-packages must hold exactly those files, their installer metadata and CPython's README: no
+  other file, directory, distribution, symlink, ``.pth`` or start-up customization. The runner's
+  floating pip, which setup-python reinstalls from the index unverified, is removed without ever
+  being executed;
+- the checkout must equal its commit: no tracked modification, no symlink, no untracked or ignored
+  code or bytecode, nothing in ``src/`` but the first-party package.
 
-  -I  isolated: ``PYTHON*`` environment variables are ignored, the script directory is not on
-      ``sys.path``, and user site-packages is off;
-  -S  no ``site``: no ``.pth`` file and no ``sitecustomize`` can execute before these checks, so
-      refusing them is a refusal, not a detection after the fact;
-  -B  no bytecode is written, so nothing a run compiles can later stand in for a verified source.
+The process runs as ``python -I -S -B``:
+- ``-I``: no ``PYTHON*`` variables, no script directory on the path, no user site-packages;
+- ``-S``: no ``site``, so no ``.pth`` or ``sitecustomize`` executes before these checks;
+- ``-B``: nothing a run compiles can later stand in for a verified source.
 
-:func:`enter` then refuses unless:
+:func:`enter` audits before any non-stdlib module can load, then sets the ONLY import path:
+stdlib, then the authenticated site-packages, then ``src/``. :func:`attest_loaded_modules`
+cross-checks what actually loaded, and the CLI repeats it immediately before the claim.
 
-- the start-up path is the interpreter's own standard library;
-- site-packages holds exactly the hash-locked set (plus the installer), no distribution twice, and
-  no ``.pth``, ``sitecustomize`` or legacy egg;
-- every file in site-packages is owned by a distribution record, and every locked file matches its
-  recorded SHA-256;
-- the checkout holds no untracked or ignored code, bytecode or path file, and ``src/`` holds only
-  the first-party package.
+STANDARD LIBRARY IMPORTS ONLY, by contract and by test. ``crypto_probability_engine.oos`` imports
+pydantic when it loads, so nothing here may import from it.
 
-Only then does it place site-packages, and after it the first-party source root, on ``sys.path``,
-so first-party files can never shadow a verified module.
-
-After the evaluator's imports, :func:`attest_loaded_modules` verifies the ORIGIN of every module
-actually loaded: the interpreter's standard library, a hash-verified file of a locked distribution,
-or a file of the reviewed pin. It is repeated immediately before the one-look claim.
-
-STANDARD LIBRARY IMPORTS ONLY, by contract and by test. The ``crypto_probability_engine.oos``
-package imports pydantic when it loads, so nothing here may import from it: this module must finish
-before anything it checks could have run.
-
-RESIDUAL, stated rather than hidden. The interpreter's standard library is trusted as installed by
-actions/setup-python. The installer is inventoried and must own its files, but it is not
-hash-verified, and nothing but a locked distribution's verified files may be a module origin. Code
-supplied by a compromised owner credential is out of reach, as Addendum 5 §30 records.
+RESIDUAL, stated rather than hidden (Addendum 7). The trusted base above is trusted, and so, with
+it, are the runner image beneath the interpreter (kernel, filesystem, bash, git). Because no
+unverified code runs after attestation, a file swapped between audit and load, or a module origin
+rewritten in memory, requires code from inside that trusted base. The verify-at-load import hook
+was considered and not adopted by owner ruling. A compromised owner credential remains out of
+reach, as Addendum 5 §30 records.
 """
 
 from __future__ import annotations
@@ -52,22 +46,27 @@ import hashlib
 import io
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import sysconfig
+import zipfile
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from email.parser import HeaderParser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 EVALUATOR_LOCK = "ops/section_5a_evaluator_requirements.lock"
 SOURCE_ROOT = "src"
 FIRST_PARTY_PACKAGE = "crypto_probability_engine"
 ISOLATED_STARTUP = "python -I -S -B"
+WHEELHOUSE_NAME = "section-5a-wheels"
 
-# The installer is present in every interpreter image. It may own files, never supply modules.
-INSTALLER_DISTRIBUTIONS = frozenset({"pip", "setuptools", "wheel"})
+# The installer the runner image floats: removed before installation, never executed, never allowed
+# to remain as an import surface.
+FLOATING_INSTALLER = "pip"
 
 # The flags `python -I -S -B` sets, in a fixed order; recorded verbatim in the run provenance.
 REQUIRED_INTERPRETER_FLAGS = (
@@ -82,13 +81,15 @@ REQUIRED_FLAGS_TEXT = ",".join(REQUIRED_INTERPRETER_FLAGS)
 
 # CPython's own install places this in site-packages without a distribution record.
 UNOWNED_SITE_FILES = frozenset({"README.txt"})
+# What pip writes into an installed .dist-info beyond the wheel's own files. Not importable.
+INSTALLER_METADATA = frozenset({"INSTALLER", "REQUESTED", "RECORD", "direct_url.json"})
 
 # Code, bytecode and path-configuration files: never untracked or ignored in the checkout.
 CODE_SUFFIXES = (".py", ".pyc", ".pyo", ".pyd", ".so", ".dylib", ".pth")
 COMPILED_SUFFIXES = (".pyc", ".pyo", ".pyd", ".so", ".dylib", ".pth")
 
 _LOCK_PIN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([A-Za-z0-9.+!_-]+) \\$")
-_LOCK_HASH = re.compile(r"^    --hash=sha256:[0-9a-f]{64}( \\)?$")
+_LOCK_HASH = re.compile(r"^    --hash=sha256:([0-9a-f]{64})( \\)?$")
 _MAX_LISTED_FAILURES = 25
 
 
@@ -98,6 +99,23 @@ class ProvenanceRefused(RuntimeError):
 
 class IsolationRefused(ProvenanceRefused):
     """The process did not start isolated, or what it can import is not exactly the verified set."""
+
+
+@dataclass(frozen=True)
+class LockEntry:
+    version: str
+    hashes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class AuthenticatedWheel:
+    """A wheel whose bytes the lock authenticates, and the importable payload it declares."""
+
+    name: str
+    version: str
+    sha256: str
+    dist_info: str
+    payload: Mapping[str, tuple[str, int | None]]
 
 
 @dataclass(frozen=True)
@@ -126,8 +144,8 @@ def canonical_distribution_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def read_lock(root: Path | None = None) -> dict[str, str]:
-    """Exact pins from the evaluator lock, fail-closed.
+def read_lock_entries(root: Path | None = None) -> dict[str, LockEntry]:
+    """Exact pins AND their hashes from the evaluator lock, fail-closed.
 
     Every requirement must be ``name==version`` followed by at least one SHA-256 hash, which is
     what ``pip --require-hashes`` enforces at install. A range, an unhashed pin, a duplicate or any
@@ -142,19 +160,18 @@ def read_lock(root: Path | None = None) -> dict[str, str]:
             f"the evaluator lock is missing or unreadable: {EVALUATOR_LOCK}"
         ) from exc
 
-    pins: dict[str, str] = {}
+    versions: dict[str, str] = {}
+    hashes: dict[str, set[str]] = {}
     current: str | None = None
-    hashes = 0
     continued = False
     for number, line in enumerate(lines, start=1):
         if continued:
-            if not _LOCK_HASH.match(line):
+            match = _LOCK_HASH.match(line)
+            if match is None:
                 raise ProvenanceRefused(f"{EVALUATOR_LOCK}:{number}: expected a sha256 hash line")
-            hashes += 1
+            hashes[current].add(match.group(1))
             continued = line.endswith("\\")
             continue
-        if current is not None and hashes == 0:
-            raise ProvenanceRefused(f"{EVALUATOR_LOCK}: {current} has no hash")
         if not line.strip() or line.startswith("#"):
             continue
         match = _LOCK_PIN.match(line)
@@ -163,16 +180,25 @@ def read_lock(root: Path | None = None) -> dict[str, str]:
                 f"{EVALUATOR_LOCK}:{number}: not an exact, hashed pin: {line.strip()!r}"
             )
         current = canonical_distribution_name(match.group(1))
-        if current in pins:
+        if current in versions:
             raise ProvenanceRefused(f"{EVALUATOR_LOCK}: {current} is pinned twice")
-        pins[current] = match.group(2)
-        hashes = 0
+        versions[current] = match.group(2)
+        hashes[current] = set()
         continued = True
-    if continued or (current is not None and hashes == 0):
+    if continued:
         raise ProvenanceRefused(f"{EVALUATOR_LOCK}: the last requirement is incomplete")
-    if not pins:
+    if not versions:
         raise ProvenanceRefused(f"{EVALUATOR_LOCK}: the lock pins nothing")
-    return pins
+    for name, digests in hashes.items():
+        if not digests:
+            raise ProvenanceRefused(f"{EVALUATOR_LOCK}: {name} has no hash")
+    return {name: LockEntry(versions[name], frozenset(hashes[name])) for name in versions}
+
+
+def read_lock(root: Path | None = None) -> dict[str, str]:
+    """Exact pins from the evaluator lock: name -> version. See :func:`read_lock_entries`."""
+
+    return {name: entry.version for name, entry in read_lock_entries(root).items()}
 
 
 # --------------------------------------------------------------------------- the interpreter
@@ -207,6 +233,52 @@ def site_directories() -> tuple[Path, ...]:
     return tuple(sorted({Path(paths["purelib"]).resolve(), Path(paths["platlib"]).resolve()}))
 
 
+def single_site_directory(sites: Iterable[Path] | None = None) -> Path:
+    """The one directory wheels install into. Split purelib/platlib layouts are refused."""
+
+    found = tuple(sites if sites is not None else site_directories())
+    if len(found) != 1:
+        headline = "site-packages must be one directory (purelib == platlib)"
+        _refuse([f"found {list(found)}"], headline)
+    return Path(found[0]).resolve()
+
+
+def bundled_pip_wheel(stdlib: Path | None = None) -> Path:
+    """The pip wheel CPython itself ships in ``ensurepip/_bundled``: the only trusted installer."""
+
+    root = Path(stdlib or sysconfig.get_paths()["stdlib"]) / "ensurepip" / "_bundled"
+    wheels = sorted(root.glob("pip-*.whl")) if root.is_dir() else []
+    if len(wheels) != 1 or wheels[0].is_symlink() or not wheels[0].is_file():
+        raise IsolationRefused(
+            f"expected exactly one regular bundled pip wheel in {root}; found {wheels}"
+        )
+    return wheels[0]
+
+
+def remove_floating_installer(site: Path) -> list[str]:
+    """Delete the runner's floating pip from site-packages WITHOUT running it.
+
+    setup-python reinstalls pip from the package index at job time, unverified. It is outside the
+    trusted base, so it may neither install anything nor remain importable. Only real directories
+    named for it are removed; anything else in site-packages is left for the audit to refuse.
+    """
+
+    site = Path(site)
+    removed: list[str] = []
+    for entry in sorted(site.iterdir()):
+        name = entry.name
+        is_installer = name == FLOATING_INSTALLER or (
+            name.startswith(f"{FLOATING_INSTALLER}-") and name.endswith(".dist-info")
+        )
+        if not is_installer:
+            continue
+        if entry.is_symlink() or not entry.is_dir():
+            raise IsolationRefused(f"refusing to remove {entry}: not a real directory")
+        shutil.rmtree(entry)
+        removed.append(name)
+    return removed
+
+
 def verify_initial_sys_path(
     entries: Iterable[str],
     *,
@@ -231,140 +303,218 @@ def verify_initial_sys_path(
     _refuse(failures, "sys.path at start-up is not the interpreter's own library")
 
 
-# --------------------------------------------------------------------------- site-packages
+# --------------------------------------------------------------------------- the wheelhouse
 
 
-@dataclass(frozen=True)
-class _Distribution:
-    name: str
-    version: str
-    site: Path
-    dist_info: Path
-    record: tuple[tuple[str, str | None, int | None], ...]
-
-
-def _read_distribution(site: Path, dist_info: Path) -> _Distribution:
-    headers = HeaderParser().parsestr((dist_info / "METADATA").read_text(encoding="utf-8"))
-    name, version = headers.get("Name"), headers.get("Version")
-    if not name or not version:
-        raise ValueError("METADATA has no Name or Version")
-    rows: list[tuple[str, str | None, int | None]] = []
-    record_text = (dist_info / "RECORD").read_text(encoding="utf-8")
-    for row in csv.reader(io.StringIO(record_text)):
-        if not row:
-            continue
-        if len(row) != 3:
-            raise ValueError(f"malformed RECORD row {row!r}")
-        relative, digest, size = row
-        if digest and not digest.startswith("sha256="):
-            raise ValueError(f"RECORD row {relative!r} is not hashed with sha256")
-        hashed = digest[len("sha256=") :] if digest else None
-        rows.append((relative, hashed, int(size) if size else None))
-    return _Distribution(canonical_distribution_name(name), version, site, dist_info, tuple(rows))
+def _sha256_hex(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _record_digest(data: bytes) -> str:
     return base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode("ascii")
 
 
-def audit_site_packages(
-    site_dirs: Iterable[Path], lock_pins: Mapping[str, str]
-) -> tuple[dict[str, str], str, frozenset[str]]:
-    """Refuse unless site-packages is exactly the verified set. Returns what was verified.
+def _safe_relative(raw: str) -> PurePosixPath | None:
+    path = PurePosixPath(raw)
+    if not raw or "\\" in raw or path.is_absolute() or ".." in path.parts or "" in path.parts:
+        return None
+    return path
 
-    Returns ``(installed, installed_files_sha256, locked_files)``. The digest identifies the exact
-    bytes of every locked file; ``locked_files`` are the resolved paths a module may come from.
+
+def _wheel_payload(archive: zipfile.ZipFile, wheel_name: str) -> tuple[str, dict]:
+    """The importable payload a wheel declares in its own RECORD, mapped to install paths."""
+
+    records = [
+        name
+        for name in archive.namelist()
+        if name.count("/") == 1 and name.endswith(".dist-info/RECORD")
+    ]
+    if len(records) != 1:
+        raise ValueError(f"{wheel_name} has {len(records)} top-level .dist-info/RECORD files")
+    dist_info = records[0].split("/", 1)[0]
+    data_prefix = dist_info[: -len(".dist-info")] + ".data"
+    payload: dict[str, tuple[str, int | None]] = {}
+    for row in csv.reader(io.StringIO(archive.read(records[0]).decode("utf-8"))):
+        if not row:
+            continue
+        if len(row) != 3:
+            raise ValueError(f"{wheel_name}: malformed RECORD row {row!r}")
+        raw, digest, size = row
+        path = _safe_relative(raw)
+        if path is None:
+            raise ValueError(f"{wheel_name}: unsafe RECORD path {raw!r}")
+        if raw == records[0] or raw.endswith((".dist-info/RECORD.jws", ".dist-info/RECORD.p7s")):
+            continue
+        if path.parts[0] == data_prefix:
+            if len(path.parts) < 3:
+                raise ValueError(f"{wheel_name}: malformed .data path {raw!r}")
+            if path.parts[1] not in {"purelib", "platlib"}:
+                continue  # scripts, headers and data never install into site-packages
+            path = PurePosixPath(*path.parts[2:])
+        if not digest.startswith("sha256="):
+            raise ValueError(f"{wheel_name}: {raw} is not recorded with a sha256 digest")
+        payload[path.as_posix()] = (digest[len("sha256=") :], int(size) if size else None)
+    return dist_info, payload
+
+
+def authenticate_wheelhouse(
+    wheelhouse: Path, lock_entries: Mapping[str, LockEntry]
+) -> dict[str, AuthenticatedWheel]:
+    """Refuse unless the wheelhouse holds exactly one lock-authenticated wheel per locked pin."""
+
+    wheelhouse = Path(wheelhouse)
+    if wheelhouse.is_symlink() or not wheelhouse.is_dir():
+        _refuse([f"not a real directory: {wheelhouse}"], "the wheelhouse is not usable")
+    failures: list[str] = []
+    wheels: dict[str, AuthenticatedWheel] = {}
+    attempted: set[str] = set()
+    for entry in sorted(wheelhouse.iterdir()):
+        if entry.is_symlink() or not entry.is_file() or entry.suffix != ".whl":
+            failures.append(f"the wheelhouse holds something but a regular wheel: {entry.name}")
+            continue
+        parts = entry.name[: -len(".whl")].split("-")
+        if len(parts) not in {5, 6}:
+            failures.append(f"not a wheel file name: {entry.name}")
+            continue
+        name, version = canonical_distribution_name(parts[0]), parts[1]
+        attempted.add(name)
+        pin = lock_entries.get(name)
+        if pin is None:
+            failures.append(f"a wheel for a distribution outside the lock: {entry.name}")
+            continue
+        if version != pin.version:
+            failures.append(f"{entry.name} is version {version}; the lock pins {pin.version}")
+            continue
+        sha256 = _sha256_hex(entry)
+        if sha256 not in pin.hashes:
+            failures.append(f"{entry.name} is not a wheel the lock authenticates (sha256 {sha256})")
+            continue
+        if name in wheels:
+            failures.append(f"more than one authenticated wheel for {name}")
+            continue
+        try:
+            with zipfile.ZipFile(entry) as archive:
+                dist_info, payload = _wheel_payload(archive, entry.name)
+        except (OSError, UnicodeError, ValueError, zipfile.BadZipFile, csv.Error) as exc:
+            failures.append(f"authenticated wheel {entry.name} cannot be read: {exc}")
+            continue
+        wheels[name] = AuthenticatedWheel(name, version, sha256, dist_info, payload)
+    for name, pin in sorted(lock_entries.items()):
+        if name not in attempted:
+            failures.append(f"no authenticated wheel for locked {name}=={pin.version}")
+    _refuse(failures, "the wheelhouse is not exactly the lock-authenticated wheels")
+    return wheels
+
+
+# --------------------------------------------------------------------------- site-packages
+
+
+def audit_site_packages(
+    site: Path, wheels: Mapping[str, AuthenticatedWheel]
+) -> tuple[dict[str, str], str, frozenset[str]]:
+    """Refuse unless site-packages is exactly the authenticated wheels' installed payload.
+
+    Every importable byte is compared with the digest recorded INSIDE its authenticated wheel.
+    Returns ``(installed, installed_files_sha256, locked_files)``: the digest identifies the exact
+    authenticated payload, and ``locked_files`` are the resolved paths a module may come from.
     """
 
-    sites = [Path(site).resolve() for site in site_dirs]
+    site = Path(site)
     failures: list[str] = []
-    distributions: list[_Distribution] = []
+    if site.is_symlink() or not site.is_dir():
+        _refuse([f"not a real directory: {site}"], "site-packages is not usable")
+    site = site.resolve()
 
-    for site in sites:
-        if not site.is_dir():
-            failures.append(f"site-packages directory is missing: {site}")
-            continue
-        for entry in sorted(site.iterdir()):
-            name = entry.name
-            if name.endswith(".pth"):
-                failures.append(f"path configuration file in site-packages: {name}")
-            elif name.split(".")[0] in {"sitecustomize", "usercustomize"}:
-                failures.append(f"start-up customization in site-packages: {name}")
-            elif name.endswith((".egg-info", ".egg-link", ".egg")):
-                failures.append(f"legacy distribution metadata is not verifiable: {name}")
-            elif name.endswith(".dist-info") and entry.is_dir():
-                try:
-                    distributions.append(_read_distribution(site, entry))
-                except (OSError, UnicodeError, ValueError, csv.Error) as exc:
-                    failures.append(f"unreadable distribution {name}: {exc}")
+    expected_files: dict[str, tuple[str, int | None]] = {}
+    metadata_files: set[str] = set()
+    for wheel in wheels.values():
+        for relative, digest in wheel.payload.items():
+            if relative in expected_files:
+                failures.append(f"{relative} is declared by more than one authenticated wheel")
+            expected_files[relative] = digest
+        metadata_files.update(f"{wheel.dist_info}/{name}" for name in INSTALLER_METADATA)
+    expected_dirs = {
+        parent.as_posix()
+        for relative in (*expected_files, *metadata_files)
+        for parent in PurePosixPath(relative).parents
+        if parent.as_posix() != "."
+    }
 
-    by_name: dict[str, list[_Distribution]] = {}
-    for distribution in distributions:
-        by_name.setdefault(distribution.name, []).append(distribution)
-    for name, copies in sorted(by_name.items()):
-        if len(copies) > 1:
+    installed: dict[str, str] = {}
+    for entry in sorted(site.iterdir()):
+        name = entry.name
+        if name.endswith(".pth"):
+            failures.append(f"path configuration file in site-packages: {name}")
+        elif name.split(".")[0] in {"sitecustomize", "usercustomize"}:
+            failures.append(f"start-up customization in site-packages: {name}")
+        elif name.endswith((".egg-info", ".egg-link", ".egg")):
+            failures.append(f"legacy distribution metadata is not verifiable: {name}")
+        elif name.endswith(".dist-info") and entry.is_dir() and not entry.is_symlink():
+            try:
+                headers = HeaderParser().parsestr((entry / "METADATA").read_text(encoding="utf-8"))
+            except (OSError, UnicodeError) as exc:
+                failures.append(f"unreadable distribution {name}: {exc}")
+                continue
+            key = canonical_distribution_name(headers.get("Name") or "")
+            if key in installed:
+                failures.append(f"distribution {key} is installed more than once")
+            installed[key] = headers.get("Version") or ""
+    for name, wheel in sorted(wheels.items()):
+        if installed.get(name) != wheel.version:
             failures.append(
-                f"distribution {name} is installed {len(copies)} times "
-                f"({', '.join(sorted(copy.dist_info.name for copy in copies))})"
+                f"{name} must be installed at {wheel.version}; found {installed.get(name)!r}"
             )
-    installed = {name: copies[0].version for name, copies in sorted(by_name.items())}
-    for name, version in sorted(lock_pins.items()):
-        if name not in installed:
-            failures.append(f"locked distribution {name}=={version} is not installed")
-        elif installed[name] != version:
-            failures.append(f"{name} is {installed[name]}, the lock pins {version}")
-    for name in sorted(set(installed) - set(lock_pins) - INSTALLER_DISTRIBUTIONS):
-        failures.append(f"distribution outside the lock is installed: {name}=={installed[name]}")
+    for name in sorted(set(installed) - set(wheels)):
+        failures.append(f"a distribution outside the authenticated wheels is installed: {name}")
 
-    owned: set[Path] = set()
     locked_files: set[str] = set()
     digest_lines: list[str] = []
-    for distribution in distributions:
-        locked = distribution.name in lock_pins
-        record_file = (distribution.dist_info / "RECORD").resolve()
-        for relative, digest, size in distribution.record:
-            path = (distribution.site / relative).resolve()
-            if not _is_within(path, distribution.site):
-                continue  # console scripts are written to bin/; they are not importable
-            if path in owned:
-                failures.append(f"{relative} is claimed by more than one distribution")
-            owned.add(path)
-            if not locked or path == record_file:
-                continue
-            if path.suffix in {".pyc", ".pyo"}:
-                failures.append(f"locked {distribution.name} carries bytecode {relative}")
-                continue
-            if digest is None:
-                failures.append(f"locked {distribution.name} records {relative} unhashed")
-                continue
-            try:
-                data = path.read_bytes()
-            except OSError:
-                failures.append(f"locked file is missing: {relative}")
-                continue
-            if _record_digest(data) != digest or (size is not None and len(data) != size):
-                failures.append(f"locked file differs from its record: {relative}")
-                continue
-            locked_files.add(path.as_posix())
-            digest_lines.append(f"{path.relative_to(distribution.site).as_posix()}\0{digest}\n")
-
-    for site in sites:
-        if not site.is_dir():
+    for relative, (digest, size) in sorted(expected_files.items()):
+        path = site / relative
+        try:
+            info = path.lstat()
+        except OSError:
+            failures.append(f"an authenticated file is not installed: {relative}")
             continue
-        for directory, _, filenames in os.walk(site):
-            for filename in filenames:
-                path = (Path(directory) / filename).resolve()
-                if path in owned:
-                    continue
-                if Path(directory).resolve() == site and filename in UNOWNED_SITE_FILES:
-                    continue
-                failures.append(
-                    "a file no distribution owns could shadow a verified module: "
-                    f"{path.relative_to(site) if _is_within(path, site) else path}"
-                )
+        if not stat.S_ISREG(info.st_mode):
+            failures.append(f"an authenticated file is not a regular file: {relative}")
+            continue
+        data = path.read_bytes()
+        if _record_digest(data) != digest or (size is not None and len(data) != size):
+            failures.append(f"an installed file differs from its authenticated wheel: {relative}")
+            continue
+        locked_files.add(path.as_posix())
+        digest_lines.append(f"{relative}\0{digest}\n")
 
-    _refuse(failures, "site-packages is not exactly the hash-locked set")
-    digest = hashlib.sha256("".join(sorted(digest_lines)).encode("utf-8")).hexdigest()
+    for directory, dirnames, filenames in os.walk(site):
+        current = Path(directory)
+        relative_dir = current.relative_to(site)
+        for dirname in dirnames:
+            relative = (relative_dir / dirname).as_posix()
+            if (current / dirname).is_symlink():
+                failures.append(f"a symlink in site-packages: {relative}")
+            elif relative not in expected_dirs:
+                failures.append(f"an unexpected directory in site-packages: {relative}")
+        for filename in filenames:
+            relative = (relative_dir / filename).as_posix()
+            if (current / filename).is_symlink():
+                failures.append(f"a symlink in site-packages: {relative}")
+            elif relative in expected_files or relative in metadata_files:
+                continue
+            elif relative_dir == Path(".") and filename in UNOWNED_SITE_FILES:
+                continue
+            else:
+                failures.append(
+                    f"a file no authenticated wheel declares could shadow verified code: {relative}"
+                )
+        dirnames[:] = [name for name in dirnames if not (current / name).is_symlink()]
+
+    _refuse(failures, "site-packages is not exactly the authenticated wheels")
+    digest = hashlib.sha256("".join(digest_lines).encode("utf-8")).hexdigest()
     return installed, digest, frozenset(locked_files)
 
 
@@ -372,15 +522,27 @@ def audit_site_packages(
 
 
 def audit_checkout(root: Path) -> None:
-    """Refuse untracked or ignored code, any bytecode cache, and anything else in src/."""
+    """Refuse a checkout that is not exactly its commit, or that carries code beside it.
+
+    Refused: tracked modifications, tracked or untracked symlinks, untracked or ignored code,
+    bytecode caches, tracked compiled or path files, and anything in ``src/`` but the package.
+    """
 
     root = Path(root).resolve()
-    listed = _git(root, "ls-files", "-z")
-    if listed is None:
-        raise IsolationRefused("the checkout's tracked files cannot be listed; not a git checkout?")
-    tracked = {item for item in listed.split("\0") if item}
+    listed = _git(root, "ls-files", "-s", "-z")
+    status = _git(root, "status", "--porcelain=v1", "--untracked-files=no")
+    if listed is None or status is None:
+        _refuse(["tracked files cannot be listed; not a git checkout?"], "the checkout is unusable")
     failures: list[str] = []
-    for relative in sorted(tracked):
+    if status.strip():
+        failures.append(f"tracked files differ from the commit: {status.split()[-1]}")
+    tracked: set[str] = set()
+    for record in filter(None, listed.split("\0")):
+        mode, _, remainder = record.partition(" ")
+        relative = remainder.split("\t", 1)[-1]
+        tracked.add(relative)
+        if mode == "120000":
+            failures.append(f"a tracked symlink: {relative}")
         if relative.endswith(COMPILED_SUFFIXES):
             failures.append(f"a compiled or path-configuration file is tracked: {relative}")
     for directory, dirnames, filenames in os.walk(root):
@@ -392,6 +554,12 @@ def audit_checkout(root: Path) -> None:
             failures.append(f"a bytecode cache is in the checkout: {relative_dir.as_posix()}")
             dirnames[:] = []
             continue
+        for name in [*dirnames, *filenames]:
+            if (current / name).is_symlink():
+                relative = (relative_dir / name).as_posix()
+                if relative not in tracked:
+                    failures.append(f"a symlink is in the checkout: {relative}")
+        dirnames[:] = [name for name in dirnames if not (current / name).is_symlink()]
         for filename in filenames:
             relative = (relative_dir / filename).as_posix()
             if relative not in tracked and filename.endswith(CODE_SUFFIXES):
@@ -408,28 +576,32 @@ def audit_checkout(root: Path) -> None:
 
 
 def enter(
-    root: Path | None = None, *, lock_pins: Mapping[str, str] | None = None
+    root: Path | None = None,
+    *,
+    wheelhouse: Path,
+    lock_entries: Mapping[str, LockEntry] | None = None,
 ) -> IsolationReport:
     """Verify the isolated process and its import surface, then set the ONLY import path.
 
     Called with the first-party source root already appended (so this module could be imported)
-    and nothing else added. On success ``sys.path`` becomes the interpreter's library, then its
-    verified site-packages, then the source root, in that order.
+    and nothing else added. On success ``sys.path`` becomes the interpreter's library, then the
+    authenticated site-packages, then the source root, in that order.
     """
 
     root = (root or project_root()).resolve()
     source = str(root / SOURCE_ROOT)
     flags = verify_interpreter_isolation()
     initial = [entry for entry in sys.path if entry != source]
-    sites = site_directories()
-    verify_initial_sys_path(initial, sites=sites)
-    installed, digest, locked_files = audit_site_packages(sites, lock_pins or read_lock(root))
+    site = single_site_directory()
+    verify_initial_sys_path(initial, sites=(site,))
+    wheels = authenticate_wheelhouse(Path(wheelhouse), lock_entries or read_lock_entries(root))
+    installed, digest, locked_files = audit_site_packages(site, wheels)
     audit_checkout(root)
-    sys.path[:] = [*initial, *(str(site) for site in sites), source]
+    sys.path[:] = [*initial, str(site), source]
     return IsolationReport(
         interpreter_flags=flags,
         stdlib_roots=tuple(str(path) for path in stdlib_roots()),
-        site_dirs=tuple(str(site) for site in sites),
+        site_dirs=(str(site),),
         source_root=source,
         installed=installed,
         installed_files_sha256=digest,
@@ -447,10 +619,11 @@ def attest_loaded_modules(
     root: Path,
     modules: Mapping[str, Any] | None = None,
 ) -> int:
-    """Refuse unless every loaded module came from the stdlib, a locked file or the pin.
+    """Refuse unless every loaded module came from the stdlib, an authenticated file or the pin.
 
     Returns the number of modules verified. Built-in and frozen modules carry no file and are part
-    of the interpreter itself.
+    of the interpreter itself. Under J1=B this is a cross-check: no unverified code runs after
+    attestation, so origins can only be rewritten from inside the trusted base (Addendum 7).
     """
 
     root = Path(root).resolve()
@@ -493,8 +666,8 @@ def attest_loaded_modules(
             verified += 1
             continue
         failures.append(
-            f"module {name} was loaded from {origin}, outside the standard library, the verified "
-            "locked files and the reviewed pin"
+            f"module {name} was loaded from {origin}, outside the standard library, the "
+            "authenticated files and the reviewed pin"
         )
     _refuse(failures, "a loaded module is not verified code")
     return verified

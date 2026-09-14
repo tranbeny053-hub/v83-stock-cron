@@ -32,6 +32,9 @@ STEPS = JOB.steps
 RUN_STEPS = [step for step in STEPS if step.run is not None]
 
 ISOLATED_ENTRYPOINT = ("-I", "-S", "-B", "scripts/evaluate_section_5a.py")
+RUNNER_TEMP = "/home/runner/work/_temp"
+WHEELHOUSE = f"{RUNNER_TEMP}/section-5a-wheels"
+BUNDLED_PIP = "/opt/hostedtoolcache/Python/3.13.14/x64/lib/python3.13/ensurepip/_bundled/pip.whl"
 
 HOSTILE = (
     "'; touch INJECTED_SINGLE; #'",
@@ -56,6 +59,12 @@ ATTEST = _step("Attest")
 TESTS = _step("tests under this exact runtime")
 EVALUATE = _step("Run the evaluation")
 UPLOAD = _step("Upload")
+
+
+def _environment(step: Step, contexts: dict[str, str], **extra: str) -> dict[str, str]:
+    """What GitHub gives a step: its resolved env, plus RUNNER_TEMP, which every runner sets."""
+
+    return {**resolve_env(step.env, contexts), "RUNNER_TEMP": RUNNER_TEMP, **extra}
 
 
 def _contexts(value: str) -> dict[str, str]:
@@ -111,11 +120,16 @@ def test_the_evaluator_only_ever_runs_isolated_and_nothing_writes_bytecode() -> 
 
     for step in (ATTEST, EVALUATE):
         assert step.run.startswith("python -I -S -B scripts/evaluate_section_5a.py "), step.name
+    invocations = 0
     for step in RUN_STEPS:
         assert "PYTHONPATH" not in step.run, step.name
-        for line in step.run.splitlines():
-            if line.lstrip().startswith("python "):
-                assert line.lstrip().startswith(("python -B ", "python -I -S -B ")), line
+        for match in re.finditer(r"\bpython\b(?P<rest>[^\n]*)", step.run):
+            invocations += 1
+            rest = match.group("rest")
+            # J1=B: every process that installs or evaluates is isolated; only pytest is not,
+            # and it may neither write bytecode nor import user site-packages.
+            assert rest.startswith((" -I -S -B ", " -s -B -m pytest ")), (step.name, rest)
+    assert invocations >= 6, "the check must see every Python invocation, or it proves nothing"
 
 
 def test_the_evaluation_takes_every_input_from_the_environment() -> None:
@@ -127,7 +141,7 @@ def test_the_evaluation_takes_every_input_from_the_environment() -> None:
     }
     assert ATTEST.env == {"SECTION_5A_EXPECTED_SHA": "${{ inputs.expected_sha }}"}
     assert INSTALL.env == {}
-    assert TESTS.env == {"PYTHONDONTWRITEBYTECODE": "1"}, "subprocesses must not write bytecode"
+    assert TESTS.env == {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"}
 
 
 def test_the_steps_run_in_the_safety_order() -> None:
@@ -160,13 +174,28 @@ def test_the_interpreter_is_exactly_the_one_the_evaluator_pins() -> None:
     }, "no cache and no version range: the interpreter is exact"
 
 
-def test_the_install_is_the_hash_locked_set_and_nothing_else() -> None:
-    command = " ".join(INSTALL.run.replace("\\\n", " ").split())
-    assert command == (
-        "python -B -m pip install --no-compile --require-hashes --no-deps --only-binary=:all: "
-        f"-r {provenance.EVALUATOR_LOCK}"
-    ), "no bytecode may be written into site-packages: it would be refused as unowned"
+def test_the_install_runs_only_cpython_s_bundled_pip_on_authenticated_wheels() -> None:
+    """J1=B. The floating pip is deleted unrun; CPython's bundled pip downloads, then installs
+    from the downloaded wheels alone, with every hash required and nothing compiled."""
+
+    commands = [
+        " ".join(line.split())
+        for line in INSTALL.run.replace("\\\n", " ").splitlines()
+        if line.strip()
+    ]
+    lock = provenance.EVALUATOR_LOCK
+    assert commands == [
+        "python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer",
+        'bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"',
+        'python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check '
+        "--require-hashes --no-deps --only-binary=:all: "
+        f'--dest "$RUNNER_TEMP/section-5a-wheels" -r {lock}',
+        'python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check '
+        '--no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile '
+        f"--require-hashes --no-deps --only-binary=:all: -r {lock}",
+    ]
     assert "requirements.txt" not in TEXT
+    assert "-m pip" not in TEXT, "the floating pip must never be executed"
 
 
 def test_the_checkout_keeps_no_credentials_and_the_image_is_pinned() -> None:
@@ -182,7 +211,7 @@ def test_expected_sha_is_a_required_dispatch_input() -> None:
 
 def test_the_in_job_tests_cover_the_evaluator_and_this_boundary() -> None:
     command = TESTS.run.split()
-    assert command[:6] == ["python", "-B", "-m", "pytest", "-q", "-p"]
+    assert command[:7] == ["python", "-s", "-B", "-m", "pytest", "-q", "-p"]
     paths = [part for part in command if part.startswith("tests/")]
     for required in (
         "tests/oos/evaluation",
@@ -212,22 +241,28 @@ def test_hostile_inputs_reach_the_evaluator_as_inert_arguments(
 
     contexts = _contexts(hostile)
     attested = run_step(
-        ATTEST, env=resolve_env(ATTEST.env, contexts), workdir=tmp_path, bin_dir=bin_dir
+        ATTEST, env=_environment(ATTEST, contexts), workdir=tmp_path, bin_dir=bin_dir
     )
     evaluated = run_step(
-        EVALUATE, env=resolve_env(EVALUATE.env, contexts), workdir=tmp_path, bin_dir=bin_dir
+        EVALUATE, env=_environment(EVALUATE, contexts), workdir=tmp_path, bin_dir=bin_dir
     )
     assert attested.returncode == 0, attested.stderr
     assert evaluated.returncode == 0, evaluated.stderr
 
     calls = stub_calls(log)
     assert [call["argv"] for call in calls] == [
-        [*ISOLATED_ENTRYPOINT, "--mode=attest", f"--expected-sha={hostile}"],
+        [
+            *ISOLATED_ENTRYPOINT,
+            "--mode=attest",
+            f"--expected-sha={hostile}",
+            f"--wheelhouse={WHEELHOUSE}",
+        ],
         [
             *ISOLATED_ENTRYPOINT,
             f"--mode={hostile}",
             f"--expected-sha={hostile}",
             f"--confirm={hostile}",
+            f"--wheelhouse={WHEELHOUSE}",
             "--artifact-dir=.work/section_5a",
             "--report=section-5a-report.json",
         ],
@@ -243,14 +278,15 @@ def test_the_real_parser_binds_each_hostile_value_to_its_own_option(
     log = tmp_path / "calls.jsonl"
     install_stub(tmp_path / "bin", "python", log)
     contexts = {**_contexts(hostile), "inputs.mode": runner.MODE_CONSUME}
-    env = resolve_env(EVALUATE.env, contexts)
+    env = _environment(EVALUATE, contexts)
     run_step(EVALUATE, env=env, workdir=tmp_path, bin_dir=tmp_path / "bin")
     (call,) = stub_calls(log)
     assert call["argv"][: len(ISOLATED_ENTRYPOINT)] == list(ISOLATED_ENTRYPOINT)
     args = cli.build_parser().parse_args(call["argv"][len(ISOLATED_ENTRYPOINT) :])
     assert args.mode == runner.MODE_CONSUME
     assert args.confirm == hostile and args.expected_sha == hostile
-    assert args.write_pin is False
+    assert args.wheelhouse == WHEELHOUSE
+    assert args.write_pin is False and args.remove_floating_installer is False
 
 
 @pytest.mark.parametrize("step", RUN_STEPS, ids=lambda step: step.name)
@@ -258,7 +294,7 @@ def test_a_failing_command_fails_its_step(tmp_path: Path, step: Step) -> None:
     """V808-R6: a refusal is a red step, never a green one."""
 
     install_stub(tmp_path / "bin", "python", tmp_path / "calls.jsonl")
-    env = {**resolve_env(step.env, _contexts("value")), "STUB_EXIT": "5"}
+    env = _environment(step, _contexts("value"), STUB_EXIT="5", STUB_STDOUT=BUNDLED_PIP)
     completed = run_step(step, env=env, workdir=tmp_path, bin_dir=tmp_path / "bin")
     assert completed.returncode == 5, (step.name, completed.stderr)
 
@@ -268,7 +304,25 @@ def test_a_succeeding_command_leaves_its_step_green(tmp_path: Path, step: Step) 
     """The counterpart, so a step that always failed could not pass the test above."""
 
     install_stub(tmp_path / "bin", "python", tmp_path / "calls.jsonl")
-    env = {**resolve_env(step.env, _contexts("value")), "STUB_EXIT": "0"}
+    env = _environment(step, _contexts("value"), STUB_EXIT="0", STUB_STDOUT=BUNDLED_PIP)
     completed = run_step(step, env=env, workdir=tmp_path, bin_dir=tmp_path / "bin")
     assert completed.returncode == 0, (step.name, completed.stderr)
-    assert len(stub_calls(tmp_path / "calls.jsonl")) == 1
+    assert len(stub_calls(tmp_path / "calls.jsonl")) == (4 if step is INSTALL else 1)
+
+
+def test_the_install_step_executes_in_the_trusted_order(tmp_path: Path) -> None:
+    """Executed: removal first, then the bundled pip downloads, then installs from the wheels."""
+
+    log = tmp_path / "calls.jsonl"
+    install_stub(tmp_path / "bin", "python", log)
+    env = _environment(INSTALL, _contexts("value"), STUB_STDOUT=BUNDLED_PIP)
+    completed = run_step(INSTALL, env=env, workdir=tmp_path, bin_dir=tmp_path / "bin")
+    assert completed.returncode == 0, completed.stderr
+    argv = [call["argv"] for call in stub_calls(log)]
+    assert argv[0] == [*ISOLATED_ENTRYPOINT, "--remove-floating-installer"]
+    assert argv[1] == [*ISOLATED_ENTRYPOINT, "--bundled-pip"]
+    assert argv[2][:5] == ["-I", "-S", "-B", f"{BUNDLED_PIP}/pip", "download"]
+    assert argv[2][argv[2].index("--dest") + 1] == WHEELHOUSE
+    assert argv[3][:5] == ["-I", "-S", "-B", f"{BUNDLED_PIP}/pip", "install"]
+    assert argv[3][argv[3].index("--find-links") + 1] == WHEELHOUSE
+    assert {"--no-index", "--no-compile", "--require-hashes", "--no-deps"} <= set(argv[3])

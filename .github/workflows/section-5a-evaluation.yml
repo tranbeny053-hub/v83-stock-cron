@@ -17,12 +17,19 @@ name: Section 5A evaluation (MANUAL DISPATCH ONLY)
 # The attestation covers isolation, pin, dispatch (main, expected_sha) and runtime.
 #
 # ISOLATED START-UP (owner ruling G1=A, V809-F1). The evaluator only ever runs as `python -I -S -B`.
-# There, before any module beyond the standard library loads, it verifies that:
-# - site-packages is exactly the hash-locked set;
-# - every loaded module comes from the stdlib, a verified locked file or the reviewed pin.
-# It refuses untracked code, `.pth` files, duplicates and shadows. So nothing here may leave
-# bytecode or code in the checkout: every Python step runs with -B, and pip installs with
-# --no-compile.
+# Before any module beyond the standard library loads, it verifies its import surface and refuses
+# untracked code, `.pth` files, duplicates, symlinks and shadows. So no step may leave bytecode or
+# code behind: every Python step runs with -B, and pip installs with --no-compile.
+#
+# THE TRUST BOUNDARY (owner ruling J1=B, V810). Trusted, and nothing else:
+# - the exact CPython 3.13.14 installed by the pinned setup-python;
+# - the pinned Actions;
+# - the pip wheel CPython bundles in ensurepip/_bundled.
+# The runner's floating pip, which setup-python reinstalls from the index unverified, is deleted
+# unrun. Wheels are downloaded by CPython's bundled pip and authenticated against the hash lock.
+# Installed importable bytes are attested against the RECORD inside each authenticated wheel, never
+# against the RECORD pip writes beside them. No unverified code runs after attestation.
+# Pre-registration Addendum 7.
 
 "on":
   workflow_dispatch:
@@ -72,26 +79,34 @@ jobs:
           python-version: "3.13.14"
           check-latest: "false"
 
-      - name: Install the hash-locked evaluator dependency set
+      - name: Install the hash-locked set with CPython's bundled pip, from authenticated wheels
         shell: bash
         # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
         run: |
-          python -B -m pip install --no-compile --require-hashes --no-deps --only-binary=:all: \
+          python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer
+          bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"
+          python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: --dest "$RUNNER_TEMP/section-5a-wheels" \
+            -r ops/section_5a_evaluator_requirements.lock
+          python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check \
+            --no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile \
+            --require-hashes --no-deps --only-binary=:all: \
             -r ops/section_5a_evaluator_requirements.lock
 
       - name: Attest isolation, pin, dispatch and runtime (main, expected_sha, interpreter, lock)
         shell: bash
         env:
           SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: python -I -S -B scripts/evaluate_section_5a.py --mode=attest --expected-sha="$SECTION_5A_EXPECTED_SHA"
+        run: python -I -S -B scripts/evaluate_section_5a.py --mode=attest --expected-sha="$SECTION_5A_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels"
 
       - name: Run the evaluator's tests under this exact runtime (no secret)
         shell: bash
         env:
-          # Inherited by every subprocess a test starts, so no test leaves bytecode in the checkout:
-          # the evaluation step's isolation audit would refuse it.
+          # Inherited by every subprocess a test starts. No test may leave bytecode in the checkout,
+          # which the evaluation step's isolation audit would refuse, or import user site-packages.
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python -B -m pytest -q -p no:cacheprovider tests/oos/evaluation tests/persistence/test_section_5a_seal_sql.py tests/migrations/test_section_5a_seal_migration.py tests/scripts/test_evaluate_section_5a.py tests/workflows/test_section_5a_evaluation_workflow_contract.py tests/workflows/test_section_5a_workflow_boundary.py tests/workflows/test_workflow_steps_reader.py tests/utils/test_canonical_json.py
+          PYTHONNOUSERSITE: "1"
+        run: python -s -B -m pytest -q -p no:cacheprovider tests/oos/evaluation tests/persistence/test_section_5a_seal_sql.py tests/migrations/test_section_5a_seal_migration.py tests/scripts/test_evaluate_section_5a.py tests/workflows/test_section_5a_evaluation_workflow_contract.py tests/workflows/test_section_5a_workflow_boundary.py tests/workflows/test_workflow_steps_reader.py tests/utils/test_canonical_json.py
 
       - name: Run the evaluation (the ONLY step that receives the database secret)
         shell: bash
@@ -100,7 +115,7 @@ jobs:
           SECTION_5A_MODE: ${{ inputs.mode }}
           SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
           SECTION_5A_CONFIRM: ${{ inputs.confirm }}
-        run: python -I -S -B scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --artifact-dir=.work/section_5a --report=section-5a-report.json
+        run: python -I -S -B scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --artifact-dir=.work/section_5a --report=section-5a-report.json
 
       # SECONDARY ONLY. The durable one-shot seal and the raw capture live in Postgres
       # (migrations/0009). This upload is convenience and audit trail; it is never the

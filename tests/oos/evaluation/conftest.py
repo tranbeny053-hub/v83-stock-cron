@@ -126,7 +126,7 @@ def synthetic_runtime(**overrides: Any) -> dict[str, Any]:
         "git_head": SYNTHETIC_SHA,
         "tracked_tree_clean": True,
         "lock_sha256": provenance.lock_sha256(),
-        "installed": {**provenance.read_lock(), "pip": "26.1.2"},
+        "installed": dict(provenance.read_lock()),
         "pin_digest": str(evaluator_pin.current_pin_artifacts()["closure_digest"]),
         "interpreter_flags": provenance.REQUIRED_FLAGS_TEXT,
         "installed_files_sha256": SYNTHETIC_INSTALLED_FILES_SHA256,

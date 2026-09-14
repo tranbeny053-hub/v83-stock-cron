@@ -791,3 +791,73 @@ that carry the reader.
 - **The positive path** is proven locally with a toolcache-shaped interpreter. Its first proof on
   GitHub's runner image is the readiness dispatch, which is T4. An unexpected file in the image's
   site-packages refuses safely there, before any database access.
+
+# Addendum 7, 2026-09-14 — the closed trust boundary (ruling J1=B)
+
+Codex task-810 killed 5 of 5 mutants but returned NOT_VERIFIED. Four bypasses remained:
+
+- **V810-F1 (CRITICAL).** Installed code was checked against the RECORD written beside it. A
+  tampered file with a rewritten RECORD passed; Opus reproduced it.
+- **V810-F2 (HIGH).** Files were hashed at audit and loaded later by path.
+- **V810-F3 (HIGH).** A symlinked package directory escaped both audits; Opus reproduced it.
+- **V810-F4 (HIGH).** Module origins were read from mutable attributes.
+
+The root cause was two things. The checks authenticated mutable installed metadata instead of the
+pinned hashes. And the job executed one piece of unverified code: the floating pip that
+setup-python reinstalls from the package index, which the install step ran. The owner ruled J1=B.
+This addendum **supersedes Addendum 6 §36's site-packages rule and §39's installer residual**.
+
+## 40. The trusted computing base
+
+Trusted, and nothing else:
+1. the exact CPython 3.13.14 installed by the pinned `actions/setup-python`;
+2. the pinned Actions (checkout, setup-python, upload-artifact, each a full commit SHA);
+3. the pip wheel CPython itself bundles in `ensurepip/_bundled`.
+
+Everything the evaluator imports beyond that base is authenticated, not inventoried.
+
+## 41. No unverified code runs
+
+- **The floating pip.** It is deleted from site-packages without ever being executed, and its
+  presence, or any other installer's, is refused thereafter.
+- **Installation.** CPython's bundled pip, running as `python -I -S -B`:
+  1. downloads the locked wheels with `--require-hashes` into a wheelhouse outside the checkout;
+  2. installs from those wheels alone, with `--no-index --no-compile --require-hashes --no-deps`.
+- **After attestation.**
+  - The in-job tests run authenticated and first-party code only, with `-s -B` and
+    `PYTHONNOUSERSITE` and `PYTHONDONTWRITEBYTECODE` inherited by every subprocess.
+  - The evaluation runs as `python -I -S -B` and re-audits everything itself.
+
+## 42. What is authenticated, and against what
+
+- **Wheels.** Each wheel's SHA-256 must be one the hash lock pins for that exact version: exactly one
+  wheel per locked pin, nothing else in the wheelhouse, no symlink.
+- **Installed importable bytes.** Every file an authenticated wheel declares must be installed as a
+  regular file whose SHA-256 and size equal the digest recorded INSIDE that wheel's own RECORD.
+  - `.data/purelib` and `.data/platlib` map to the site root.
+  - Scripts, headers and data never enter site-packages.
+  - The RECORD pip writes beside installed files is never an authority (V810-F1).
+- **`installed_files_sha256`** is now a deterministic function of the authenticated wheels alone.
+- **site-packages** holds exactly those files, pip's installer metadata (`INSTALLER`, `REQUESTED`,
+  `RECORD`, `direct_url.json`) and CPython's `README.txt`. Refused:
+  - any other file, directory or distribution;
+  - any duplicate, symlink, `.pth`, `sitecustomize`, `usercustomize` or egg;
+  - a split purelib/platlib layout.
+- **The checkout** must equal its commit. Refused:
+  - tracked modifications, tracked or untracked symlinks (V810-F3);
+  - untracked or ignored code, bytecode caches;
+  - tracked compiled or path files, and anything in `src/` but the package.
+
+## 43. Residual trusted base, stated rather than hidden
+
+- **The base itself.** Its integrity is assumed, not verified. So is the runner image beneath the
+  interpreter: kernel, filesystem, bash, coreutils and git.
+- **V810-F2 and F4.** No unverified code runs after attestation, so a file swapped between audit and
+  load, or a module origin rewritten in memory, requires code from inside that base. They are
+  residual, not closed. The same holds for bundled shared libraries and package data files, which
+  are verified at attestation and are not modules.
+- **The verify-at-load import hook** was considered and, by owner ruling, not adopted.
+- **The owner credential.** Code supplied by a compromised owner credential remains out of reach
+  (Addendum 5 §30).
+- **The first real proof on GitHub's runner image** is the readiness dispatch, which is T4. An
+  unexpected file there refuses safely, before any database access.
