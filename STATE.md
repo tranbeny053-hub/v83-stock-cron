@@ -1,6 +1,6 @@
 # STATE
 
-Updated: 2026-09-14 (§2.6 SAFETY CHANGE BUILT AND VERIFIED — consume enforces the readiness population before claiming, 4a0a908, gate 1873, Codex task-814 VERIFIED; ONE T3 for lane F requested; then a new readiness, then consume with that ID; one look NOT consumed)
+Updated: 2026-09-15 (lane F MERGED as PR #97 — main 1d8f933, tree fc242d44 as authorized: consume now enforces the readiness population before claiming; NEW readiness T4 on 1d8f933 next (N3); one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
@@ -175,9 +175,9 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-lane-e (LOCAL ONLY, never to be pushed before the apply), from main
-  4b0a522. It carries this STATE checkpoint alone. It stays LOCAL because any merge to main would
-  move main away from the SHA the fresh T4 apply must name.
+CURRENT_BRANCH=chore/state-post-lane-f (LOCAL ONLY), from main 1d8f933. It carries this STATE checkpoint and
+  stays local, so main remains the SHA that readiness and consumption must name.
+CURRENT_BRANCH_PRIOR_E=chore/state-post-lane-e, from main 4b0a522. Its STATE commits merged with #97.
 CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
   STATE commits merged with #96.
 CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was branched from main 5940557.
@@ -674,7 +674,22 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=ONE T3 REQUESTED for lane F, fix/5a-consume-population-guard. The head and tree are named in
+OWNER_BOUNDARY=A NEW READINESS T4 TO BE REQUESTED (ruling N3): dispatch section-5a-evaluation.yml ONCE with
+  mode=readiness at main 1d8f933832a01a88f4d58183eae0bcf240eae6df.
+  - Its FULL decision_population_id becomes the ONLY identity consumption may use.
+  - The old readiness identity f83c31f7… (run 34863318042, on 4b0a522) is historical. Compare it for
+    information only.
+  CONSUMED: the lane F T3 (#97).
+LANE_F_MERGED=PR #97, owner-authorized T3, run by the scripted procedure (.work/814/t3-lane-f/):
+  - exact-head CI green on 52abeee (run 34871596220);
+  - a --match-head-commit merge;
+  - parents (4b0a522, 52abeee);
+  - a merged tree fc242d444f04bc80388914b262ad869a539f7a19 EQUAL to the authorized tree;
+  - exact-main CI green on 1d8f933 (run 34871911951);
+  - hf a89b45e, unchanged; zero open PRs.
+  One process slip: the lane script was started with a shell '&' rather than the harness's
+  background mode. It ran to completion, and a tracked waiter confirmed LANE_PASS.
+OWNER_BOUNDARY_PRIOR_F=ONE T3 was requested for lane F, fix/5a-consume-population-guard. The head and tree are named in
   .work/814/final-review.md.
   - The owner authorized it as a §2.6 safety change on 2026-09-14: N1=A, N2, N3.
   - It is built and verified:
@@ -717,9 +732,9 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner's T3 authorization of lane F. Then run the scripted single-lane merge, and after it
-  request a NEW readiness T4 on the new pin. DO NOT dispatch consume or any other Section 5A run until
-  it is separately authorized.
+NEXT_ACTION=Request the NEW readiness T4 at main 1d8f933. MERGE NOTHING to main. After a verified readiness,
+  request consume with THAT run's full decision_population_id.
+  DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
