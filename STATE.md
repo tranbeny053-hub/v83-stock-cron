@@ -1,11 +1,35 @@
 # STATE
 
-Updated: 2026-09-14 (lane E MERGED as PR #96 — main 4b0a522, tree b34fa44e as authorized, M1=A; FRESH T4 apply of 0009 REQUESTED at exactly 4b0a522; 0009 unapplied; nothing deployed; one look NOT consumed)
+Updated: 2026-09-14 (MIGRATION 0009 APPLIED ONCE AND VERIFIED — run 34861816985 at main 4b0a522, 48/48 runbook checks; seal table exists, locked down, empty; 0008 unapplied; readiness T4 next; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
-  no live DB read, no readiness run, no evaluation, no holdout row inspected.
+  no readiness run, no evaluation, no holdout row inspected.
+  MIGRATION 0009 APPLIED ONCE, VERIFIED. This is the owner-authorized FRESH T4, CONSUMED 2026-09-14,
+  NEVER RERUN, and NEVER DISPATCH THE APPLY WORKFLOW AGAIN.
+  - The run. 34861816985, attempt 1, workflow_dispatch on main 4b0a522, image ubuntu24
+    20260907.300.1. Every step succeeded, and the apply step ran 15:24:02Z -> 15:24:08Z.
+  - The raw report, captured before parsing (.work/813/t4-apply-0009-b/, evidence.sha256):
+    - outcome APPLIED, committed true;
+    - migration_sha256 == executed_migration_sha256 == 96bdad8358b853a4…, the reviewed 0009;
+    - pre_checks: seal tables, guard functions and guard triggers in any schema all 0;
+      analysis_run_details_present false;
+    - post_checks:
+      - exactly the 12 reviewed columns;
+      - constraints section_5a_captured_is_complete, section_5a_claim_has_verified_provenance,
+        section_5a_claimed_has_no_snapshot (c), the pkey (p), the seal_id and state checks (c);
+      - triggers section_5a_seal_guard and section_5a_seal_truncate_guard;
+      - row-level security true and not forced; owned by the applying role;
+      - anon, authenticated, service_role and PUBLIC hold NO privilege;
+      - rows 0; 0008's table still absent.
+    - run_provenance: this workflow on main, expected == sha == git_head == 4b0a522, run 34861816985,
+      CPython 3.13.14, isolated start-up.
+  - LINUX PROOF (L1b). The attest step's driver_helpers on the real runner equal the pinned
+    fingerprints: _cython_3_2_4 41c2a9fd…, cython_runtime 038e7fe8….
+  - No database URL appears in the log or the report. verify_run.py: VERDICT VERIFIED, 48/48.
+  The earlier T4 at 3dc545c (run 34851608514) refused before any database access. Both runs are
+  consumed.
   T4 APPLY OF 0009, owner-authorized ONE SHOT, 2026-09-14. It is CONSUMED; NEVER RERUN.
   - Dispatched once at 13:49:08Z: run 34851608514, attempt 1, main 3dc545c. The pre-dispatch
     checks passed.
@@ -615,7 +639,11 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=A FRESH T4 REQUESTED: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
+OWNER_BOUNDARY=T4 READINESS TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with mode=readiness at
+  main 4b0a522. It reads the evidence, never the probabilities, and claims nothing. It is its own
+  authorization, and consumption is a separate T4 after it.
+OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and is DONE (see LOOP_STATE). Its
+  request was: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
   4b0a52209afd5ef3a9eb62b4da8cca126619befd, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
   - The same procedure as run 34851608514: pre-checks (origin/main == SHA, hf unchanged, no active
     runs, workflow active), one dispatch, raw capture of the run JSON, job log and report artifact
@@ -625,8 +653,10 @@ OWNER_BOUNDARY=A FRESH T4 REQUESTED: dispatch section-5a-apply-seal-migration.ym
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner's fresh T4 authorization of the 0009 apply at 4b0a522. MERGE NOTHING to main
-  meanwhile. NEVER rerun run 34851608514.
+NEXT_ACTION=Request the readiness T4, section-5a-evaluation.yml mode=readiness at main 4b0a522. MERGE NOTHING to
+  main before readiness and consumption unless the owner decides otherwise.
+  - NEVER dispatch the apply workflow again; 0009 is applied.
+  - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
   to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
