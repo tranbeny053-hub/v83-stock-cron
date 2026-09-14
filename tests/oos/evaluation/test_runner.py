@@ -6,6 +6,7 @@ No database is contacted: the repository is a fake built from synthetic evidence
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -157,7 +158,9 @@ def test_readiness_output_contains_no_score_of_any_kind() -> None:
 
     report = runner.run_readiness(FakeRepository())
     payload = {key: value for key, value in report.items() if key != "note"}
-    rendered = json.dumps(payload).lower()
+    # Identities are hex digests of hash-seeded synthetic rows, and a digest can spell "ece" by
+    # chance, which made this scan flaky. Scan everything else.
+    rendered = re.sub(r"\b[0-9a-f]{64}\b", "<digest>", json.dumps(payload).lower())
     for forbidden in (
         "brier", "ece", "d_bar", "boundary_statistic",
         "a1_holds", "a2_holds", "b1_holds", "authorized_cells",
