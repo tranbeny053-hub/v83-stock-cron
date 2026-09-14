@@ -1,11 +1,70 @@
 # STATE
 
-Updated: 2026-09-14 (repair lane E VERIFIED: exact driver-helper attestation, bf93028, gate 1846; task-813 16/16 attacks refused, Finding 1 recompute; T3 + decision M1 pending; 0009 unapplied; one look NOT consumed)
+Updated: 2026-09-14 (§2.6 SAFETY CHANGE BUILT AND VERIFIED — consume enforces the readiness population before claiming, 4a0a908, gate 1873, Codex task-814 VERIFIED; ONE T3 for lane F requested; then a new readiness, then consume with that ID; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
-  no live DB read, no readiness run, no evaluation, no holdout row inspected.
+  no evaluation, no probability read, no score computed.
+  CONDITIONAL CONSUME AUTHORIZATION (2026-09-14): NOT EXERCISED. STOPPED UNCONSUMED, and nothing was
+  dispatched.
+  - The owner's condition: the frozen consume path at 4b0a522 must enforce equality with readiness
+    decision_population_id f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 BEFORE
+    the durable claim or probability exposure.
+  - A read-only inspection shows it does NOT. The only pre-claim reads are the anomaly count and
+    feature diagnostics (runner.py 293-294). The claim is at 300-311, the first paired-evidence read
+    (with probabilities) at 315. decision_population_id is computed only in the result (510),
+    reported, never compared. No CLI flag, workflow input or repository check exists.
+  - Readiness facts relevant to drift: 0 unresolved arms, 0 label disagreements.
+  - Write-up: .work/814/consume-population-guard-missing.md.
+  FIRST LIVE READINESS RUN, VERIFIED. This is the owner-authorized T4, CONSUMED 2026-09-14, NEVER RERUN
+  without a new authorization.
+  - The run. 34863318042, attempt 1, workflow_dispatch on main 4b0a522, mode=readiness, no confirm.
+    Every step succeeded, and the in-job tests passed 595 on the real runner. The readiness step ran
+    15:38:51Z -> 15:39:06Z.
+  - The raw report, captured before parsing (.work/813/t4-readiness/, evidence.sha256):
+    - mode readiness; consumes_one_look FALSE;
+    - no probability, score, statistic or determination anywhere (pre-registration §1). The only
+      verdict is §1's attainability verdict;
+    - decision_population_id f83c31f7bd5a9a4d… and evidence_snapshot_id bf3fc0dadfa1103c…;
+    - run_provenance: the evaluation workflow on main, expected == sha == git_head == 4b0a522,
+      run 34863318042, CPython 3.13.14, isolated.
+  - The attest step's driver_helpers equal the pinned fingerprints, a second proof on Linux.
+  - Counts only; no score was ever loaded:
+    - 15m: 466 admitted pairs; usable windows k1/k2/k4 = 89/70/42, from 176/117/71 before the drop;
+      ATTAINABLE.
+    - 1H: 257 pairs; usable 40/28/18; ATTAINABLE.
+    - 4H: 86 pairs; usable 11/7/5, exactly at the floor of 5; ATTAINABLE.
+    - Origin anomalies 0; admitted_resolved_after_t_close 6; missed attempts UNMEASURED by design.
+  - PRE-REGISTRATION §2.6. The evaluator is now FROZEN. Any change after this first live readiness
+    run resets the pin and needs explicit owner authorization stating what changed and why.
+  - The checker (verify_readiness.py) returned VERIFIED. Its first pass flagged the §1 attainability
+    'verdict' keys, because its pattern was overbroad. That output is kept, and the pattern was
+    narrowed to exactly §1's allowance: ATTAINABLE or PASS_UNATTAINABLE at attainability.<timeframe>.
+  MIGRATION 0009 APPLIED ONCE, VERIFIED. This is the owner-authorized FRESH T4, CONSUMED 2026-09-14,
+  NEVER RERUN, and NEVER DISPATCH THE APPLY WORKFLOW AGAIN.
+  - The run. 34861816985, attempt 1, workflow_dispatch on main 4b0a522, image ubuntu24
+    20260907.300.1. Every step succeeded, and the apply step ran 15:24:02Z -> 15:24:08Z.
+  - The raw report, captured before parsing (.work/813/t4-apply-0009-b/, evidence.sha256):
+    - outcome APPLIED, committed true;
+    - migration_sha256 == executed_migration_sha256 == 96bdad8358b853a4…, the reviewed 0009;
+    - pre_checks: seal tables, guard functions and guard triggers in any schema all 0;
+      analysis_run_details_present false;
+    - post_checks:
+      - exactly the 12 reviewed columns;
+      - constraints section_5a_captured_is_complete, section_5a_claim_has_verified_provenance,
+        section_5a_claimed_has_no_snapshot (c), the pkey (p), the seal_id and state checks (c);
+      - triggers section_5a_seal_guard and section_5a_seal_truncate_guard;
+      - row-level security true and not forced; owned by the applying role;
+      - anon, authenticated, service_role and PUBLIC hold NO privilege;
+      - rows 0; 0008's table still absent.
+    - run_provenance: this workflow on main, expected == sha == git_head == 4b0a522, run 34861816985,
+      CPython 3.13.14, isolated start-up.
+  - LINUX PROOF (L1b). The attest step's driver_helpers on the real runner equal the pinned
+    fingerprints: _cython_3_2_4 41c2a9fd…, cython_runtime 038e7fe8….
+  - No database URL appears in the log or the report. verify_run.py: VERDICT VERIFIED, 48/48.
+  The earlier T4 at 3dc545c (run 34851608514) refused before any database access. Both runs are
+  consumed.
   T4 APPLY OF 0009, owner-authorized ONE SHOT, 2026-09-14. It is CONSUMED; NEVER RERUN.
   - Dispatched once at 13:49:08Z: run 34851608514, attempt 1, main 3dc545c. The pre-dispatch
     checks passed.
@@ -116,9 +175,11 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-lane-d (LOCAL ONLY, never to be pushed before the apply), from main
-  3dc545c. It carries this STATE checkpoint alone. It stays LOCAL because any merge to main would
-  move main away from the SHA the T4 apply must name.
+CURRENT_BRANCH=chore/state-post-lane-e (LOCAL ONLY, never to be pushed before the apply), from main
+  4b0a522. It carries this STATE checkpoint alone. It stays LOCAL because any merge to main would
+  move main away from the SHA the fresh T4 apply must name.
+CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
+  STATE commits merged with #96.
 CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was branched from main 5940557.
   - bf31847: the post-batch STATE checkpoint.
   - de31d5a: THE LANE D IMPLEMENTATION, gated PASS: ruff, 1825 passed, schemas+smoke, scanners 3/3.
@@ -132,8 +193,10 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=3dc545c (main). Exact-main CI passed on Python 3.11/Linux, run 34850349141. The local
-  gate was 1825 on the identical tree (lane D 18a6447).
+LAST_GREEN_SHA=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
+  gate was 1857 on the identical tree (lane E 5d833de).
+LAST_GREEN_SHA_PRIOR_D=3dc545c (main). Exact-main CI run 34850349141; the local gate was 1825 (lane D
+  18a6447).
 LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local gate was 1739 on the
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
@@ -154,10 +217,11 @@ LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · comp
   - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
   - 553 in-job tests passed, leaving no bytecode;
   - readiness reached the authority refusal, and with the driver loaded both origin checks passed.
-MAIN_STATE=main = origin/main = 3dc545c, tree b58b7063, zero open PRs. It is the merge of PR #95 (lane D)
-  onto 5940557 (#94), onto #93 (86a5ed1), onto #92 (99e5499), onto 5f36126 (PR #91).
-  The SUPABASE_DB_URL repository secret exists (name checked only). Neither Section 5A workflow
-  has ever run.
+MAIN_STATE=main = origin/main = 4b0a522, tree b34fa44e, zero open PRs. It is the merge of PR #96 (lane E)
+  onto 3dc545c (#95, lane D), onto 5940557 (#94), onto #93, onto #92.
+  The SUPABASE_DB_URL repository secret exists (name checked only).
+  - The evaluation workflow has NEVER run.
+  - The apply workflow ran ONCE: run 34851608514, refused before any database access.
   Scratch worktrees remain under the session scratchpad; the repository checkout itself is single.
 MAIN_STATE_PRIOR=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
   merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
@@ -534,7 +598,19 @@ OWNER_RULINGS_L1_L3=Ruled 2026-09-14:
   - L2: Opus implements, and Codex runs at most 5 bounded attacks.
   - L3: repair, then T3 merge, then a fresh T4 apply.
   No dispatch, DB, readiness or one look.
-LANE_E=fix/5a-driver-helper-attestation (LOCAL). The repair bf93028 is gated at 1846.
+LANE_E=fix/5a-driver-helper-attestation, MERGED as PR #96, owner-authorized T3 with M1=A. It ran by
+  the same scripted procedure (.work/813/t3-lane-e/):
+  - exact-head CI green on 5d833de (run 34859880367);
+  - a --match-head-commit merge;
+  - parents (3dc545c, 5d833de);
+  - a merged tree b34fa44ec471846ec497cbb9ebfb20289d132f47 EQUAL to the authorized tree;
+  - exact-main CI green on 4b0a522 (run 34860237518);
+  - hf a89b45e, unchanged.
+  Contents:
+  - bf93028: the exact dynamic-helper rule;
+  - 064cfe0: attack-pinning tests and STATE;
+  - 5d833de: the M1=A recompute guard.
+  The prior local gate was 1846 at bf93028.
   - L1b is delivered through the attest steps: attest loads the driver without connecting and
     attests again, before the tests and the secret. The in-job test would have had to skip, which
     tests/test_no_silent_skips.py bans.
@@ -598,9 +674,54 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-NEXT_ACTION=Request lane E's T3 together with decision M1 (recompute guard: A fold into lane E as one extra
-  verified commit, recommended; B a follow-up before readiness). NEVER rerun run 34851608514 or
-  re-dispatch the apply without a NEW T4.
+OWNER_BOUNDARY=ONE T3 REQUESTED for lane F, fix/5a-consume-population-guard. The head and tree are named in
+  .work/814/final-review.md.
+  - The owner authorized it as a §2.6 safety change on 2026-09-14: N1=A, N2, N3.
+  - It is built and verified:
+    - 4a0a908: the guard and Addendum 10, gate 1873;
+    - Codex task-814 VERIFIED: 5 attack groups, 19 variants held;
+    - probe-only variants are now committed tests.
+  - After merge (N3): a NEW, separately authorized readiness on the new pin, then consume ONLY with
+    that readiness run's decision_population_id.
+OWNER_RULINGS_N1_N3=Ruled 2026-09-14:
+  - N1=A: a required full expected decision_population_id for consume; the probability-free
+    readiness population check before the durable claim or probability exposure, where a mismatch
+    STOPS UNCONSUMED; a post-claim re-check that refuses statistics on drift.
+  - N2: Addendum 10, the full gate, bounded Codex verification.
+  - N3: after the T3 merge, a new separately authorized readiness on the new pin, then consume
+    only with that readiness ID.
+OWNER_BOUNDARY_PRIOR_N=RULINGS N1-N3 were requested (.work/814/consume-population-guard-missing.md).
+  - N1, the guard. A (recommended):
+    - a required expected_population_id input;
+    - a pre-claim probability-free read with equality, refusing with nothing spent;
+    - a post-claim re-check before any statistic;
+    - the result states the equality.
+    B: an atomic claim+read transaction.
+  - N2: Opus, tests, Addendum 10 (§2.6: what changed and why), a re-pin, one Codex check of at most
+    5 attacks, a T3.
+  - N3: re-run readiness at the new pin (recommended), then consume with that ID.
+  The conditional consume authorization was NOT exercised and is not reusable.
+OWNER_BOUNDARY_PRIOR_CONSUME=T4 CONSUMPTION (THE ONE LOOK) was requested: dispatch section-5a-evaluation.yml ONCE with
+  mode=consume and confirm CONSUME-SECTION-5A-ONE-LOOK at main 4b0a522, the same pin as readiness.
+  - It is IRREVERSIBLE: the claim spends the look.
+  - Compare its decision_population_id with readiness's f83c31f7… to detect drift.
+  The readiness T4 (run 34863318042) is CONSUMED.
+OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and is DONE (see LOOP_STATE). Its
+  request was: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
+  4b0a52209afd5ef3a9eb62b4da8cca126619befd, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
+  - The same procedure as run 34851608514: pre-checks (origin/main == SHA, hf unchanged, no active
+    runs, workflow active), one dispatch, raw capture of the run JSON, job log and report artifact
+    before parsing, then verification per .work/812/t4-apply-0009-runbook.md.
+  - NEW in the attest step: it now loads the driver without connecting, and its report names the
+    helper fingerprints. They must equal the pinned ones on Linux.
+  - NEVER rerun.
+  CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
+  T3 (#95); the T3 batch #92-#94.
+NEXT_ACTION=WAIT for the owner's T3 authorization of lane F. Then run the scripted single-lane merge, and after it
+  request a NEW readiness T4 on the new pin. DO NOT dispatch consume or any other Section 5A run until
+  it is separately authorized.
+  - NEVER dispatch the apply workflow again; 0009 is applied.
+  - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
   to hf; or deploy.
 NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the

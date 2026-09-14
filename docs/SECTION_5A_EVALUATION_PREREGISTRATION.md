@@ -1047,3 +1047,68 @@ fingerprints, and refuses until reviewed again.
   - consumption attests before its claim;
   - recovery attests before its result or write;
   - the seal migration attests before connecting.
+
+# Addendum 10, 2026-09-14 — consumption names its readiness population (owner-authorized §2.6 safety change)
+
+**Pre-registration §2.6 requires this addendum.** The evaluator has run live readiness once
+(run `34863318042`, at main `4b0a522`). Any change after that resets the pin and needs explicit owner
+authorization stating what changed and why. The owner authorized this change on 2026-09-14
+(rulings N1=A, N2, N3).
+
+## 52. Why
+
+**The owner made the one look conditional on a guard.** The frozen consume path had to enforce that
+the population about to be evaluated equals the readiness `decision_population_id`, BEFORE the
+durable claim or any probability exposure.
+
+**A read-only inspection of main `4b0a522` showed it did not:**
+- the only pre-claim reads were the anomaly count and the feature diagnostics;
+- the claim preceded the first paired-evidence read;
+- the population identity was computed only in the result, and never compared.
+
+§26 had already made `decision_population_id` a genuine drift check. This addendum makes that
+check enforced, and places it before anything can be spent. The consume authorization was not
+exercised, and nothing was dispatched.
+
+## 53. What changed
+
+- **Consumption takes the FULL readiness identity.**
+  - The evaluation workflow gains the input `expected_population_id`, required for consume and
+    passed only through `env:`.
+  - The CLI gains `--expected-population-id`.
+  - `runner.run_consumption` takes `expected_population_id`.
+  - A **verified consumption**, one carrying run provenance, **must** name it. That is the only
+    kind the durable Postgres authority and migration 0009's CHECK accept. Without it the run
+    refuses before any read, and so does any value that is not exactly 64 lowercase hex characters.
+- **Before the claim**, and before the loaded-module guard:
+  1. the population is computed exactly as readiness computes it, from the probability-free
+     projection `fetch_oos_paired_evidence(include_probabilities=False)`, by the same
+     `decision_population_id`;
+  2. a probability column in that projection refuses;
+  3. **a mismatch raises `ReadinessPopulationMismatch` and STOPS UNCONSUMED**: nothing is claimed,
+     no probability is read, and no artifact is written.
+- **After the claim**, the population of the rows actually read is re-checked before any snapshot
+  or statistic.
+  - **Drift raises `ConsumedPopulationDrift`.**
+  - The seal records `CAPTURE_FAILED`, and no statistic is computed.
+  - Recovery refuses a seal without a snapshot, because recovering it is an owner decision.
+- **The result states** `expected_decision_population_id` and `population_matches_readiness`.
+- **No decision rule, statistic, threshold, lattice or admission rule changes.**
+- **The pinned red tests are untouched and still pass.** Their doubles carry no provenance, so the
+  library keeps accepting consumptions from undeclared test doubles without the identity, exactly as
+  it accepts their absent provenance (ruling D3). The durable authority never does.
+
+## 54. The sequence (ruling N3)
+
+1. The change merges under its own T3.
+2. A NEW, separately authorized readiness runs on the new pin.
+3. Consumption may then run **only with that readiness run's `decision_population_id`**.
+
+## 55. Residual, stated rather than hidden
+
+- **A race after the claim can still spend the look.** A population change in the seconds between
+  the pre-claim read and the post-claim read spends the look with no statistic computed
+  (`CAPTURE_FAILED`, then an owner decision). The earlier readiness run showed 0 unresolved arms and
+  0 label disagreements, and the collector is stopped.
+- **The atomic alternative was not adopted.** It would make the claim, the read and the check one
+  transaction (ruling N1=B), and would change the verified claim-before-read protocol.

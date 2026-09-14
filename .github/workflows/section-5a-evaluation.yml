@@ -54,6 +54,13 @@ name: Section 5A evaluation (MANUAL DISPATCH ONLY)
         required: false
         type: string
         default: ""
+      # Addendum 10 (§2.6 safety change): consumption refuses, before claiming or reading anything,
+      # unless the population it is about to evaluate is exactly the one readiness measured.
+      expected_population_id:
+        description: required for consume; the FULL decision_population_id from the readiness run on this commit
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -115,7 +122,8 @@ jobs:
           SECTION_5A_MODE: ${{ inputs.mode }}
           SECTION_5A_EXPECTED_SHA: ${{ inputs.expected_sha }}
           SECTION_5A_CONFIRM: ${{ inputs.confirm }}
-        run: python -I -S -B scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --artifact-dir=.work/section_5a --report=section-5a-report.json
+          SECTION_5A_EXPECTED_POPULATION_ID: ${{ inputs.expected_population_id }}
+        run: python -I -S -B scripts/evaluate_section_5a.py --mode="$SECTION_5A_MODE" --expected-sha="$SECTION_5A_EXPECTED_SHA" --confirm="$SECTION_5A_CONFIRM" --expected-population-id="$SECTION_5A_EXPECTED_POPULATION_ID" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --artifact-dir=.work/section_5a --report=section-5a-report.json
 
       # SECONDARY ONLY. The durable one-shot seal and the raw capture live in Postgres
       # (migrations/0009). This upload is convenience and audit trail; it is never the
