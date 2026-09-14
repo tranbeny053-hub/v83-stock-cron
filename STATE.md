@@ -1,11 +1,22 @@
 # STATE
 
-Updated: 2026-09-14 (FIRST LIVE READINESS RUN VERIFIED — run 34863318042 at main 4b0a522: consumes_one_look=false, no score anywhere, all three timeframes ATTAINABLE; evaluator now FROZEN per pre-registration §2.6; consume T4 next; one look NOT consumed)
+Updated: 2026-09-14 (CONDITIONAL CONSUME NOT EXERCISED — the frozen consume path has NO pre-claim population-ID guard; STOPPED UNCONSUMED per owner condition; rulings N1-N3 requested; one look NOT consumed)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
   no evaluation, no probability read, no score computed.
+  CONDITIONAL CONSUME AUTHORIZATION (2026-09-14): NOT EXERCISED. STOPPED UNCONSUMED, and nothing was
+  dispatched.
+  - The owner's condition: the frozen consume path at 4b0a522 must enforce equality with readiness
+    decision_population_id f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 BEFORE
+    the durable claim or probability exposure.
+  - A read-only inspection shows it does NOT. The only pre-claim reads are the anomaly count and
+    feature diagnostics (runner.py 293-294). The claim is at 300-311, the first paired-evidence read
+    (with probabilities) at 315. decision_population_id is computed only in the result (510),
+    reported, never compared. No CLI flag, workflow input or repository check exists.
+  - Readiness facts relevant to drift: 0 unresolved arms, 0 label disagreements.
+  - Write-up: .work/814/consume-population-guard-missing.md.
   FIRST LIVE READINESS RUN, VERIFIED. This is the owner-authorized T4, CONSUMED 2026-09-14, NEVER RERUN
   without a new authorization.
   - The run. 34863318042, attempt 1, workflow_dispatch on main 4b0a522, mode=readiness, no confirm.
@@ -663,7 +674,18 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=T4 CONSUMPTION (THE ONE LOOK) TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with
+OWNER_BOUNDARY=RULINGS N1-N3 REQUESTED (.work/814/consume-population-guard-missing.md).
+  - N1, the guard. A (recommended):
+    - a required expected_population_id input;
+    - a pre-claim probability-free read with equality, refusing with nothing spent;
+    - a post-claim re-check before any statistic;
+    - the result states the equality.
+    B: an atomic claim+read transaction.
+  - N2: Opus, tests, Addendum 10 (§2.6: what changed and why), a re-pin, one Codex check of at most
+    5 attacks, a T3.
+  - N3: re-run readiness at the new pin (recommended), then consume with that ID.
+  The conditional consume authorization was NOT exercised and is not reusable.
+OWNER_BOUNDARY_PRIOR_CONSUME=T4 CONSUMPTION (THE ONE LOOK) was requested: dispatch section-5a-evaluation.yml ONCE with
   mode=consume and confirm CONSUME-SECTION-5A-ONE-LOOK at main 4b0a522, the same pin as readiness.
   - It is IRREVERSIBLE: the claim spends the look.
   - Compare its decision_population_id with readiness's f83c31f7… to detect drift.
@@ -679,8 +701,8 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=Request the consumption T4 (the one look) at main 4b0a522. MERGE NOTHING to main. The evaluator
-  is frozen (§2.6).
+NEXT_ACTION=WAIT for rulings N1-N3. The evaluator is FROZEN: any change needs explicit owner authorization
+  (§2.6). DO NOT dispatch consume or any other Section 5A run.
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
   DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
