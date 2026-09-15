@@ -1,11 +1,11 @@
 # STATE
 
-Updated: 2026-09-15 (PREP BUILT AND GATED — L1 release candidate, L2 0008 route, L3 candle history, v2 module; composition 5e03a7f PASS 2059; Codex task-817 verifying; nothing pushed, deployed or applied)
+Updated: 2026-09-15 (PREP COMPLETE — L1 release, L2 0008 route, L3 candle history, v2 module; Codex task-817 findings fixed and re-proven; composition 2b724ee PASS 2085; awaiting ONE owner batch; nothing pushed, deployed or applied)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=POST-ONE-LOOK PREP, BUILT. Four local lanes committed and gated; Codex task-817 is the last check before
-  the owner batch. No push, no deploy, no DB, no dispatch (see OWNER_BOUNDARY and PREP_RESULTS).
+LOOP_STATE=POST-ONE-LOOK PREP, COMPLETE. Four local lanes committed, gated, reviewed and adversarially verified;
+  WAITING for the owner batch. No push, no deploy, no DB, no dispatch (see OWNER_BOUNDARY and PREP_RESULTS).
   T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
   §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
   - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
@@ -234,10 +234,10 @@ CURRENT_BRANCH=chore/state-post-99 (LOCAL ONLY), from main c0ed7a0. It carries t
   The prep lanes, each LOCAL ONLY from main c0ed7a0 (worktrees in the session scratchpad; commits persist):
   - prep/l1-hf-release fd0e1f0 — L1: the PROD-SAFE-3 release identity; the release tooling and runbook
     live in .work/816/l1/;
-  - prep/l2-0008-activation be8c19d — L2: 0008 hardened (RLS, REVOKE, GRANT to service_role) and its
-    one-shot dispatch route;
-  - prep/l3-candle-width 37d4735 — L3: candle history up to 800 bars, uncalled, snapshot unchanged;
-  - prep/v2-distributional ad80791 — the R2 distributional-v2 module, unwired and NOT frozen.
+  - prep/l2-0008-activation 3cd8476 — L2: 0008 hardened (RLS, REVOKE, GRANT to service_role) and its
+    one-shot dispatch route, with the owner repository pinned;
+  - prep/l3-candle-width 84e7181 — L3: candle history up to 800 bars, uncalled, snapshot unchanged;
+  - prep/v2-distributional 36d4a4e — the R2 distributional-v2 module, unwired and NOT frozen.
   Evidence: .work/816/. The lane worktrees, the composition compose2 (5e03a7f) and pin-sim are in the
   session scratchpad; the commits persist in the repository.
 CURRENT_BRANCH_PRIOR_98=chore/state-post-98, MERGED as PR #99 (the recovery-header fix).
@@ -271,9 +271,11 @@ LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local ga
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
   86a5ed1 and 5940557. Links are in .work/811/t3-batch/raw/*/ci_*_url.txt.
-LAST_VERIFY=PASS ruff ok | 2059 passed | schemas+smoke ok | scanners 3/3 · composition 5e03a7f (c0ed7a0 + L2 + L3 +
-  v2 + L1 + STATE) · 2026-09-15 (local). Per lane: L2 1991, L3 1914, v2 1920, L1 1883. The composition touches
-  none of the 69 evaluator-pinned files, and the pinned red tests are unchanged.
+LAST_VERIFY=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · code-final composition 2b724ee (c0ed7a0 +
+  L2 3cd8476 + L3 84e7181 + v2 36d4a4e + L1 fd0e1f0 + STATE 0b512a8) · 2026-09-15 (local). Per lane: L2 2003,
+  L3 1923, v2 1925, L1 1883. It touches none of the 69 evaluator-pinned files (24 files changed), and the
+  pinned red tests are unchanged. This checkpoint differs from that tree only in STATE.md.
+LAST_VERIFY_PRIOR_817=PASS | 2059 passed · composition 5e03a7f, the tree Codex task-817 verified.
 LAST_VERIFY_PRIOR_99=PASS ruff ok | 1883 passed | schemas+smoke ok | scanners 3/3 · main ccd0a54 · 2026-09-15 (local).
 LAST_VERIFY_PRIOR=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
   2026-09-14 (local, and Codex task-811 before and after its mutants).
@@ -567,9 +569,17 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=task-817, fired 2026-09-15T05:12:23Z from the compose2 worktree's own delegate.sh (sandbox = that worktree),
-  bounded to 5 attacks per lane over L2, L3 and v2. The result lands in <compose2>/.work/result-817.json and
-  verification-817.md. ON RESUME: read those files; never re-fire task-817 while a result exists.
+CODEX_PENDING=NONE. task-817 COMPLETE, fresh: fired 2026-09-15T05:12:23Z, delegate exit 05:24:59Z, base 5e03a7f,
+  no tracked change. Evidence: .work/816/codex-817/.
+CODEX_VERIFICATION_817=VERIFIED_WITH_FINDINGS (5 attacks per lane; the gate passed at 2059). L3 held every attack.
+  Triage (.work/816/codex-817/triage.md):
+  - F-817-1 · L2 accepted a self-consistent fork identity. FIXED: the owner repository is pinned (3cd8476).
+    The rerun probe on the final composition shows a fork refused.
+  - F-817-2 · L2: in-process mutation of the digest constant. RESIDUAL, the documented in-process class
+    (Addendum 7 §43); the attested reviewed checkout binds the constant. No code change is possible.
+  - F-817-3 · v2 accepted band_frac=True. FIXED (36d4a4e); the rerun shows ValueError.
+  - Probe-only coverage is now pinned by committed tests (L2 +12, L3 +9, v2 +5).
+  - Siblings, recorded only (evaluator-pinned): provenance.py shares F-817-1's property; v1 shares F-817-3's.
 CODEX_PENDING_PRIOR=NONE. task-812 COMPLETE. It is fresh: fired 09:13:53Z, delegate exit 09:20:32Z, base
   de31d5a, no tracked change, and every restored file matches its committed blob.
 CODEX_VERIFICATION_812=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1825 before and
@@ -845,9 +855,14 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=READ task-817's result; triage any finding (one targeted repair per causal class, re-gate); archive the
-  evidence into .work/816/; finalize this STATE; then return ONE owner batch (T3 for the lanes, and the decisions).
-  - NO push, deploy, DB access, migration apply or workflow dispatch; no freeze, T_freeze, T0 or holdout tuning.
+NEXT_ACTION=WAIT for the owner batch.
+  - Proposed: ONE T3 for the five PRs (L2, L3, v2, L1, STATE), in that order, with the scripted procedure in
+    .work/816/t3-prep-batch/ and the final main tree named in the request.
+  - Then, each separately and naming exact SHAs: T4 apply 0008 -> T3 origin push of release R and pin P -> T4
+    deploy R -> T3 merge P and dispatch the guard.
+  - Owner decisions: the release shape (A recommended); later, v2 (skill gate, display, wiring in pinned files,
+    freeze); and a read-only privilege audit of the older tables (the sibling finding).
+  - NO push, deploy, DB access, migration apply or workflow dispatch until authorized.
 PREP_RESULTS=Built 2026-09-15, all local:
   - L2 (0008 activation). FINDING: 0008 as authored had no RLS or REVOKE, so on Supabase the anon key could reach
     the operator's Detail payloads. Hardened in place (never applied): RLS on, not forced; REVOKE ALL FROM PUBLIC,
