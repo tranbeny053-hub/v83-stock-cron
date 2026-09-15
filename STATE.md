@@ -1,10 +1,11 @@
 # STATE
 
-Updated: 2026-09-15 (§5A ONE LOOK RESULT RECORDED ON MAIN via PR #98 — main ccd0a54; NOT_PASS on 15m, 1H and 4H, no authorized cells; open owner decisions: DEPLOY_PROHIBITED, Wave 1, Wave 3)
+Updated: 2026-09-15 (PREP PHASE — owner lifted DEPLOY_PROHIBITED with NO deploy authorized; local parallel prep of L1 HF release, L2 0008 activation, L3 candle width > 205 and the R2-based distributional-v2 module; main c0ed7a0 after PR #99)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=POST-ONE-LOOK. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
+LOOP_STATE=POST-ONE-LOOK PREP. Four local prep lanes, no push, no deploy, no DB (see OWNER_BOUNDARY).
+  T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
   §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
   - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
     second look.
@@ -228,7 +229,14 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-98 (LOCAL ONLY), from main ccd0a54. It carries only this note that PR #98 merged.
+CURRENT_BRANCH=chore/state-post-99 (LOCAL ONLY), from main c0ed7a0. It carries this STATE record of the prep phase.
+  The prep lanes, each LOCAL ONLY from main c0ed7a0 (worktrees in the session scratchpad; commits persist):
+  - prep/l1-hf-release — L1, the Hugging Face release candidate and its runbook;
+  - prep/l2-0008-activation — L2, migration 0008 hardening, a dispatch-only apply route and runbook;
+  - prep/l3-candle-width — L3, candle history wider than 205 bars without changing any existing input;
+  - prep/v2-distributional — the R2 distributional-v2 module, unwired and NOT frozen.
+  Evidence: .work/816/.
+CURRENT_BRANCH_PRIOR_98=chore/state-post-98, MERGED as PR #99 (the recovery-header fix).
 CURRENT_BRANCH_PRIOR_F=chore/state-post-lane-f, MERGED as PR #98 (the result record).
 CURRENT_BRANCH_PRIOR_E=chore/state-post-lane-e, from main 4b0a522. Its STATE commits merged with #97.
 CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
@@ -246,7 +254,9 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=ccd0a54 (main, PR #98, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
+LAST_GREEN_SHA=c0ed7a0 (main, PR #99, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
+  34922052354; exact-head CI on bcf2d5a was run 34921878215. The local gate on this tree was 1883.
+LAST_GREEN_SHA_PRIOR_98=ccd0a54 (main, PR #98, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
   34920375430. The local gate on this tree was 1883.
 LAST_GREEN_SHA_PRIOR_F=1d8f933 (main, lane F #97). Exact-main CI run 34871911951.
 LAST_GREEN_SHA_PRIOR_E=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
@@ -721,7 +731,10 @@ OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reu
   migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
   holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
   change, no re-freeze.
-DEPLOY_PROHIBITED=HELD BY OWNER RULING until the §5A one-look result is captured and checkpointed.
+DEPLOY_PROHIBITED=LIFTED BY OWNER RULING 2026-09-15: "lift DEPLOY_PROHIBITED but no deploy yet". Lifting it
+  authorizes NOTHING: a push to hf is still a deploy that needs its own owner authorization, and none
+  has been given. Production stays at hf/main = a89b45e (PROD-SAFE-2), confirmed after PR #99.
+DEPLOY_PROHIBITED_PRIOR2=HELD BY OWNER RULING until the §5A one-look result is captured and checkpointed.
   The original wording below was scoped "through T_close" and would have lapsed silently when
   T_close passed; the owner extended it instead. Production stays at hf/main = a89b45e
   (PROD-SAFE-2), re-confirmed unchanged after the batch. No workflow deploys to Hugging Face, so
@@ -731,7 +744,21 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The one look is CONSUMED, and its result is NOT_PASS everywhere.
+OWNER_BOUNDARY=PREP ONLY. Owner ruling 2026-09-15, verbatim: "Owner ruling: lift DEPLOY_PROHIBITED but no deploy
+  yet. After merge, MAX-run parallel prep for HF clean-room release, 0008 activation, >205 candle-width, and
+  R2-based v2; no new freeze/T0 or holdout tuning."
+  - AUTHORIZED: local prep of the four lanes on local branches, with ./verify.sh, reviews, and bounded Codex
+    verification.
+  - NOT AUTHORIZED: any push (origin or hf), deploy, database access, migration apply, workflow dispatch,
+    a new candidate freeze / T_freeze / T0 / holdout, or any tuning against the consumed §5A holdout
+    (§5A.9). Changing any of the 69 files pinned by ops/section_5a_evaluator_pin.json is an evaluator
+    change that needs owner authorization (pre-registration §2.6), so the prep lanes avoid them.
+  - The prep returns as ONE owner batch.
+  CONSUMED: the T3 for PR #99 (chore/state-post-98@bcf2d5a, STATE.md only). Exact-head CI green (run
+  34921878215); merged with --match-head-commit as c0ed7a0; parents (ccd0a54, bcf2d5a); merged tree
+  f7971d4dd2f4ff5ef08e2d61f6d7541b15b9b750 EQUAL to the authorized tree; exact-main CI green (run
+  34922052354); hf a89b45e unchanged; no open PRs. Evidence: .work/816/t3-state-98/.
+OWNER_BOUNDARY_PRIOR_RESULT=NO ACTION IS AUTHORIZED. The one look is CONSUMED, and its result is NOT_PASS everywhere.
   Owner decisions are pending (docs/POST_ONE_LOOK_DEPENDENCY_MAP.md §3):
   - [DONE] the result is recorded on main: PR #98, STATE.md only, merged as ccd0a54. It had exact-head CI
     green (run 34920194240), parents (1d8f933, b966fa8), a merged tree 9ee5a959… EQUAL to the
@@ -808,7 +835,9 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for owner decisions on DEPLOY_PROHIBITED, Wave 1 and Wave 3. The result is recorded on main (PR #98).
+NEXT_ACTION=PREP the four lanes locally (L1, L2, L3, v2), verify and review each, then return ONE owner batch.
+  - NO push, deploy, DB access, migration apply or workflow dispatch; no freeze, T_freeze, T0 or holdout tuning.
+NEXT_ACTION_PRIOR_RESULT=WAIT for owner decisions on DEPLOY_PROHIBITED, Wave 1 and Wave 3. The result is recorded on main (PR #98).
   - NEVER dispatch consume again; the seal refuses, and no retuning is allowed against this holdout.
   - DO NOT deploy, apply 0008, or start a new freeze without explicit authorization.
   DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
