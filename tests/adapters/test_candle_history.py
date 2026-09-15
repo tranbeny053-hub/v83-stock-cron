@@ -6,7 +6,7 @@ No network: every provider response is served by an ``httpx.MockTransport``.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -131,7 +131,7 @@ def _okx_pager(bars: list[dict[str, Any]], seen: list[dict[str, str]], *, page: 
 # --------------------------------------------------------------------------- the legacy window
 
 
-@pytest.mark.parametrize("timeframe", ["15m", "1H", "4H"])
+@pytest.mark.parametrize("timeframe", ["15m", "1H", "4H", "1D", "1W", "1M"])
 def test_the_snapshot_request_is_unchanged_for_both_providers(timeframe: str) -> None:
     """The methodology-neutral promise: the snapshot still asks for exactly min_history + 5."""
 
@@ -238,6 +238,19 @@ def test_binance_history_is_one_request_that_drops_the_bar_in_progress() -> None
         later.open_time_utc == earlier.close_time_utc
         for earlier, later in zip(history.candles, history.candles[1:], strict=False)
     )
+    validate_candle_history(history)
+
+
+@pytest.mark.parametrize("bars", [1, CANDLE_HISTORY_MAX_BARS])
+def test_binance_history_at_both_edges_of_the_bound_is_exact(bars: int) -> None:
+    series = _series(1000, "15m")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_binance_rows(series[-int(request.url.params["limit"]) :]))
+
+    history = fetch_binance_candle_history(_client(handler), BTC, "15m", bars=bars)
+    assert len(history.candles) == bars and history.requests == 1
+    assert _millis(history.candles[-1].open_time_utc) == series[-2]["open_ms"]
     validate_candle_history(history)
 
 
@@ -372,6 +385,29 @@ def test_a_history_must_hold_exactly_the_requested_bars() -> None:
     assert refused.value.code == ErrorCode.INSUFFICIENT_DATA
 
 
+@pytest.mark.parametrize("defect", ["duplicate", "high-below-close", "naive-time", "non-utc-time"])
+def test_a_malformed_history_fails_validation(defect: str) -> None:
+    history = _history()
+    candles = list(history.candles)
+    if defect == "duplicate":
+        candles[100] = candles[99]
+    elif defect == "high-below-close":
+        candles[100] = replace(candles[100], high=candles[100].close * 0.99)
+    elif defect == "naive-time":
+        candles[100] = replace(
+            candles[100], open_time_utc=candles[100].open_time_utc.replace(tzinfo=None)
+        )
+    else:
+        seven = timezone(timedelta(hours=7))
+        candles[100] = replace(
+            candles[100],
+            open_time_utc=candles[100].open_time_utc.astimezone(seven),
+            close_time_utc=candles[100].close_time_utc.astimezone(seven),
+        )
+    with pytest.raises(DataValidationError):
+        validate_candle_history(replace(history, candles=tuple(candles)))
+
+
 def test_a_stale_or_future_history_fails_validation() -> None:
     history = _history()
     stale_now = history.as_of_utc + timedelta(hours=12)
@@ -433,3 +469,7 @@ def test_a_history_that_ends_elsewhere_or_disagrees_on_a_shared_candle_is_refuse
     changed[50] = replace(changed[50], close=changed[50].close + 0.5)
     with pytest.raises(DataValidationError, match="shared candle"):
         assert_history_extends_snapshot(history, replace(snapshot, candles=tuple(changed)))
+    volume_only = list(snapshot.candles)
+    volume_only[50] = replace(volume_only[50], volume=volume_only[50].volume + 1.0)
+    with pytest.raises(DataValidationError, match="shared candle"):
+        assert_history_extends_snapshot(history, replace(snapshot, candles=tuple(volume_only)))
