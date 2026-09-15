@@ -449,9 +449,22 @@ def test_an_unsupported_symbol_or_timeframe_refuses() -> None:
     _refuses(candles, timeframe="1D", match="does not support")
 
 
-@pytest.mark.parametrize("band", [-0.001, math.nan, math.inf])
-def test_a_band_that_is_not_finite_and_non_negative_refuses(band: float) -> None:
+@pytest.mark.parametrize("band", [-0.001, math.nan, math.inf, True, False, "0.002", None])
+def test_a_band_that_is_not_a_finite_non_negative_number_refuses(band: object) -> None:
     _refuses(_window(), band=band, match="band")
+
+
+def test_the_output_ignores_volume_and_repeats_exactly() -> None:
+    candles = _window(symbol="ETH/USDT", timeframe="1H", window=1)
+    rescaled = tuple(replace(candle, volume=candle.volume * 7.0 + 1.0) for candle in candles)
+    for band in GOLDEN_BANDS:
+        outputs = [
+            compute_distributional_v2_probabilities(
+                window, symbol="ETH/USDT", timeframe="1H", band_frac=band
+            )
+            for window in (candles, candles, rescaled)
+        ]
+        assert outputs[0] == outputs[1] == outputs[2]
 
 
 def test_too_few_candles_refuse() -> None:

@@ -82,6 +82,9 @@ def compute_distributional_v2_probabilities(
             f"distributional-v2 does not support {symbol!r} {timeframe!r}; it serves "
             f"{sorted(SUPPORTED_SYMBOLS)} x {sorted(SUPPORTED_TIMEFRAMES)}"
         ) from exc
+    # A bool is an int, and float(True) is 1.0: refuse it and any non-number (task-817, F-817-3).
+    if isinstance(band_frac, bool) or not isinstance(band_frac, int | float):
+        raise ValueError("distributional-v2 requires a real-number band")
     band = float(band_frac)
     if not isfinite(band) or band < 0.0:
         raise ValueError("distributional-v2 requires a finite non-negative band")
