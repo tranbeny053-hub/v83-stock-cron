@@ -1,10 +1,10 @@
 # STATE
 
-Updated: 2026-09-15 (§5A ONE LOOK CONSUMED ONCE AND CHECKPOINTED — run 34919367341 at main 1d8f933: NOT_PASS on 15m, 1H and 4H; authorized cells NONE; integrity VERIFIED, offline recompute matches; no promotion; next decisions are the owner's)
+Updated: 2026-09-15 (§5A ONE LOOK RESULT RECORDED ON MAIN via PR #98 — main ccd0a54; NOT_PASS on 15m, 1H and 4H, no authorized cells; open owner decisions: DEPLOY_PROHIBITED, Wave 1, Wave 3)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
+LOOP_STATE=POST-ONE-LOOK. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
   §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
   - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
     second look.
@@ -228,8 +228,8 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-lane-f (LOCAL ONLY), from main 1d8f933. It carries this STATE checkpoint and
-  stays local, so main remains the SHA that readiness and consumption must name.
+CURRENT_BRANCH=chore/state-post-98 (LOCAL ONLY), from main ccd0a54. It carries only this note that PR #98 merged.
+CURRENT_BRANCH_PRIOR_F=chore/state-post-lane-f, MERGED as PR #98 (the result record).
 CURRENT_BRANCH_PRIOR_E=chore/state-post-lane-e, from main 4b0a522. Its STATE commits merged with #97.
 CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
   STATE commits merged with #96.
@@ -246,7 +246,10 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
+LAST_GREEN_SHA=ccd0a54 (main, PR #98, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
+  34920375430. The local gate on this tree was 1883.
+LAST_GREEN_SHA_PRIOR_F=1d8f933 (main, lane F #97). Exact-main CI run 34871911951.
+LAST_GREEN_SHA_PRIOR_E=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
   gate was 1857 on the identical tree (lane E 5d833de).
 LAST_GREEN_SHA_PRIOR_D=3dc545c (main). Exact-main CI run 34850349141; the local gate was 1825 (lane D
   18a6447).
@@ -254,7 +257,8 @@ LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local ga
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
   86a5ed1 and 5940557. Links are in .work/811/t3-batch/raw/*/ci_*_url.txt.
-LAST_VERIFY=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
+LAST_VERIFY=PASS ruff ok | 1883 passed | schemas+smoke ok | scanners 3/3 · main ccd0a54 · 2026-09-15 (local).
+LAST_VERIFY_PRIOR=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
   2026-09-14 (local, and Codex task-811 before and after its mutants).
   CI portability: CI runs the suite on Python 3.11 on Linux, but every local gate ran 3.13.14 on macOS.
   - ruff reports no 3.12-only syntax; a probe proves ruff 0.16.3 would flag it.
@@ -729,7 +733,10 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   confirmed unchanged immediately after every merge.
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The one look is CONSUMED, and its result is NOT_PASS everywhere.
   Owner decisions are pending (docs/POST_ONE_LOOK_DEPENDENCY_MAP.md §3):
-  - whether and how to record the result on main (a STATE PR is a T3);
+  - [DONE] the result is recorded on main: PR #98, STATE.md only, merged as ccd0a54. It had exact-head CI
+    green (run 34920194240), parents (1d8f933, b966fa8), a merged tree 9ee5a959… EQUAL to the
+    authorized tree, and exact-main CI green (run 34920375430). hf a89b45e is unchanged. Evidence:
+    .work/815/t3-state-record/;
   - DEPLOY_PROHIBITED: held "until the §5A one-look result is captured and checkpointed". That
     condition is now met, but lifting it and any release (L1) are owner decisions; nothing here is a
     deploy authorization;
@@ -801,7 +808,7 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for owner decisions on recording the result, DEPLOY_PROHIBITED, Wave 1 and Wave 3.
+NEXT_ACTION=WAIT for owner decisions on DEPLOY_PROHIBITED, Wave 1 and Wave 3. The result is recorded on main (PR #98).
   - NEVER dispatch consume again; the seal refuses, and no retuning is allowed against this holdout.
   - DO NOT deploy, apply 0008, or start a new freeze without explicit authorization.
   DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
