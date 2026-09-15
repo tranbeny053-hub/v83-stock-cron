@@ -7,6 +7,11 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Protocol
 
+from crypto_probability_engine.adapters.candle_history import (
+    CandleHistory,
+    fetch_binance_candle_history,
+    fetch_okx_candle_history,
+)
 from crypto_probability_engine.adapters.http_client import PublicHttpClient
 from crypto_probability_engine.adapters.mappers import (
     BINANCE_BASE_URL,
@@ -190,6 +195,13 @@ class BinancePublicAdapter:
             provider=self.name,
             symbols=parse_binance_symbol_universe(payload),
         )
+
+    def fetch_candle_history(
+        self, symbol: NormalizedSymbol, timeframe: str, *, bars: int
+    ) -> CandleHistory:
+        """Exactly ``bars`` closed candles. Never used by ``fetch_market_snapshot``."""
+
+        return fetch_binance_candle_history(self.http_client, symbol, timeframe, bars=bars)
 
     def _optional_ticker(
         self,
@@ -385,6 +397,13 @@ class OkxPublicAdapter:
             provider=self.name,
             symbols=parse_okx_symbol_universe(payload),
         )
+
+    def fetch_candle_history(
+        self, symbol: NormalizedSymbol, timeframe: str, *, bars: int
+    ) -> CandleHistory:
+        """Exactly ``bars`` closed candles. Never used by ``fetch_market_snapshot``."""
+
+        return fetch_okx_candle_history(self.http_client, symbol, timeframe, bars=bars)
 
     def _optional_ticker(
         self,
