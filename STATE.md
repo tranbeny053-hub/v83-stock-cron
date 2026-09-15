@@ -1,11 +1,51 @@
 # STATE
 
-Updated: 2026-09-15 (NEW READINESS VERIFIED on 1d8f933 — run 34873105124: decision_population_id f83c31f7…d8a5f6, identical to the first readiness; all timeframes ATTAINABLE; consume T4 with that ID next; one look NOT consumed)
+Updated: 2026-09-15 (§5A ONE LOOK CONSUMED ONCE AND CHECKPOINTED — run 34919367341 at main 1d8f933: NOT_PASS on 15m, 1H and 4H; authorized cells NONE; integrity VERIFIED, offline recompute matches; no promotion; next decisions are the owner's)
 
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=POST-T_close. T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS NOT CONSUMED:
-  no evaluation, no probability read, no score computed.
+  §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
+  - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
+    second look.
+  - The run. 34919367341, attempt 1, workflow_dispatch on main 1d8f933, mode=consume, confirm
+    token, expected_population_id f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6.
+    Dispatched 01:58:30Z; every step succeeded; local state COMPLETE.
+  - Raw capture before interpretation (.work/815/t4-consume/, evidence.sha256): the run JSON, the
+    job log, and the artifact (report, result, state, snapshot).
+  - INTEGRITY VERIFIED (verify_consume.py):
+    - consumes_one_look true;
+    - population_matches_readiness TRUE (the pre-claim guard held);
+    - provenance: the evaluation workflow at 1d8f933, run 34919367341, CPython 3.13.14, isolated;
+    - evaluator_pin_digest b9d94a7d… equals the provenance pin;
+    - the attest step's driver_helpers are pinned;
+    - evidence_snapshot_id 752eeed4…, result_inputs_digest d776f395…;
+    - no database URL anywhere.
+  - OFFLINE RECOMPUTE. From the captured snapshot, with the frozen code at 1d8f933 (recompute-
+    artifact mode, no database), every state, flag, count and digest is IDENTICAL. Three A1
+    boundary statistics differ only in the last ULP (macOS vs Linux libm), far from 0.05.
+  - THE §5A RESULT, EXACTLY AS COMPUTED. authorized_cells = [] (NONE).
+    - 15m: NOT_PASS, "requirement(s) not met: A, B2"; 466 admitted pairs.
+      - A1 held at c=1,2,4 (boundary statistics 0.00367, 0.00699, 0.01501). A2 failed at all
+        three (0.336, 0.452, 0.140).
+      - B1 held: ECE candidate 0.0326 vs baseline 0.0962. B2 failed: n_worse 52 > n_better 37.
+    - 1H: NOT_PASS, "requirement(s) not met: A, B2"; 257 pairs.
+      - c=1: A1 held (0.00879), A2 failed (0.0769). c=2: A1 held (0.00613), A2 held (0.0178).
+        c=4: A1 failed (0.155), A2 failed (0.407).
+      - B1 held: 0.0216 vs 0.0685. B2 failed: 21 > 19.
+    - 4H: NOT_PASS, "requirement(s) not met: A, B2"; 86 pairs.
+      - c=1: A1 failed (0.0637), A2 held (0.00586). c=2: both failed (0.323, 0.0625). c=4: both
+        held (0.0358, 0.03125).
+      - B1 held: 0.0196 vs 0.2237. B2 failed: 6 > 5.
+    - FAIL checks, every timeframe: probability_triplet_sums_to_one OBSERVABLE_PASS. The three gate
+      predicates are NOT_OBSERVABLE_FROM_PERSISTED_STATE, so even A and B together would have
+      authorized nothing.
+    - These are pre-committed decision boundaries, not hypothesis tests: no p-value, no
+      significance, and no profitability claim.
+  - CONSEQUENCE, per V1_QUANT_CONTRACT §5A.9. The NOT PASS may NOT be retuned against this
+    holdout. A second attempt requires a new candidate freeze, new T_freeze, new T0 and a new
+    holdout. No promotion happens: Wave 2 of the post-look dependency map disappears, and Wave 3
+    becomes the live question.
   NEW READINESS ON THE GUARDED PIN (ruling N3), VERIFIED. This is the owner-authorized T4, CONSUMED; never rerun.
   - The run. 34873105124, attempt 1, workflow_dispatch on main 1d8f933, mode=readiness, with no
     confirm and no expected_population_id. Every step succeeded, and the in-job tests passed 621.
@@ -687,7 +727,17 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=T4 CONSUMPTION (THE ONE LOOK) TO BE REQUESTED: dispatch section-5a-evaluation.yml ONCE with
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The one look is CONSUMED, and its result is NOT_PASS everywhere.
+  Owner decisions are pending (docs/POST_ONE_LOOK_DEPENDENCY_MAP.md §3):
+  - whether and how to record the result on main (a STATE PR is a T3);
+  - DEPLOY_PROHIBITED: held "until the §5A one-look result is captured and checkpointed". That
+    condition is now met, but lifting it and any release (L1) are owner decisions; nothing here is a
+    deploy authorization;
+  - Wave 1: the L1 HF clean-room release, the L2 migration 0008 apply (T4), and L3 candle-fetch
+    width;
+  - Wave 3: the distributional-v2 module and a NEW candidate freeze, new T_freeze, new T0, new
+    holdout.
+OWNER_BOUNDARY_PRIOR_CONSUME2=T4 CONSUMPTION (THE ONE LOOK) was requested: dispatch section-5a-evaluation.yml ONCE with
   mode=consume, confirm CONSUME-SECTION-5A-ONE-LOOK and
   expected_population_id=f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 at main
   1d8f933832a01a88f4d58183eae0bcf240eae6df. It is IRREVERSIBLE once claimed. A population mismatch
@@ -751,8 +801,9 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=Request the consumption T4 at main 1d8f933, with expected_population_id f83c31f7…d8a5f6, the full
-  identity from run 34873105124. MERGE NOTHING to main.
+NEXT_ACTION=WAIT for owner decisions on recording the result, DEPLOY_PROHIBITED, Wave 1 and Wave 3.
+  - NEVER dispatch consume again; the seal refuses, and no retuning is allowed against this holdout.
+  - DO NOT deploy, apply 0008, or start a new freeze without explicit authorization.
   DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
   - NEVER dispatch the apply workflow again; 0009 is applied.
   - NEVER rerun runs 34851608514 or 34861816985.
