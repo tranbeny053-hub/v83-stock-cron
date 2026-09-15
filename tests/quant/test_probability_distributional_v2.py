@@ -480,6 +480,10 @@ def test_a_malformed_window_refuses() -> None:
         for c in candles
     ]
     _refuses(local, match="UTC")
+    naive_close = candles[:-1] + [
+        replace(candles[-1], close_time_utc=candles[-1].close_time_utc.replace(tzinfo=None))
+    ]
+    _refuses(naive_close, match="UTC")
     last = candles[-1]
     long_bar = candles[:-1] + [
         replace(last, close_time_utc=last.close_time_utc + timedelta(hours=1))

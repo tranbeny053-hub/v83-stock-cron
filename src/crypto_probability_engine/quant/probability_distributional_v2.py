@@ -150,8 +150,9 @@ def _require_well_formed_window(window: tuple[MarketCandle, ...], timeframe: str
     for candle in window:
         opened = candle.open_time_utc
         closed = candle.close_time_utc
-        if opened.utcoffset() is None or opened.utcoffset().total_seconds() != 0:
-            raise ValueError("distributional-v2 candles must carry UTC times")
+        for moment in (opened, closed):
+            if moment.utcoffset() is None or moment.utcoffset().total_seconds() != 0:
+                raise ValueError("distributional-v2 candles must carry UTC times")
         if (closed - opened).total_seconds() != bar:
             raise ValueError(f"distributional-v2 {timeframe} candles must span exactly one bar")
         if int(opened.timestamp()) % bar != 0:
