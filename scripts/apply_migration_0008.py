@@ -57,6 +57,9 @@ MODE_ATTEST = "attest"
 MODE_APPLY = "apply"
 REQUIRED_EVENT = "workflow_dispatch"
 REQUIRED_REF = "refs/heads/main"
+# The owner repository, pinned. A fork's run carries a self-consistent identity of its own, and it
+# must refuse here, although a fork is never handed this repository's secret (task-817, F-817-1).
+EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
 PINNED_PYTHON = ("CPython", "3.13.14")
 
 TIMEOUT_STATEMENTS = (
@@ -264,6 +267,10 @@ def verify_dispatch(
 
     repository = str(dispatch.get("repository", ""))
     need(dispatch.get("github_actions") == "true", "not running inside GitHub Actions")
+    need(
+        repository == EXPECTED_REPOSITORY,
+        f"repository is {repository!r}, not the owner repository {EXPECTED_REPOSITORY}",
+    )
     need(
         dispatch.get("event_name") == REQUIRED_EVENT,
         f"event is {dispatch.get('event_name')!r}, not a manual {REQUIRED_EVENT}",

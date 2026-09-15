@@ -26,7 +26,7 @@ MIGRATION_BYTES = (ROOT / apply_0008.MIGRATION).read_bytes()
 MIGRATION_SQL = MIGRATION_BYTES.decode("utf-8")
 DATABASE_URL = "postgresql://owner:NEVER-SHOWN-SECRET@db.never-contacted.invalid:5432/postgres"
 SHA = "d" * 40
-REPOSITORY = "synthetic-owner/synthetic-repo"
+REPOSITORY = apply_0008.EXPECTED_REPOSITORY
 
 
 # ------------------------------------------------------------------------ a psycopg-3-shaped fake
@@ -335,11 +335,19 @@ def test_any_difference_from_the_reviewed_schema_rolls_the_apply_back(difference
     assert "committed" not in captured
 
 
-def test_a_driver_error_mid_apply_rolls_back() -> None:
-    database = FakeDatabase(healthy_results(), fail_on={MIGRATION_SQL: RuntimeError("boom")})
+@pytest.mark.parametrize("position", range(len(EXPECTED_ORDER)))
+def test_a_driver_error_at_any_statement_rolls_back(position: int) -> None:
+    """Every statement of the transaction, in turn: rollback once, never a commit (task-817)."""
+
+    statement = EXPECTED_ORDER[position]
+    database = FakeDatabase(healthy_results(), fail_on={statement: RuntimeError("boom")})
+    captured: dict[str, Any] = {}
     with pytest.raises(RuntimeError):
-        _apply(database)
+        apply_0008.apply_in_one_transaction(
+            lambda: database.connect(DATABASE_URL), MIGRATION_SQL, captured
+        )
     assert database.commits == 0 and database.rollbacks == 1
+    assert "committed" not in captured
 
 
 def test_the_checks_name_every_difference_not_only_the_first() -> None:
@@ -414,6 +422,24 @@ DISPATCH_REFUSALS = {
     ),
     "other-repository-workflow": (
         _dispatch(workflow_ref=f"attacker/fork/{apply_0008.WORKFLOW}@refs/heads/main"),
+        _runtime(),
+        SHA,
+    ),
+    "self-consistent-fork": (
+        _dispatch(
+            repository="attacker/fork",
+            workflow_ref=f"attacker/fork/{apply_0008.WORKFLOW}@refs/heads/main",
+        ),
+        _runtime(),
+        SHA,
+    ),
+    "renamed-repository": (
+        _dispatch(
+            repository="tranbeny053-hub/v83-stock-cron-copy",
+            workflow_ref=(
+                f"tranbeny053-hub/v83-stock-cron-copy/{apply_0008.WORKFLOW}@refs/heads/main"
+            ),
+        ),
         _runtime(),
         SHA,
     ),
