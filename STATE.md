@@ -1,11 +1,12 @@
 # STATE
 
-Updated: 2026-09-15 (PREP COMPLETE — L1 release, L2 0008 route, L3 candle history, v2 module; Codex task-817 findings fixed and re-proven; composition 2b724ee PASS 2085; awaiting ONE owner batch; nothing pushed, deployed or applied)
+Updated: 2026-09-16 (PREP MERGED as PRs #100-#104, main e5cd7ef, batch VERIFIED; release R 00705c55 and pin P 7d2cf2f4 staged locally; 0008 route pre-checked; awaiting the owner's T4 sequence; nothing applied or deployed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=POST-ONE-LOOK PREP, COMPLETE. Four local lanes committed, gated, reviewed and adversarially verified;
-  WAITING for the owner batch. No push, no deploy, no DB, no dispatch (see OWNER_BOUNDARY and PREP_RESULTS).
+LOOP_STATE=POST-ONE-LOOK RELEASE STAGED. The prep lanes are MERGED (PRs #100-#104, main e5cd7ef). The release
+  candidate and its pin commit are built and gated LOCALLY; WAITING for the owner's T4 sequence (see OWNER_BOUNDARY
+  and RELEASE_STAGED). Nothing applied, dispatched or deployed.
   T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
   §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
   - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
@@ -230,7 +231,10 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-99 (LOCAL ONLY), from main c0ed7a0. It carries this STATE record of the prep phase.
+CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record of the merged batch.
+  The prep branches below are MERGED: L2 #100, L3 #101, v2 #102, L1 #103, and chore/state-post-99 #104.
+  The staged release lives only in this repository's objects (never pushed): R 00705c55 and P 7d2cf2f4, with the
+  pin worktree in the session scratchpad (lanes/pin-real). Both rebuild deterministically from main.
   The prep lanes, each LOCAL ONLY from main c0ed7a0 (worktrees in the session scratchpad; commits persist):
   - prep/l1-hf-release fd0e1f0 — L1: the PROD-SAFE-3 release identity; the release tooling and runbook
     live in .work/816/l1/;
@@ -258,7 +262,9 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=c0ed7a0 (main, PR #99, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
+LAST_GREEN_SHA=e5cd7ef (main, PR #104, the end of the prep batch). Exact-main CI passed on Python 3.11/Linux, run
+  35078236168. Its tree 0344911170da79ad7491886d58f1f262ced988a5 equals the composition gated locally at 2085.
+LAST_GREEN_SHA_PRIOR_99=c0ed7a0 (main, PR #99, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
   34922052354; exact-head CI on bcf2d5a was run 34921878215. The local gate on this tree was 1883.
 LAST_GREEN_SHA_PRIOR_98=ccd0a54 (main, PR #98, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
   34920375430. The local gate on this tree was 1883.
@@ -271,7 +277,9 @@ LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local ga
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
   86a5ed1 and 5940557. Links are in .work/811/t3-batch/raw/*/ci_*_url.txt.
-LAST_VERIFY=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · code-final composition 2b724ee (c0ed7a0 +
+LAST_VERIFY=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · pin commit P 7d2cf2f4 (the release candidate R
+  plus the re-pin) · 2026-09-16 (local). The guard delta after the re-pin is [], advisory SCHEDULER_AHEAD_OF_PIN.
+LAST_VERIFY_PRIOR_BATCH=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · code-final composition 2b724ee (c0ed7a0 +
   L2 3cd8476 + L3 84e7181 + v2 36d4a4e + L1 fd0e1f0 + STATE 0b512a8) · 2026-09-15 (local). Per lane: L2 2003,
   L3 1923, v2 1925, L1 1883. It touches none of the 69 evaluator-pinned files (24 files changed), and the
   pinned red tests are unchanged. This checkpoint differs from that tree only in STATE.md.
@@ -764,7 +772,26 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=PREP ONLY. Owner ruling 2026-09-15, verbatim: "Owner ruling: lift DEPLOY_PROHIBITED but no deploy
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The T3 prep batch is CONSUMED. The owner's T4 sequence is requested:
+  (1) T4 apply 0008 at e5cd7ef; (2) T3 origin push of release/prod-safe-3@P and its PR, CI only; (3) T4 deploy R to
+  hf; (4) T3 merge P and ONE guard dispatch. Each step runs only if the previous one verified, and never
+  concurrently.
+  RULINGS 2026-09-16: release shape A (convergence). The older-table privilege check was returned as the literal
+  placeholder "<yes/no>", so it is UNDECIDED and NOT authorized; it is asked again.
+  CONSUMED: the T3 batch, verbatim: "push to origin only (never hf) five PRs, merged strictly in this order:
+  prep/l2-0008-activation@3cd8476, prep/l3-candle-width@84e7181, prep/v2-distributional@36d4a4e,
+  prep/l1-hf-release@fd0e1f0, chore/state-post-99@cc58e1a ... final main tree must equal
+  0344911170da79ad7491886d58f1f262ced988a5 ... No workflow dispatch, DB, migration apply or deploy."
+  Result: BATCH_VERIFIED by an independent re-check (.work/816/t3-prep-batch/verify_batch.output):
+  - #100 merge 314b90a (c0ed7a0, 3cd8476); head CI run 35075216223, main CI run 35075513951;
+  - #101 merge 8c9e042 (314b90a, 84e7181); head CI 35075824981, main CI 35076121691;
+  - #102 merge 8116483 (8c9e042, 36d4a4e); head CI 35076499354, main CI 35076848359;
+  - #103 merge 5cd1042 (8116483, fd0e1f0); head CI 35077197126, main CI 35077544509;
+  - #104 merge e5cd7ef (5cd1042, cc58e1a); head CI 35077895577, main CI 35078236168.
+  Every PR merged at its authorized head with exactly its lane's files, with --match-head-commit; every merged
+  tree equals merge-tree(previous, head); the final tree equals the authorized one; hf a89b45e unchanged; no open
+  PRs; no workflow dispatched (apply-migration-0008.yml is registered and active, with zero runs).
+OWNER_BOUNDARY_PRIOR_PREP=PREP ONLY. Owner ruling 2026-09-15, verbatim: "Owner ruling: lift DEPLOY_PROHIBITED but no deploy
   yet. After merge, MAX-run parallel prep for HF clean-room release, 0008 activation, >205 candle-width, and
   R2-based v2; no new freeze/T0 or holdout tuning."
   - AUTHORIZED: local prep of the four lanes on local branches, with ./verify.sh, reviews, and bounded Codex
@@ -855,14 +882,23 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner batch.
-  - Proposed: ONE T3 for the five PRs (L2, L3, v2, L1, STATE), in that order, with the scripted procedure in
-    .work/816/t3-prep-batch/ and the final main tree named in the request.
-  - Then, each separately and naming exact SHAs: T4 apply 0008 -> T3 origin push of release R and pin P -> T4
-    deploy R -> T3 merge P and dispatch the guard.
-  - Owner decisions: the release shape (A recommended); later, v2 (skill gate, display, wiring in pinned files,
-    freeze); and a read-only privilege audit of the older tables (the sibling finding).
-  - NO push, deploy, DB access, migration apply or workflow dispatch until authorized.
+NEXT_ACTION=WAIT for the owner's T4 sequence, then execute it strictly in order, stopping at the first failure:
+  1. T4 apply 0008: pre-checks, ONE dispatch, raw capture, verify (.work/816/l2/t4-apply-0008-runbook.md).
+  2. T3: push P (carrying R) to origin as release/prod-safe-3; open the PR; exact-head CI green; do NOT merge.
+  3. T4: `git push hf R:refs/heads/main` as a fast-forward; read-only live checks (.work/816/l1/runbook.md §5).
+  4. T3: merge P with --match-head-commit; parents, tree, exact-main CI; ONE source-integrity-guard dispatch.
+  - NEVER run consume or the 0009 route again. No analysis against production. No force push except an
+    authorized rollback.
+RELEASE_STAGED=Built 2026-09-16 from main X = e5cd7efffb86c875800c51049045f49425780477:
+  - R = 00705c55e7eb291d01b4e02d4cca859122083f28: tree(R) == tree(X); parents (a89b45e, X); deterministic (two
+    builds agree); runtime delta vs deployed 36 files, +8943/-249.
+  - P = 7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e: the re-pin on R (the runtime pin and the guard test only);
+    VERIFY=PASS at 2085.
+  - Runtime accounted for since the reviewed tree: only the unwired v2 module differs (the task-817 fixes).
+  - HF push set: 260 commits, 483 blobs, max 387 KB, none over 10 MiB, none binary; README, .dockerignore,
+    Dockerfile and requirements are unchanged vs deployed.
+  - 0008 route: registered and active; bytes at X equal the pinned a8f290b3...; repository pin correct; no runs
+    queued anywhere; the secret SUPABASE_DB_URL exists (name only).
 PREP_RESULTS=Built 2026-09-15, all local:
   - L2 (0008 activation). FINDING: 0008 as authored had no RLS or REVOKE, so on Supabase the anon key could reach
     the operator's Detail payloads. Hardened in place (never applied): RLS on, not forced; REVOKE ALL FROM PUBLIC,
