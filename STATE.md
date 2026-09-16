@@ -1,10 +1,13 @@
 # STATE
 
-Updated: 2026-09-16 (OWNER CORRECTION: the older-table privilege audit is authorized; its read-only route is built and verified LOCALLY (prep/audit-older-table-privileges 2b95fd0, gate 2230, Codex 818-820); running it needs the route on main, so ONE T3 + ONE dispatch is requested; the exposure result is not yet known; release R 00705c55 / P 7d2cf2f4 still staged; nothing pushed, applied or deployed)
+Updated: 2026-09-16 (OLDER-TABLE AUDIT DONE: PR #105 merged as 66acc44 and VERIFIED; ONE read-only dispatch, run 35120616278, VERIFIED; result NOT_EXPOSED_THROUGH_AUDITED_PATHS (RLS on, no policies, on all 10 tables); release R 00705c55 / P 7d2cf2f4 still staged; the refreshed four-step boundary awaits the owner; nothing applied or deployed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AUDIT ROUTE READY, WAITING FOR ITS T3 + ONE DISPATCH; RELEASE STILL STAGED. Owner correction 2026-09-16:
+LOOP_STATE=AUDIT DONE; RELEASE STILL STAGED; WAITING for the owner's four-step authorization (OWNER_BOUNDARY).
+  The authorized T3 merged the audit route as PR #105 (66acc44), and the ONE read-only dispatch (run 35120616278)
+  VERIFIED. RESULT: NOT_EXPOSED_THROUGH_AUDITED_PATHS; see AUDIT_RESULT. Nothing applied or deployed; hf a89b45e.
+LOOP_STATE_PRIOR_AUDIT=AUDIT ROUTE READY, WAITING FOR ITS T3 + ONE DISPATCH; RELEASE STILL STAGED. Owner correction 2026-09-16:
   the older-table privilege check was already YES; run the read-only audit now; do not start 0008 or the HF deploy;
   return the exact exposure result and the refreshed four-step boundary. No existing route can read catalogs and the
   secret lives only in Actions, so the audit needs its route merged (T3) and ONE dispatch; see AUDIT_ROUTE and
@@ -238,8 +241,8 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   Product work outside §5A continues in parallel; it never touches the envelope.
 CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record (3571d7e: the merged
   batch; then the audit-route record).
-  The audit lane, LOCAL ONLY, prep/audit-older-table-privileges (worktree: session scratchpad lanes/audit): 209d1e0 the
-  route; e551e43 repair 1; 2b95fd0 repair 2 = THE HEAD TO AUTHORIZE (tree 0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b).
+  The audit lane prep/audit-older-table-privileges (209d1e0 route, e551e43 repair 1, 2b95fd0 repair 2) is MERGED as
+  PR #105 (66acc44). This STATE branch is still based on e5cd7ef; rebase or merge it onto 66acc44 before its PR.
   The prep branches below are MERGED: L2 #100, L3 #101, v2 #102, L1 #103, and chore/state-post-99 #104.
   The staged release lives only in this repository's objects (never pushed): R 00705c55 and P 7d2cf2f4, with the
   pin worktree in the session scratchpad (lanes/pin-real). Both rebuild deterministically from main.
@@ -270,7 +273,9 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=e5cd7ef (main, PR #104, the end of the prep batch). Exact-main CI passed on Python 3.11/Linux, run
+LAST_GREEN_SHA=66acc44 (main, PR #105, the audit route). Exact-main CI run 35120232571 passed; tree
+  0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b, which the gate passed locally at 2230.
+LAST_GREEN_SHA_PRIOR_105=e5cd7ef (main, PR #104, the end of the prep batch). Exact-main CI passed on Python 3.11/Linux, run
   35078236168. Its tree 0344911170da79ad7491886d58f1f262ced988a5 equals the composition gated locally at 2085.
 LAST_GREEN_SHA_PRIOR_99=c0ed7a0 (main, PR #99, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
   34922052354; exact-head CI on bcf2d5a was run 34921878215. The local gate on this tree was 1883.
@@ -796,7 +801,28 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=ONE T3 + ONE READ-ONLY DISPATCH REQUESTED (the older-table audit). Nothing else is authorized.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The audit T3 and its one dispatch are CONSUMED. REQUESTED: the refreshed four
+  steps below, each only after the previous one verified, never concurrently:
+  (1) T4 apply 0008 ONCE at main 66acc44 (0008 bytes still a8f290b3...; its route files are unchanged since e5cd7ef);
+  (2) T3 push release/prod-safe-3@P 7d2cf2f4 (carrying R) to origin and open its PR, CI only; it shows exactly
+      ops/hf_runtime_baseline.json and tests/scripts/test_source_integrity_guard.py (merge-base e5cd7ef);
+  (3) T4 deploy R 00705c55 to hf as a fast-forward from a89b45e, then the read-only live checks;
+  (4) T3 merge P with --match-head-commit, parents (66acc44, P); final main tree
+      194a52958316bbd13e7807ad8c00a8a13f9b2ceb (recomputed against the real 66acc44; simulated end state PASSES
+      2230); ONE source-integrity-guard dispatch.
+  CONSUMED 2026-09-16, verbatim: "T3 + T4 READ-ONLY AUDIT AUTHORIZED: push origin only (never hf)
+  prep/audit-older-table-privileges@2b95fd0, open one PR, and merge only after BOTH exact-head checks (normal CI +
+  PostgreSQL rehearsal) are green, with --match-head-commit, parents (e5cd7ef, 2b95fd0), merged tree
+  0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b, then exact-main CI green. Only after that, dispatch
+  audit-table-privileges.yml exactly once at that merge SHA with confirm READ-ONLY-AUDIT-OLDER-TABLES-ONCE;
+  metadata/catalog reads only, no application-row reads or mutation. Depth-16 limit accepted, but reaching it must
+  return INCOMPLETE, never NOT_EXPOSED. Capture raw run JSON/log/artifact before parsing. Stop on any
+  mismatch/failure. No 0008 or HF deploy."
+  - T3 result, LANE_PASS and LANE_VERIFIED (.work/816/t3-audit/verify_lane.output): PR #105 merged as 66acc44 at head
+    2b95fd0 with its 7 files; head checks CI 35119962707 and rehearsal 35119962806 succeeded; parents (e5cd7ef,
+    2b95fd0); tree 0281f7f2 bit-identical; exact-main CI 35120232571 succeeded; hf a89b45e unchanged.
+  - The dispatch: run 35120616278, dispatched 16:14:28Z, attempt 1, on main 66acc44; every step succeeded.
+OWNER_BOUNDARY_PRIOR_AUDIT=ONE T3 + ONE READ-ONLY DISPATCH REQUESTED (the older-table audit). Nothing else is authorized.
   Owner correction 2026-09-16, verbatim: "Owner correction: older-table privilege check was already YES in the prior
   ruling; the <yes/no> placeholder was only left in Claude's template. Run that already-authorized audit now, strictly
   read-only metadata only for tables from migrations 0001–0004 and 0007: RLS, grants to PUBLIC/anon/authenticated/
@@ -927,7 +953,14 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner's T3 + ONE dispatch for the older-table audit (OWNER_BOUNDARY), then, stopping at the first
+NEXT_ACTION=WAIT for the owner's authorization of the refreshed four steps (OWNER_BOUNDARY), then run them strictly in
+  order, stopping at the first failure: 1. .work/816/l2/t4-apply-0008-runbook.md (M = 66acc44 unless main moved);
+  2. the release PR, CI only; 3. the hf fast-forward and the live checks (.work/816/l1/runbook.md §5); 4. the P merge
+  and ONE guard dispatch. Separately, the owner decides whether to codify the older tables' RLS in a migration
+  (AUDIT_RESULT). The STATE branch needs its own T3.
+  - NEVER run consume, the 0009 route or the audit dispatch again. No analysis against production. Never push to hf
+    without a deploy authorization.
+NEXT_ACTION_PRIOR_AUDIT=WAIT for the owner's T3 + ONE dispatch for the older-table audit (OWNER_BOUNDARY), then, stopping at the first
   mismatch:
   1. bash .work/816/t3-audit/run-lane.sh (manifest head 2b95fd0, expected previous main e5cd7ef, expected merged
      tree 0281f7f2, both head `test` checks);
@@ -956,7 +989,29 @@ RELEASE_STAGED=Built 2026-09-16 from main X = e5cd7efffb86c875800c51049045f49425
     queued anywhere; the secret SUPABASE_DB_URL exists (name only).
   - Refreshed for the audit merge at 2b95fd0: P's PR still shows only its two files; the final main tree after P
     merges is 194a52958316bbd13e7807ad8c00a8a13f9b2ceb (simulated eb8881f, PASS 2230).
-AUDIT_ROUTE=prep/audit-older-table-privileges, LOCAL ONLY, from main e5cd7ef; head 2b95fd0, tree 0281f7f2. Seven files:
+AUDIT_RESULT=Run 35120616278 (read-only, rolled back, never committed; transaction_read_only on; no catalog read refused),
+  VERIFIED by .work/816/audit-dispatch/verify_audit.py. Raw capture before parsing: .work/816/audit-dispatch/raw/
+  (raw.sha256; report 1d3bae94..., log a3bebde5...).
+  VERDICT: NOT_EXPOSED_THROUGH_AUDITED_PATHS. The discovery limit was not reached: no views, no parents, nothing
+  unreadable. No server fact was missing.
+  - All 10 tables (analysis_runs, analysis_timeframe_results, app_events, news_clusters, news_evidence_links,
+    news_items, prediction_outcomes, predictions, provider_observations, watchlist) are in public, owned by postgres,
+    with ROW LEVEL SECURITY ON (not forced) and NO policies.
+  - anon and authenticated HOLD all seven table privileges (Supabase's default grants) and schema USAGE, but with RLS
+    on and no policy every command is RLS_DENIES_ALL. They are not owner-equivalent, have no BYPASSRLS, and inherit
+    no role (no memberships).
+  - service_role has BYPASSRLS: every command is OPEN, as the Hugging Face runtime requires.
+  - No PUBLIC grant, no column grant, no view or rule over the tables, no inheritance parent, no Realtime
+    publication. pgrst.db_schemas is not stored in the database (assumed public; context only).
+  - Default privileges still grant new tables in public to anon/authenticated/service_role (postgres and
+    supabase_admin), which is why 0008 revokes explicitly.
+  FINDINGS FOR THE OWNER (no action taken):
+  - Drift: migrations 0001-0004 and 0007 never enable RLS, but production has it on. A rebuild from the migrations
+    would leave these tables open to the anon key; the rehearsal built from the real migrations shows exactly that.
+  - Defense in depth: RLS with no policy is the only barrier; the API roles still hold full privileges.
+  - Optional: a new migration that enables RLS and revokes the API roles on these tables, as 0005/0006/0008/0009
+    do. That is an owner decision, then a T2 lane and a T4 apply.
+AUDIT_ROUTE=prep/audit-older-table-privileges, MERGED as PR #105 (66acc44), from main e5cd7ef; head 2b95fd0, tree 0281f7f2. Seven files:
   - scripts/audit_table_privileges.py;
   - scripts/audit_rehearsal/00_supabase_like_roles.sql and 90_variations.sql;
   - .github/workflows/audit-table-privileges.yml: dispatch-only; attest -> rehearse -> tests -> audit (the only step
