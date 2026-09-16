@@ -5,12 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SCANNER_PATH = Path(__file__).resolve()
 SCAN_PATHS = [
     ROOT / "src",
     ROOT / "tests",
     ROOT / "schemas",
     ROOT / "frontend",
     ROOT / ".github" / "workflows",
+    ROOT / "scripts",
 ]
 FORBIDDEN_TERMS = (
     "place_order",
@@ -40,7 +42,11 @@ def iter_files() -> list[Path]:
         if path.is_file():
             files.append(path)
         elif path.exists():
-            files.extend(item for item in path.rglob("*") if item.is_file())
+            files.extend(
+                item
+                for item in path.rglob("*")
+                if item.is_file() and item.resolve() != SCANNER_PATH
+            )
     return files
 
 
@@ -62,4 +68,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

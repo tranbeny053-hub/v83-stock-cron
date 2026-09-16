@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -9,6 +10,22 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def read_frontend(name: str) -> str:
     return (ROOT / "frontend" / name).read_text(encoding="utf-8")
+
+
+def extract_javascript_function(source: str, name: str) -> str:
+    function_start = source.index(f"function {name}(")
+    async_start = function_start - len("async ")
+    start = async_start if source[async_start:function_start] == "async " else function_start
+    opening_brace = source.index("{", start)
+    depth = 0
+    for index in range(opening_brace, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+    raise AssertionError(f"Could not extract {name}")
 
 
 def test_frontend_app_is_valid_javascript() -> None:
@@ -36,10 +53,93 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    # Tokens are per-asset; only the changed asset's token moves.
-    assert 'href="/styles.css?v=w4c1-ka1-20260824-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260824-a"' in html
+    # Keep both browser-facing asset tokens aligned for each frontend release.
+    assert 'href="/styles.css?v=w4c1-ka1-20260828-a"' in html
+    assert 'src="/app.js?v=w4c1-ka1-20260828-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
+
+
+def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+
+    assert 'data-tab="recent">Recent Analysis' in html
+    assert 'id="recentPanel"' in html
+    assert 'await sessionApi("/v1/runs")' in js
+    assert 'if (run.detail_available)' in js
+    assert 'row.addEventListener("click", () => openDetail(run))' in js
+    assert 'document.createElement(run.detail_available ? "button" : "div")' in js
+    assert "Full breakdown not available after restart." in js
+    assert "History is not durable right now." in js
+    assert "No recent analyses yet." in js
+    assert "Recent analyses could not be loaded:" in js
+    assert 'target.replaceChildren();' in extract_javascript_function(js, "loadRecentRuns")
+
+
+def test_recent_analysis_filters_and_context_are_local_and_fail_closed() -> None:
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(js, name)
+        for name in (
+            "uniqueRecentValues",
+            "filterRecentRuns",
+            "recentSourceLabel",
+            "recentEmptyMessage",
+        )
+    )
+    single_timeframes = next(
+        line for line in js.splitlines() if line.startswith("const singleTimeframes = ")
+    )
+    cases = """
+const runs = [
+  {symbol: "BTC", primary_timeframe: "2H", analysis_mode: "METRICS_ONLY"},
+  {symbol: "BTC", primary_timeframe: "1D", analysis_mode: "NEWS_ADDON"},
+  {symbol: "ETH", primary_timeframe: "15m", analysis_mode: "NEWS_ADDON"},
+  {symbol: "SOL", primary_timeframe: "4H", analysis_mode: "NEWS_ADDON"},
+  {symbol: "BTC", primary_timeframe: "1H", analysis_mode: "METRICS_ONLY"},
+];
+if (
+  JSON.stringify(uniqueRecentValues(runs, "symbol")) !== JSON.stringify(["BTC", "ETH", "SOL"])
+) process.exit(1);
+const filtered = filterRecentRuns(runs, {symbol: "BTC", timeframe: "1D", mode: "NEWS_ADDON"});
+if (filtered.length !== 1 || filtered[0].primary_timeframe !== "1D") process.exit(2);
+if (recentEmptyMessage(0, "") !== "No recent analyses yet.") process.exit(3);
+if (!recentEmptyMessage(3, "").includes("match the selected filters")) process.exit(4);
+if (
+  recentSourceLabel({data_source: "feed", is_live_data: false}) !== "feed · Not live data"
+) process.exit(5);
+if (recentSourceLabel({data_source: null, is_live_data: undefined}) !== "") process.exit(6);
+if (
+  !recentSourceLabel({data_source: "feed", is_live_data: true}).includes("Live data")
+) process.exit(7);
+if (recentSourceLabel({data_source: "feed"}).includes("Live data")) process.exit(8);
+if (
+  JSON.stringify(uniqueRecentValues(runs, "primary_timeframe", singleTimeframes)) !==
+  JSON.stringify(["15m", "1H", "4H", "1D", "2H"])
+) process.exit(9);
+"""
+    completed = subprocess.run(
+        ["node", "-e", f"{single_timeframes}\n{functions}\n{cases}"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert all(
+        filter_id in html
+        for filter_id in (
+            'id="recentSymbolFilter"',
+            'id="recentTimeframeFilter"',
+            'id="recentModeFilter"',
+            'id="clearRecentFilters"',
+        )
+    )
+    assert 'await sessionApi("/v1/runs")' in extract_javascript_function(js, "loadRecentRuns")
+    populate_filters = extract_javascript_function(js, "populateRecentFilters")
+    assert all(key in populate_filters for key in ("symbol", "primary_timeframe", "analysis_mode"))
+    assert 'uniqueRecentValues(runs, "primary_timeframe", singleTimeframes)' in populate_filters
+    assert "detail_available" not in extract_javascript_function(js, "filterRecentRuns")
 
 
 def test_ops_ka1_build_fingerprint_is_backend_driven_at_startup() -> None:
@@ -243,6 +343,17 @@ def test_decision_section_reads_backend_contract_and_renders_first() -> None:
         'section("Overview"'
     )
     assert 'data-tab="decision"' not in html
+
+
+def test_final_decision_strength_is_qualified_by_backend_reliability_status() -> None:
+    js = read_frontend("app.js")
+    chunk = js.split("function renderFinalDecisionCard", maxsplit=1)[1].split(
+        "function renderActionabilityRow", maxsplit=1
+    )[0]
+
+    assert "const quality = synthesis.model_quality_summary || {};" in chunk
+    assert 'backendText(quality.reliability_status) || "Not measured yet"' in chunk
+    assert 'textBlock("p", `Reliability: ${reliabilityStatus}`, "muted")' in chunk
 
 
 def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> None:
@@ -561,7 +672,7 @@ def test_ui_d1_4b_fetches_all_calibration_diagnostics_once_with_cache() -> None:
     load_chunk = js.split("async function loadCalibrationDiagnostics", maxsplit=1)[1].split(
         "function formatCalibrationMetric", maxsplit=1
     )[0]
-    assert js.count('api("/v1/calibration")') == 1
+    assert js.count('sessionApi("/v1/calibration")') == 1
     assert js.count("/v1/calibration") == 1
     assert "singleTimeframes" not in load_chunk
     assert "include_buckets" not in load_chunk
@@ -803,16 +914,97 @@ def test_batch_cards_reuse_structured_detail_renderer() -> None:
         'id="batchPanel"', maxsplit=1
     )[0]
     assert 'id="detailPanel"' not in single_section
-    assert (
-        "renderResults(document.querySelector(\"#batchResult\"), payload.results, payload.errors)"
-        in js
-    )
+    assert "renderResults(target, payload.results, payload.errors, payload.items)" in js
     assert "target.append(overviewCard(payload))" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
     assert "payload.detail_view" in js
     assert "renderStructuredDetail(payload, detailView)" in js
     assert "Detail Analysis is unavailable for this result." in js
+
+
+def test_failed_batch_replaces_stale_results_with_safe_failure_state() -> None:
+    source = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(source, name)
+        for name in (
+            "loginFailureMessage",
+            "batchFailureMessage",
+            "renderBatchFailure",
+            "runBatchAnalysis",
+        )
+    )
+    sentinel = "SENTINEL-SUBMITTED-SYMBOL"
+    script = f"""
+{functions}
+const target = {{
+  children: [{{ textContent: "STALE BATCH RESULT" }}],
+  replaceChildren(...children) {{ this.children = children; }},
+  append(...children) {{ this.children.push(...children); }},
+}};
+const document = {{
+  querySelector(selector) {{
+    if (selector === "#batchResult") return target;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+  createElement() {{ return {{ className: "", textContent: "" }}; }},
+}};
+let apiCalls = 0;
+let lastBatchRequest = null;
+const hideDetail = () => {{}};
+const setLoading = () => {{}};
+const setAnalysisActive = () => {{}};
+const renderResults = () => {{}};
+const updateStatusFromPayload = () => {{}};
+const markRefreshed = () => {{}};
+const api = async () => {{
+  apiCalls += 1;
+  throw {{
+    status: 422,
+    payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
+  }};
+}};
+const sessionApi = api;
+(async () => {{
+  await runBatchAnalysis({{ symbols: ["BTC"], analysisMode: "METRICS_ONLY", timeframe: "4H" }});
+  const rejected = {{
+    apiCalls,
+    childCount: target.children.length,
+    className: target.children[0].className,
+    message: target.children[0].textContent,
+  }};
+  target.children = [{{ textContent: "ANOTHER STALE RESULT" }}];
+  await runBatchAnalysis({{ symbols: [], analysisMode: "METRICS_ONLY", timeframe: "4H" }});
+  const empty = {{
+    apiCalls,
+    childCount: target.children.length,
+    className: target.children[0].className,
+    message: target.children[0].textContent,
+  }};
+  console.log(JSON.stringify({{ rejected, empty }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    states = json.loads(completed.stdout)
+
+    assert states["rejected"] == {
+        "apiCalls": 1,
+        "childCount": 1,
+        "className": "result-card error-card",
+        "message": "Batch request was not accepted. Enter at least one symbol and try again.",
+    }
+    assert sentinel not in states["rejected"]["message"]
+    assert states["empty"] == {
+        "apiCalls": 1,
+        "childCount": 1,
+        "className": "result-card error-card",
+        "message": "Enter at least one symbol to run batch analysis.",
+    }
 
 
 def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
@@ -829,6 +1021,217 @@ def test_watchlist_tab_symbol_view_and_detail_hooks_present() -> None:
     assert "/v1/watchlist" in js
     assert "openDetail(payload)" in js
     assert "/v1/analyze/detail/" in js
+
+
+def test_watchlist_analysis_context_joins_normalized_symbol_and_preserves_order() -> None:
+    js = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(js, name)
+        for name in (
+            "formatRecentTime",
+            "recentSourceLabel",
+            "latestRunsByNormalizedSymbol",
+            "appendWatchlistAnalysis",
+            "renderWatchlist",
+        )
+    )
+    script = f"""
+{functions}
+class Element {{
+  constructor(tag) {{
+    this.tag = tag;
+    this.children = [];
+    this.textContent = "";
+    this.className = "";
+    this.listeners = {{}};
+  }}
+  append(...children) {{ this.children.push(...children); }}
+  replaceChildren(...children) {{ this.children = children; }}
+  addEventListener(name, callback) {{ this.listeners[name] = callback; }}
+}}
+const target = new Element("div");
+const document = {{
+  createElement: (tag) => new Element(tag),
+  querySelector: (selector) => {{
+    if (selector === "#watchlistList") return target;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+}};
+const setWatchlistStatus = () => {{}};
+const openWatchlistSymbol = () => {{}};
+const removeWatchlistSymbol = () => {{}};
+const openDetail = () => {{}};
+const symbols = ["ETH/USDT", "BTC/USDT", "SOL/USDT"];
+const runs = [
+  {{
+    run_id: "btc-new",
+    symbol: "btc",
+    normalized_symbol: "BTC/USDT",
+    as_of_utc: "2026-08-27T01:00:00Z",
+    primary_timeframe: "4H",
+    data_source: "feed",
+    is_live_data: true,
+    detail_available: true,
+  }},
+  {{
+    run_id: "btc-old",
+    symbol: "BTCUSDT",
+    normalized_symbol: "BTC/USDT",
+    as_of_utc: "2026-08-26T01:00:00Z",
+    primary_timeframe: "1D",
+    detail_available: true,
+  }},
+  {{
+    run_id: "eth",
+    symbol: "eth",
+    normalized_symbol: "ETH/USDT",
+    as_of_utc: "2026-08-27T00:00:00Z",
+    primary_timeframe: "",
+    data_source: "feed",
+    is_live_data: false,
+    detail_available: false,
+  }},
+];
+renderWatchlist(symbols, "OK", runs);
+const rows = target.children;
+const summarize = (row) => ({{
+  symbol: row.children[0].textContent,
+  contextText: row.children[2].textContent,
+  contextChildren: row.children[2].children.map((child) => child.textContent),
+  contextTags: row.children[2].children.map((child) => child.tag),
+}});
+console.log(JSON.stringify(rows.map(summarize)));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    rows = json.loads(completed.stdout)
+
+    assert [row["symbol"] for row in rows] == ["ETH/USDT", "BTC/USDT", "SOL/USDT"]
+    assert rows[0]["contextChildren"][0].startswith("Last analyzed: ")
+    assert rows[0]["contextChildren"][1:] == [
+        "feed · Not live data",
+        "Full breakdown not available after restart.",
+    ]
+    assert "button" not in rows[0]["contextTags"]
+    assert "Primary timeframe: 4H" in rows[1]["contextChildren"]
+    assert "feed · Live data" in rows[1]["contextChildren"]
+    assert "Open latest analysis" in rows[1]["contextChildren"]
+    assert rows[1]["contextTags"].count("button") == 1
+    assert rows[2]["contextText"] == "No recent analysis found."
+    assert "Not analyzed yet" not in rows[2]["contextText"]
+    assert "never" not in rows[2]["contextText"].lower()
+    assert "button" not in rows[2]["contextTags"]
+    assert rows[2]["contextChildren"] == []
+
+
+def test_watchlist_history_failure_does_not_block_symbol_rendering() -> None:
+    js = read_frontend("app.js")
+    load_watchlist = extract_javascript_function(js, "loadWatchlist")
+    script = f"""
+{load_watchlist}
+const calls = [];
+const renders = [];
+const api = async (path) => {{
+  calls.push(path);
+  if (path === "/v1/runs") throw new Error("history unavailable");
+  return {{ symbols: ["ETH/USDT", "BTC/USDT"], persistence_status: "OK" }};
+}};
+const sessionApi = api;
+const renderWatchlist = (symbols, status, runs) =>
+  renders.push({{ symbols, status, hasRuns: runs !== undefined }});
+const readLocalWatchlist = () => ["LOCAL/USDT"];
+const writeLocalWatchlist = () => {{}};
+const document = {{ querySelector: () => ({{ title: "" }}) }};
+(async () => {{
+  await loadWatchlist();
+  console.log(JSON.stringify({{ calls, renders }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert sorted(result["calls"]) == ["/v1/runs", "/v1/watchlist"]
+    assert result["renders"] == [
+        {"symbols": ["ETH/USDT", "BTC/USDT"], "status": "OK", "hasRuns": False}
+    ]
+
+
+def test_failed_watchlist_mutations_replace_stale_success_with_safe_failure() -> None:
+    source = read_frontend("app.js")
+    functions = "\n".join(
+        extract_javascript_function(source, name)
+        for name in (
+            "watchlistFailureMessage",
+            "renderWatchlistMutationFailure",
+            "addWatchlistSymbol",
+            "removeWatchlistSymbol",
+        )
+    )
+    sentinel = "SENTINEL-SUBMITTED-SYMBOL"
+    script = f"""
+{functions}
+const statusTarget = {{ textContent: "Watchlist persistence: OK", title: "stale" }};
+const persistenceStates = [];
+const document = {{
+  querySelector(selector) {{
+    if (selector === "#watchlistStatus") return statusTarget;
+    throw new Error(`Unexpected selector: ${{selector}}`);
+  }},
+}};
+const updatePersistenceStatus = (status) => persistenceStates.push(status);
+const readLocalWatchlist = () => [];
+const writeLocalWatchlist = () => {{}};
+const renderWatchlist = () => {{}};
+let callCount = 0;
+const api = async () => {{
+  callCount += 1;
+  throw {{
+    status: 422,
+    payload: {{ detail: [{{ type: "value_error", input: "{sentinel}" }}] }},
+  }};
+}};
+const sessionApi = api;
+(async () => {{
+  await addWatchlistSymbol("{sentinel}");
+  const add = {{ message: statusTarget.textContent, title: statusTarget.title }};
+  statusTarget.textContent = "Watchlist persistence: OK";
+  statusTarget.title = "stale";
+  await removeWatchlistSymbol("{sentinel}");
+  const remove = {{ message: statusTarget.textContent, title: statusTarget.title }};
+  console.log(JSON.stringify({{ add, remove, persistenceStates, callCount }}));
+}})().catch((error) => {{ console.error(error); process.exit(1); }});
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    states = json.loads(completed.stdout)
+
+    expected_message = (
+        "Watchlist persistence: WRITE FAILED. "
+        "The watchlist change was not accepted. Check the entry and try again."
+    )
+    assert states == {
+        "add": {"message": expected_message, "title": ""},
+        "remove": {"message": expected_message, "title": ""},
+        "persistenceStates": ["UNAVAILABLE", "UNAVAILABLE"],
+        "callCount": 2,
+    }
+    assert "persistence: OK" not in states["add"]["message"]
+    assert "persistence: OK" not in states["remove"]["message"]
+    assert sentinel not in states["add"]["message"]
+    assert sentinel not in states["remove"]["message"]
 
 
 def test_refresh_control_and_persistence_badge_are_visible() -> None:

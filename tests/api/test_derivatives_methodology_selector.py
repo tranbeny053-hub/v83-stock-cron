@@ -168,6 +168,9 @@ def test_analyze_request_signature_preserves_existing_contract() -> None:
         "prediction_origin",
         "deterministic_identity",
         "derivatives_methodology_version",
+        "methodology_version",
+        "pair_context",
+        "arm",
     ]
     assert params["request"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
     for name in list(params)[1:]:
@@ -176,6 +179,9 @@ def test_analyze_request_signature_preserves_existing_contract() -> None:
     assert params["prediction_origin"].default == "USER_REQUESTED"
     assert params["deterministic_identity"].default is False
     assert params["derivatives_methodology_version"].default == METHODOLOGY_VERSION_V0
+    assert params["methodology_version"].default == "heuristic-v1-wave4b0"
+    assert params["pair_context"].default is None
+    assert params["arm"].default is None
 
 
 def test_omitted_selector_and_explicit_v0_are_deep_equal_when_disabled(

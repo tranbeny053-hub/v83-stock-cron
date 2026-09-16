@@ -306,6 +306,7 @@ baseline_counts AS (
         count(*) FILTER (
             WHERE d.derivatives_methodology_version = p.v1_methodology
               AND pred.prediction_origin = p.scheduled_origin
+              AND pred.run_id !~ '^oosb-[0-9a-f]{32}$'
         )::bigint AS v1_scheduled_shadow_snapshots,
         count(*) FILTER (
             WHERE d.derivatives_methodology_version = p.v1_methodology
@@ -316,6 +317,7 @@ baseline_counts AS (
         count(*) FILTER (
             WHERE d.derivatives_methodology_version = p.v0_methodology
               AND pred.prediction_origin = p.scheduled_origin
+              AND pred.run_id !~ '^oosb-[0-9a-f]{32}$'
         )::bigint AS v0_scheduled_shadow_snapshots,
         count(*) FILTER (
             WHERE d.derivatives_methodology_version = p.v0_methodology

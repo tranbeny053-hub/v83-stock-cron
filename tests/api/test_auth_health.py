@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
 
+import pytest
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api import auth
@@ -145,6 +146,65 @@ def test_oversized_login_code_is_rejected_before_hashing(monkeypatch) -> None:
     assert response.status_code == 422
     assert submitted not in response.text
     assert str(len(submitted)) not in response.text
+
+
+@pytest.mark.parametrize(
+    ("submitted", "submitted_text"),
+    [
+        pytest.param({"value": "operator-access-code"}, "operator-access-code", id="object"),
+        pytest.param(["operator-access-code"], "operator-access-code", id="list"),
+        pytest.param(8675309, "8675309", id="integer"),
+        pytest.param(None, "null", id="null"),
+    ],
+)
+def test_malformed_login_code_is_not_echoed(
+    submitted: object, submitted_text: str
+) -> None:
+    client = make_client()
+
+    response = client.post("/v1/auth/login", json={"code": submitted})
+
+    assert response.status_code == 422
+    assert submitted_text not in response.text
+
+
+@pytest.mark.parametrize("path", ["/v1/auth/login", "/v1/auth/dev"])
+@pytest.mark.parametrize(
+    ("submitted", "submitted_text"),
+    [
+        pytest.param("top-level-access-value", "top-level-access-value", id="string"),
+        pytest.param(8675309, "8675309", id="number"),
+        pytest.param(
+            ["top-level-list-access-value"],
+            "top-level-list-access-value",
+            id="list",
+        ),
+    ],
+)
+def test_top_level_auth_body_is_not_echoed(
+    path: str, submitted: object, submitted_text: str
+) -> None:
+    client = make_client()
+
+    response = client.post(path, json=submitted)
+
+    assert response.status_code == 422
+    assert submitted_text not in response.text
+
+
+def test_non_auth_validation_error_still_echoes_input() -> None:
+    client = make_client()
+    login_response = client.post("/v1/auth/login", json={"code": "operator-test-code"})
+    submitted = "non-auth-validation-input"
+
+    response = client.post(
+        "/v1/analyze",
+        json=submitted,
+        cookies={SESSION_COOKIE: login_response.cookies[SESSION_COOKIE]},
+    )
+
+    assert response.status_code == 422
+    assert submitted in response.text
 
 
 def test_login_code_at_maximum_length_still_works() -> None:

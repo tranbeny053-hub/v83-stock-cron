@@ -1,0 +1,62 @@
+name: OOS pair evidence (scheduled + manual)
+
+# THE HOLDOUT CLOSED AT T_close = 2026-09-12T04:00:00Z.
+#
+# The scheduled trigger is removed because rows collected after T_close fall outside the
+# section 5A window lattice and are discarded, so continued collection is waste rather
+# than contamination. Nothing about WHAT the collector computes or writes changes here.
+#
+# The collector stays manually runnable via workflow_dispatch, and the scheduled step
+# below is left in place, inert, so that restoring collection is a one-line revert of
+# this block rather than a reconstruction. Re-enabling is an owner decision.
+"on":
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Keep the collector read/write inert
+        required: true
+        type: boolean
+        default: true
+      max_occasions:
+        description: Maximum due occasions attempted in MATRIX order
+        required: true
+        type: number
+        default: 6
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Run scheduled bounded collector (writing enabled)
+        if: github.event_name == 'schedule'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          UCPE_OOS_PAIR_EVIDENCE_ENABLED: "true"
+        run: >-
+          PYTHONPATH=src python scripts/collect_oos_pair_evidence.py
+          --dry-run false
+          --max-occasions 6
+          --confirm-write WRITE-OOS-PAIR-EVIDENCE
+      # Dispatch inputs reach the shell ONLY through env, expanded in double quotes. An expression
+      # inside `run:` is pasted into the script text before bash parses it, which is how the
+      # section 5A evaluation workflow let an input execute as a command (V808-F1).
+      - name: Run manually dispatched bounded collector (input driven)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          UCPE_OOS_PAIR_EVIDENCE_ENABLED: ${{ inputs.dry_run == false && 'true' || 'false' }}
+          COLLECTOR_DRY_RUN: ${{ inputs.dry_run }}
+          COLLECTOR_MAX_OCCASIONS: ${{ inputs.max_occasions }}
+          COLLECTOR_CONFIRM_WRITE: ${{ inputs.dry_run == false && 'WRITE-OOS-PAIR-EVIDENCE' || 'DRY-RUN' }}
+        run: >-
+          PYTHONPATH=src python scripts/collect_oos_pair_evidence.py
+          --dry-run="$COLLECTOR_DRY_RUN"
+          --max-occasions="$COLLECTOR_MAX_OCCASIONS"
+          --confirm-write="$COLLECTOR_CONFIRM_WRITE"

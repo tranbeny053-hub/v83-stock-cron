@@ -1,0 +1,101 @@
+"""The evaluation workflow must never be able to consume the holdout unattended.
+
+The shared block-YAML reader cannot parse folded scalars or GitHub expressions, and
+already cannot parse the existing collector workflow, so these contracts are asserted
+on the file text — the same approach ``tests/scripts/test_source_integrity_guard.py``
+takes. The trigger extraction below is deliberately small and exact rather than a
+general YAML parser.
+
+This file asserts nothing about the collector workflow's CONTENT. Doing so would couple
+this lane to the separate lane that stops the collector.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+EVALUATION = ROOT / ".github/workflows/section-5a-evaluation.yml"
+
+# A literal fixture, deliberately NOT the live collector workflow. Asserting on the
+# collector's content here would couple this lane to the independent lane that stops
+# the collector, and would fail the moment that lane lands.
+_TRIGGER_FIXTURE = """name: Example
+
+"on":
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+"""
+
+
+def trigger_keys(text: str) -> set[str]:
+    """Return the keys nested directly under the workflow's ``on:`` mapping."""
+
+    lines = text.splitlines()
+    keys: set[str] = set()
+    inside = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith(" "):
+            inside = stripped.rstrip(":") in {"on", '"on"', "'on'"}
+            continue
+        if not inside:
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 2 and stripped.endswith(":"):
+            keys.add(stripped[:-1].strip("\"'"))
+        elif indent == 2 and ":" in stripped:
+            keys.add(stripped.split(":", 1)[0].strip("\"'"))
+    return keys
+
+
+def test_trigger_extraction_is_itself_correct() -> None:
+    """Guard the guard: a helper that silently returned nothing would pass everything."""
+
+    assert trigger_keys(_TRIGGER_FIXTURE) == {"schedule", "workflow_dispatch"}
+
+
+def test_evaluation_workflow_has_no_schedule_trigger() -> None:
+    """A cron here could take the one look with nobody watching."""
+
+    keys = trigger_keys(EVALUATION.read_text(encoding="utf-8"))
+    assert keys == {"workflow_dispatch"}
+    assert "schedule" not in keys
+
+
+def test_evaluation_workflow_defaults_to_the_safe_mode() -> None:
+    text = EVALUATION.read_text(encoding="utf-8")
+    mode_block = text.split("mode:", 1)[1].split("confirm:", 1)[0]
+    assert "default: readiness" in mode_block
+
+
+def test_evaluation_workflow_verifies_the_pin_before_it_runs() -> None:
+    """The attestation verifies the pin inside the isolated process, before the evaluation step."""
+
+    text = EVALUATION.read_text(encoding="utf-8")
+    assert text.index("--mode=attest") < text.index('--mode="$SECTION_5A_MODE"')
+
+
+def test_evaluation_workflow_requires_the_confirmation_token_to_be_passed() -> None:
+    text = EVALUATION.read_text(encoding="utf-8")
+    assert "--confirm" in text
+    assert "CONSUME-SECTION-5A-ONE-LOOK" in text
+
+
+def test_seal_recovery_is_dispatchable_where_the_secret_lives() -> None:
+    """V807-R4. Recovery needs the database secret, which exists only in this workflow."""
+
+    text = EVALUATION.read_text(encoding="utf-8")
+    options = text.split("options:", 1)[1].split("confirm:", 1)[0]
+    assert "- recompute" in options
+    assert "- readiness" in options and "- consume" in options

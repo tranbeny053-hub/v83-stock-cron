@@ -27,6 +27,12 @@ def main() -> int:
     if addon["influence_mode"] != "ADVISORY_DISPLAY_ONLY":
         print("FAIL: influence mode must remain advisory display only.")
         return 1
+    if addon["status"] == "UNAVAILABLE":
+        print(
+            "FAIL: news smoke found no available provider "
+            f"(configured={addon['configured_source_count']})."
+        )
+        return 1
     print(
         "PASS: news smoke completed "
         f"status={addon['status']} providers={addon['configured_source_count']}"

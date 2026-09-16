@@ -1,0 +1,24 @@
+{
+  "file": "tests/oos/evaluation/test_g1_g7_red.py",
+  "sha256": "c7e5d4c6dc49ccc288d66b5ee395af89c0de9ad20a11d920aef48659598a6d2e",
+  "authored_by": "Codex task-806, against the frozen evaluator 2b31832",
+  "rule": "These tests are the repair contract. They must not be edited to obtain green. Any change to this file or this pin is visible in review and must be justified there.",
+  "original_sha256": "efe36649582ecbfe3a9835d159bd3ea1bd54befe4a55269dd165084d265f07df",
+  "amendments": [
+    {
+      "date": "2026-09-13",
+      "authorized_by": "owner rulings D2 and D3",
+      "from_sha256": "efe36649582ecbfe3a9835d159bd3ea1bd54befe4a55269dd165084d265f07df",
+      "to_sha256": "c7e5d4c6dc49ccc288d66b5ee395af89c0de9ad20a11d920aef48659598a6d2e",
+      "scope": [
+        "D2: G3.4's two-party barrier moved from the probability read to the pre-claim seal read, so both consumers race the atomic claim instead of a lone reader timing out",
+        "D2: _ConcurrentRepository gained capture_section_5a_snapshot so the winner can complete",
+        "D2: a separate single-reader success proof, test_g3_4b_a_single_reader_completes_the_one_look",
+        "D3: the driver and concurrent doubles declare the durable Postgres authority",
+        "D3: _consume no longer passes verify_pin=False"
+      ],
+      "unchanged": "No assertion was removed or altered. The only deleted lines are verify_pin=False, the probability-read barrier wait, and the pre-amendment seal return.",
+      "evidence": "Against the not-yet-repaired code, the amended file passes 22 of 22 in 0.37 s; the original G3.4 failure lived in the double, not the evaluator."
+    }
+  ]
+}

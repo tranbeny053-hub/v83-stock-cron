@@ -14,19 +14,26 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "e6ee23cc81274c2ad68e247293738bc8e81f082a"
+PIN_SHA = "a89b45e417fcf221daddf757b5fd5900a8a026b1"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
-# Non-empty while a guarded change is merged on GitHub but not yet deployed to the Space:
-# session-scoped prediction origin touches api/app.py. This mirrors reality and must be
-# emptied again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
+# It goes non-empty whenever a guarded change is merged but not yet deployed, and shrinks
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. The frontend
+# entries emptied when PROD-SAFE-2 shipped the UI changes. analysis_service.py does not
+# clear and is not expected to: main carries the section-5A arm machinery that the deployed
+# clean-room candidate deliberately does not, so this entry stands until that code is either
+# retired or deliberately deployed. api/app.py and frontend/styles.css entered the delta with
+# the Recent Analysis History feature, which is merged but deliberately not deployed.
+# config/build_info.py entered with the PROD-SAFE-3 release identity, which names the next
+# deploy; the pin keeps describing the live build until that deploy lands and is re-pinned.
 CURRENT_DELTA_PATHS = [
     "frontend/app.js",
     "frontend/index.html",
     "frontend/styles.css",
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
@@ -271,8 +278,8 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
     assert intended.source_milestone == "wave-4d3-ops-2a0-cadence-runtime"
     assert intended.fingerprint == "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A"
     assert intended.asset_tokens == {
-        "app_js": "w4c1-ka1-20260621-a",
-        "styles_css": "w4c1-ka1-20260621-a",
+        "app_js": "w4c1-ka1-20260824-a",
+        "styles_css": "w4c1-ka1-20260824-a",
     }
     assert set(intended.critical_source_digests) == set(guard.CRITICAL_SOURCE_PATHS)
 
@@ -812,7 +819,12 @@ def test_manifest_fidelity_against_unprefixed_pinned_git_objects(
             capture_output=True,
         )
         if exists.returncode != 0:
-            pytest.skip(f"pinned Git object unavailable: {spec}")
+            pytest.fail(
+                f"pinned Git object unavailable: {spec}. Fetch the pinned objects with "
+                f"`git fetch --depth=1 origin {PIN_SHA}` before running this test. The "
+                "pinned commit must remain fetchable; if it has been garbage-collected, "
+                "the production pin is meaningless."
+            )
         prefixed = subprocess.run(
             ["git", "cat-file", "-e", f"{PIN_SHA}:v8-crypto-api-clean/{relative_path}"],
             cwd=ROOT,
@@ -1033,8 +1045,8 @@ def test_workflow_is_scheduled_read_only_unsecreted_and_unchanged() -> None:
         "group: source-integrity-guard",
         "cancel-in-progress: false",
         "timeout-minutes: 10",
-        "actions/checkout@v4",
-        "actions/setup-python@v5",
+        "actions/checkout@v7",
+        "actions/setup-python@v7",
         'python-version: "3.11"',
         "python scripts/source_integrity_guard.py",
     ):

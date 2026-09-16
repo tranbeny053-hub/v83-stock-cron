@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,9 +8,10 @@ from fastapi.testclient import TestClient
 from crypto_probability_engine.api import calibration_endpoint
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import SESSION_COOKIE, hash_code, session_limiter
+from crypto_probability_engine.calibration import service as calibration_service
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
 
-ROOT = Path(__file__).resolve().parents[2]
 EXPECTED_REPOSITORY = "SUPA" + "BASE_POSTGRES"
 
 
@@ -271,19 +271,61 @@ def test_calibration_query_constraints_are_enforced() -> None:
     assert client.get("/v1/calibration", params={"limit": 5001}).status_code == 422
 
 
-def test_calibration_endpoint_is_read_only() -> None:
-    source = (ROOT / "src/crypto_probability_engine/api/calibration_endpoint.py").read_text(
-        encoding="utf-8"
+def test_calibration_endpoint_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ReadOnlyRepositorySpy(InMemoryPersistenceRepository):
+        denied_mutations = {
+            "save_run",
+            "save_timeframe_result",
+            "save_provider_observation",
+            "save_news_item",
+            "save_news_cluster",
+            "save_news_evidence_link",
+            "save_prediction",
+            "save_feature_snapshot",
+            "save_derivatives_snapshot",
+            "save_prediction_outcome",
+            "add_watchlist",
+            "remove_watchlist",
+        }
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.mutation_attempts: list[str] = []
+
+        def __getattribute__(self, name: str):
+            if name in object.__getattribute__(self, "denied_mutations"):
+                return object.__getattribute__(self, "_deny_mutation")(name)
+            return super().__getattribute__(name)
+
+        def __getattr__(self, name: str):
+            return self._deny_mutation(name)
+
+        def _deny_mutation(self, name: str):
+            def deny(*args, **kwargs):
+                self.mutation_attempts.append(name)
+                raise AssertionError(f"calibration attempted repository mutation: {name}")
+
+            return deny
+
+        def repository_type(self) -> str:
+            return EXPECTED_REPOSITORY
+
+    repository = ReadOnlyRepositorySpy()
+    monkeypatch.setattr(
+        calibration_service,
+        "build_operator_repository",
+        lambda settings: repository,
     )
-    mutation_markers = (
-        "IN" + "SERT",
-        "UP" + "DATE",
-        "DE" + "LETE",
-        "save_" + "prediction",
-        "save_" + "prediction_outcome",
-        "resolve_" + "outcomes",
-    )
-    assert not any(marker in source for marker in mutation_markers)
+    client = make_client()
+    login(client)
+
+    response = client.get("/v1/calibration", params={"timeframe": "15m"})
+
+    # A deny-on-write spy tests runtime behavior; source-text scans miss aliases and helpers.
+    assert repository.mutation_attempts == []
+    assert response.status_code == 200
+    assert response.json()["status"] == "OK"
+    assert response.json()["repository"] == EXPECTED_REPOSITORY
 
 
 def test_calibration_response_wording_is_safely_bounded(

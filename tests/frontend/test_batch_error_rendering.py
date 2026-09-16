@@ -84,3 +84,59 @@ def test_batch_error_messages_are_safe_and_actionable() -> None:
     ]
     for message in messages:
         assert SENTINEL not in message
+
+
+def test_batch_results_render_in_request_order_with_legacy_fallback() -> None:
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    helpers = "\n".join(
+        _extract_function(source, name) for name in ("batchErrorMessage", "renderResults")
+    )
+    script = f"""
+{helpers}
+const document = {{
+  createElement() {{ return {{ className: "", textContent: "" }}; }},
+}};
+const overviewCard = (payload) => ({{ textContent: `success:${{payload.symbol}}` }});
+const target = {{
+  children: [],
+  replaceChildren(...children) {{ this.children = children; }},
+  append(...children) {{ this.children.push(...children); }},
+}};
+const payloads = [
+  {{ run_id: "run-btc", symbol: "BTC" }},
+  {{ run_id: "run-eth", symbol: "ETH" }},
+];
+const errors = [{{
+  index: 1,
+  symbol: "$NOPE",
+  detail: {{ error: {{ code: "INVALID_SYMBOL", message: "Unsupported." }} }},
+}}];
+const items = [
+  {{ index: 0, symbol: "BTC", status: "OK", run_id: "run-btc" }},
+  {{ index: 1, symbol: "$NOPE", status: "ERROR", detail: errors[0].detail }},
+  {{ index: 2, symbol: "ETH", status: "OK", run_id: "run-eth" }},
+];
+renderResults(target, payloads, errors, items);
+const ordered = target.children.map((child) => child.textContent);
+renderResults(target, payloads, errors);
+const legacy = target.children.map((child) => child.textContent);
+console.log(JSON.stringify({{ ordered, legacy }}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    rendered = json.loads(completed.stdout)
+    assert rendered["ordered"] == [
+        "success:BTC",
+        "Item 2 ($NOPE): Unsupported. (Code: INVALID_SYMBOL)",
+        "success:ETH",
+    ]
+    assert rendered["legacy"] == [
+        "success:BTC",
+        "success:ETH",
+        "Item 2 ($NOPE): Unsupported. (Code: INVALID_SYMBOL)",
+    ]

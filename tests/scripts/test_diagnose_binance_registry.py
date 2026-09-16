@@ -268,8 +268,8 @@ def test_workflow_contract_and_collector_workflow_unchanged() -> None:
     assert "group: derivatives-registry-diagnostic" in text
     assert "cancel-in-progress: false" in text
     assert "timeout-minutes: 5" in text
-    assert "actions/checkout@v4" in text
-    assert "actions/setup-python@v5" in text
+    assert "actions/checkout@v7" in text
+    assert "actions/setup-python@v7" in text
     assert 'python-version: "3.11"' in text
     assert "PYTHONPATH: src" in text
     assert "SUPABASE" not in text

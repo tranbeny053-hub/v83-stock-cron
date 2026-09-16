@@ -3,18 +3,22 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import OrderedDict
 from datetime import UTC, datetime
 
 import httpx
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine.api import analysis_service
+from crypto_probability_engine.api import app as app_module
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_limiter
 from crypto_probability_engine.api.schemas import validate_analysis_response
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.persistence.repository import SupabaseRestRepository
+from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 
 
 def make_client() -> TestClient:
@@ -508,7 +512,18 @@ def test_news_provider_degradation_keeps_analysis_200(monkeypatch) -> None:
     assert "NEWSAPI_KEY" not in response.text
 
 
-def test_batch_partial_failure_is_isolated() -> None:
+def test_batch_partial_failure_preserves_identity_and_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    analyze_calls = 0
+    original_analyze_request = app_module.analyze_request
+
+    def counted_analyze_request(*args, **kwargs):
+        nonlocal analyze_calls
+        analyze_calls += 1
+        return original_analyze_request(*args, **kwargs)
+
+    monkeypatch.setattr(app_module, "analyze_request", counted_analyze_request)
     client = make_client()
     login(client)
     response = client.post(
@@ -516,15 +531,31 @@ def test_batch_partial_failure_is_isolated() -> None:
         json={
             "requests": [
                 {"symbol": "BTC", "analysis_mode": "METRICS_ONLY"},
-                    {"symbol": "$NOPE", "analysis_mode": "METRICS_ONLY"},
+                {"symbol": "$NOPE", "analysis_mode": "METRICS_ONLY"},
+                {"symbol": "eth/usdt", "analysis_mode": "METRICS_ONLY"},
             ]
         },
     )
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["results"]) == 1
+    assert analyze_calls == 3
+    assert [result["symbol"] for result in payload["results"]] == ["BTC", "eth/usdt"]
     assert len(payload["errors"]) == 1
-    assert payload["errors"][0]["detail"]["error"]["code"] == "INVALID_SYMBOL"
+    error = payload["errors"][0]
+    assert error["index"] == 1
+    assert error["symbol"] == "$NOPE"
+    assert error["detail"]["error"]["code"] == "INVALID_SYMBOL"
+
+    items = payload["items"]
+    assert [item["symbol"] for item in items] == ["BTC", "$NOPE", "eth/usdt"]
+    assert [item["status"] for item in items] == ["OK", "ERROR", "OK"]
+    assert [item["index"] for item in items] == [0, 1, 2]
+    assert items[0]["run_id"] == payload["results"][0]["run_id"]
+    assert items[2]["run_id"] == payload["results"][1]["run_id"]
+    assert "detail" not in items[0]
+    assert "detail" not in items[2]
+    assert items[1]["detail"] == error["detail"]
+    assert "run_id" not in items[1]
 
 
 def test_detail_lookup_returns_detail_view() -> None:
@@ -535,6 +566,308 @@ def test_detail_lookup_returns_detail_view() -> None:
     detail = client.get(f"/v1/analyze/detail/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run_id"] == run_id
+
+
+@pytest.mark.parametrize(
+    ("prediction_origin", "expected_detail_tasks"),
+    [
+        ("USER_REQUESTED", 1),
+        ("CONTROLLED_SMOKE", 0),
+        ("SCHEDULED_SHADOW_EVIDENCE", 0),
+    ],
+)
+def test_detail_write_is_scheduled_only_for_user_requested(
+    prediction_origin: str,
+    expected_detail_tasks: int,
+) -> None:
+    class DetailRepository:
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def save_run_detail(self, _row: dict) -> str:
+            return "OK"
+
+    payload = {
+        "run_id": "run-detail",
+        "analysis_hash": "analysis-hash",
+        "detail_view": {
+            "run_id": "run-detail",
+            "article_body": "full article body",
+            "api_secret_key": "highly-sensitive",
+        },
+    }
+    background_tasks = BackgroundTasks()
+
+    analysis_service.schedule_best_effort_persist(
+        background_tasks,
+        DetailRepository(),
+        payload,
+        prediction_origin=prediction_origin,
+    )
+
+    detail_tasks = [
+        task for task in background_tasks.tasks if task.func.__name__ == "save_run_detail"
+    ]
+    assert len(detail_tasks) == expected_detail_tasks
+    if detail_tasks:
+        stored = detail_tasks[0].args[0]
+        assert stored["run_id"] == "run-detail"
+        assert stored["analysis_hash"] == "analysis-hash"
+        assert stored["detail_payload"]["article_body"] == "[removed]"
+        assert stored["detail_payload"]["api_secret_key"] == "set (****)"
+        assert "full article body" not in json.dumps(stored)
+        assert "highly-sensitive" not in json.dumps(stored)
+
+
+def test_schedule_best_effort_persist_requires_prediction_origin() -> None:
+    with pytest.raises(TypeError):
+        analysis_service.schedule_best_effort_persist(  # type: ignore[call-arg]
+            BackgroundTasks(),
+            None,
+            {},
+        )
+
+
+def test_detail_lookup_uses_durable_user_requested_detail_after_restart() -> None:
+    class DurableDetailRepository:
+        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
+            assert prediction_origin == "USER_REQUESTED"
+            if run_id == "durable-run":
+                return {"run_id": run_id, "sections": {"score": "restored"}}
+            return None
+
+    client = make_client()
+    client.app.state.persistence_repository = DurableDetailRepository()
+    login(client)
+
+    restored = client.get("/v1/analyze/detail/durable-run")
+    missing = client.get("/v1/analyze/detail/missing-run")
+
+    assert restored.status_code == 200
+    assert restored.json() == {
+        "run_id": "durable-run",
+        "sections": {"score": "restored"},
+    }
+    assert missing.status_code == 404
+
+
+def test_recent_runs_requires_normal_session_and_filters_non_user_origins() -> None:
+    client = make_client()
+    assert client.get("/v1/runs").status_code == 401
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    smoke = {**analyzed, "run_id": "smoke-run", "analysis_hash": "smoke-hash"}
+    scheduled = {**analyzed, "run_id": "scheduled-run", "analysis_hash": "scheduled-hash"}
+    store.put("smoke-run", smoke, prediction_origin="CONTROLLED_SMOKE")
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    response = client.get("/v1/runs")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "in_process"
+    assert [row["run_id"] for row in response.json()["runs"]] == [analyzed["run_id"]]
+    assert response.json()["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+    assert response.json()["runs"][0]["detail_available"] is True
+    assert response.json()["runs"][0]["normalized_symbol"] == analyzed["normalized_symbol"]
+
+    smoke_detail = client.get("/v1/analyze/detail/smoke-run")
+    assert smoke_detail.status_code == 404
+
+
+def test_recent_runs_excludes_constructor_run_without_recorded_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_client = make_client()
+    login(source_client)
+    analyzed = source_client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    legacy = {**analyzed, "run_id": "legacy-run", "analysis_hash": "legacy-hash"}
+    store = InMemoryRunStore(runs=OrderedDict([("legacy-run", legacy)]))
+    monkeypatch.setattr(
+        "crypto_probability_engine.api.app.InMemoryRunStore",
+        lambda *, limit: store,
+    )
+    client = make_client()
+    login(client)
+
+    assert store.list_runs()[0]["prediction_origin"] == "UNCLASSIFIED"
+    assert client.get("/v1/runs").json() == {"source": "in_process", "runs": []}
+
+
+def test_scheduled_collector_run_remains_verbatim_and_detail_retrievable() -> None:
+    client = make_client()
+    login(client)
+    analyzed = client.post("/v1/analyze", json={"symbol": "BTC"}).json()
+    store = client.app.state.run_store
+    store.runs.clear()
+    scheduled = {**analyzed, "run_id": "scheduled-run"}
+    expected = scheduled.copy()
+    store.put(
+        "scheduled-run",
+        scheduled,
+        prediction_origin="SCHEDULED_SHADOW_EVIDENCE",
+    )
+
+    assert store.get("scheduled-run") is scheduled
+    assert scheduled == expected
+    assert client.get("/v1/runs").json() == {"source": "in_process", "runs": []}
+    detail = client.get("/v1/analyze/detail/scheduled-run")
+    assert detail.status_code == 404
+
+
+def test_recent_runs_prefers_durable_rows_and_marks_missing_detail() -> None:
+    client = make_client()
+    login(client)
+
+    class DurableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            assert limit == 100
+            assert prediction_origin == "USER_REQUESTED"
+            return [
+                {
+                    "run_id": "restored-run",
+                    "symbol": "ETH",
+                    "normalized_symbol": "ETH/USDT",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "restored-hash",
+                    "primary_timeframe": "1D",
+                    "data_source": "durable_feed",
+                    "is_live_data": False,
+                }
+            ]
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+        def run_ids_with_detail(
+            self, run_ids: list[str], *, prediction_origin: str
+        ) -> set[str]:
+            assert run_ids == ["restored-run"]
+            assert prediction_origin == "USER_REQUESTED"
+            return set()
+
+    client.app.state.persistence_repository = DurableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload == {
+        "source": "durable",
+        "runs": [
+            {
+                "run_id": "restored-run",
+                "symbol": "ETH",
+                "normalized_symbol": "ETH/USDT",
+                "analysis_mode": "METRICS_ONLY",
+                "as_of_utc": "2026-08-27T00:00:00Z",
+                "analysis_hash": "restored-hash",
+                "prediction_origin": "USER_REQUESTED",
+                "detail_available": False,
+                "primary_timeframe": "1D",
+                "data_source": "durable_feed",
+                "is_live_data": False,
+            }
+        ],
+    }
+
+
+def test_recent_runs_batches_detail_availability_and_preserves_mixed_truth() -> None:
+    client = make_client()
+    login(client)
+    in_process = client.post("/v1/analyze", json={"symbol": "ETH"}).json()
+    availability_calls: list[tuple[list[str], str]] = []
+
+    class DurableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            return [
+                {
+                    "run_id": in_process["run_id"],
+                    "symbol": "ETH",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": in_process["analysis_hash"],
+                },
+                {
+                    "run_id": "durable-with-detail",
+                    "symbol": "BTC",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "durable-hash",
+                },
+                {
+                    "run_id": "durable-without-detail",
+                    "symbol": "SOL",
+                    "analysis_mode": "METRICS_ONLY",
+                    "as_of_utc": "2026-08-27T00:00:00Z",
+                    "analysis_hash": "missing-hash",
+                },
+            ]
+
+        def run_ids_with_detail(
+            self, run_ids: list[str], *, prediction_origin: str
+        ) -> set[str]:
+            availability_calls.append((run_ids, prediction_origin))
+            return {"durable-with-detail"}
+
+        def persistence_status(self) -> str:
+            return "OK"
+
+    client.app.state.persistence_repository = DurableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload["source"] == "durable"
+    assert availability_calls == [
+        (
+            ["durable-with-detail", "durable-without-detail"],
+            "USER_REQUESTED",
+        )
+    ]
+    assert {
+        row["run_id"]: row["detail_available"] for row in payload["runs"]
+    } == {
+        in_process["run_id"]: True,
+        "durable-with-detail": True,
+        "durable-without-detail": False,
+    }
+
+
+def test_recent_runs_falls_back_user_only_when_persistence_raises() -> None:
+    client = make_client()
+    login(client)
+    store = client.app.state.run_store
+    base = {
+        "symbol": "BTC",
+        "normalized_symbol": "BTC/USDT",
+        "analysis_mode": "METRICS_ONLY",
+        "as_of_utc": "2026-08-27T00:00:00Z",
+        "analysis_hash": "hash",
+        "timeframes": {"primary": "4H"},
+        "data_quality": {"data_source": "in_process_feed", "is_live_data": True},
+    }
+    store.put("user-run", {**base, "run_id": "user-run"}, prediction_origin="USER_REQUESTED")
+    store.put("smoke-run", {**base, "run_id": "smoke-run"}, prediction_origin="CONTROLLED_SMOKE")
+
+    class UnavailableRepository:
+        def recent_runs_for_origin(self, limit: int, *, prediction_origin: str) -> list[dict]:
+            raise RuntimeError("unavailable")
+
+    client.app.state.persistence_repository = UnavailableRepository()
+
+    payload = client.get("/v1/runs").json()
+
+    assert payload["source"] == "in_process"
+    assert [row["run_id"] for row in payload["runs"]] == ["user-run"]
+    assert payload["runs"][0]["primary_timeframe"] == "4H"
+    assert payload["runs"][0]["normalized_symbol"] == "BTC/USDT"
+    assert payload["runs"][0]["data_source"] == "in_process_feed"
+    assert payload["runs"][0]["is_live_data"] is True
+    assert payload["runs"][0]["prediction_origin"] == "USER_REQUESTED"
+    assert payload["runs"][0]["detail_available"] is True
 
 
 def test_debug_export_requires_dev_session_and_is_sanitized() -> None:

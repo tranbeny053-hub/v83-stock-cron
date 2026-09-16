@@ -6,6 +6,10 @@ import hashlib
 import json
 
 from crypto_probability_engine.adapters.types import MarketSnapshot
+from crypto_probability_engine.config.defaults import (
+    DEFAULT_METHODOLOGY_VERSION,
+    DISTRIBUTIONAL_METHODOLOGY_VERSION,
+)
 from crypto_probability_engine.execution_realism.realism import compute_execution_realism
 from crypto_probability_engine.features.btc_eth_context import btc_eth_context_state
 from crypto_probability_engine.features.correlation_beta import correlation_beta_state
@@ -23,6 +27,10 @@ from crypto_probability_engine.quant.horizon_timeout import (
     compute_timeout_probability,
     horizon_timeout_state,
 )
+from crypto_probability_engine.quant.probability_distributional import (
+    build_distributional_probability_state,
+    compute_distributional_probabilities,
+)
 from crypto_probability_engine.quant.probability_three_state import compute_probability_state
 from crypto_probability_engine.quant.risk_arbiter import compute_risk_arbiter
 from crypto_probability_engine.quant.tail_cvar import compute_tail_cvar
@@ -34,7 +42,17 @@ def stable_hash(payload: dict) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
+def run_quant_pipeline(
+    snapshot: MarketSnapshot,
+    provider_state: dict,
+    *,
+    methodology_version: str = DEFAULT_METHODOLOGY_VERSION,
+) -> dict:
+    if methodology_version not in {
+        DEFAULT_METHODOLOGY_VERSION,
+        DISTRIBUTIONAL_METHODOLOGY_VERSION,
+    }:
+        raise ValueError(f"Unsupported methodology version: {methodology_version}")
     epistemic = assess_epistemic_sufficiency(snapshot)
     trend = compute_trend_mtf(snapshot.candles)
     volatility = compute_realized_volatility(snapshot.candles)
@@ -42,13 +60,40 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
     volume = compute_volume_anomaly(snapshot.candles)
     execution = compute_execution_realism(liquidity)
     risk_arbiter = compute_risk_arbiter(trend, volatility, liquidity, execution)
-    timeout_frac = compute_timeout_probability(volatility, liquidity, timeframe=snapshot.timeframe)
-    probability = compute_probability_state(
-        net_signal=risk_arbiter["net_signal"],
-        timeout_frac=timeout_frac,
-        epistemic_state=epistemic,
-        volatility_state=volatility,
-    )
+    if methodology_version == DEFAULT_METHODOLOGY_VERSION:
+        timeout_frac = compute_timeout_probability(
+            volatility, liquidity, timeframe=snapshot.timeframe
+        )
+        probability = compute_probability_state(
+            net_signal=risk_arbiter["net_signal"],
+            timeout_frac=timeout_frac,
+            epistemic_state=epistemic,
+            volatility_state=volatility,
+        )
+        timeout_state = horizon_timeout_state(timeout_frac, timeframe=snapshot.timeframe)
+        probability_model = "probability_three_state"
+    else:
+        distributional = compute_distributional_probabilities(
+            snapshot.candles,
+            timeframe=snapshot.timeframe,
+            band_frac=execution["round_trip_cost_frac"],
+        )
+        probability = build_distributional_probability_state(
+            distributional,
+            epistemic_state=epistemic,
+        )
+        # B3 has no legacy vol_reference. Expose only its defined scale and live band.
+        timeout_state = {
+            "status": "OK",
+            "method": DISTRIBUTIONAL_METHODOLOGY_VERSION,
+            "p_timeout_frac": distributional.p_timeout_frac,
+            "timeout_is_directional": False,
+            "timeframe": snapshot.timeframe,
+            "sigma_bar": distributional.sigma_bar,
+            "sigma_h": distributional.sigma_h,
+            "band_frac": distributional.band_frac,
+        }
+        probability_model = "probability_distributional"
     score = compute_score_stack(probability, risk_arbiter)
     tail_risk = compute_tail_cvar(snapshot.candles, timeframe=snapshot.timeframe)
     risk_flags = global_risk_state()
@@ -85,7 +130,7 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
             "volatility",
             "liquidity_depth",
             "volume_anomaly",
-            "probability_three_state",
+            probability_model,
             "risk_arbiter",
             "tail_cvar",
         ],
@@ -98,7 +143,7 @@ def run_quant_pipeline(snapshot: MarketSnapshot, provider_state: dict) -> dict:
         "quant_compute_state": quant_state,
         "epistemic_sufficiency_state": epistemic,
         "probability_state": probability,
-        "horizon_timeout_state": horizon_timeout_state(timeout_frac, timeframe=snapshot.timeframe),
+        "horizon_timeout_state": timeout_state,
         "risk_arbiter_state": risk_arbiter,
         "tail_risk_state": tail_risk,
         "calibration_state": calibration_state(),

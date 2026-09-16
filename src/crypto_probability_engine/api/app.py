@@ -23,6 +23,7 @@ from crypto_probability_engine.api.auth import (
     LoginRequest,
     authenticate_dev,
     authenticate_login,
+    clear_session_cookies,
     session_prediction_origin,
     set_session_cookie,
     verify_session_token,
@@ -43,6 +44,7 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.repository import (
     build_operator_repository,
     build_persistence_repository,
@@ -146,6 +148,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         set_session_cookie(response, token, app_settings)
         return {"ok": True}
 
+    @app.post("/v1/auth/logout")
+    def logout(
+        response: Response,
+        _session: dict = Depends(require_app_session),  # noqa: B008
+    ) -> dict:
+        clear_session_cookies(response, app_settings)
+        return {"ok": True}
+
     @app.post("/v1/auth/dev")
     def dev_login(body: LoginRequest, request: Request, response: Response) -> dict:
         token = authenticate_dev(request, body, app_settings)
@@ -169,14 +179,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         repository = app.state.persistence_repository
+        prediction_origin = session_prediction_origin(session)
         result = analyze_request(
             body,
             settings=app_settings,
             run_store=run_store,
             persistence_status=current_persistence_status(repository),
-            prediction_origin=session_prediction_origin(session),
+            prediction_origin=prediction_origin,
         )
-        schedule_best_effort_persist(background_tasks, repository, result)
+        schedule_best_effort_persist(
+            background_tasks,
+            repository,
+            result,
+            prediction_origin=prediction_origin,
+        )
         schedule_skill_evidence_refresh(
             background_tasks,
             app.state.skill_evidence_repository,
@@ -192,7 +208,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         results: list[dict] = []
         errors: list[dict] = []
+        items: list[dict] = []
         repository = app.state.persistence_repository
+        prediction_origin = session_prediction_origin(session)
         for index, item in enumerate(body.requests):
             try:
                 result = analyze_request(
@@ -200,29 +218,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     settings=app_settings,
                     run_store=run_store,
                     persistence_status=current_persistence_status(repository),
-                    prediction_origin=session_prediction_origin(session),
+                    prediction_origin=prediction_origin,
                 )
-                schedule_best_effort_persist(background_tasks, repository, result)
+                schedule_best_effort_persist(
+                    background_tasks,
+                    repository,
+                    result,
+                    prediction_origin=prediction_origin,
+                )
                 results.append(result)
+                items.append(
+                    {
+                        "index": index,
+                        "symbol": item.symbol,
+                        "status": "OK",
+                        "run_id": result["run_id"],
+                    }
+                )
             except Exception as exc:
                 if hasattr(exc, "detail"):
-                    errors.append({"index": index, "detail": exc.detail})
+                    detail = exc.detail
                 else:
-                    errors.append(
-                        {
-                            "index": index,
-                            "detail": api_error(
-                                500,
-                                ErrorCode.BACKEND_TIMEOUT,
-                                "Batch item failed.",
-                            ).detail,
-                        }
-                    )
+                    detail = api_error(
+                        500,
+                        ErrorCode.BACKEND_TIMEOUT,
+                        "Batch item failed.",
+                    ).detail
+                errors.append({"index": index, "detail": detail, "symbol": item.symbol})
+                items.append(
+                    {
+                        "index": index,
+                        "symbol": item.symbol,
+                        "status": "ERROR",
+                        "detail": detail,
+                    }
+                )
         schedule_skill_evidence_refresh(
             background_tasks,
             app.state.skill_evidence_repository,
         )
-        return {"results": results, "errors": errors}
+        return {"results": results, "errors": errors, "items": items}
 
     @app.get("/v1/watchlist")
     def list_watchlist(session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
@@ -270,9 +305,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         payload = run_store.get(run_id)
-        if not payload:
+        if payload and not any(
+            row.get("run_id") == run_id
+            and row.get("prediction_origin") == PredictionOrigin.USER_REQUESTED.value
+            for row in run_store.list_runs()
+        ):
             raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+        if not payload:
+            durable = app.state.persistence_repository.get_run_detail(
+                run_id,
+                prediction_origin=PredictionOrigin.USER_REQUESTED.value,
+            )
+            if not durable:
+                raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+            return durable
         return payload["detail_view"]
+
+    @app.get("/v1/runs")
+    def recent_runs(_session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
+        origin = PredictionOrigin.USER_REQUESTED.value
+        repository = app.state.persistence_repository
+        source = "durable"
+        try:
+            rows = repository.recent_runs_for_origin(
+                app_settings.recent_run_limit,
+                prediction_origin=origin,
+            )
+            if repository.persistence_status() != "OK":
+                raise RuntimeError("durable persistence is unavailable")
+        except Exception:
+            source = "in_process"
+            rows = [
+                row
+                for row in run_store.list_runs()
+                if row.get("prediction_origin") == origin
+            ]
+
+        durable_only_ids = [
+            str(row.get("run_id"))
+            for row in rows
+            if run_store.get(str(row.get("run_id"))) is None
+        ]
+        try:
+            durable_detail_ids = repository.run_ids_with_detail(
+                durable_only_ids,
+                prediction_origin=origin,
+            )
+        except Exception:
+            durable_detail_ids = set()
+
+        normalized = []
+        for row in rows:
+            run_id = str(row.get("run_id"))
+            in_process_detail = run_store.get(run_id) is not None
+            normalized.append(
+                {
+                    "run_id": row.get("run_id"),
+                    "symbol": row.get("symbol"),
+                    "normalized_symbol": row.get("normalized_symbol"),
+                    "analysis_mode": row.get("analysis_mode"),
+                    "as_of_utc": row.get("as_of_utc"),
+                    "analysis_hash": row.get("analysis_hash"),
+                    "prediction_origin": origin,
+                    "detail_available": in_process_detail
+                    or run_id in durable_detail_ids,
+                    "primary_timeframe": row.get("primary_timeframe"),
+                    "data_source": row.get("data_source"),
+                    "is_live_data": row.get("is_live_data"),
+                }
+            )
+        return {"source": source, "runs": normalized}
 
     @app.get("/v1/debug/runs")
     def debug_runs(_session: dict = Depends(require_app_dev_session)) -> dict:  # noqa: B008

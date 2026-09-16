@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from statistics import median
 from typing import Any
 
@@ -14,6 +15,21 @@ from crypto_probability_engine.calibration.schemas import (
 )
 
 EPS = 1e-12
+
+
+def brier_score(
+    probabilities: Mapping[OutcomeLabel, float], realized_label: OutcomeLabel
+) -> float:
+    """Return the three-class Brier score for normalized probabilities."""
+
+    if realized_label not in OUTCOME_LABELS:
+        raise ValueError(f"unsupported realized label: {realized_label!r}")
+    one_hot = {
+        outcome: 1.0 if outcome == realized_label else 0.0 for outcome in OUTCOME_LABELS
+    }
+    return sum(
+        (probabilities[outcome] - one_hot[outcome]) ** 2 for outcome in OUTCOME_LABELS
+    )
 
 
 def compute_calibration_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -43,10 +59,7 @@ def compute_calibration_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         probs = row["probs"]
         label = row["realized_label"]
         outcome_distribution[label] += 1
-        one_hot = {outcome: 1.0 if outcome == label else 0.0 for outcome in OUTCOME_LABELS}
-        brier_values.append(
-            sum((probs[outcome] - one_hot[outcome]) ** 2 for outcome in OUTCOME_LABELS)
-        )
+        brier_values.append(brier_score(probs, label))
         log_loss_values.append(-math.log(max(probs[label], EPS)))
         top_label = top_prediction_label(probs)
         if top_label == label:
@@ -94,6 +107,32 @@ def top_prediction_label(probs: dict[OutcomeLabel, float]) -> OutcomeLabel:
             best = label
             best_prob = probs[label]
     return best
+
+
+def normalize_probabilities(
+    probabilities: Mapping[OutcomeLabel, float],
+) -> dict[OutcomeLabel, float] | None:
+    """Return probabilities divided by their sum, or ``None`` when unusable.
+
+    THE SINGLE NORMALIZER. ``brier_score`` is defined against one-hot on NORMALIZED
+    probabilities (V1_QUANT_CONTRACT §5A.4), and the calibration enumeration normalizes
+    internally, so any caller scoring raw values would treat a tolerance-admitted row
+    differently from the calibration path. Exposed for exactly that reason.
+    """
+
+    raw: dict[OutcomeLabel, float] = {}
+    for label_name in OUTCOME_LABELS:
+        try:
+            value = float(probabilities[label_name])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not math.isfinite(value) or value < 0.0 or value > 1.0:
+            return None
+        raw[label_name] = value
+    total = sum(raw.values())
+    if not math.isfinite(total) or total <= 0.0:
+        return None
+    return {label_name: raw[label_name] / total for label_name in OUTCOME_LABELS}
 
 
 def _normalize_row(row: dict[str, Any]) -> dict[str, Any] | None:

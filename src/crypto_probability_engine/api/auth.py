@@ -10,9 +10,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import Request, Response
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, GetCoreSchemaHandler, ValidationError
+from pydantic_core import core_schema
 
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import ErrorCode
@@ -35,13 +37,38 @@ class LoginRequest(BaseModel):
     # 128 characters is generous for a human access code but too small to amplify PBKDF2.
     code: str = Field(max_length=MAX_ACCESS_CODE_LENGTH)
 
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls, source_type: Any, handler: GetCoreSchemaHandler
+    ) -> core_schema.CoreSchema:
+        schema = handler(source_type)
+        return core_schema.no_info_wrap_validator_function(
+            cls._redact_validation_errors,
+            schema,
+        )
+
+    @classmethod
+    def _redact_validation_errors(
+        cls,
+        value: Any,
+        handler: core_schema.ValidatorFunctionWrapHandler,
+    ) -> Any:
+        try:
+            return handler(value)
+        except ValidationError as exc:
+            errors = exc.errors(include_url=False)
+            for error in errors:
+                if "input" in error:
+                    error["input"] = "[REDACTED]"
+            raise ValidationError.from_exception_data(cls.__name__, errors) from None
+
     def __init__(self, **data: object) -> None:
         try:
             super().__init__(**data)
         except ValidationError as exc:
             errors = exc.errors(include_url=False)
             for error in errors:
-                if error["type"] == "string_too_long" and error["loc"] == ("code",):
+                if error["loc"] == ("code",) and "input" in error:
                     error["input"] = "[REDACTED]"
             raise ValidationError.from_exception_data(type(self).__name__, errors) from None
 
@@ -275,8 +302,21 @@ def set_session_cookie(
     response.set_cookie(
         DEV_SESSION_COOKIE if dev else SESSION_COOKIE,
         token,
+        path="/",
         httponly=True,
         samesite="lax",
         secure=settings.session_cookie_secure,
-        max_age=3600,
+        max_age=settings.session_ttl_seconds,
     )
+
+
+def clear_session_cookies(response: Response, settings: Settings) -> None:
+    """Delete both session cookies with the exact attributes they were set with."""
+    for name in (SESSION_COOKIE, DEV_SESSION_COOKIE):
+        response.delete_cookie(
+            name,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=settings.session_cookie_secure,
+        )

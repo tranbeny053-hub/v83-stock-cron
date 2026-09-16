@@ -69,6 +69,9 @@ let currentWatchlistSymbol = null;
 let calibrationDiagnosticsCache = null;
 let calibrationDiagnosticsCachedAt = 0;
 let calibrationDiagnosticsRequest = null;
+let recentRuns = [];
+let recentRunsSource = null;
+let sessionGeneration = 0;
 const scoreHeatBands = [
   {
     min: 86,
@@ -135,6 +138,18 @@ async function api(path, options = {}) {
   return payload;
 }
 
+async function sessionApi(path, options = {}) {
+  const generation = sessionGeneration;
+  try {
+    return await api(path, options);
+  } catch (error) {
+    if (error?.status === 401) {
+      handleSessionExpired(generation);
+    }
+    throw error;
+  }
+}
+
 function loginFailureMessage(status, payload) {
   const detail =
     payload && typeof payload === "object" && !Array.isArray(payload) ? payload.detail : null;
@@ -186,9 +201,20 @@ function updateStatusFromPayload(payload = {}) {
   }
 }
 
+function persistenceStatusText(status) {
+  return status === "OK"
+      ? "Storage available"
+      : status === "STATELESS"
+        ? "No storage configured — analyses are not retained and will not appear in Recent Analysis history"
+        : status === "UNAVAILABLE"
+          ? "Storage unavailable — this analysis is not being retained and will not appear in Recent Analysis history"
+          : "Storage status unknown";
+}
+
 function updatePersistenceStatus(status) {
   const safeStatus = status || "UNKNOWN";
-  persistenceStatusBadge.textContent = `Persistence: ${safeStatus}`;
+  const statusText = persistenceStatusText(safeStatus);
+  persistenceStatusBadge.textContent = `Persistence: ${statusText}`;
   persistenceStatusBadge.dataset.persistenceStatus = safeStatus;
   persistenceStatusBadge.classList.remove("status-ok", "status-warn", "status-unknown");
   if (safeStatus === "OK") {
@@ -228,9 +254,11 @@ function updateDevModeUx(devMode = {}) {
 
 async function loadSystemStatus() {
   try {
-    await api("/v1/system_status");
+    await sessionApi("/v1/system_status");
+    return true;
   } catch {
     updatePersistenceStatus("UNKNOWN");
+    return false;
   }
 }
 
@@ -238,13 +266,17 @@ function showPanel(name) {
   for (const button of document.querySelectorAll(".tab")) {
     button.classList.toggle("active", button.dataset.tab === name);
   }
-  for (const panel of ["single", "batch", "watchlist", "dev"]) {
+  for (const panel of ["single", "batch", "watchlist", "recent", "dev"]) {
     document.querySelector(`#${panel}Panel`).classList.toggle("hidden", panel !== name);
   }
   hideDetail();
   if (name === "watchlist") {
     loadWatchlist();
   }
+  if (name === "recent") {
+    loadRecentRuns();
+  }
+  updateRefreshButton();
 }
 
 function setLoading(id, active) {
@@ -256,6 +288,13 @@ function setAnalysisActive(active) {
   updateRefreshButton();
 }
 
+function refreshActionLabel() {
+  const tab = activeTabName();
+  if (tab === "recent") return "Refresh";
+  if (tab === "dev") return "Refresh status";
+  return "Re-analyze";
+}
+
 function updateRefreshButton() {
   const now = Date.now();
   const cooldownActive = now < refreshReadyAt;
@@ -263,9 +302,9 @@ function updateRefreshButton() {
   if (analysisActive) {
     refreshButton.textContent = "Re-analyzing...";
   } else if (cooldownActive) {
-    refreshButton.textContent = `Re-analyze (${Math.ceil((refreshReadyAt - now) / 1000)}s)`;
+    refreshButton.textContent = `${refreshActionLabel()} (${Math.ceil((refreshReadyAt - now) / 1000)}s)`;
   } else {
-    refreshButton.textContent = "Re-analyze";
+    refreshButton.textContent = refreshActionLabel();
   }
   if (refreshTimer) {
     clearTimeout(refreshTimer);
@@ -276,10 +315,14 @@ function updateRefreshButton() {
   }
 }
 
-function markRefreshed() {
-  lastRefreshed.textContent = `last refreshed at ${new Date().toLocaleTimeString()}`;
+function startRefreshCooldown() {
   refreshReadyAt = Date.now() + refreshCooldownMs;
   updateRefreshButton();
+}
+
+function markRefreshed(label = "last refreshed") {
+  lastRefreshed.textContent = `${label} at ${new Date().toLocaleTimeString()}`;
+  startRefreshCooldown();
 }
 
 function activeTabName() {
@@ -693,8 +736,59 @@ function batchErrorMessage(item) {
   return `${label}: ${message}${codeSuffix}`;
 }
 
-function renderResults(target, payloads, errors = []) {
+function batchFailureMessage(status, payload) {
+  const detail =
+    payload && typeof payload === "object" && !Array.isArray(payload) ? payload.detail : null;
+  const errorEnvelope =
+    detail && typeof detail === "object" && !Array.isArray(detail) ? detail.error : null;
+  const backendMessage =
+    errorEnvelope &&
+    typeof errorEnvelope === "object" &&
+    !Array.isArray(errorEnvelope) &&
+    typeof errorEnvelope.message === "string" &&
+    errorEnvelope.message.trim()
+      ? errorEnvelope.message.trim()
+      : null;
+
+  if (status === 401) {
+    return loginFailureMessage(status, payload);
+  }
+  if (status === 422) {
+    return "Batch request was not accepted. Enter at least one symbol and try again.";
+  }
+  if (backendMessage) {
+    return backendMessage;
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "Batch analysis is temporarily unavailable. Try again shortly.";
+}
+
+function renderBatchFailure(target, message) {
+  const node = document.createElement("article");
+  node.className = "result-card error-card";
+  node.textContent = message;
+  target.replaceChildren(node);
+}
+
+function renderResults(target, payloads, errors = [], items) {
   target.replaceChildren();
+  if (Array.isArray(items)) {
+    const payloadsByRunId = new Map(payloads.map((payload) => [payload.run_id, payload]));
+    for (const item of items) {
+      if (item.status === "OK") {
+        const payload = payloadsByRunId.get(item.run_id);
+        if (payload) target.append(overviewCard(payload));
+      } else if (item.status === "ERROR") {
+        const node = document.createElement("article");
+        node.className = "result-card";
+        node.textContent = batchErrorMessage(item);
+        target.append(node);
+      }
+    }
+    return;
+  }
   for (const payload of payloads) {
     target.append(overviewCard(payload));
   }
@@ -739,7 +833,7 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
   try {
     const requests = singleTimeframes.map(async (timeframe) => {
       try {
-        const payload = await api("/v1/analyze", {
+        const payload = await sessionApi("/v1/analyze", {
           method: "POST",
           body: JSON.stringify({
             symbol,
@@ -786,7 +880,7 @@ async function openDetail(payload) {
   let detailView = null;
   if (payload.run_id && payload.frontend_display?.detail_available !== false) {
     try {
-      detailView = await api(`/v1/analyze/detail/${payload.run_id}`);
+      detailView = await sessionApi(`/v1/analyze/detail/${payload.run_id}`);
     } catch {
       detailView = null;
     }
@@ -801,6 +895,180 @@ async function openDetail(payload) {
   renderStructuredDetail(payload, detailView);
   detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+function formatRecentTime(value) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? String(value || "Time unavailable")
+    : parsed.toLocaleString();
+}
+
+function uniqueRecentValues(runs, key, preferredOrder = null) {
+  const values = [...new Set(runs.map((run) => run[key]).filter((value) => value != null))];
+  if (preferredOrder == null) {
+    return values.sort();
+  }
+  return values.sort((left, right) => {
+    const leftIndex = preferredOrder.indexOf(left);
+    const rightIndex = preferredOrder.indexOf(right);
+    if (leftIndex === -1 && rightIndex === -1) {
+      return left < right ? -1 : left > right ? 1 : 0;
+    }
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
+}
+
+function filterRecentRuns(runs, filters) {
+  return runs.filter(
+    (run) =>
+      (!filters.symbol || run.symbol === filters.symbol) &&
+      (!filters.timeframe || run.primary_timeframe === filters.timeframe) &&
+      (!filters.mode || run.analysis_mode === filters.mode),
+  );
+}
+
+function recentSourceLabel(run) {
+  const parts = [];
+  const dataSource = String(run.data_source || "").trim();
+  if (dataSource) {
+    parts.push(dataSource);
+  }
+  if (run.is_live_data === true) {
+    parts.push("Live data");
+  } else if (run.is_live_data === false) {
+    parts.push("Not live data");
+  }
+  return parts.join(" · ");
+}
+
+function recentEmptyMessage(totalCount, sourceNote) {
+  return totalCount === 0
+    ? `No recent analyses yet.${sourceNote}`
+    : `No recent analyses match the selected filters.${sourceNote}`;
+}
+
+function setRecentFilterOptions(select, values, allLabel) {
+  const selected = select.value;
+  select.replaceChildren();
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = allLabel;
+  select.append(all);
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  }
+  select.value = values.includes(selected) ? selected : "";
+}
+
+function populateRecentFilters(runs) {
+  setRecentFilterOptions(
+    document.querySelector("#recentSymbolFilter"),
+    uniqueRecentValues(runs, "symbol"),
+    "All symbols",
+  );
+  setRecentFilterOptions(
+    document.querySelector("#recentTimeframeFilter"),
+    uniqueRecentValues(runs, "primary_timeframe", singleTimeframes),
+    "All timeframes",
+  );
+  setRecentFilterOptions(
+    document.querySelector("#recentModeFilter"),
+    uniqueRecentValues(runs, "analysis_mode"),
+    "All modes",
+  );
+}
+
+function selectedRecentFilters() {
+  return {
+    symbol: document.querySelector("#recentSymbolFilter").value,
+    timeframe: document.querySelector("#recentTimeframeFilter").value,
+    mode: document.querySelector("#recentModeFilter").value,
+  };
+}
+
+function renderRecentRuns(runs, source) {
+  const target = document.querySelector("#recentList");
+  const status = document.querySelector("#recentStatus");
+  target.replaceChildren();
+  const sourceNote = source === "in_process" ? " History is not durable right now." : "";
+  if (runs.length === 0) {
+    status.textContent = recentEmptyMessage(recentRuns.length, sourceNote);
+    return;
+  }
+  status.textContent = `${runs.length} recent ${runs.length === 1 ? "analysis" : "analyses"}.${sourceNote}`;
+  for (const run of runs) {
+    const row = document.createElement(run.detail_available ? "button" : "div");
+    const symbol = document.createElement("strong");
+    const mode = document.createElement("span");
+    const timeframe = document.createElement("span");
+    const sourceIndicator = document.createElement("span");
+    const time = document.createElement("time");
+    row.className = "recent-row";
+    symbol.textContent = run.symbol || "Symbol unavailable";
+    mode.textContent = run.analysis_mode || "Mode unavailable";
+    if (run.primary_timeframe != null) {
+      timeframe.textContent = run.primary_timeframe;
+    }
+    sourceIndicator.textContent = recentSourceLabel(run);
+    time.dateTime = run.as_of_utc || "";
+    time.textContent = formatRecentTime(run.as_of_utc);
+    row.append(symbol, mode);
+    if (run.primary_timeframe != null) {
+      row.append(timeframe);
+    }
+    if (sourceIndicator.textContent) {
+      row.append(sourceIndicator);
+    }
+    row.append(time);
+    if (run.detail_available) {
+      row.type = "button";
+      row.addEventListener("click", () => openDetail(run));
+    } else {
+      row.classList.add("recent-row-disabled");
+      const note = document.createElement("small");
+      note.textContent = "Full breakdown not available after restart.";
+      row.append(note);
+    }
+    target.append(row);
+  }
+}
+
+async function loadRecentRuns() {
+  const target = document.querySelector("#recentList");
+  const status = document.querySelector("#recentStatus");
+  target.replaceChildren();
+  status.textContent = "Loading recent analyses…";
+  try {
+    const payload = await sessionApi("/v1/runs");
+    recentRuns = Array.isArray(payload.runs) ? payload.runs : [];
+    recentRunsSource = payload.source;
+    populateRecentFilters(recentRuns);
+    renderRecentRuns(filterRecentRuns(recentRuns, selectedRecentFilters()), recentRunsSource);
+    return true;
+  } catch (error) {
+    target.replaceChildren();
+    status.textContent = `Recent analyses could not be loaded: ${error.message || "Request failed"}`;
+    return false;
+  }
+}
+
+for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+  document.querySelector(selector).addEventListener("change", () => {
+    renderRecentRuns(filterRecentRuns(recentRuns, selectedRecentFilters()), recentRunsSource);
+  });
+}
+
+document.querySelector("#clearRecentFilters").addEventListener("click", () => {
+  for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+    document.querySelector(selector).value = "";
+  }
+  renderRecentRuns(recentRuns, recentRunsSource);
+});
 
 function hideDetail() {
   detailPanel.replaceChildren();
@@ -1023,6 +1291,7 @@ function primaryDecisionReason(stack, decision = {}) {
 function renderFinalDecisionCard(synthesis = {}) {
   const decision = synthesis.decision_synthesis || {};
   const permission = synthesis.action_permission || {};
+  const quality = synthesis.model_quality_summary || {};
   const stack = orderedActionability(synthesis.actionability_stack);
   const changes = Array.isArray(synthesis.what_would_change_decision)
     ? synthesis.what_would_change_decision
@@ -1035,6 +1304,8 @@ function renderFinalDecisionCard(synthesis = {}) {
   const headingGroup = document.createElement("div");
   headingGroup.append(textBlock("p", "Backend final decision", "decision-eyebrow"));
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
+  const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
+  headingGroup.append(textBlock("p", `Reliability: ${reliabilityStatus}`, "muted"));
   header.append(headingGroup);
   header.append(
     decisionBadge(
@@ -1242,7 +1513,7 @@ async function loadCalibrationDiagnostics() {
     return calibrationDiagnosticsRequest;
   }
 
-  calibrationDiagnosticsRequest = api("/v1/calibration")
+  calibrationDiagnosticsRequest = sessionApi("/v1/calibration")
     .catch(() => ({
       status: "UNAVAILABLE",
       timeframes: [],
@@ -1834,7 +2105,7 @@ function renderStructuredDetail(payload, detailView) {
     section("Overview", [
       downloadJsonButton(payload),
       keyValueTable([
-        ["Symbol", payload.normalized_symbol],
+        ["Symbol", payload.normalized_symbol || payload.symbol || details.symbol],
         ["Timeframe", payload.timeframes?.timeframe_label || payload.timeframes?.primary],
         ["Horizon", payload.timeframes?.horizon_label],
         ["Analysis mode", payload.analysis_mode],
@@ -1844,7 +2115,12 @@ function renderStructuredDetail(payload, detailView) {
         ["Run ID", payload.run_id],
         ["Data source", display.data_source],
         ["Live data", display.is_live_data],
-        ["Persistence", payload.debug?.persistence_status || details.debug_lite?.persistence_status],
+        [
+          "Persistence",
+          persistenceStatusText(
+            payload.debug?.persistence_status || details.debug_lite?.persistence_status,
+          ),
+        ],
       ]),
     ]),
     renderDecisionBrief(decisionBrief, display.blocking_reasons),
@@ -1923,6 +2199,20 @@ function renderStructuredDetail(payload, detailView) {
   detailPanel.classList.remove("hidden");
 }
 
+async function restoreSession() {
+  if (!(await loadSystemStatus())) {
+    return false;
+  }
+  sessionGeneration += 1;
+  loginPanel.classList.add("hidden");
+  clearOperatorData();
+  workspace.classList.remove("hidden");
+  document.querySelector("#logoutButton").classList.remove("hidden");
+  sessionStatus.textContent = "Ready";
+  updateRefreshButton();
+  return true;
+}
+
 document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
@@ -1932,13 +2222,73 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
       method: "POST",
       body: JSON.stringify({ code }),
     });
+    sessionGeneration += 1;
     loginPanel.classList.add("hidden");
+    clearOperatorData();
     workspace.classList.remove("hidden");
+    document.querySelector("#logoutButton").classList.remove("hidden");
     sessionStatus.textContent = "Ready";
     updateRefreshButton();
     await loadSystemStatus();
   } catch (error) {
     loginStatus.textContent = loginFailureMessage(error?.status, error?.payload);
+  }
+});
+
+function clearOperatorData() {
+  hideDetail();
+  singleResult.replaceChildren();
+  renderTimeframePlaceholders(singleResult);
+  for (const selector of ["#batchResult", "#recentList", "#watchlistList", "#devResult"]) {
+    document.querySelector(selector).replaceChildren();
+  }
+  document.querySelector("#recentStatus").textContent = "Recent analyses not loaded yet.";
+  for (const selector of ["#recentSymbolFilter", "#recentTimeframeFilter", "#recentModeFilter"]) {
+    document.querySelector(selector).value = "";
+  }
+  recentRuns = [];
+  recentRunsSource = null;
+  lastBatchRequest = null;
+  currentWatchlistSymbol = null;
+  calibrationDiagnosticsCache = null;
+  calibrationDiagnosticsCachedAt = 0;
+  calibrationDiagnosticsRequest = null;
+}
+
+function resetToLoggedOut() {
+  loginPanel.classList.remove("hidden");
+  workspace.classList.add("hidden");
+  document.querySelector("#logoutButton").classList.add("hidden");
+  sessionStatus.textContent = "Locked";
+  loginStatus.textContent = "";
+  document.querySelector("#accessCode").value = "";
+  clearOperatorData();
+  analysisActive = false;
+  refreshReadyAt = 0;
+  lastRefreshed.textContent = "last refreshed: never";
+  updatePersistenceStatus("UNKNOWN");
+  updateDevModeUx({ enabled: false, configured: false });
+  showPanel("single");
+  updateRefreshButton();
+}
+
+function handleSessionExpired(generation) {
+  if (generation !== sessionGeneration) return;
+  if (workspace.classList.contains("hidden")) return;
+  resetToLoggedOut();
+  loginStatus.textContent = "Your session expired. Please sign in again.";
+}
+
+document.querySelector("#logoutButton").addEventListener("click", async () => {
+  try {
+    await api("/v1/auth/logout", { method: "POST" });
+    resetToLoggedOut();
+  } catch (error) {
+    if (error?.status === 401) {
+      resetToLoggedOut();
+      return;
+    }
+    sessionStatus.textContent = "Log out failed — you are still signed in.";
   }
 });
 
@@ -1966,6 +2316,11 @@ function batchRequestFromForm(form) {
 
 async function runBatchAnalysis(batchRequest) {
   hideDetail();
+  const target = document.querySelector("#batchResult");
+  if (!Array.isArray(batchRequest?.symbols) || batchRequest.symbols.length === 0) {
+    renderBatchFailure(target, "Enter at least one symbol to run batch analysis.");
+    return;
+  }
   setLoading("#batchLoading", true);
   setAnalysisActive(true);
   try {
@@ -1975,13 +2330,15 @@ async function runBatchAnalysis(batchRequest) {
       analysis_mode: batchRequest.analysisMode,
       timeframe: batchRequest.timeframe,
     }));
-    const payload = await api("/v1/analyze_batch", {
+    const payload = await sessionApi("/v1/analyze_batch", {
       method: "POST",
       body: JSON.stringify({ requests }),
     });
-    renderResults(document.querySelector("#batchResult"), payload.results, payload.errors);
+    renderResults(target, payload.results, payload.errors, payload.items);
     updateStatusFromPayload(payload.results?.[0] || {});
     markRefreshed();
+  } catch (error) {
+    renderBatchFailure(target, batchFailureMessage(error?.status, error?.payload));
   } finally {
     setAnalysisActive(false);
     setLoading("#batchLoading", false);
@@ -2015,7 +2372,86 @@ function setWatchlistStatus(status) {
     : "Watchlist persistence: OK";
 }
 
-function renderWatchlist(symbols, status) {
+function watchlistFailureMessage(status) {
+  if (status === 401) {
+    return "Your session is not authorized. Sign in and try the watchlist change again.";
+  }
+  if (status === 422) {
+    return "The watchlist change was not accepted. Check the entry and try again.";
+  }
+  if (status === 429) {
+    return "Too many watchlist changes were requested. Wait a moment and try again.";
+  }
+  if (typeof status !== "number") {
+    return "Unable to reach the service. Check your connection and try again.";
+  }
+  return "The watchlist change could not be saved. Try again shortly.";
+}
+
+function renderWatchlistMutationFailure(status) {
+  const target = document.querySelector("#watchlistStatus");
+  updatePersistenceStatus("UNAVAILABLE");
+  target.textContent = `Watchlist persistence: WRITE FAILED. ${watchlistFailureMessage(status)}`;
+  target.title = "";
+}
+
+function latestRunsByNormalizedSymbol(runs) {
+  const latestBySymbol = new Map();
+  for (const run of runs) {
+    if (
+      typeof run.normalized_symbol === "string" &&
+      !latestBySymbol.has(run.normalized_symbol)
+    ) {
+      latestBySymbol.set(run.normalized_symbol, run);
+    }
+  }
+  return latestBySymbol;
+}
+
+function appendWatchlistAnalysis(row, run) {
+  const context = document.createElement("div");
+  context.className = "watchlist-analysis-context";
+  if (!run) {
+    context.textContent = "No recent analysis found.";
+    row.append(context);
+    return;
+  }
+
+  const lastAnalyzed = document.createElement("time");
+  lastAnalyzed.dateTime = run.as_of_utc || "";
+  lastAnalyzed.textContent = `Last analyzed: ${formatRecentTime(run.as_of_utc)}`;
+  context.append(lastAnalyzed);
+
+  const timeframe = String(run.primary_timeframe || "").trim();
+  if (timeframe) {
+    const timeframeLabel = document.createElement("span");
+    timeframeLabel.textContent = `Primary timeframe: ${timeframe}`;
+    context.append(timeframeLabel);
+  }
+
+  const source = recentSourceLabel(run);
+  if (source) {
+    const sourceIndicator = document.createElement("span");
+    sourceIndicator.textContent = source;
+    context.append(sourceIndicator);
+  }
+
+  if (run.detail_available === true) {
+    const openLatest = document.createElement("button");
+    openLatest.type = "button";
+    openLatest.className = "watchlist-open-latest";
+    openLatest.textContent = "Open latest analysis";
+    openLatest.addEventListener("click", () => openDetail(run));
+    context.append(openLatest);
+  } else {
+    const note = document.createElement("small");
+    note.textContent = "Full breakdown not available after restart.";
+    context.append(note);
+  }
+  row.append(context);
+}
+
+function renderWatchlist(symbols, status, runs = null) {
   const target = document.querySelector("#watchlistList");
   setWatchlistStatus(status);
   target.replaceChildren();
@@ -2026,6 +2462,7 @@ function renderWatchlist(symbols, status) {
     target.append(empty);
     return;
   }
+  const latestBySymbol = Array.isArray(runs) ? latestRunsByNormalizedSymbol(runs) : null;
   for (const symbol of symbols) {
     const row = document.createElement("article");
     row.className = "watchlist-row";
@@ -2040,20 +2477,31 @@ function renderWatchlist(symbols, status) {
     removeButton.textContent = "Remove";
     removeButton.addEventListener("click", () => removeWatchlistSymbol(symbol));
     row.append(symbolButton, removeButton);
+    if (latestBySymbol) {
+      appendWatchlistAnalysis(row, latestBySymbol.get(symbol));
+    }
     target.append(row);
   }
 }
 
 async function loadWatchlist() {
+  const historyRequest = sessionApi("/v1/runs")
+    .then((payload) => (Array.isArray(payload.runs) ? payload.runs : []))
+    .catch(() => null);
   try {
-    const payload = await api("/v1/watchlist");
+    const payload = await sessionApi("/v1/watchlist");
     let symbols = payload.symbols || [];
     if (payload.persistence_status !== "OK") {
       const localSymbols = readLocalWatchlist();
       symbols = localSymbols.length ? localSymbols : symbols;
       writeLocalWatchlist(symbols);
     }
-    renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
+    const status = payload.persistence_status || "UNAVAILABLE";
+    renderWatchlist(symbols, status);
+    const runs = await historyRequest;
+    if (runs !== null) {
+      renderWatchlist(symbols, status, runs);
+    }
   } catch (error) {
     renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
     document.querySelector("#watchlistStatus").title = error.message || "Watchlist unavailable";
@@ -2061,28 +2509,54 @@ async function loadWatchlist() {
 }
 
 async function addWatchlistSymbol(symbol) {
-  const payload = await api("/v1/watchlist", {
-    method: "POST",
-    body: JSON.stringify({ symbol }),
-  });
-  let symbols = payload.symbols || [];
-  if (payload.persistence_status !== "OK") {
-    symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
-    writeLocalWatchlist(symbols);
+  try {
+    const payload = await sessionApi("/v1/watchlist", {
+      method: "POST",
+      body: JSON.stringify({ symbol }),
+    });
+    const envelope =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    let symbols = Array.isArray(envelope.symbols)
+      ? envelope.symbols.filter((item) => typeof item === "string")
+      : [];
+    const persistenceStatus =
+      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
+        ? envelope.persistence_status
+        : "UNAVAILABLE";
+    if (persistenceStatus !== "OK") {
+      symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
+      writeLocalWatchlist(symbols);
+    }
+    renderWatchlist(symbols, persistenceStatus);
+  } catch (error) {
+    const failure = error && typeof error === "object" && !Array.isArray(error) ? error : null;
+    renderWatchlistMutationFailure(failure?.status);
   }
-  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
 }
 
 async function removeWatchlistSymbol(symbol) {
-  const payload = await api(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
-    method: "DELETE",
-  });
-  let symbols = payload.symbols || [];
-  if (payload.persistence_status !== "OK") {
-    symbols = readLocalWatchlist().filter((item) => item !== symbol);
-    writeLocalWatchlist(symbols);
+  try {
+    const payload = await sessionApi(`/v1/watchlist/${encodeURIComponent(symbol)}`, {
+      method: "DELETE",
+    });
+    const envelope =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? payload : {};
+    let symbols = Array.isArray(envelope.symbols)
+      ? envelope.symbols.filter((item) => typeof item === "string")
+      : [];
+    const persistenceStatus =
+      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
+        ? envelope.persistence_status
+        : "UNAVAILABLE";
+    if (persistenceStatus !== "OK") {
+      symbols = readLocalWatchlist().filter((item) => item !== symbol);
+      writeLocalWatchlist(symbols);
+    }
+    renderWatchlist(symbols, persistenceStatus);
+  } catch (error) {
+    const failure = error && typeof error === "object" && !Array.isArray(error) ? error : null;
+    renderWatchlistMutationFailure(failure?.status);
   }
-  renderWatchlist(symbols, payload.persistence_status || "UNAVAILABLE");
 }
 
 async function openWatchlistSymbol(symbol) {
@@ -2139,8 +2613,30 @@ async function refreshCurrentView() {
     await runBatchAnalysis(request);
     return;
   }
-  await loadSystemStatus();
-  markRefreshed();
+  if (tab === "recent") {
+    const reloaded = await loadRecentRuns();
+    if (reloaded) {
+      markRefreshed("history reloaded");
+    } else {
+      startRefreshCooldown();
+    }
+    return;
+  }
+  if (tab === "dev") {
+    const refreshed = await loadSystemStatus();
+    if (refreshed) {
+      markRefreshed("status refreshed");
+    } else {
+      startRefreshCooldown();
+    }
+    return;
+  }
+  const refreshed = await loadSystemStatus();
+  if (refreshed) {
+    markRefreshed();
+  } else {
+    startRefreshCooldown();
+  }
 }
 
 refreshButton.addEventListener("click", async () => {
@@ -2151,7 +2647,7 @@ refreshButton.addEventListener("click", async () => {
   }
 });
 
-document.querySelector("#devForm").addEventListener("submit", async (event) => {
+async function handleDevFormSubmit(event) {
   event.preventDefault();
   const code = new FormData(event.currentTarget).get("code");
   try {
@@ -2161,29 +2657,63 @@ document.querySelector("#devForm").addEventListener("submit", async (event) => {
     });
     document.querySelector("#devResult").textContent = "Dev Mode ready.";
   } catch (error) {
-    document.querySelector("#devResult").textContent =
-      devModeStatus.textContent || error.message || "Dev Mode unavailable.";
+    document.querySelector("#devResult").textContent = loginFailureMessage(
+      error?.status,
+      error?.payload,
+    );
   }
-});
+}
 
-document.querySelector("#loadRuns").addEventListener("click", async () => {
-  const runs = await api("/v1/debug/runs");
-  const target = document.querySelector("#devResult");
-  target.textContent = JSON.stringify(runs, null, 2);
-  for (const run of runs.runs) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = `Export ${run.run_id}`;
-    button.addEventListener("click", async () => {
-      const exported = await api(`/v1/debug/export/${run.run_id}`);
-      target.textContent = JSON.stringify(exported, null, 2);
-    });
-    target.append(document.createElement("br"), button);
+function devToolFailureMessage(action, status, payload) {
+  const failure = loginFailureMessage(status, payload);
+  if (status === 401) {
+    return `${action} failed: Dev Mode re-auth is needed; your normal session remains active. ${failure}`;
   }
-});
+  return `${action} failed: ${failure}`;
+}
+
+async function exportDebugRun(run, target) {
+  try {
+    const exported = await api(`/v1/debug/export/${run.run_id}`);
+    target.textContent = JSON.stringify(exported, null, 2);
+  } catch (error) {
+    target.textContent = devToolFailureMessage(
+      `Exporting run ${run.run_id}`,
+      error?.status,
+      error?.payload,
+    );
+  }
+}
+
+async function loadDebugRuns() {
+  const target = document.querySelector("#devResult");
+  try {
+    const runs = await api("/v1/debug/runs");
+    target.textContent = JSON.stringify(runs, null, 2);
+    for (const run of runs.runs) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `Export ${run.run_id}`;
+      button.addEventListener("click", async () => {
+        await exportDebugRun(run, target);
+      });
+      target.append(document.createElement("br"), button);
+    }
+  } catch (error) {
+    target.textContent = devToolFailureMessage(
+      "Loading the run list",
+      error?.status,
+      error?.payload,
+    );
+  }
+}
+
+document.querySelector("#devForm").addEventListener("submit", handleDevFormSubmit);
+document.querySelector("#loadRuns").addEventListener("click", loadDebugRuns);
 
 renderTimeframePlaceholders(singleResult);
 void loadBuildFingerprint();
 updatePersistenceStatus("UNKNOWN");
 updateDevModeUx({ enabled: false, configured: false });
 updateRefreshButton();
+void restoreSession();

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ultimate Crypto Probability Engine</title>
-    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260824-a" />
+    <link rel="stylesheet" href="/styles.css?v=w4c1-ka1-20260828-a" />
   </head>
   <body>
     <main class="shell">
@@ -17,6 +17,7 @@
           Build fingerprint…
         </span>
         <div class="status-pill" id="sessionStatus">Locked</div>
+        <button id="logoutButton" type="button" class="hidden">Log out</button>
       </section>
 
       <section class="login-panel" id="loginPanel">
@@ -34,12 +35,13 @@
           <button class="tab active" data-tab="single">Single Crypto Analysis</button>
           <button class="tab" data-tab="batch">Batch Crypto Analysis</button>
           <button class="tab" data-tab="watchlist">Watchlist</button>
+          <button class="tab" data-tab="recent">Recent Analysis</button>
           <button class="tab" data-tab="dev">Dev Mode</button>
         </nav>
 
         <section class="shell-status-bar" aria-label="Refresh and persistence status">
           <div class="status-stack">
-            <span class="status-badge status-unknown" id="persistenceStatusBadge">Persistence: UNKNOWN</span>
+            <span class="status-badge status-unknown" id="persistenceStatusBadge">Persistence: Storage status unknown</span>
             <span class="muted" id="lastRefreshed">last refreshed: never</span>
           </div>
           <button id="refreshButton" type="button" disabled>Re-analyze</button>
@@ -146,6 +148,25 @@
 
         </section>
 
+        <section class="panel hidden" id="recentPanel">
+          <div class="recent-filters" id="recentFilters" aria-label="Recent analysis filters">
+            <label for="recentSymbolFilter">Symbol
+              <select id="recentSymbolFilter"><option value="">All symbols</option></select>
+            </label>
+            <label for="recentTimeframeFilter">Timeframe
+              <select id="recentTimeframeFilter"><option value="">All timeframes</option></select>
+            </label>
+            <label for="recentModeFilter">Mode
+              <select id="recentModeFilter"><option value="">All modes</option></select>
+            </label>
+            <button id="clearRecentFilters" type="button">Clear filters</button>
+          </div>
+          <p class="muted" id="recentStatus" role="status" aria-live="polite">
+            Recent analyses not loaded yet.
+          </p>
+          <div id="recentList" class="recent-list" aria-label="Recent analyses"></div>
+        </section>
+
         <section class="panel hidden" id="devPanel">
           <p class="muted dev-mode-status" id="devModeStatus">Dev Mode is disabled in this deployment.</p>
           <form id="devForm" class="control-row">
@@ -173,6 +194,6 @@
         <p class="news-note"></p>
       </article>
     </template>
-    <script src="/app.js?v=w4c1-ka1-20260824-a" type="module"></script>
+    <script src="/app.js?v=w4c1-ka1-20260828-a" type="module"></script>
   </body>
 </html>

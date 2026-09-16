@@ -64,3 +64,69 @@ completed projects: it produced 115 MB of control evidence and zero lines of pro
 before terminating on a missing directory. If process files exceed ten, or coordination
 artifacts exceed 20% of source-plus-test bytes for two consecutive weeks, delete the
 excess — do not refactor it.
+
+---
+
+# Owner-facing doctrine (adopted 2026-08-19)
+
+Canonical home. `CLAUDE.md` points here and does not restate it.
+
+## Quant North Star
+
+**Honesty about uncertainty is the product.** UCPE's value is a calibrated, gated statement of
+what is and is not known — not a forecast that sounds confident.
+
+- **Evidence outranks argument.** A gate closes on a citation a sceptic could re-check, never on
+  a persuasive case. "Release requires evidence."
+- **Never convert NOT_RUN into PASS.** If it did not happen, it is not done.
+- **Pre-register before measuring.** Fix inference sets, margins, and decision rules before
+  seeing data, and record them where they cannot be quietly edited. Never fit a method to a
+  result.
+- **Measure rather than assume.** If a parameter is obtainable read-only, obtain it. Assumed
+  values get sensitivity ranges and an explicit route to replacing them.
+- **State the estimand.** Every number answers a specific question about a specific population.
+  Carrying a control size or margin from one population into another silently changes the
+  question.
+- **Distinguish proven from reconstructed** from inferred. Say which, every time.
+- **Aggregate evidence is never a per-timeframe guarantee.**
+
+## Free-resource discipline
+
+Paid API cost target is **zero**. Deterministic tools are free and authoritative; use them first
+and let them decide. Reserve model reasoning for judgment that tools cannot render. Never
+silently substitute a model — record any substitution. The GPT sidecar is exceptional, reached
+only through the owner's own logged-in session, never an API key.
+
+## Safe learning
+
+The system must be able to learn without endangering what it already knows.
+
+- **The control cohort is sacred.** `USER_REQUESTED` is the evidence base; `CONTROLLED_SMOKE` and
+  `SCHEDULED_SHADOW_EVIDENCE` exist so deliberate activity can never masquerade as it.
+- **Predictions are immutable.** Nothing is updated, deleted, or relabelled — so a
+  misclassification is permanent, and classification must be proven *before* the write.
+- **Canary before commitment.** Ahead of any irreversible write, make the smallest possible one
+  and verify it. This bounded a real misclassification to a single row.
+- **A new `methodology_version` resets the evidence base**, so the prior cohort must survive as
+  the control. Sequencing is a safety property, not bureaucracy.
+- **Gate on insufficient evidence, never on optimism.** `INSUFFICIENT_EVIDENCE` activates the
+  hard gate; a horizon with no data is protected, not guessed at.
+
+## Whole-product thinking
+
+The deliverable is an operator's working system, not a merged diff.
+
+- **The owner is a non-coder.** Never require reading code to answer a question.
+- **Minimum owner effort.** Batch decisions; pre-flight every handed-over command against its
+  exact failure path; give one command, not a menu; state expected output and the decision rule
+  for each outcome *before* it runs.
+- **First time right.** A command that cannot run costs more than the work it saved.
+- **Verify the whole chain, not the merge.** Deployed ≠ merged; configured ≠ saved; returned 200
+  ≠ took effect. Confirm with two independent signals.
+- **Correct in place, loudly.** Retract in the same file; never silently edit a claim.
+- **Leave it resumable.** Any pause must be recoverable from `STATE.md` + Git + `.work/` alone.
+
+## Response UI for owner-facing replies
+
+`WHAT THIS MEANS` · `WHERE` · `DO NOW` · `INPUT NEEDED` · `SEND THIS` · `THEN` · `DO NOT` ·
+`RETURN WHEN`. Omit only genuinely empty headings. Never bury an owner action in prose.
