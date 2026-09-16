@@ -25,12 +25,15 @@ DRIFT_SHA = "d" * 40
 # clean-room candidate deliberately does not, so this entry stands until that code is either
 # retired or deliberately deployed. api/app.py and frontend/styles.css entered the delta with
 # the Recent Analysis History feature, which is merged but deliberately not deployed.
+# config/build_info.py entered with the PROD-SAFE-3 release identity, which names the next
+# deploy; the pin keeps describing the live build until that deploy lands and is re-pinned.
 CURRENT_DELTA_PATHS = [
     "frontend/app.js",
     "frontend/index.html",
     "frontend/styles.css",
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the

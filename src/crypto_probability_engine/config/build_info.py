@@ -1,10 +1,10 @@
 """Source-controlled runtime build fingerprint."""
 
 SCHEMA_VERSION = "build-info.v1"
-RELEASE_ID = "UCPE-W4D3-OPS-2A0-20260622-A"
-RELEASE_LABEL = "Wave 4D.3-Ops Cadence Runtime Primitives"
+RELEASE_ID = "UCPE-PROD-SAFE-3-20260915-A"
+RELEASE_LABEL = "PROD-SAFE-3 convergence release of main"
 ENVIRONMENT = "HF_PRODUCTION"
-SOURCE_MILESTONE = "wave-4d3-ops-2a0-cadence-runtime"
+SOURCE_MILESTONE = "prod-safe-3-convergence"
 
 SHORT_RELEASE_ID = RELEASE_ID.removeprefix("UCPE-")
 FINGERPRINT = f"UCPE LIVE BUILD · {SHORT_RELEASE_ID}"
