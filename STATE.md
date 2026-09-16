@@ -1,10 +1,15 @@
 # STATE
 
-Updated: 2026-09-16 (PREP MERGED as PRs #100-#104, main e5cd7ef, batch VERIFIED; release R 00705c55 and pin P 7d2cf2f4 staged locally; 0008 route pre-checked; awaiting the owner's T4 sequence; nothing applied or deployed)
+Updated: 2026-09-16 (OWNER CORRECTION: the older-table privilege audit is authorized; its read-only route is built and verified LOCALLY (prep/audit-older-table-privileges 2b95fd0, gate 2230, Codex 818-820); running it needs the route on main, so ONE T3 + ONE dispatch is requested; the exposure result is not yet known; release R 00705c55 / P 7d2cf2f4 still staged; nothing pushed, applied or deployed)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=POST-ONE-LOOK RELEASE STAGED. The prep lanes are MERGED (PRs #100-#104, main e5cd7ef). The release
+LOOP_STATE=AUDIT ROUTE READY, WAITING FOR ITS T3 + ONE DISPATCH; RELEASE STILL STAGED. Owner correction 2026-09-16:
+  the older-table privilege check was already YES; run the read-only audit now; do not start 0008 or the HF deploy;
+  return the exact exposure result and the refreshed four-step boundary. No existing route can read catalogs and the
+  secret lives only in Actions, so the audit needs its route merged (T3) and ONE dispatch; see AUDIT_ROUTE and
+  OWNER_BOUNDARY. THE EXPOSURE RESULT IS NOT YET KNOWN. Nothing pushed, dispatched, applied or deployed since #104.
+LOOP_STATE_PRIOR_104=POST-ONE-LOOK RELEASE STAGED. The prep lanes are MERGED (PRs #100-#104, main e5cd7ef). The release
   candidate and its pin commit are built and gated LOCALLY; WAITING for the owner's T4 sequence (see OWNER_BOUNDARY
   and RELEASE_STAGED). Nothing applied, dispatched or deployed.
   T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
@@ -231,7 +236,10 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
   and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
   LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
   Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record of the merged batch.
+CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record (3571d7e: the merged
+  batch; then the audit-route record).
+  The audit lane, LOCAL ONLY, prep/audit-older-table-privileges (worktree: session scratchpad lanes/audit): 209d1e0 the
+  route; e551e43 repair 1; 2b95fd0 repair 2 = THE HEAD TO AUTHORIZE (tree 0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b).
   The prep branches below are MERGED: L2 #100, L3 #101, v2 #102, L1 #103, and chore/state-post-99 #104.
   The staged release lives only in this repository's objects (never pushed): R 00705c55 and P 7d2cf2f4, with the
   pin worktree in the session scratchpad (lanes/pin-real). Both rebuild deterministically from main.
@@ -277,7 +285,9 @@ LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local ga
   identical tree (composition b58d334).
 LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
   86a5ed1 and 5940557. Links are in .work/811/t3-batch/raw/*/ci_*_url.txt.
-LAST_VERIFY=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · pin commit P 7d2cf2f4 (the release candidate R
+LAST_VERIFY=PASS ruff ok | 2230 passed | schemas+smoke ok | scanners 3/3 · audit head 2b95fd0 · 2026-09-16 (local). The
+  simulated end state (the audit merged, then P merged: eb8881f, tree 194a5295) also PASSES at 2230.
+LAST_VERIFY_PRIOR_PIN=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · pin commit P 7d2cf2f4 (the release candidate R
   plus the re-pin) · 2026-09-16 (local). The guard delta after the re-pin is [], advisory SCHEDULER_AHEAD_OF_PIN.
 LAST_VERIFY_PRIOR_BATCH=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · code-final composition 2b724ee (c0ed7a0 +
   L2 3cd8476 + L3 84e7181 + v2 36d4a4e + L1 fd0e1f0 + STATE 0b512a8) · 2026-09-15 (local). Per lane: L2 2003,
@@ -577,7 +587,21 @@ CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; 
   where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
   verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
   LOW F10, R2.
-CODEX_PENDING=NONE. task-817 COMPLETE, fresh: fired 2026-09-15T05:12:23Z, delegate exit 05:24:59Z, base 5e03a7f,
+CODEX_PENDING=NONE. task-818, 819 and 820 COMPLETE, fresh (fired 10:02:41Z, 11:03:12Z, 11:23:41Z; bases 209d1e0,
+  e551e43, 2b95fd0; no tracked change). Three of the budget's four delegations used. Evidence and triage:
+  .work/816/codex-818-820/ (triage.md).
+CODEX_VERIFICATION_818_820=Each VERIFIED_WITH_FINDINGS; every gate passed (2185, 2218, 2230).
+  - 818: two false negatives (inherited policy roles; API-role ownership) and a role-name leak. REPAIR 1 (e551e43):
+    the server decides membership/INHERIT, PUBLIC, ownership, policy applicability and column privileges; a missing
+    fact is unsafe (INCOMPLETE); policy role lists withheld element by element; one REPEATABLE READ snapshot.
+  - 819: repair 1 held; PG16 rehearsal predicted with no mismatch. Two false negatives of one class (the assessment
+    assumed the surface): views over views; Realtime outside the served schemas. REPAIR 2 (2b95fd0), for the class:
+    served schemas are context only; Realtime by its own rules (incl. deleted-row keys under RLS); recursive view/rule
+    discovery with any-column privileges; inheritance/partition parents.
+  - 820: repair 2 held; PG16 rehearsal predicted with no mismatch; SQL valid on PG 15-17. F-820-1: the recursive
+    discovery stops at depth 16 without a signal. NOT repaired (two rounds is the limit): escalated with a no-code
+    disposition, since the post-run verifier treats a reached depth (or an unreadable discovery) as INCOMPLETE.
+CODEX_PENDING_PRIOR_817=NONE. task-817 COMPLETE, fresh: fired 2026-09-15T05:12:23Z, delegate exit 05:24:59Z, base 5e03a7f,
   no tracked change. Evidence: .work/816/codex-817/.
 CODEX_VERIFICATION_817=VERIFIED_WITH_FINDINGS (5 attacks per lane; the gate passed at 2059). L3 held every attack.
   Triage (.work/816/codex-817/triage.md):
@@ -772,12 +796,33 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The T3 prep batch is CONSUMED. The owner's T4 sequence is requested:
+OWNER_BOUNDARY=ONE T3 + ONE READ-ONLY DISPATCH REQUESTED (the older-table audit). Nothing else is authorized.
+  Owner correction 2026-09-16, verbatim: "Owner correction: older-table privilege check was already YES in the prior
+  ruling; the <yes/no> placeholder was only left in Claude's template. Run that already-authorized audit now, strictly
+  read-only metadata only for tables from migrations 0001–0004 and 0007: RLS, grants to PUBLIC/anon/authenticated/
+  service_role, policies, ownership/schema exposure; no application-row reads and no mutation. Do not start 0008 or HF
+  deploy yet. Return the exact exposure result and the refreshed four-step production-release boundary."
+  The audit itself is authorized, but it can only run from main, and merging its new route is a T3 not yet given.
+  REQUESTED: push to origin only prep/audit-older-table-privileges@2b95fd0 and open its PR; merge only after BOTH
+  exact-head `test` checks (CI and the rehearsal) are green, with --match-head-commit; parents (e5cd7ef, 2b95fd0);
+  merged tree 0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b; exact-main CI green; then ONE dispatch of
+  audit-table-privileges.yml at that merge SHA with confirm READ-ONLY-AUDIT-OLDER-TABLES-ONCE; stop on any mismatch;
+  never hf; no 0008, no deploy. ALSO ESCALATED: F-820-1 (CODEX_VERIFICATION_818_820); recommended: accept as-is.
+  THE FOUR-STEP RELEASE BOUNDARY, REFRESHED (each step only after the previous one verified, never concurrently;
+  NOT authorized):
+  (1) T4 apply 0008 at the then-current main SHA, i.e. after the audit merge (the audit PR changes no 0008-route file);
+  (2) T3 push release/prod-safe-3@P 7d2cf2f4 (carrying R) to origin and open its PR, CI only; it still shows exactly
+      ops/hf_runtime_baseline.json and tests/scripts/test_source_integrity_guard.py (merge-base e5cd7ef);
+  (3) T4 deploy R 00705c55 to hf as a fast-forward from a89b45e;
+  (4) T3 merge P with --match-head-commit; final main tree 194a52958316bbd13e7807ad8c00a8a13f9b2ceb (if the audit
+      merges at 2b95fd0 first; simulated eb8881f PASSES 2230); ONE source-integrity-guard dispatch.
+OWNER_BOUNDARY_PRIOR_104=NO ACTION IS AUTHORIZED. The T3 prep batch is CONSUMED. The owner's T4 sequence is requested:
   (1) T4 apply 0008 at e5cd7ef; (2) T3 origin push of release/prod-safe-3@P and its PR, CI only; (3) T4 deploy R to
   hf; (4) T3 merge P and ONE guard dispatch. Each step runs only if the previous one verified, and never
   concurrently.
   RULINGS 2026-09-16: release shape A (convergence). The older-table privilege check was returned as the literal
-  placeholder "<yes/no>", so it is UNDECIDED and NOT authorized; it is asked again.
+  placeholder "<yes/no>", so it is UNDECIDED and NOT authorized; it is asked again. (SUPERSEDED: the owner corrected
+  this to YES; see OWNER_BOUNDARY.)
   CONSUMED: the T3 batch, verbatim: "push to origin only (never hf) five PRs, merged strictly in this order:
   prep/l2-0008-activation@3cd8476, prep/l3-candle-width@84e7181, prep/v2-distributional@36d4a4e,
   prep/l1-hf-release@fd0e1f0, chore/state-post-99@cc58e1a ... final main tree must equal
@@ -882,7 +927,17 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner's T4 sequence, then execute it strictly in order, stopping at the first failure:
+NEXT_ACTION=WAIT for the owner's T3 + ONE dispatch for the older-table audit (OWNER_BOUNDARY), then, stopping at the first
+  mismatch:
+  1. bash .work/816/t3-audit/run-lane.sh (manifest head 2b95fd0, expected previous main e5cd7ef, expected merged
+     tree 0281f7f2, both head `test` checks);
+  2. an independent re-check of the merge (parents, tree, file set, exact-main CI);
+  3. bash .work/816/audit-dispatch/run_audit.sh (ONE dispatch, flag-guarded, raw capture before parsing), then
+     python3 .work/816/audit-dispatch/verify_audit.py; report the exposures and the EFFECTIVE VERDICT verbatim.
+  Then STOP: no 0008 and no HF deploy until the owner authorizes the refreshed four steps.
+  - NEVER run consume or the 0009 route again. No analysis against production. Never push to hf without a deploy
+    authorization.
+NEXT_ACTION_PRIOR_104=WAIT for the owner's T4 sequence, then execute it strictly in order, stopping at the first failure:
   1. T4 apply 0008: pre-checks, ONE dispatch, raw capture, verify (.work/816/l2/t4-apply-0008-runbook.md).
   2. T3: push P (carrying R) to origin as release/prod-safe-3; open the PR; exact-head CI green; do NOT merge.
   3. T4: `git push hf R:refs/heads/main` as a fast-forward; read-only live checks (.work/816/l1/runbook.md §5).
@@ -899,6 +954,30 @@ RELEASE_STAGED=Built 2026-09-16 from main X = e5cd7efffb86c875800c51049045f49425
     Dockerfile and requirements are unchanged vs deployed.
   - 0008 route: registered and active; bytes at X equal the pinned a8f290b3...; repository pin correct; no runs
     queued anywhere; the secret SUPABASE_DB_URL exists (name only).
+  - Refreshed for the audit merge at 2b95fd0: P's PR still shows only its two files; the final main tree after P
+    merges is 194a52958316bbd13e7807ad8c00a8a13f9b2ceb (simulated eb8881f, PASS 2230).
+AUDIT_ROUTE=prep/audit-older-table-privileges, LOCAL ONLY, from main e5cd7ef; head 2b95fd0, tree 0281f7f2. Seven files:
+  - scripts/audit_table_privileges.py;
+  - scripts/audit_rehearsal/00_supabase_like_roles.sql and 90_variations.sql;
+  - .github/workflows/audit-table-privileges.yml: dispatch-only; attest -> rehearse -> tests -> audit (the only step
+    with the secret) -> upload;
+  - .github/workflows/audit-table-privileges-rehearsal.yml: pull_request only, job `test`, no secret;
+  - tests/scripts/test_audit_table_privileges.py and tests/workflows/test_audit_table_privileges_workflow.py.
+  How it reads:
+  - One REPEATABLE READ, READ ONLY transaction, refused unless the server confirms it; pg_catalog only; always rolled
+    back. The report never holds the URL, the connecting role or a non-standard role name.
+  - The server decides membership and INHERIT, PUBLIC, ownership, policy applicability and column privileges. A
+    missing fact counts as unsafe (INCOMPLETE).
+  - The served-schema list is context only; Realtime, views over views and inheritance parents are all reported.
+  - Verdicts: EXPOSED, INCOMPLETE, NOT_EXPOSED_THROUGH_AUDITED_PATHS. Not audited: SECURITY DEFINER/RPC, side
+    channels, HTTP-layer settings, row contents.
+  It changes no runtime, 0008-route, evaluator-pinned (69), guard-critical (11) or protected test file.
+  Pre-flight 2026-09-16, read-only:
+  - origin main e5cd7ef; hf a89b45e;
+  - no open PR and no run in progress;
+  - the branch is not on origin; the token has the workflow scope.
+  Lane files: .work/816/t3-audit/ (manifest.txt, expected_prev_main.txt, expected_final_tree.txt, bodies/A.md,
+  lane.sh, run-lane.sh). Dispatch files: .work/816/audit-dispatch/ (run_audit.sh, verify_audit.py).
 PREP_RESULTS=Built 2026-09-15, all local:
   - L2 (0008 activation). FINDING: 0008 as authored had no RLS or REVOKE, so on Supabase the anon key could reach
     the operator's Detail payloads. Hardened in place (never applied): RLS on, not forced; REVOKE ALL FROM PUBLIC,
