@@ -102,6 +102,42 @@ _ROLES_SQL = "ARRAY[" + ", ".join(f"'{name}'" for name in API_ROLES) + "]::text[
 _PRIVILEGES_SQL = ", ".join(f"('{name}')" for name in PRIVILEGES)
 _COLUMN_PRIVILEGES_SQL = ", ".join(f"('{name}')" for name in COLUMN_PRIVILEGES)
 _RELKINDS_SQL = "ARRAY['r', 'p', 'v', 'm', 'f']::\"char\"[]"
+_API_PRIVILEGES_SQL = ", ".join(f"('{name}')" for name in API_PRIVILEGES)
+_MAX_DEPTH = 16
+
+
+def _held_sql(relation: str) -> str:
+    """Whether role r holds privilege p on the relation: on the whole relation, or (SELECT,
+    INSERT, UPDATE) on at least one column. DELETE is never asked as a column question."""
+
+    return (
+        "CASE WHEN p.privilege = 'DELETE'"
+        f" THEN pg_catalog.has_table_privilege(r.oid, {relation}, p.privilege)"
+        f" ELSE pg_catalog.has_any_column_privilege(r.oid, {relation}, p.privilege) END"
+    )
+
+
+# Every relation whose rewrite rules read or write an audited table, directly or through other
+# such relations (a view over a view), with the shortest depth. Views are the usual case.
+_DEPENDENTS_CTE = (
+    "WITH RECURSIVE dependents(relation_oid, base_oid, depth) AS ("
+    "SELECT rw.ev_class, t.oid, 1"
+    " FROM pg_catalog.pg_class AS t"
+    " JOIN pg_catalog.pg_depend AS d ON d.refobjid = t.oid"
+    " AND d.classid = 'pg_catalog.pg_rewrite'::regclass"
+    " AND d.refclassid = 'pg_catalog.pg_class'::regclass"
+    " JOIN pg_catalog.pg_rewrite AS rw ON rw.oid = d.objid"
+    f" WHERE t.relname::text = ANY ({_TABLES_SQL}) AND t.relkind = ANY ({_RELKINDS_SQL})"
+    " AND rw.ev_class <> t.oid"
+    " UNION"
+    " SELECT rw.ev_class, dep.base_oid, dep.depth + 1"
+    " FROM dependents AS dep"
+    " JOIN pg_catalog.pg_depend AS d ON d.refobjid = dep.relation_oid"
+    " AND d.classid = 'pg_catalog.pg_rewrite'::regclass"
+    " AND d.refclassid = 'pg_catalog.pg_class'::regclass"
+    " JOIN pg_catalog.pg_rewrite AS rw ON rw.oid = d.objid"
+    f" WHERE rw.ev_class <> dep.relation_oid AND dep.depth < {_MAX_DEPTH})"
+)
 
 GUARD_STATEMENTS = (
     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
@@ -262,35 +298,56 @@ QUERIES: dict[str, str] = {
         " ORDER BY 1"
     ),
     "dependent_views": (
-        "SELECT DISTINCT vn.nspname, v.relname, v.relkind::text,"
-        " pg_catalog.pg_get_userbyid(v.relowner), COALESCE(v.reloptions::text, ''),"
-        " tn.nspname, t.relname"
-        " FROM pg_catalog.pg_depend AS d"
-        " JOIN pg_catalog.pg_rewrite AS rw ON rw.oid = d.objid"
-        " JOIN pg_catalog.pg_class AS v ON v.oid = rw.ev_class"
+        f"{_DEPENDENTS_CTE}"
+        " SELECT vn.nspname, v.relname, v.relkind::text, pg_catalog.pg_get_userbyid(v.relowner),"
+        " COALESCE(v.reloptions::text, ''), tn.nspname, t.relname, MIN(dep.depth)"
+        " FROM dependents AS dep"
+        " JOIN pg_catalog.pg_class AS v ON v.oid = dep.relation_oid"
         " JOIN pg_catalog.pg_namespace AS vn ON vn.oid = v.relnamespace"
-        " JOIN pg_catalog.pg_class AS t ON t.oid = d.refobjid"
+        " JOIN pg_catalog.pg_class AS t ON t.oid = dep.base_oid"
         " JOIN pg_catalog.pg_namespace AS tn ON tn.oid = t.relnamespace"
-        " WHERE d.classid = 'pg_catalog.pg_rewrite'::regclass"
-        " AND d.refclassid = 'pg_catalog.pg_class'::regclass"
-        f" AND t.relname::text = ANY ({_TABLES_SQL}) AND v.oid <> t.oid"
+        " GROUP BY 1, 2, 3, 4, 5, 6, 7"
         " ORDER BY 1, 2, 6, 7"
     ),
+    # SELECT, INSERT and UPDATE count when held on any column; DELETE exists only for the whole
+    # relation (the CASE never asks a column question about DELETE).
     "dependent_view_privileges": (
-        "SELECT DISTINCT vn.nspname, v.relname, r.rolname, p.privilege,"
-        " pg_catalog.has_table_privilege(r.oid, v.oid, p.privilege)"
-        " FROM pg_catalog.pg_depend AS d"
-        " JOIN pg_catalog.pg_rewrite AS rw ON rw.oid = d.objid"
-        " JOIN pg_catalog.pg_class AS v ON v.oid = rw.ev_class"
+        f"{_DEPENDENTS_CTE}"
+        " SELECT DISTINCT vn.nspname, v.relname, v.relkind::text, r.rolname, p.privilege,"
+        f" {_held_sql('v.oid')}"
+        " FROM dependents AS dep"
+        " JOIN pg_catalog.pg_class AS v ON v.oid = dep.relation_oid"
         " JOIN pg_catalog.pg_namespace AS vn ON vn.oid = v.relnamespace"
-        " JOIN pg_catalog.pg_class AS t ON t.oid = d.refobjid"
         " CROSS JOIN pg_catalog.pg_roles AS r"
-        " CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) AS p(privilege)"
-        " WHERE d.classid = 'pg_catalog.pg_rewrite'::regclass"
-        " AND d.refclassid = 'pg_catalog.pg_class'::regclass"
-        f" AND t.relname::text = ANY ({_TABLES_SQL}) AND v.oid <> t.oid"
-        f" AND r.rolname::text = ANY ({_ROLES_SQL})"
-        " ORDER BY 1, 2, 3, 4"
+        f" CROSS JOIN (VALUES {_API_PRIVILEGES_SQL}) AS p(privilege)"
+        f" WHERE r.rolname::text = ANY ({_ROLES_SQL})"
+        " ORDER BY 1, 2, 4, 5"
+    ),
+    # Tables an audited table inherits from, or is a partition of, at any depth. A query on such a
+    # parent returns the audited table's rows under the PARENT's grants and row-level security.
+    "inheritance_parents": (
+        "WITH RECURSIVE ancestors(child_oid, parent_oid, depth) AS ("
+        "SELECT i.inhrelid, i.inhparent, 1"
+        " FROM pg_catalog.pg_inherits AS i"
+        " JOIN pg_catalog.pg_class AS c ON c.oid = i.inhrelid"
+        f" WHERE c.relname::text = ANY ({_TABLES_SQL}) AND c.relkind = ANY ({_RELKINDS_SQL})"
+        " UNION"
+        " SELECT a.child_oid, i.inhparent, a.depth + 1"
+        " FROM ancestors AS a"
+        " JOIN pg_catalog.pg_inherits AS i ON i.inhrelid = a.parent_oid"
+        f" WHERE a.depth < {_MAX_DEPTH})"
+        " SELECT DISTINCT pn.nspname, pa.relname, pa.relkind::text, cn.nspname, c.relname,"
+        " r.rolname, p.privilege, pa.relrowsecurity,"
+        f" {_held_sql('pa.oid')}"
+        " FROM ancestors AS a"
+        " JOIN pg_catalog.pg_class AS pa ON pa.oid = a.parent_oid"
+        " JOIN pg_catalog.pg_namespace AS pn ON pn.oid = pa.relnamespace"
+        " JOIN pg_catalog.pg_class AS c ON c.oid = a.child_oid"
+        " JOIN pg_catalog.pg_namespace AS cn ON cn.oid = c.relnamespace"
+        " CROSS JOIN pg_catalog.pg_roles AS r"
+        f" CROSS JOIN (VALUES {_API_PRIVILEGES_SQL}) AS p(privilege)"
+        f" WHERE r.rolname::text = ANY ({_ROLES_SQL})"
+        " ORDER BY 1, 2, 4, 5, 6, 7"
     ),
     "realtime_publications": (
         "SELECT p.pubname::text, p.schemaname::text, p.tablename::text"
@@ -301,7 +358,13 @@ QUERIES: dict[str, str] = {
 }
 # A refused read of one of these is recorded and the audit continues; the others are required.
 OPTIONAL_QUERIES = frozenset(
-    {"api_schemas_setting", "dependent_views", "dependent_view_privileges", "realtime_publications"}
+    {
+        "api_schemas_setting",
+        "dependent_views",
+        "dependent_view_privileges",
+        "inheritance_parents",
+        "realtime_publications",
+    }
 )
 # Columns holding any role name, or (policies) a list of them. Only standard identifiers are
 # reported; every other name is withheld, element by element.
@@ -351,6 +414,7 @@ REHEARSAL_EXPECTED_OWNERSHIP = {
 REHEARSAL_NON_STANDARD_ROLE = "rehearsal reader"
 REHEARSAL_EXPECTED_ANON_INHERITS = {WITHHELD, "rehearsal_owner"}
 REHEARSAL_EXPECTED_ANON_MEMBER_OF = {WITHHELD, "rehearsal_bystander", "rehearsal_owner"}
+_VIEW = "(a view over an audited table)"
 REHEARSAL_EXPECTED_EXPOSURE_MARKERS = (
     "public.analysis_runs: anon SELECT OPEN",
     "public.app_events: anon can receive change events through publication(s) supabase_realtime",
@@ -358,18 +422,33 @@ REHEARSAL_EXPECTED_EXPOSURE_MARKERS = (
     "public.analysis_timeframe_results: anon INSERT OPEN ON COLUMNS timeframe",
     "public.analysis_timeframe_results: anon UPDATE OPEN ON COLUMNS disposition",
     "public.news_evidence_links: anon SELECT OPEN",
-    "public.rehearsal_runs_view (a view over an audited table): anon SELECT REVIEW",
     "public.prediction_outcomes: anon SELECT POLICY_DECIDES: rehearsal_read",
     "public.prediction_outcomes: anon INSERT POLICY_DECIDES: rehearsal_inherited_insert",
+    "public.prediction_outcomes: anon can receive change events through publication(s) "
+    "supabase_realtime, as the policy decides",
+    "public.prediction_outcomes: authenticated can receive the primary keys of deleted rows "
+    "through publication(s) supabase_realtime",
+    f"public.rehearsal_runs_view {_VIEW}: authenticated SELECT REVIEW",
+    f"public.rehearsal_nested_view {_VIEW}: anon SELECT REVIEW",
+    f"public.rehearsal_column_view {_VIEW}: anon SELECT REVIEW",
+    f"rehearsal_private.rehearsal_hidden_view {_VIEW}: anon SELECT REVIEW",
+    "public.rehearsal_parent (a parent of public.provider_observations): anon SELECT REVIEW",
 )
 # No exposure line may start with these: RLS with no applicable policy, forced RLS on an owner, a
-# restrictive-only policy, and grants reachable only through a membership that does not inherit.
+# restrictive-only policy, grants reachable only through a membership that does not inherit, and
+# view privileges that were revoked or never granted.
 REHEARSAL_UNEXPOSED_PREFIXES = (
     "public.predictions:",
     "public.provider_observations:",
     "public.news_items:",
     "public.watchlist:",
     "public.news_evidence_links: authenticated",
+    "public.prediction_outcomes: authenticated SELECT",
+    f"public.rehearsal_runs_view {_VIEW}: anon",
+    f"public.rehearsal_column_view {_VIEW}: anon INSERT",
+    f"public.rehearsal_column_view {_VIEW}: anon UPDATE",
+    f"public.rehearsal_column_view {_VIEW}: anon DELETE",
+    f"rehearsal_private.rehearsal_hidden_view {_VIEW}: authenticated",
 )
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -725,6 +804,16 @@ def rehearsal_failures(observed: Mapping[str, Any], assessment: Mapping[str, Any
             failures.append(f"an exposure line starts with {prefix!r}, which must stay closed")
     if not any(row[2] == "PUBLIC" for row in observed["table_grants"]):
         failures.append("the PUBLIC grant on news_clusters was not observed")
+    if not any(
+        row[1] == "rehearsal_nested_view" and row[6] == "analysis_runs" and row[7] == 2
+        for row in observed.get("dependent_views", [])
+    ):
+        failures.append("the view over a view was not found at depth 2")
+    if not any(
+        row[:5] == ["public", "rehearsal_parent", "r", "public", "provider_observations"]
+        for row in observed.get("inheritance_parents", [])
+    ):
+        failures.append("the parent of provider_observations was not found")
     if assessment["verdict"] != "EXPOSED":
         failures.append(f"the verdict is {assessment['verdict']}, not EXPOSED")
     return failures
@@ -790,15 +879,23 @@ def _redacted(value: Any) -> Any:
 
 
 def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
-    """Pure: each audited table's exposure to anon and authenticated through the Data API.
+    """Pure: each audited table's exposure to anon and authenticated.
 
     A role can use a command on a table when the server says it holds that privilege on the table
     or on some of its columns. Rows are then filtered unless row-level security is off or the role
     bypasses it: BYPASSRLS, superuser, or acting as the owner of a table that does not force it.
     Under row-level security only a PERMISSIVE policy that the server says applies to the role can
-    admit rows; the policy expression then decides, and it is reported for review. The Data API
-    reaches the table only if the role may use its schema and the schema is served; when the served
-    schemas are not visible in the database, Supabase's default (``public``) is assumed and said.
+    admit rows; the policy expression then decides, and it is reported for review. Reaching the
+    table through PostgREST or GraphQL needs USAGE on its schema.
+
+    Supabase reaches the database through several surfaces: PostgREST, GraphQL (whose search path
+    includes ``public`` even when PostgREST does not serve it), and Realtime, which needs neither
+    schema USAGE nor a served schema and never applies row-level security to DELETE events. So the
+    served-schema list (``pgrst.db_schemas``, or Supabase's default ``public`` when it is not
+    visible) is reported as context and never rules an exposure out.
+
+    Indirect paths are reported for review: relations whose rewrite rules reach an audited table at
+    any depth (views over views), and tables an audited table inherits from or is a partition of.
 
     Each server fact is looked up for every API role that exists. A missing or unknown fact is
     listed in ``facts_incomplete`` and taken as the unsafe answer, so it can never hide an exposure.
@@ -843,7 +940,8 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
             "ASSUMED: Supabase's default API schema (the setting is not visible in the database)"
         )
     for name, what in (
-        ("dependent_view_privileges", "views over the audited tables"),
+        ("dependent_view_privileges", "relations built on the audited tables"),
+        ("inheritance_parents", "tables the audited tables inherit from"),
         ("realtime_publications", "Realtime publications"),
     ):
         if name in observed.get("query_errors", {}):
@@ -858,6 +956,11 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
         found_tables.add(table)
         key = f"{schema}.{table}"
         table_policies = policies.get((schema, table), [])
+        publications = [
+            row[0]
+            for row in observed.get("realtime_publications", [])
+            if row[1] == schema and row[2] == table
+        ]
         entry: dict[str, Any] = {
             "relkind": relkind,
             "owner": owner,
@@ -866,13 +969,10 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
             "row_level_security_forced": bool(forced),
             "schema_served_by_api": schema in served,
             "policies": [row[2] for row in table_policies],
-            "realtime_publications": [
-                row[0]
-                for row in observed.get("realtime_publications", [])
-                if row[1] == schema and row[2] == table
-            ],
+            "realtime_publications": publications,
             "roles": {},
         }
+        context = "" if schema in served else " [the schema is not listed in pgrst.db_schemas]"
         for role in API_ROLES:
             if role in roles:
                 held = {
@@ -896,18 +996,16 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
                 or attributes.get("superuser", False)
                 or (acts_as_owner and not forced)
             )
-            reachable = schema in served and uses_schema
             commands: dict[str, str] = {}
-            exposed: dict[str, bool] = {}
+            admits: dict[str, str] = {}
             columns_only: dict[str, list[str]] = {}
             for command in API_PRIVILEGES:
                 columns = column_only.get((schema, table, role, command), [])
                 if command not in held and not columns:
-                    commands[command], exposed[command] = "NO_PRIVILEGE", False
+                    commands[command], admits[command] = "NO_PRIVILEGE", ""
                     continue
                 if not rls or bypass:
-                    verdict = "OPEN" if reachable else "OPEN_BUT_NOT_API_REACHABLE"
-                    exposed[command] = reachable
+                    admits[command] = "OPEN"
                 else:
                     # Only a PERMISSIVE policy can admit rows; RESTRICTIVE ones only narrow them.
                     applicable = sorted(
@@ -921,13 +1019,17 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
                             f"{key}: whether policy {row[2]} applies to {role}",
                         )
                     )
-                    if not applicable:
-                        verdict = "RLS_DENIES_ALL"
-                    elif reachable:
-                        verdict = "POLICY_DECIDES: " + ", ".join(applicable)
-                    else:
-                        verdict = "POLICY_DECIDES_NOT_API_REACHABLE"
-                    exposed[command] = bool(applicable) and reachable
+                    admits[command] = (
+                        "POLICY_DECIDES: " + ", ".join(applicable) if applicable else ""
+                    )
+                if not admits[command]:
+                    verdict = "RLS_DENIES_ALL"
+                elif uses_schema:
+                    verdict = admits[command]
+                elif admits[command] == "OPEN":
+                    verdict = "OPEN_BUT_NO_SCHEMA_USAGE"
+                else:
+                    verdict = "POLICY_DECIDES_BUT_NO_SCHEMA_USAGE"
                 if command not in held:
                     columns_only[command] = columns
                     verdict += " ON COLUMNS " + ", ".join(columns)
@@ -940,23 +1042,55 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
                 "schema_usage": uses_schema,
                 "data_api": commands,
             }
-            if role != "service_role":
-                for command in API_PRIVILEGES:
-                    if exposed[command]:
-                        exposures.append(f"{key}: {role} {command} {commands[command]}")
-                if exposed["SELECT"] and entry["realtime_publications"]:
+            if role == "service_role":
+                continue
+            for command in API_PRIVILEGES:
+                if admits[command] and uses_schema:
+                    exposures.append(f"{key}: {role} {command} {commands[command]}{context}")
+            # Realtime checks column SELECT privileges itself, needs no schema USAGE or served
+            # schema, and delivers the primary keys of deleted rows without row-level security.
+            if publications and ("SELECT" in held or "SELECT" in columns_only):
+                names = ", ".join(publications)
+                if admits["SELECT"] == "OPEN":
                     exposures.append(
-                        f"{key}: {role} can receive change events through publication(s) "
-                        + ", ".join(entry["realtime_publications"])
+                        f"{key}: {role} can receive change events through publication(s) {names}"
+                    )
+                elif admits["SELECT"]:
+                    exposures.append(
+                        f"{key}: {role} can receive change events through publication(s) {names},"
+                        " as the policy decides, and the primary keys of deleted rows"
+                    )
+                else:
+                    exposures.append(
+                        f"{key}: {role} can receive the primary keys of deleted rows through "
+                        f"publication(s) {names}: Realtime does not apply row-level security to "
+                        "DELETE events"
                     )
         tables[key] = entry
-    for view_schema, view, role, privilege, held in observed.get("dependent_view_privileges", []):
+    for schema, name, relkind, role, privilege, held in observed.get(
+        "dependent_view_privileges", []
+    ):
         if held is None:
-            gaps.add(f"{view_schema}.{view}: whether {role} holds {privilege}")
-        if (held or held is None) and role != "service_role" and view_schema in served:
+            gaps.add(f"{schema}.{name}: whether {role} holds {privilege}")
+        if (held or held is None) and role != "service_role":
+            kind = {
+                "v": "a view over an audited table",
+                "m": "a materialized view over an audited table",
+            }.get(relkind, "a relation whose rules reach an audited table")
             exposures.append(
-                f"{view_schema}.{view} (a view over an audited table): {role} {privilege} "
-                "REVIEW: the view's owner and security_invoker decide which rows are visible"
+                f"{schema}.{name} ({kind}): {role} {privilege} REVIEW: the view's owner and "
+                "security_invoker decide which rows are visible"
+            )
+    for (
+        parent_schema, parent, _, child_schema, child, role, privilege, parent_rls, held
+    ) in observed.get("inheritance_parents", []):
+        if held is None:
+            gaps.add(f"{parent_schema}.{parent}: whether {role} holds {privilege}")
+        if (held or held is None) and role != "service_role":
+            exposures.append(
+                f"{parent_schema}.{parent} (a parent of {child_schema}.{child}): {role} {privilege}"
+                " REVIEW: through the parent, the child's rows follow the parent's grants and "
+                f"row-level security ({'on' if parent_rls else 'off'})"
             )
     missing = sorted(set(AUDITED_TABLES) - found_tables)
     duplicated = sorted(
@@ -968,7 +1102,7 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
     elif gaps:
         overall = "INCOMPLETE"
     else:
-        overall = "NOT_EXPOSED_THROUGH_TABLE_GRANTS"
+        overall = "NOT_EXPOSED_THROUGH_AUDITED_PATHS"
     return {
         "api_schemas": sorted(served),
         "api_schemas_source": served_source,
@@ -981,6 +1115,9 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
         "public_grants": [list(item) for item in public_grants],
         "column_grants": observed["column_grants"],
         "dependent_views": observed.get("dependent_views", []),
+        "inheritance_parents": sorted(
+            {tuple(row[:5]) for row in observed.get("inheritance_parents", [])}
+        ),
         "realtime_publications": observed.get("realtime_publications", []),
         "anon_or_authenticated_exposures": exposures,
         "facts_incomplete": sorted(gaps),
@@ -988,6 +1125,9 @@ def assess(observed: Mapping[str, Any]) -> dict[str, Any]:
         "not_audited": [
             "SECURITY DEFINER functions and other RPC paths, which can read a table whatever the "
             "caller's grants: outside this audit's ruled scope (the tables themselves)",
+            "side channels, such as foreign-key checks run from other tables",
+            "HTTP-layer settings kept outside the database (PostgREST and GraphQL configuration): "
+            "the served-schema list is context only and never rules an exposure out",
             "row contents: never read, by design",
         ],
     }

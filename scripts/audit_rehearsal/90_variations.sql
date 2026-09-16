@@ -49,11 +49,26 @@ ALTER TABLE public.provider_observations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_observations FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.provider_observations FROM anon;
 
--- A view over an audited table, which inherits the default grants.
+-- Views over an audited table, with the default grants unless revoked. anon may not use the direct view,
+-- but may use a view built on it, one column of another view, and a view in a schema PostgREST does not
+-- serve.
 CREATE VIEW public.rehearsal_runs_view AS SELECT run_id FROM public.analysis_runs;
+REVOKE ALL ON TABLE public.rehearsal_runs_view FROM anon;
+CREATE VIEW public.rehearsal_nested_view AS SELECT run_id FROM public.rehearsal_runs_view;
+CREATE VIEW public.rehearsal_column_view AS SELECT run_id, symbol FROM public.analysis_runs;
+REVOKE ALL ON TABLE public.rehearsal_column_view FROM anon;
+GRANT SELECT (run_id) ON TABLE public.rehearsal_column_view TO anon;
+CREATE SCHEMA rehearsal_private;
+GRANT USAGE ON SCHEMA rehearsal_private TO anon;
+CREATE VIEW rehearsal_private.rehearsal_hidden_view AS SELECT run_id FROM public.analysis_runs;
+GRANT SELECT ON TABLE rehearsal_private.rehearsal_hidden_view TO anon;
 
--- A table in the Realtime publication.
-CREATE PUBLICATION supabase_realtime FOR TABLE public.app_events;
+-- A parent table: through it, provider_observations' rows follow the parent's grants, not their own.
+CREATE TABLE public.rehearsal_parent (id bigint);
+ALTER TABLE public.provider_observations INHERIT public.rehearsal_parent;
+
+-- Tables in the Realtime publication: one without RLS, and one where RLS decides.
+CREATE PUBLICATION supabase_realtime FOR TABLE public.app_events, public.prediction_outcomes;
 
 -- A grant to PUBLIC.
 GRANT SELECT ON TABLE public.news_clusters TO PUBLIC;

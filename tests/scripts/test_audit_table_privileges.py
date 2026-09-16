@@ -125,6 +125,15 @@ def _anon_without_table_grants(name: str) -> bool:
     return name == "analysis_timeframe_results"
 
 
+# Who holds what on each rehearsal view (any column counts for SELECT, INSERT and UPDATE).
+VIEW_GRANTS = {
+    "rehearsal_column_view": lambda role, privilege: role != "anon" or privilege == "SELECT",
+    "rehearsal_nested_view": lambda role, privilege: True,
+    "rehearsal_runs_view": lambda role, privilege: role != "anon",
+    "rehearsal_hidden_view": lambda role, privilege: role == "anon" and privilege == "SELECT",
+}
+
+
 def rehearsal_snapshot() -> dict[str, list]:
     """What the catalog queries return on the rehearsal fixtures (scripts/audit_rehearsal/).
 
@@ -220,14 +229,37 @@ def rehearsal_snapshot() -> dict[str, list]:
         ],
         "api_schemas_setting": [["*", "pgrst.db_schemas=public, graphql_public"]],
         "dependent_views": [
-            ["public", "rehearsal_runs_view", "v", "postgres", "", "public", "analysis_runs"]
+            [schema, view, "v", "postgres", "", "public", "analysis_runs", depth]
+            for schema, view, depth in (
+                ("public", "rehearsal_column_view", 1),
+                ("public", "rehearsal_nested_view", 2),
+                ("public", "rehearsal_runs_view", 1),
+                ("rehearsal_private", "rehearsal_hidden_view", 1),
+            )
         ],
         "dependent_view_privileges": [
-            ["public", "rehearsal_runs_view", role, privilege, True]
+            [schema, view, "v", role, privilege, VIEW_GRANTS[view](role, privilege)]
+            for schema, view in (
+                ("public", "rehearsal_column_view"),
+                ("public", "rehearsal_nested_view"),
+                ("public", "rehearsal_runs_view"),
+                ("rehearsal_private", "rehearsal_hidden_view"),
+            )
             for role in audit.API_ROLES
             for privilege in ("DELETE", "INSERT", "SELECT", "UPDATE")
         ],
-        "realtime_publications": [["supabase_realtime", "public", "app_events"]],
+        "inheritance_parents": [
+            [
+                "public", "rehearsal_parent", "r", "public", "provider_observations",
+                role, privilege, False, True,
+            ]
+            for role in audit.API_ROLES
+            for privilege in ("DELETE", "INSERT", "SELECT", "UPDATE")
+        ],
+        "realtime_publications": [
+            ["supabase_realtime", "public", "app_events"],
+            ["supabase_realtime", "public", "prediction_outcomes"],
+        ],
     }
 
 
@@ -339,7 +371,8 @@ def test_every_statement_is_read_only_and_starts_as_expected() -> None:
     for statement in _statements():
         bare = _without_literals(statement)
         assert bare.startswith(
-            ("SELECT ", "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+            ("SELECT ", "WITH RECURSIVE ",
+             "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
              "SET LOCAL ", "SAVEPOINT audit_",
              "RELEASE SAVEPOINT audit_", "ROLLBACK TO SAVEPOINT audit_")
         ), statement
@@ -351,10 +384,15 @@ def test_no_query_ever_reads_an_application_table() -> None:
     """Every FROM or JOIN target is a pg_catalog relation or function, VALUES, or a subquery."""
 
     for name, query in audit.QUERIES.items():
-        targets = re.findall(r"\b(?:FROM|JOIN)\s+(?:LATERAL\s+)?(\S+)", _without_literals(query))
+        bare = _without_literals(query)
+        # A recursive query may also read the working table it declares itself, and nothing else.
+        declared = set(re.findall(r"\bWITH RECURSIVE ([a-z_]+)\(", bare))
+        assert len(declared) == len(re.findall(r"\bWITH\b", bare)), name
+        assert not declared & set(audit.AUDITED_TABLES), name
+        targets = re.findall(r"\b(?:FROM|JOIN)\s+(?:LATERAL\s+)?(\S+)", bare)
         assert targets, name
         for target in targets:
-            assert target.startswith(("pg_catalog.", "(")), (name, target)
+            assert target.startswith(("pg_catalog.", "(")) or target in declared, (name, target)
             assert not any(table == target.split(".")[-1] for table in audit.AUDITED_TABLES), target
     assert audit.READ_ONLY_SQL.startswith("SELECT pg_catalog.current_setting(")
 
@@ -539,6 +577,10 @@ def test_the_rehearsal_snapshot_satisfies_every_rehearsal_expectation() -> None:
         "role-name-leaked",
         "policy-roles-not-a-list",
         "no-view",
+        "nested-view-missing",
+        "revoked-view-granted",
+        "no-parent",
+        "no-policy-publication",
         "no-publication",
         "no-public-grant",
         "anon-bypasses-rls",
@@ -599,7 +641,7 @@ def test_the_rehearsal_check_notices_every_departure(mutation: str) -> None:
         snapshot["role_memberships"].pop()
     elif mutation == "role-name-leaked":
         extra["dependent_views"] = [
-            ["public", "rehearsal_runs_view", "v", NON_STANDARD, "", "public", "analysis_runs"]
+            [*row[:3], NON_STANDARD, *row[4:]] for row in snapshot["dependent_views"]
         ]
     elif mutation == "policy-roles-not-a-list":
         extra["policies"] = [
@@ -607,6 +649,17 @@ def test_the_rehearsal_check_notices_every_departure(mutation: str) -> None:
         ]
     elif mutation == "no-view":
         snapshot["dependent_view_privileges"] = []
+    elif mutation == "nested-view-missing":
+        snapshot["dependent_views"] = [
+            row for row in snapshot["dependent_views"] if row[1] != "rehearsal_nested_view"
+        ]
+    elif mutation == "revoked-view-granted":
+        key = ("public", "rehearsal_runs_view", "v", "anon", "SELECT")
+        set_fact(snapshot, "dependent_view_privileges", key, True)
+    elif mutation == "no-parent":
+        snapshot["inheritance_parents"] = []
+    elif mutation == "no-policy-publication":
+        snapshot["realtime_publications"] = snapshot["realtime_publications"][:1]
     elif mutation == "no-publication":
         snapshot["realtime_publications"] = []
     elif mutation == "no-public-grant":
@@ -636,21 +689,51 @@ def test_an_unreadable_schema_setting_falls_back_to_public_and_says_so() -> None
     assert audit.rehearsal_failures(observed, assessment) == []
 
 
-def test_a_table_outside_the_served_schemas_or_without_usage_is_not_api_reachable() -> None:
+def test_the_served_schema_list_is_context_and_never_rules_an_exposure_out() -> None:
+    """task-819: GraphQL and Realtime reach tables PostgREST does not serve."""
+
     snapshot = rehearsal_snapshot()
     snapshot["api_schemas_setting"] = [["*", "pgrst.db_schemas=graphql_public"]]
     assessment = audit.assess(observed_from(snapshot))
-    runs = assessment["tables"]["public.analysis_runs"]["roles"]["anon"]["data_api"]
-    assert runs == dict.fromkeys(audit.API_PRIVILEGES, "OPEN_BUT_NOT_API_REACHABLE")
-    assert assessment["verdict"] == "NOT_EXPOSED_THROUGH_TABLE_GRANTS"
+    entry = assessment["tables"]["public.analysis_runs"]
+    assert entry["schema_served_by_api"] is False
+    assert entry["roles"]["anon"]["data_api"] == dict.fromkeys(audit.API_PRIVILEGES, "OPEN")
+    exposures = assessment["anon_or_authenticated_exposures"]
+    assert (
+        "public.analysis_runs: anon SELECT OPEN [the schema is not listed in pgrst.db_schemas]"
+        in exposures
+    )
+    assert (
+        "public.app_events: anon can receive change events through publication(s) "
+        "supabase_realtime" in exposures
+    )
+    hidden = "rehearsal_private.rehearsal_hidden_view (a view over an audited table): anon SELECT"
+    assert any(line.startswith(hidden) for line in exposures)
+    assert assessment["verdict"] == "EXPOSED"
 
+
+def test_without_schema_usage_only_realtime_still_reaches_the_rows() -> None:
     snapshot = rehearsal_snapshot()
     snapshot["schema_usage"] = [
         ["public", "pg_database_owner", role, role == "service_role"] for role in audit.API_ROLES
     ]
     assessment = audit.assess(observed_from(snapshot))
     runs = assessment["tables"]["public.analysis_runs"]["roles"]["anon"]["data_api"]
-    assert runs == dict.fromkeys(audit.API_PRIVILEGES, "OPEN_BUT_NOT_API_REACHABLE")
+    assert runs == dict.fromkeys(audit.API_PRIVILEGES, "OPEN_BUT_NO_SCHEMA_USAGE")
+    outcomes = assessment["tables"]["public.prediction_outcomes"]["roles"]["anon"]["data_api"]
+    assert outcomes["SELECT"] == "POLICY_DECIDES_BUT_NO_SCHEMA_USAGE"
+    columns = assessment["tables"]["public.analysis_timeframe_results"]["roles"]["anon"]
+    assert columns["data_api"]["SELECT"] == "OPEN_BUT_NO_SCHEMA_USAGE ON COLUMNS run_id"
+    exposures = assessment["anon_or_authenticated_exposures"]
+    table_lines = [
+        line for line in exposures
+        if line.split(":")[0] in assessment["tables"] and " can receive " not in line
+    ]
+    assert table_lines == []
+    assert (
+        "public.app_events: anon can receive change events through publication(s) "
+        "supabase_realtime" in exposures
+    )
 
 
 def hardened_snapshot() -> dict[str, list]:
@@ -670,6 +753,7 @@ def hardened_snapshot() -> dict[str, list]:
         row[3] = False
     snapshot["dependent_views"] = []
     snapshot["dependent_view_privileges"] = []
+    snapshot["inheritance_parents"] = []
     return snapshot
 
 
@@ -677,7 +761,7 @@ def test_a_fully_hardened_database_is_not_exposed() -> None:
     assessment = audit.assess(observed_from(hardened_snapshot()))
     assert assessment["anon_or_authenticated_exposures"] == []
     assert assessment["facts_incomplete"] == []
-    assert assessment["verdict"] == "NOT_EXPOSED_THROUGH_TABLE_GRANTS"
+    assert assessment["verdict"] == "NOT_EXPOSED_THROUGH_AUDITED_PATHS"
     service = assessment["tables"]["public.predictions"]["roles"]["service_role"]
     assert service["data_api"] == {
         "SELECT": "OPEN", "INSERT": "OPEN", "UPDATE": "NO_PRIVILEGE", "DELETE": "NO_PRIVILEGE"
@@ -821,7 +905,8 @@ def test_a_missing_api_role_holds_nothing_and_leaves_no_gap() -> None:
     for name, index in (
         ("roles", 0), ("role_memberships", 0), ("role_inheritance", 0),
         ("effective_privileges", 2), ("owner_equivalence", 2), ("policy_applicability", 3),
-        ("column_privileges", 3), ("schema_usage", 2), ("dependent_view_privileges", 2),
+        ("column_privileges", 3), ("schema_usage", 2), ("dependent_view_privileges", 3),
+        ("inheritance_parents", 5),
     ):
         snapshot[name] = [row for row in snapshot[name] if row[index] != "anon"]
     assessment = audit.assess(observed_from(snapshot))
@@ -879,23 +964,123 @@ def test_column_privileges_from_public_or_an_inherited_role_are_exposures() -> N
     )
 
 
-def test_realtime_follows_select_whether_the_table_or_a_policy_admits_it() -> None:
+def test_realtime_follows_select_privileges_not_schemas_and_leaks_deleted_keys() -> None:
+    """task-819: Realtime needs neither USAGE nor a served schema, and never filters DELETEs."""
+
     snapshot = rehearsal_snapshot()
     snapshot["realtime_publications"] += [
-        ["supabase_realtime", "public", "prediction_outcomes"],
         ["supabase_realtime", "public", "predictions"],
+        ["supabase_realtime", "public", "watchlist"],
+        ["supabase_realtime", "public", "analysis_timeframe_results"],
     ]
     exposures = audit.assess(observed_from(snapshot))["anon_or_authenticated_exposures"]
+    names = "publication(s) supabase_realtime"
+    assert f"public.app_events: anon can receive change events through {names}" in exposures
     assert (
-        "public.prediction_outcomes: anon can receive change events through publication(s) "
-        "supabase_realtime" in exposures
+        f"public.prediction_outcomes: anon can receive change events through {names}, as the "
+        "policy decides, and the primary keys of deleted rows" in exposures
     )
-    assert not any(line.startswith("public.predictions:") for line in exposures)
+    assert (
+        f"public.predictions: anon can receive the primary keys of deleted rows through {names}: "
+        "Realtime does not apply row-level security to DELETE events" in exposures
+    )
+    assert any(
+        line.startswith("public.analysis_timeframe_results: anon can receive change events")
+        for line in exposures
+    ), "column-only SELECT is enough for Realtime"
+    assert not any(line.startswith("public.watchlist:") for line in exposures)
+    assert not any("service_role" in line for line in exposures)
+
+
+def test_views_are_followed_through_other_views_and_column_grants() -> None:
+    """task-819: a view over a view reaches the audited rows; any granted column counts."""
+
+    assessment = audit.assess(observed_from(rehearsal_snapshot()))
+    exposures = assessment["anon_or_authenticated_exposures"]
+    view = "(a view over an audited table)"
+    for line in (
+        f"public.rehearsal_nested_view {view}: anon SELECT REVIEW",
+        f"public.rehearsal_nested_view {view}: anon DELETE REVIEW",
+        f"public.rehearsal_column_view {view}: anon SELECT REVIEW",
+        f"rehearsal_private.rehearsal_hidden_view {view}: anon SELECT REVIEW",
+        f"public.rehearsal_runs_view {view}: authenticated SELECT REVIEW",
+    ):
+        assert any(exposure.startswith(line) for exposure in exposures), line
+    for absent in (
+        f"public.rehearsal_runs_view {view}: anon",
+        f"public.rehearsal_column_view {view}: anon INSERT",
+        f"rehearsal_private.rehearsal_hidden_view {view}: authenticated",
+        "public.rehearsal_nested_view (a view over an audited table): service_role",
+    ):
+        assert not any(exposure.startswith(absent) for exposure in exposures), absent
+    nested = [row for row in assessment["dependent_views"] if row[1] == "rehearsal_nested_view"]
+    assert nested == [
+        ["public", "rehearsal_nested_view", "v", "postgres", "", "public", "analysis_runs", 2]
+    ]
+
+    # A hardened database with only a view over a view granted to anon is still exposed.
+    snapshot = hardened_snapshot()
+    snapshot["dependent_views"] = [
+        ["public", "v2", "v", "postgres", "", "public", "analysis_runs", 2]
+    ]
+    snapshot["dependent_view_privileges"] = [
+        ["public", "v2", "v", "anon", "SELECT", True],
+        ["public", "v2", "m", "authenticated", "SELECT", False],
+    ]
+    assessment = audit.assess(observed_from(snapshot))
+    assert assessment["anon_or_authenticated_exposures"] == [
+        f"public.v2 {view}: anon SELECT REVIEW: the view's owner and security_invoker decide "
+        "which rows are visible"
+    ]
+    assert assessment["verdict"] == "EXPOSED"
+
+
+@pytest.mark.parametrize(
+    ("relkind", "wording"),
+    [
+        ("v", "a view over an audited table"),
+        ("m", "a materialized view over an audited table"),
+        ("r", "a relation whose rules reach an audited table"),
+    ],
+)
+def test_a_dependent_relation_is_named_by_its_kind(relkind: str, wording: str) -> None:
+    snapshot = hardened_snapshot()
+    snapshot["dependent_view_privileges"] = [["public", "x", relkind, "anon", "SELECT", True]]
+    exposures = audit.assess(observed_from(snapshot))["anon_or_authenticated_exposures"]
+    assert exposures[0].startswith(f"public.x ({wording}): anon SELECT REVIEW")
+
+
+def test_a_parent_table_reaches_the_audited_rows_under_its_own_rules() -> None:
+    """task-819 sibling: inheritance and partition parents return their children's rows."""
+
+    assessment = audit.assess(observed_from(rehearsal_snapshot()))
+    parent = "public.rehearsal_parent (a parent of public.provider_observations)"
+    line = (
+        f"{parent}: anon SELECT REVIEW: through the parent, the child's rows follow the parent's "
+        "grants and row-level security (off)"
+    )
+    assert line in assessment["anon_or_authenticated_exposures"]
+    assert assessment["inheritance_parents"] == [
+        ("public", "rehearsal_parent", "r", "public", "provider_observations")
+    ]
+
+    snapshot = hardened_snapshot()
+    snapshot["inheritance_parents"] = [
+        ["public", "p", "p", "public", "predictions", "anon", "SELECT", True, None],
+        ["public", "p", "p", "public", "predictions", "authenticated", "SELECT", True, False],
+        ["public", "p", "p", "public", "predictions", "service_role", "SELECT", True, True],
+    ]
+    assessment = audit.assess(observed_from(snapshot))
+    assert assessment["anon_or_authenticated_exposures"] == [
+        "public.p (a parent of public.predictions): anon SELECT REVIEW: through the parent, the "
+        "child's rows follow the parent's grants and row-level security (on)"
+    ]
+    assert assessment["facts_incomplete"] == ["public.p: whether anon holds SELECT"]
 
 
 @pytest.mark.parametrize(
     "gap", ["privilege-row-missing", "owner-unknown", "usage-unknown", "realtime-refused",
-            "views-refused"]
+            "views-refused", "parents-refused"]
 )
 def test_a_missing_server_fact_makes_a_hardened_result_incomplete_never_safe(gap: str) -> None:
     snapshot = hardened_snapshot()
@@ -915,6 +1100,9 @@ def test_a_missing_server_fact_makes_a_hardened_result_incomplete_never_safe(gap
     elif gap == "views-refused":
         snapshot.pop("dependent_view_privileges")
         errors["dependent_view_privileges"] = "InsufficientPrivilege"
+    elif gap == "parents-refused":
+        snapshot.pop("inheritance_parents")
+        errors["inheritance_parents"] = "InsufficientPrivilege"
     assessment = audit.assess(observed_from(snapshot, query_errors=errors))
     assert assessment["anon_or_authenticated_exposures"] == []
     assert len(assessment["facts_incomplete"]) == 1, assessment["facts_incomplete"]
@@ -924,7 +1112,7 @@ def test_a_missing_server_fact_makes_a_hardened_result_incomplete_never_safe(gap
 def test_an_unknown_view_privilege_is_reviewed_and_incomplete() -> None:
     snapshot = hardened_snapshot()
     snapshot["dependent_view_privileges"] = [
-        ["public", "rehearsal_runs_view", "anon", "SELECT", None]
+        ["public", "rehearsal_runs_view", "v", "anon", "SELECT", None]
     ]
     assessment = audit.assess(observed_from(snapshot))
     assert assessment["anon_or_authenticated_exposures"][0].startswith(
@@ -1248,7 +1436,18 @@ def test_the_rehearsal_fixtures_build_what_the_expectations_describe() -> None:
         "ALTER TABLE public.provider_observations FORCE ROW LEVEL SECURITY;",
         "REVOKE ALL ON TABLE public.provider_observations FROM anon;",
         "CREATE VIEW public.rehearsal_runs_view AS SELECT run_id FROM public.analysis_runs;",
-        "CREATE PUBLICATION supabase_realtime FOR TABLE public.app_events;",
+        "REVOKE ALL ON TABLE public.rehearsal_runs_view FROM anon;",
+        "CREATE VIEW public.rehearsal_nested_view AS SELECT run_id FROM "
+        "public.rehearsal_runs_view;",
+        "REVOKE ALL ON TABLE public.rehearsal_column_view FROM anon;",
+        "GRANT SELECT (run_id) ON TABLE public.rehearsal_column_view TO anon;",
+        "CREATE VIEW rehearsal_private.rehearsal_hidden_view AS SELECT run_id FROM "
+        "public.analysis_runs;",
+        "GRANT SELECT ON TABLE rehearsal_private.rehearsal_hidden_view TO anon;",
+        "CREATE TABLE public.rehearsal_parent (id bigint);",
+        "ALTER TABLE public.provider_observations INHERIT public.rehearsal_parent;",
+        "CREATE PUBLICATION supabase_realtime FOR TABLE public.app_events, "
+        "public.prediction_outcomes;",
         "GRANT SELECT ON TABLE public.news_clusters TO PUBLIC;",
     ):
         assert statement in variations, statement
