@@ -106,14 +106,37 @@ class FakeCursor:
 
 # ------------------------------------------------------------------------ the rehearsal, synthetic
 
-RLS_TABLES = {"predictions", "prediction_outcomes", "news_items"}
+RLS_TABLES = {
+    "predictions", "prediction_outcomes", "news_items", "news_evidence_links",
+    "provider_observations",
+}
+FORCED_TABLES = {"provider_observations"}
+OWNED_BY_REHEARSAL_OWNER = {"news_evidence_links", "provider_observations"}
+NON_STANDARD = "rehearsal reader"
+# (policy, role) pairs the server says apply; every other pair does not.
+APPLYING = {
+    ("rehearsal_narrow", "anon"),
+    ("rehearsal_read", "anon"),
+    ("rehearsal_inherited_insert", "anon"),
+}
+
+
+def _anon_without_table_grants(name: str) -> bool:
+    return name == "analysis_timeframe_results"
 
 
 def rehearsal_snapshot() -> dict[str, list]:
-    """What the catalog queries return on the rehearsal fixtures (scripts/audit_rehearsal/)."""
+    """What the catalog queries return on the rehearsal fixtures (scripts/audit_rehearsal/).
+
+    Raw, as the server returns it: role names are not yet withheld.
+    """
 
     tables = [
-        ["public", name, "r", "postgres", name in RLS_TABLES, False, False]
+        [
+            "public", name, "r",
+            "rehearsal_owner" if name in OWNED_BY_REHEARSAL_OWNER else "postgres",
+            name in RLS_TABLES, name in FORCED_TABLES, False,
+        ]
         for name in audit.AUDITED_TABLES
     ]
     effective = []
@@ -123,7 +146,7 @@ def rehearsal_snapshot() -> dict[str, list]:
                 held = True
                 if name == "watchlist":
                     held = False
-                if name == "analysis_timeframe_results" and role == "anon":
+                if _anon_without_table_grants(name) and role == "anon":
                     held = False
                 effective.append(["public", name, role, privilege, held])
     grants = [
@@ -131,28 +154,63 @@ def rehearsal_snapshot() -> dict[str, list]:
         for name in audit.AUDITED_TABLES
         for role in audit.API_ROLES
         for privilege in ALL_PRIVILEGES
-        if name != "watchlist" and not (name == "analysis_timeframe_results" and role == "anon")
+        if name != "watchlist"
+        and not (role == "anon" and (
+            _anon_without_table_grants(name) or name in OWNED_BY_REHEARSAL_OWNER
+        ))
     ] + [["public", "news_clusters", "PUBLIC", "SELECT", False]]
+    policies = [
+        [
+            "public", "news_items", "rehearsal_narrow", "RESTRICTIVE",
+            ["anon"], "SELECT", "true", None,
+        ],
+        [
+            "public", "prediction_outcomes", "rehearsal_inherited_insert", "PERMISSIVE",
+            [NON_STANDARD], "INSERT", None, "false",
+        ],
+        [
+            "public", "prediction_outcomes", "rehearsal_read", "PERMISSIVE",
+            ["anon"], "SELECT", "true", None,
+        ],
+        [
+            "public", "predictions", "rehearsal_not_inherited", "PERMISSIVE",
+            ["rehearsal_bystander"], "SELECT", "true", None,
+        ],
+    ]
     return {
         "roles": [
             ["anon", False, False, False, False],
             ["authenticated", False, False, False, False],
             ["service_role", False, True, False, False],
         ],
-        "role_memberships": [],
+        "role_memberships": [
+            ["anon", NON_STANDARD],
+            ["anon", "rehearsal_bystander"],
+            ["anon", "rehearsal_owner"],
+        ],
+        "role_inheritance": [["anon", NON_STANDARD], ["anon", "rehearsal_owner"]],
         "tables": tables,
+        "owner_equivalence": [
+            ["public", name, role, role == "anon" and name in OWNED_BY_REHEARSAL_OWNER]
+            for name in audit.AUDITED_TABLES
+            for role in audit.API_ROLES
+        ],
         "table_grants": sorted(grants),
         "effective_privileges": effective,
-        "column_grants": [["public", "analysis_timeframe_results", "run_id", "anon", "SELECT"]],
-        "policies": [
-            [
-                "public", "news_items", "rehearsal_narrow", "RESTRICTIVE",
-                "{anon}", "SELECT", "true", None,
-            ],
-            [
-                "public", "prediction_outcomes", "rehearsal_read", "PERMISSIVE",
-                "{anon}", "SELECT", "true", None,
-            ],
+        "column_grants": [
+            ["public", "analysis_timeframe_results", "run_id", "anon", "SELECT"],
+            ["public", "analysis_timeframe_results", "timeframe", "PUBLIC", "INSERT"],
+        ],
+        "column_privileges": [
+            ["public", "analysis_timeframe_results", "timeframe", "anon", "INSERT"],
+            ["public", "analysis_timeframe_results", "run_id", "anon", "SELECT"],
+            ["public", "analysis_timeframe_results", "disposition", "anon", "UPDATE"],
+        ],
+        "policies": policies,
+        "policy_applicability": [
+            [row[0], row[1], row[2], role, (row[2], role) in APPLYING]
+            for row in policies
+            for role in audit.API_ROLES
         ],
         "schema_usage": [["public", "pg_database_owner", role, True] for role in audit.API_ROLES],
         "default_privileges": [
@@ -174,10 +232,21 @@ def rehearsal_snapshot() -> dict[str, list]:
 
 
 def observed_from(snapshot: dict[str, list], **overrides: Any) -> dict[str, Any]:
+    """The snapshot as read_catalogs records it: role names withheld, nothing else changed."""
+
     observed: dict[str, Any] = {"query_errors": {}, "transaction_read_only": "on"}
-    observed.update(deepcopy(snapshot))
+    for name, rows in deepcopy(snapshot).items():
+        observed[name] = audit._redact_role_names(name, rows)
     observed.update(overrides)
     return observed
+
+
+def set_fact(snapshot: dict[str, list], name: str, key: tuple, value: Any) -> None:
+    """Set the last column of the one row of `name` whose leading columns are `key`."""
+
+    rows = [row for row in snapshot[name] if tuple(row[: len(key)]) == key]
+    assert len(rows) == 1, (name, key)
+    rows[0][-1] = value
 
 
 def healthy_results(snapshot: dict[str, list] | None = None) -> dict[str, list]:
@@ -270,7 +339,8 @@ def test_every_statement_is_read_only_and_starts_as_expected() -> None:
     for statement in _statements():
         bare = _without_literals(statement)
         assert bare.startswith(
-            ("SELECT ", "SET TRANSACTION READ ONLY", "SET LOCAL ", "SAVEPOINT audit_",
+            ("SELECT ", "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+             "SET LOCAL ", "SAVEPOINT audit_",
              "RELEASE SAVEPOINT audit_", "ROLLBACK TO SAVEPOINT audit_")
         ), statement
         assert not FORBIDDEN_WORDS.search(bare.replace("privilege_type", "")), statement
@@ -303,6 +373,32 @@ def test_every_role_and_privilege_is_checked() -> None:
         assert f"'{role}'" in audit._ROLES_SQL
     assert "a.grantee = 0" in audit.QUERIES["table_grants"], "PUBLIC is grantee 0"
     assert "acldefault('r', c.relowner)" in audit.QUERIES["table_grants"]
+
+
+def test_membership_ownership_policy_roles_and_columns_are_resolved_by_the_server() -> None:
+    """No INHERIT, ownership or policy-role rule is re-implemented: the server decides."""
+
+    assert audit.GUARD_STATEMENTS[0] == (
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+    )
+    inheritance = audit.QUERIES["role_inheritance"]
+    assert "pg_catalog.pg_has_role(r.oid, o.oid, 'USAGE')" in inheritance
+    assert "o.oid <> r.oid" in inheritance
+    owner = audit.QUERIES["owner_equivalence"]
+    assert "pg_catalog.pg_has_role(r.oid, c.relowner, 'USAGE')" in owner
+    applicability = audit.QUERIES["policy_applicability"]
+    assert "0::pg_catalog.oid = ANY (pol.polroles)" in applicability, "a PUBLIC policy"
+    assert "pg_catalog.pg_has_role(r.oid, pr.roleid, 'USAGE')" in applicability
+    assert "FROM pg_catalog.pg_policy AS pol" in applicability
+    columns = audit.QUERIES["column_privileges"]
+    assert "VALUES ('SELECT'), ('INSERT'), ('UPDATE')" in columns
+    assert "pg_catalog.has_column_privilege(r.oid, c.oid, att.attnum, p.privilege)" in columns
+    assert "NOT pg_catalog.has_table_privilege(r.oid, c.oid, p.privilege)" in columns
+    assert "NOT att.attisdropped" in columns
+    assert "p.roles::text[]" in audit.QUERIES["policies"], "policy roles arrive as a list"
+    for name in ("role_inheritance", "owner_equivalence", "policy_applicability",
+                 "column_privileges"):
+        assert name not in audit.OPTIONAL_QUERIES, "a missing server fact is never optional"
 
 
 # --------------------------------------------------------------------------- the transaction
@@ -365,12 +461,29 @@ def test_non_standard_role_names_are_withheld() -> None:
     snapshot["tables"][0][3] = "postgres.abcdefghijklmnop"
     snapshot["schema_usage"][0][1] = "Weird Owner"
     snapshot["role_memberships"] = [["anon", "role.with.dots"]]
+    snapshot["role_inheritance"] = [["anon", "evil\n"], ["anon", "pg_read_all_data"]]
+    snapshot["policies"][0][4] = ["public", "a,b", 'q"x', "anon\n", None, "authenticated"]
+    snapshot["policies"][1][4] = '{"reader role"}'  # not a list: withheld whole
     database = FakeDatabase(healthy_results(snapshot))
     observed, _ = _read(database)
-    assert observed["tables"][0][3] == "<non-standard role name withheld>"
-    assert observed["schema_usage"][0][1] == "<non-standard role name withheld>"
-    assert observed["role_memberships"] == [["anon", "<non-standard role name withheld>"]]
-    assert "abcdefghijklmnop" not in json.dumps(observed)
+    withheld = audit.WITHHELD
+    assert withheld == "<non-standard role name withheld>"
+    assert observed["tables"][0][3] == withheld
+    assert observed["schema_usage"][0][1] == withheld
+    assert observed["role_memberships"] == [["anon", withheld]]
+    assert observed["role_inheritance"] == [["anon", withheld], ["anon", "pg_read_all_data"]]
+    assert observed["policies"][0][4] == [
+        "public", withheld, withheld, withheld, withheld, "authenticated"
+    ]
+    assert observed["policies"][1][4] == withheld
+    serialized = json.dumps(observed)
+    for leaked in ("abcdefghijklmnop", "Weird", "dots", "evil", "a,b", 'q\\"x', "reader role",
+                   NON_STANDARD):
+        assert leaked not in serialized, leaked
+    # The rehearsal's own non-standard role is withheld wherever the server returns it.
+    rehearsal, _ = _read(FakeDatabase(healthy_results()))
+    assert NON_STANDARD not in json.dumps(rehearsal)
+    assert rehearsal["policies"][1][4] == [withheld]
 
 
 # --------------------------------------------------------------------------- the assessment
@@ -384,10 +497,26 @@ def test_the_rehearsal_snapshot_satisfies_every_rehearsal_expectation() -> None:
     assert assessment["api_schemas"] == ["graphql_public", "public"]
     assert assessment["public_grants"] == [["public", "news_clusters", "SELECT"]]
     assert any("SECURITY DEFINER" in item for item in assessment["not_audited"])
+    assert assessment["facts_incomplete"] == []
+    assert assessment["role_inheritance"] == {"anon": [audit.WITHHELD, "rehearsal_owner"]}
     prediction_outcomes = assessment["tables"]["public.prediction_outcomes"]["roles"]
     assert prediction_outcomes["authenticated"]["data_api"] == dict.fromkeys(
         audit.API_PRIVILEGES, "RLS_DENIES_ALL"
     )
+    columns = assessment["tables"]["public.analysis_timeframe_results"]["roles"]["anon"]
+    assert columns["privileges"] == []
+    assert columns["column_only_privileges"] == {
+        "SELECT": ["run_id"], "INSERT": ["timeframe"], "UPDATE": ["disposition"]
+    }
+    links = assessment["tables"]["public.news_evidence_links"]["roles"]
+    assert links["anon"]["acts_as_table_owner"] and links["anon"]["bypasses_row_level_security"]
+    assert links["authenticated"]["data_api"] == dict.fromkeys(
+        audit.API_PRIVILEGES, "RLS_DENIES_ALL"
+    )
+    forced = assessment["tables"]["public.provider_observations"]
+    assert forced["row_level_security_forced"] is True
+    assert forced["roles"]["anon"]["acts_as_table_owner"] is True
+    assert forced["roles"]["anon"]["bypasses_row_level_security"] is False
 
 
 @pytest.mark.parametrize(
@@ -397,6 +526,18 @@ def test_the_rehearsal_snapshot_satisfies_every_rehearsal_expectation() -> None:
         "restrictive-becomes-permissive",
         "watchlist-granted",
         "column-grant-gone",
+        "public-column-grant-gone",
+        "inherited-column-grant-gone",
+        "inherited-policy-ignored",
+        "non-inherited-policy-applies",
+        "owner-bypass-ignored",
+        "forced-rls-ignored",
+        "owner-fact-missing",
+        "policy-fact-unknown",
+        "inheritance-differs",
+        "membership-differs",
+        "role-name-leaked",
+        "policy-roles-not-a-list",
         "no-view",
         "no-publication",
         "no-public-grant",
@@ -421,7 +562,49 @@ def test_the_rehearsal_check_notices_every_departure(mutation: str) -> None:
             if row[1] == "watchlist":
                 row[4] = True
     elif mutation == "column-grant-gone":
-        snapshot["column_grants"] = []
+        snapshot["column_privileges"] = [
+            row for row in snapshot["column_privileges"] if row[4] != "SELECT"
+        ]
+    elif mutation == "public-column-grant-gone":
+        snapshot["column_privileges"] = [
+            row for row in snapshot["column_privileges"] if row[4] != "INSERT"
+        ]
+    elif mutation == "inherited-column-grant-gone":
+        snapshot["column_privileges"] = [
+            row for row in snapshot["column_privileges"] if row[4] != "UPDATE"
+        ]
+    elif mutation == "inherited-policy-ignored":
+        key = ("public", "prediction_outcomes", "rehearsal_inherited_insert", "anon")
+        set_fact(snapshot, "policy_applicability", key, False)
+    elif mutation == "non-inherited-policy-applies":
+        key = ("public", "predictions", "rehearsal_not_inherited", "anon")
+        set_fact(snapshot, "policy_applicability", key, True)
+    elif mutation == "owner-bypass-ignored":
+        set_fact(snapshot, "owner_equivalence", ("public", "news_evidence_links", "anon"), False)
+    elif mutation == "forced-rls-ignored":
+        for row in snapshot["tables"]:
+            if row[1] == "provider_observations":
+                row[5] = False
+    elif mutation == "owner-fact-missing":
+        snapshot["owner_equivalence"] = [
+            row for row in snapshot["owner_equivalence"]
+            if row[:3] != ["public", "predictions", "anon"]
+        ]
+    elif mutation == "policy-fact-unknown":
+        key = ("public", "predictions", "rehearsal_not_inherited", "authenticated")
+        set_fact(snapshot, "policy_applicability", key, None)
+    elif mutation == "inheritance-differs":
+        snapshot["role_inheritance"].append(["anon", "rehearsal_bystander"])
+    elif mutation == "membership-differs":
+        snapshot["role_memberships"].pop()
+    elif mutation == "role-name-leaked":
+        extra["dependent_views"] = [
+            ["public", "rehearsal_runs_view", "v", NON_STANDARD, "", "public", "analysis_runs"]
+        ]
+    elif mutation == "policy-roles-not-a-list":
+        extra["policies"] = [
+            [*row[:4], "{anon}", *row[5:]] for row in observed_from(snapshot)["policies"]
+        ]
     elif mutation == "no-view":
         snapshot["dependent_view_privileges"] = []
     elif mutation == "no-publication":
@@ -470,7 +653,7 @@ def test_a_table_outside_the_served_schemas_or_without_usage_is_not_api_reachabl
     assert runs == dict.fromkeys(audit.API_PRIVILEGES, "OPEN_BUT_NOT_API_REACHABLE")
 
 
-def test_a_fully_hardened_database_is_not_exposed() -> None:
+def hardened_snapshot() -> dict[str, list]:
     """The shape 0005, 0006 and 0009 have: RLS on, no API grant but service_role's."""
 
     snapshot = rehearsal_snapshot()
@@ -480,11 +663,20 @@ def test_a_fully_hardened_database_is_not_exposed() -> None:
         row[4] = row[2] == "service_role" and row[3] in ("SELECT", "INSERT")
     snapshot["table_grants"] = []
     snapshot["column_grants"] = []
+    snapshot["column_privileges"] = []
     snapshot["policies"] = []
+    snapshot["policy_applicability"] = []
+    for row in snapshot["owner_equivalence"]:
+        row[3] = False
     snapshot["dependent_views"] = []
     snapshot["dependent_view_privileges"] = []
-    assessment = audit.assess(observed_from(snapshot))
+    return snapshot
+
+
+def test_a_fully_hardened_database_is_not_exposed() -> None:
+    assessment = audit.assess(observed_from(hardened_snapshot()))
     assert assessment["anon_or_authenticated_exposures"] == []
+    assert assessment["facts_incomplete"] == []
     assert assessment["verdict"] == "NOT_EXPOSED_THROUGH_TABLE_GRANTS"
     service = assessment["tables"]["public.predictions"]["roles"]["service_role"]
     assert service["data_api"] == {
@@ -495,13 +687,253 @@ def test_a_fully_hardened_database_is_not_exposed() -> None:
 def test_an_all_command_policy_for_public_decides_every_command() -> None:
     snapshot = rehearsal_snapshot()
     snapshot["policies"].append(
-        ["public", "predictions", "open_all", "PERMISSIVE", "{public}", "ALL", "true", "true"]
+        ["public", "predictions", "open_all", "PERMISSIVE", ["public"], "ALL", "true", "true"]
     )
+    snapshot["policy_applicability"] += [
+        ["public", "predictions", "open_all", role, True] for role in audit.API_ROLES
+    ]
     assessment = audit.assess(observed_from(snapshot))
     anon = assessment["tables"]["public.predictions"]["roles"]["anon"]["data_api"]
     assert anon == dict.fromkeys(audit.API_PRIVILEGES, "POLICY_DECIDES: open_all")
     assert any(line.startswith("public.predictions: anon DELETE POLICY_DECIDES") for line in
                assessment["anon_or_authenticated_exposures"])
+
+
+def _anon(assessment: dict[str, Any], table: str) -> dict[str, Any]:
+    return assessment["tables"][f"public.{table}"]["roles"]["anon"]
+
+
+def test_a_policy_for_a_role_anon_inherits_decides_its_rows() -> None:
+    """task-818 finding 1: the policy names a parent role; the server says it applies to anon."""
+
+    snapshot = rehearsal_snapshot()
+    snapshot["policies"] = [
+        [
+            "public", "predictions", "via_parent", "PERMISSIVE",
+            ["reader role"], "SELECT", "true", None,
+        ]
+    ]
+    snapshot["policy_applicability"] = [
+        ["public", "predictions", "via_parent", role, role == "anon"] for role in audit.API_ROLES
+    ]
+    snapshot["role_memberships"] = [["anon", "reader role"]]
+    snapshot["role_inheritance"] = [["anon", "reader role"]]
+    snapshot["roles"][0][3] = True
+    assessment = audit.assess(observed_from(snapshot))
+    anon = _anon(assessment, "predictions")["data_api"]
+    assert anon["SELECT"] == "POLICY_DECIDES: via_parent"
+    assert anon["INSERT"] == anon["UPDATE"] == anon["DELETE"] == "RLS_DENIES_ALL"
+    exposures = assessment["anon_or_authenticated_exposures"]
+    assert "public.predictions: anon SELECT POLICY_DECIDES: via_parent" in exposures
+    authenticated = assessment["tables"]["public.predictions"]["roles"]["authenticated"]
+    assert authenticated["data_api"]["SELECT"] == "RLS_DENIES_ALL"
+    assert assessment["role_inheritance"] == {"anon": [audit.WITHHELD]}
+    assert "reader role" not in json.dumps(assessment)
+
+    # The same membership without inheritance: the server says the policy does not apply.
+    key = ("public", "predictions", "via_parent", "anon")
+    set_fact(snapshot, "policy_applicability", key, False)
+    assessment = audit.assess(observed_from(snapshot))
+    assert _anon(assessment, "predictions")["data_api"]["SELECT"] == "RLS_DENIES_ALL"
+
+    # An unknown answer is never taken as "does not apply".
+    set_fact(snapshot, "policy_applicability", key, None)
+    assessment = audit.assess(observed_from(snapshot))
+    assert _anon(assessment, "predictions")["data_api"]["SELECT"] == "POLICY_DECIDES: via_parent"
+    assert assessment["facts_incomplete"] == [
+        "public.predictions: whether policy via_parent applies to anon"
+    ]
+
+
+def test_only_permissive_policies_the_server_applies_admit_rows() -> None:
+    snapshot = rehearsal_snapshot()
+    snapshot["policies"] = [
+        ["public", "predictions", "allow_all", "PERMISSIVE", ["anon"], "ALL", "true", "true"],
+        ["public", "predictions", "narrow", "RESTRICTIVE", ["anon"], "SELECT", "false", None],
+        [
+            "public", "predictions", "others", "PERMISSIVE",
+            ["authenticated"], "SELECT", "true", None,
+        ],
+    ]
+    applying = {"allow_all": {"anon"}, "narrow": {"anon"}, "others": {"authenticated"}}
+    snapshot["policy_applicability"] = [
+        ["public", "predictions", name, role, role in roles]
+        for name, roles in applying.items()
+        for role in audit.API_ROLES
+    ]
+    assessment = audit.assess(observed_from(snapshot))
+    roles = assessment["tables"]["public.predictions"]["roles"]
+    assert roles["anon"]["data_api"] == dict.fromkeys(
+        audit.API_PRIVILEGES, "POLICY_DECIDES: allow_all"
+    )
+    assert roles["authenticated"]["data_api"] == {
+        "SELECT": "POLICY_DECIDES: others",
+        "INSERT": "RLS_DENIES_ALL",
+        "UPDATE": "RLS_DENIES_ALL",
+        "DELETE": "RLS_DENIES_ALL",
+    }
+
+
+def test_an_api_role_acting_as_the_owner_bypasses_unforced_row_level_security() -> None:
+    """task-818 finding 2: ownership, direct or inherited, bypasses RLS unless it is forced."""
+
+    snapshot = rehearsal_snapshot()
+    predictions = next(row for row in snapshot["tables"] if row[1] == "predictions")
+    predictions[3] = "anon"
+    set_fact(snapshot, "owner_equivalence", ("public", "predictions", "anon"), True)
+    assessment = audit.assess(observed_from(snapshot))
+    anon = _anon(assessment, "predictions")
+    assert anon["acts_as_table_owner"] and anon["bypasses_row_level_security"]
+    assert anon["data_api"] == dict.fromkeys(audit.API_PRIVILEGES, "OPEN")
+    assert "public.predictions: anon SELECT OPEN" in assessment["anon_or_authenticated_exposures"]
+    authenticated = assessment["tables"]["public.predictions"]["roles"]["authenticated"]
+    assert not authenticated["bypasses_row_level_security"]
+
+    predictions[5] = True  # FORCE ROW LEVEL SECURITY
+    assessment = audit.assess(observed_from(snapshot))
+    anon = _anon(assessment, "predictions")
+    assert anon["acts_as_table_owner"] and not anon["bypasses_row_level_security"]
+    assert anon["data_api"] == dict.fromkeys(audit.API_PRIVILEGES, "RLS_DENIES_ALL")
+
+    # An unknown ownership answer counts as ownership.
+    predictions[5] = False
+    set_fact(snapshot, "owner_equivalence", ("public", "predictions", "anon"), None)
+    assessment = audit.assess(observed_from(snapshot))
+    assert _anon(assessment, "predictions")["data_api"]["SELECT"] == "OPEN"
+    assert assessment["facts_incomplete"] == [
+        "public.predictions: whether anon acts as its owner"
+    ]
+
+
+def test_superuser_and_bypassrls_api_roles_bypass_row_level_security() -> None:
+    snapshot = rehearsal_snapshot()
+    snapshot["roles"][0][1] = True  # anon is a superuser
+    snapshot["roles"][1][2] = True  # authenticated has BYPASSRLS
+    assessment = audit.assess(observed_from(snapshot))
+    for role in ("anon", "authenticated"):
+        info = assessment["tables"]["public.predictions"]["roles"][role]
+        assert info["bypasses_row_level_security"], role
+        assert info["data_api"]["SELECT"] == "OPEN", role
+
+
+def test_a_missing_api_role_holds_nothing_and_leaves_no_gap() -> None:
+    snapshot = rehearsal_snapshot()
+    for name, index in (
+        ("roles", 0), ("role_memberships", 0), ("role_inheritance", 0),
+        ("effective_privileges", 2), ("owner_equivalence", 2), ("policy_applicability", 3),
+        ("column_privileges", 3), ("schema_usage", 2), ("dependent_view_privileges", 2),
+    ):
+        snapshot[name] = [row for row in snapshot[name] if row[index] != "anon"]
+    assessment = audit.assess(observed_from(snapshot))
+    assert assessment["facts_incomplete"] == []
+    for entry in assessment["tables"].values():
+        anon = entry["roles"]["anon"]
+        assert anon["data_api"] == dict.fromkeys(audit.API_PRIVILEGES, "NO_PRIVILEGE")
+        assert not anon["bypasses_row_level_security"] and not anon["acts_as_table_owner"]
+    assert not any(" anon " in line for line in assessment["anon_or_authenticated_exposures"])
+
+
+def test_column_privileges_from_public_or_an_inherited_role_are_exposures() -> None:
+    """A sibling of finding 1: column privileges reach anon through PUBLIC and membership too."""
+
+    assessment = audit.assess(observed_from(rehearsal_snapshot()))
+    exposures = assessment["anon_or_authenticated_exposures"]
+    for line in (
+        "public.analysis_timeframe_results: anon SELECT OPEN ON COLUMNS run_id",
+        "public.analysis_timeframe_results: anon INSERT OPEN ON COLUMNS timeframe",
+        "public.analysis_timeframe_results: anon UPDATE OPEN ON COLUMNS disposition",
+    ):
+        assert line in exposures
+    assert not any("DELETE" in line and "analysis_timeframe_results: anon" in line
+                   for line in exposures)
+
+    # Under row-level security with no applicable policy, column privileges admit no row.
+    snapshot = rehearsal_snapshot()
+    results = next(row for row in snapshot["tables"] if row[1] == "analysis_timeframe_results")
+    results[4] = True
+    assessment = audit.assess(observed_from(snapshot))
+    assert _anon(assessment, "analysis_timeframe_results")["data_api"] == {
+        "SELECT": "RLS_DENIES_ALL ON COLUMNS run_id",
+        "INSERT": "RLS_DENIES_ALL ON COLUMNS timeframe",
+        "UPDATE": "RLS_DENIES_ALL ON COLUMNS disposition",
+        "DELETE": "NO_PRIVILEGE",
+    }
+    assert not any(line.startswith("public.analysis_timeframe_results: anon")
+                   for line in assessment["anon_or_authenticated_exposures"])
+
+    # With an applicable permissive policy, the policy decides those columns' rows.
+    snapshot["policies"].append(
+        ["public", "analysis_timeframe_results", "cols", "PERMISSIVE", ["anon"], "SELECT", "true",
+         None]
+    )
+    snapshot["policy_applicability"] += [
+        ["public", "analysis_timeframe_results", "cols", role, role == "anon"]
+        for role in audit.API_ROLES
+    ]
+    assessment = audit.assess(observed_from(snapshot))
+    verdict = "POLICY_DECIDES: cols ON COLUMNS run_id"
+    assert _anon(assessment, "analysis_timeframe_results")["data_api"]["SELECT"] == verdict
+    assert (
+        f"public.analysis_timeframe_results: anon SELECT {verdict}"
+        in assessment["anon_or_authenticated_exposures"]
+    )
+
+
+def test_realtime_follows_select_whether_the_table_or_a_policy_admits_it() -> None:
+    snapshot = rehearsal_snapshot()
+    snapshot["realtime_publications"] += [
+        ["supabase_realtime", "public", "prediction_outcomes"],
+        ["supabase_realtime", "public", "predictions"],
+    ]
+    exposures = audit.assess(observed_from(snapshot))["anon_or_authenticated_exposures"]
+    assert (
+        "public.prediction_outcomes: anon can receive change events through publication(s) "
+        "supabase_realtime" in exposures
+    )
+    assert not any(line.startswith("public.predictions:") for line in exposures)
+
+
+@pytest.mark.parametrize(
+    "gap", ["privilege-row-missing", "owner-unknown", "usage-unknown", "realtime-refused",
+            "views-refused"]
+)
+def test_a_missing_server_fact_makes_a_hardened_result_incomplete_never_safe(gap: str) -> None:
+    snapshot = hardened_snapshot()
+    errors: dict[str, str] = {}
+    if gap == "privilege-row-missing":
+        snapshot["effective_privileges"] = [
+            row for row in snapshot["effective_privileges"]
+            if row[:4] != ["public", "watchlist", "anon", "SELECT"]
+        ]
+    elif gap == "owner-unknown":
+        set_fact(snapshot, "owner_equivalence", ("public", "watchlist", "anon"), None)
+    elif gap == "usage-unknown":
+        set_fact(snapshot, "schema_usage", ("public", "pg_database_owner", "anon"), None)
+    elif gap == "realtime-refused":
+        snapshot.pop("realtime_publications")
+        errors["realtime_publications"] = "InsufficientPrivilege"
+    elif gap == "views-refused":
+        snapshot.pop("dependent_view_privileges")
+        errors["dependent_view_privileges"] = "InsufficientPrivilege"
+    assessment = audit.assess(observed_from(snapshot, query_errors=errors))
+    assert assessment["anon_or_authenticated_exposures"] == []
+    assert len(assessment["facts_incomplete"]) == 1, assessment["facts_incomplete"]
+    assert assessment["verdict"] == "INCOMPLETE"
+
+
+def test_an_unknown_view_privilege_is_reviewed_and_incomplete() -> None:
+    snapshot = hardened_snapshot()
+    snapshot["dependent_view_privileges"] = [
+        ["public", "rehearsal_runs_view", "anon", "SELECT", None]
+    ]
+    assessment = audit.assess(observed_from(snapshot))
+    assert assessment["anon_or_authenticated_exposures"][0].startswith(
+        "public.rehearsal_runs_view (a view over an audited table): anon SELECT REVIEW"
+    )
+    assert assessment["facts_incomplete"] == [
+        "public.rehearsal_runs_view: whether anon holds SELECT"
+    ]
+    assert assessment["verdict"] == "EXPOSED"
 
 
 # --------------------------------------------------------------------------- the dispatch
@@ -577,6 +1009,11 @@ DISPATCH_REFUSALS = {
     "not-isolated": (_dispatch(), _runtime(interpreter_flags=""), SHA),
     "unverified-install": (_dispatch(), _runtime(installed_files_sha256=""), SHA),
     "bad-run-id": (_dispatch(run_id="x"), _runtime(), SHA),
+    "run-id-with-newline": (_dispatch(run_id="987654321\n"), _runtime(), SHA),
+    "sha-with-newline": (_dispatch(sha=SHA + "\n"), _runtime(git_head=SHA + "\n"), SHA + "\n"),
+    "install-digest-with-newline": (
+        _dispatch(), _runtime(installed_files_sha256="f" * 64 + "\n"), SHA
+    ),
 }
 
 
@@ -784,17 +1221,41 @@ def test_the_rehearsal_fixtures_build_what_the_expectations_describe() -> None:
     assert "CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;" in roles
     assert "ALTER ROLE authenticator SET pgrst.db_schemas = 'public, graphql_public';" in roles
     assert "GRANT ALL ON TABLES TO anon, authenticated, service_role;" in roles
+    assert "CREATE ROLE anon NOLOGIN NOINHERIT;" in roles
+    assert audit.REHEARSAL_NON_STANDARD_ROLE == NON_STANDARD
     for statement in (
+        f'CREATE ROLE "{NON_STANDARD}" NOLOGIN;',
+        f'GRANT "{NON_STANDARD}" TO anon WITH INHERIT TRUE;',
+        "GRANT rehearsal_owner TO anon WITH INHERIT TRUE;",
+        "GRANT rehearsal_bystander TO anon WITH INHERIT FALSE;",
         "ALTER TABLE public.predictions ENABLE ROW LEVEL SECURITY;",
+        "CREATE POLICY rehearsal_not_inherited ON public.predictions FOR SELECT TO "
+        "rehearsal_bystander USING (true);",
         "CREATE POLICY rehearsal_read ON public.prediction_outcomes FOR SELECT TO anon",
+        "CREATE POLICY rehearsal_inherited_insert ON public.prediction_outcomes FOR INSERT TO "
+        f'"{NON_STANDARD}" WITH CHECK (false);',
         "AS RESTRICTIVE FOR SELECT TO anon USING (true);",
         "REVOKE ALL ON TABLE public.watchlist FROM anon, authenticated, service_role;",
+        "GRANT SELECT ON TABLE public.watchlist TO rehearsal_bystander;",
         "GRANT SELECT (run_id) ON TABLE public.analysis_timeframe_results TO anon;",
+        "GRANT INSERT (timeframe) ON TABLE public.analysis_timeframe_results TO PUBLIC;",
+        "GRANT UPDATE (disposition) ON TABLE public.analysis_timeframe_results TO "
+        f'"{NON_STANDARD}";',
+        "ALTER TABLE public.news_evidence_links OWNER TO rehearsal_owner;",
+        "ALTER TABLE public.news_evidence_links ENABLE ROW LEVEL SECURITY;",
+        "REVOKE ALL ON TABLE public.news_evidence_links FROM anon;",
+        "ALTER TABLE public.provider_observations OWNER TO rehearsal_owner;",
+        "ALTER TABLE public.provider_observations FORCE ROW LEVEL SECURITY;",
+        "REVOKE ALL ON TABLE public.provider_observations FROM anon;",
         "CREATE VIEW public.rehearsal_runs_view AS SELECT run_id FROM public.analysis_runs;",
         "CREATE PUBLICATION supabase_realtime FOR TABLE public.app_events;",
         "GRANT SELECT ON TABLE public.news_clusters TO PUBLIC;",
     ):
         assert statement in variations, statement
+    # The synthetic snapshot mirrors exactly these fixtures.
+    assert {row[1] for row in rehearsal_snapshot()["tables"] if row[3] == "rehearsal_owner"} == {
+        "news_evidence_links", "provider_observations"
+    }
     for text in (roles, variations):
         assert "PASSWORD" not in text.upper()
 
