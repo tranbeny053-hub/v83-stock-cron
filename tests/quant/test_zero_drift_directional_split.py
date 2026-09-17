@@ -82,6 +82,34 @@ def test_the_split_is_never_even_and_leans_both_ways() -> None:
     assert re.search(r"about 48–54% up", header)
 
 
+# Where the split leans DOWN (share below 0.5), as the document's prose lists it.
+DOWN_LEANING = {
+    ("distributional-v2", "BTC/USDT 15m", "one table"): (2.0,),
+    ("distributional-v2", "BTC/USDT 1H", "session 08-15 UTC"): (1.0,),
+    ("distributional-v2", "ETH/USDT 15m", "one table"): (1.0, 2.0),
+    ("distributional-v2", "ETH/USDT 1H", "session 08-15 UTC"): RATIOS,
+    ("distributional-v1", "every symbol 15m", "one table"): (1.0, 2.0),
+}
+
+
+def test_the_split_leans_down_exactly_where_the_document_says() -> None:
+    leaning = {}
+    for key, values in _computed().items():
+        ratios = tuple(
+            ratio for ratio, value in zip(RATIOS, values, strict=True) if float(value) < 0.5
+        )
+        if ratios:
+            leaning[key] = ratios
+    assert leaning == DOWN_LEANING
+    prose = DOC.read_text(encoding="utf-8").split("## 7. Correction", 1)[1]
+    for line in (
+        "15m at z = 1.0 and 2.0 (for BTC under v2, only at 2.0);",
+        "ETH 1H in the 08-15 session, at every ratio;",
+        "BTC 1H in that session, at z = 1.0.",
+    ):
+        assert line in prose
+
+
 def test_the_tables_are_asymmetric_so_zero_location_is_not_symmetry() -> None:
     for cells in CELLS.values():
         for cell in cells.values():

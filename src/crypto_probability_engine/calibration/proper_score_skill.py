@@ -15,15 +15,24 @@ THE RECOMMENDED DEFAULT (docs/R2_ZERO_DRIFT_GATE_AND_DISPLAY.md §2), implemente
   mathematics enters the product;
 - the floor is the same 100 resolved outcomes, but it now counts every resolved outcome, TIMEOUT
   included;
-- the verdicts are unchanged, so ``apply_skill_gate``, hard-gate seniority, the detail view and the
-  frontend are untouched. ``observed_directional_rate`` is ``None``, because no directional rate is
-  measured.
+- the verdicts are unchanged, so ``apply_skill_gate``, hard-gate seniority and the frontend are
+  untouched. ``observed_directional_rate`` is ``None``, because no directional rate is measured.
 Fail-closed behaviour is kept: any unusable row, too few rows, or an undefined statistic can never
-demonstrate skill.
+demonstrate skill. Neither can floating-point noise. The t statistic ignores scale, so per-row
+differences within ``NUMERICAL_NOISE`` count as zero, and the mean improvement must exceed it. A
+model equal to climatology up to rounding (stored base rates that sum to 0.9999999999999999) is
+therefore never judged skilful.
 
 ADOPTION IS THE OWNER'S DECISION (R2 §7.2 (a)). Nothing calls ``classify_proper_score_skill`` or
-``skill_classifier_for``. Adoption would also need the repository to return per-row probabilities
-(``persistence/repository.py``, pinned by the section 5A evaluator).
+``skill_classifier_for``. Adoption would also need:
+- per-row probabilities from the repository (``persistence/repository.py``, pinned by the section
+  5A evaluator);
+- new wording in the detail view, whose explanation of ``NO_DEMONSTRATED_SKILL``
+  (``detail/frontend_display.py``) speaks of directional accuracy;
+- a decision on dependence. The test treats evaluated rows as independent, like the live
+  directional test. Overlapping horizons and repeated analyses of one candle are not, which
+  overstates the evidence. The options are to de-duplicate (one row per symbol, timeframe and
+  reference close) or to test window means, as section 5A's A1 does.
 """
 
 from __future__ import annotations
@@ -49,6 +58,8 @@ from crypto_probability_engine.oos.evaluation.stats_kernel import student_t_lowe
 from crypto_probability_engine.quant.probability_distributional_v2 import CANDIDATE_NAME
 
 BOUNDARY_CONVENTION = 0.05
+# Score differences at this scale are floating-point noise, never evidence (see the module note).
+NUMERICAL_NOISE = 1e-12
 DIRECTIONAL = "directional"
 PROPER_SCORE = "proper_score"
 # The classifier each methodology is judged by. Unknown methodologies refuse (fail closed).
@@ -179,11 +190,16 @@ def _parse(row: Mapping[str, Any]) -> tuple[tuple[str, str], dict[str, float], s
 def _score_test(model: Sequence[float], climatology: Sequence[float]) -> ScoreTest:
     """One-sided paired t-test that the mean of ``model - climatology`` is below zero.
 
-    Fails closed with fewer than two rows and with zero or non-finite dispersion, exactly as the
-    section 5A A1 test does: a strict guard may only err toward no demonstrated skill.
+    Differences within ``NUMERICAL_NOISE`` count as zero. The test fails closed with fewer than two
+    rows and with zero or non-finite dispersion, exactly as the section 5A A1 test does. It also
+    fails closed when the mean improvement is itself within ``NUMERICAL_NOISE``. A strict guard may
+    only err toward no demonstrated skill.
     """
 
-    differences = [m - c for m, c in zip(model, climatology, strict=True)]
+    differences = [
+        0.0 if abs(m - c) <= NUMERICAL_NOISE else m - c
+        for m, c in zip(model, climatology, strict=True)
+    ]
     n = len(differences)
     model_mean = math.fsum(model) / n
     climatology_mean = math.fsum(climatology) / n
@@ -194,5 +210,7 @@ def _score_test(model: Sequence[float], climatology: Sequence[float]) -> ScoreTe
         stdev = math.sqrt(variance)
         if stdev > 0.0 and math.isfinite(stdev):
             boundary = student_t_lower_tail_cdf(mean / (stdev / math.sqrt(n)), n - 1)
-    holds = boundary is not None and boundary <= BOUNDARY_CONVENTION
+    holds = (
+        boundary is not None and boundary <= BOUNDARY_CONVENTION and mean < -NUMERICAL_NOISE
+    )
     return ScoreTest(model_mean, climatology_mean, mean, boundary, holds)

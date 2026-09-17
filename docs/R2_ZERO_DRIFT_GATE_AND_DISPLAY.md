@@ -159,13 +159,20 @@ standardized six-bar returns. `F` is not symmetric about zero. So `p_up != p_dow
   drifted up over most of it. It responds to nothing in the current market except the ratio of the
   live band to the model's scale and, on 1H v2, the session. It is not a conditional directional
   forecast.
-- **§1 still holds, by a different mechanism.** The top label is not a tie; it is whichever side the
-  table's skew favours at that ratio, usually `UP` and sometimes `DOWN` (15m at wide ratios, ETH 1H
-  in the 08-15 session). The directional classifier therefore scores a fixed skew against realized
+- **§1 still holds, by a different mechanism.** The top label is not a tie. It is whichever side the
+  table's skew favours at that ratio: usually `UP`, and `DOWN` in exactly these cells:
+  - 15m at z = 1.0 and 2.0 (for BTC under v2, only at 2.0);
+  - ETH 1H in the 08-15 session, at every ratio;
+  - BTC 1H in that session, at z = 1.0.
+
+  A test pins that list. The directional classifier therefore scores a fixed skew against realized
   direction. That measures market drift against a constant, not model skill, so the finding and the
   hard-gate hazard are unchanged.
 - **§2 is unaffected.** The proper-score gate scores the whole triplet, skew included, against the
-  base rate of the same rows. A static skew cannot beat that base rate.
+  base rate of the same rows. A static skew cannot beat that base rate: under a strictly proper
+  score, the in-sample base rate is the best constant forecast. The prepared gate also counts
+  differences within floating-point noise as none, so an exact echo of the base rate cannot pass
+  either.
   - It is now prepared, dormant, as `calibration/proper_score_skill.py`, with a test reproducing
     finding A6: a static skew on an up-drifting market passes the directional gate and fails the
     proper-score gate.

@@ -8,7 +8,9 @@ with no location term.
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 from pathlib import Path
+from random import Random
 
 import pytest
 
@@ -85,6 +87,56 @@ def test_climatology_itself_can_never_demonstrate_skill() -> None:
     assert result.verdict == "NO_DEMONSTRATED_SKILL"
     assert result.log_loss.boundary is None, "zero dispersion: the statistic is undefined"
     assert not result.log_loss.holds and not result.brier.holds
+
+
+def _echo(up: int, down: int, timeout: int, convert=float) -> list[dict]:
+    """A model that stores exactly the in-sample base rates of its own rows."""
+
+    n = up + down + timeout
+    rates = [convert(count / n) for count in (up, down, timeout)]
+    return [_row(label, *rates) for label in _labels(up, down, timeout)]
+
+
+def test_climatology_up_to_float_rounding_never_demonstrates_skill() -> None:
+    """Review finding: an echo of the base rates "demonstrated" skill through float noise.
+
+    ``normalize_probabilities`` divides by ``sum(...)``. Where that sum is not exactly 1.0, every
+    probability moves by a float step. The t statistic ignores scale, so the echo passed. Which
+    mixes are affected depends on the interpreter's ``sum``: Python 3.12+ sums (0.08, 0.35, 0.57)
+    to 0.9999999999999999, while 3.11 gets 1.0. So the noisy mixes are found with the same ``sum``.
+    """
+
+    assert skill.assess_proper_score_skill(_echo(8, 35, 57)).verdict == "NO_DEMONSTRATED_SKILL"
+    noisy = [
+        (up, down, n - up - down)
+        for n in (100, 150, 200)
+        for up in range(1, n - 1)
+        for down in range(1, n - up)
+        if sum((up / n, down / n, (n - up - down) / n)) != 1.0
+    ]
+    assert len(noisy) >= 10, "this interpreter must exercise the noise"
+    for mix in noisy:
+        result = skill.assess_proper_score_skill(_echo(*mix))
+        assert result.verdict == "NO_DEMONSTRATED_SKILL", mix
+        assert result.log_loss.boundary is None and result.brier.boundary is None, mix
+    draw = Random(7)
+    for _ in range(50):
+        n = draw.randint(100, 400)
+        up = draw.randint(1, n - 2)
+        down = draw.randint(1, n - up - 1)
+        stored = _echo(up, down, n - up - down, convert=lambda value: Decimal(repr(value)))
+        assert skill.classify_proper_score_skill(stored)["verdict"] != "SKILL_DEMONSTRATED"
+
+
+def test_differences_within_numerical_noise_count_as_none() -> None:
+    climatology = [0.7] * 200
+    for scale in (1e-16, 1e-14, 1e-13):
+        model = [0.7 - scale * (1 + index % 3) for index in range(200)]
+        test = skill._score_test(model, climatology)
+        assert test.mean_difference == 0.0 and test.boundary is None and not test.holds
+    real = [0.7 - 0.01 * (1 + index % 3) for index in range(200)]
+    assert skill._score_test(real, climatology).holds
+    assert skill.NUMERICAL_NOISE == 1e-12
 
 
 def test_a_static_skew_passes_the_directional_gate_but_not_the_proper_score_gate() -> None:

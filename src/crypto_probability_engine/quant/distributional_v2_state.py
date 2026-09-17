@@ -1,10 +1,13 @@
 """distributional-v2 pipeline states. PREP ONLY: NOT WIRED, NOT FROZEN, NOT A METHODOLOGY VERSION.
 
 These are the two pieces a future selector branch in ``quant/pipeline.py`` would call after
-``compute_distributional_v2_probabilities``. They are exactly the ``probability_state`` and
-``horizon_timeout_state`` shapes the distributional-v1 branch emits, so wiring changes nothing
-downstream: the score stack, the gates, the response schema and the frontend see the same contract.
-A test compares the probability state with v1's builder, field for field.
+``compute_distributional_v2_probabilities``.
+- ``probability_state`` is exactly the contract the distributional-v1 branch emits, so the score
+  stack, the gates, the response schema and the frontend see no difference. A test compares it with
+  v1's builder, field for field.
+- ``horizon_timeout_state`` keeps v1's status, method and timeout fields. v2's own scale facts
+  (``profile_mean``, ``session``, ``candles_used``) replace v1's single-bar ``sigma_bar``. The
+  response schema leaves this object open, and nothing downstream reads ``sigma_bar``.
 
 Nothing imports this module. The selector and the version constants live in files pinned by the
 section 5A evaluator (``quant/pipeline.py``, ``config/defaults.py``), so wiring is the owner's
