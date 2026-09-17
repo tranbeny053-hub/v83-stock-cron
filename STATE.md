@@ -1,10 +1,13 @@
 # STATE
 
-Updated: 2026-09-17 (RELEASE SEQUENCE STOPPED AT STEP 3: 0008 APPLIED and VERIFIED (run 35164080476); release PR #106 open at P 7d2cf2f4 with CI green, NOT merged; the hf push FAILED AUTHENTICATION (expired Hugging Face token), nothing pushed, production still PROD-SAFE-2 a89b45e RUNNING; step 4 not started; waiting for a refreshed HF credential and a fresh owner authorization)
+Updated: 2026-09-17 (RELEASE SEQUENCE STOPPED AT STEP 3 AGAIN: attempt 2 (fresh authorization, refreshed credential) passed every invariant and the dry-run login check, but Hugging Face's pre-receive hook REFUSED the push: "You are not authorized to push to this repo"; nothing pushed; production still PROD-SAFE-2 a89b45e RUNNING; 0008 applied; PR #106 open, not merged; step 4 not started; waiting for a token WITH WRITE ACCESS and a fresh authorization)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=RELEASE SEQUENCE STOPPED AT STEP 3 (no rerun without a fresh owner authorization); see RELEASE_SEQUENCE.
+LOOP_STATE=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 2 (no rerun without a fresh owner authorization). Attempt 2's
+  push was refused by Hugging Face's pre-receive hook: "You are not authorized to push to this repo" (the refreshed
+  token logs in but cannot write to the Space). Nothing changed. See RELEASE_SEQUENCE.
+LOOP_STATE_PRIOR_ATTEMPT2=RELEASE SEQUENCE STOPPED AT STEP 3 (no rerun without a fresh owner authorization); see RELEASE_SEQUENCE.
   Step 1 PASS: 0008 applied once (run 35164080476, VERIFIED). Step 2 PASS: PR #106 open at P 7d2cf2f4, CI green
   (run 35164170597), NOT merged. Step 3 FAILED BEFORE ANY CHANGE: `git push hf` was refused ("OAuth token has
   expired"); hf/main and the running Space are still a89b45e (PROD-SAFE-2). Step 4 not started.
@@ -806,7 +809,20 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The release sequence is STOPPED at step 3. Needed from the owner:
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Attempt 2 of step 3 is CONSUMED (refused, nothing changed). Needed from the owner:
+  (a) a Hugging Face token WITH WRITE ACCESS to spaces/beny053/ultimate-crypto-probability-engine (a Write token of
+      the beny053 account, or fine-grained with write on that Space), saved as the git credential;
+  (b) a FRESH authorization of step 3 (and of step 4 after it).
+  CONSUMED 2026-09-17, verbatim: "HF credential has been refreshed locally; token value was not shared. FRESH
+  AUTHORIZATION for release steps 3–4 after the expired-token FAILED-SAFE stop: (3) T4 push
+  00705c55e7eb291d01b4e02d4cca859122083f28 to hf/main strictly as a fast-forward from a89b45e, never force, only after
+  the prepared dry-run credential check and all previous release invariants re-pass; wait for RUNNING and perform
+  read-only live checks only: /healthcheck=200, build-info=UCPE-PROD-SAFE-3-20260915-A, served
+  index.html/app.js/styles.css byte-match; no analysis calls. (4) Only after deploy PASS: T3 merge PR #106 at
+  7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e with --match-head-commit, parents (66acc44, 7d2cf2f4), final main tree
+  194a52958316bbd13e7807ad8c00a8a13f9b2ceb, exact-main CI green, then dispatch source-integrity-guard exactly once and
+  require HEALTHY with empty delta. Never rerun a failed T4 without fresh owner authorization."
+OWNER_BOUNDARY_PRIOR_ATTEMPT2=NO ACTION IS AUTHORIZED. The release sequence is STOPPED at step 3. Needed from the owner:
   (a) refresh the Hugging Face git credential on this Mac (the keychain token for huggingface.co has expired; a
       token with write access to the Space; never shared in chat);
   (b) a FRESH authorization of step 3 (and of step 4 after it), since a failed T4 is never rerun without one.
@@ -973,7 +989,8 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
 NEXT_ACTION=WAIT for the owner: a refreshed Hugging Face credential AND a fresh step-3 (then step-4) authorization. Then:
-  1. move .work/816/t4-deploy/raw to attempt-1-auth-expired/ and remove pushed.flag (the failed attempt is kept);
+  1. move .work/816/t4-deploy/raw (and verdict, run output, flag) to attempt-3-.../ only if a third attempt fails;
+     attempts 1 and 2 are archived under .work/816/t4-deploy/attempt-*;
   2. bash .work/816/t4-deploy/deploy.sh (re-checks PR #106, its CI, hf a89b45e, origin 66acc44, no guard run),
      then .venv/bin/python .work/816/t4-deploy/verify_deploy.py;
   3. only after VERIFIED: bash .work/816/t3-merge-guard/merge_and_guard.sh, then python3
@@ -1035,6 +1052,13 @@ RELEASE_SEQUENCE=2026-09-16/17, per the owner's authorization (OWNER_BOUNDARY):
     `git push hf R:refs/heads/main` at 23:56:35Z exited 128: "remote: OAuth token has expired", "Authentication
     failed". hf/main is still a89b45e and the Space still runs it (checked after). No PIN_DRIFT window opened.
     Evidence: .work/816/t4-deploy/raw (push.err, space_before.json, raw.sha256).
+  - STEP 3, ATTEMPT 2 (fresh authorization 2026-09-17, after the owner refreshed the credential): FAILED, NOTHING
+    CHANGED. At 03:15Z every invariant re-passed (0008 VERIFIED; PR #106 open at P, files exactly the two, CI green;
+    origin 66acc44; hf a89b45e; the Space RUNNING a89b45e; nothing in progress). The dry run showed
+    `a89b45e..00705c5 -> main` (rc 0), proving the login is accepted. The real push at 03:16:07Z exited 1:
+    "! [remote rejected] ... (pre-receive hook declined)", "You are not authorized to push to this repo. Make sure
+    that you are properly logged in." hf/main is still a89b45e; the Space still runs it (lastModified 2026-08-25).
+    Evidence: .work/816/t4-deploy/attempt-2-push-not-authorized/. LESSON: a dry run cannot prove write permission.
   - STEP 4 NOT STARTED. Scripts ready: .work/816/t3-merge-guard/ (merge_and_guard.sh, verify_guard.py).
 AUDIT_RESULT=Run 35120616278 (read-only, rolled back, never committed; transaction_read_only on; no catalog read refused),
   VERIFIED by .work/816/audit-dispatch/verify_audit.py. Raw capture before parsing: .work/816/audit-dispatch/raw/
