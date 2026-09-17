@@ -160,12 +160,15 @@ standardized six-bar returns. `F` is not symmetric about zero. So `p_up != p_dow
   live band to the model's scale and, on 1H v2, the session. It is not a conditional directional
   forecast.
 - **§1 still holds, by a different mechanism.** The top label is not a tie. It is whichever side the
-  table's skew favours at that ratio: usually `UP`, and `DOWN` in exactly these cells:
+  table's skew favours at that ratio, usually `UP`. At the four tabulated ratios, `DOWN` appears in
+  exactly these cells:
   - 15m at z = 1.0 and 2.0 (for BTC under v2, only at 2.0);
   - ETH 1H in the 08-15 session, at every ratio;
   - BTC 1H in that session, at z = 1.0.
 
-  A test pins that list. The directional classifier therefore scores a fixed skew against realized
+  A test pins that list. On a finer grid up to z = 4 the boundaries move. BTC 15m under v2 leans
+  `DOWN` from z ≈ 1.09, and six further 1H and 4H tables lean `DOWN` only somewhere above z ≈ 2.4.
+  The directional classifier therefore scores a fixed skew against realized
   direction. That measures market drift against a constant, not model skill, so the finding and the
   hard-gate hazard are unchanged.
 - **§2 is unaffected.** The proper-score gate scores the whole triplet, skew included, against the
