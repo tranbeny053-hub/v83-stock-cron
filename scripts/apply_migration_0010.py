@@ -844,11 +844,17 @@ def _refusal_record(mode: str, exc: BaseException, captured: Mapping[str, Any]) 
 
 
 def _commit_state(captured: Mapping[str, Any]) -> bool | str:
-    """A failure after COMMIT was sent cannot tell whether the server committed."""
+    """Whether anything was committed; UNKNOWN after a failure while a COMMIT was in flight.
 
-    if captured.get("committed") is True:
+    A rehearsal nests one record per apply (``first_apply``, ``second_apply``).
+    """
+
+    records = [captured, *(value for value in captured.values() if isinstance(value, Mapping))]
+    if any(record.get("committed") is True for record in records):
         return True
-    return COMMIT_UNKNOWN if captured.get("commit_attempted") else False
+    if any(record.get("commit_attempted") for record in records):
+        return COMMIT_UNKNOWN
+    return False
 
 
 def _is_refusal(exc: BaseException) -> bool:

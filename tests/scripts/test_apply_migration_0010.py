@@ -923,6 +923,9 @@ def test_a_commit_that_fails_in_flight_is_reported_as_unknown(
         ({"commit_attempted": True}, "UNKNOWN"),
         ({"commit_attempted": True, "committed": True}, True),
         ({"committed": "yes"}, False),
+        ({"first_apply": {"commit_attempted": True, "committed": True}, "second_apply": {}}, True),
+        ({"first_apply": {"commit_attempted": True}}, "UNKNOWN"),
+        ({"first_apply": {"pre_legacy": []}}, False),
     ],
 )
 def test_the_commit_state_is_never_claimed_without_a_returned_commit(
@@ -1006,6 +1009,21 @@ def test_a_rehearsal_whose_second_apply_succeeds_refuses(
     assert code == 2
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert "one-shot property does not hold" in report["detail"]
+    assert report["committed"] is True, "both scratch applies committed"
+
+
+def test_a_rehearsal_commit_that_fails_in_flight_is_reported_as_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = FakeDatabase(_rehearsal_results())
+    database.fail_commit = ConnectionError("server closed the connection")
+    _install_driver(monkeypatch, database, [])
+    environ = {apply_0010.REHEARSAL_URL_VARIABLE: REHEARSAL_URL}
+    code = apply_0010.main(_argv("rehearse", tmp_path, wheelhouse="", confirm=""), environ=environ)
+    assert code == 1
+    report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
+    assert report["outcome"] == "FAILED" and report["committed"] == "UNKNOWN"
+    assert report["captured"]["first_apply"]["commit_attempted"] is True
 
 
 def test_a_rehearsal_whose_second_apply_fails_otherwise_fails(
