@@ -14,27 +14,15 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "a89b45e417fcf221daddf757b5fd5900a8a026b1"
+PIN_SHA = "00705c55e7eb291d01b4e02d4cca859122083f28"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
-# It goes non-empty whenever a guarded change is merged but not yet deployed, and shrinks
-# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. The frontend
-# entries emptied when PROD-SAFE-2 shipped the UI changes. analysis_service.py does not
-# clear and is not expected to: main carries the section-5A arm machinery that the deployed
-# clean-room candidate deliberately does not, so this entry stands until that code is either
-# retired or deliberately deployed. api/app.py and frontend/styles.css entered the delta with
-# the Recent Analysis History feature, which is merged but deliberately not deployed.
-# config/build_info.py entered with the PROD-SAFE-3 release identity, which names the next
-# deploy; the pin keeps describing the live build until that deploy lands and is re-pinned.
-CURRENT_DELTA_PATHS = [
-    "frontend/app.js",
-    "frontend/index.html",
-    "frontend/styles.css",
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/api/app.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-SAFE-3
+# deployed main's own tree, so nothing stands in it: analysis_service.py, the standing
+# clean-room delta of the backport lineage, cleared with that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -272,14 +260,14 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-W4D3-OPS-2A0-20260622-A"
-    assert intended.release_label == "Wave 4D.3-Ops Cadence Runtime Primitives"
+    assert intended.release_id == "UCPE-PROD-SAFE-3-20260915-A"
+    assert intended.release_label == "PROD-SAFE-3 convergence release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "wave-4d3-ops-2a0-cadence-runtime"
-    assert intended.fingerprint == "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A"
+    assert intended.source_milestone == "prod-safe-3-convergence"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-SAFE-3-20260915-A"
     assert intended.asset_tokens == {
-        "app_js": "w4c1-ka1-20260824-a",
-        "styles_css": "w4c1-ka1-20260824-a",
+        "app_js": "w4c1-ka1-20260828-a",
+        "styles_css": "w4c1-ka1-20260828-a",
     }
     assert set(intended.critical_source_digests) == set(guard.CRITICAL_SOURCE_PATHS)
 

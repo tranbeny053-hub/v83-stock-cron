@@ -1,26 +1,26 @@
 {
   "critical_source_digests": {
     "Dockerfile": "d6d90cbcce02014662f45f4b9f140017b751ec46ebdab770342ae8ba4cd11494",
-    "frontend/app.js": "bb4810b7164ba1115fb40d77dced9bd327c8666ffc998c52073fc5bbd68c55cb",
-    "frontend/index.html": "68394e8d77f9515151f3628230ac091ad6662f49dcc6d0c3f8061ab86e739549",
-    "frontend/styles.css": "8419782f2ccf46595b5ad36bda3d8cedc04f9accd42f0de1ea106700fe75b398",
+    "frontend/app.js": "c683d20afe26bcd71ff3d1e4f18cf820c419eb04e31d8393310bb1280776a1c3",
+    "frontend/index.html": "70928eb4b1363f75022e07fa30fc877071979e8165ed6061af338923becc0191",
+    "frontend/styles.css": "c7be1c9db153391f1712530a34d28e3732ebb596208cf09e8d50bdad74a31247",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "b9bdd46e91a792680464d6cc5f49e53087c3071f0fc9175d4cba1a399607bfcd",
-    "src/crypto_probability_engine/api/app.py": "ea55f4b36bf7187405a9bad2481ea21a1951b8e88c67a7568dccd5b0e1f478f7",
-    "src/crypto_probability_engine/config/build_info.py": "e0bd6f701933880fcb82e48621efda6c053759d11f623e48bbdc0e3b1eb03358",
+    "src/crypto_probability_engine/api/analysis_service.py": "3ce0282dfb5e5640d3722c0749b7445a87c0acec63a8607a296e287164ea560f",
+    "src/crypto_probability_engine/api/app.py": "63db9e18fa9ca076f40f3303da3db48356a0e57798f5b48c1bc7102af1d7ca14",
+    "src/crypto_probability_engine/config/build_info.py": "2c7450ed155f5e9c7765310a54f3b547df1c11bbf843ed6f5fc5f0f8adeccbec",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-SAFE-3-20260915-A",
   "frontend_asset_tokens": {
-    "app_js": "w4c1-ka1-20260824-a",
-    "styles_css": "w4c1-ka1-20260824-a"
+    "app_js": "w4c1-ka1-20260828-a",
+    "styles_css": "w4c1-ka1-20260828-a"
   },
-  "hf_main_sha": "a89b45e417fcf221daddf757b5fd5900a8a026b1",
-  "release_id": "UCPE-W4D3-OPS-2A0-20260622-A",
-  "release_label": "Wave 4D.3-Ops Cadence Runtime Primitives",
+  "hf_main_sha": "00705c55e7eb291d01b4e02d4cca859122083f28",
+  "release_id": "UCPE-PROD-SAFE-3-20260915-A",
+  "release_label": "PROD-SAFE-3 convergence release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "wave-4d3-ops-2a0-cadence-runtime"
+  "source_milestone": "prod-safe-3-convergence"
 }
