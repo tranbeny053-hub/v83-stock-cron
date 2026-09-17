@@ -1,0 +1,67 @@
+name: Migration 0010 rehearsal (scratch PostgreSQL, no secrets)
+
+# Proves, BEFORE the route can merge, that migration 0010 and its apply route work on a real
+# PostgreSQL. It builds a scratch database from migrations 0001-0009 plus the audited production
+# state, applies 0010 once through scripts/apply_migration_0010.py --mode=rehearse, and requires a
+# second apply to refuse. It also rebuilds a second scratch database from migrations 0001-0010 alone,
+# which must carry the codified posture by itself. It references no secret and touches no real
+# database. The job is named `test` so the owner-authorized merge procedure waits for it.
+
+"on":
+  pull_request:
+    paths:
+      - scripts/apply_migration_0010.py
+      - scripts/migration_0010_rehearsal/**
+      - .github/workflows/apply-migration-0010.yml
+      - .github/workflows/apply-migration-0010-rehearsal.yml
+      - migrations/**
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse the apply on scratch local PostgreSQL databases
+        shell: bash
+        env:
+          MIGRATION_0010_REHEARSAL_URL: "postgresql:///migration_0010_rehearsal?host=/var/run/postgresql"
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0010_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres createdb -O "$(id -un)" migration_0010_rehearsal
+          sudo -u postgres createdb -O "$(id -un)" migration_0010_rebuild
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0010_rehearsal -f - < scripts/migration_0010_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0010_rebuild -f - < scripts/migration_0010_rehearsal/01_supabase_like_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql > "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rehearsal -f - < scripts/migration_0010_rehearsal/10_audited_production_state.sql
+          PYTHONPATH=src python scripts/apply_migration_0010.py --mode=rehearse --report=migration-0010-rehearsal-report.json
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < migrations/0010_legacy_table_security.sql
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < scripts/migration_0010_rehearsal/20_assert_rebuild_posture.sql
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: migration-0010-rehearsal-report
+          path: migration-0010-rehearsal-report.json
+          if-no-files-found: warn

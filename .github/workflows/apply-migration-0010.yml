@@ -1,0 +1,135 @@
+name: Migration 0010 legacy table security (MANUAL DISPATCH ONLY, ONE SHOT)
+
+# DELIBERATELY NO `schedule:` OR `push:` TRIGGER. Applying migration 0010 is a T4 action. The owner
+# authorizes ONE dispatch, and it is never rerun.
+#
+# WHAT IT DOES. scripts/apply_migration_0010.py applies exactly migrations/0010 in ONE transaction:
+# - read-only pre-checks refuse unless the ten legacy tables are in the state the read-only audit
+#   measured (row-level security on, no policy, service_role holding every privilege) and anon or
+#   authenticated still hold something, so a second dispatch changes nothing;
+# - then the migration, whose bytes must equal the digest pinned in the script;
+# - then read-only post-checks: row-level security still on, no privilege left for PUBLIC, anon or
+#   authenticated on the tables or their serial sequences, service_role exactly as before, and the
+#   tables of 0005, 0006, 0008 and 0009 unchanged.
+# Any refusal rolls everything back. No application row is read.
+#
+# BEFORE THE SECRET IS HANDED TO ANY STEP, the same apply is rehearsed on a scratch local PostgreSQL
+# built from migrations 0001-0009 plus the audited production state: applied once, then refused a
+# second time. A second scratch database is rebuilt from migrations 0001-0010 alone and must carry
+# the codified posture by itself.
+#
+# THE SAME TRUST BOUNDARY AS THE OTHER DATABASE ROUTES:
+# - exact CPython 3.13.14 and the pinned Actions;
+# - CPython's bundled pip, installing lock-authenticated wheels;
+# - `python -I -S -B`;
+# - a dispatch verified against THIS workflow, in the owner repository, on main, at exactly
+#   expected_sha.
+# Inputs reach the shell ONLY through `env:`, expanded in double quotes. Every step declares
+# `shell: bash`. Only the apply step receives the database secret.
+#
+# CONCURRENCY. It shares the section 5A group, so no two production-database dispatch workflows of
+# this repository can ever run at the same time.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: REQUIRED. The full 40-character commit SHA on main that the owner reviewed
+        required: true
+        type: string
+      confirm:
+        description: REQUIRED. Exactly APPLY-MIGRATION-0010-ONCE
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: section-5a-evaluation
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install the exact pinned interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+
+      - name: Install the hash-locked set with CPython's bundled pip, from authenticated wheels
+        shell: bash
+        # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
+        run: |
+          python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer
+          bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"
+          python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: --dest "$RUNNER_TEMP/section-5a-wheels" \
+            -r ops/section_5a_evaluator_requirements.lock
+          python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check \
+            --no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile \
+            --require-hashes --no-deps --only-binary=:all: \
+            -r ops/section_5a_evaluator_requirements.lock
+
+      - name: Attest isolation, dispatch and runtime for this workflow (no database)
+        shell: bash
+        env:
+          MIGRATION_0010_EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: python -I -S -B scripts/apply_migration_0010.py --mode=attest --expected-sha="$MIGRATION_0010_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels"
+
+      - name: Rehearse the apply on scratch local PostgreSQL databases (no secret)
+        shell: bash
+        env:
+          MIGRATION_0010_REHEARSAL_URL: "postgresql:///migration_0010_rehearsal?host=/var/run/postgresql"
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0010_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres createdb -O "$(id -un)" migration_0010_rehearsal
+          sudo -u postgres createdb -O "$(id -un)" migration_0010_rebuild
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0010_rehearsal -f - < scripts/migration_0010_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0010_rebuild -f - < scripts/migration_0010_rehearsal/01_supabase_like_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql > "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rehearsal -f - < scripts/migration_0010_rehearsal/10_audited_production_state.sql
+          python -I -S -B scripts/apply_migration_0010.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0010-rehearsal-report.json
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < "$RUNNER_TEMP/migrations_0001_0009.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < migrations/0010_legacy_table_security.sql
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0010_rebuild -f - < scripts/migration_0010_rehearsal/20_assert_rebuild_posture.sql
+
+      - name: Run migration 0010's tests under this exact runtime (no secret)
+        shell: bash
+        env:
+          # Inherited by every subprocess a test starts. No test may leave bytecode in the checkout,
+          # which the apply step's isolation audit would refuse, or import user site-packages.
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_apply_migration_0010.py tests/migrations/test_legacy_table_security_migration.py tests/workflows/test_apply_migration_0010_workflow.py tests/workflows/test_workflow_steps_reader.py
+
+      - name: Apply migration 0010 once (the ONLY step that receives the database secret)
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MIGRATION_0010_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MIGRATION_0010_CONFIRM: ${{ inputs.confirm }}
+        run: python -I -S -B scripts/apply_migration_0010.py --mode=apply --expected-sha="$MIGRATION_0010_EXPECTED_SHA" --confirm="$MIGRATION_0010_CONFIRM" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0010-apply-report.json
+
+      # The raw pre- and post-check results, on success and on refusal. Never the database URL.
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: migration-0010-apply-report
+          path: |
+            migration-0010-apply-report.json
+            migration-0010-rehearsal-report.json
+          if-no-files-found: warn
