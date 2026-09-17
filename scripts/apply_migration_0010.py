@@ -25,9 +25,10 @@ state:
   dispatch refuses and the one-shot property is enforced by the database itself).
 
 ONE TRANSACTION, FAIL CLOSED. Under bounded timeouts and an advisory lock:
-  1. read-only PRE-CHECKS, as above, plus the three serial sequences and the security of the tables
-     of 0005, 0006, 0008 and 0009. The server's version decides which table privileges are asked
-     about, so no check is blind to one the server can grant;
+  1. read-only PRE-CHECKS, as above, plus the three serial sequences. The security of the tables of
+     0005, 0006, 0008 and 0009 is recorded, not required: 0010 never touches them. The server's
+     version decides which table privileges are asked about, so no check is blind to one the server
+     can grant;
   2. exactly the pinned bytes of migration 0010, with no parameters;
   3. read-only POST-CHECKS refuse unless:
      - every legacy table keeps row-level security, owner and zero policies;
@@ -35,6 +36,8 @@ ONE TRANSACTION, FAIL CLOSED. Under bounded timeouts and an advisory lock:
      - service_role's table and sequence privileges are unchanged;
      - the other migrations' tables are exactly as they were.
 Any refusal or error rolls the transaction back, so nothing is applied; only then is it committed.
+If the connection fails while the COMMIT is in flight, the report says ``committed`` is UNKNOWN.
+Had it committed, a second dispatch would refuse as not a first apply.
 No application row is ever read.
 
 Every query result is captured raw before it is judged, and written to ``--report`` on success
@@ -152,12 +155,19 @@ def _held(function: str, role: str, relation: str, values: str) -> str:
     )
 
 
+# The relation kinds of the audit's table facts (scripts/audit_table_privileges.py).
+_TABLE_LIKE_RELKINDS_SQL = "ARRAY['r', 'p', 'v', 'm', 'f']::\"char\"[]"
+
+
 def _security_sql(names: Sequence[str], privileges: Sequence[str]) -> str:
     listed = ", ".join(f"('{name}')" for name in names)
     asked = ", ".join(f"('{name}')" for name in privileges)
     return (
         "SELECT t.name,"
-        " (SELECT count(*) FROM pg_catalog.pg_class AS k WHERE k.relname::text = t.name),"
+        # Relations of the kinds the audit measured, in any schema: a same-named index, sequence or
+        # type is not a second table.
+        " (SELECT count(*) FROM pg_catalog.pg_class AS k WHERE k.relname::text = t.name"
+        f" AND k.relkind = ANY ({_TABLE_LIKE_RELKINDS_SQL})),"
         " c.relkind::text,"
         " pg_catalog.pg_get_userbyid(c.relowner) = current_user,"
         " c.relrowsecurity, c.relforcerowsecurity,"
@@ -230,6 +240,7 @@ SEQUENCE_FIELDS = (
     "service_role",
 )
 NOT_A_FIRST_APPLY = "this is not a first apply"
+COMMIT_UNKNOWN = "UNKNOWN"
 
 # The rehearsal reaches only a local server through its unix socket: never a network host.
 _LOCAL_SOCKET_URL = re.compile(r"postgresql:///[a-z_][a-z0-9_]*\?host=/var/run/postgresql")
@@ -628,8 +639,9 @@ def apply_in_one_transaction(
                     "the applied posture is not the reviewed one, so the transaction is rolled "
                     "back: " + "; ".join(failures)
                 )
+        captured["commit_attempted"] = True
         connection.commit()
-    captured["committed"] = True
+        captured["committed"] = True
     return {
         "outcome": "APPLIED",
         "api_roles_present": captured["api_roles_present"],
@@ -693,13 +705,15 @@ def sequence_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
 
 
 def other_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    failures: list[str] = []
+    """The later migrations' tables are recorded, not required.
+
+    0010 never touches them, and the post-check requires their security to be identical after the
+    apply, whatever it is. Only a malformed read refuses.
+    """
+
     if [row.get("table") for row in rows] != sorted(OTHER_TABLES):
         return [f"the other tables read were {[row.get('table') for row in rows]}"]
-    for row in rows:
-        if row.get("relations_named_so") != 1 or row.get("relkind") != "r":
-            failures.append(f"{row['table']}: not exactly one ordinary table, so not recorded")
-    return failures
+    return []
 
 
 def legacy_post_check_failures(
@@ -824,9 +838,17 @@ def _refusal_record(mode: str, exc: BaseException, captured: Mapping[str, Any]) 
         "detail": str(exc)
         if refused
         else "unexpected failure; the detail is withheld because driver messages can name the host",
-        "committed": False,
+        "committed": _commit_state(captured),
         "captured": dict(captured),
     }
+
+
+def _commit_state(captured: Mapping[str, Any]) -> bool | str:
+    """A failure after COMMIT was sent cannot tell whether the server committed."""
+
+    if captured.get("committed") is True:
+        return True
+    return COMMIT_UNKNOWN if captured.get("commit_attempted") else False
 
 
 def _is_refusal(exc: BaseException) -> bool:

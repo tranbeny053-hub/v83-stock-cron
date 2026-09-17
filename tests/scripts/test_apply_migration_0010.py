@@ -23,6 +23,7 @@ import pytest
 
 from crypto_probability_engine.runtime_isolation import REQUIRED_FLAGS_TEXT, ProvenanceRefused
 from scripts import apply_migration_0010 as apply_0010
+from scripts import audit_table_privileges as audit
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_BYTES = (ROOT / apply_0010.MIGRATION).read_bytes()
@@ -57,6 +58,7 @@ class FakeDatabase:
         self.rollbacks = 0
         self.in_transaction = False
         self.calls: dict[str, int] = {}
+        self.fail_commit: Exception | None = None
 
     def connect(self, url: str, **options: Any) -> FakeConnection:
         self.connects.append((url, options))
@@ -78,6 +80,8 @@ class FakeConnection:
         return FakeCursor(self.database)
 
     def commit(self) -> None:
+        if self.database.in_transaction and self.database.fail_commit is not None:
+            raise self.database.fail_commit
         if self.database.in_transaction:
             self.database.commits += 1
         self.database.in_transaction = False
@@ -328,6 +332,8 @@ def test_the_checks_cover_every_table_role_privilege_and_sequence() -> None:
     for privilege in ALL:
         assert f"('{privilege}')" in legacy
     assert "a.grantee = 0" in legacy, "PUBLIC is grantee 0"
+    kinds = f"k.relkind = ANY ({audit._RELKINDS_SQL})"
+    assert kinds in legacy, "a same-named relation counts only if the audit would see it"
     assert "att.attacl" in legacy, "column grants are checked"
     assert "pg_policy" in legacy and "relforcerowsecurity" in legacy
     assert 'COLLATE "C"' in legacy, "the order never depends on the database collation"
@@ -445,12 +451,7 @@ PRE_CHECK_DIFFERENCES = {
     "sequence-missing": {"SEQUENCE": audited_sequences()[:2]},
     "sequence-public-grant": {"SEQUENCE": audited_sequences(public_has_a_privilege=True)},
     "other-table-missing": {"OTHER": other_rows()[:3]},
-    "other-table-absent": {
-        "OTHER": [
-            *other_rows()[:3],
-            legacy_row("section_5a_evaluation_seal", relations_named_so=0, relkind=None),
-        ]
-    },
+    "other-tables-in-another-order": {"OTHER": list(reversed(other_rows()))},
 }
 
 
@@ -479,6 +480,22 @@ def test_a_database_not_in_the_audited_state_refuses_before_the_migration(differ
         _apply(database)
     assert MIGRATION_SQL not in database.executed()
     assert database.commits == 0 and database.rollbacks == 1
+
+
+def test_the_later_tables_are_recorded_not_required() -> None:
+    """0010 never touches them: an absent or unusual one only has to stay exactly as it was."""
+
+    unusual = [
+        legacy_row("analysis_run_details", relations_named_so=0, relkind=None, anon=[],
+                   authenticated=[], service_role=[]),
+        legacy_row("prediction_derivatives_snapshots", relkind="v"),
+        *other_rows()[2:],
+    ]
+    database = FakeDatabase(healthy_results(**{OTHER_SQL: Each([unusual, unusual])}))
+    outcome, captured = _apply(database)
+    assert outcome["outcome"] == "APPLIED" and database.commits == 1
+    assert captured["pre_other"] == captured["post_other"]
+    assert captured["pre_other"][0]["relations_named_so"] == 0
 
 
 def test_a_second_apply_refuses_as_not_a_first_apply() -> None:
@@ -878,6 +895,40 @@ def test_an_unexpected_failure_withholds_its_message_because_it_can_name_the_hos
     for text in (report_text, streams.out, streams.err):
         assert "NEVER-SHOWN-SECRET" not in text and "never-contacted" not in text
     assert database.rollbacks == 1 and database.commits == 0
+
+
+def test_a_commit_that_fails_in_flight_is_reported_as_unknown(
+    calls: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = FakeDatabase(healthy_results())
+    database.fail_commit = ConnectionError(f"server closed the connection: {DATABASE_URL}")
+    _install_driver(monkeypatch, database, calls)
+    code = apply_0010.main(_argv("apply", tmp_path), environ={"SUPABASE_DB_URL": DATABASE_URL})
+    assert code == 1
+    report_text = (tmp_path / "report.json").read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["outcome"] == "FAILED" and report["error_type"] == "ConnectionError"
+    assert report["committed"] == apply_0010.COMMIT_UNKNOWN == "UNKNOWN"
+    assert report["captured"]["commit_attempted"] is True
+    assert "committed" not in report["captured"]
+    assert "post_legacy" in report["captured"], "the post-checks had passed"
+    assert "NEVER-SHOWN-SECRET" not in report_text and "never-contacted" not in report_text
+
+
+@pytest.mark.parametrize(
+    ("captured", "expected"),
+    [
+        ({}, False),
+        ({"pre_legacy": []}, False),
+        ({"commit_attempted": True}, "UNKNOWN"),
+        ({"commit_attempted": True, "committed": True}, True),
+        ({"committed": "yes"}, False),
+    ],
+)
+def test_the_commit_state_is_never_claimed_without_a_returned_commit(
+    captured: dict[str, Any], expected: object
+) -> None:
+    assert apply_0010._commit_state(captured) == expected
 
 
 def test_the_loaded_module_check_covers_the_pin_and_this_script(
