@@ -1,10 +1,14 @@
 # STATE
 
-Updated: 2026-09-17 (RELEASE SEQUENCE STOPPED AT STEP 3 AGAIN: attempt 2 (fresh authorization, refreshed credential) passed every invariant and the dry-run login check, but Hugging Face's pre-receive hook REFUSED the push: "You are not authorized to push to this repo"; nothing pushed; production still PROD-SAFE-2 a89b45e RUNNING; 0008 applied; PR #106 open, not merged; step 4 not started; waiting for a token WITH WRITE ACCESS and a fresh authorization)
+Updated: 2026-09-17 (RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH: every invariant re-passed, but the dry-run login check found NO saved Hugging Face credential on this Mac ("could not read Username ... terminal prompts disabled"); the push never ran; production still PROD-SAFE-2 a89b45e RUNNING; 0008 applied; PR #106 open, not merged; waiting for the owner to save the token for git and to say go)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 2 (no rerun without a fresh owner authorization). Attempt 2's
+LOOP_STATE=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH. The attempt-3 authorization (2026-09-17)
+  was NOT consumed by a push: the prepared dry-run login check failed first because git found no saved credential for
+  huggingface.co. No flag, no push, nothing changed. Waiting for the owner to save the write token for git and to
+  say go; then run attempt 3 exactly as authorized.
+LOOP_STATE_PRIOR_ATTEMPT3=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 2 (no rerun without a fresh owner authorization). Attempt 2's
   push was refused by Hugging Face's pre-receive hook: "You are not authorized to push to this repo" (the refreshed
   token logs in but cannot write to the Space). Nothing changed. See RELEASE_SEQUENCE.
 LOOP_STATE_PRIOR_ATTEMPT2=RELEASE SEQUENCE STOPPED AT STEP 3 (no rerun without a fresh owner authorization); see RELEASE_SEQUENCE.
@@ -809,7 +813,19 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Attempt 2 of step 3 is CONSUMED (refused, nothing changed). Needed from the owner:
+OWNER_BOUNDARY=WAITING FOR THE OWNER'S GO. Attempt 3's authorization (verbatim below) stopped at its precondition before
+  the push, so no T4 action ran. Needed: the write token SAVED AS THE GIT CREDENTIAL on this Mac (a presence check
+  should print "saved login for: beny053"), then the owner's go, which may repeat the attempt-3 text.
+  ATTEMPT 3, verbatim: "HF credential attempt 3 is ready: the active account is beny053, and the new token was
+  verified in Hugging Face settings to have write access to beny053/ultimate-crypto-probability-engine; token value
+  was not shared. FRESH AUTHORIZATION, release steps 3–4 only: (3) T4 push 00705c55e7eb291d01b4e02d4cca859122083f28
+  to hf/main strictly as a fast-forward from a89b45e, never force, after all release invariants re-pass; wait for
+  RUNNING and perform read-only live checks only: /healthcheck=200, build-info=UCPE-PROD-SAFE-3-20260915-A, served
+  index.html/app.js/styles.css byte-match; no analysis calls. (4) Only after deploy PASS: T3 merge PR #106 at
+  7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e with --match-head-commit, parents (66acc44, 7d2cf2f4), final main tree
+  194a52958316bbd13e7807ad8c00a8a13f9b2ceb, exact-main CI green, then dispatch source-integrity-guard exactly once
+  and require HEALTHY with empty delta. Never rerun a failed T4 without fresh owner authorization."
+OWNER_BOUNDARY_PRIOR_ATTEMPT3=NO ACTION IS AUTHORIZED. Attempt 2 of step 3 is CONSUMED (refused, nothing changed). Needed from the owner:
   (a) a Hugging Face token WITH WRITE ACCESS to spaces/beny053/ultimate-crypto-probability-engine (a Write token of
       the beny053 account, or fine-grained with write on that Space), saved as the git credential;
   (b) a FRESH authorization of step 3 (and of step 4 after it).
@@ -1059,6 +1075,10 @@ RELEASE_SEQUENCE=2026-09-16/17, per the owner's authorization (OWNER_BOUNDARY):
     "! [remote rejected] ... (pre-receive hook declined)", "You are not authorized to push to this repo. Make sure
     that you are properly logged in." hf/main is still a89b45e; the Space still runs it (lastModified 2026-08-25).
     Evidence: .work/816/t4-deploy/attempt-2-push-not-authorized/. LESSON: a dry run cannot prove write permission.
+  - STEP 3, ATTEMPT 3 (fresh authorization 2026-09-17): STOPPED BEFORE THE PUSH. At 03:26Z every invariant
+    re-passed. The dry-run login check exited 128: "fatal: could not read Username for 'https://huggingface.co':
+    terminal prompts disabled", so git found no saved credential. No flag was written and the push never ran; hf and
+    the Space still a89b45e. Evidence: .work/816/t4-deploy/attempt-3-no-saved-credential/.
   - STEP 4 NOT STARTED. Scripts ready: .work/816/t3-merge-guard/ (merge_and_guard.sh, verify_guard.py).
 AUDIT_RESULT=Run 35120616278 (read-only, rolled back, never committed; transaction_read_only on; no catalog read refused),
   VERIFIED by .work/816/audit-dispatch/verify_audit.py. Raw capture before parsing: .work/816/audit-dispatch/raw/
