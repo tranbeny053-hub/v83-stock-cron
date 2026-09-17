@@ -1,2068 +1,270 @@
 # STATE
 
-Updated: 2026-09-17 (PROD-SAFE-3 IS LIVE: hf/main 00705c55 RUNNING, healthcheck 200, build-info UCPE-PROD-SAFE-3-20260915-A, served frontend byte-identical; PR #106 merged as 08c77f09 (parents 66acc44, 7d2cf2f4; tree 194a5295; main CI green); guard run 35179229959 HEALTHY 3/3 with empty delta; 0008 applied; the release sequence is COMPLETE; nothing pending)
+Updated: 2026-09-17 (post-release checkpoint: PROD-SAFE-3 is live, pinned and accepted by the owner; a four-lane
+post-release prep batch is built, gated and reviewed LOCALLY and waits for one owner T3; nothing has been pushed,
+dispatched, applied or deployed since the release)
+
+**Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
+earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
+production proofs. This branch merges 2c6df51, so that record stays reachable from main. Where the two differ, this
+file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE AFTER RELEASE. PROD-SAFE-3 IS DEPLOYED AND PINNED (2026-09-17); the four-step release sequence is COMPLETE
-  and VERIFIED at every step (RELEASE_SEQUENCE). Production = hf/main 00705c55 (R); main = 08c77f09 (tree 194a5295).
-  No action is pending or authorized.
-LOOP_STATE_PRIOR_RELEASED=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH. The attempt-3 authorization (2026-09-17)
-  was NOT consumed by a push: the prepared dry-run login check failed first because git found no saved credential for
-  huggingface.co. No flag, no push, nothing changed. Waiting for the owner to save the write token for git and to
-  say go; then run attempt 3 exactly as authorized.
-LOOP_STATE_PRIOR_ATTEMPT3=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 2 (no rerun without a fresh owner authorization). Attempt 2's
-  push was refused by Hugging Face's pre-receive hook: "You are not authorized to push to this repo" (the refreshed
-  token logs in but cannot write to the Space). Nothing changed. See RELEASE_SEQUENCE.
-LOOP_STATE_PRIOR_ATTEMPT2=RELEASE SEQUENCE STOPPED AT STEP 3 (no rerun without a fresh owner authorization); see RELEASE_SEQUENCE.
-  Step 1 PASS: 0008 applied once (run 35164080476, VERIFIED). Step 2 PASS: PR #106 open at P 7d2cf2f4, CI green
-  (run 35164170597), NOT merged. Step 3 FAILED BEFORE ANY CHANGE: `git push hf` was refused ("OAuth token has
-  expired"); hf/main and the running Space are still a89b45e (PROD-SAFE-2). Step 4 not started.
-  PR #106 MUST NOT be merged before a verified deploy of R (its pin describes R).
-LOOP_STATE_PRIOR_RELEASE=AUDIT DONE; RELEASE STILL STAGED; WAITING for the owner's four-step authorization (OWNER_BOUNDARY).
-  The authorized T3 merged the audit route as PR #105 (66acc44), and the ONE read-only dispatch (run 35120616278)
-  VERIFIED. RESULT: NOT_EXPOSED_THROUGH_AUDITED_PATHS; see AUDIT_RESULT. Nothing applied or deployed; hf a89b45e.
-LOOP_STATE_PRIOR_AUDIT=AUDIT ROUTE READY, WAITING FOR ITS T3 + ONE DISPATCH; RELEASE STILL STAGED. Owner correction 2026-09-16:
-  the older-table privilege check was already YES; run the read-only audit now; do not start 0008 or the HF deploy;
-  return the exact exposure result and the refreshed four-step boundary. No existing route can read catalogs and the
-  secret lives only in Actions, so the audit needs its route merged (T3) and ONE dispatch; see AUDIT_ROUTE and
-  OWNER_BOUNDARY. THE EXPOSURE RESULT IS NOT YET KNOWN. Nothing pushed, dispatched, applied or deployed since #104.
-LOOP_STATE_PRIOR_104=POST-ONE-LOOK RELEASE STAGED. The prep lanes are MERGED (PRs #100-#104, main e5cd7ef). The release
-  candidate and its pin commit are built and gated LOCALLY; WAITING for the owner's T4 sequence (see OWNER_BOUNDARY
-  and RELEASE_STAGED). Nothing applied, dispatched or deployed.
-  T_close PASSED 2026-09-12T04:00:00Z. THE §5A ONE LOOK IS CONSUMED (NEVER AGAIN):
-  §5A ONE LOOK: CONSUMED EXACTLY ONCE, RESULT CAPTURED AND CHECKPOINTED (2026-09-15).
-  - The authorization. Owner-authorized T4, CONSUMED. NEVER RERUN: the durable seal refuses a
-    second look.
-  - The run. 34919367341, attempt 1, workflow_dispatch on main 1d8f933, mode=consume, confirm
-    token, expected_population_id f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6.
-    Dispatched 01:58:30Z; every step succeeded; local state COMPLETE.
-  - Raw capture before interpretation (.work/815/t4-consume/, evidence.sha256): the run JSON, the
-    job log, and the artifact (report, result, state, snapshot).
-  - INTEGRITY VERIFIED (verify_consume.py):
-    - consumes_one_look true;
-    - population_matches_readiness TRUE (the pre-claim guard held);
-    - provenance: the evaluation workflow at 1d8f933, run 34919367341, CPython 3.13.14, isolated;
-    - evaluator_pin_digest b9d94a7d… equals the provenance pin;
-    - the attest step's driver_helpers are pinned;
-    - evidence_snapshot_id 752eeed4…, result_inputs_digest d776f395…;
-    - no database URL anywhere.
-  - OFFLINE RECOMPUTE. From the captured snapshot, with the frozen code at 1d8f933 (recompute-
-    artifact mode, no database), every state, flag, count and digest is IDENTICAL. Three A1
-    boundary statistics differ only in the last ULP (macOS vs Linux libm), far from 0.05.
-  - THE §5A RESULT, EXACTLY AS COMPUTED. authorized_cells = [] (NONE).
-    - 15m: NOT_PASS, "requirement(s) not met: A, B2"; 466 admitted pairs.
-      - A1 held at c=1,2,4 (boundary statistics 0.00367, 0.00699, 0.01501). A2 failed at all
-        three (0.336, 0.452, 0.140).
-      - B1 held: ECE candidate 0.0326 vs baseline 0.0962. B2 failed: n_worse 52 > n_better 37.
-    - 1H: NOT_PASS, "requirement(s) not met: A, B2"; 257 pairs.
-      - c=1: A1 held (0.00879), A2 failed (0.0769). c=2: A1 held (0.00613), A2 held (0.0178).
-        c=4: A1 failed (0.155), A2 failed (0.407).
-      - B1 held: 0.0216 vs 0.0685. B2 failed: 21 > 19.
-    - 4H: NOT_PASS, "requirement(s) not met: A, B2"; 86 pairs.
-      - c=1: A1 failed (0.0637), A2 held (0.00586). c=2: both failed (0.323, 0.0625). c=4: both
-        held (0.0358, 0.03125).
-      - B1 held: 0.0196 vs 0.2237. B2 failed: 6 > 5.
-    - FAIL checks, every timeframe: probability_triplet_sums_to_one OBSERVABLE_PASS. The three gate
-      predicates are NOT_OBSERVABLE_FROM_PERSISTED_STATE, so even A and B together would have
-      authorized nothing.
-    - These are pre-committed decision boundaries, not hypothesis tests: no p-value, no
-      significance, and no profitability claim.
-  - CONSEQUENCE, per V1_QUANT_CONTRACT §5A.9. The NOT PASS may NOT be retuned against this
-    holdout. A second attempt requires a new candidate freeze, new T_freeze, new T0 and a new
-    holdout. No promotion happens: Wave 2 of the post-look dependency map disappears, and Wave 3
-    becomes the live question.
-  NEW READINESS ON THE GUARDED PIN (ruling N3), VERIFIED. This is the owner-authorized T4, CONSUMED; never rerun.
-  - The run. 34873105124, attempt 1, workflow_dispatch on main 1d8f933, mode=readiness, with no
-    confirm and no expected_population_id. Every step succeeded, and the in-job tests passed 621.
-    The readiness step ran 17:12:25Z -> 17:12:39Z.
-  - The raw report (.work/814/t4-readiness-2/, evidence.sha256):
-    - consumes_one_look FALSE; no probability, score or determination anywhere;
-    - run_provenance: the evaluation workflow at 1d8f933, pin b9d94a7d…;
-    - the attest step's driver_helpers equal the pinned fingerprints.
-  - THE CONSUMPTION IDENTITY. decision_population_id =
-    f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6, EQUAL to the first readiness
-    run's. The whole report is IDENTICAL to the first apart from generated_at_utc and run_provenance
-    (evidence_snapshot_id bf3fc0da… is unchanged too). Attainability: 15m 42, 1H 18, 4H 5 usable
-    4-windows, all ATTAINABLE.
-  CONDITIONAL CONSUME AUTHORIZATION (2026-09-14): NOT EXERCISED. STOPPED UNCONSUMED, and nothing was
-  dispatched.
-  - The owner's condition: the frozen consume path at 4b0a522 must enforce equality with readiness
-    decision_population_id f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 BEFORE
-    the durable claim or probability exposure.
-  - A read-only inspection shows it does NOT. The only pre-claim reads are the anomaly count and
-    feature diagnostics (runner.py 293-294). The claim is at 300-311, the first paired-evidence read
-    (with probabilities) at 315. decision_population_id is computed only in the result (510),
-    reported, never compared. No CLI flag, workflow input or repository check exists.
-  - Readiness facts relevant to drift: 0 unresolved arms, 0 label disagreements.
-  - Write-up: .work/814/consume-population-guard-missing.md.
-  FIRST LIVE READINESS RUN, VERIFIED. This is the owner-authorized T4, CONSUMED 2026-09-14, NEVER RERUN
-  without a new authorization.
-  - The run. 34863318042, attempt 1, workflow_dispatch on main 4b0a522, mode=readiness, no confirm.
-    Every step succeeded, and the in-job tests passed 595 on the real runner. The readiness step ran
-    15:38:51Z -> 15:39:06Z.
-  - The raw report, captured before parsing (.work/813/t4-readiness/, evidence.sha256):
-    - mode readiness; consumes_one_look FALSE;
-    - no probability, score, statistic or determination anywhere (pre-registration §1). The only
-      verdict is §1's attainability verdict;
-    - decision_population_id f83c31f7bd5a9a4d… and evidence_snapshot_id bf3fc0dadfa1103c…;
-    - run_provenance: the evaluation workflow on main, expected == sha == git_head == 4b0a522,
-      run 34863318042, CPython 3.13.14, isolated.
-  - The attest step's driver_helpers equal the pinned fingerprints, a second proof on Linux.
-  - Counts only; no score was ever loaded:
-    - 15m: 466 admitted pairs; usable windows k1/k2/k4 = 89/70/42, from 176/117/71 before the drop;
-      ATTAINABLE.
-    - 1H: 257 pairs; usable 40/28/18; ATTAINABLE.
-    - 4H: 86 pairs; usable 11/7/5, exactly at the floor of 5; ATTAINABLE.
-    - Origin anomalies 0; admitted_resolved_after_t_close 6; missed attempts UNMEASURED by design.
-  - PRE-REGISTRATION §2.6. The evaluator is now FROZEN. Any change after this first live readiness
-    run resets the pin and needs explicit owner authorization stating what changed and why.
-  - The checker (verify_readiness.py) returned VERIFIED. Its first pass flagged the §1 attainability
-    'verdict' keys, because its pattern was overbroad. That output is kept, and the pattern was
-    narrowed to exactly §1's allowance: ATTAINABLE or PASS_UNATTAINABLE at attainability.<timeframe>.
-  MIGRATION 0009 APPLIED ONCE, VERIFIED. This is the owner-authorized FRESH T4, CONSUMED 2026-09-14,
-  NEVER RERUN, and NEVER DISPATCH THE APPLY WORKFLOW AGAIN.
-  - The run. 34861816985, attempt 1, workflow_dispatch on main 4b0a522, image ubuntu24
-    20260907.300.1. Every step succeeded, and the apply step ran 15:24:02Z -> 15:24:08Z.
-  - The raw report, captured before parsing (.work/813/t4-apply-0009-b/, evidence.sha256):
-    - outcome APPLIED, committed true;
-    - migration_sha256 == executed_migration_sha256 == 96bdad8358b853a4…, the reviewed 0009;
-    - pre_checks: seal tables, guard functions and guard triggers in any schema all 0;
-      analysis_run_details_present false;
-    - post_checks:
-      - exactly the 12 reviewed columns;
-      - constraints section_5a_captured_is_complete, section_5a_claim_has_verified_provenance,
-        section_5a_claimed_has_no_snapshot (c), the pkey (p), the seal_id and state checks (c);
-      - triggers section_5a_seal_guard and section_5a_seal_truncate_guard;
-      - row-level security true and not forced; owned by the applying role;
-      - anon, authenticated, service_role and PUBLIC hold NO privilege;
-      - rows 0; 0008's table still absent.
-    - run_provenance: this workflow on main, expected == sha == git_head == 4b0a522, run 34861816985,
-      CPython 3.13.14, isolated start-up.
-  - LINUX PROOF (L1b). The attest step's driver_helpers on the real runner equal the pinned
-    fingerprints: _cython_3_2_4 41c2a9fd…, cython_runtime 038e7fe8….
-  - No database URL appears in the log or the report. verify_run.py: VERDICT VERIFIED, 48/48.
-  The earlier T4 at 3dc545c (run 34851608514) refused before any database access. Both runs are
-  consumed.
-  T4 APPLY OF 0009, owner-authorized ONE SHOT, 2026-09-14. It is CONSUMED; NEVER RERUN.
-  - Dispatched once at 13:49:08Z: run 34851608514, attempt 1, main 3dc545c. The pre-dispatch
-    checks passed.
-  - checkout, setup-python 3.13.14, install (floating pip removed, authenticated wheels), attest and
-    in-job tests all PASSED on GitHub's real image.
-  - APPLY REFUSED, exit 2: "IsolationRefused: a loaded module is not verified code: module
-    _cython_3_2_4 has no verifiable origin; module cython_runtime has no verifiable origin".
-  - The report shows committed:false and captured:{}, so NO STATEMENT RAN. The DATABASE WAS NEVER
-    CONTACTED: the refusal is the post-driver-load attestation, before connect. 0009 is still
-    unapplied. hf/main a89b45e and origin/main 3dc545c are unchanged.
-  - ROOT CAUSE. Importing the locked psycopg loads its Cython extensions, and they create two
-    in-memory modules with no spec, loader, file or path, and no Python code:
-    - _cython_3_2_4 holds three C types;
-    - cython_runtime is empty.
-    attest_loaded_modules refuses every origin-less module. The sibling scan (no network) found these
-    two as the ONLY origin-less modules across both routes, and they reproduce on macOS.
-  - CORRECTION TO THE RECORD. The J1=B end-to-end claim "with the driver loaded both origin checks
-    passed" was WRONG. The driver is imported lazily at first connection, AFTER both checks, and
-    readiness makes no later check. So consume's pre-claim runtime_guard would ALSO have refused on
-    the real runner, safely before the claim.
-  - Diagnosis and raw evidence: .work/812/t4-apply-0009/ (diagnosis.md, evidence.sha256).
-  LANE D T3 MERGED 2026-09-14, owner-authorized, by the same scripted procedure
-  (.work/812/t3-lane-d/, SHA-256 manifest):
-    #95 feat/5a-0009-hardening-apply-route  18a6447 -> 3dc545c
-  Exact-head CI green (run 34850047119); a --match-head-commit merge; parents (5940557, 18a6447);
-  the merged tree b58b7063d643fb3c74d82dcfe5af3711cdd8f747 EQUALS the owner-authorized tree;
-  exact-main CI green (run 34850349141). hf/main = a89b45e, unchanged. Zero open PRs.
-  T3 BATCH #92-#94 MERGED 2026-09-14. The owner authorized it; it ran with scripted raw capture
-  (.work/811/t3-batch/, SHA-256 manifest). Three INDEPENDENT PRs, merged in order. Each had exact-head
-  CI green, a --match-head-commit merge, parents verified as (previous main, lane head), a merged
-  tree bit-identical to the local merge-tree, and exact-main CI green. It was armed to stop on the
-  first mismatch, and none occurred. All six CI runs were Python 3.11 on Linux, all green.
-    #92 feat/5a-evaluator-on-main          e199969 -> 99e5499
-    #93 test/resolver-pipefail-regression  8ce93c4 -> 86a5ed1
-    #94 fix/oos-workflow-input-transport   8d6e26e -> 5940557
-  The final main tree 249e64995e10fc840409ddac2fcf8e97f047c13c EQUALS the owner-authorized tree:
-  the gated local composition, identical in either order.
-  hf/main = a89b45e, unchanged. Zero open PRs.
-  One pre-flight abort, disclosed to the owner: the first lane A invocation passed a mistyped full
-  expected SHA. The script refused at step 0, before any push; nothing reached origin. It was
-  rerun with every SHA read from the verified manifest.
-  Previous batch, for provenance. That checkpoint corrected a stale recovery block
-  (origin/main = 200d822 recorded when main was d52e9ae):
-  T3 BATCH #84-#90 MERGED 2026-09-13, owner-authorized, seven INDEPENDENT PRs, each with
-  exact-head CI green, a --match-head-commit merge, parents verified (previous main, lane
-  head), the merged tree proven bit-identical to a local composition, and exact-main CI green
-  after every merge; the batch was armed to stop on the first mismatch and none occurred:
-    #84 docs/post-one-look-dependency-map     9a7fe7b -> 7c24989
-    #85 docs/r2-zero-drift-gate-and-display   aeb7133 -> 0fca908
-    #86 docs/g1-g7-acceptance-matrix          f471695 -> 4c2aa4d
-    #87 chore/delegate-fresh-result-identity  a6fa2de -> d11bee6
-    #88 ops/stop-post-tclose-collector        7ffc6f2 -> 651c63e
-    #89 fix/r202-provider-http-bounds         ce2dc44 -> 068900d
-    #90 fix/a203-candle-boundaries            27e81e2 -> 68b4c8e
-  The final main tree e1042da is BIT-IDENTICAL to the composition of the seven reviewed heads
-  computed in a different merge order, so what shipped is exactly what was reviewed,
-  independent of order. Test arithmetic reconciles: 1150 = 1132 + 5 + 4 + 5 + 4.
-  Historical standby narrative from 2026-08-28 is retained below for provenance:
-LOOP_STATE_PRIOR=IDLE — STANDBY. No lane open, no candidate open. The product board is CLEAR:
-  the owner closed the last two open candidates (see OWNER_PRODUCT_DECISIONS) and put the loop
-  on standby until a NEW genuine product issue arrives or the governed section 5A T_close
-  boundary is reached. Fifteen product PRs are SHIPPED to main. PR #56 (in-process
-  Recent Analysis History) merged 2026-08-27T05:32:03Z, PR #57 (durable history) merged
-  2026-08-27T06:12:00Z. Batches 1-10 remain closed and the pre-T_close audit returned BOARD
-  CLEAR. PROD-SAFE-2 remains the deployed build and NOTHING was deployed by either merge. The
-  section 5A envelope is UNCHANGED and still frozen: the holdout, its evaluation, the candidate
-  freeze, the collector, outcome and holdout inspection, T_close itself, and any change to what
-  the collector computes or persists. Ordinary safe work outside that envelope continues under
-  normal risk tiers, with owner authorization for T3/T4.
-CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluator is ON MAIN (5940557,
-  PR #92) and has NEVER RUN. The work in progress is lane D, owner rulings K1=A and K2=A:
-  - harden migration 0009 with row-level security, REVOKE from PUBLIC/anon/authenticated/service_role,
-    and public.-qualified names;
-  - add a dedicated one-shot apply workflow. In ONE transaction it runs the read-only pre-checks
-    (no stale table: F-0009-C), applies exactly 0009, and runs the post-checks; any failure rolls back.
-  Design: .work/812/lane-d-design.md. Then come three separate T4s: apply 0009 once, readiness, consume.
-  HISTORY (below): the evaluator lived on feat/5a-evaluator, local, and its implementation was once
-  FROZEN at 2b31832 (branch ref cb6edf7 carries STATE-only commits above it; the src/ tree hash is
-  identical).
-  VERIFICATION HISTORY. task-805 run 1 returned NOT_VERIFIED with nine findings F1-F9; the
-  owner ruled on F1, F2 and F9 and Opus repaired F3-F8. task-805 run 2 exhausted Codex quota
-  before reporting but its probes established seven sibling findings G1-G7, the worst being G1:
-  Postgres NUMERIC arrives as Decimal, the serializer handled only datetime, and the digest ran
-  after the probability read and before the seal claim, so on real data the FIRST consumption
-  would have read the holdout and crashed with no seal. After two repair rounds on the same
-  causal class were each defeated by siblings, the owner accepted the escalation and INVERTED
-  THE LOOP: the verifier authors failing tests first, against the frozen implementation.
-  task-806 RED TEAM RETURNED 2026-09-13 (result verified fresh; production code untouched):
-  17 properties RED, 4 REFUTED with evidence (G3.2, G3.3, G4.2, G5.1), plus four NEW sibling
-  findings, all RED — G8 the runner accepts a process-local in-memory repository as a seal
-  authority; G9 the Postgres seal claim uses plain json.dumps and raises on datetime, a SECOND
-  independent route to reading the holdout without sealing it, even once G1 is fixed; G10
-  recompute treats deleted feature_rows and origin_anomalies as empty/zero; G11 an empty
-  population reports a measured-looking zero-second span. Evidence at .work/806/.
-  REPAIR LANDED 2026-09-13 at 0bbcdd5, against the task-806 red tests pinned by SHA-256 efe36649...
-  in their own commit 80a95f6 BEFORE the repair and never edited. 20 of 21 pass. G3.4 stays RED:
-  it is UNSATISFIABLE under its own double — its probability read waits on a two-party Barrier with
-  a 5 s timeout, so the lone reader G3.1 requires raises BrokenBarrierError. Proven empirically
-  before the repair; left for the owner and Codex to amend, neither edited nor gamed.
-  THE DESIGN CHANGED: the one look is now CLAIMED, durably and atomically, BEFORE any probability
-  is exposed, and on Postgres the read itself captures raw evidence into the claimed seal inside
-  one transaction before returning. One lossless canonical serializer backs every digest and seal
-  column. Migration 0009 enforces the lifecycle in the database. Addendum 3 of the pre-registration
-  records it.
-  RECOMPOSED onto main 5f36126 as branch feat/5a-evaluator-on-main; STATE.md was the only file
-  changed on both sides and the only conflict.
-  CURRENT IMPLEMENTATION: fd8239a on feat/5a-evaluator-on-main. It carries the owner rulings D1-D4
-  and every task-807 structural repair, on top of the red-test amendment c44e416. This branch is
-  LOCAL and NOT PUSHED; task-808 returned NOT_VERIFIED against it (see CODEX_VERIFICATION_808).
-  Product work outside §5A continues in parallel; it never touches the envelope.
-CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record (3571d7e: the merged
-  batch; then the audit-route record).
-  The audit lane prep/audit-older-table-privileges (209d1e0 route, e551e43 repair 1, 2b95fd0 repair 2) is MERGED as
-  PR #105 (66acc44), and release/prod-safe-3 (P 7d2cf2f4) as PR #106 (08c77f09). This STATE branch is still based on
-  e5cd7ef: rebase or merge it onto 08c77f09 before its PR (a T3 of its own). The merged branch release/prod-safe-3
-  still exists on origin (deleting it was not authorized).
-  The prep branches below are MERGED: L2 #100, L3 #101, v2 #102, L1 #103, and chore/state-post-99 #104.
-  The staged release lives only in this repository's objects (never pushed): R 00705c55 and P 7d2cf2f4, with the
-  pin worktree in the session scratchpad (lanes/pin-real). Both rebuild deterministically from main.
-  The prep lanes, each LOCAL ONLY from main c0ed7a0 (worktrees in the session scratchpad; commits persist):
-  - prep/l1-hf-release fd0e1f0 — L1: the PROD-SAFE-3 release identity; the release tooling and runbook
-    live in .work/816/l1/;
-  - prep/l2-0008-activation 3cd8476 — L2: 0008 hardened (RLS, REVOKE, GRANT to service_role) and its
-    one-shot dispatch route, with the owner repository pinned;
-  - prep/l3-candle-width 84e7181 — L3: candle history up to 800 bars, uncalled, snapshot unchanged;
-  - prep/v2-distributional 36d4a4e — the R2 distributional-v2 module, unwired and NOT frozen.
-  Evidence: .work/816/. The lane worktrees, the composition compose2 (5e03a7f) and pin-sim are in the
-  session scratchpad; the commits persist in the repository.
-CURRENT_BRANCH_PRIOR_98=chore/state-post-98, MERGED as PR #99 (the recovery-header fix).
-CURRENT_BRANCH_PRIOR_F=chore/state-post-lane-f, MERGED as PR #98 (the result record).
-CURRENT_BRANCH_PRIOR_E=chore/state-post-lane-e, from main 4b0a522. Its STATE commits merged with #97.
-CURRENT_BRANCH_PRIOR_D=chore/state-post-lane-d, from main 3dc545c. It was the base of lane E, and its
-  STATE commits merged with #96.
-CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was branched from main 5940557.
-  - bf31847: the post-batch STATE checkpoint.
-  - de31d5a: THE LANE D IMPLEMENTATION, gated PASS: ruff, 1825 passed, schemas+smoke, scanners 3/3.
-    - 0009: public.-qualified, row-level security on, REVOKE ALL FROM PUBLIC, anon, authenticated,
-      service_role.
-    - scripts/apply_section_5a_seal.py: one transaction, with pre-checks, the exact bytes of 0009,
-      post-checks, and rollback on any refusal.
-    - .github/workflows/section-5a-apply-seal-migration.yml: dispatch-only.
-    - provenance.attest(workflow=...), with require_verified_provenance still evaluation-only.
-    - Addendum 8, and a re-pin to 0911c9bd (69 files).
-    - The in-job selection passes 195 tests under -s -B.
-  - STATE commits above.
-  The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=08c77f09 (main, PR #106, the PROD-SAFE-3 pin). Exact-main CI run 35179052192 passed; tree
-  194a52958316bbd13e7807ad8c00a8a13f9b2ceb (the owner-authorized final tree; simulated and gated locally at 2230).
-LAST_GREEN_SHA_PRIOR_106=66acc44 (main, PR #105, the audit route). Exact-main CI run 35120232571 passed; tree
-  0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b, which the gate passed locally at 2230.
-LAST_GREEN_SHA_PRIOR_105=e5cd7ef (main, PR #104, the end of the prep batch). Exact-main CI passed on Python 3.11/Linux, run
-  35078236168. Its tree 0344911170da79ad7491886d58f1f262ced988a5 equals the composition gated locally at 2085.
-LAST_GREEN_SHA_PRIOR_99=c0ed7a0 (main, PR #99, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
-  34922052354; exact-head CI on bcf2d5a was run 34921878215. The local gate on this tree was 1883.
-LAST_GREEN_SHA_PRIOR_98=ccd0a54 (main, PR #98, STATE.md only). Exact-main CI passed on Python 3.11/Linux, run
-  34920375430. The local gate on this tree was 1883.
-LAST_GREEN_SHA_PRIOR_F=1d8f933 (main, lane F #97). Exact-main CI run 34871911951.
-LAST_GREEN_SHA_PRIOR_E=4b0a522 (main). Exact-main CI passed on Python 3.11/Linux, run 34860237518. The local
-  gate was 1857 on the identical tree (lane E 5d833de).
-LAST_GREEN_SHA_PRIOR_D=3dc545c (main). Exact-main CI run 34850349141; the local gate was 1825 (lane D
-  18a6447).
-LAST_GREEN_SHA_PRIOR=5940557 (main). Exact-main CI run 34824354602; the local gate was 1739 on the
-  identical tree (composition b58d334).
-LAST_VERIFY_BATCH=Exact-head CI green on e199969, 8ce93c4 and 8d6e26e. Exact-main CI green on 99e5499,
-  86a5ed1 and 5940557. Links are in .work/811/t3-batch/raw/*/ci_*_url.txt.
-LAST_VERIFY=PASS ruff ok | 2230 passed | schemas+smoke ok | scanners 3/3 · audit head 2b95fd0 · 2026-09-16 (local). The
-  simulated end state (the audit merged, then P merged: eb8881f, tree 194a5295) also PASSES at 2230.
-LAST_VERIFY_PRIOR_PIN=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · pin commit P 7d2cf2f4 (the release candidate R
-  plus the re-pin) · 2026-09-16 (local). The guard delta after the re-pin is [], advisory SCHEDULER_AHEAD_OF_PIN.
-LAST_VERIFY_PRIOR_BATCH=PASS ruff ok | 2085 passed | schemas+smoke ok | scanners 3/3 · code-final composition 2b724ee (c0ed7a0 +
-  L2 3cd8476 + L3 84e7181 + v2 36d4a4e + L1 fd0e1f0 + STATE 0b512a8) · 2026-09-15 (local). Per lane: L2 2003,
-  L3 1923, v2 1925, L1 1883. It touches none of the 69 evaluator-pinned files (24 files changed), and the
-  pinned red tests are unchanged. This checkpoint differs from that tree only in STATE.md.
-LAST_VERIFY_PRIOR_817=PASS | 2059 passed · composition 5e03a7f, the tree Codex task-817 verified.
-LAST_VERIFY_PRIOR_99=PASS ruff ok | 1883 passed | schemas+smoke ok | scanners 3/3 · main ccd0a54 · 2026-09-15 (local).
-LAST_VERIFY_PRIOR=PASS ruff ok | 1739 passed | schemas+smoke ok | scanners 3/3 · composition 02d5844 ·
-  2026-09-14 (local, and Codex task-811 before and after its mutants).
-  CI portability: CI runs the suite on Python 3.11 on Linux, but every local gate ran 3.13.14 on macOS.
-  - ruff reports no 3.12-only syntax; a probe proves ruff 0.16.3 would flag it.
-  - The 45 changed Python files use no stdlib API newer than 3.11.
-  - The full composition suite passed 1739 with builtins.sum replaced by 3.11's naive float
-    summation; 2379 of 36594 calls really differed.
-  - The libm-dependent t-CDF is asserted only within tolerances, and recompute binds evidence and
-    rule digests, never float results.
-  - The first real 3.11/Linux run is the PR's exact-head CI.
-  End-to-end on a toolcache-shaped CPython 3.13.14, using the workflow's own step text:
-  - install removed the floating pip unrun and installed 19 authenticated wheels with CPython's
-    bundled pip;
-  - attest PASSED; 7 negative refusals, including the V810-F1 and F3 reproductions;
-  - 553 in-job tests passed, leaving no bytecode;
-  - readiness reached the authority refusal, and with the driver loaded both origin checks passed.
-MAIN_STATE=main = origin/main = 4b0a522, tree b34fa44e, zero open PRs. It is the merge of PR #96 (lane E)
-  onto 3dc545c (#95, lane D), onto 5940557 (#94), onto #93, onto #92.
-  The SUPABASE_DB_URL repository secret exists (name checked only).
-  - The evaluation workflow has NEVER run.
-  - The apply workflow ran ONCE: run 34851608514, refused before any database access.
-  Scratch worktrees remain under the session scratchpad; the repository checkout itself is single.
-MAIN_STATE_PRIOR=main = origin/main = 200d822, clean, single worktree, zero open PRs. 200d822 is the
-  merge of the PR #82 STATE checkpoint onto 0f9fe93; no product code moved with it.
-  0f9fe93 itself was the head of a TWO-LANE BATCH merged in order: PR #80 (d790569,
-  exact-main CI #147, tree byte-identical to the reviewed head b91b318) then PR #81
-  (0f9fe93, exact-main CI #149). Before merging the second
-  lane its reviewed head, tree and diff were re-verified unchanged, and the tree that resulted
-  from merging it onto the NEW main was proven BIT-IDENTICAL to the composition preflight tree
-  eefb993e228e11ca7147ea0363b03bcc09ac9b79, so what shipped is exactly what was reviewed
-  together. Test arithmetic reconciles exactly: 1125 base + 3 + 4 = 1132.
-  b4333ee was the PR #79 STATE checkpoint, which recorded 7ab92ab (PR #78, CI #143).
-SHIPPED_TO_MAIN=Recent Analysis History, in two steps.
-  PR #56 (2cdc06c): operator-facing GET /v1/runs behind the ordinary app session, a Recent
-    Analysis tab, and fail-closed run provenance in the in-process store.
-  PR #57 (7299c6e): the same history made DURABLE. A new read-only
-    recent_runs_for_origin(limit, *, prediction_origin) on the protocol and all three
-    repository implementations derives origin by joining analysis_runs to predictions on
-    run_id, because analysis_runs carries no prediction_origin column. /v1/runs now prefers
-    durable rows, falls back to the in-process store, and reports which in a top-level
-    "source" field. Rows carry detail_available, because the full detail_view is NOT persisted
-    durably — only the run summary is — so a restored entry shows its summary and says the full
-    breakdown is unavailable rather than firing a request that would 404.
-  PR #59 (690d756): durable sanitized Detail, so a restored USER_REQUESTED entry can REOPEN
-    full Detail. detail_view is ~7.4 KB and is not reconstructable from existing tables, so one
-    additive table was authored: migrations/0008_analysis_run_details.sql. The write lives in
-    schedule_best_effort_persist, which only the two analyze routes call, gated to
-    USER_REQUESTED and sanitized through sanitize_for_export. Reads reuse the same
-    EXISTS-over-predictions origin guard. save_run_detail uses its own connection and swallows
-    its own failures, so the absent table cannot call mark_unavailable, cannot open the
-    persistence circuit breaker, and cannot affect any other write.
-  PR #61 (b8d81d3): history rows now carry primary_timeframe and a conservative source
-    indicator, plus browser-local symbol/timeframe/mode filters. Every field already existed —
-    durable rows carried them and the normalization was dropping them; the in-process store now
-    projects the same three from the stored payload. Nothing is computed and the browser derives
-    no analysis value. The indicator claims "Live data" only when is_live_data is exactly true.
-    disposition and total_score are deliberately NOT surfaced: they are decision claims that
-    belong in Detail. Filtered-empty is reported distinctly from genuinely-empty.
-  PR #63 (1668534): the history detail-availability read is BATCHED. /v1/runs now issues ONE
-    run_ids_with_detail query for all durable-only rows instead of one get_run_detail call per
-    row. It reuses the same EXISTS-over-predictions origin guard, takes a required validated
-    keyword-only origin, issues no query on empty input, caps its input and fails closed beyond
-    the cap, and — like save_run_detail and get_run_detail — uses its own connection and
-    swallows its own failures so the absent table cannot open the persistence circuit breaker.
-    get_run_detail is unchanged and still serves the single /v1/analyze/detail lookup.
-  PR #65 (3eeeef6): each watchlist symbol now shows its last analysis — when, primary
-    timeframe, and the same conservative source indicator — plus an "Open latest analysis"
-    action gated on detail_available. Joined in the browser from /v1/runs on NORMALIZED_SYMBOL,
-    not symbol: the watchlist stores symbol.display while a run row's symbol is the raw request
-    text, so joining on symbol would silently report analyzed symbols as never analyzed.
-    NAVIGATION ONLY: no score, disposition or probability, and the watchlist is never
-    reordered, ranked or badged. A symbol with no match reads "No recent analysis found." —
-    NOT "not analyzed yet" — because /v1/runs is BOUNDED recent history and absence there is
-    evidence about the window, not about the symbol. The watchlist renders symbols first and
-    enriches after, so a failing /v1/runs never empties it.
-  PR #67 (17ca9e1): /v1/analyze_batch now returns an "items" list — one entry per request, in
-    ORIGINAL REQUEST ORDER, carrying index, the RAW requested symbol, and status OK|ERROR, with
-    run_id for OK and the same detail object for ERROR. Each errors entry also gains symbol.
-    results is unchanged and every existing errors key keeps its value, so a consumer reading
-    only those sees no difference; the analysis payload and analysis_hash do not move. Exactly
-    one analysis attempt per item: nothing is retried and nothing extra is analyzed to recover
-    identity. The raw request text is used deliberately — when the failure is a
-    symbol-normalization rejection there is no normalized symbol, so it is the only honest
-    identifier. The frontend renders in request order and falls back to successes-then-errors
-    when items is absent.
-  PR #69 (18e987a): the persistence status line now states its CONSEQUENCE instead of naming a
-    state. STATELESS and UNAVAILABLE each say that the analysis is not retained and will not
-    appear in Recent Analysis history; OK says storage is available and deliberately does NOT
-    say "saved", because the write is best-effort and fire-and-forget, so claiming a completed
-    save at render time would be a claim the frontend cannot support. Wording only: the status
-    values, the API and the persistence path are unchanged.
-  PR #70 (9923f33): the SAME wording now serves both places. The Detail "Persistence" row was
-    carrying its own second copy of the status text, so PR #69 moved the header badge and left
-    Detail behind; persistenceStatusText is now extracted once and used by both, and an
-    executable test pins them equal for all four statuses. Also reverts a regression this lane
-    introduced in its first commit: Detail's "Live data" row had been changed to a raw boolean,
-    which made a missing value render blank instead of "n/a", capitalised only that one row,
-    and disagreed with the second "Live data" row that still went through formatValue. It is
-    restored to main's behaviour — formatValue already renders null/undefined as "n/a",
-    booleans as "yes"/"no", and arrays as joined or "none".
-  PR #72 (b8f5ff6): the global refresh control now actually refreshes Recent Analysis.
-    refreshCurrentView branched on the active tab for single, watchlist and batch and then
-    FELL THROUGH to loadSystemStatus() + markRefreshed(). The Recent tab (data-tab="recent")
-    had no branch, so clicking the control there pinged /v1/system_status, never called
-    loadRecentRuns(), and still stamped "last refreshed at ..." — the list stayed stale while
-    the UI claimed a refresh. Recent now reloads /v1/runs and NOTHING else: no analysis, no
-    write, no POST, no new endpoint, and the existing analysis-active and cooldown guard is
-    untouched. Three supporting changes keep the wording honest rather than moving the lie one
-    level down: loadRecentRuns swallows its own error, so it now REPORTS success and the stamp
-    is written only when the reload actually happened, while a failure still arms the cooldown
-    so the control cannot be hammered; markRefreshed takes an optional label and delegates the
-    cooldown to startRefreshCooldown, with the default reproducing the previous text exactly so
-    all four pre-existing call sites are unchanged; and the button reads "Refresh" on Recent
-    instead of "Re-analyze", still "Re-analyzing..." on every tab while an analysis genuinely
-    runs, with showPanel refreshing the label on a tab switch. The dev tab uses the same
-    fallback and has the same untruthful label; it was DELIBERATELY LEFT ALONE rather than
-    widening the task, and remains an open adjacent candidate. The new test executes the real
-    functions in node against a fake DOM, and was not taken at face value: each of the three
-    guards was reverted in turn and the test confirmed to fail.
-  PR #74 (4af3bfd): the Dev tab refresh now says what it actually refreshes — the adjacent
-    candidate PR #72 deliberately left open. The Dev tab used the same fallback, but unlike
-    Recent its ACTION was already legitimate and is unchanged: /v1/system_status is a
-    read-only GET, and on success api() feeds updateStatusFromPayload, which refreshes the
-    persistence badge and Dev Mode availability. Only the wording lied. The button now reads
-    "Refresh status" instead of "Re-analyze", and loadSystemStatus — which catches its own
-    error and degrades the badge to UNKNOWN — now REPORTS success, so a failed refresh is no
-    longer stamped "last refreshed at ...". A failure still arms the cooldown and still
-    degrades the badge. The trailing fallback for an unrecognised tab got the same treatment
-    and keeps the generic wording. NO AUTH-SEMANTIC CHANGE: zero diff lines touch
-    updateDevModeUx, #devModeStatus, #devCode, #devForm, /v1/auth/dev, #loadRuns or
-    /v1/debug/*, and no refresh message is ever written into the Dev Mode status line.
-    MUTATION TESTING FOUND A REAL HOLE, now closed: the behaviour test STUBS loadSystemStatus
-    and loadRecentRuns, so their real bodies never ran, and making loadSystemStatus's catch
-    return true instead of false left the whole suite GREEN while silently restoring the very
-    bug being fixed. That one-line contract — resolve true on success, false in the catch —
-    carries every honesty guarantee in both refresh lanes. A second test now executes the real
-    functions with api stubbed and pins all four outcomes plus the UNKNOWN degradation. The
-    loadRecentRuns half shipped in PR #72 with the same hole and is closed here too.
-  PR #76 (b7d4657): OPERATOR LOGOUT — the first T2 lane in this run. There was no way to end
-    a session: the operator could only wait for the cookie to expire, and an elevated Dev Mode
-    cookie outlived any intent to stop working. POST /v1/auth/logout is authenticated by the
-    existing app session and deletes BOTH cookies with the exact attributes they were set with
-    (path=/, HttpOnly, SameSite=lax, Secure when configured) so the browser actually matches
-    and drops them. It clears the Dev cookie UNCONDITIONALLY — a logout that leaves an elevated
-    session behind is the bug the route exists to prevent. No DB, no write, no analysis, no run.
-    POST ONLY, deliberately, and NO MIDDLEWARE: a GET reaches the StaticFiles mount and 404s,
-    so logout is unreachable by navigation, and SameSite=lax means a cross-site POST carries no
-    cookie and fails the session check. An earlier revision added a global http middleware that
-    ran on EVERY request just to turn that 404 into a 405; it was removed in review, because the
-    status code was a test preference and 404 already satisfies the security requirement. Do not
-    reintroduce it — the test now pins the real property, that a GET does not end the session.
-  TTL MISMATCH FIXED (proven, not speculative): create_session_token has always expired the
-    token at now + settings.session_ttl_seconds, from the operator-settable
-    UCPE_SESSION_TTL_SECONDS, while set_session_cookie hardcoded max_age=3600. They agreed ONLY
-    at the default. Above 3600 the browser dropped a still-valid cookie and logged the operator
-    out early; below it the browser kept a cookie the server already rejected, so the UI looked
-    signed in while every call returned 401. The cookie lifetime now follows the configured TTL,
-    and a regression test asserts the real numbers (900 and 7200), not 3600.
-    The UI's Log out control returns to a freshly-loaded state. The cookies are HttpOnly, so the
-    browser cannot clear them itself: a FAILED request does NOT show a logged-out state, it says
-    the operator is still signed in. A 401 is the exception and counts as logged out.
-    clearOperatorData runs on LOGIN as well as logout, so a response still in flight when logout
-    is clicked cannot leave the previous session's results in the DOM for the next login.
-    Exactly one line was removed from auth.py (max_age=3600); app.py is purely additive; no
-    existing auth check, limiter or comparison was touched. api/auth.py is NOT a guarded source
-    path; app.py, index.html and app.js are, but all three were already in CURRENT_DELTA_PATHS,
-    so the guard's delta set is unchanged.
-  PR #78 (7ab92ab): SESSION EXPIRY RECOVERY. A normal authenticated request that 401s because
-    the session is no longer valid used to leave the UI claiming to be signed in, with every
-    later action failing under its own local error message. It now returns the UI to the
-    locked/login state and clears operator data.
-  THE CLASSIFICATION IS THE WHOLE POINT — DO NOT BLANKET ALL 401s. Recovery is OPT-IN through
-    a sessionApi wrapper; api() itself is unchanged. Classification follows the endpoint's
-    BACKEND GUARD, never the 401 message text, because verify_session_token emits three
-    different messages ("Session expired.", "Valid session is required.", "Dev Mode re-auth is
-    required.") and none is a stable contract. TEN sites guarded by require_app_session
-    recover: /v1/system_status, /v1/analyze, /v1/analyze/detail/{id}, /v1/runs twice
-    (loadRecentRuns and the watchlist enrichment), /v1/calibration, /v1/analyze_batch, and GET,
-    POST and DELETE on /v1/watchlist. FIVE are excluded and MUST STAY EXCLUDED: POST
-    /v1/auth/login and POST /v1/auth/dev are PUBLIC routes where a 401 means the code typed was
-    wrong, not that a session ended; GET /v1/debug/runs and GET /v1/debug/export/{id} are
-    guarded by require_app_dev_session, which reads ONLY the dev cookie, so a 401 there means
-    Dev re-auth is needed while the normal session is perfectly valid; POST /v1/auth/logout
-    handles its own 401. The URL namespace mirrors the guard boundary exactly, which is what
-    makes the map stable. Opt-in is the safe default: a future normal-session call that forgets
-    the wrapper merely misses the recovery, while a future dev call inheriting a global rule
-    would destroy a valid session.
-    The wrapper recovers BEFORE rethrowing, because three of the ten sites swallow their own
-    errors, and rethrowing keeps existing finally blocks such as setAnalysisActive(false)
-    running. A sessionGeneration counter, incremented ONLY on successful login, stops a 401 from
-    an old session locking a session that has since been signed back in; handleSessionExpired
-    also returns early when the workspace is already hidden, so concurrent 401s — routine, since
-    loadWatchlist fires two requests in parallel — recover exactly once. An earlier revision
-    incremented that counter inside resetToLoggedOut, which was both unnecessary and destructive
-    to three existing tests; resetToLoggedOut is byte-identical to what preceded it.
-    Eight mutations were confirmed to break the suite, including the three forbidden ones: the
-    dev debug route recovering, dev login recovering, and an invalid access code logging the
-    operator out. The test file also carries a COVERAGE GUARD that extracts every call site from
-    app.js and asserts each is in the RECOVER or the EXCLUDE set, so a new unclassified call
-    site fails the build instead of silently inheriting a default.
-    src/, schemas/, migrations/, frontend/index.html and frontend/styles.css are byte-identical
-    to the previous main: no backend change, no auth weakening, no retries, no writes.
-  PR #80 (d790569): SESSION RESTORE ON LOAD. The session cookie is HttpOnly, so the page
-    cannot read it, and nothing asked the server whether it was still valid. Every reload
-    showed the login panel and made the operator retype the access code even when the cookie
-    was good — and it is good for the full configured UCPE_SESSION_TTL_SECONDS since PR #76
-    aligned the cookie lifetime to the token TTL. Boot now probes with loadSystemStatus, which
-    already performs a read-only GET on the session-guarded route and already reports success.
-    REUSING IT ADDS NO CALL SITE, which is why the PR #78 401-classification coverage guard
-    stays green and untouched; do not replace this with a new api() call without classifying
-    it there. A 401 at boot routes to handleSessionExpired, which returns immediately because
-    the workspace is still hidden, so nothing is reset and no expiry message appears. Success
-    mirrors the login path exactly, including the sessionGeneration bump and clearOperatorData
-    before unhiding. A FAILED PROBE SAYS NOTHING: not being signed in is the default state, and
-    announcing a failed session check on every first visit would be noise and wrong.
-  PR #81 (0f9fe93): DEV MODE REPORTS WHAT ACTUALLY FAILED. Two defects. A failed Dev auth
-    rendered devModeStatus.textContent — the AVAILABILITY line owned by updateDevModeUx, which
-    reads "Dev Mode is available. Re-auth to load debug tools." Being truthy it always won, so
-    a wrong Dev code, a rate limit and Dev Mode being disabled all produced that same sentence;
-    typing the wrong code looked like nothing had happened. The backend distinguishes all three
-    (401 "Invalid Dev Mode code.", 429 with retry_after_seconds 60, 403 "Dev Mode is disabled.")
-    and every one was discarded. loginFailureMessage already handled them, including the retry
-    hint, so the handler now uses it; devModeStatus keeps its own job and is never overwritten.
-    Separately, Load Runs and the per-run Export buttons had NO error handling at all, so a
-    failure — most often an expired Dev session — became an unhandled promise rejection and the
-    operator saw nothing happen. Both now report, naming which action failed, and a 401 says Dev
-    re-auth is needed WHILE STATING THE NORMAL SESSION REMAINS ACTIVE, which is true because
-    those routes are guarded by require_app_dev_session and read only the dev cookie. No retry
-    and no automatic re-auth. The three Dev and debug call sites DELIBERATELY keep plain api
-    rather than sessionApi, so a Dev 401 still cannot end the normal session.
-  SWEEP RESULT, so it is not redone blindly: /v1/system_status returns shelter_mode,
-    kill_switch, circuit_state, repository_type, provider_mode, store_status,
-    news_sources_status and last_calibration_utc that the UI drops. All are CONSTANTS today, so
-    surfacing them would be speculative UI rather than user value — rejected, same call as the
-    news influence_mode wording. Single-analysis per-timeframe failure, watchlist failure
-    states and the build fingerprint were audited and are already correct.
-  MERGED IS NOT DEPLOYED: none of this is in front of users.
-ACTIVE_LANE=feat/5a-evaluator-on-main (LOCAL, NOT PUSHED) — the repaired §5A evaluator recomposed onto
-  main. Implementation 0bbcdd5; fresh full Codex adversarial verification task-807 in progress.
-OWNER_PRODUCT_DECISIONS=Two candidates are CLOSED BY OWNER RULING, 2026-08-28. They are not
-  defects and must NOT be re-proposed by a future whole-product gap sweep. Both surfaced
-  repeatedly as the only remaining candidates once the board was otherwise clear, so they are
-  written here to stop that loop.
-  1. RECENT HISTORY STAYS FIXED AND BOUNDED FOR v1. Do NOT add an operator-adjustable
-     /v1/runs limit. What "recent" should mean is a product question the owner has answered,
-     not an implementation gap. /v1/runs remains bounded recent history, which is also why the
-     watchlist says "No recent analysis found." rather than claiming a symbol was never
-     analyzed — absence there is evidence about the window, not about the symbol.
-  2. CONSTANT system_status FIELDS STAY HIDDEN absent a real operator use case. The UI
-     deliberately drops shelter_mode, kill_switch, circuit_state, repository_type,
-     provider_mode, store_status, news_sources_status and last_calibration_utc. Every one is a
-     CONSTANT in the current build, so rendering them would be speculative UI rather than user
-     value. Surface one only if the owner raises a concrete operator need, or if that field
-     actually starts to vary.
-SUPERSEDED_FROZEN_LANES=The T_close freeze on the three lanes below LAPSED BY ITS OWN TERMS when
-  T_close passed. fix/r202-01 (2c35ab2) and fix/a203-01 (b5310dc) were 63 commits stale; they were
-  REPLAYED onto exact main d52e9ae in fresh worktrees, revalidated independently, and shipped as
-  #89 and #90. The originals are SUPERSEDED and kept only for provenance. integration/b11-combined
-  (1b10587) was deliberately NOT used as a release candidate and is superseded too.
-  OPERATIONAL NOTE ON #90: A203 makes candle validation STRICTLY STRICTER — exact adjacency and
-  rejection of a future latest close — so provider data previously tolerated with small gaps now
-  fails analysis rather than proceeding. It is merged, NOT deployed.
-FROZEN_POST_T_CLOSE_PRIOR=Three branches are LOCAL-ONLY and frozen until after T_close. None is
-  pushed, none is on any remote, none is on main. Do not open a PR, merge, or deploy any of
-  them before T_close:
-    fix/r202-01              2c35ab2  provider HTTP byte cap + wall-clock deadline (R202-01)
-    fix/a203-01              b5310dc  candle ordering/future boundaries fail closed (A203-01)
-    integration/b11-combined 1b10587  the two above merged, for integration evidence only
-  Re-verified at this pre-T_close checkpoint: still absent from origin, still unreachable
-  from main, still frozen.
-COLLECTOR=STOPPED on main as of #88 (651c63e): the schedule trigger is removed, workflow_dispatch
-  retained, and WHAT the collector writes is unchanged. The §5A.5 pre-registered cadence
-  assertion was INVERTED rather than deleted, so restoring a schedule fails the build. The
-  OUTCOME RESOLVER IS STILL SCHEDULED (resolve-outcomes.yml, cron "17 * * * *"), which matters:
-  outstanding predictions still need outcomes.
-DELEGATE_HAZARD=CLOSED by #87. delegate.sh rotates any existing result and log to .prev-<ts> and
-  refuses a result older than the invocation, so a stale verdict can no longer satisfy
-  completion. That exact failure happened once and was nearly reported as a fresh verdict.
-CODEX_VERIFICATION_807=COMPLETE, verdict NOT_VERIFIED. Fresh (result 14:28:56Z; Opus's independent
-  review was written earlier at 13:47:32Z). 40 of 40 mutations KILLED, so the repair's mechanisms
-  hold; G3.4 unsatisfiability independently CONFIRMED. Evidence and the consolidated MAX review are
-  at .work/807/.
-  CRITICAL F1 — out-of-tranche symbols are pooled into A and B. Verified by Opus: losing BTC alone
-  is NOT_PASS (A=F, B=F); adding SOL/USDT flips it to A=T, B=T. Scope was enforced at authorization,
-  never at admission. This makes PASS easier and has existed since the original decision layer.
-  HIGH F3 — the CLI builds Settings(), which ignores the environment, so in Actions readiness would
-  report an EMPTY in-memory store: a false "frame failed". Verified by Opus. Every other script uses
-  Settings.from_env().
-  HIGH R4 (Opus) — the workflow offers readiness and consume only, so seal recovery is unreachable
-  where the secret lives. HIGH F4/F5 — the library accepts an undeclared authority and
-  verify_pin=False. HIGH F2 — readiness and consumption identities are incomparable. MEDIUM F6-F9,
-  LOW F10, R2.
-CODEX_PENDING=NONE. task-818, 819 and 820 COMPLETE, fresh (fired 10:02:41Z, 11:03:12Z, 11:23:41Z; bases 209d1e0,
-  e551e43, 2b95fd0; no tracked change). Three of the budget's four delegations used. Evidence and triage:
-  .work/816/codex-818-820/ (triage.md).
-CODEX_VERIFICATION_818_820=Each VERIFIED_WITH_FINDINGS; every gate passed (2185, 2218, 2230).
-  - 818: two false negatives (inherited policy roles; API-role ownership) and a role-name leak. REPAIR 1 (e551e43):
-    the server decides membership/INHERIT, PUBLIC, ownership, policy applicability and column privileges; a missing
-    fact is unsafe (INCOMPLETE); policy role lists withheld element by element; one REPEATABLE READ snapshot.
-  - 819: repair 1 held; PG16 rehearsal predicted with no mismatch. Two false negatives of one class (the assessment
-    assumed the surface): views over views; Realtime outside the served schemas. REPAIR 2 (2b95fd0), for the class:
-    served schemas are context only; Realtime by its own rules (incl. deleted-row keys under RLS); recursive view/rule
-    discovery with any-column privileges; inheritance/partition parents.
-  - 820: repair 2 held; PG16 rehearsal predicted with no mismatch; SQL valid on PG 15-17. F-820-1: the recursive
-    discovery stops at depth 16 without a signal. NOT repaired (two rounds is the limit): escalated with a no-code
-    disposition, since the post-run verifier treats a reached depth (or an unreadable discovery) as INCOMPLETE.
-CODEX_PENDING_PRIOR_817=NONE. task-817 COMPLETE, fresh: fired 2026-09-15T05:12:23Z, delegate exit 05:24:59Z, base 5e03a7f,
-  no tracked change. Evidence: .work/816/codex-817/.
-CODEX_VERIFICATION_817=VERIFIED_WITH_FINDINGS (5 attacks per lane; the gate passed at 2059). L3 held every attack.
-  Triage (.work/816/codex-817/triage.md):
-  - F-817-1 · L2 accepted a self-consistent fork identity. FIXED: the owner repository is pinned (3cd8476).
-    The rerun probe on the final composition shows a fork refused.
-  - F-817-2 · L2: in-process mutation of the digest constant. RESIDUAL, the documented in-process class
-    (Addendum 7 §43); the attested reviewed checkout binds the constant. No code change is possible.
-  - F-817-3 · v2 accepted band_frac=True. FIXED (36d4a4e); the rerun shows ValueError.
-  - Probe-only coverage is now pinned by committed tests (L2 +12, L3 +9, v2 +5).
-  - Siblings, recorded only (evaluator-pinned): provenance.py shares F-817-1's property; v1 shares F-817-3's.
-CODEX_PENDING_PRIOR=NONE. task-812 COMPLETE. It is fresh: fired 09:13:53Z, delegate exit 09:20:32Z, base
-  de31d5a, no tracked change, and every restored file matches its committed blob.
-CODEX_VERIFICATION_812=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1825 before and
-  after.
-  - M1: the pre-check stale refusal was disabled. 5 committed tests killed it: the four F-0009-C
-    cases and the refused-apply report.
-  - M2: the row-level-security post-check was skipped. 2 killed it.
-  - M3: post-check failures were allowed to reach commit(). 16 of the 17 difference cases killed
-    it; the 17th refuses earlier, in _row.
-  - M4: service_role was dropped from 0009's REVOKE. The migration text test killed it.
-  - M5: require_verified_provenance accepted any attestable workflow. The never-claims test killed
-    it.
-  Opus cross-check against the raw log: 25 FAILED lines = 5+2+16+1+1, exactly the credited tests.
-  Evidence: .work/812/codex/.
-CODEX_DONE_811=task-811 COMPLETE. It is fresh: fired 06:44:29Z, delegate exit 06:53:47Z, base
-  02d5844, tree f75fd138, no tracked change, and every restored file matches its committed blob.
-CODEX_VERIFICATION_811=VERIFIED. Committed suite: 5 KILLED, 0 SURVIVED. The gate passed at 1739 both
-  before and after the mutants.
-  - M1: the wheel-digest check in audit_site_packages was disabled (the V810-F1 regression). Killed
-    by test_a_tampered_file_with_a_rewritten_installed_record_refuses.
-  - M2: the site-packages symlink refusal was disabled (the V810-F3 regression). Killed by
-    test_a_symlinked_package_directory_refuses.
-  - M3: lock-hash membership was disabled. Killed by test_a_wheel_the_lock_does_not_authenticate_refuses.
-  - M4: pip, setuptools and wheel were allowed beside the lock. Killed by
-    test_not_even_the_installer_may_sit_beside_the_lock.
-  - M5: the install ran the floating `python -B -m pip`. Three workflow-boundary tests killed it.
-  Opus cross-check: the raw pytest output has exactly 7 FAILED lines, which are the credited tests
-  (3777 run - 3770 passed). Each mutant disabled a single guard, and every sibling test passed.
-  Evidence: .work/811/codex/, with a SHA-256 manifest in .work/811/evidence.sha256.
-  Final MAX review: .work/811/final-max-review.md.
-CODEX_VERIFICATION_810=NOT_VERIFIED. 5 of 5 mutants KILLED by committed tests. Bypass hunt:
-  - CRITICAL V810-F1: the installed RECORD is trusted. A file tampered together with its RECORD
-    passes; Opus REPRODUCED it on the toolcache-shaped interpreter.
-  - HIGH V810-F3: symlinked directories evade the walks; Opus REPRODUCED it.
-  - HIGH V810-F2: time of check to time of use — hashed once, loaded later by path.
-  - HIGH V810-F4: module origins are read from mutable attributes.
-  Root cause (Opus): the checks authenticate against mutable installed metadata, not the pinned
-  hashes; and the job runs one unverified piece of code, the floating pip that setup-python
-  force-reinstalls from PyPI and the install step executes. The runtime-identity class is at the
-  bound (E3 -> V809-F1 -> G1 -> V810). NO unilateral repair.
-  Final MAX review: .work/810/final-max-review.md. Evidence: .work/810/.
-CODEX_VERIFICATION_809=VERIFIED_WITH_FINDINGS on composition faaed6d (tree 993fc5dd). Committed suite:
-  15/15 mutants KILLED, 0 SURVIVED, no new tests. Gate 1652. Red tests (c7e5d4c6...) and the adopted
-  808 tests (b88f1838...) intact. Migration 0009 REVIEWED BUT UNEXECUTED: NULL, precedence and key
-  spelling verified. The library provenance=None allowance is not permission on any real path.
-  The resolver claim (§33) was proven by execution.
-  MEDIUM F809-1, found independently by Opus as O809-1 15 minutes before Codex's report: the runtime
-  identity binds distribution METADATA, not import ORIGINS. Codex's shadow certifi.py was imported
-  under locked metadata; Opus's committed scripts/platform.py executed while the pin passed.
-  Causes: module-level imports run before attestation; scripts/ is sys.path[0]; PYTHONPATH=src;
-  untracked files are ignored; same-version duplicate distributions collapse. Not reachable through
-  dispatch input.
-  LOW F809-2: the workflow step reader silently drops workflow-level env.
-  Consolidated MAX review: .work/809/consolidated-max-review.md. Evidence: .work/809/.
-CODEX_VERIFICATION_808=NOT_VERIFIED. Consolidated MAX review: .work/808/consolidated-max-review.md.
-  Evidence: .work/808/codex/ and .work/808/opus/.
-  CRITICAL V808-F1 (Codex; Opus reproduced it harmlessly with a stub): the evaluation workflow puts
-  `--confirm '${{ inputs.confirm }}'` into shell source AFTER the pin-check step, with
-  SUPABASE_DB_URL in the step env. A dispatcher can mutate the evaluator, re-pin, and consume under
-  altered rules. Needs write access: PUBLIC repo, exactly 1 push-capable account, 0 environments.
-  Not live — the workflow exists only on this unpushed lane.
-  HIGH R6 (Opus, new): the run step pipes into `| tee` under GitHub's default `bash -e` with no
-  pipefail (confirmed in GitHub docs; reproduced), so a refused or crashed readiness, consume or
-  recovery shows GREEN.
-  MEDIUM R7 (Opus, new): Codex's 40/0 holds only with its uncommitted test_adversarial_808.py.
-  Against the COMMITTED suite, mutants re-pinned: R01, R07, D08, D10, D12, S07 and S08 SURVIVE
-  (1476 passed). S07 and S08 count exact ties for the candidate in B2 and C, contrary to §5A's
-  "ties count as WORSE" — the implementation is correct, but nothing committed catches a regression.
-  MEDIUM R5 (Opus, pre-result; Codex silent): requirements ranges plus interpreter drift, so the
-  verified runtime is not the executed runtime.
-  HOLDING: amendment c44e416 faithful; guard order and D3; F1 scope; D4 identity; D1 closure; 0009
-  lifecycle (REVIEWED BUT UNEXECUTED); gates 1476 committed / 1483 with Codex's tests.
-  CLASS AT BOUND: V808-F1, R6 and R5 are the second defeat of the entrypoint class (a guarantee
-  true in the library, false at the production entrypoint; first defeat F3/R4). Root cause: the
-  workflow is only ever checked as text and never executed, and its runtime is unbound. NO
-  unilateral repair was made.
-  Out-of-lane, not acted on: resolve-outcomes.yml:64 has the same tee masking; oos-pair-evidence.yml
-  interpolates typed inputs into run (LOW).
-OWNER_RULINGS_D1_D4=Applied 2026-09-13. D1 pin derived from the entrypoint's full first-party import
-  closure plus declared rule/runtime surfaces (67 files; does not reach the HF app surface). D2 G3.4
-  amended — barrier moved pre-claim, separate single-reader proof — in its own commit c44e416 with the
-  amendment chained from the Codex original hash. D3 fail closed unless durable authority AND pin are
-  positively verified; verify_pin removed from consumption and seal recovery. D4
-  decision_population_id, probability-free, distinct from evidence_snapshot_id.
-REPAIR_808_BASE=fd8239a. ./verify.sh PASS 1476. All 807 structural repairs applied: F1 scope at
-  admission (CRITICAL), F3 Settings.from_env, R4 workflow recompute, F6 materialized cells + declared
-  schema, F8 TRUNCATE guard, F10 contract-instants cross-check, R2 ReadinessRefused. Behavioural
-  mutations with the mutant re-pinned: all four new critical guarantees KILLED.
-ESCALATION_807=RESOLVED by owner rulings D1-D4 (see OWNER_RULINGS_D1_D4). As originally escalated:
-  three causal classes have now been defeated twice each and are AT CLAUDE.md's
-  two-attempt bound: pin scope (F6 -> G4 -> F7), diagnostics completeness (F7 -> G6 -> F6), authority
-  surface (F2 -> G8 -> F4). No repair was started. Root cause for pin scope is measured: the CLI's
-  first-party import closure is 23 files and 8 are unpinned, including config/settings.py, which
-  undercuts the pre-registration's reason for rejecting closure-based pinning.
+LOOP_STATE=WAITING FOR THE OWNER: one T3 for the batch below, plus product decisions (OWNER_BOUNDARY).
+  PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED ("PROD-SAFE-3 is ACCEPTED", owner, 2026-09-17).
+  The post-release batch is complete locally: four lanes, one composition preflight, one consolidated review.
+  Since the release there has been no push, dispatch, database access, migration apply or deploy, and none is
+  authorized.
+  ON RESUME, check Git first: if origin/main already contains the four lane heads, the T3 has run; verify it
+  against BATCH_T3 before anything else.
+CURRENT_MILESTONE=Post-release prep, inside the owner's envelope of 2026-09-17:
+  (1) this STATE checkpoint;
+  (2) a legacy-table security migration that codifies the audited posture, NOT applied;
+  (3) distributional-v2 integration prep;
+  (4) the dormant wider-history path, only where v2 needs it.
+  The owner excluded: a v2 freeze, a new T0, a new holdout, any database mutation, any HF deploy.
+CURRENT_BRANCH=chore/state-post-106 (LOCAL; lane A), from main 08c77f09.
+  - Its first commit merges the unpublished STATE history 2c6df51 (chore/state-post-104, from e5cd7ef).
+  - Its second commit is this compaction. A checkpoint cannot name its own head.
+  The batch lanes are all LOCAL ONLY (worktrees in the session scratchpad under lanes2/; the commits persist):
+  - A chore/state-post-106: this file.
+  - B prep/0010-legacy-table-security @ aaf11228: migration 0010, its one-shot route and its rehearsal
+    (BATCH_0010).
+  - C prep/v2-integration-prep @ 5a3b5685: the dormant v2 state builders, the proper-score skill classifier
+    and the 50/50 correction (BATCH_V2).
+  - D prep/v2-history-serving @ 9c53e3cb: STACKED ON C. Dormant v2 serving; candle history for 15m only.
+LAST_GREEN_SHA=08c77f09 (main, PR #106, the PROD-SAFE-3 pin). Exact-main CI run 35179052192 green; tree 194a5295.
+LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
+  - Composition 0151ece2: main + B + D, where D contains C. Tree 906ccf9b.
+  - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone.
+    2230 + 163 + 34 + 18 = 2445.
+  - Lane A changes STATE.md only; its composition is gated again before the T3.
+CODEX_PENDING=NONE. This batch used no Codex delegation: the owner directed that Claude owns critical reasoning
+  and implementation, and that Codex is kept for bounded mechanical or adversarial verification.
+  The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_RULINGS_L1_L3=Ruled 2026-09-14:
-  - L1=A strengthened: only _cython_3_2_4 and cython_runtime; only while the authenticated locked
-    driver is loaded; truly file- and loader-less; an exact pinned structural fingerprint;
-    everything else refuses.
-  - L1b.
-  - L2: Opus implements, and Codex runs at most 5 bounded attacks.
-  - L3: repair, then T3 merge, then a fresh T4 apply.
-  No dispatch, DB, readiness or one look.
-LANE_E=fix/5a-driver-helper-attestation, MERGED as PR #96, owner-authorized T3 with M1=A. It ran by
-  the same scripted procedure (.work/813/t3-lane-e/):
-  - exact-head CI green on 5d833de (run 34859880367);
-  - a --match-head-commit merge;
-  - parents (3dc545c, 5d833de);
-  - a merged tree b34fa44ec471846ec497cbb9ebfb20289d132f47 EQUAL to the authorized tree;
-  - exact-main CI green on 4b0a522 (run 34860237518);
-  - hf a89b45e, unchanged.
-  Contents:
-  - bf93028: the exact dynamic-helper rule;
-  - 064cfe0: attack-pinning tests and STATE;
-  - 5d833de: the M1=A recompute guard.
-  The prior local gate was 1846 at bf93028.
-  - L1b is delivered through the attest steps: attest loads the driver without connecting and
-    attests again, before the tests and the secret. The in-job test would have had to skip, which
-    tests/test_no_silent_skips.py bans.
-  - The local end-to-end run (.work/813/e2e): BEFORE, 3dc545c apply REFUSED exactly as on GitHub.
-    AFTER, both attest modes PASS at the pinned digests, and apply passes attestation and stops at
-    a nonexistent socket.
-  - Codex task-813 VERIFIED_WITH_FINDINGS: 16/16 attacks refused; 8 uncovered variants are now
-    pinned by tests.
-  - Finding 1: recompute can advance the seal with no post-driver attestation. Decision M1.
-  Review: .work/813/final-review.md.
-OWNER_BOUNDARY_PRIOR_L=RULINGS L1-L3 were requested (.work/812/t4-apply-0009/diagnosis.md §4), then RULED.
-  - L1, what the attestation accepts. A (recommended): accept an origin-less module ONLY IF all hold:
-    - its exact name is in {cython_runtime, _cython_3_2_4}, tied to the locked driver build;
-    - it is a plain module with no spec, loader, file or path;
-    - it holds no Python code;
-    - an authenticated locked extension module is loaded.
-    B: name and structure only. C: attest only before the driver loads (not recommended).
-  - L1b: readiness repeats the post-read attestation; an in-job regression test imports the real
-    driver and attests; Addendum 9.
-  - L2, verification: Opus, the local end-to-end run before and after, and ONE Codex spot-check of at
-    most 5 mutants.
-  - L3, sequence: a T3 for the repair, then a NEW T4 apply at the new SHA, then readiness, then
-    consume.
-  CONSUMED: the T4 apply at 3dc545c (refused, no DB contact), the lane D T3 (#95), and the T3 batch
-  #92-#94.
-OWNER_BOUNDARY_CONSUMED_T3_92_94=The request as it was made (.work/811/final-max-review.md):
-  - The batch: push the three branches to origin (NEVER hf), open three independent PRs, and merge
-    in order A, B, C. Each merge needs exact-head CI green, a --match-head-commit merge, parents
-    verified and exact-main CI green. The merged main tree must equal the gated local composition.
-    Stop on the first mismatch.
-  - Merging runs only ci.yml, which uses no secrets. The evaluation workflow is dispatch-only, and
-    no dispatch is authorized.
-  - K1 (F-0009-A HIGH, no RLS or REVOKE on the seal table). A (recommended): amend in a follow-up
-    lane D before any apply. B: fold into lane A before the push.
-  - K2 (F-0009-B, no apply route). A (recommended): a dedicated manual-dispatch workflow for 0009
-    alone, with the F-0009-C pre-checks. B: an apply mode in the evaluation workflow.
-  Runbook: .work/811/0009-apply-only-runbook.md. Every T4 stays separate.
-OWNER_RULINGS_J1_J3=Ruled 2026-09-14, now APPLIED and VERIFIED:
-  - J1=B, with a closed trust base: exact CPython 3.13.14, pinned Actions, CPython's bundled pip;
-    wheels authenticated against the lock; installed bytes against the wheel's own RECORD;
-    symlinks and unexpected import surfaces refused; no unverified code after attestation;
-    Addendum 7; no import hook.
-  - J2=A: Codex ran one mechanical spot-check of 5 mutants, all killed.
-  - J3: after 5/5 killed and a green composition, return ONE T3 batch for A, B and C.
-  In parallel: the READ-ONLY proof and runbook that 0009 applies with --only, without 0008 (done).
-  The T3 batch #84-#90 of 2026-09-13 is CONSUMED as well.
-OWNER_BOUNDARY_PRIOR=Fourteen T3 origin batches are CONSUMED and must not be reused: the
-  PR #56, PR #57, PR #59, PR #61, PR #63, PR #65, PR #67, PR #69, PR #70, PR #72, PR #74,
-  PR #76 and PR #78 batches, plus the two-lane PR #80 + PR #81 batch. Each authorized exactly
-  its own push, PR and merge, and no deploy. No T4 has been authorized or consumed for
-  migration 0008. The PROD-SAFE-2 T3/T4 authorization remains CONSUMED. Standing prohibition while the
-  holdout runs: no holdout or outcome inspection, no collector dispatch, no deploy, no model
-  change, no re-freeze.
-DEPLOY_PROHIBITED=LIFTED BY OWNER RULING 2026-09-15: "lift DEPLOY_PROHIBITED but no deploy yet". Lifting it
-  authorizes NOTHING: a push to hf is still a deploy that needs its own owner authorization, and none
-  has been given. Production stays at hf/main = a89b45e (PROD-SAFE-2), confirmed after PR #99.
-DEPLOY_PROHIBITED_PRIOR2=HELD BY OWNER RULING until the §5A one-look result is captured and checkpointed.
-  The original wording below was scoped "through T_close" and would have lapsed silently when
-  T_close passed; the owner extended it instead. Production stays at hf/main = a89b45e
-  (PROD-SAFE-2), re-confirmed unchanged after the batch. No workflow deploys to Hugging Face, so
-  no merge can deploy. Original wording:
-DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUNS, through
-  T_close = 2026-09-12T04:00:00Z. This binds every lane in this file, including work already
-  merged to main. A push to origin is a separate, lesser action and never implies a deploy;
-  only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
-  confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The release sequence is CONSUMED and COMPLETE.
-  CONSUMED 2026-09-17 (attempt 4), verbatim: "HF Git credential is now confirmed locally: hf auth whoami is beny053,
-  Git credential fill returns saved login beny053, and the token's Hugging Face settings show write access to
-  beny053/ultimate-crypto-probability-engine; token value was not shared. FRESH AUTHORIZATION, release steps 3–4: T4
-  push 00705c55e7eb291d01b4e02d4cca859122083f28 to hf/main strictly fast-forward from a89b45e, never force, after all
-  release invariants re-pass; wait for RUNNING and perform read-only live checks only (/healthcheck=200,
-  build-info=UCPE-PROD-SAFE-3-20260915-A, served index/app.js/styles.css byte-match), no analysis calls. Only after
-  deploy PASS: T3 merge PR #106 at 7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e, verify parents/final tree/exact-main CI,
-  then dispatch source-integrity-guard exactly once and require HEALTHY with empty delta. Stop on first mismatch; no
-  rerun of a failed T4."
-  OPEN OWNER DECISIONS (none blocking): publish this STATE branch (T3); codify the older tables' RLS/REVOKE in a
-  migration (AUDIT_RESULT); delete the merged release/prod-safe-3 branch.
-OWNER_BOUNDARY_PRIOR_RELEASED=WAITING FOR THE OWNER'S GO. Attempt 3's authorization (verbatim below) stopped at its precondition before
-  the push, so no T4 action ran. Needed: the write token SAVED AS THE GIT CREDENTIAL on this Mac (a presence check
-  should print "saved login for: beny053"), then the owner's go, which may repeat the attempt-3 text.
-  ATTEMPT 3, verbatim: "HF credential attempt 3 is ready: the active account is beny053, and the new token was
-  verified in Hugging Face settings to have write access to beny053/ultimate-crypto-probability-engine; token value
-  was not shared. FRESH AUTHORIZATION, release steps 3–4 only: (3) T4 push 00705c55e7eb291d01b4e02d4cca859122083f28
-  to hf/main strictly as a fast-forward from a89b45e, never force, after all release invariants re-pass; wait for
-  RUNNING and perform read-only live checks only: /healthcheck=200, build-info=UCPE-PROD-SAFE-3-20260915-A, served
-  index.html/app.js/styles.css byte-match; no analysis calls. (4) Only after deploy PASS: T3 merge PR #106 at
-  7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e with --match-head-commit, parents (66acc44, 7d2cf2f4), final main tree
-  194a52958316bbd13e7807ad8c00a8a13f9b2ceb, exact-main CI green, then dispatch source-integrity-guard exactly once
-  and require HEALTHY with empty delta. Never rerun a failed T4 without fresh owner authorization."
-OWNER_BOUNDARY_PRIOR_ATTEMPT3=NO ACTION IS AUTHORIZED. Attempt 2 of step 3 is CONSUMED (refused, nothing changed). Needed from the owner:
-  (a) a Hugging Face token WITH WRITE ACCESS to spaces/beny053/ultimate-crypto-probability-engine (a Write token of
-      the beny053 account, or fine-grained with write on that Space), saved as the git credential;
-  (b) a FRESH authorization of step 3 (and of step 4 after it).
-  CONSUMED 2026-09-17, verbatim: "HF credential has been refreshed locally; token value was not shared. FRESH
-  AUTHORIZATION for release steps 3–4 after the expired-token FAILED-SAFE stop: (3) T4 push
-  00705c55e7eb291d01b4e02d4cca859122083f28 to hf/main strictly as a fast-forward from a89b45e, never force, only after
-  the prepared dry-run credential check and all previous release invariants re-pass; wait for RUNNING and perform
-  read-only live checks only: /healthcheck=200, build-info=UCPE-PROD-SAFE-3-20260915-A, served
-  index.html/app.js/styles.css byte-match; no analysis calls. (4) Only after deploy PASS: T3 merge PR #106 at
-  7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e with --match-head-commit, parents (66acc44, 7d2cf2f4), final main tree
-  194a52958316bbd13e7807ad8c00a8a13f9b2ceb, exact-main CI green, then dispatch source-integrity-guard exactly once and
-  require HEALTHY with empty delta. Never rerun a failed T4 without fresh owner authorization."
-OWNER_BOUNDARY_PRIOR_ATTEMPT2=NO ACTION IS AUTHORIZED. The release sequence is STOPPED at step 3. Needed from the owner:
-  (a) refresh the Hugging Face git credential on this Mac (the keychain token for huggingface.co has expired; a
-      token with write access to the Space; never shared in chat);
-  (b) a FRESH authorization of step 3 (and of step 4 after it), since a failed T4 is never rerun without one.
-  CONSUMED 2026-09-17, verbatim: "RELEASE SEQUENCE AUTHORIZED, strictly in order, never overlap, stop on first
-  mismatch: (1) T4 apply 0008 exactly once at main@66acc44c49d5d735267761d54f4fb083f70d97b4, capture raw evidence
-  first and verify 0009/legacy security state untouched. (2) Only after 0008 PASS: T3 push origin only
-  release/prod-safe-3@7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e, open PR, exact-head CI green, DO NOT merge. (3) Only
-  after that: T4 push 00705c55e7eb291d01b4e02d4cca859122083f28 to hf/main as fast-forward from a89b45e, never force;
-  wait for RUNNING and perform read-only live checks only: /healthcheck=200, build-info
-  UCPE-PROD-SAFE-3-20260915-A, served index/app.js/styles.css byte-match; no analysis calls. (4) Only after deploy
-  PASS: T3 merge P with --match-head-commit, parents (66acc44, 7d2cf2f4), final main tree
-  194a52958316bbd13e7807ad8c00a8a13f9b2ceb, exact-main CI green, then dispatch source-integrity-guard exactly once
-  and require HEALTHY with empty delta. No rerun of any failed T4 without fresh owner authorization."
-OWNER_BOUNDARY_PRIOR_RELEASE=NO ACTION IS AUTHORIZED. The audit T3 and its one dispatch are CONSUMED. REQUESTED: the refreshed four
-  steps below, each only after the previous one verified, never concurrently:
-  (1) T4 apply 0008 ONCE at main 66acc44 (0008 bytes still a8f290b3...; its route files are unchanged since e5cd7ef);
-  (2) T3 push release/prod-safe-3@P 7d2cf2f4 (carrying R) to origin and open its PR, CI only; it shows exactly
-      ops/hf_runtime_baseline.json and tests/scripts/test_source_integrity_guard.py (merge-base e5cd7ef);
-  (3) T4 deploy R 00705c55 to hf as a fast-forward from a89b45e, then the read-only live checks;
-  (4) T3 merge P with --match-head-commit, parents (66acc44, P); final main tree
-      194a52958316bbd13e7807ad8c00a8a13f9b2ceb (recomputed against the real 66acc44; simulated end state PASSES
-      2230); ONE source-integrity-guard dispatch.
-  CONSUMED 2026-09-16, verbatim: "T3 + T4 READ-ONLY AUDIT AUTHORIZED: push origin only (never hf)
-  prep/audit-older-table-privileges@2b95fd0, open one PR, and merge only after BOTH exact-head checks (normal CI +
-  PostgreSQL rehearsal) are green, with --match-head-commit, parents (e5cd7ef, 2b95fd0), merged tree
-  0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b, then exact-main CI green. Only after that, dispatch
-  audit-table-privileges.yml exactly once at that merge SHA with confirm READ-ONLY-AUDIT-OLDER-TABLES-ONCE;
-  metadata/catalog reads only, no application-row reads or mutation. Depth-16 limit accepted, but reaching it must
-  return INCOMPLETE, never NOT_EXPOSED. Capture raw run JSON/log/artifact before parsing. Stop on any
-  mismatch/failure. No 0008 or HF deploy."
-  - T3 result, LANE_PASS and LANE_VERIFIED (.work/816/t3-audit/verify_lane.output): PR #105 merged as 66acc44 at head
-    2b95fd0 with its 7 files; head checks CI 35119962707 and rehearsal 35119962806 succeeded; parents (e5cd7ef,
-    2b95fd0); tree 0281f7f2 bit-identical; exact-main CI 35120232571 succeeded; hf a89b45e unchanged.
-  - The dispatch: run 35120616278, dispatched 16:14:28Z, attempt 1, on main 66acc44; every step succeeded.
-OWNER_BOUNDARY_PRIOR_AUDIT=ONE T3 + ONE READ-ONLY DISPATCH REQUESTED (the older-table audit). Nothing else is authorized.
-  Owner correction 2026-09-16, verbatim: "Owner correction: older-table privilege check was already YES in the prior
-  ruling; the <yes/no> placeholder was only left in Claude's template. Run that already-authorized audit now, strictly
-  read-only metadata only for tables from migrations 0001–0004 and 0007: RLS, grants to PUBLIC/anon/authenticated/
-  service_role, policies, ownership/schema exposure; no application-row reads and no mutation. Do not start 0008 or HF
-  deploy yet. Return the exact exposure result and the refreshed four-step production-release boundary."
-  The audit itself is authorized, but it can only run from main, and merging its new route is a T3 not yet given.
-  REQUESTED: push to origin only prep/audit-older-table-privileges@2b95fd0 and open its PR; merge only after BOTH
-  exact-head `test` checks (CI and the rehearsal) are green, with --match-head-commit; parents (e5cd7ef, 2b95fd0);
-  merged tree 0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b; exact-main CI green; then ONE dispatch of
-  audit-table-privileges.yml at that merge SHA with confirm READ-ONLY-AUDIT-OLDER-TABLES-ONCE; stop on any mismatch;
-  never hf; no 0008, no deploy. ALSO ESCALATED: F-820-1 (CODEX_VERIFICATION_818_820); recommended: accept as-is.
-  THE FOUR-STEP RELEASE BOUNDARY, REFRESHED (each step only after the previous one verified, never concurrently;
-  NOT authorized):
-  (1) T4 apply 0008 at the then-current main SHA, i.e. after the audit merge (the audit PR changes no 0008-route file);
-  (2) T3 push release/prod-safe-3@P 7d2cf2f4 (carrying R) to origin and open its PR, CI only; it still shows exactly
-      ops/hf_runtime_baseline.json and tests/scripts/test_source_integrity_guard.py (merge-base e5cd7ef);
-  (3) T4 deploy R 00705c55 to hf as a fast-forward from a89b45e;
-  (4) T3 merge P with --match-head-commit; final main tree 194a52958316bbd13e7807ad8c00a8a13f9b2ceb (if the audit
-      merges at 2b95fd0 first; simulated eb8881f PASSES 2230); ONE source-integrity-guard dispatch.
-OWNER_BOUNDARY_PRIOR_104=NO ACTION IS AUTHORIZED. The T3 prep batch is CONSUMED. The owner's T4 sequence is requested:
-  (1) T4 apply 0008 at e5cd7ef; (2) T3 origin push of release/prod-safe-3@P and its PR, CI only; (3) T4 deploy R to
-  hf; (4) T3 merge P and ONE guard dispatch. Each step runs only if the previous one verified, and never
-  concurrently.
-  RULINGS 2026-09-16: release shape A (convergence). The older-table privilege check was returned as the literal
-  placeholder "<yes/no>", so it is UNDECIDED and NOT authorized; it is asked again. (SUPERSEDED: the owner corrected
-  this to YES; see OWNER_BOUNDARY.)
-  CONSUMED: the T3 batch, verbatim: "push to origin only (never hf) five PRs, merged strictly in this order:
-  prep/l2-0008-activation@3cd8476, prep/l3-candle-width@84e7181, prep/v2-distributional@36d4a4e,
-  prep/l1-hf-release@fd0e1f0, chore/state-post-99@cc58e1a ... final main tree must equal
-  0344911170da79ad7491886d58f1f262ced988a5 ... No workflow dispatch, DB, migration apply or deploy."
-  Result: BATCH_VERIFIED by an independent re-check (.work/816/t3-prep-batch/verify_batch.output):
-  - #100 merge 314b90a (c0ed7a0, 3cd8476); head CI run 35075216223, main CI run 35075513951;
-  - #101 merge 8c9e042 (314b90a, 84e7181); head CI 35075824981, main CI 35076121691;
-  - #102 merge 8116483 (8c9e042, 36d4a4e); head CI 35076499354, main CI 35076848359;
-  - #103 merge 5cd1042 (8116483, fd0e1f0); head CI 35077197126, main CI 35077544509;
-  - #104 merge e5cd7ef (5cd1042, cc58e1a); head CI 35077895577, main CI 35078236168.
-  Every PR merged at its authorized head with exactly its lane's files, with --match-head-commit; every merged
-  tree equals merge-tree(previous, head); the final tree equals the authorized one; hf a89b45e unchanged; no open
-  PRs; no workflow dispatched (apply-migration-0008.yml is registered and active, with zero runs).
-OWNER_BOUNDARY_PRIOR_PREP=PREP ONLY. Owner ruling 2026-09-15, verbatim: "Owner ruling: lift DEPLOY_PROHIBITED but no deploy
-  yet. After merge, MAX-run parallel prep for HF clean-room release, 0008 activation, >205 candle-width, and
-  R2-based v2; no new freeze/T0 or holdout tuning."
-  - AUTHORIZED: local prep of the four lanes on local branches, with ./verify.sh, reviews, and bounded Codex
-    verification.
-  - NOT AUTHORIZED: any push (origin or hf), deploy, database access, migration apply, workflow dispatch,
-    a new candidate freeze / T_freeze / T0 / holdout, or any tuning against the consumed §5A holdout
-    (§5A.9). Changing any of the 69 files pinned by ops/section_5a_evaluator_pin.json is an evaluator
-    change that needs owner authorization (pre-registration §2.6), so the prep lanes avoid them.
-  - The prep returns as ONE owner batch.
-  CONSUMED: the T3 for PR #99 (chore/state-post-98@bcf2d5a, STATE.md only). Exact-head CI green (run
-  34921878215); merged with --match-head-commit as c0ed7a0; parents (ccd0a54, bcf2d5a); merged tree
-  f7971d4dd2f4ff5ef08e2d61f6d7541b15b9b750 EQUAL to the authorized tree; exact-main CI green (run
-  34922052354); hf a89b45e unchanged; no open PRs. Evidence: .work/816/t3-state-98/.
-OWNER_BOUNDARY_PRIOR_RESULT=NO ACTION IS AUTHORIZED. The one look is CONSUMED, and its result is NOT_PASS everywhere.
-  Owner decisions are pending (docs/POST_ONE_LOOK_DEPENDENCY_MAP.md §3):
-  - [DONE] the result is recorded on main: PR #98, STATE.md only, merged as ccd0a54. It had exact-head CI
-    green (run 34920194240), parents (1d8f933, b966fa8), a merged tree 9ee5a959… EQUAL to the
-    authorized tree, and exact-main CI green (run 34920375430). hf a89b45e is unchanged. Evidence:
-    .work/815/t3-state-record/;
-  - DEPLOY_PROHIBITED: held "until the §5A one-look result is captured and checkpointed". That
-    condition is now met, but lifting it and any release (L1) are owner decisions; nothing here is a
-    deploy authorization;
-  - Wave 1: the L1 HF clean-room release, the L2 migration 0008 apply (T4), and L3 candle-fetch
-    width;
-  - Wave 3: the distributional-v2 module and a NEW candidate freeze, new T_freeze, new T0, new
-    holdout.
-OWNER_BOUNDARY_PRIOR_CONSUME2=T4 CONSUMPTION (THE ONE LOOK) was requested: dispatch section-5a-evaluation.yml ONCE with
-  mode=consume, confirm CONSUME-SECTION-5A-ONE-LOOK and
-  expected_population_id=f83c31f7bd5a9a4d0b2fdfd87ba1f7b8d4841ccea6408966c55c97da1fd8a5f6 at main
-  1d8f933832a01a88f4d58183eae0bcf240eae6df. It is IRREVERSIBLE once claimed. A population mismatch
-  stops it unconsumed.
-  The new readiness T4 (run 34873105124) is CONSUMED.
-OWNER_BOUNDARY_PRIOR_READINESS2=A NEW READINESS T4 was requested (ruling N3): dispatch section-5a-evaluation.yml ONCE with
-  mode=readiness at main 1d8f933832a01a88f4d58183eae0bcf240eae6df.
-  - Its FULL decision_population_id becomes the ONLY identity consumption may use.
-  - The old readiness identity f83c31f7… (run 34863318042, on 4b0a522) is historical. Compare it for
-    information only.
-  CONSUMED: the lane F T3 (#97).
-LANE_F_MERGED=PR #97, owner-authorized T3, run by the scripted procedure (.work/814/t3-lane-f/):
-  - exact-head CI green on 52abeee (run 34871596220);
-  - a --match-head-commit merge;
-  - parents (4b0a522, 52abeee);
-  - a merged tree fc242d444f04bc80388914b262ad869a539f7a19 EQUAL to the authorized tree;
-  - exact-main CI green on 1d8f933 (run 34871911951);
-  - hf a89b45e, unchanged; zero open PRs.
-  One process slip: the lane script was started with a shell '&' rather than the harness's
-  background mode. It ran to completion, and a tracked waiter confirmed LANE_PASS.
-OWNER_BOUNDARY_PRIOR_F=ONE T3 was requested for lane F, fix/5a-consume-population-guard. The head and tree are named in
-  .work/814/final-review.md.
-  - The owner authorized it as a §2.6 safety change on 2026-09-14: N1=A, N2, N3.
-  - It is built and verified:
-    - 4a0a908: the guard and Addendum 10, gate 1873;
-    - Codex task-814 VERIFIED: 5 attack groups, 19 variants held;
-    - probe-only variants are now committed tests.
-  - After merge (N3): a NEW, separately authorized readiness on the new pin, then consume ONLY with
-    that readiness run's decision_population_id.
-OWNER_RULINGS_N1_N3=Ruled 2026-09-14:
-  - N1=A: a required full expected decision_population_id for consume; the probability-free
-    readiness population check before the durable claim or probability exposure, where a mismatch
-    STOPS UNCONSUMED; a post-claim re-check that refuses statistics on drift.
-  - N2: Addendum 10, the full gate, bounded Codex verification.
-  - N3: after the T3 merge, a new separately authorized readiness on the new pin, then consume
-    only with that readiness ID.
-OWNER_BOUNDARY_PRIOR_N=RULINGS N1-N3 were requested (.work/814/consume-population-guard-missing.md).
-  - N1, the guard. A (recommended):
-    - a required expected_population_id input;
-    - a pre-claim probability-free read with equality, refusing with nothing spent;
-    - a post-claim re-check before any statistic;
-    - the result states the equality.
-    B: an atomic claim+read transaction.
-  - N2: Opus, tests, Addendum 10 (§2.6: what changed and why), a re-pin, one Codex check of at most
-    5 attacks, a T3.
-  - N3: re-run readiness at the new pin (recommended), then consume with that ID.
-  The conditional consume authorization was NOT exercised and is not reusable.
-OWNER_BOUNDARY_PRIOR_CONSUME=T4 CONSUMPTION (THE ONE LOOK) was requested: dispatch section-5a-evaluation.yml ONCE with
-  mode=consume and confirm CONSUME-SECTION-5A-ONE-LOOK at main 4b0a522, the same pin as readiness.
-  - It is IRREVERSIBLE: the claim spends the look.
-  - Compare its decision_population_id with readiness's f83c31f7… to detect drift.
-  The readiness T4 (run 34863318042) is CONSUMED.
-OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and is DONE (see LOOP_STATE). Its
-  request was: dispatch section-5a-apply-seal-migration.yml ONCE, on main, at exactly
-  4b0a52209afd5ef3a9eb62b4da8cca126619befd, with confirm APPLY-SECTION-5A-SEAL-MIGRATION-ONCE.
-  - The same procedure as run 34851608514: pre-checks (origin/main == SHA, hf unchanged, no active
-    runs, workflow active), one dispatch, raw capture of the run JSON, job log and report artifact
-    before parsing, then verification per .work/812/t4-apply-0009-runbook.md.
-  - NEW in the attest step: it now loads the driver without connecting, and its report names the
-    helper fingerprints. They must equal the pinned ones on Linux.
-  - NEVER rerun.
-  CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
-  T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner. Nothing is running or pending. Post-release, read-only and owner-side:
-  - the functional proof of durable Detail is the operator's own next genuine analysis: History shows "Detail
-    available" and reopens it (never a smoke test);
-  - watch the residual risks (release review §7): A203-01's stricter candle adjacency and R202-01's provider deadline
-    may surface visible failures instead of silent ones;
-  - scheduled guard runs should now report HEALTHY; the advisory reads SCHEDULER_DIVERGENT_FROM_PIN because the
-    workflow's shallow checkout cannot prove ancestry (non-failing).
-  - NEVER run consume, the 0009 route, the audit, the 0008 apply or the deploy again. No analysis against production.
-    Rollback is a new T4 (.work/816/l1/runbook.md).
-NEXT_ACTION_PRIOR_RELEASED=WAIT for the owner: a refreshed Hugging Face credential AND a fresh step-3 (then step-4) authorization. Then:
-  1. move .work/816/t4-deploy/raw (and verdict, run output, flag) to attempt-3-.../ only if a third attempt fails;
-     attempts 1 and 2 are archived under .work/816/t4-deploy/attempt-*;
-  2. bash .work/816/t4-deploy/deploy.sh (re-checks PR #106, its CI, hf a89b45e, origin 66acc44, no guard run),
-     then .venv/bin/python .work/816/t4-deploy/verify_deploy.py;
-  3. only after VERIFIED: bash .work/816/t3-merge-guard/merge_and_guard.sh, then python3
-     .work/816/t3-merge-guard/verify_guard.py (HEALTHY, deployment_delta_paths []).
-  Never merge PR #106 before a verified deploy. Never force-push hf. No analysis against production. Never run
-  consume, the 0009 route, the audit or the 0008 apply again.
-NEXT_ACTION_PRIOR_RELEASE=WAIT for the owner's authorization of the refreshed four steps (OWNER_BOUNDARY), then run them strictly in
-  order, stopping at the first failure: 1. .work/816/l2/t4-apply-0008-runbook.md (M = 66acc44 unless main moved);
-  2. the release PR, CI only; 3. the hf fast-forward and the live checks (.work/816/l1/runbook.md §5); 4. the P merge
-  and ONE guard dispatch. Separately, the owner decides whether to codify the older tables' RLS in a migration
-  (AUDIT_RESULT). The STATE branch needs its own T3.
-  - NEVER run consume, the 0009 route or the audit dispatch again. No analysis against production. Never push to hf
-    without a deploy authorization.
-NEXT_ACTION_PRIOR_AUDIT=WAIT for the owner's T3 + ONE dispatch for the older-table audit (OWNER_BOUNDARY), then, stopping at the first
-  mismatch:
-  1. bash .work/816/t3-audit/run-lane.sh (manifest head 2b95fd0, expected previous main e5cd7ef, expected merged
-     tree 0281f7f2, both head `test` checks);
-  2. an independent re-check of the merge (parents, tree, file set, exact-main CI);
-  3. bash .work/816/audit-dispatch/run_audit.sh (ONE dispatch, flag-guarded, raw capture before parsing), then
-     python3 .work/816/audit-dispatch/verify_audit.py; report the exposures and the EFFECTIVE VERDICT verbatim.
-  Then STOP: no 0008 and no HF deploy until the owner authorizes the refreshed four steps.
-  - NEVER run consume or the 0009 route again. No analysis against production. Never push to hf without a deploy
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Requested, as one batch:
+  - T3, one batch. Push B, C, D and A to origin only (never hf), open four PRs against main, and merge strictly
+    in the order B, C, D, A. Each merge needs:
+    - every exact-head `test` check green. B has two (ci.yml and the 0010 rehearsal); the others have one;
+    - a --match-head-commit merge;
+    - parents (previous main, lane head);
+    - the expected tree (BATCH_T3);
+    - exact-main CI green.
+    Stop at the first mismatch. The lanes run one after another, so D's PR opens after C has merged and lists
+    only D's files. The prepared scripts are in .work/817/t3-batch/ (run-batch.sh, then verify_batch.sh).
+  - Product decisions. None is needed for the T3.
+    (a) Adopt the proper-score skill gate for zero-location methodologies (R2 doc §2).
+    (b) The directional display for them (R2 doc §4). The §7 correction applies: the split is a fixed skew of
+        about 48-54% up, not 50/50.
+    (c) §2.6 authorization to wire v2. quant/pipeline.py and config/defaults.py are evaluator-pinned.
+    (d) Freeze sequencing and a new pre-registered holdout.
+  - Later, separately:
+    - the T4 apply of 0010: one dispatch of apply-migration-0010.yml, after B merges;
+    - deleting the merged branch release/prod-safe-3, which is still on origin.
+NEXT_ACTION=WAIT for the owner.
+  - On the T3: bash .work/817/t3-batch/run-batch.sh, then bash .work/817/t3-batch/verify_batch.sh. It reuses
+    .work/816/t3-audit's lane.sh unchanged, with a manifest of heads, files, expected trees and check counts, raw
+    capture, and an independent re-check.
+  - On a 0010 T4, follow the .work/816/t4-apply-0008 pattern: pre-checks, one flag-guarded dispatch, raw capture
+    before parsing, then a verifier.
+  - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, or the PROD-SAFE-3 deploy.
+  - No analysis call against production. Never push to hf without a deploy authorization.
+PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
+  - hf/main is 00705c55 (R), a convergence release: tree(R) == tree(main e5cd7ef).
+  - Release UCPE-PROD-SAFE-3-20260915-A, pinned by PR #106 (main 08c77f09).
+  - Guard run 35179229959: HEALTHY 3/3, deployment_delta_paths [].
+  - Every user analysis runs heuristic-v1-wave4b0.
+  - Scheduled guard runs report SCHEDULER_DIVERGENT_FROM_PIN. It is advisory and non-failing: the shallow checkout
+    cannot prove ancestry.
+  - Earlier releases: PROD-SAFE-2 a89b45e (2026-08-25) and PROD-SAFE-1 (2026-08-23).
+  - Rollback is a new T4 (.work/816/l1/runbook.md).
+  To watch, owner-side:
+  - The functional proof of durable Detail is the operator's next genuine analysis: History should show "Detail
+    available" and reopen it.
+  - A203-01's strict candle adjacency and R202-01's provider deadline may surface failures that used to be silent.
+DATABASE=Supabase, PostgreSQL 17 or later (the audit saw the MAINTAIN privilege granted).
+  - Migrations 0001-0007 were applied before this record.
+  - 0009 was applied once, 2026-09-14 (run 34861816985).
+  - 0008 was applied once, 2026-09-16 (run 35164080476).
+  - 0010 is AUTHORED on lane B and NOT applied.
+  The older-table audit (run 35120616278, read-only) returned NOT_EXPOSED_THROUGH_AUDITED_PATHS:
+  - the ten legacy tables have RLS on (not forced) and no policy;
+  - anon and authenticated hold every table privilege, MAINTAIN included, yet are denied every row;
+  - service_role has BYPASSRLS;
+  - there is no PUBLIC grant, column grant, view, parent table or publication.
+  Its findings, both addressed by lane B:
+  - the migrations never enable RLS, so a rebuilt database would be open to the anon key;
+  - RLS without a policy is the only barrier.
+NEVER_RERUN=Consumed one-shot actions. None may run again:
+  - §5A readiness runs 34863318042 (4b0a522) and 34873105124 (1d8f933).
+  - The §5A ONE LOOK, consume run 34919367341 (1d8f933, population f83c31f7…). The durable seal refuses a second
+    look.
+  - The 0009 route: 34851608514 (refused before any DB contact) and 34861816985 (applied). Never dispatch it again.
+  - The older-table audit 35120616278.
+  - The 0008 apply 35164080476.
+  - The PROD-SAFE-3 deploy: attempt 4, pushed at 03:39:17Z. Attempts 1-3 failed safely and changed nothing.
+  - Its guard dispatch 35179229959.
+  - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
+    edit docs/r2_evidence/SEALED_ATTESTATION.md.
+  - Every T3 batch through PR #106.
+SECTION_5A_RESULT=Consumed once, 2026-09-15, and recomputed offline with identical results.
+  - authorized_cells = [] (NONE).
+  - 15m (466 pairs), 1H (257) and 4H (86) are each NOT_PASS: "requirement(s) not met: A, B2".
+  - The gate predicates were NOT_OBSERVABLE_FROM_PERSISTED_STATE, so passing A and B would still have authorized
+    nothing.
+  - These are pre-committed decision boundaries, not hypothesis tests, and make no profitability claim.
+  - V1_QUANT_CONTRACT §5A.9 forbids retuning against this holdout. A second attempt needs a new candidate freeze,
+    T_freeze, T0 and holdout.
+  - distributional-v1 is not promoted.
+  Evidence: .work/815/t4-consume/.
+V2_STATUS=distributional-v2 is on main as an unwired module (#102). It is NOT frozen and NOT a methodology version.
+  - Recipe: R2 arm CB, HAR log-variance plus a calendar profile, with empirical shape tables. BTC/USDT and
+    ETH/USDT on 15m, 1H and 4H; TABLES_SHA256 f0689f29….
+  - Evidence of record: docs/R2_FRONTIER_REPORT.md, docs/DISTRIBUTIONAL_V2_PREP.md and
+    docs/R2_ZERO_DRIFT_GATE_AND_DISPLAY.md.
+  - Lanes C and D prepare everything that touches no evaluator-pinned file.
+  - Wiring needs §2.6 authorization.
+  - Adopting the proper-score gate also needs per-row probabilities from persistence/repository.py, which is pinned.
+  - Correction (lane C): with mu = 0, the up share is not 50/50. The shape tables fix it between 0.4794 and 0.5427.
+BATCH_0010=Lane B has four commits:
+  - e5677406: the route;
+  - aeef379c: PostgreSQL 17 MAINTAIN;
+  - 1d581367 and aaf11228: the review fixes.
+  Migration 0010 (sha256 bc2ec1dd…):
+  - enables RLS where it is off;
+  - REVOKEs ALL on the 10 tables and 3 serial sequences from PUBLIC, anon and authenticated;
+  - GRANTs the 7 portable table privileges to service_role.
+  Effective access in production does not change.
+  The route: scripts/apply_migration_0010.py and .github/workflows/apply-migration-0010.yml (dispatch-only; confirm
+  APPLY-MIGRATION-0010-ONCE; advisory lock 5000010). It runs ONE transaction:
+  - pre-checks require the audited state, so a second apply refuses ("not a first apply"). The tables of
+    0005, 0006, 0008 and 0009 are recorded, not required;
+  - the server's version decides which privileges are asked about;
+  - it executes the exact pinned bytes;
+  - post-checks, then a commit only if everything passes. If the connection fails while the COMMIT is in
+    flight, the report says committed "UNKNOWN".
+  The PR-time rehearsal has NEVER RUN on GitHub (.github/workflows/apply-migration-0010-rehearsal.yml; job `test`;
+  scratch PostgreSQL 16; no secret). This machine has no PostgreSQL, so its first run is B's exact-head check. A
+  failure there stops the T3 before any merge.
+BATCH_V2=Lane C has three commits: 9101bff2 (the prep), then 679e0801 and 5a3b5685 (the review fixes).
+  - quant/distributional_v2_state.py builds v1's exact probability_state and horizon_timeout_state from a v2
+    triplet. Tests check field-by-field parity and the schema.
+  - calibration/proper_score_skill.py is R2 §2's gate. It fails closed, uses the §5A statistics kernel, and
+    counts score differences within 1e-12 as none. Nothing selects it.
+  - The 50/50 correction: docs §7, plus a test that recomputes its table.
+  - The unwired v2 guard lists the dormant prep modules and proves nothing imports them.
+  Lane D (9c53e3cb, parent 5a3b5685): quant/distributional_v2_serving.py.
+  - 1H and 4H come from the snapshot's 204 closed candles, with no request.
+  - 15m is the only timeframe that needs more. It fetches exactly 673 closed candles, once, from the snapshot's own
+    provider, and requires assert_history_extends_snapshot.
+  - Everything else fails closed.
+  - The adapters' guard allows exactly this one dormant caller and proves nothing imports it.
+  C and D both extend the same guard, so D is stacked on C and must merge after it.
+BATCH_T3=The expected main tree after each merge, in order, from main 08c77f09:
+  - B aaf1122874d825df72aac980794714d72e552e75 -> tree 071556e3754de16f30544777db52e54c37b37966
+    (files: 11; head checks: 2);
+  - C 5a3b568523b580f4aad2af5d28f381b169f68774 -> tree 6bd22f37d932b8f34fa9e99c105a42e119709d28
+    (files: 8; head checks: 1);
+  - D 9c53e3cbe71af06eebcf0b9d5ede2ade8b1974be -> tree 906ccf9bced1fec92b3959a6ab50790b990325ea
+    (files: 5; head checks: 1). This equals the gated composition;
+  - A (this branch) -> STATE.md only (head checks: 1). A checkpoint cannot state its own tree; the owner
+    report and .work/817/t3-batch/manifest.txt carry it.
+REVIEW=One consolidated review of the composed diff (an Opus subagent, read-only, 2026-09-17), then one
+  bounded re-check of the fixes. There was no CRITICAL or HIGH finding.
+  - MEDIUM (C), FIXED. An exact echo of the base rates could "demonstrate" proper-score skill through float
+    noise. normalize_probabilities divides by sum(...), which is compensated on Python 3.12+ and naive on 3.11.
+    - Score differences within 1e-12 now count as none.
+    - A regression sweep covers it, and the test fails without the fix under both summation styles.
+    - The re-check: no zero-skill set reached a pass (18,618 random sets), and no real improvement was
+      suppressed (40,000 trials).
+  - LOW (C), for decision (a), written into the module note:
+    - rows are treated as independent, so overlapping horizons and repeated analyses overstate the evidence;
+      adoption must choose de-duplication or window means;
+    - adoption also needs new detail-view wording (detail/frontend_display.py).
+  - LOW (C), FIXED:
+    - the timeout-state description;
+    - R2 doc §7's DOWN-leaning list. It is now exact at the tabulated ratios, pinned by a test, and the
+      finer-grid boundaries are stated.
+  - LOW (B), FIXED:
+    - refusal paths the audit never measured: same-named relations of other kinds, and the presence of the
+      0005/0006 tables, which is now recorded rather than required;
+    - a COMMIT failing in flight is reported as "UNKNOWN", including in the rehearsal's per-apply records.
+  - LOW (B), RESIDUAL. The PostgreSQL 17 (MAINTAIN) branch runs only against the fake cursor, because the PR
+    rehearsal uses the runner's PostgreSQL 16.
+    - A defect there would refuse or roll back safely, but it would spend the 0010 T4.
+    - Otherwise the statement forms are ones production has already run (0008, the audit).
+  - LOW, inherited, report only. The 0008 and §5A routes would also report committed=false after a COMMIT
+    failed in flight. Both are consumed, so there is nothing to change.
+  - Held under attack:
+    - every rehearsal step on a stock ubuntu-24.04 runner;
+    - the pre-checks against the audit artifact;
+    - the trust boundary: the secret in one step, plus dispatch, token and URL handling;
+    - v2's probability_state parity;
+    - lane D's windows, provider check and extends-snapshot check;
+    - no pinned, scanner or guard file weakened.
+STANDING_RULES=
+  - Tiers and budget are in CLAUDE.md. Authorizations are one-shot and name exact SHAs. Owner interactions are
+    batched.
+  - The 69 evaluator-pinned files (ops/section_5a_evaluator_pin.json) change only with §2.6 owner authorization
+    that states what changed and why. The pinned red tests (tests/oos/evaluation/test_g1_g7_red.py) are never
+    edited.
+  - The three safety scanners and tests/test_no_silent_skips.py are never weakened or narrowed.
+  - No database access, migration apply, workflow dispatch or deploy without its own authorization.
+  - Every T4 captures raw evidence before parsing it.
+  - Never request or expose a secret or a database URL.
+  - DEPLOY_PROHIBITED was lifted on 2026-09-15, but every push to hf is still a deploy that needs its own
     authorization.
-NEXT_ACTION_PRIOR_104=WAIT for the owner's T4 sequence, then execute it strictly in order, stopping at the first failure:
-  1. T4 apply 0008: pre-checks, ONE dispatch, raw capture, verify (.work/816/l2/t4-apply-0008-runbook.md).
-  2. T3: push P (carrying R) to origin as release/prod-safe-3; open the PR; exact-head CI green; do NOT merge.
-  3. T4: `git push hf R:refs/heads/main` as a fast-forward; read-only live checks (.work/816/l1/runbook.md §5).
-  4. T3: merge P with --match-head-commit; parents, tree, exact-main CI; ONE source-integrity-guard dispatch.
-  - NEVER run consume or the 0009 route again. No analysis against production. No force push except an
-    authorized rollback.
-RELEASE_STAGED=Built 2026-09-16 from main X = e5cd7efffb86c875800c51049045f49425780477:
-  - R = 00705c55e7eb291d01b4e02d4cca859122083f28: tree(R) == tree(X); parents (a89b45e, X); deterministic (two
-    builds agree); runtime delta vs deployed 36 files, +8943/-249.
-  - P = 7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e: the re-pin on R (the runtime pin and the guard test only);
-    VERIFY=PASS at 2085.
-  - Runtime accounted for since the reviewed tree: only the unwired v2 module differs (the task-817 fixes).
-  - HF push set: 260 commits, 483 blobs, max 387 KB, none over 10 MiB, none binary; README, .dockerignore,
-    Dockerfile and requirements are unchanged vs deployed.
-  - 0008 route: registered and active; bytes at X equal the pinned a8f290b3...; repository pin correct; no runs
-    queued anywhere; the secret SUPABASE_DB_URL exists (name only).
-  - Refreshed for the audit merge at 2b95fd0: P's PR still shows only its two files; the final main tree after P
-    merges is 194a52958316bbd13e7807ad8c00a8a13f9b2ceb (simulated eb8881f, PASS 2230).
-RELEASE_SEQUENCE=2026-09-16/17, per the owner's authorization (OWNER_BOUNDARY):
-  - STEP 1 PASS. Migration 0008 applied ONCE: run 35164080476, dispatched 23:51:06Z on main 66acc44, attempt 1, every
-    step green. Raw capture first (.work/816/t4-apply-0008/raw, raw.sha256), then VERIFIED on every check
-    (verify_apply.output):
-    - outcome APPLIED, committed; executed bytes a8f290b3 == the reviewed file at 66acc44;
-    - pre-checks: no prior object, the joined tables and prediction_origin present, 3 API roles, seal present;
-    - post-checks: exactly the 4 columns, the primary key and 2 indexes; RLS on (not forced); owned by the applying
-      role; no privilege for anon, authenticated or PUBLIC; service_role exactly SELECT, INSERT, UPDATE; 0 rows;
-    - the 0009 seal present before and after; driver helpers equal the pinned fingerprints; no URL anywhere.
-    0009/legacy untouched BY CONSTRUCTION: the static scope proof at 66acc44 (scope_proof.output) shows the migration
-    is exactly five statements on public.analysis_run_details, and every other statement is read-only. No post-apply
-    re-measurement of the legacy tables was run (the audit was authorized once).
-  - STEP 2 PASS. release/prod-safe-3 pushed to origin at P 7d2cf2f4 (only R and P were new to GitHub); PR #106 opened
-    with exactly the two pin files; exact-head CI run 35164170597 green; NOT merged (.work/816/t3-release).
-  - STEP 3 FAILED, NOTHING CHANGED. All preconditions passed (PR #106 open at P with CI green; hf a89b45e; origin
-    66acc44 with no runtime change since e5cd7ef; R a fast-forward; no guard run; the Space RUNNING a89b45e). The one
-    `git push hf R:refs/heads/main` at 23:56:35Z exited 128: "remote: OAuth token has expired", "Authentication
-    failed". hf/main is still a89b45e and the Space still runs it (checked after). No PIN_DRIFT window opened.
-    Evidence: .work/816/t4-deploy/raw (push.err, space_before.json, raw.sha256).
-  - STEP 3, ATTEMPT 2 (fresh authorization 2026-09-17, after the owner refreshed the credential): FAILED, NOTHING
-    CHANGED. At 03:15Z every invariant re-passed (0008 VERIFIED; PR #106 open at P, files exactly the two, CI green;
-    origin 66acc44; hf a89b45e; the Space RUNNING a89b45e; nothing in progress). The dry run showed
-    `a89b45e..00705c5 -> main` (rc 0), proving the login is accepted. The real push at 03:16:07Z exited 1:
-    "! [remote rejected] ... (pre-receive hook declined)", "You are not authorized to push to this repo. Make sure
-    that you are properly logged in." hf/main is still a89b45e; the Space still runs it (lastModified 2026-08-25).
-    Evidence: .work/816/t4-deploy/attempt-2-push-not-authorized/. LESSON: a dry run cannot prove write permission.
-  - STEP 3, ATTEMPT 3 (fresh authorization 2026-09-17): STOPPED BEFORE THE PUSH. At 03:26Z every invariant
-    re-passed. The dry-run login check exited 128: "fatal: could not read Username for 'https://huggingface.co':
-    terminal prompts disabled", so git found no saved credential. No flag was written and the push never ran; hf and
-    the Space still a89b45e. Evidence: .work/816/t4-deploy/attempt-3-no-saved-credential/.
-  - STEP 3, ATTEMPT 4 (fresh authorization 2026-09-17, credential confirmed by the owner): PASS. At 03:39Z every
-    invariant re-passed and the dry run showed the fast-forward. The ONE push at 03:39:17Z:
-    `a89b45e..00705c5  00705c55... -> main` (rc 0, not forced).
-    - The Space went RUNNING_BUILDING -> RUNNING_APP_STARTING -> RUNNING at R by 03:40:03Z.
-    - Live round 1 (03:40:10Z, GETs only): /healthcheck 200 (status OK, uptime 12 s); /v1/build-info 200, no-store,
-      release_id/label/environment/milestone/fingerprint all equal to P's pin (UCPE-PROD-SAFE-3-20260915-A);
-      /, /app.js and /styles.css byte-identical to R and to P's pin.
-    - verify_deploy.output: VERIFIED. Evidence: .work/816/t4-deploy/raw (raw.sha256). No analysis call was made.
-  - STEP 4: PASS.
-    - PR #106 merged at 03:40:37Z with --match-head-commit 7d2cf2f4: merge 08c77f09, parents (66acc44, 7d2cf2f4),
-      tree 194a5295 == merge-tree == authorized; exact-main CI run 35179052192 green.
-    - The window when the pin did not match the Space lasted 80 s (push to merge); no scheduled guard run fell in it.
-    - ONE guard dispatch at 03:43:29Z: run 35179229959 on 08c77f09, attempt 1, success. Summary:
-      final_classification HEALTHY, 3/3 rounds HEALTHY, exit 0; deployment_delta_paths [] (empty delta);
-      hf_main_sha == pinned == 00705c55; live == intended == UCPE-PROD-SAFE-3-20260915-A; critical source and frontend
-      assets match. deployment_delta_present true only because main is ahead of the pinned commit; advisory
-      SCHEDULER_DIVERGENT_FROM_PIN (the guard's shallow checkout cannot prove ancestry; non-failing).
-    - verify_guard.output: VERIFIED. Evidence: .work/816/t3-merge-guard/raw (raw.sha256).
-  - Independent final check: origin/main 08c77f09 (tree 194a5295); hf/main 00705c55; the Space RUNNING at R; no open PR;
-    the only guard run since the push is the dispatched one.
-AUDIT_RESULT=Run 35120616278 (read-only, rolled back, never committed; transaction_read_only on; no catalog read refused),
-  VERIFIED by .work/816/audit-dispatch/verify_audit.py. Raw capture before parsing: .work/816/audit-dispatch/raw/
-  (raw.sha256; report 1d3bae94..., log a3bebde5...).
-  VERDICT: NOT_EXPOSED_THROUGH_AUDITED_PATHS. The discovery limit was not reached: no views, no parents, nothing
-  unreadable. No server fact was missing.
-  - All 10 tables (analysis_runs, analysis_timeframe_results, app_events, news_clusters, news_evidence_links,
-    news_items, prediction_outcomes, predictions, provider_observations, watchlist) are in public, owned by postgres,
-    with ROW LEVEL SECURITY ON (not forced) and NO policies.
-  - anon and authenticated HOLD all seven table privileges (Supabase's default grants) and schema USAGE, but with RLS
-    on and no policy every command is RLS_DENIES_ALL. They are not owner-equivalent, have no BYPASSRLS, and inherit
-    no role (no memberships).
-  - service_role has BYPASSRLS: every command is OPEN, as the Hugging Face runtime requires.
-  - No PUBLIC grant, no column grant, no view or rule over the tables, no inheritance parent, no Realtime
-    publication. pgrst.db_schemas is not stored in the database (assumed public; context only).
-  - Default privileges still grant new tables in public to anon/authenticated/service_role (postgres and
-    supabase_admin), which is why 0008 revokes explicitly.
-  FINDINGS FOR THE OWNER (no action taken):
-  - Drift: migrations 0001-0004 and 0007 never enable RLS, but production has it on. A rebuild from the migrations
-    would leave these tables open to the anon key; the rehearsal built from the real migrations shows exactly that.
-  - Defense in depth: RLS with no policy is the only barrier; the API roles still hold full privileges.
-  - Optional: a new migration that enables RLS and revokes the API roles on these tables, as 0005/0006/0008/0009
-    do. That is an owner decision, then a T2 lane and a T4 apply.
-AUDIT_ROUTE=prep/audit-older-table-privileges, MERGED as PR #105 (66acc44), from main e5cd7ef; head 2b95fd0, tree 0281f7f2. Seven files:
-  - scripts/audit_table_privileges.py;
-  - scripts/audit_rehearsal/00_supabase_like_roles.sql and 90_variations.sql;
-  - .github/workflows/audit-table-privileges.yml: dispatch-only; attest -> rehearse -> tests -> audit (the only step
-    with the secret) -> upload;
-  - .github/workflows/audit-table-privileges-rehearsal.yml: pull_request only, job `test`, no secret;
-  - tests/scripts/test_audit_table_privileges.py and tests/workflows/test_audit_table_privileges_workflow.py.
-  How it reads:
-  - One REPEATABLE READ, READ ONLY transaction, refused unless the server confirms it; pg_catalog only; always rolled
-    back. The report never holds the URL, the connecting role or a non-standard role name.
-  - The server decides membership and INHERIT, PUBLIC, ownership, policy applicability and column privileges. A
-    missing fact counts as unsafe (INCOMPLETE).
-  - The served-schema list is context only; Realtime, views over views and inheritance parents are all reported.
-  - Verdicts: EXPOSED, INCOMPLETE, NOT_EXPOSED_THROUGH_AUDITED_PATHS. Not audited: SECURITY DEFINER/RPC, side
-    channels, HTTP-layer settings, row contents.
-  It changes no runtime, 0008-route, evaluator-pinned (69), guard-critical (11) or protected test file.
-  Pre-flight 2026-09-16, read-only:
-  - origin main e5cd7ef; hf a89b45e;
-  - no open PR and no run in progress;
-  - the branch is not on origin; the token has the workflow scope.
-  Lane files: .work/816/t3-audit/ (manifest.txt, expected_prev_main.txt, expected_final_tree.txt, bodies/A.md,
-  lane.sh, run-lane.sh). Dispatch files: .work/816/audit-dispatch/ (run_audit.sh, verify_audit.py).
-PREP_RESULTS=Built 2026-09-15, all local:
-  - L2 (0008 activation). FINDING: 0008 as authored had no RLS or REVOKE, so on Supabase the anon key could reach
-    the operator's Detail payloads. Hardened in place (never applied): RLS on, not forced; REVOKE ALL FROM PUBLIC,
-    anon, authenticated, service_role; GRANT SELECT, INSERT, UPDATE TO service_role, exactly what the Hugging Face
-    runtime's REST repository uses. The route mirrors 0009's: dispatch-only, trusted install, attest -> tests ->
-    apply (the only step with the secret), pinned bytes a8f290b3..., ONE transaction with pre- and post-checks.
-    Runbook: .work/816/l2/t4-apply-0008-runbook.md. SIBLING (report only): the 0001-0004 and 0007 tables carry no
-    RLS/REVOKE in their migrations; a read-only production privilege audit is an owner decision.
-  - L3 (candle width). Widening fetch_market_snapshot would silently change heuristic-v1's inputs (volatility and
-    tail CVaR read every candle), so the snapshot is unchanged (pinned by a test), and a separate, uncalled
-    capability fetches up to 800 closed candles. A read-only keyless probe (.work/816/l3/probe, raw-captured)
-    VERIFIED OKX after-paging (strictly older, gap-free; 900 contiguous 15m bars) and Binance 1000 rows per request.
-  - v2. The R2 arm CB recipe, refit by R2's own code on R2's admitted corpus (horizon_end < 2026-08-12; cache
-    written 2026-08-20, before section 5A T0); constants for BTC/USDT and ETH/USDT, digest f0689f29....
-    Parity: 11,980 real rows x 3 bands to 8.9e-16 with per-window sums (2.3e-9 otherwise, attributed to R2's
-    prefix-sum rolling mean). FINDING: R2's own triplet code fails its assertion at a zero band; the module uses
-    v1's construction. Unwired; no freeze. Doc: docs/DISTRIBUTIONAL_V2_PREP.md on the branch.
-  - L1 (release). Recommended shape A, a convergence release: R = tree(main@X), parents (a89b45e, X), so the push
-    to hf is a fast-forward. Simulated end to end: R_sim 6eaf546f (deterministic); pin commit P_sim 14892651
-    PASSES the full gate; the guard's delta after re-pin is [] with advisory SCHEDULER_AHEAD_OF_PIN. Methodology
-    neutrality proven by citation: user routes run heuristic-v1-wave4b0; the evaluator code is inert in the Space.
-    Review: .work/816/l1/release-review.md. Runbook: .work/816/l1/runbook.md.
-  - Order when authorized: T3 batch (lanes) -> T4 apply 0008 -> T3 push R/P to origin -> T4 deploy R -> T3 merge P,
-    then a guard dispatch. Never two T4 actions at once.
-NEXT_ACTION_PRIOR_RESULT=WAIT for owner decisions on DEPLOY_PROHIBITED, Wave 1 and Wave 3. The result is recorded on main (PR #98).
-  - NEVER dispatch consume again; the seal refuses, and no retuning is allowed against this holdout.
-  - DO NOT deploy, apply 0008, or start a new freeze without explicit authorization.
-  DO NOT dispatch consume, the apply workflow, or any run until it is separately authorized.
-  - NEVER dispatch the apply workflow again; 0009 is applied.
-  - NEVER rerun runs 34851608514 or 34861816985.
-  DO NOT dispatch any workflow; run readiness, consumption or recompute; apply 0008 or 0009; push
-  to hf; or deploy.
-NEXT_ACTION_PRIOR=SECTION 5A ONLY, scheduled: WAIT until T_close = 2026-09-12T04:00:00Z, then run the
-  V1_QUANT_CONTRACT.md section 5A evaluation ONCE. This is the single scheduled action. The
-  date is a contract instant, NOT a reminder or automation request: create no timer, task, or
-  schedule from it.
-BLOCKER_BEFORE_0008_T4=CLOSED by PR #63 (merged 1668534). The owner-directed prerequisite is
-  satisfied: /v1/runs no longer issues one detail query per row. It now issues exactly one
-  batched run_ids_with_detail call for all durable-only rows, bounded and fail-closed, and the
-  behaviour of detail_available is identical per row. No blocker now stands against migration
-  0008. Applying it remains a separate T4 decision that has NOT been authorized or taken.
-MIGRATION_0008_NOT_APPLIED=migrations/0008_analysis_run_details.sql is MERGED AS CODE ONLY and
-  has NOT been applied to any database. Until an owner applies it (a T4 action, one-shot, with
-  raw capture before parsing), analysis_run_details does not exist, every durable Detail write
-  fails and is swallowed by design, and nothing else degrades: history still lists runs and
-  in-process Detail still works within a runtime. Applying it is what switches the feature on.
-  scripts/apply_migrations.py was NEVER run in this work.
-OPEN_ITEM=check_no_secrets walks the whole repository and its SKIP_DIRS omits .work/, so it
-  scans gitignored scratch logs and can fail ./verify.sh on a clean tree from an untracked file.
-  Its own docstring says it scans committed files. Deliberately NOT changed before T_close,
-  because adding a skip narrows a mandatory scanner. Remedy meanwhile: delete stale .work/*.log.
-RUN_PROVENANCE=FAIL CLOSED, in both the in-process and the durable path. put() requires an
-  explicit prediction_origin; list_runs() falls back to a local UNCLASSIFIED sentinel, never
-  USER_REQUESTED. recent_runs_for_origin() takes prediction_origin as a required keyword-only
-  argument and passes it through validate_prediction_origin, so the sentinel can never be
-  queried and can never be persisted. A run with no prediction of the requested origin is
-  EXCLUDED, so the durable list can legitimately be shorter than the in-process one. /v1/runs
-  keeps an explicit USER_REQUESTED allow-list. Any successor MUST preserve this.
-DEPLOY_POSTURE=Recomputed against ops/hf_runtime_baseline.json on 690d756: GitHub main is
-  ahead of the deployed bundle on FIVE guarded paths, unchanged by PR #59 —
-  frontend/app.js, frontend/index.html, frontend/styles.css,
-  src/crypto_probability_engine/api/analysis_service.py and
-  src/crypto_probability_engine/api/app.py. Recomputed against ops/hf_runtime_baseline.json on
-  CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py
-  records all five exactly. analysis_service.py is the structural clean-room delta and never
-  clears. None of it is in front of users until a future owner-authorized deploy.
+  - Run provenance fails closed, and any successor must keep it that way:
+    - put() needs an explicit prediction_origin;
+    - UNCLASSIFIED is never persisted;
+    - /v1/runs allows USER_REQUESTED only.
+  - Owner product decisions of 2026-08-28 are closed; never re-propose them:
+    - Recent History stays fixed and bounded for v1;
+    - constant system_status fields stay hidden unless a real operator use case appears.
+  - The collector has been stopped on main since #88; restoring its schedule fails the build. The outcome resolver
+    stays scheduled (resolve-outcomes.yml, cron "17 * * * *").
+  - Owner rulings D1-D4, J1-J3, K1-K2, L1-L3, M1 and N1-N3 are applied. Their full text is in 2c6df51:STATE.md.
+OPEN_ITEMS=Non-blocking; none is authorized.
+  - scripts/check_no_secrets.py also scans .work/ (SKIP_DIRS omits it), so a stale gitignored log can fail
+    ./verify.sh on a clean tree. Fixing it narrows a mandatory scanner, which needs an explicit owner decision.
+    Meanwhile, delete stale .work/*.log files.
+  - oos-pair-evidence.yml and resolve-outcomes.yml still pin Node-20-era actions (checkout@v4, setup-python@v5).
+    They were frozen for the holdout, which is now closed.
+  - Merged branches remain on origin, including release/prod-safe-1 to -3. Deleting any of them needs the owner.
+  - As of 2026-08-22, per-timeframe calibration MEASURED needed about 3x more operator traffic (134-172 samples per
+    timeframe, against a threshold of 500).
+EVIDENCE=.work/ is gitignored and local.
+  - 805-814: the §5A evaluator's verification and its T3/T4 runs.
+  - 815: the one look.
+  - 816: this release cycle (evidence.sha256): the l1-l3 prep, t3-audit, audit-dispatch, codex-818-820,
+    t4-apply-0008, t3-release, t4-deploy and t3-merge-guard.
+  - 817: this batch.
+    - t3-batch/ is the prepared T3: manifest, titles, bodies, run-batch.sh and verify_batch.sh.
+    - batch/ has every lane and composition verify output, the expected-tree computation, and the review
+      record (review.md) with its probes.
 ```
-Update this block on every pause, every milestone change, and every GPT consultation.
+Update this block on every pause, every milestone change and every GPT consultation.
 `GPT_REQUEST_STATE` ∈ `NONE` · `DRAFTED` · `SENT_WAITING_RESULT` · `COMPLETED_RESULT_SAVED` ·
 `SKIPPED_UNAVAILABLE`.
 
-## Provenance repair — 2026-08-27, before any T3
-
-The first History build defaulted a missing run origin to `USER_REQUESTED`. My review cleared
-it by checking only the *currently reachable* callers, which was too lenient: `InMemoryRunStore`
-is a dataclass whose `runs` field is an init parameter, so a store constructed directly holds
-runs that never passed through `put()` and were reported as the operator's own. The owner
-caught it and held T3.
-
-It now fails closed on both halves — `put()` requires an explicit origin, and anything
-unrecorded reads as a local `UNCLASSIFIED` sentinel that `validate_prediction_origin` rejects,
-so it can never reach the `prediction_origin` CHECK constraint. Regression coverage pins all
-seven cases: omitted at construction, omitted at call, smoke, shadow evidence, operator,
-non-persistability of the sentinel, and eviction. Collector/OOS identity was re-established
-after the repair, on local deterministic evidence only.
-
-## Checkpoint — 2026-08-27: one lane open at T3, two lanes frozen local
-
-Three findings that had been excluded from every batch-4-to-6 task were taken up. Two are
-fixed and **frozen local**: R202-01 (provider bodies had no byte cap and no wall-clock
-deadline, so an allow-listed upstream could trickle forever or exhaust RAM) and A203-01
-(candle ordering and future-close boundaries failed open — a 4H series overlapping by 1h
-passed because only gaps >= one full bar were rejected, and a close after `now` passed on a
-negative age). Both are reviewed and green. Neither ships before `T_close`.
-
-The third lane, Recent Analysis History, is the only active one and is stopped at T3.
-
-**Why the History lane needed a persistence proof.** The section-5A collector passes a
-`run_store` into `analyze_request`, so the in-process run store sits on the collector's code
-path. The collector's *database* evidence, however, is written by `persist_analysis_now`,
-which contains zero `run_store` references. Identity was established two ways, on local
-deterministic evidence only, with no holdout or outcome inspection: every DB-write function in
-`analysis_service.py` is byte-identical by AST hash and `analyze_request` is the only function
-that changed; and a deterministic differential probe — validated against a same-commit
-stability control — produced identical hashes before and after for the validated payload,
-`analysis_hash`, prediction rows, feature snapshots, the persist result and its idempotent
-repeat. `schemas/response.schema.json` still matches its deployed pin digest, corroborating
-that the response envelope did not move.
-
-**A structural artefact to expect, not to misread.** This checkpoint names `68a6250` as
-`LAST_GREEN_SHA` while itself being a later commit. A docs checkpoint cannot name the commit
-that carries it. `68a6250` is the commit the work was verified on; this commit changes only
-`STATE.md` and no product blob, so the identity proof above still applies verbatim.
-
-## Production — PROD-SAFE-3 IS DEPLOYED (2026-09-17)
-hf/main moved a89b45e -> 00705c55 at 2026-09-17T03:39:17Z by fast-forward: a convergence release whose tree equals
-main e5cd7ef. The runtime pin was merged as PR #106 (08c77f09).
-Shipped to users: Recent Analysis History and durable Detail (migration 0008 applied first, run 35164080476);
-session and auth hardening; accumulated reviewed UI work; a provider byte cap and deadline; stricter candle adjacency;
-release identity UCPE-PROD-SAFE-3-20260915-A. Every user analysis still runs heuristic-v1-wave4b0.
-
-Proof captured at deploy time, all read-only:
-  healthcheck  status OK, uptime 12s (fresh restart)
-  build-info   UCPE-PROD-SAFE-3-20260915-A / HF_PRODUCTION, matching the pin
-  served bytes sha256 of index.html, app.js and styles.css each byte-identical to R and the pin
-  guard 35179229959  HEALTHY, 3/3 rounds, deployment delta paths []
-
-No analysis call, no smoke test, no holdout inspection. Two earlier push attempts failed safely (an expired token,
-then a token without write access), and a third stopped before pushing (no saved credential).
-
-## Production — PROD-SAFE-2 (2026-08-25, superseded)
-hf/main moved e9d549c -> a89b45e at 2026-08-25T17:55:11Z by fast-forward, one commit.
-Shipped to users: login failure states, batch-item error messages that show the backend's
-message instead of a bare enum, and removal of the browser-derived "Tactical horizons"
-verdict. Also shipped: the 480-character news snippet cap and a bounded best-effort
-persistence backlog. The six authoritative per-timeframe cards are unchanged.
-
-Proof captured at deploy time, all read-only:
-  healthcheck  status OK, uptime 6s (fresh restart)
-  build-info   UCPE-W4D3-OPS-2A0-20260622-A / HF_PRODUCTION, matching the pin
-  served bytes sha256 of app.js, styles.css and index.html each byte-identical to the pin
-  guard #605  HEALTHY, 3/3 rounds, delta path count 1 (the structural analysis_service.py)
-
-No DB write, no prediction smoke, no holdout inspection, no Change-B/OOS code was included.
-
-## Production — PROD-SAFE-1 (2026-08-23, superseded)
-
-`hf/main` = **`e9d549c`**, deployed 2026-08-23T06:01:39Z as a fast-forward from `9933615`.
-This is the first deploy since 2026-08-17 and it carries **no section-5A code whatsoever**.
-
-**What it is.** A release candidate rooted at the then-deployed `9933615` — deliberately NOT
-cut from `main`, because `main` carries the Change-B candidate and the collector, none of
-which may reach production while the holdout runs. Three backports were integrated onto that
-clean base: the `blocking_reasons` operator-facing UI, the login hardening, and the Docker
-build-context fix. `VERIFY=PASS`, 842 passed (822 base + 11 + 9).
-
-**Clean-room proof.** `oos/`, `probability_distributional.py`, the collector, the OOS workflow
-and the freeze file are all absent from the deployed tree. A word-boundary search for
-`OOSArm`, `pair_context`, `PairTarget` and `distributional` returns zero in both the base and
-the candidate, and no forbidden token appears on any added line. No protected-tier path
-(`quant/` `gates/` `persistence/` `config/` `schemas/` `migrations/`) is touched.
-
-**One real adaptation, recorded because it is a divergence from `main`.** APP-1 on `main`
-gates `blocking_reasons` off the collector arms via `include_blocking_reasons=arm_context is
-None`. There is no `arm_context` on this lineage and no collector to protect, so the flag is
-kept for parity but the call site gates nothing. `api/analysis_service.py` therefore moves by
-two lines here against a large diff on `main`.
-
-**Deploy evidence, in order.**
-1. Pre-deploy baseline: guard **#573**, scheduled, on `4dc8ad5` — HEALTHY.
-2. `git push hf e9d549c:refs/heads/main` — fast-forward, `9933615..e9d549c`, 06:01:39Z.
-3. Space rebuilt: API `sha=e9d549c`, `stage` went `RUNNING_BUILDING` → `RUNNING`.
-4. `/healthcheck`, `/v1/build-info`, `/` all 200.
-5. **Decisive:** the live Space serves `app.js` whose SHA-256 is `9591fac6…`, byte-identical
-   to the pinned digest. `styles.css` matches its unchanged pin. The build fingerprint does
-   NOT move — `config/build_info.py` is unchanged — so it was never used as proof.
-6. Pin PR #30 merged at 06:14:11Z. **`PIN_DRIFT` window: 12m 32s.** No scheduled guard fired
-   inside it; the latest scheduled run at window close was still #573.
-7. Post-merge CI **#47** on `074e995` — SUCCESS.
-8. Guard **#574** dispatched once on `074e995` — **HEALTHY**, critical source match True,
-   frontend asset match True, three probe rounds all HEALTHY.
-
-**The pin now describes the live build.** Five literals moved on `main` and only five:
-`hf_main_sha` → `e9d549c`; the digests for `frontend/app.js`, `frontend/index.html` and
-`api/analysis_service.py`; and `frontend_asset_tokens.app_js` → `w4c1-ka1-20260823-a`. Eight
-of eleven guarded digests, `styles_css`, and every identity field are untouched.
-
-**Two standing consequences a future session must not misread.**
-- The guard reports advisory `SCHEDULER_DIVERGENT_FROM_PIN` with `scheduler_ahead_count:
-  null`, permanently, because the deployed commit is a separate lineage from `main` and the
-  ancestry walk cannot resolve. It is contract-defined, non-failing, and was predicted before
-  the deploy. It is NOT drift.
-- `CURRENT_DELTA_PATHS` is `["src/crypto_probability_engine/api/analysis_service.py"]` and
-  stays that way, because `main` carries collector code the deployed build deliberately does
-  not. This does not empty until a future deploy is cut from `main` itself.
-
-**Rollback, if ever needed.**
-`git push --force-with-lease=refs/heads/main:e9d549c59f159222e763182cf0aa02564c1ed67c hf
-9933615b3a9a1bdffada6cc568c2927ff9106114:refs/heads/main`, then revert the five pin literals
-and the test mirror. Force is required because the restore moves the remote backwards.
-
-**Untouched throughout:** the database, the section-5A holdout, the collector, every
-`V1_QUANT_CONTRACT.md` §5A path, and `T_close` = 2026-09-12T04:00:00Z. No prediction row was
-written; `live_smoke.py` and `manual_smoke.py` were deliberately not run because they create
-prediction rows. Only `production_smoke.py`-class read-only GETs were used.
-
-## Current status — 2026-08-22
-
-`STATE.md` on `main` had not moved since `439c601` (2026-08-17) while **fourteen PRs, #8
-through #21, merged**. This section reconciles the top of the file to what is provable today.
-It replaces the recovery block and the roadmap only. **Everything from *Operating model V2 —
-anchored 2026-08-16* downwards is the historical record as written between 2026-08-15 and
-2026-08-17 and is preserved verbatim; where it conflicts with this section, this section
-governs.**
-
-**Proven this session — deterministic, local, read-only:**
-- `origin/main` = `e910751` — the PR #21 merge commit, dated 2026-08-22T22:55:23+07:00.
-- `./verify.sh` on that exact tree: **PASS** — ruff clean, **993 passed** in 6.05 s,
-  schemas + smoke ok, scanners **3/3**.
-- **Nothing is deployed from this work.** `git ls-remote hf refs/heads/main` = `9933615`.
-  That SHA is a strict ancestor of `origin/main`, which is **33 commits (15 first-parent)
-  ahead**, so a future deploy would be a fast-forward. No deploy is authorized.
-- **No `PIN_DRIFT`.** `ops/hf_runtime_baseline.json` carries `hf_main_sha = 9933615`, which
-  equals live `hf/main` exactly.
-- `ci.yml` triggers on `push` to `main` **and** on `pull_request`, so merges to `main` are
-  now verified in the clean room on the merge commit itself.
-- Node-24-native pins (`actions/checkout@v7`, `actions/setup-python@v7`) are in place on five
-  workflows: `ci.yml`, `source-integrity-guard.yml`, `derivatives-evidence-cadence.yml`,
-  `derivatives-cadence-readiness-diagnostic.yml`, `derivatives-registry-diagnostic.yml`.
-  **Two are deliberately still on Node-20-era pins** — `oos-pair-evidence.yml` and
-  `resolve-outcomes.yml` (`@v4`/`@v5`) — frozen for the duration of the holdout.
-- The holdout instants are tracked on `main` in `V1_QUANT_CONTRACT.md` §5A.2:
-  `T_freeze = 2026-08-20T11:35:56Z` · `T0 = 2026-08-21T04:00:00Z` ·
-  `T_close = 2026-09-12T04:00:00Z` (`= T0 + 528 h`, driven by 4H). The collector cadence
-  `7,22,37,52 * * * *` is enabled in `.github/workflows/oos-pair-evidence.yml` on `main`.
-
-**Recorded in Git during 2026-08-18…22, not re-verified in this session.** These lanes closed
-on GitHub-side evidence (`gh` is not installed on this machine and no browser check was run
-here), so they are reported as *recorded*, not as *re-proven today*: CI-1 `fd4684c` ·
-CI-2 `a950a0f` · CI-3 `9b36f50` (guard dispatch `HEALTHY`) · CI-4 `f3daffd`
-(`AVAILABLE_COMPLETE`) · CI-5 `68592f2` · TEST-1 `9605863` · GOV-1 (a branch ruleset on `main`
-enforcing pull-request + CI; `main` had been unprotected) · CI-6 `e910751`.
-
-**`NOT_RUN`, stated as a limitation and never as a pass.** The `@v7` pins on
-`derivatives-evidence-cadence.yml` have never executed on any SHA. Moving that to *executed*
-requires a T3 dispatch of a write-capable collector, which is refused while the holdout runs.
-
-**Known gaps between `origin/main` and the local record — none of them fixed by this lane.**
-The narrative history for 2026-08-17 → 2026-08-22 (~6 000 lines) exists only on the local,
-unpushed branch `chore/session-origin-diagnostic` @ `186d0ad`; that branch is **stale on code**
-— it predates PRs #8–#21 — so it must not be merged or copied wholesale, only mined. Also
-unpushed and still open: `RELEASE_GATE.md` on `main` reads **273 proven / 13 open**, while the
-local record has it at **275 / 11** after the authorized 2026-08-19 browser evidence run closed
-Wave 4A.2 and Wave 1.1 · `CLAUDE.md` on `main` lacks the *Model routing and effort* section ·
-`docs/OPERATING_DOCTRINE.md` on `main` lacks the owner-facing doctrine adopted 2026-08-19.
-
-**Section 5A's prohibition, verbatim.** The holdout is evaluated **exactly once**, at
-`T_close`. **No interim looks** — `d`, `ECE`, per-symbol tallies and window counts are not
-computed or inspected before `T_close`. A NOT PASS or FAIL **may not be retuned against the
-same holdout**; a second attempt requires a new candidate freeze, new `T_freeze`, new `T0` and
-a new holdout. `T_close` is fixed once `T0` is observed and may not be extended, shortened or
-re-declared.
-
-**Standing environment constraints.** `gh` is off `PATH`; outbound `curl` and `git push` are
-refused by the Claude Code permission classifier. Every remote write needs the owner to run it
-with the `!` prefix, and GitHub settings or PR work needs the browser.
-
-## v1 roadmap — progress at a glance
-*Updated 2026-08-22 · `RELEASE_GATE.md` on `main`: **273 proven / 13 open** — stale; the local
-record has it at 275 / 11 and that correction is not yet pushed.*
-
-**Completed milestones**
-1. **Change A — calibration truth + skill gating.** PR #2, merged `e6ee23c`, **deployed to
-   production**. Change A is closed and needs nothing further.
-2. **Deploy pin + source-integrity closure.** PR #3, merged `1b06aab`; guard `HEALTHY` exit 0,
-   no `PIN_DRIFT`.
-3. **Operating model V2 + GPT sidecar.** PR #4, merged `a59b295`. Six process artifacts, no
-   growth.
-4. **Production live-smoke + release-gate reconciliation.** PR #5, merged `6eb632d`. Gate went
-   271/15 → 273/13; `/v1/calibration` proven to serve in production.
-5. **Remaining deployed browser evidence closure.** Closed 2026-08-19 by an authorized T4
-   evidence run in a `CONTROLLED_SMOKE` session: Wave 4A.2's card check and Wave 1.1's
-   deployed UI smoke. **The `RELEASE_GATE.md` edit recording this is not yet on `main`.**
-6. **Change B tranche-1 infrastructure and activation.** PRs #8–#14: paired-evidence
-   collector, the section 5A acceptance contract, the `distributional-v1` candidate freeze,
-   the recorded `T0`, and the recurring cadence. The collector is bounded by
-   `--max-occasions`, so a canary can be exactly one occasion.
-7. **CI and governance hardening.** PRs #15–#21: post-merge CI on `main`, Node-24 action pins
-   across five workflows, and bare-`pytest` parity — plus GOV-1, a branch ruleset protecting
-   `main`, which is a GitHub settings change rather than a PR.
-
-**Current milestone** — **Change B tranche 1: the holdout is live and accumulating.** The
-candidate `distributional-v1` is frozen; collection runs unattended on the enabled cadence
-until `T_close = 2026-09-12T04:00:00Z`, when section 5A is evaluated **once**. There is no
-work to do in the meantime and no interim look is permitted.
-
-**Next major milestone** — **the section 5A evaluation at `T_close`**, and only then the
-decision on whether `distributional-v1` ships. Change B remains **undeployed**; production
-still runs the Change A methodology.
-
-**Outstanding, but not milestones** — the unpushed `RELEASE_GATE.md`, `CLAUDE.md`, and
-`docs/OPERATING_DOCTRINE.md` corrections listed above · `oos-pair-evidence.yml` and
-`resolve-outcomes.yml` still on Node-20-era pins, frozen for the holdout, and
-`oos-pair-evidence.yml` additionally lacks a `permissions:` block (low severity — the
-repository default is already read-only) · per-timeframe `MEASURED` needs roughly 3× more
-operator traffic per timeframe (134–172 against a ≥500 threshold) · the six-versus-seven
-derivatives-cohort reconciliation is open and deliberately not guessed at.
-
-## Operating model V2 — anchored 2026-08-16
-- **Claude Code holds the loop.** **Codex `exec` is the implementation and debugging lane.**
-  **Deterministic tooling is the verification authority** — `./verify.sh`, Git, and the three
-  safety scanners decide pass/fail; no model adjudicates a gate.
-- **GPT-5.6 Sol via Claude Code Chrome is an exceptional sidecar only**, outside the normal
-  loop, default budget **≤1 consultation per milestone**, advisory and granting no authority.
-- **No OpenAI API fallback, no API key, ever. No transcript relay.** GPT sees only the
-  compact gitignored `.work/gpt-request.md` (≤2 KB) and returns `.work/gpt-result.md` (≤1 KB).
-- **The owner is the sole authority** for product and scope decisions, T3/T4 boundaries,
-  secrets, spend, and release.
-- **PAUSE/RESUME semantics live in `CLAUDE.md`.** The recovery block above plus Git plus
-  `.work/` are sufficient to resume after abrupt quota exhaustion **without repeating any
-  completed Codex delegation or GPT consultation**.
-- **UABO remains retired and frozen. Change A remains deployed and closed. Change B has NOT
-  started.**
-
-**Goal** — Complete UCPE v1: a production-quality, analysis-only crypto probability engine.
-
-**v1 scope** — resolver + calibration activation · deploy the GitHub↔HF gap · full
-hard-gating · horizon-specific probability modelling · live smokes · release-gate closure.
-**Out of v1 (owner decision 2026-08-15):** Phase 2D.3B derivatives first-write. Preserved
-in Git on `preserve/2d3b-readiness-packet`; must not block v1.
-
-**Repo** — canonical working copy is this directory, `/Users/kha/Documents/Kha-app/UCPE`.
-`origin` = `github.com/tranbeny053-hub/v83-stock-cron` (CI + cron).
-`hf` = the Hugging Face Space — **pushing to `hf` is a deployment (T3)**.
-Pre-Git copy preserved read-only at `/Users/kha/Documents/Kha-app/v8-crypto-api-clean`;
-proven byte-identical to `676fafb` except the four files now committed. Retire it after v1.
-
-**Last green** — `main` @ `1b06aab` · `VERIFY=PASS` 776 passed, ruff clean, 3/3 scanners.
-Deployed production build is `e6ee23c`; `main` is one pin commit ahead of it by design.
-
-**Change A is merged to GitHub (2026-08-16).** PR #2 `feat/calibration-truth` → `main`,
-head `44ca1d9`, CI green on that exact head, merged as merge commit
-`e6ee23cc81274c2ad68e247293738bc8e81f082a` = `origin/main`. 20 files, +1252 −28. The
-merged tree is byte-identical to the PR head. **Nothing was deployed** — `hf` was verified
-unchanged at `30d4982` before and after, and no workflow deploys to Hugging Face or
-triggers on push to `main`, so merging cannot deploy.
-
-**Branches** — `main` = `a59b295` (one docs-only checkpoint ahead of `origin/main`) ·
-`chore/gpt-sidecar` (merged by PR #4, kept) · `chore/deploy-pin-change-a` (merged by PR #3) ·
-`feat/calibration-truth` (merged by PR #2) · `preserve/2d3b-readiness-packet` ·
-`chore/operating-model`. Production remains `e6ee23c`, which is an ancestor of `main`.
-
-**Production — Change A IS DEPLOYED (2026-08-16).** HF Space live at `e6ee23c`,
-`stage=RUNNING`, `cpu-basic`, healthy. The prior build `30d4982` was a strict ancestor,
-24 commits behind, so the deploy was the expected fast-forward.
-
-**Live operations (verified 2026-08-15, read-only)** — all 7 GitHub workflows active.
-Outcome resolver: 670 runs, last 100 all successful. Source-integrity guard green.
-**Database: all 7 migrations (0001–0007) APPLIED. No migration work is required.**
-965 predictions, 813 resolved outcomes (DOWN 376 / UP 327 / TIMEOUT 110).
-
-**CORRECTION 2026-08-17 — one workflow *does* reference Hugging Face.** Earlier entries said
-"no workflow references Hugging Face". That phrasing was wrong, though the conclusion it
-supported still holds. `.github/workflows/keepalive.yml` pings the Space, but it is
-`schedule` + `workflow_dispatch` **only, with no push trigger**; it issues a single
-`curl GET` on `/` and hard-refuses any URL containing `/v1/`, `analyze`, `auth`, or
-`calibration`. **It cannot deploy and cannot write.** The accurate claim is: *no workflow
-deploys to Hugging Face, and none triggers on push to `main`* — so merging still cannot
-deploy. Deployment happens only by an explicit `git push hf`.
-
-**Prediction generation is traffic-driven, not scheduled.** A prediction row is written
-only as a best-effort background side-effect of a session-gated `/v1/analyze` or
-`/v1/analyze_batch` call (`app.py:164,185` → `analysis_service.py:510`). No scheduled
-workflow calls it: keepalive GETs `/` only; the other two schedules resolve outcomes and
-check source integrity. So `predictions_last_7d = 0` means **no operator used the app
-since 2026-08-05 04:25:18Z** — the month spent on UABO. It is not a fault.
-
-**CI has now run.** `ci.yml` triggers on `push` to `codex/**` and on `pull_request`; PR #2
-supplied the first real trigger. Check run `test` completed `success` on head `44ca1d9`.
-Clean-room verification of this repository has now actually executed.
-
-**Calibration — MEASURED (verified 2026-08-15, read-only production query)**
-Default cohort **806 samples → `MEASURED`** (threshold ≥500). Nothing is lost to data
-quality: `excluded_prediction_not_live = 0`, `excluded_outcome_not_live = 0`,
-`excluded_bad_label = 0`. The only exclusions are 7 correctly-cohorted rows
-(5 `CONTROLLED_SMOKE` + 2 `SCHEDULED_SHADOW_EVIDENCE`), so the derivatives smoke rows are
-**already reclassified** — the contamination query returned no rows.
-Single `model_version=phase1a-wave4b0` and `methodology_version=heuristic-v1-wave4b0`
-across all 806 → **no `VERSION_MIX_WARNING`**. A clean single-version sample.
-
-Per-timeframe, all `WARMING_UP` (100–299): 15m 172 · 4H 172 · 1H 165 · 1D 163 · 1W 134.
-**1M has zero resolved outcomes** (its horizons sit among the 152 still-unresolved).
-So unscoped reports are MEASURED; per-timeframe reports warn; per-symbol will warn more.
-
-*This is the second time live evidence beat the documentation: the strategic audit
-assumed calibration was stuck at `INSUFFICIENT_SAMPLE`. It is at `MEASURED`.*
-
-**Gate** — `./verify.sh` is now materially equivalent to GitHub CI: ruff, full pytest,
-`validate_schemas.py`, `manual_smoke.py`, and all 3 safety scanners. **3.84 s**, one-line
-output, first-causal-failure preserved. A local PASS is now as strong as a green CI run.
-
-**HF production (read-only, 2026-08-15)** — Space `RUNNING`, `cpu-basic`, sha `30d4982`
-(= baseline), uptime ~2.5 days. `/healthcheck` 200; `/v1/build-info` 200 with fingerprint
-`UCPE-W4D3-OPS-2A0-20260622-A`. `/v1/system_status` and `/v1/calibration` both return
-**401 with a well-formed UNAUTHORIZED body — the route is registered and its auth gate
-works** (not 404, not 500).
-
-**Production CAN serve calibration — configuration proven end to end (2026-08-16).**
-Owner confirmed the HF Space secret key `SUPABASE_DB_URL` is PRESENT. Every file in the
-calibration path is **byte-identical** between the deployed build `30d4982` and `main`:
-`calibration/service.py`, `calibration/metrics.py`, `persistence/repository.py`,
-`persistence/prediction_origin.py`, `config/settings.py`, `api/app.py`,
-`api/calibration_endpoint.py`. So `build_operator_repository` selects
-`SupabasePersistenceRepository`, the endpoint's `_EXPECTED_REPOSITORY` guard
-(`SUPABASE_POSTGRES`) passes, and it reads the same database the resolver writes to.
-*Superseded 2026-08-16: the live HTTP invocation is no longer unverified — Phase B invoked it
-with a real session and it served 200. See the Phase B section below.*
-
-**But `/v1/calibration` will NOT report MEASURED — CONFIRMED LIVE 2026-08-16.** The endpoint never issues an unscoped
-query: `calibration_endpoint.py:118` iterates `SUPPORTED_TIMEFRAMES` =
-`("15m","1H","4H","1D","1W","1M")` and builds one scoped report per timeframe. So
-production will report **WARMING_UP ×5 and NO_SAMPLES for 1M** — not MEASURED. The
-806/MEASURED figure is the unscoped aggregate, which no endpoint requests. Reaching
-MEASURED per timeframe needs ≥500 resolved outcomes in a single timeframe (currently
-134–172), i.e. roughly 3× more operator traffic per timeframe.
-
-**Deploy packet for Change A — prepared, verified, unpushed (2026-08-16)**
-Branch `chore/deploy-pin-change-a`, **local only, never pushed**, `VERIFY=PASS` 776.
-The pin commit is `1712469`; `a4bd2ac` and this checkpoint are `STATE.md`-only commits on top.
-The source-integrity guard (`.github/workflows/source-integrity-guard.yml`, cron `27 */2 * * *`
-→ `scripts/source_integrity_guard.py`) is a **composite pin** held as tracked literals in
-`ops/hf_runtime_baseline.json`: the HF `refs/heads/main` commit SHA, SHA-256 of eleven
-guarded source blobs read from that HF commit, plus build identity and frontend asset
-tokens. It runs in GitHub Actions and reads the manifest from the **GitHub** checkout; it
-queries HF only for its ref SHA and blobs. So the pin update belongs on GitHub `main`
-only — never in the HF repo. No secret supplies any expected value.
-
-The packet changes exactly five literals: `hf_main_sha` `30d4982` → `e6ee23c`, and the four
-guarded digests Change A alters (`schemas/response.schema.json`, `api/analysis_service.py`,
-`api/app.py`, `derivatives_intel/runtime.py`). `config/build_info.py` is byte-identical
-across both builds, so the **fingerprint does not move** — drift would come from the SHA
-and blob layers, not identity. The test's `PIN_SHA`/`CURRENT_DELTA_PATHS` mirror follows;
-non-empty-delta coverage is retained by `test_shallow_checkout_advisory_is_non_failing`.
-
-**Order held: deploy first, pin second — all four steps executed 2026-08-16.**
-(1) `e6ee23c` pushed to `hf` (fast-forward); (2) health confirmed; (3)
-`chore/deploy-pin-change-a` landed on GitHub `main` by PR #3; (4) guard dispatched.
-The `PIN_DRIFT` window between (1) and (3) opened and closed as designed and was never
-observed as a failure, because the guard was only dispatched after the pin landed.
-
-**PIN CLOSED — PR #3 merged.** `chore/deploy-pin-change-a` @ `7290a0e` → `main`, CI check
-run `test` = `success` on that exact head, merged as merge commit
-`1b06aab32ed560cf890609ef9c722862c71ebf6c` = `origin/main`. The PR contained exactly three
-files — `ops/hf_runtime_baseline.json`, `tests/scripts/test_source_integrity_guard.py`,
-`STATE.md` — no source, schema, gate, or quant change. `mergeable_state` was `clean`.
-
-**SOURCE-INTEGRITY GUARD — HEALTHY, exit 0** (`workflow_dispatch` run `31941852536`,
-head `1b06aab`). `pinned_hf_main_sha` == `hf_main_sha` == `e6ee23c`, so **no `PIN_DRIFT`
-remains**. Three probe rounds all `HEALTHY`; `critical_source_match: true`;
-`mismatched_path_names: []`; `frontend_asset_match: true`; live fingerprint == intended.
-
-*Correction to the earlier prediction:* the advisory came back
-**`SCHEDULER_DIVERGENT_FROM_PIN`, not `SCHEDULER_AHEAD_OF_PIN`.** This is benign and
-contract-defined. The guard workflow uses `actions/checkout@v4` with no `fetch-depth`, so
-the runner has a depth-1 shallow clone and the ancestry walk in `evaluate_deployment_delta`
-raises; `_safe_deployment_advisory` catches it and returns the fallback
-(`scheduler_ahead_count: null`, `deployment_delta_paths: []`) — exactly what was observed.
-`test_shallow_checkout_advisory_is_non_failing` covers this path, and the advisory
-structurally cannot affect Q1: the summary validator raises
-`"Integrity summary advisory affected Q1."` if it ever did, and
-`test_advisory_internal_failure_cannot_fail_healthy_q1` pins that. So the advisory is
-non-failing by contract, not by interpretation. **Expect this advisory on every run until
-the workflow sets `fetch-depth: 0`** — not a fault, and not worth a change on its own.
-
-Rollback was pre-authorized but **not used and not needed**. For reference, restoring the
-previous build would need
-`git push --force-with-lease=refs/heads/main:e6ee23cc81274c2ad68e247293738bc8e81f082a hf 30d4982903e6f44e063616bc3f03f334bd2544e2:refs/heads/main`
-plus reverting the five pin literals on GitHub — a force is required because the restore
-moves the remote backwards.
-
-**CHANGE A DEPLOYED TO PRODUCTION — 2026-08-16.**
-`e6ee23c` is live on the HF Space. Pre-deploy fail-closed checks all passed first:
-`origin/main` = `e6ee23c` exactly, `hf refs/heads/main` = `30d4982` exactly, ancestry
-confirmed fast-forward, packet diff exactly the five pin literals + test mirror +
-`STATE.md`, `./verify.sh` = `PASS` 776.
-
-*First attempt was blocked at the credential boundary and mutated nothing.* `git push hf`
-hung ten minutes and transferred zero bytes: `credential.helper` is `osxkeychain` with no
-`huggingface.co` entry, so git fell back to an interactive username prompt the harness
-askpass never answers. Confirmed with `GIT_TERMINAL_PROMPT=0` →
-`fatal: could not read Username for 'https://huggingface.co'`; reproduced with the sandbox
-disabled, so not a sandbox effect. **Anonymous read of `hf` works — only write needs
-credentials**, which is why every `git ls-remote hf` succeeded throughout.
-Resolution: the owner ran `hf auth login`, which installs the CLI and writes
-`~/.cache/huggingface/token` but **does not configure git over HTTPS**. The push was
-completed by bridging that owner-provisioned token to git for the single push via an
-inline `credential.helper`. **No token was printed, stored in the repo, or modified.**
-If `osxkeychain` still lacks a `huggingface.co` entry, a future push needs the same bridge
-or a one-time `hf auth login --add-to-git-credential`.
-
-**Deploy evidence — restart proven independently of the fingerprint.** `hf refs/heads/main`
-= `e6ee23c`; HF Spaces API reports `sha=e6ee23c`, `stage=RUNNING`, `cpu-basic`;
-`uptime_seconds` collapsed **278648 → 28** and resumed climbing, so the runtime genuinely
-rebuilt and restarted. The build fingerprint stayed
-`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` exactly as predicted — `config/build_info.py`
-is byte-identical across both builds — which is why it was never used as deploy proof.
-Health after deploy: `/healthcheck` 200 `status=OK` · `/v1/build-info` 200 · `/` 200 ·
-`/v1/calibration` and `/v1/system_status` both **401 `UNAUTHORIZED` with a well-formed
-body — routes registered, auth gates intact, not 404 and not 500**.
-No rollback was used and none was needed. No DB write, no migration, no secret change.
-
-**CANONICAL HANDOFF CHECKPOINT — CHANGE A DEPLOYMENT CLOSURE COMPLETE (2026-08-16).**
-Production `e6ee23c` · GitHub `main` `1b06aab` · guard `HEALTHY` exit 0 · no `PIN_DRIFT`.
-Closure boundaries held exactly: **no production DB write, no migration applied, no secret
-created or modified, no rollback used, and Change B not started.** The one secret-adjacent
-act was *using* the owner's already-provisioned HF token for a single push without printing,
-storing, or altering it. Nothing in this closure is pending or half-applied.
-
-**GPT SIDECAR AMENDED INTO THE OPERATING MODEL — 2026-08-16 (T0, docs only).**
-`CLAUDE.md` gains two sections — *GPT sidecar* and *Pause and resume* — and `STATE.md`
-gains the recovery block above. **No new process file**: still exactly six
-(`CLAUDE.md` `AGENTS.md` `STATE.md` `verify.sh` `delegate.sh` `docs/OPERATING_DOCTRINE.md`).
-`.work/gpt-request.md` and `.work/gpt-result.md` are gitignored ephemera, not artifacts.
-Routing is unchanged — deterministic tool > Codex > Opus > owner — and GPT sits outside the
-loop at ≤1 consultation per milestone.
-
-*Smoke test executed once, end to end, and discarded.* A temporary ChatGPT thread was
-opened in the owner's logged-in Plus session via Claude Code Chrome; the Advanced menu read
-**Model `GPT-5.6 Sol`, Effort High** before anything was sent; a 566-byte non-sensitive
-handshake went out and a 450-byte reply came back (`UCPE-SIDECAR-OK` · self-reported
-`GPT-5.6 Sol` · one clause on why advice carries no authority). Both limits held (≤2 KB
-request, ≤1 KB result). **No OpenAI API and no API key**: no `OPENAI*` environment variable
-exists, no key file on disk, the `openai` package is not installed in `.venv`, and the
-repository contains no `openai` or `api.openai.com` reference — the only transport was the
-browser UI. The smoke thread is **not** project history and is referenced nowhere.
-
-**OPERATING MODEL V2 IS ANCHORED TO GITHUB — PR #4 MERGED (2026-08-16).**
-`chore/gpt-sidecar` @ `74af3ce` → `main`, four docs-only commits (`b52f7ca` handoff
-checkpoint · `93d9ecd` sidecar + pause/resume · `76eebb0` V2 preservation list · `74af3ce`
-T3 pause record), exactly two files changed (`CLAUDE.md`, `STATE.md`), +147 −20. CI check
-`CI / test (pull_request)` was **`Successful in 34s` on the exact latest head `74af3ce`**,
-`mergeable_state` clean, merged as merge commit
-`a59b295aead428fa51667b9e915b02ad7a6c4feb` = `origin/main`. `hf` was `e6ee23c` before and
-after — **the merge cannot deploy**: no workflow deploys to Hugging Face and `ci.yml`'s push
-trigger is limited to `codex/**`, so nothing fires on push to `main`.
-
-*The push needed the owner.* `git push` is refused by the Claude Code auto-mode permission
-classifier and `gh` is not installed on this machine, so the loop paused at the T3 boundary
-with `origin` untouched and the owner ran the one-line push in-session. The PR itself was
-opened and merged through the GitHub web UI via Claude Code Chrome. If a future session
-needs to push, expect the same wall: either the owner runs it, or a Bash permission rule for
-`git push` is added.
-
-**Local `main` is one docs-only commit ahead of `origin/main`** — this checkpoint. That is
-the established pattern (`b52f7ca` rode along the same way and landed in PR #4); it will
-ride along in the next PR. Nothing else is unpushed.
-
-**MILESTONE: PRODUCTION LIVE-SMOKE + RELEASE-GATE CLOSURE — started 2026-08-16.**
-Branch `feat/production-live-smoke`, two commits, `VERIFY=PASS` 785 (was 776).
-
-*Change L1 — read-only production smoke (`87fd77a`, T1).* `scripts/production_smoke.py` plus
-`tests/scripts/test_production_smoke.py`. **Read-only by construction**: GET only, with a
-single `POST /v1/auth/login`, pinned by an AST test that fails if any other write verb or any
-analyze path ever appears in the module. Gated behind `UCPE_PRODUCTION_SMOKE_ENABLED`,
-mirroring `UCPE_LIVE_SMOKE_ENABLED`, so the suite never reaches the network. Raw bodies are
-captured before parsing; headers are never captured; no secret is ever printed.
-
-**PHASE A EXECUTED AGAINST LIVE PRODUCTION — exit 0, 2026-08-16.** Unauthenticated,
-read-only, no write, no secret. `/healthcheck` 200 `status=OK`, `uptime_seconds=12154`;
-`/v1/build-info` 200, `release_id=UCPE-W4D3-OPS-2A0-20260622-A`, `environment=HF_PRODUCTION`;
-`/` 200 serving `/app.js?v=w4c1-ka1-20260621-a`, and **that served bundle contains
-`prob_up_pct`, `prob_down_pct`, `prob_timeout_pct` and none of the stale markers**;
-`/v1/system_status` and `/v1/calibration` both 401 with a well-formed `UNAUTHORIZED` body.
-This is the first time the deployed frontend bundle has been verified from outside the app.
-`frontend/index.html` references the same `w4c1-ka1-20260621-a` token production serves, so
-source and production agree — **no frontend drift**.
-
-*Change L2 — gate reconciliation (`d97b553`, T0).* `RELEASE_GATE.md` now reads 271 proven,
-15 genuinely open, 27 historical ceremony items resolved inline as superseded. Every newly
-ticked box carries a checkable citation; **every one of the 15 open boxes states the specific
-evidence that would close it.** The Wave 4A.2 cache-bust literals are annotated as historical
-(`wave4a2-b9137ee` → live `w4c1-ka1-20260621-a`).
-
-*Deliberately left open:* the Phase-1 cohort item says **six** historical derivatives smoke
-rows; the production query found **seven** (5 `CONTROLLED_SMOKE` + 2
-`SCHEDULED_SHADOW_EVIDENCE`). Recorded as an open reconciliation rather than guessed at.
-
-**BLOCKING FINDING — the live write-smoke is blocked by contract, not by authorization.**
-`AnalysisRequest` (`src/crypto_probability_engine/api/schemas.py:77`) is `extra="forbid"` and
-carries only `symbol`, `analysis_mode`, `timeframe`, `asset_class`, `include_detail`. **There
-is no prediction-origin field on the HTTP contract**, so every production `/v1/analyze` write
-is recorded `USER_REQUESTED`. The origin contract exists at the service layer and in the DB,
-but the endpoint cannot reach it. Codex reported this as `BLOCKED` on task 009 and the finding
-was independently confirmed. Consequence: **any live write-smoke would inject synthetic rows
-into the 806-sample `USER_REQUESTED` control cohort**, destroying the very evidence separation
-Change B depends on. No workaround was attempted; the write phase was removed from scope and
-the capability rebuilt read-only as task 011.
-
-*Repair record — one causal class, one consolidated repair, no blind retry.* Task 011 came
-back `BLOCKED` after the same cookie-session failure twice under `MockTransport`. Root cause
-was **a test-fixture defect, not a script defect**: the mocked `Set-Cookie` omitted `Path`, so
-`http.cookiejar` derived the cookie path from the login URL as `/v1/auth` and never sent it to
-`/v1/system_status`. Proven directly — the cookie *was* delivered to `/v1/auth/whoami` and
-withheld from `/v1/system_status`. The real app emits `Path=/` (`api/auth.py:166` → Starlette
-default), so the mock did not reproduce production. Sibling scan found no other `Set-Cookie`
-mock in the repo. Consolidated repair: fixture corrected to production's real cookie
-attributes, the redundant manual `client.cookies.update(...)` that disguised the cause removed,
-and **a regression test added that asserts the real login response still sets `Path=/`**, so
-the mock can never silently drift from production again.
-
-**PHASE B PASSED IN FULL — 2026-08-16, re-run with the repaired instrument.**
-`PASS: production smoke phases A+B`. `/v1/calibration` served **200** at the 120s budget and
-returned exactly what was predicted:
-`15m WARMING_UP 172 · 1H WARMING_UP 165 · 4H WARMING_UP 172 · 1D WARMING_UP 163 ·
-1W WARMING_UP 134 · 1M NO_SAMPLES 0`.
-
-**Those counts match the 2026-08-15 read-only SQL query exactly.** That is an independent
-cross-check, not a restatement: the live endpoint and the direct database query agree
-per timeframe, which confirms the deployed endpoint really does read the same database the
-resolver writes to. The identical counts also confirm **no new outcomes resolved since
-2026-08-15**, consistent with zero operator traffic.
-
-Three standing predictions are now confirmed by live evidence rather than inference: the
-endpoint serves rather than 401-ing; it reports per-timeframe scoped results, never the
-unscoped 806/`MEASURED` aggregate; and 1M reports `NO_SAMPLES`. The earlier 10s timeout was
-an instrument defect, exactly as diagnosed — production was healthy throughout.
-
-*History of that failure, kept because the diagnosis mattered:*
-
-**PHASE B FIRST RUN — partial, 2026-08-16.**
-The owner ran Phase A+B. Phase A passed again. Login succeeded and
-`GET /v1/system_status` returned 200 with **`persistence_status=OK`,
-`repository_type=SUPABASE_REST`, `store_status=CONFIGURED`, `circuit_state=CLOSED`** — the
-first live proof the deployed runtime reaches durable persistence. It also settles which
-Wave 1.2 priority tier production actually selects: **`SUPABASE_REST`**, the first tier. Note
-this is the *runtime* repository; the calibration endpoint builds a separate *operator*
-repository that prefers direct Postgres (`repository.py:2258`), so both tiers are in use for
-different purposes. **Wave 1.2's `Persistence: OK` item is closed on this evidence.**
-
-Then: `FAIL: production smoke phases A+B; The read operation timed out`.
-
-*The timed-out read was `GET /v1/calibration`, identified without re-running anything.* Raw
-capture proved it by absence: every earlier request wrote its body, and
-`phase-b-calibration.body` was the only one missing, so no response ever arrived.
-
-**Both defects were in the instrument, not proven in production.** (1) A single blanket 10s
-timeout was applied to every request, but `/v1/calibration` fans one HTTP call out to six
-sequential Space→Supabase round trips — `calibration_endpoint.py:30` iterates six
-`SUPPORTED_TIMEFRAMES`, each a scoped read with `limit` defaulting to 5000 (line 90), against
-the direct-Postgres operator repository. Ten seconds was never a contract-grounded budget.
-(2) The failure never named *which* read died. Repaired in `20c19d3`: `--calibration-timeout`
-(default 120s) separate from `--timeout` (10s, so real hangs still surface fast), and
-transport errors now name method, path and elapsed budget, with the query string stripped and
-the raw transport message dropped so nothing sensitive rides along. No production behaviour
-was touched.
-
-*That run proved only that the endpoint did not answer within 10 seconds — neither health nor
-fault. The re-run decided it: healthy, and the predicted per-timeframe values.*
-
-**MILESTONE: REMAINING DEPLOYED BROWSER EVIDENCE CLOSURE — started 2026-08-17.**
-Target: Wave 4A.2's live browser card check and Wave 1.1's deployed UI smoke, the last two
-gate items that need a browser. Investigation complete; **no code changed, no smoke run, no
-production analysis.**
-
-*Findings, each verified against the code:*
-- **No request shape renders the cards without writing a ledger row.** Every card is filled
-  only from its own fresh `/v1/analyze` response (`frontend/app.js:733-748`), and neither
-  `analysis_mode` nor `include_detail` suppresses prediction construction. Row construction
-  needs live data plus a valid anchor (`api/analysis_service.py:776-787`); the only skips are
-  fixture mode, failure, or degradation — none of which is a viable request shape.
-- **There is no way at all to set a non-default origin over HTTP.** `AnalysisRequest` has no
-  origin field and forbids extras (`api/schemas.py:77-84`); the routes pass no origin
-  (`api/app.py:164-202`); CORS allows only `Content-Type`; and there is **no deployment-wide
-  origin setting** — `Settings` has no such field and `from_env` reads no such variable.
-- **No deployed view renders cards from stored data.** The detail endpoint reads the
-  **in-memory** run store, which does not survive a Space restart
-  (`api/app.py:264-272`, `persistence/run_store.py:9-14`). Persisted rows hold the three
-  numbers but not the `decision_synthesis` fields the cards render from.
-- **Loading the page writes nothing.** Init renders placeholders and fetches only public
-  `/v1/build-info`; login calls only `/v1/system_status`. Analysis starts *only* on explicit
-  user action (`frontend/app.js:2164-2168`, `1910-1921`, `1928-2127`). A browser can safely
-  load and log in.
-
-*Two corrections to the delegated investigation, both material:*
-1. **An API-only field would not help a browser.** The frontend posts exactly
-   `{symbol, analysis_mode, timeframe}` (`frontend/app.js:737-741`), so a UI smoke would still
-   send the default. Closing these items via the origin route needs a **frontend** change too.
-2. **Going stateless is far costlier than reported.** `build_persistence_repository` falls
-   through REST → **Postgres** → in-memory (`persistence/repository.py:2244-2252`), and the
-   Space holds all three credentials. Emptying it means removing **three** secrets and
-   restoring **three** — six owner-only operations on production, where a botched restore
-   silently costs durable persistence.
-
-**DEPLOYED TO PRODUCTION — 2026-08-17. `9933615` IS LIVE.**
-Deploy-first staging, at the owner's direction. `git push hf 9933615:refs/heads/main` was a
-clean **fast-forward** (`e6ee23c..9933615`, ancestry verified beforehand, no force) and this
-time needed **no credential bridging** — the earlier `osxkeychain` wall did not recur.
-
-*Restart proven independently of the fingerprint.* `hf/main` = `9933615` exactly;
-`uptime_seconds` collapsed **72539 → 94** and resumed climbing. The fingerprint stayed
-`UCPE LIVE BUILD · W4D3-OPS-2A0-20260622-A` **exactly as predicted**, because
-`config/build_info.py` is byte-identical across both builds — which is precisely why uptime,
-not the fingerprint, was designated the proof in advance. Post-deploy Phase A: `PASS` — health
-200, build-info 200, served bundle intact, `/v1/system_status` and `/v1/calibration` both
-well-formed 401s.
-
-**THE DEPLOYED FEATURE IS INERT, BY DESIGN.** `CONTROLLED_SMOKE_CODE_HASH` is **not**
-configured on the Space, so `_hash_matches` returns `False` immediately (`api/auth.py:127-128`)
-and the `CONTROLLED_SMOKE` branch is unreachable. Login behaviour is byte-for-byte what it was.
-This deploy changed **no observable production behaviour**; it only staged the code. That is
-the whole point of deploy-first: the secret becomes the single, reversible moment of change.
-
-**PIN RE-BASELINED LOCALLY (`0237e8e`, branch `chore/deploy-pin-session-origin`).** Deploy
-first, pin second. Exactly **two** literals, both computed: `hf_main_sha` `e6ee23c…` →
-`9933615…`, and the `api/app.py` digest `8c559699…` → `ea55f4b3…`. Only **one of the eleven**
-guarded blobs moved — `api/auth.py` and `config/settings.py` are not guarded.
-*Applied by exact string substitution, not a JSON round-trip:* re-encoding escaped the
-non-ASCII separator in the fingerprint to `\u00b7`, semantically identical but not
-byte-identical, which would have been a third unintended literal change. `CURRENT_DELTA_PATHS`
-is empty again and `PIN_SHA` follows the new pin.
-
-**A `PIN_DRIFT` WINDOW IS OPEN** between the deploy and the pin landing on GitHub `main` — the
-pinned SHA still says `e6ee23c` on `origin/main` while HF serves `9933615`. **Do not dispatch
-the source-integrity guard until the pin merges.** This is the same window Change A opened and
-closed by design.
-
-**PR #6 MERGED TO GITHUB — 2026-08-17.** `feat/session-scoped-origin` @ `966e5bf` → `main`,
-merged as merge commit **`9933615b3a9a1bdffada6cc568c2927ff9106114`** = `origin/main`.
-Verified from Git rather than the UI: **two parents** (`6eb632d` + `966e5bf`) confirm the
-merge-commit method rather than a squash or rebase, and the exact head CI went green on is an
-ancestor of `main`. 7 commits, 10 files, +542 −27. CI `CI / test (pull_request)` passed on that
-exact head — the first clean-room verification of this T2 auth change.
-
-**`hf/main` re-verified `e6ee23c` after the merge — nothing deployed.** The owner generated the
-smoke code locally against the existing production salt; it is **not yet configured** on the
-Space, so the feature is inert in production by design. CI could not exercise it end to end for
-the same reason, which is itself a tested property.
-
-**CREDENTIAL BOUNDARY FAILED ONCE, THEN REPAIRED — 2026-08-17 (`bb09cb0`).**
-The owner's first attempt to generate the secret was blocked before any hash existed:
-`make_access_hash.py` restricted `--name` to the two original secrets, while `RELEASE_GATE.md`
-already documented generating `CONTROLLED_SMOKE_CODE_HASH` with that exact command. **The
-feature added a third deployment secret and never reconciled the generator** — my omission, not
-the operator's error.
-
-*Not worked around.* The hash must use the **same salt and iteration count the app uses at
-login**; this script reads `UCPE_ACCESS_CODE_SALT` and `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` and
-calls the app's own `pbkdf2_hash_code`, so reusing another secret's name or hand-rolling a
-digest would risk a silent mismatch that surfaces only as a failed production login. A test now
-pins that the digest is identical whichever `--name` is chosen. The supported names live in one
-constant feeding both the argparse choices and the description, since those drifting apart is
-what caused this.
-
-*Sibling scan caught a second gap:* the frontend static **safety** test enumerated backend
-secret names without the new one, so frontend code could have referenced
-`CONTROLLED_SMOKE_CODE_HASH` without failing. Closed in the same commit rather than left open
-while asking the owner to create that secret. Remaining incomplete lists are **documentation
-only** and were reported, not changed: `README.md`, `DEPLOYMENT_CHECKLIST.md`,
-`DEBUG_PACK_EXAMPLE.md`, `AI/06_TEST_COMMANDS.md`.
-
-**RESOLVED — session-scoped origin implemented (`be2104e`, T2, branch
-`feat/session-scoped-origin`).** Owner chose the session-layer approach over widening the
-request contract. `VERIFY=PASS` 815 (was 803).
-
-The origin now rides inside the session payload, which was **already HMAC-signed over its
-body** (`api/auth.py:84-95`), so it cannot be forged without the signing key. A second access
-code, hashed as `CONTROLLED_SMOKE_CODE_HASH`, mints a session whose analyses are recorded
-`CONTROLLED_SMOKE`; both `/v1/analyze` and `/v1/analyze_batch` read it from the verified
-session. **`AnalysisRequest` is untouched** — it keeps `extra="forbid"` and gains no origin
-field — and **the frontend is unchanged**, so the browser simply logs in with the other code.
-
-*Fail-closed, deliberately asymmetric:* an **absent** origin key means `USER_REQUESTED`, so
-sessions minted before this change survive the deploy; an origin key that is **present but
-unsupported** returns 401 rather than defaulting, because a silent downgrade would contaminate
-the cohort invisibly — the precise harm this exists to prevent. Login is byte-for-byte
-unchanged when the hash is unset, the normal code is still checked first, a wrong code returns
-an identical error either way, the same limiter and constant-time compare apply, and a smoke
-session grants no Dev Mode. All eleven of those properties have direct tests
-(`tests/api/test_session_prediction_origin.py`).
-
-*Known, accepted:* whether the smoke hash is configured is observable through login **timing**,
-since an unset hash short-circuits before PBKDF2. It leaks only the existence of the feature —
-which this repository documents publicly anyway — never the credential, and the attempt limiter
-bounds sampling. Not worth constant-time padding; recorded rather than silently ignored.
-
-*Guard test:* `CURRENT_DELTA_PATHS` now lists `api/app.py`, because a guarded source file is
-changed on GitHub but not yet deployed. **`ops/hf_runtime_baseline.json` is deliberately NOT
-re-pinned** — the pin tracks what is deployed, and the order is deploy first, pin second. The
-regression test now exercises a real non-empty delta instead of an empty one, which is stronger
-coverage than before.
-
-**Original conclusion, which drove the decision: closing both items honestly does require a contract change.** Wave 1.1 says
-"Manual **deployed** UI smoke" — by the same reading the audit applied, that means the real
-Space, so a local render check cannot close it. No waiver, no scope reduction, and no
-reinterpretation is available here.
-
-**MILESTONE CLOSED — PR #5 MERGED TO GITHUB, 2026-08-17.**
-`feat/production-live-smoke` @ `0e0c844` → `main`, merged as merge commit
-**`6eb632d1417190d8517284e89a7d7dd1408aff42`** = `origin/main`. Verified from Git, not the UI:
-the commit has **two parents** (`a59b295` + `0e0c844`), confirming the merge-commit method
-rather than a squash or rebase, and `0e0c844` — the exact head CI went green on — is an
-ancestor of `main`. 14 commits, 6 files, +1262 −61.
-
-**CI ran clean-room for the first time on this work**: `CI / test (pull_request)`
-**Successful in 29s** on head `0e0c844`, the exact commit merged.
-
-**NOTHING WAS DEPLOYED.** `hf/main` verified `e6ee23c` **after** the merge, unchanged. No
-workflow references Hugging Face and `ci.yml`'s push trigger is limited to `codex/**`, so a
-merge to `main` cannot deploy. Production still runs `e6ee23c`. The branch was **kept**, not
-deleted, matching how `chore/gpt-sidecar` was kept after PR #4.
-
-**Gate: 273 proven / 13 open.** What the merge did *not* close, and why: 2 items need a real
-browser session (Wave 4A.2's card-rendering check, Wave 1.1's deployed UI smoke); 1 is an
-unconsumed precondition (manual collector dispatch); the rest are superseded, deferred, or
-out of v1. The six-versus-seven derivatives-cohort discrepancy remains an open reconciliation,
-deliberately not guessed at.
-
-*Prior boundary, for the record:*
-
-**T3 PUSH EXECUTED BY THE OWNER — 2026-08-16.** `feat/production-live-smoke` pushed to
-`origin` and now tracks it; `origin/feat/production-live-smoke` = `28f0e4b` = the exact local
-head at push time. `origin/main` unchanged at `a59b295`. **`hf` untouched — the push cannot
-deploy**: no workflow deploys to Hugging Face. The long-standing `main` docs commit `22b3414`
-is an ancestor of this branch, so it rode along exactly as `b52f7ca` did in PR #4.
-
-**CI HAS NOT RUN on these commits.** `ci.yml` triggers on `push` to `codex/**` and on
-`pull_request` only; this branch is `feat/**`, so the push fired nothing. The 803-test suite
-has been verified locally but has **not** had clean-room verification. Opening a PR is what
-triggers it.
-
-**Open decisions** — one: whether to open a PR, and whether to merge. See NEXT ACTION.
-
-**NEXT ACTION — three batched owner decisions. Nothing is half-applied.**
-
-1. ~~**Phase B**~~ — **DONE 2026-08-16.** Ran clean end to end at the 120s budget; see the
-   Phase B section above. The access code stayed in the owner's shell (`read -s`, then
-   `unset`) and never entered chat, a file, or the repository. Nothing further is needed.
-
-2. **Wave 4B0 — CLOSED ON EVIDENCE 2026-08-16 (`91254f3`). No waiver, no scope exclusion, no
-   API widening, no synthetic `USER_REQUESTED` row.**
-   The block was never really about authorization: `analyze_request()`
-   (`api/analysis_service.py:117`) has always accepted `prediction_origin` as a keyword. Only
-   the HTTP request model lacks the field. Driving that runtime primitive directly with
-   `CONTROLLED_SMOKE` — the pattern the Phase 2A collector gate already blesses — produces
-   correctly classified evidence with **no schema change, no API change and no redeploy**.
-   Ran live via `scripts/live_smoke.py`, all six cells `CROSS_PROVIDER`: BTC 1D DOWN=0.477839
-   SUFFICIENT · BTC 1W UP=0.505850 SUFFICIENT · BTC 1M UP=0.377757 LOW_SAMPLE · SOL 1D
-   DOWN=0.399734 SUFFICIENT · SOL 1W UP=0.395839 SUFFICIENT · SOL 1M UP=0.365214 LOW_SAMPLE.
-   Each cell asserted schema-valid, live, probability invariant within 1e-9,
-   `profitability_claim=false`, `news_influence_frac=0.0`, the Wave 4B0 `1M` LOW_SAMPLE rule,
-   and `CONTROLLED_SMOKE` classification read from the runtime's own non-consuming
-   `_peek_prediction_persistence`.
-   **Scope of the evidence, stated plainly:** local process, code byte-identical to deployed
-   `e6ee23c` (`git diff e6ee23c HEAD -- src/ schemas/` is empty), `STATELESS`, zero database
-   writes. Not executed against the HF Space over HTTP — impossible without cohort
-   contamination. The item says "after merge/deploy", not "against the deployed instance";
-   where this gate means the latter it says so (Wave 1.1's "Manual **deployed** UI smoke").
-   The smoke is **non-writing by construction**: it refuses to start if any database variable
-   is configured, so it cannot reach production data. Persisting CONTROLLED_SMOKE rows to the
-   production DB remains an unauthorized **T4** action and no write path was built.
-
-   *Superseded routes, kept for the record:*
-   **A NOT_RUN closure was tried on 2026-08-16 and reverted as an invalid waiver** (`acfc690`
-   + `3e1cf10`, reverted by `90d6d83`). The post-decision audit found `RELEASE_GATE.md`
-   authorizes not-run closure exactly once, inside the item's own text (Sprint 3: "or
-   explicitly recorded as not run with reason"); the Wave 4B0 item has no such clause. The
-   "Pass/fail/not-run result for each relevant command" line is a *reporting* obligation, not
-   a satisfying condition. "Release requires evidence" stands and the Deployment gate blocks
-   release. `V1_QUANT_CONTRACT.md` is silent on live smoke, so `RELEASE_GATE.md` governs.
-   No box was ever ticked (271/15 throughout), so nothing was presented as a pass.
-   **Do not re-apply a not-run closure.** The remaining routes are:
-   (a) **Add a prediction-origin field to `AnalysisRequest`** so a smoke can write
-   `CONTROLLED_SMOKE` — T2 API/schema change plus a T3 redeploy before it is usable, and it
-   widens the public contract for a test-only need;
-   (b) **Record an explicit v1 scope exclusion** in the Phase 2D.3B form
-   (`<!-- OUT OF v1 (owner decision <date>) -->`), which **also requires amending line 5** of
-   `RELEASE_GATE.md` so its "only one owner-approved v1 scope reduction" claim stays true.
-   (b) is a scope reduction and is the owner's alone. Accepting `USER_REQUESTED` smoke writes
-   stays rejected: it contaminates the 806-sample control cohort.
-
-3. **T3 push of `feat/production-live-smoke`** (2 commits, plus the docs commit on `main`
-   riding along). Expect the same wall as last time: `git push` is refused by the auto-mode
-   permission classifier and `gh` is absent, so the owner runs the push in-session.
-
-Change A still needs nothing further.
-Worth knowing before choosing: production now serves Change A's gating, but
-`/v1/calibration` still reports **`WARMING_UP` ×5 and `NO_SAMPLES` for 1M**, because the
-endpoint only issues per-timeframe scoped queries and no timeframe has ≥500 resolved
-outcomes (134–172 each). The 806/`MEASURED` figure remains an unscoped aggregate no
-endpoint requests. Since predictions are traffic-driven, that gap closes only with roughly
-3× more operator traffic per timeframe — not with time alone.
-Change B (horizon-specific probability modelling) stays deferred and **has not started**:
-it needs a new `methodology_version`, which resets calibration to `NO_SAMPLES`, so the
-806-sample cohort must survive as the control until Change A has re-accumulated evidence
-under gating.
+## v1 at a glance
+- **Change A** (calibration truth and skill gating) was deployed in 2026-08 and is closed.
+- **Change B, tranche 1** (distributional-v1 against a pre-registered holdout) is closed. The §5A one look was
+  NOT_PASS on every timeframe, and nothing was promoted.
+- **R2 frontier research** is closed. It recommends distributional-v2 as the next candidate; the candidate is not
+  frozen.
+- **In production (PROD-SAFE-3):**
+  - Recent Analysis History and durable Detail;
+  - session and auth hardening;
+  - provider byte caps and deadlines;
+  - strict candle adjacency;
+  - the accumulated reviewed UI work.
+- **Next, owner-gated:**
+  - the batch T3;
+  - the v2 decisions (a) to (d);
+  - the 0010 apply.
+  A v2 promotion needs its own freeze, T0, holdout and one look.
