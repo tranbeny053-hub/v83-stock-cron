@@ -1,7 +1,7 @@
 # STATE
 
-Updated: 2026-09-17 (the post-release batch is MERGED and VERIFIED: PRs #107-#110, main e22ce337; migration 0010
-APPLIED ONCE and VERIFIED: run 35190794876, PostgreSQL 17.6; hf unchanged at 00705c55)
+Updated: 2026-09-17 (0010 T4 accepted by the owner; R3 research started: E0 PASS (exact) and G1 done, in
+.work/research3 only; nothing authorized or pending; hf unchanged at 00705c55)
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -10,18 +10,16 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE AFTER THE 0010 T4. Nothing is authorized or pending.
+LOOP_STATE=WAITING FOR THE OWNER after R3 E0 + G1 (research only). Nothing is authorized or pending.
+  - The owner accepted the 0010 T4 ("no further DB action") and started R3 with E0 + G1 only, treating
+    .work/research3/FABLE_FRONTIER_AUDIT.md as the research plan, not production authority (R3).
   - PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED (owner, 2026-09-17).
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=Post-release prep is COMPLETE and merged, inside the owner's envelope of 2026-09-17:
-  - the STATE checkpoint;
-  - migration 0010 and its route, APPLIED once (T4, run 35190794876);
-  - distributional-v2 integration prep;
-  - the dormant wider-history path for v2's 15m cell.
-  What comes next is the owner's: the v2 decisions (a) to (d). Still excluded: a v2 freeze, a new T0, a new
-  holdout, any further database mutation, any HF deploy.
+CURRENT_MILESTONE=R3 frontier research, E0 + G1 COMPLETE (R3). The post-release prep is merged, and 0010 is
+  applied. Still excluded: consumed-holdout evaluation, pinned-file changes, wiring, a v2 freeze, a new T0,
+  any database action, any HF deploy.
 CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
@@ -42,7 +40,9 @@ CODEX_PENDING=NONE. This batch used no Codex delegation: the owner directed that
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested: .work/research3/R3_LANE_MAP.md (Lane D go;
+  PSG-2 reference and weekly blocks; tranche scope, where 4H looks un-gateable at band 0.002; heuristic
+  evidence source; exclusion-window end).
   CONSUMED, with each authorization kept verbatim:
   - the batch T3 (.work/817/t3-batch/authorization.txt);
   - the 0010 T4 (.work/818/t4-apply-0010/authorization.txt).
@@ -57,10 +57,33 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner.
+NEXT_ACTION=WAIT for the owner. Next R3 work, once approved: wave 1 of R3_LANE_MAP.md. G2, G1b, E1-E5 and E7, S
+  and I need no new data. D needs a go.
   - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, the 0010 apply, or the PROD-SAFE-3
     deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
+R3=Research in .work/research3 (gitignored; README.md, evidence.sha256 with 74 files).
+  - E0 PASS, exact.
+    - R2's code is archived byte-identical, without the sealed attestation, so sealed folds stay refused.
+    - The store was rebuilt from the digest-verified R1 cache: 6 cells × 75 arrays, bit-identical.
+    - The archived selftest passes.
+    - DEV reference_dev + robust_{15m,1H,4H}: 53,088 numeric leaves, all exactly equal.
+    - The v2 recipe CB DEV log loss is 1.04450516 / 1.03366655 / 0.91434692.
+  - G1 done. The exclusion window was re-derived from the contract and admission.py:
+    - the consumed outcomes are [2026-08-21T04Z, 2026-09-13T04Z);
+    - the planned window is [2026-08-12, 2026-09-14T04Z], matching the plan;
+    - with the G1 7-day embargo it becomes [2026-08-12, 2026-09-20T04Z].
+    Dependence of d (CB vs prequential symmetric climatology; vs B3Dev):
+    - BTC-ETH same-instant correlation is 0.23-0.64;
+    - within a deployment, dependence clears in 2-3 days, with VR plateaus of 4.4 (15m), 2.0 (1H) and
+      1.7-2.0 (4H);
+    - across deployments, 15m and 1H show regime long memory;
+    - d has a weekly cycle;
+    - the plan's literal W rule is unreliable.
+    W* = 7 days (whole UTC weeks); G2 must confirm size on 15m.
+  - Power preview (not G3): 15m is powered at 6-12 weeks; 1H needs about 13-17; 4H at band 0.002 cannot be
+    gated (Brier is marginally worse than climatology).
+  - The deployed-heuristic comparator is not replayable offline (it needs order books).
 PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
   - hf/main is 00705c55 (R), a convergence release: tree(R) == tree(main e5cd7ef).
   - Release UCPE-PROD-SAFE-3-20260915-A, pinned by PR #106 (main 08c77f09).
@@ -265,6 +288,7 @@ EVIDENCE=.work/ is gitignored and local.
   - 815: the one look.
   - 816: this release cycle (evidence.sha256): the l1-l3 prep, t3-audit, audit-dispatch, codex-818-820,
     t4-apply-0008, t3-release, t4-deploy and t3-merge-guard.
+  - research3: R3 (see R3 and its README).
   - 818: the 0010 T4 (t4-apply-0010/: authorization, scope proof, predispatch, run_apply, raw, verify_apply;
     evidence.sha256).
   - 817: this batch.
