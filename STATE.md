@@ -1,7 +1,8 @@
 # STATE
 
 Updated: 2026-09-17 (0010 T4 accepted by the owner; R3 research started: E0 PASS (exact) and G1 done, in
-.work/research3 only; nothing authorized or pending; hf unchanged at 00705c55)
+.work/research3 only; main is now 535248d1 (#111, merged outside this loop, CI green); nothing authorized or
+pending; hf unchanged at 00705c55)
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -21,14 +22,19 @@ CURRENT_MILESTONE=R3 frontier research, E0 + G1 COMPLETE (R3). The post-release 
   applied. Still excluded: consumed-holdout evaluation, pinned-file changes, wiring, a v2 freeze, a new T0,
   any database action, any HF deploy.
 CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
+  main has since moved to 535248d1 (#111), which changed no STATE.md, so publishing merges cleanly.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=e22ce337 (main, PR #110). Exact-main CI run 35189507625 green.
-  Its tree 2e1667b47af4214a33346017e7332897a99e93ac is the owner-authorized tree and the locally gated
-  composition.
+LAST_GREEN_SHA=535248d1 (main, PR #111: the last two Node-20-era workflows moved to the reviewed Node-24 pins).
+  - Merged 2026-09-17T07:36:36Z from the owner's account. It was not created or merged by this loop.
+  - Parents (e22ce337, e0dd56ac). It changes only oos-pair-evidence.yml, resolve-outcomes.yml and a new
+    workflow test; no src/, ops/ or STATE.md.
+  - Exact-main CI run 35195392429 green.
+  Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
+  owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
   - Composition c641fec2 (B, C, D, A onto 08c77f09) has tree 2e1667b4, equal to main e22ce337.
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
@@ -278,8 +284,7 @@ OPEN_ITEMS=Non-blocking; none is authorized.
   - scripts/check_no_secrets.py also scans .work/ (SKIP_DIRS omits it), so a stale gitignored log can fail
     ./verify.sh on a clean tree. Fixing it narrows a mandatory scanner, which needs an explicit owner decision.
     Meanwhile, delete stale .work/*.log files.
-  - oos-pair-evidence.yml and resolve-outcomes.yml still pin Node-20-era actions (checkout@v4, setup-python@v5).
-    They were frozen for the holdout, which is now closed.
+  - (Resolved by #111: oos-pair-evidence.yml and resolve-outcomes.yml are now on the Node-24 pins.)
   - Merged branches remain on origin, including release/prod-safe-1 to -3. Deleting any of them needs the owner.
   - As of 2026-08-22, per-timeframe calibration MEASURED needed about 3x more operator traffic (134-172 samples per
     timeframe, against a threshold of 500).
