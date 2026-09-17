@@ -1,8 +1,8 @@
 # STATE
 
-Updated: 2026-09-17 (0010 T4 accepted by the owner; R3 research started: E0 PASS (exact) and G1 done, in
-.work/research3 only; main is now 535248d1 (#111, merged outside this loop, CI green); nothing authorized or
-pending; hf unchanged at 00705c55)
+Updated: 2026-09-17. R3 Wave 1 is complete (research only, in .work/research3), audited once with every
+fix rerun. Earlier the same day: the 0010 T4 was accepted, and E0 and G1 were done. main is 535248d1 (#111,
+merged outside this loop, CI green). Nothing is authorized or pending. hf is unchanged at 00705c55.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -11,15 +11,21 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER after R3 E0 + G1 (research only). Nothing is authorized or pending.
-  - The owner accepted the 0010 T4 ("no further DB action") and started R3 with E0 + G1 only, treating
-    .work/research3/FABLE_FRONTIER_AUDIT.md as the research plan, not production authority (R3).
+LOOP_STATE=WAITING FOR THE OWNER after R3 Wave 1 (research only). Nothing is authorized or pending.
+  - The owner ruled on the E0/G1 questions and ran Wave 1 as a research-only step (R3). The rulings:
+    - Lane D public/keyless outbound = GO;
+    - W = 7 UTC days is a research candidate, not a gate;
+    - 4H stays in;
+    - the collector stays off;
+    - the F3 exclusion ends no earlier than 2026-09-20T04:00Z.
+  - Before that, the owner accepted the 0010 T4 ("no further DB action") and started R3 with E0 + G1,
+    treating .work/research3/FABLE_FRONTIER_AUDIT.md as the research plan, not production authority.
   - PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED (owner, 2026-09-17).
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=R3 frontier research, E0 + G1 COMPLETE (R3). The post-release prep is merged, and 0010 is
-  applied. Still excluded: consumed-holdout evaluation, pinned-file changes, wiring, a v2 freeze, a new T0,
+CURRENT_MILESTONE=R3 frontier research, Wave 1 COMPLETE (R3); E0 and G1 before it. The post-release prep is
+  merged, and 0010 is applied. Still excluded: consumed-holdout evaluation, pinned-file changes, wiring, a v2 freeze, a new T0,
   any database action, any HF deploy.
 CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
   main has since moved to 535248d1 (#111), which changed no STATE.md, so publishing merges cleanly.
@@ -36,19 +42,27 @@ LAST_GREEN_SHA=535248d1 (main, PR #111: the last two Node-20-era workflows moved
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
+  - Re-run for this R3 Wave-1 record, on the STATE branch at 56ca7f8 plus this change: the same result.
   - Composition c641fec2 (B, C, D, A onto 08c77f09) has tree 2e1667b4, equal to main e22ce337.
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. This batch used no Codex delegation: the owner directed that Claude owns critical reasoning
-  and implementation, and that Codex is kept for bounded mechanical or adversarial verification.
+CODEX_PENDING=NONE. Neither the batch nor R3 used Codex: the owner directed that Claude owns critical
+  reasoning and implementation, and that Codex is kept for bounded mechanical or adversarial verification.
+  R3 Wave 1 was audited once by a single read-only Claude review agent, followed by one bounded re-check of
+  its findings.
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested: .work/research3/R3_LANE_MAP.md (Lane D go;
-  PSG-2 reference and weekly blocks; tranche scope, where 4H looks un-gateable at band 0.002; heuristic
-  evidence source; exclusion-window end).
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested in
+  .work/research3/lanes/wave1/WAVE1_REPORT.md §11:
+  - the Wave-2 working candidate;
+  - the venue policy;
+  - S: v2 symmetry; v1 symmetry (its module is pinned, so §2.6); H_extended; the display;
+  - I: the ledger columns; gate_trace storage; the evidence source after G4;
+  - the 4H slope rule;
+  - Wave-2 GO.
   CONSUMED, with each authorization kept verbatim:
   - the batch T3 (.work/817/t3-batch/authorization.txt);
   - the 0010 T4 (.work/818/t4-apply-0010/authorization.txt).
@@ -63,12 +77,17 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested: .work/research3/
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner. Next R3 work, once approved: wave 1 of R3_LANE_MAP.md. G2, G1b, E1-E5 and E7, S
-  and I need no new data. D needs a go.
+NEXT_ACTION=WAIT for the owner. Next R3 work, once approved, is Wave 2 (WAVE1_REPORT.md §10):
+  - public fetches: F1, F2, sub-bar;
+  - G2 proper, then G3 and G4;
+  - E6, E8, E9, E10;
+  - the 4H shape work;
+  - F3 accumulation, only after 2026-09-20T04:00Z.
   - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, the 0010 apply, or the PROD-SAFE-3
     deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
-R3=Research in .work/research3 (gitignored; README.md, evidence.sha256 with 74 files).
+R3=Research in .work/research3 (gitignored). E0/G1: README.md, evidence.sha256 (74 files, re-verified).
+  Wave 1: lanes/wave1/README.md, evidence_wave1.sha256 (235 files, chained).
   - E0 PASS, exact.
     - R2's code is archived byte-identical, without the sealed attestation, so sealed folds stay refused.
     - The store was rebuilt from the digest-verified R1 cache: 6 cells × 75 arrays, bit-identical.
@@ -90,6 +109,23 @@ R3=Research in .work/research3 (gitignored; README.md, evidence.sha256 with 74 f
   - Power preview (not G3): 15m is powered at 6-12 weeks; 1H needs about 13-17; 4H at band 0.002 cannot be
     gated (Brier is marginally worse than climatology).
   - The deployed-heuristic comparator is not replayable offline (it needs order books).
+  - Wave 1 COMPLETE. The package is lanes/wave1/WAVE1_REPORT.md; its tables are generated.
+    - Audit: one read-only audit found 3 HIGH and 5 MEDIUM, all fixed. Every affected lane was rerun on
+      the final code, and the bounded re-check found everything FIXED with nothing new at HIGH/MEDIUM. The
+      audited version is kept in lanes/wave1/pre_audit/.
+    - Candidate (a DEV-rule outcome, not a freeze):
+      - 15m: symmetric;
+      - 1H: symmetric + deseasonal inputs + Parkinson 1-bar term;
+      - 4H: symmetric.
+    - Cost of symmetry: none on 15m; it helps 4H; about 0.0006 (sub-floor) on 1H session-table models.
+    - E11: Binance constants on OKX fail σ/triplet parity on 15m and 1H (4H passes), but skill transfers
+      (15m edge −0.0458 on OKX vs −0.0455 on Binance). Recommendation: one serving venue per cell, with
+      same-venue resolution.
+    - E12: historical fail-closed downtime is 0.000% on both venues.
+    - G1b: a roll28 reference is recommended for G2/G3.
+    - G2 pilot: the iid rule false-passes 13-24% under P1a; nothing adopted.
+    - 4H: CB's own reliability slope (1.37) blocks the adoption rule there.
+    - S and I designs are ready for owner decisions.
 PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
   - hf/main is 00705c55 (R), a convergence release: tree(R) == tree(main e5cd7ef).
   - Release UCPE-PROD-SAFE-3-20260915-A, pinned by PR #106 (main 08c77f09).
