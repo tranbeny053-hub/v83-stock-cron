@@ -1,8 +1,7 @@
 # STATE
 
-Updated: 2026-09-17 (post-release checkpoint: PROD-SAFE-3 is live, pinned and accepted by the owner; a four-lane
-post-release prep batch is built, gated and reviewed LOCALLY and waits for one owner T3; nothing has been pushed,
-dispatched, applied or deployed since the release)
+Updated: 2026-09-17 (the post-release batch is MERGED and VERIFIED: PRs #107-#110, main e22ce337, tree 2e1667b4 ==
+the gated composition; nothing applied, dispatched or deployed; hf unchanged at 00705c55)
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -11,66 +10,61 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: one T3 for the batch below, plus product decisions (OWNER_BOUNDARY).
-  PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED ("PROD-SAFE-3 is ACCEPTED", owner, 2026-09-17).
-  The post-release batch is complete locally: four lanes, one composition preflight, one consolidated review.
-  Since the release there has been no push, dispatch, database access, migration apply or deploy, and none is
-  authorized.
-  ON RESUME, check Git first: if origin/main already contains the four lane heads, the T3 has run; verify it
-  against BATCH_T3 before anything else.
-CURRENT_MILESTONE=Post-release prep, inside the owner's envelope of 2026-09-17:
-  (1) this STATE checkpoint;
-  (2) a legacy-table security migration that codifies the audited posture, NOT applied;
-  (3) distributional-v2 integration prep;
-  (4) the dormant wider-history path, only where v2 needs it.
-  The owner excluded: a v2 freeze, a new T0, a new holdout, any database mutation, any HF deploy.
-CURRENT_BRANCH=chore/state-post-106 (LOCAL; lane A), from main 08c77f09.
-  - Its first commit merges the unpublished STATE history 2c6df51 (chore/state-post-104, from e5cd7ef).
-  - Its second commit is this compaction. A checkpoint cannot name its own head.
-  The batch lanes are all LOCAL ONLY (worktrees in the session scratchpad under lanes2/; the commits persist):
-  - A chore/state-post-106: this file.
-  - B prep/0010-legacy-table-security @ aaf11228: migration 0010, its one-shot route and its rehearsal
-    (BATCH_0010).
-  - C prep/v2-integration-prep @ 5a3b5685: the dormant v2 state builders, the proper-score skill classifier
-    and the 50/50 correction (BATCH_V2).
-  - D prep/v2-history-serving @ 9c53e3cb: STACKED ON C. Dormant v2 serving; candle history for 15m only.
-LAST_GREEN_SHA=08c77f09 (main, PR #106, the PROD-SAFE-3 pin). Exact-main CI run 35179052192 green; tree 194a5295.
+LOOP_STATE=IDLE AFTER THE BATCH T3. Nothing is authorized or pending.
+  - PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED (owner, 2026-09-17).
+  - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
+  - Since the release there has been no dispatch, database access, migration apply or deploy.
+CURRENT_MILESTONE=Post-release prep is COMPLETE and merged, inside the owner's envelope of 2026-09-17:
+  - the STATE checkpoint;
+  - migration 0010 and its route, NOT applied;
+  - distributional-v2 integration prep;
+  - the dormant wider-history path for v2's 15m cell.
+  What comes next is the owner's: the 0010 apply, and the v2 decisions (a) to (d). Still excluded: a v2 freeze,
+  a new T0, a new holdout, any database mutation, any HF deploy.
+CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
+  The batch branches are merged, and remain on origin:
+  - prep/0010-legacy-table-security;
+  - prep/v2-integration-prep;
+  - prep/v2-history-serving;
+  - chore/state-post-106.
+LAST_GREEN_SHA=e22ce337 (main, PR #110). Exact-main CI run 35189507625 green.
+  Its tree 2e1667b47af4214a33346017e7332897a99e93ac is the owner-authorized tree and the locally gated
+  composition.
 LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
-  - Composition 0151ece2: main + B + D, where D contains C. Tree 906ccf9b.
-  - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone.
-    2230 + 163 + 34 + 18 = 2445.
-  - Lane A changes STATE.md only; its composition is gated again before the T3.
+  - Composition c641fec2 (B, C, D, A onto 08c77f09) has tree 2e1667b4, equal to main e22ce337.
+  - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
+  - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
+    (verify_batch.output).
 CODEX_PENDING=NONE. This batch used no Codex delegation: the owner directed that Claude owns critical reasoning
   and implementation, and that Codex is kept for bounded mechanical or adversarial verification.
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Requested, as one batch:
-  - T3, one batch. Push B, C, D and A to origin only (never hf), open four PRs against main, and merge strictly
-    in the order B, C, D, A. Each merge needs:
-    - every exact-head `test` check green. B has two (ci.yml and the 0010 rehearsal); the others have one;
-    - a --match-head-commit merge;
-    - parents (previous main, lane head);
-    - the expected tree (BATCH_T3);
-    - exact-main CI green.
-    Stop at the first mismatch. The lanes run one after another, so D's PR opens after C has merged and lists
-    only D's files. The prepared scripts are in .work/817/t3-batch/ (run-batch.sh, then verify_batch.sh).
-  - Product decisions. None is needed for the T3.
-    (a) Adopt the proper-score skill gate for zero-location methodologies (R2 doc §2).
-    (b) The directional display for them (R2 doc §4). The §7 correction applies: the split is a fixed skew of
-        about 48-54% up, not 50/50.
-    (c) §2.6 authorization to wire v2. quant/pipeline.py and config/defaults.py are evaluator-pinned.
-    (d) Freeze sequencing and a new pre-registered holdout.
-  - Later, separately:
-    - the T4 apply of 0010: one dispatch of apply-migration-0010.yml, after B merges;
-    - deleting the merged branch release/prod-safe-3, which is still on origin.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED.
+  The batch T3 is CONSUMED. Its authorization is kept verbatim in .work/817/t3-batch/authorization.txt.
+  Open, each needing its own authorization:
+  - T4: apply migration 0010 ONCE. That is one dispatch of apply-migration-0010.yml on main at an exact SHA,
+    with confirm APPLY-MIGRATION-0010-ONCE. Residual risk: its PostgreSQL 17 (MAINTAIN) branch has never run on
+    a real server (REVIEW).
+  - Product decisions:
+    (a) adopt the proper-score skill gate for zero-location methodologies (R2 doc §2). This needs the
+        dependence decision and the detail-view wording (REVIEW);
+    (b) the directional display (R2 doc §4). The §7 correction applies: the split is a fixed skew of about
+        48-54% up, not 50/50;
+    (c) §2.6 authorization to wire v2. quant/pipeline.py and config/defaults.py are evaluator-pinned;
+    (d) freeze sequencing and a new pre-registered holdout.
+  - T3: publish this STATE record.
+  - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
+  - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner.
-  - On the T3: bash .work/817/t3-batch/run-batch.sh, then bash .work/817/t3-batch/verify_batch.sh. It reuses
-    .work/816/t3-audit's lane.sh unchanged, with a manifest of heads, files, expected trees and check counts, raw
-    capture, and an independent re-check.
-  - On a 0010 T4, follow the .work/816/t4-apply-0008 pattern: pre-checks, one flag-guarded dispatch, raw capture
-    before parsing, then a verifier.
+  - On a 0010 T4, prepare .work/818/t4-apply-0010/ on the .work/816/t4-apply-0008 pattern:
+    - pre-checks: main at the authorized SHA, the workflow active with no runs, hf unchanged, nothing running;
+    - one flag-guarded dispatch;
+    - raw capture of the run JSON, job log, report artifact and hashes, before parsing;
+    - then a verifier. It requires outcome APPLIED and committed true, server_version_num >= 170000 with
+      MAINTAIN asked, anon and authenticated holding nothing, service_role unchanged, RLS on with no policy,
+      the later tables unchanged, the pinned migration bytes, and no URL anywhere.
   - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, or the PROD-SAFE-3 deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
 PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
@@ -90,13 +84,13 @@ DATABASE=Supabase, PostgreSQL 17 or later (the audit saw the MAINTAIN privilege 
   - Migrations 0001-0007 were applied before this record.
   - 0009 was applied once, 2026-09-14 (run 34861816985).
   - 0008 was applied once, 2026-09-16 (run 35164080476).
-  - 0010 is AUTHORED on lane B and NOT applied.
+  - 0010 is MERGED as code (#107) and NOT applied. Its apply workflow is registered and active, with no runs.
   The older-table audit (run 35120616278, read-only) returned NOT_EXPOSED_THROUGH_AUDITED_PATHS:
   - the ten legacy tables have RLS on (not forced) and no policy;
   - anon and authenticated hold every table privilege, MAINTAIN included, yet are denied every row;
   - service_role has BYPASSRLS;
   - there is no PUBLIC grant, column grant, view, parent table or publication.
-  Its findings, both addressed by lane B:
+  Its findings, both addressed by migration 0010 once it is applied:
   - the migrations never enable RLS, so a rebuilt database would be open to the anon key;
   - RLS without a policy is the only barrier.
 NEVER_RERUN=Consumed one-shot actions. None may run again:
@@ -110,7 +104,7 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - Its guard dispatch 35179229959.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
-  - Every T3 batch through PR #106.
+  - Every T3 batch through PR #106, and the post-release batch T3 (PRs #107-#110).
 SECTION_5A_RESULT=Consumed once, 2026-09-15, and recomputed offline with identical results.
   - authorized_cells = [] (NONE).
   - 15m (466 pairs), 1H (257) and 4H (86) are each NOT_PASS: "requirement(s) not met: A, B2".
@@ -126,11 +120,11 @@ V2_STATUS=distributional-v2 is on main as an unwired module (#102). It is NOT fr
     ETH/USDT on 15m, 1H and 4H; TABLES_SHA256 f0689f29….
   - Evidence of record: docs/R2_FRONTIER_REPORT.md, docs/DISTRIBUTIONAL_V2_PREP.md and
     docs/R2_ZERO_DRIFT_GATE_AND_DISPLAY.md.
-  - Lanes C and D prepare everything that touches no evaluator-pinned file.
+  - PRs #108 and #109 prepared everything that touches no evaluator-pinned file. It is still unwired.
   - Wiring needs §2.6 authorization.
   - Adopting the proper-score gate also needs per-row probabilities from persistence/repository.py, which is pinned.
   - Correction (lane C): with mu = 0, the up share is not 50/50. The shape tables fix it between 0.4794 and 0.5427.
-BATCH_0010=Lane B has four commits:
+BATCH_0010=MERGED as PR #107 (merge 2b7edf0b). Lane B had four commits:
   - e5677406: the route;
   - aeef379c: PostgreSQL 17 MAINTAIN;
   - 1d581367 and aaf11228: the review fixes.
@@ -147,10 +141,16 @@ BATCH_0010=Lane B has four commits:
   - it executes the exact pinned bytes;
   - post-checks, then a commit only if everything passes. If the connection fails while the COMMIT is in
     flight, the report says committed "UNKNOWN".
-  The PR-time rehearsal has NEVER RUN on GitHub (.github/workflows/apply-migration-0010-rehearsal.yml; job `test`;
-  scratch PostgreSQL 16; no secret). This machine has no PostgreSQL, so its first run is B's exact-head check. A
-  failure there stops the T3 before any merge.
-BATCH_V2=Lane C has three commits: 9101bff2 (the prep), then 679e0801 and 5a3b5685 (the review fixes).
+  The PR-time rehearsal (.github/workflows/apply-migration-0010-rehearsal.yml) PASSED on its first run, run
+  35187843344 on PostgreSQL 16.15, with no secret:
+  - one apply, committed;
+  - anon and authenticated left with nothing on the 10 tables and 3 sequences;
+  - service_role unchanged, RLS on, no policy, and the later tables unchanged;
+  - the second apply refused as not a first apply;
+  - the database rebuilt from 0001-0010 alone asserted the posture.
+  Evidence: .work/817/t3-batch/raw/rehearsal-35187843344/ (the report artifact and log, hashed).
+BATCH_V2=MERGED as PR #108 (merge fe1f0c67) and PR #109 (merge 0f60edaf). Nothing is wired.
+  Lane C had three commits: 9101bff2 (the prep), then 679e0801 and 5a3b5685 (the review fixes).
   - quant/distributional_v2_state.py builds v1's exact probability_state and horizon_timeout_state from a v2
     triplet. Tests check field-by-field parity and the schema.
   - calibration/proper_score_skill.py is R2 §2's gate. It fails closed, uses the §5A statistics kernel, and
@@ -163,16 +163,19 @@ BATCH_V2=Lane C has three commits: 9101bff2 (the prep), then 679e0801 and 5a3b56
     provider, and requires assert_history_extends_snapshot.
   - Everything else fails closed.
   - The adapters' guard allows exactly this one dormant caller and proves nothing imports it.
-  C and D both extend the same guard, so D is stacked on C and must merge after it.
-BATCH_T3=The expected main tree after each merge, in order, from main 08c77f09:
-  - B aaf1122874d825df72aac980794714d72e552e75 -> tree 071556e3754de16f30544777db52e54c37b37966
-    (files: 11; head checks: 2);
-  - C 5a3b568523b580f4aad2af5d28f381b169f68774 -> tree 6bd22f37d932b8f34fa9e99c105a42e119709d28
-    (files: 8; head checks: 1);
-  - D 9c53e3cbe71af06eebcf0b9d5ede2ade8b1974be -> tree 906ccf9bced1fec92b3959a6ab50790b990325ea
-    (files: 5; head checks: 1). This equals the gated composition;
-  - A (this branch) -> STATE.md only (head checks: 1). A checkpoint cannot state its own tree; the owner
-    report and .work/817/t3-batch/manifest.txt carry it.
+  C and D both extend the same guard, so D was stacked on C and merged after it.
+BATCH_T3=CONSUMED and VERIFIED on 2026-09-17, 05:58Z-06:24Z, by .work/817/t3-batch/run-batch.sh (raw/ per lane;
+  run.output). The merges, in order:
+  - B PR #107: head aaf11228, merge 2b7edf0b, parents (08c77f09, aaf11228), tree 071556e3.
+    Head checks: CI 35187843347 and rehearsal 35187843344. Main CI 35188066124.
+  - C PR #108: head 5a3b5685, merge fe1f0c67, parents (2b7edf0b, 5a3b5685), tree 6bd22f37.
+    Head CI 35188325807. Main CI 35188524324.
+  - D PR #109: head 9c53e3cb, merge 0f60edaf, parents (fe1f0c67, 9c53e3cb), tree 906ccf9b.
+    Head CI 35188753430. Main CI 35188996341.
+  - A PR #110: head 6be3a535, merge e22ce337, parents (0f60edaf, 6be3a535), tree 2e1667b4.
+    Head CI 35189258073. Main CI 35189507625.
+  Every tree equals both the owner-authorized tree and merge-tree(previous main, head). Every file set equals
+  the manifest. After the batch: no open PR, hf unchanged, and no workflow dispatched.
 REVIEW=One consolidated review of the composed diff (an Opus subagent, read-only, 2026-09-17), then one
   bounded re-check of the fixes. There was no CRITICAL or HIGH finding.
   - MEDIUM (C), FIXED. An exact echo of the base rates could "demonstrate" proper-score skill through float
@@ -243,7 +246,8 @@ EVIDENCE=.work/ is gitignored and local.
   - 816: this release cycle (evidence.sha256): the l1-l3 prep, t3-audit, audit-dispatch, codex-818-820,
     t4-apply-0008, t3-release, t4-deploy and t3-merge-guard.
   - 817: this batch.
-    - t3-batch/ is the prepared T3: manifest, titles, bodies, run-batch.sh and verify_batch.sh.
+    - t3-batch/ is the executed T3: authorization.txt, manifest, titles, bodies, run-batch.sh, run.output,
+      raw/ per lane, raw/rehearsal-35187843344/, verify_batch.sh and verify_batch.output.
     - batch/ has every lane and composition verify output, the expected-tree computation, and the review
       record (review.md) with its probes.
 ```
@@ -263,8 +267,8 @@ Update this block on every pause, every milestone change and every GPT consultat
   - provider byte caps and deadlines;
   - strict candle adjacency;
   - the accumulated reviewed UI work.
+- **Merged, not in production:** migration 0010 and its route (not applied), and the unwired v2 prep (#107-#109).
 - **Next, owner-gated:**
-  - the batch T3;
-  - the v2 decisions (a) to (d);
-  - the 0010 apply.
+  - the 0010 apply;
+  - the v2 decisions (a) to (d).
   A v2 promotion needs its own freeze, T0, holdout and one look.
