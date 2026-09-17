@@ -1,10 +1,13 @@
 # STATE
 
-Updated: 2026-09-17 (RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH: every invariant re-passed, but the dry-run login check found NO saved Hugging Face credential on this Mac ("could not read Username ... terminal prompts disabled"); the push never ran; production still PROD-SAFE-2 a89b45e RUNNING; 0008 applied; PR #106 open, not merged; waiting for the owner to save the token for git and to say go)
+Updated: 2026-09-17 (PROD-SAFE-3 IS LIVE: hf/main 00705c55 RUNNING, healthcheck 200, build-info UCPE-PROD-SAFE-3-20260915-A, served frontend byte-identical; PR #106 merged as 08c77f09 (parents 66acc44, 7d2cf2f4; tree 194a5295; main CI green); guard run 35179229959 HEALTHY 3/3 with empty delta; 0008 applied; the release sequence is COMPLETE; nothing pending)
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH. The attempt-3 authorization (2026-09-17)
+LOOP_STATE=IDLE AFTER RELEASE. PROD-SAFE-3 IS DEPLOYED AND PINNED (2026-09-17); the four-step release sequence is COMPLETE
+  and VERIFIED at every step (RELEASE_SEQUENCE). Production = hf/main 00705c55 (R); main = 08c77f09 (tree 194a5295).
+  No action is pending or authorized.
+LOOP_STATE_PRIOR_RELEASED=RELEASE SEQUENCE STOPPED AT STEP 3, ATTEMPT 3, BEFORE THE PUSH. The attempt-3 authorization (2026-09-17)
   was NOT consumed by a push: the prepared dry-run login check failed first because git found no saved credential for
   huggingface.co. No flag, no push, nothing changed. Waiting for the owner to save the write token for git and to
   say go; then run attempt 3 exactly as authorized.
@@ -254,7 +257,9 @@ CURRENT_MILESTONE=§5A EVALUATION — collection CLOSED at T_close. The evaluato
 CURRENT_BRANCH=chore/state-post-104 (LOCAL ONLY), from main e5cd7ef. It carries this STATE record (3571d7e: the merged
   batch; then the audit-route record).
   The audit lane prep/audit-older-table-privileges (209d1e0 route, e551e43 repair 1, 2b95fd0 repair 2) is MERGED as
-  PR #105 (66acc44). This STATE branch is still based on e5cd7ef; rebase or merge it onto 66acc44 before its PR.
+  PR #105 (66acc44), and release/prod-safe-3 (P 7d2cf2f4) as PR #106 (08c77f09). This STATE branch is still based on
+  e5cd7ef: rebase or merge it onto 08c77f09 before its PR (a T3 of its own). The merged branch release/prod-safe-3
+  still exists on origin (deleting it was not authorized).
   The prep branches below are MERGED: L2 #100, L3 #101, v2 #102, L1 #103, and chore/state-post-99 #104.
   The staged release lives only in this repository's objects (never pushed): R 00705c55 and P 7d2cf2f4, with the
   pin worktree in the session scratchpad (lanes/pin-real). Both rebuild deterministically from main.
@@ -285,7 +290,9 @@ CURRENT_BRANCH_PRIOR=feat/5a-0009-hardening-apply-route, MERGED as #95. It was b
     - The in-job selection passes 195 tests under -s -B.
   - STATE commits above.
   The lanes A, B and C are MERGED (#92-#94). main = origin/main = 5940557.
-LAST_GREEN_SHA=66acc44 (main, PR #105, the audit route). Exact-main CI run 35120232571 passed; tree
+LAST_GREEN_SHA=08c77f09 (main, PR #106, the PROD-SAFE-3 pin). Exact-main CI run 35179052192 passed; tree
+  194a52958316bbd13e7807ad8c00a8a13f9b2ceb (the owner-authorized final tree; simulated and gated locally at 2230).
+LAST_GREEN_SHA_PRIOR_106=66acc44 (main, PR #105, the audit route). Exact-main CI run 35120232571 passed; tree
   0281f7f2618af2e4c11aaba4e9bd8ef3e3474b7b, which the gate passed locally at 2230.
 LAST_GREEN_SHA_PRIOR_105=e5cd7ef (main, PR #104, the end of the prep batch). Exact-main CI passed on Python 3.11/Linux, run
   35078236168. Its tree 0344911170da79ad7491886d58f1f262ced988a5 equals the composition gated locally at 2085.
@@ -813,7 +820,19 @@ DEPLOY_PROHIBITED_PRIOR=NO HUGGING FACE DEPLOY OF ANY KIND WHILE THE HOLDOUT RUN
   merged to main. A push to origin is a separate, lesser action and never implies a deploy;
   only a push to the hf remote deploys. Production stays at hf/main = a89b45e (PROD-SAFE-2),
   confirmed unchanged immediately after every merge.
-OWNER_BOUNDARY=WAITING FOR THE OWNER'S GO. Attempt 3's authorization (verbatim below) stopped at its precondition before
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The release sequence is CONSUMED and COMPLETE.
+  CONSUMED 2026-09-17 (attempt 4), verbatim: "HF Git credential is now confirmed locally: hf auth whoami is beny053,
+  Git credential fill returns saved login beny053, and the token's Hugging Face settings show write access to
+  beny053/ultimate-crypto-probability-engine; token value was not shared. FRESH AUTHORIZATION, release steps 3–4: T4
+  push 00705c55e7eb291d01b4e02d4cca859122083f28 to hf/main strictly fast-forward from a89b45e, never force, after all
+  release invariants re-pass; wait for RUNNING and perform read-only live checks only (/healthcheck=200,
+  build-info=UCPE-PROD-SAFE-3-20260915-A, served index/app.js/styles.css byte-match), no analysis calls. Only after
+  deploy PASS: T3 merge PR #106 at 7d2cf2f4a40e89fd47f4fb659e48f8adbb36573e, verify parents/final tree/exact-main CI,
+  then dispatch source-integrity-guard exactly once and require HEALTHY with empty delta. Stop on first mismatch; no
+  rerun of a failed T4."
+  OPEN OWNER DECISIONS (none blocking): publish this STATE branch (T3); codify the older tables' RLS/REVOKE in a
+  migration (AUDIT_RESULT); delete the merged release/prod-safe-3 branch.
+OWNER_BOUNDARY_PRIOR_RELEASED=WAITING FOR THE OWNER'S GO. Attempt 3's authorization (verbatim below) stopped at its precondition before
   the push, so no T4 action ran. Needed: the write token SAVED AS THE GIT CREDENTIAL on this Mac (a presence check
   should print "saved login for: beny053"), then the owner's go, which may repeat the attempt-3 text.
   ATTEMPT 3, verbatim: "HF credential attempt 3 is ready: the active account is beny053, and the new token was
@@ -1004,7 +1023,16 @@ OWNER_BOUNDARY_CONSUMED_APPLY=The fresh T4 apply at 4b0a522 was authorized and i
   - NEVER rerun.
   CONSUMED: the lane E T3 (#96, M1=A); the T4 apply at 3dc545c (refused, no DB contact); the lane D
   T3 (#95); the T3 batch #92-#94.
-NEXT_ACTION=WAIT for the owner: a refreshed Hugging Face credential AND a fresh step-3 (then step-4) authorization. Then:
+NEXT_ACTION=WAIT for the owner. Nothing is running or pending. Post-release, read-only and owner-side:
+  - the functional proof of durable Detail is the operator's own next genuine analysis: History shows "Detail
+    available" and reopens it (never a smoke test);
+  - watch the residual risks (release review §7): A203-01's stricter candle adjacency and R202-01's provider deadline
+    may surface visible failures instead of silent ones;
+  - scheduled guard runs should now report HEALTHY; the advisory reads SCHEDULER_DIVERGENT_FROM_PIN because the
+    workflow's shallow checkout cannot prove ancestry (non-failing).
+  - NEVER run consume, the 0009 route, the audit, the 0008 apply or the deploy again. No analysis against production.
+    Rollback is a new T4 (.work/816/l1/runbook.md).
+NEXT_ACTION_PRIOR_RELEASED=WAIT for the owner: a refreshed Hugging Face credential AND a fresh step-3 (then step-4) authorization. Then:
   1. move .work/816/t4-deploy/raw (and verdict, run output, flag) to attempt-3-.../ only if a third attempt fails;
      attempts 1 and 2 are archived under .work/816/t4-deploy/attempt-*;
   2. bash .work/816/t4-deploy/deploy.sh (re-checks PR #106, its CI, hf a89b45e, origin 66acc44, no guard run),
@@ -1079,7 +1107,26 @@ RELEASE_SEQUENCE=2026-09-16/17, per the owner's authorization (OWNER_BOUNDARY):
     re-passed. The dry-run login check exited 128: "fatal: could not read Username for 'https://huggingface.co':
     terminal prompts disabled", so git found no saved credential. No flag was written and the push never ran; hf and
     the Space still a89b45e. Evidence: .work/816/t4-deploy/attempt-3-no-saved-credential/.
-  - STEP 4 NOT STARTED. Scripts ready: .work/816/t3-merge-guard/ (merge_and_guard.sh, verify_guard.py).
+  - STEP 3, ATTEMPT 4 (fresh authorization 2026-09-17, credential confirmed by the owner): PASS. At 03:39Z every
+    invariant re-passed and the dry run showed the fast-forward. The ONE push at 03:39:17Z:
+    `a89b45e..00705c5  00705c55... -> main` (rc 0, not forced).
+    - The Space went RUNNING_BUILDING -> RUNNING_APP_STARTING -> RUNNING at R by 03:40:03Z.
+    - Live round 1 (03:40:10Z, GETs only): /healthcheck 200 (status OK, uptime 12 s); /v1/build-info 200, no-store,
+      release_id/label/environment/milestone/fingerprint all equal to P's pin (UCPE-PROD-SAFE-3-20260915-A);
+      /, /app.js and /styles.css byte-identical to R and to P's pin.
+    - verify_deploy.output: VERIFIED. Evidence: .work/816/t4-deploy/raw (raw.sha256). No analysis call was made.
+  - STEP 4: PASS.
+    - PR #106 merged at 03:40:37Z with --match-head-commit 7d2cf2f4: merge 08c77f09, parents (66acc44, 7d2cf2f4),
+      tree 194a5295 == merge-tree == authorized; exact-main CI run 35179052192 green.
+    - The window when the pin did not match the Space lasted 80 s (push to merge); no scheduled guard run fell in it.
+    - ONE guard dispatch at 03:43:29Z: run 35179229959 on 08c77f09, attempt 1, success. Summary:
+      final_classification HEALTHY, 3/3 rounds HEALTHY, exit 0; deployment_delta_paths [] (empty delta);
+      hf_main_sha == pinned == 00705c55; live == intended == UCPE-PROD-SAFE-3-20260915-A; critical source and frontend
+      assets match. deployment_delta_present true only because main is ahead of the pinned commit; advisory
+      SCHEDULER_DIVERGENT_FROM_PIN (the guard's shallow checkout cannot prove ancestry; non-failing).
+    - verify_guard.output: VERIFIED. Evidence: .work/816/t3-merge-guard/raw (raw.sha256).
+  - Independent final check: origin/main 08c77f09 (tree 194a5295); hf/main 00705c55; the Space RUNNING at R; no open PR;
+    the only guard run since the push is the dispatched one.
 AUDIT_RESULT=Run 35120616278 (read-only, rolled back, never committed; transaction_read_only on; no catalog read refused),
   VERIFIED by .work/816/audit-dispatch/verify_audit.py. Raw capture before parsing: .work/816/audit-dispatch/raw/
   (raw.sha256; report 1d3bae94..., log a3bebde5...).
@@ -1238,7 +1285,23 @@ that the response envelope did not move.
 that carries it. `68a6250` is the commit the work was verified on; this commit changes only
 `STATE.md` and no product blob, so the identity proof above still applies verbatim.
 
-## Production — PROD-SAFE-2 IS DEPLOYED (2026-08-25)
+## Production — PROD-SAFE-3 IS DEPLOYED (2026-09-17)
+hf/main moved a89b45e -> 00705c55 at 2026-09-17T03:39:17Z by fast-forward: a convergence release whose tree equals
+main e5cd7ef. The runtime pin was merged as PR #106 (08c77f09).
+Shipped to users: Recent Analysis History and durable Detail (migration 0008 applied first, run 35164080476);
+session and auth hardening; accumulated reviewed UI work; a provider byte cap and deadline; stricter candle adjacency;
+release identity UCPE-PROD-SAFE-3-20260915-A. Every user analysis still runs heuristic-v1-wave4b0.
+
+Proof captured at deploy time, all read-only:
+  healthcheck  status OK, uptime 12s (fresh restart)
+  build-info   UCPE-PROD-SAFE-3-20260915-A / HF_PRODUCTION, matching the pin
+  served bytes sha256 of index.html, app.js and styles.css each byte-identical to R and the pin
+  guard 35179229959  HEALTHY, 3/3 rounds, deployment delta paths []
+
+No analysis call, no smoke test, no holdout inspection. Two earlier push attempts failed safely (an expired token,
+then a token without write access), and a third stopped before pushing (no saved credential).
+
+## Production — PROD-SAFE-2 (2026-08-25, superseded)
 hf/main moved e9d549c -> a89b45e at 2026-08-25T17:55:11Z by fast-forward, one commit.
 Shipped to users: login failure states, batch-item error messages that show the backend's
 message instead of a bare enum, and removal of the browser-derived "Tactical horizons"
