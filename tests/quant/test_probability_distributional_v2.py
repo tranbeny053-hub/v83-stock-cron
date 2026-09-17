@@ -531,15 +531,25 @@ def test_a_low_above_the_high_refuses() -> None:
 
 # --------------------------------------------------------------------------- not wired
 
+# Prep modules that name v2. Each may be imported by nothing, which the test below enforces.
+DORMANT_V2_PREP = (
+    "calibration/proper_score_skill.py",
+    "quant/distributional_v2_state.py",
+)
+
 
 def test_nothing_in_the_product_uses_distributional_v2() -> None:
     package = ROOT / "src" / "crypto_probability_engine"
-    users = sorted(
-        str(path.relative_to(package))
+    sources = {
+        path.relative_to(package).as_posix(): path.read_text(encoding="utf-8")
         for path in package.rglob("*.py")
-        if "distributional_v2" in path.read_text(encoding="utf-8")
-    )
-    assert users == ["quant/probability_distributional_v2.py"]
+    }
+    users = sorted(name for name, text in sources.items() if "distributional_v2" in text)
+    assert users == sorted(["quant/probability_distributional_v2.py", *DORMANT_V2_PREP])
+    for module in DORMANT_V2_PREP:
+        stem = Path(module).stem
+        importers = [name for name, text in sources.items() if stem in text and name != module]
+        assert importers == [], f"{module} is prep only and must stay unwired"
     defaults = (package / "config" / "defaults.py").read_text(encoding="utf-8")
     assert "distributional-v2" not in defaults, "no methodology version is assigned in prep"
     assert not (ROOT / "ops" / "distributional_v2_freeze.json").exists()
