@@ -1,12 +1,19 @@
 -- Rehearsal assertion for migration 0010, run on a database REBUILT from migrations 0001-0010 with
 -- Supabase's default privileges and no production state: the codified posture must hold on its own.
--- Raises on any departure. Runs ONLY in a scratch local PostgreSQL on a CI runner.
+-- Raises on any departure. Runs ONLY in a scratch local PostgreSQL on a CI runner. It asks about
+-- every table privilege the server has: MAINTAIN too on PostgreSQL 17 and later.
 DO $$
 DECLARE
   legacy_object text;
   api_role text;
   table_privilege text;
+  table_privileges text[] := ARRAY[
+    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+  ];
 BEGIN
+  IF pg_catalog.current_setting('server_version_num')::integer >= 170000 THEN
+    table_privileges := table_privileges || 'MAINTAIN'::text;
+  END IF;
   FOREACH legacy_object IN ARRAY ARRAY[
     'analysis_runs',
     'analysis_timeframe_results',
@@ -27,9 +34,7 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'row-level security is off on %', legacy_object;
     END IF;
-    FOREACH table_privilege IN ARRAY ARRAY[
-      'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
-    ]
+    FOREACH table_privilege IN ARRAY table_privileges
     LOOP
       FOREACH api_role IN ARRAY ARRAY['anon', 'authenticated']
       LOOP

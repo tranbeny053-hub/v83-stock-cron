@@ -31,7 +31,14 @@ DATABASE_URL = "postgresql://owner:NEVER-SHOWN-SECRET@db.never-contacted.invalid
 REHEARSAL_URL = "postgresql:///migration_0010_rehearsal?host=/var/run/postgresql"
 SHA = "c" * 40
 REPOSITORY = apply_0010.EXPECTED_REPOSITORY
-ALL = list(apply_0010.TABLE_PRIVILEGES)
+# The audit saw the API roles hold MAINTAIN, so production runs PostgreSQL 17 or later. The CI
+# rehearsal runs Ubuntu 24.04's PostgreSQL 16, which has no MAINTAIN.
+PRODUCTION_SERVER = 170006
+REHEARSAL_SERVER = 160010
+ALL = list(apply_0010.table_privileges_for(PRODUCTION_SERVER))
+REHEARSAL_ALL = list(apply_0010.table_privileges_for(REHEARSAL_SERVER))
+LEGACY_SQL = apply_0010.legacy_security_sql(PRODUCTION_SERVER)
+OTHER_SQL = apply_0010.other_security_sql(PRODUCTION_SERVER)
 SEQUENCE_ALL = list(apply_0010.SEQUENCE_PRIVILEGES)
 
 
@@ -125,7 +132,7 @@ class FakeCursor:
 # ------------------------------------------------------------------------ the audited state
 
 
-def legacy_row(table: str, **changes: Any) -> tuple:
+def legacy_row(table: str, *, privileges: list[str] = ALL, **changes: Any) -> tuple:
     values = {
         "table": table,
         "relations_named_so": 1,
@@ -136,21 +143,24 @@ def legacy_row(table: str, **changes: Any) -> tuple:
         "policies": 0,
         "public_has_a_privilege": False,
         "column_grant_to_public_anon_or_authenticated": False,
-        "anon": list(ALL),
-        "authenticated": list(ALL),
-        "service_role": list(ALL),
+        "anon": list(privileges),
+        "authenticated": list(privileges),
+        "service_role": list(privileges),
     }
     values.update(changes)
     return tuple(values[field] for field in apply_0010.SECURITY_FIELDS)
 
 
-def audited_legacy(**changes: Any) -> list[tuple]:
-    return [legacy_row(table, **changes) for table in apply_0010.LEGACY_TABLES]
-
-
-def applied_legacy(**changes: Any) -> list[tuple]:
+def audited_legacy(*, privileges: list[str] = ALL, **changes: Any) -> list[tuple]:
     return [
-        legacy_row(table, **{"anon": [], "authenticated": [], **changes})
+        legacy_row(table, privileges=privileges, **changes)
+        for table in apply_0010.LEGACY_TABLES
+    ]
+
+
+def applied_legacy(*, privileges: list[str] = ALL, **changes: Any) -> list[tuple]:
+    return [
+        legacy_row(table, privileges=privileges, **{"anon": [], "authenticated": [], **changes})
         for table in apply_0010.LEGACY_TABLES
     ]
 
@@ -199,9 +209,10 @@ def healthy_results(**overrides: Any) -> dict[str, Any]:
 
     results: dict[str, Any] = {
         apply_0010.ROLES_SQL: [(3,)],
-        apply_0010.LEGACY_SECURITY_SQL: Each([audited_legacy(), applied_legacy()]),
+        apply_0010.SERVER_VERSION_SQL: [(PRODUCTION_SERVER,)],
+        LEGACY_SQL: Each([audited_legacy(), applied_legacy()]),
         apply_0010.SEQUENCE_SECURITY_SQL: Each([audited_sequences(), applied_sequences()]),
-        apply_0010.OTHER_SECURITY_SQL: Each([other_rows(), other_rows()]),
+        OTHER_SQL: Each([other_rows(), other_rows()]),
     }
     results.update(overrides)
     return results
@@ -211,13 +222,14 @@ EXPECTED_ORDER = [
     *apply_0010.TIMEOUT_STATEMENTS,
     apply_0010.ADVISORY_LOCK_SQL,
     apply_0010.ROLES_SQL,
-    apply_0010.LEGACY_SECURITY_SQL,
+    apply_0010.SERVER_VERSION_SQL,
+    LEGACY_SQL,
     apply_0010.SEQUENCE_SECURITY_SQL,
-    apply_0010.OTHER_SECURITY_SQL,
+    OTHER_SQL,
     MIGRATION_SQL,
-    apply_0010.LEGACY_SECURITY_SQL,
+    LEGACY_SQL,
     apply_0010.SEQUENCE_SECURITY_SQL,
-    apply_0010.OTHER_SECURITY_SQL,
+    OTHER_SQL,
 ]
 
 
@@ -288,10 +300,13 @@ def test_every_check_is_a_read_only_catalog_query_without_parameters() -> None:
 
 def test_no_check_reads_an_application_row() -> None:
     for statement in (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
+        apply_0010.legacy_security_sql(REHEARSAL_SERVER),
         apply_0010.SEQUENCE_SECURITY_SQL,
-        apply_0010.OTHER_SECURITY_SQL,
+        OTHER_SQL,
+        apply_0010.other_security_sql(REHEARSAL_SERVER),
         apply_0010.ROLES_SQL,
+        apply_0010.SERVER_VERSION_SQL,
     ):
         for table in (*apply_0010.LEGACY_TABLES, *apply_0010.OTHER_TABLES):
             assert f"FROM public.{table}" not in statement
@@ -299,18 +314,18 @@ def test_no_check_reads_an_application_row() -> None:
 
 
 def test_the_checks_cover_every_table_role_privilege_and_sequence() -> None:
-    legacy = apply_0010.LEGACY_SECURITY_SQL
+    legacy = LEGACY_SQL
     for table in apply_0010.LEGACY_TABLES:
         assert f"('{table}')" in legacy
     for table in apply_0010.OTHER_TABLES:
-        assert f"('{table}')" in apply_0010.OTHER_SECURITY_SQL
+        assert f"('{table}')" in OTHER_SQL
     for role in apply_0010.API_ROLES:
         assert f"has_table_privilege('{role}', c.oid, v.privilege)" in legacy
         assert (
             f"has_sequence_privilege('{role}', q.oid, v.privilege)"
             in apply_0010.SEQUENCE_SECURITY_SQL
         )
-    for privilege in apply_0010.TABLE_PRIVILEGES:
+    for privilege in ALL:
         assert f"('{privilege}')" in legacy
     assert "a.grantee = 0" in legacy, "PUBLIC is grantee 0"
     assert "att.attacl" in legacy, "column grants are checked"
@@ -336,6 +351,51 @@ def test_a_first_apply_runs_every_check_in_one_committed_transaction() -> None:
     assert captured["post_legacy"][0]["service_role"] == ALL
     assert captured["post_other"] == captured["pre_other"]
     assert captured["committed"] is True
+
+
+def _server(version: int) -> dict[str, Any]:
+    """A first apply on a server of ``version``, asked about exactly its privileges."""
+
+    privileges = list(apply_0010.table_privileges_for(version))
+    return {
+        apply_0010.ROLES_SQL: [(3,)],
+        apply_0010.SERVER_VERSION_SQL: [(version,)],
+        apply_0010.legacy_security_sql(version): Each(
+            [audited_legacy(privileges=privileges), applied_legacy(privileges=privileges)]
+        ),
+        apply_0010.SEQUENCE_SECURITY_SQL: Each([audited_sequences(), applied_sequences()]),
+        apply_0010.other_security_sql(version): Each([other_rows(), other_rows()]),
+    }
+
+
+@pytest.mark.parametrize("version", [150008, 160010, 169999, 170000, 170006, 180001])
+def test_every_server_is_asked_about_every_table_privilege_it_has(version: int) -> None:
+    database = FakeDatabase(_server(version))
+    outcome, captured = _apply(database)
+    assert outcome["outcome"] == "APPLIED" and database.commits == 1
+    assert outcome["server_version_num"] == captured["server_version_num"] == version
+    has_maintain = version >= 170000
+    assert ("MAINTAIN" in outcome["table_privileges_asked"]) is has_maintain
+    assert len(outcome["table_privileges_asked"]) == 7 + has_maintain
+    for query in (apply_0010.legacy_security_sql(version), apply_0010.other_security_sql(version)):
+        assert query in database.executed()
+        assert ("('MAINTAIN')" in query) is has_maintain
+    assert outcome["table_privileges_asked"] == sorted(outcome["table_privileges_asked"])
+
+
+@pytest.mark.parametrize(
+    "reported",
+    [[(140012,)], [(None,)], [("170006",)], [(True,)], [(170006.0,)], [], [(170006, 1)]],
+    ids=["postgres-14", "null", "text", "boolean", "float", "no-row", "two-values"],
+)
+def test_an_unsupported_or_unreadable_server_version_refuses_before_any_security_read(
+    reported: list[tuple],
+) -> None:
+    database = FakeDatabase(healthy_results(**{apply_0010.SERVER_VERSION_SQL: reported}))
+    with pytest.raises(ProvenanceRefused, match="nothing is applied"):
+        _apply(database)
+    assert database.executed()[-1] == apply_0010.SERVER_VERSION_SQL
+    assert database.commits == 0 and database.rollbacks == 1
 
 
 def test_the_migration_statement_is_exactly_the_file() -> None:
@@ -371,6 +431,9 @@ PRE_CHECK_DIFFERENCES = {
         "LEGACY": _one(audited_legacy(), 9, service_role=[p for p in ALL if p != "DELETE"])
     },
     "service-role-unreadable": {"LEGACY": _one(audited_legacy(), 0, service_role=None)},
+    "service-role-lacks-maintain": {
+        "LEGACY": _one(audited_legacy(), 2, service_role=list(apply_0010.TABLE_PRIVILEGES))
+    },
     "already-applied": {"LEGACY": applied_legacy()},
     "wrong-order": {"LEGACY": list(reversed(audited_legacy()))},
     "sequence-renamed": {
@@ -393,9 +456,9 @@ PRE_CHECK_DIFFERENCES = {
 
 def _pre(difference: str) -> dict[str, Any]:
     keys = {
-        "LEGACY": apply_0010.LEGACY_SECURITY_SQL,
+        "LEGACY": LEGACY_SQL,
         "SEQUENCE": apply_0010.SEQUENCE_SECURITY_SQL,
-        "OTHER": apply_0010.OTHER_SECURITY_SQL,
+        "OTHER": OTHER_SQL,
     }
     changes = PRE_CHECK_DIFFERENCES[difference]
     overrides = {}
@@ -421,12 +484,12 @@ def test_a_database_not_in_the_audited_state_refuses_before_the_migration(differ
 def test_a_second_apply_refuses_as_not_a_first_apply() -> None:
     database = FakeDatabase(
         healthy_results(
-            **{apply_0010.LEGACY_SECURITY_SQL: Each([applied_legacy()])},
+            **{LEGACY_SQL: Each([applied_legacy()])},
         )
     )
     with pytest.raises(ProvenanceRefused, match=apply_0010.NOT_A_FIRST_APPLY):
         _apply(database)
-    assert database.executed()[-1] == apply_0010.LEGACY_SECURITY_SQL
+    assert database.executed()[-1] == LEGACY_SQL
 
 
 def test_missing_api_roles_refuse_before_anything_is_read() -> None:
@@ -438,9 +501,9 @@ def test_missing_api_roles_refuse_before_anything_is_read() -> None:
 
 def _post(key: str, rows: list[tuple]) -> dict[str, Any]:
     before = {
-        apply_0010.LEGACY_SECURITY_SQL: audited_legacy(),
+        LEGACY_SQL: audited_legacy(),
         apply_0010.SEQUENCE_SECURITY_SQL: audited_sequences(),
-        apply_0010.OTHER_SECURITY_SQL: other_rows(),
+        OTHER_SQL: other_rows(),
     }[key]
     return healthy_results(**{key: Each([before, rows])})
 
@@ -451,39 +514,40 @@ _CHANGED_OTHER[0] = legacy_row(
 )
 POST_CHECK_DIFFERENCES = {
     "anon-keeps-a-privilege": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 0, anon=["TRUNCATE"]),
     ),
+    "anon-keeps-maintain": (LEGACY_SQL, _one(applied_legacy(), 5, anon=["MAINTAIN"])),
     "authenticated-keeps-a-privilege": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 9, authenticated=["SELECT"]),
     ),
     "rls-turned-off": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 1, row_level_security=False),
     ),
     "rls-forced": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 2, row_level_security_forced=True),
     ),
-    "a-policy-appeared": (apply_0010.LEGACY_SECURITY_SQL, _one(applied_legacy(), 3, policies=1)),
+    "a-policy-appeared": (LEGACY_SQL, _one(applied_legacy(), 3, policies=1)),
     "owner-changed": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 4, owned_by_applying_role=False),
     ),
     "public-granted": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 5, public_has_a_privilege=True),
     ),
     "column-granted": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 6, column_grant_to_public_anon_or_authenticated=True),
     ),
     "service-role-narrowed": (
-        apply_0010.LEGACY_SECURITY_SQL,
+        LEGACY_SQL,
         _one(applied_legacy(), 7, service_role=["SELECT"]),
     ),
-    "a-table-vanished": (apply_0010.LEGACY_SECURITY_SQL, applied_legacy()[1:]),
+    "a-table-vanished": (LEGACY_SQL, applied_legacy()[1:]),
     "sequence-anon-keeps-usage": (
         apply_0010.SEQUENCE_SECURITY_SQL,
         [sequence_row("analysis_timeframe_results", "public.analysis_timeframe_results_id_seq",
@@ -498,7 +562,7 @@ POST_CHECK_DIFFERENCES = {
         applied_sequences(public_has_a_privilege=True),
     ),
     "sequences-vanished": (apply_0010.SEQUENCE_SECURITY_SQL, []),
-    "another-migration-s-table-changed": (apply_0010.OTHER_SECURITY_SQL, _CHANGED_OTHER),
+    "another-migration-s-table-changed": (OTHER_SQL, _CHANGED_OTHER),
 }
 
 
@@ -535,7 +599,7 @@ def test_a_driver_error_at_any_statement_rolls_back(position: int) -> None:
 
 def test_a_malformed_check_row_refuses() -> None:
     database = FakeDatabase(
-        healthy_results(**{apply_0010.LEGACY_SECURITY_SQL: Each([[("analysis_runs", 1)]])})
+        healthy_results(**{LEGACY_SQL: Each([[("analysis_runs", 1)]])})
     )
     with pytest.raises(ProvenanceRefused, match="not a row of 12 values"):
         _apply(database)
@@ -547,10 +611,12 @@ def test_the_judges_name_every_difference_not_only_the_first() -> None:
     broken = [
         {**dict.fromkeys(fields), "table": table} for table in apply_0010.LEGACY_TABLES
     ]
-    assert len(apply_0010.legacy_pre_check_failures(broken)) == 10 * 9
+    assert len(apply_0010.legacy_pre_check_failures(broken, ALL)) == 10 * 9
     healthy = [dict(zip(fields, row, strict=True)) for row in audited_legacy()]
     applied = [dict(zip(fields, row, strict=True)) for row in applied_legacy()]
-    assert apply_0010.legacy_pre_check_failures(healthy) == []
+    assert apply_0010.legacy_pre_check_failures(healthy, ALL) == []
+    # Judged by a server's list without MAINTAIN, every role on every table holds one too many.
+    assert len(apply_0010.legacy_pre_check_failures(healthy)) == 10 * 3
     assert apply_0010.legacy_post_check_failures(healthy, applied) == []
     assert len(apply_0010.legacy_post_check_failures(healthy, healthy)) == 10 * 2
 
@@ -840,9 +906,15 @@ def _rehearsal_results() -> dict[str, Any]:
 
     return {
         apply_0010.ROLES_SQL: [(3,)],
-        apply_0010.LEGACY_SECURITY_SQL: Each([audited_legacy(), applied_legacy()]),
+        apply_0010.SERVER_VERSION_SQL: [(REHEARSAL_SERVER,)],
+        apply_0010.legacy_security_sql(REHEARSAL_SERVER): Each(
+            [
+                audited_legacy(privileges=REHEARSAL_ALL),
+                applied_legacy(privileges=REHEARSAL_ALL),
+            ]
+        ),
         apply_0010.SEQUENCE_SECURITY_SQL: Each([audited_sequences(), applied_sequences()]),
-        apply_0010.OTHER_SECURITY_SQL: Each([other_rows()]),
+        apply_0010.other_security_sql(REHEARSAL_SERVER): Each([other_rows()]),
     }
 
 
@@ -857,6 +929,8 @@ def test_a_rehearsal_applies_once_and_proves_a_second_apply_refuses(
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert report["outcome"] == "REHEARSED"
     assert report["first_apply"]["outcome"] == "APPLIED"
+    assert report["first_apply"]["server_version_num"] == REHEARSAL_SERVER
+    assert report["first_apply"]["table_privileges_asked"] == REHEARSAL_ALL
     assert apply_0010.NOT_A_FIRST_APPLY in report["second_apply_refusal"]
     assert database.connects == [
         (REHEARSAL_URL, {"connect_timeout": 8}),
@@ -870,7 +944,7 @@ def test_a_rehearsal_whose_second_apply_succeeds_refuses(
 ) -> None:
     database = FakeDatabase(healthy_results())
     _install_driver(monkeypatch, database, [])
-    database.results[apply_0010.LEGACY_SECURITY_SQL] = Each(
+    database.results[LEGACY_SQL] = Each(
         [audited_legacy(), applied_legacy(), audited_legacy(), applied_legacy()]
     )
     database.results[apply_0010.SEQUENCE_SECURITY_SQL] = Each(

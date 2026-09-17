@@ -10,7 +10,8 @@
 -- row-level security on (not forced) and no policy. anon and authenticated hold every table
 -- privilege, but row-level security denies them every row. service_role holds every privilege and
 -- bypasses row-level security. There is no PUBLIC grant, column grant, view, rule, parent table or
--- publication.
+-- publication. "Every privilege" is eight there: the audit saw MAINTAIN granted, so production runs
+-- PostgreSQL 17 or later.
 --
 -- WHY:
 -- - The migrations never enabled row-level security, so a database rebuilt from them would leave
@@ -25,10 +26,12 @@
 -- 2. PUBLIC, anon and authenticated lose every privilege on the ten tables and on their three serial
 --    sequences. Row-level security already denies them every row, so no reachable read or write
 --    changes; only the latent privileges go.
--- 3. service_role keeps exactly the table privileges it holds today. They are stated explicitly, so a
---    rebuild does not depend on Supabase's default privileges. service_role bypasses row-level
---    security, which the Hugging Face runtime's REST repository requires. Its sequence privileges are
---    not touched.
+-- 3. service_role keeps exactly the table privileges it holds today. The seven that every supported
+--    PostgreSQL has are stated explicitly, so a rebuild does not depend on Supabase's default
+--    privileges. On PostgreSQL 17 and later, REVOKE ALL also takes MAINTAIN from PUBLIC, anon and
+--    authenticated, while service_role keeps the MAINTAIN it holds from those defaults.
+--    service_role bypasses row-level security, which the Hugging Face runtime's REST repository
+--    requires. Its sequence privileges are not touched.
 --
 -- Nothing else changes: ownership, policies (none), forced row-level security (off), and every
 -- other table. The applying role owns these tables, and row-level security that is not forced does

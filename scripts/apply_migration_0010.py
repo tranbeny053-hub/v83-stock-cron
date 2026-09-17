@@ -19,19 +19,20 @@ Effective access is unchanged, and this route refuses unless production is still
 state:
 - every legacy table exists once, in ``public``, is owned by the applying role, has row-level
   security on and not forced, has no policy, and has no PUBLIC or column grant;
-- service_role holds all seven table privileges;
+- service_role holds every table privilege the server has: seven, plus MAINTAIN on PostgreSQL 17
+  and later (the audit saw production's API roles hold MAINTAIN, so production runs 17 or later);
 - anon or authenticated still hold something (otherwise this is not a first apply, so a second
   dispatch refuses and the one-shot property is enforced by the database itself).
 
 ONE TRANSACTION, FAIL CLOSED. Under bounded timeouts and an advisory lock:
   1. read-only PRE-CHECKS, as above, plus the three serial sequences and the security of the tables
-     of 0005, 0006, 0008 and 0009;
+     of 0005, 0006, 0008 and 0009. The server's version decides which table privileges are asked
+     about, so no check is blind to one the server can grant;
   2. exactly the pinned bytes of migration 0010, with no parameters;
   3. read-only POST-CHECKS refuse unless:
      - every legacy table keeps row-level security, owner and zero policies;
      - PUBLIC, anon and authenticated hold nothing on the tables or the sequences;
-     - service_role holds exactly the seven table privileges and its sequence privileges are
-       unchanged;
+     - service_role's table and sequence privileges are unchanged;
      - the other migrations' tables are exactly as they were.
 Any refusal or error rolls the transaction back, so nothing is applied; only then is it committed.
 No application row is ever read.
@@ -64,7 +65,7 @@ WORKFLOW = ".github/workflows/apply-migration-0010.yml"
 REHEARSAL_WORKFLOW = ".github/workflows/apply-migration-0010-rehearsal.yml"
 MIGRATION = "migrations/0010_legacy_table_security.sql"
 # The reviewed bytes. A different file on the dispatched commit refuses before any connection.
-MIGRATION_SHA256 = "05d026887826317aa005b5f98d0f3cdb2ae513c4364ae8f84ecb2900fb5d2426"
+MIGRATION_SHA256 = "bc2ec1dd501b1d5f0d49204a0d6b1619ef29f4359d3d98166101e99452cbcc1e"
 CONFIRMATION = "APPLY-MIGRATION-0010-ONCE"
 REPORT_SCHEMA = "migration-0010-apply-report.v1"
 DISPATCH_SCHEMA = "migration-0010-dispatch.v1"
@@ -119,12 +120,26 @@ OTHER_TABLES = (
     "prediction_feature_snapshots",
     "section_5a_evaluation_seal",
 )
+# The table privileges of every supported server, sorted as the checks return them.
 TABLE_PRIVILEGES = ("DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE")
+# PostgreSQL 17 added MAINTAIN, and production runs 17 or later: the audit saw the API roles hold
+# it. On such a server every check also asks about MAINTAIN; on an older one, asking would fail.
+MAINTAIN_SINCE_SERVER_VERSION = 170000
+MINIMUM_SERVER_VERSION = 150000
+TABLE_PRIVILEGES_WITH_MAINTAIN = tuple(sorted((*TABLE_PRIVILEGES, "MAINTAIN")))
 SEQUENCE_PRIVILEGES = ("SELECT", "UPDATE", "USAGE")
+SERVER_VERSION_SQL = "SELECT pg_catalog.current_setting('server_version_num')::integer"
 
 _API_ROLES_SQL = ", ".join(f"'{role}'" for role in API_ROLES)
-_TABLE_PRIVILEGES_SQL = ", ".join(f"('{name}')" for name in TABLE_PRIVILEGES)
 _SEQUENCE_PRIVILEGES_SQL = ", ".join(f"('{name}')" for name in SEQUENCE_PRIVILEGES)
+
+
+def table_privileges_for(server_version: int) -> tuple[str, ...]:
+    """Every table privilege a server of ``server_version`` (server_version_num) can grant."""
+
+    if server_version >= MAINTAIN_SINCE_SERVER_VERSION:
+        return TABLE_PRIVILEGES_WITH_MAINTAIN
+    return TABLE_PRIVILEGES
 
 
 def _held(function: str, role: str, relation: str, values: str) -> str:
@@ -137,8 +152,9 @@ def _held(function: str, role: str, relation: str, values: str) -> str:
     )
 
 
-def _security_sql(names: Sequence[str]) -> str:
+def _security_sql(names: Sequence[str], privileges: Sequence[str]) -> str:
     listed = ", ".join(f"('{name}')" for name in names)
+    asked = ", ".join(f"('{name}')" for name in privileges)
     return (
         "SELECT t.name,"
         " (SELECT count(*) FROM pg_catalog.pg_class AS k WHERE k.relname::text = t.name),"
@@ -154,9 +170,9 @@ def _security_sql(names: Sequence[str]) -> str:
         " AND att.attacl IS NOT NULL AND (a.grantee = 0 OR a.grantee IN ("
         "SELECT r.oid FROM pg_catalog.pg_roles AS r"
         " WHERE r.rolname IN ('anon', 'authenticated')))),"
-        f" {_held('has_table_privilege', 'anon', 'c.oid', _TABLE_PRIVILEGES_SQL)},"
-        f" {_held('has_table_privilege', 'authenticated', 'c.oid', _TABLE_PRIVILEGES_SQL)},"
-        f" {_held('has_table_privilege', 'service_role', 'c.oid', _TABLE_PRIVILEGES_SQL)}"
+        f" {_held('has_table_privilege', 'anon', 'c.oid', asked)},"
+        f" {_held('has_table_privilege', 'authenticated', 'c.oid', asked)},"
+        f" {_held('has_table_privilege', 'service_role', 'c.oid', asked)}"
         f" FROM (VALUES {listed}) AS t(name)"
         " LEFT JOIN pg_catalog.pg_class AS c"
         " ON c.oid = pg_catalog.to_regclass('public.' || t.name)"
@@ -168,8 +184,16 @@ ROLES_SQL = (
     "SELECT count(*) FROM pg_catalog.pg_roles"
     f" WHERE rolname IN ({_API_ROLES_SQL})"
 )
-LEGACY_SECURITY_SQL = _security_sql(LEGACY_TABLES)
-OTHER_SECURITY_SQL = _security_sql(OTHER_TABLES)
+
+
+def legacy_security_sql(server_version: int) -> str:
+    return _security_sql(LEGACY_TABLES, table_privileges_for(server_version))
+
+
+def other_security_sql(server_version: int) -> str:
+    return _security_sql(OTHER_TABLES, table_privileges_for(server_version))
+
+
 SECURITY_FIELDS = (
     "table",
     "relations_named_so",
@@ -542,9 +566,25 @@ def apply_in_one_transaction(
             if roles != len(API_ROLES):
                 raise _refusal(f"{roles!r} of the {len(API_ROLES)} Supabase API roles exist")
 
-            pre_legacy = _rows(cursor, LEGACY_SECURITY_SQL, SECURITY_FIELDS)
+            cursor.execute(SERVER_VERSION_SQL)
+            server_version = _row(cursor.fetchone(), 1, "server version")[0]
+            captured["server_version_num"] = server_version
+            if (
+                not isinstance(server_version, int)
+                or isinstance(server_version, bool)
+                or server_version < MINIMUM_SERVER_VERSION
+            ):
+                raise _refusal(
+                    f"the server version {server_version!r} is not PostgreSQL 15 or later"
+                )
+            privileges = table_privileges_for(server_version)
+            captured["table_privileges_asked"] = list(privileges)
+            legacy_sql = legacy_security_sql(server_version)
+            other_sql = other_security_sql(server_version)
+
+            pre_legacy = _rows(cursor, legacy_sql, SECURITY_FIELDS)
             captured["pre_legacy"] = pre_legacy
-            failures = legacy_pre_check_failures(pre_legacy)
+            failures = legacy_pre_check_failures(pre_legacy, privileges)
             if failures:
                 raise _refusal(
                     "the database is not in the audited state a first apply of 0010 requires: "
@@ -552,7 +592,7 @@ def apply_in_one_transaction(
                 )
             pre_sequences = _rows(cursor, SEQUENCE_SECURITY_SQL, SEQUENCE_FIELDS)
             captured["pre_sequences"] = pre_sequences
-            pre_other = _rows(cursor, OTHER_SECURITY_SQL, SECURITY_FIELDS)
+            pre_other = _rows(cursor, other_sql, SECURITY_FIELDS)
             captured["pre_other"] = pre_other
             failures = sequence_pre_check_failures(pre_sequences) + other_pre_check_failures(
                 pre_other
@@ -568,9 +608,9 @@ def apply_in_one_transaction(
                 migration_sql.encode("utf-8")
             ).hexdigest()
 
-            post_legacy = _rows(cursor, LEGACY_SECURITY_SQL, SECURITY_FIELDS)
+            post_legacy = _rows(cursor, legacy_sql, SECURITY_FIELDS)
             post_sequences = _rows(cursor, SEQUENCE_SECURITY_SQL, SEQUENCE_FIELDS)
-            post_other = _rows(cursor, OTHER_SECURITY_SQL, SECURITY_FIELDS)
+            post_other = _rows(cursor, other_sql, SECURITY_FIELDS)
             captured["post_legacy"] = post_legacy
             captured["post_sequences"] = post_sequences
             captured["post_other"] = post_other
@@ -593,6 +633,8 @@ def apply_in_one_transaction(
     return {
         "outcome": "APPLIED",
         "api_roles_present": captured["api_roles_present"],
+        "server_version_num": server_version,
+        "table_privileges_asked": list(privileges),
         "pre_legacy": pre_legacy,
         "pre_sequences": pre_sequences,
         "pre_other": pre_other,
@@ -604,8 +646,13 @@ def apply_in_one_transaction(
     }
 
 
-def legacy_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Pure: every way the legacy tables differ from the state the audit measured."""
+def legacy_pre_check_failures(
+    rows: Sequence[Mapping[str, Any]], privileges: Sequence[str] = TABLE_PRIVILEGES
+) -> list[str]:
+    """Pure: every way the legacy tables differ from the state the audit measured.
+
+    ``privileges`` is every table privilege the server can grant (``table_privileges_for``).
+    """
 
     failures: list[str] = []
     if [row.get("table") for row in rows] != list(LEGACY_TABLES):
@@ -616,13 +663,13 @@ def legacy_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
             failures.append(f"{row['table']}: row-level security is not on, as the audit measured")
         if row.get("policies") != 0:
             failures.append(f"{row['table']}: has {row.get('policies')!r} policies, not none")
-        if row.get("service_role") != list(TABLE_PRIVILEGES):
+        if row.get("service_role") != list(privileges):
             failures.append(
                 f"{row['table']}: service_role holds {row.get('service_role')!r}, not every "
                 "privilege, as the audit measured"
             )
         for role in ("anon", "authenticated"):
-            if not set(row.get(role) or ()) <= set(TABLE_PRIVILEGES):
+            if not set(row.get(role) or ()) <= set(privileges):
                 failures.append(f"{row['table']}: {role} privileges are unreadable")
     if not failures and not any(row["anon"] or row["authenticated"] for row in rows):
         failures.append(
