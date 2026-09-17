@@ -1,7 +1,7 @@
 # STATE
 
-Updated: 2026-09-17 (the post-release batch is MERGED and VERIFIED: PRs #107-#110, main e22ce337, tree 2e1667b4 ==
-the gated composition; nothing applied, dispatched or deployed; hf unchanged at 00705c55)
+Updated: 2026-09-17 (the post-release batch is MERGED and VERIFIED: PRs #107-#110, main e22ce337; migration 0010
+APPLIED ONCE and VERIFIED: run 35190794876, PostgreSQL 17.6; hf unchanged at 00705c55)
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -10,17 +10,18 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IDLE AFTER THE BATCH T3. Nothing is authorized or pending.
+LOOP_STATE=IDLE AFTER THE 0010 T4. Nothing is authorized or pending.
   - PROD-SAFE-3 is DEPLOYED, PINNED and ACCEPTED (owner, 2026-09-17).
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
-  - Since the release there has been no dispatch, database access, migration apply or deploy.
+  - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
+  - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=Post-release prep is COMPLETE and merged, inside the owner's envelope of 2026-09-17:
   - the STATE checkpoint;
-  - migration 0010 and its route, NOT applied;
+  - migration 0010 and its route, APPLIED once (T4, run 35190794876);
   - distributional-v2 integration prep;
   - the dormant wider-history path for v2's 15m cell.
-  What comes next is the owner's: the 0010 apply, and the v2 decisions (a) to (d). Still excluded: a v2 freeze,
-  a new T0, a new holdout, any database mutation, any HF deploy.
+  What comes next is the owner's: the v2 decisions (a) to (d). Still excluded: a v2 freeze, a new T0, a new
+  holdout, any further database mutation, any HF deploy.
 CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
@@ -42,11 +43,10 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED.
-  The batch T3 is CONSUMED. Its authorization is kept verbatim in .work/817/t3-batch/authorization.txt.
+  CONSUMED, with each authorization kept verbatim:
+  - the batch T3 (.work/817/t3-batch/authorization.txt);
+  - the 0010 T4 (.work/818/t4-apply-0010/authorization.txt).
   Open, each needing its own authorization:
-  - T4: apply migration 0010 ONCE. That is one dispatch of apply-migration-0010.yml on main at an exact SHA,
-    with confirm APPLY-MIGRATION-0010-ONCE. Residual risk: its PostgreSQL 17 (MAINTAIN) branch has never run on
-    a real server (REVIEW).
   - Product decisions:
     (a) adopt the proper-score skill gate for zero-location methodologies (R2 doc §2). This needs the
         dependence decision and the detail-view wording (REVIEW);
@@ -58,14 +58,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner.
-  - On a 0010 T4, prepare .work/818/t4-apply-0010/ on the .work/816/t4-apply-0008 pattern:
-    - pre-checks: main at the authorized SHA, the workflow active with no runs, hf unchanged, nothing running;
-    - one flag-guarded dispatch;
-    - raw capture of the run JSON, job log, report artifact and hashes, before parsing;
-    - then a verifier. It requires outcome APPLIED and committed true, server_version_num >= 170000 with
-      MAINTAIN asked, anon and authenticated holding nothing, service_role unchanged, RLS on with no policy,
-      the later tables unchanged, the pinned migration bytes, and no URL anywhere.
-  - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, or the PROD-SAFE-3 deploy.
+  - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, the 0010 apply, or the PROD-SAFE-3
+    deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
 PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
   - hf/main is 00705c55 (R), a convergence release: tree(R) == tree(main e5cd7ef).
@@ -80,17 +74,21 @@ PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
   - The functional proof of durable Detail is the operator's next genuine analysis: History should show "Detail
     available" and reopen it.
   - A203-01's strict candle adjacency and R202-01's provider deadline may surface failures that used to be silent.
-DATABASE=Supabase, PostgreSQL 17 or later (the audit saw the MAINTAIN privilege granted).
+DATABASE=Supabase, PostgreSQL 17.6 (server_version_num 170006, read by the 0010 apply).
   - Migrations 0001-0007 were applied before this record.
   - 0009 was applied once, 2026-09-14 (run 34861816985).
   - 0008 was applied once, 2026-09-16 (run 35164080476).
-  - 0010 is MERGED as code (#107) and NOT applied. Its apply workflow is registered and active, with no runs.
+  - 0010 was applied once, 2026-09-17 (run 35190794876), and VERIFIED.
+    - The ten legacy tables keep RLS on, with no policy.
+    - anon and authenticated now hold nothing on them or on their three serial sequences.
+    - service_role keeps all eight table privileges and its sequence privileges.
+    - The tables of 0005, 0006, 0008 and 0009 are unchanged.
   The older-table audit (run 35120616278, read-only) returned NOT_EXPOSED_THROUGH_AUDITED_PATHS:
   - the ten legacy tables have RLS on (not forced) and no policy;
   - anon and authenticated hold every table privilege, MAINTAIN included, yet are denied every row;
   - service_role has BYPASSRLS;
   - there is no PUBLIC grant, column grant, view, parent table or publication.
-  Its findings, both addressed by migration 0010 once it is applied:
+  Its findings, both addressed by migration 0010, now applied:
   - the migrations never enable RLS, so a rebuilt database would be open to the anon key;
   - RLS without a policy is the only barrier.
 NEVER_RERUN=Consumed one-shot actions. None may run again:
@@ -99,6 +97,7 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
     look.
   - The 0009 route: 34851608514 (refused before any DB contact) and 34861816985 (applied). Never dispatch it again.
   - The older-table audit 35120616278.
+  - The 0010 apply 35190794876. The route refuses a second apply as "not a first apply"; never dispatch it again.
   - The 0008 apply 35164080476.
   - The PROD-SAFE-3 deploy: attempt 4, pushed at 03:39:17Z. Attempts 1-3 failed safely and changed nothing.
   - Its guard dispatch 35179229959.
@@ -124,7 +123,8 @@ V2_STATUS=distributional-v2 is on main as an unwired module (#102). It is NOT fr
   - Wiring needs §2.6 authorization.
   - Adopting the proper-score gate also needs per-row probabilities from persistence/repository.py, which is pinned.
   - Correction (lane C): with mu = 0, the up share is not 50/50. The shape tables fix it between 0.4794 and 0.5427.
-BATCH_0010=MERGED as PR #107 (merge 2b7edf0b). Lane B had four commits:
+BATCH_0010=MERGED as PR #107 (merge 2b7edf0b), then APPLIED ONCE on 2026-09-17 by the owner-authorized T4.
+  The T4 is recorded below. Lane B had four commits:
   - e5677406: the route;
   - aeef379c: PostgreSQL 17 MAINTAIN;
   - 1d581367 and aaf11228: the review fixes.
@@ -149,6 +149,28 @@ BATCH_0010=MERGED as PR #107 (merge 2b7edf0b). Lane B had four commits:
   - the second apply refused as not a first apply;
   - the database rebuilt from 0001-0010 alone asserted the posture.
   Evidence: .work/817/t3-batch/raw/rehearsal-35187843344/ (the report artifact and log, hashed).
+  THE T4 (.work/818/t4-apply-0010/):
+  - Pre-dispatch, 17 checks PASS:
+    - main e22ce337 and hf 00705c55;
+    - exact-main CI green;
+    - the static scope proof: the migration is exactly bc2ec1dd, and the route is byte-identical to aaf11228;
+    - the workflow active with no runs, and nothing queued;
+    - the secret present (name only).
+  - ONE dispatch at 06:39:24Z: run 35190794876, attempt 1. Every step succeeded, including the in-job
+    rehearsal on PostgreSQL 16.15.
+  - Raw capture before parsing: run JSON, log, both reports and raw.sha256.
+  - verify_apply.py: VERIFIED, 88 checks, 0 failures.
+    - Outcome APPLIED, committed. The executed bytes bc2ec1dd equal the reviewed file.
+    - server_version_num 170006, with all eight privileges asked, MAINTAIN included.
+    - Before: every table matched the audit. anon and authenticated held all eight; RLS on; no policy.
+    - After: anon and authenticated hold nothing on the tables and sequences. RLS and policies are
+      unchanged. service_role is unchanged (all eight; sequences unchanged).
+    - The later tables are identical before and after.
+    - The driver helpers equal the pinned fingerprints. The provenance is e22ce337, attempt 1, CPython
+      3.13.14, isolated.
+    - No database URL appears, except the rehearsal's local socket.
+    - The verifier was mutation-tested beforehand; it caught all 13 injected failures.
+  - After: main and hf unchanged; exactly one 0010 run; no other run since the dispatch.
 BATCH_V2=MERGED as PR #108 (merge fe1f0c67) and PR #109 (merge 0f60edaf). Nothing is wired.
   Lane C had three commits: 9101bff2 (the prep), then 679e0801 and 5a3b5685 (the review fixes).
   - quant/distributional_v2_state.py builds v1's exact probability_state and horizon_timeout_state from a v2
@@ -196,10 +218,8 @@ REVIEW=One consolidated review of the composed diff (an Opus subagent, read-only
     - refusal paths the audit never measured: same-named relations of other kinds, and the presence of the
       0005/0006 tables, which is now recorded rather than required;
     - a COMMIT failing in flight is reported as "UNKNOWN", including in the rehearsal's per-apply records.
-  - LOW (B), RESIDUAL. The PostgreSQL 17 (MAINTAIN) branch runs only against the fake cursor, because the PR
-    rehearsal uses the runner's PostgreSQL 16.
-    - A defect there would refuse or roll back safely, but it would spend the 0010 T4.
-    - Otherwise the statement forms are ones production has already run (0008, the audit).
+  - LOW (B), RESOLVED BY THE T4. The PostgreSQL 17 (MAINTAIN) branch ran on production (170006) and
+    verified.
   - LOW, inherited, report only. The 0008 and §5A routes would also report committed=false after a COMMIT
     failed in flight. Both are consumed, so there is nothing to change.
   - Held under attack:
@@ -245,6 +265,8 @@ EVIDENCE=.work/ is gitignored and local.
   - 815: the one look.
   - 816: this release cycle (evidence.sha256): the l1-l3 prep, t3-audit, audit-dispatch, codex-818-820,
     t4-apply-0008, t3-release, t4-deploy and t3-merge-guard.
+  - 818: the 0010 T4 (t4-apply-0010/: authorization, scope proof, predispatch, run_apply, raw, verify_apply;
+    evidence.sha256).
   - 817: this batch.
     - t3-batch/ is the executed T3: authorization.txt, manifest, titles, bodies, run-batch.sh, run.output,
       raw/ per lane, raw/rehearsal-35187843344/, verify_batch.sh and verify_batch.output.
@@ -267,8 +289,8 @@ Update this block on every pause, every milestone change and every GPT consultat
   - provider byte caps and deadlines;
   - strict candle adjacency;
   - the accumulated reviewed UI work.
-- **Merged, not in production:** migration 0010 and its route (not applied), and the unwired v2 prep (#107-#109).
-- **Next, owner-gated:**
-  - the 0010 apply;
-  - the v2 decisions (a) to (d).
+- **Database:** migration 0010 is applied (2026-09-17), so the legacy tables' security is now codified in the
+  migrations.
+- **Merged, not in production:** the unwired v2 prep (#108, #109).
+- **Next, owner-gated:** the v2 decisions (a) to (d).
   A v2 promotion needs its own freeze, T0, holdout and one look.
