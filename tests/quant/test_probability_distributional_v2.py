@@ -534,6 +534,7 @@ def test_a_low_above_the_high_refuses() -> None:
 # Prep modules that name v2. Each may be imported by nothing, which the test below enforces.
 DORMANT_V2_PREP = (
     "calibration/proper_score_skill.py",
+    "quant/distributional_v2_serving.py",
     "quant/distributional_v2_state.py",
 )
 
