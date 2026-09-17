@@ -3,6 +3,12 @@
 Read-only design work, 2026-09-12. **No `distributional-v2` code, no freeze, no promotion.**
 R2 evidence was read but not touched; no database or holdout was accessed.
 
+> **Correction, 2026-09-17 (§7).** §1, §4 and §5 assume that `mu = 0` makes `p_up == p_down`. It
+> does not. The empirical shape tables of distributional-v1 and distributional-v2 are skewed, so both
+> models carry a fixed up/down split of about 48–54% up, set only by the band-to-scale ratio, the
+> cell and (on 1H v2) the session. The recommendations stand, and §7 states what changes in the
+> reasoning.
+
 These are the two owner decisions R2 §7.2 batches as prerequisites for any future
 `distributional-v2`. They are prerequisites *for* v2 rather than consequences *of* the §5A
 result, so settling them now takes them off the critical path without committing to anything.
@@ -115,3 +121,71 @@ Recommended defaults only. No code, no `distributional-v2`, no freeze, no promot
 change to any gate in the product today. Adoption of §2 and §4 is an owner decision, and both
 would land as ordinary reviewed T2 work under a future contract — not under §5A, which is
 closed to amendment.
+
+## 7. Correction, 2026-09-17: the shape tables are skewed, so the split is not 50/50
+
+**What was wrong.** §1 says that under `mu = 0`, `p_up == p_down` exactly, and that the top label is
+therefore always `UP` by tie order. `mu = 0` only removes a location term. The probabilities are
+`p_down = F(-b/sigma)` and `p_up = 1 - F(b/sigma)`, where `F` is the cell's empirical CDF of
+standardized six-bar returns. `F` is not symmetric about zero. So `p_up != p_down` whenever the band
+`b` is positive, which is always.
+
+- The product's own tests already relied on this: `test_epistemic_null_neutralizes_real_distributional_asymmetry`.
+- What `mu = 0` does guarantee is sign invariance: flipping the sign of every input return changes
+  nothing (`test_zero_location_has_no_return_sign_response`).
+
+**The measured split.** The up share `p_up / (p_up + p_down)` is below, at four band-to-scale ratios
+`z = b / sigma`. A test recomputes every figure from the committed tables
+(`tests/quant/test_zero_drift_directional_split.py`).
+
+| Model | Cell | Table | z=0.25 | z=0.5 | z=1.0 | z=2.0 |
+|---|---|---|---:|---:|---:|---:|
+| distributional-v2 | BTC/USDT 15m | one table | 0.5077 | 0.5075 | 0.5033 | 0.4794 |
+| distributional-v2 | BTC/USDT 1H | session 00-07 UTC | 0.5109 | 0.5144 | 0.5188 | 0.5108 |
+| distributional-v2 | BTC/USDT 1H | session 08-15 UTC | 0.5070 | 0.5047 | 0.4971 | 0.5171 |
+| distributional-v2 | BTC/USDT 1H | session 16-23 UTC | 0.5255 | 0.5297 | 0.5382 | 0.5381 |
+| distributional-v2 | BTC/USDT 4H | one table | 0.5221 | 0.5264 | 0.5303 | 0.5369 |
+| distributional-v2 | ETH/USDT 15m | one table | 0.5094 | 0.5080 | 0.4975 | 0.4830 |
+| distributional-v2 | ETH/USDT 1H | session 00-07 UTC | 0.5109 | 0.5147 | 0.5175 | 0.5174 |
+| distributional-v2 | ETH/USDT 1H | session 08-15 UTC | 0.4876 | 0.4890 | 0.4861 | 0.4832 |
+| distributional-v2 | ETH/USDT 1H | session 16-23 UTC | 0.5277 | 0.5343 | 0.5427 | 0.5382 |
+| distributional-v2 | ETH/USDT 4H | one table | 0.5192 | 0.5212 | 0.5277 | 0.5275 |
+| distributional-v1 | every symbol 15m | one table | 0.5091 | 0.5051 | 0.4879 | 0.4825 |
+| distributional-v1 | every symbol 1H | one table | 0.5118 | 0.5158 | 0.5131 | 0.5121 |
+| distributional-v1 | every symbol 4H | one table | 0.5205 | 0.5240 | 0.5384 | 0.5400 |
+
+**What it means.**
+- **The split is static.** It is a property of the historical sample the tables were fitted on, which
+  drifted up over most of it. It responds to nothing in the current market except the ratio of the
+  live band to the model's scale and, on 1H v2, the session. It is not a conditional directional
+  forecast.
+- **§1 still holds, by a different mechanism.** The top label is not a tie. It is whichever side the
+  table's skew favours at that ratio, usually `UP`. At the four tabulated ratios, `DOWN` appears in
+  exactly these cells:
+  - 15m at z = 1.0 and 2.0 (for BTC under v2, only at 2.0);
+  - ETH 1H in the 08-15 session, at every ratio;
+  - BTC 1H in that session, at z = 1.0.
+
+  A test pins that list. On a finer grid up to z = 4 the boundaries move. BTC 15m under v2 leans
+  `DOWN` from z ≈ 1.09, and six further 1H and 4H tables lean `DOWN` only somewhere above z ≈ 2.4.
+  The directional classifier therefore scores a fixed skew against realized
+  direction. That measures market drift against a constant, not model skill, so the finding and the
+  hard-gate hazard are unchanged.
+- **§2 is unaffected.** The proper-score gate scores the whole triplet, skew included, against the
+  base rate of the same rows. A static skew cannot beat that base rate: under a strictly proper
+  score, the in-sample base rate is the best constant forecast. The prepared gate also counts
+  differences within floating-point noise as none, so an exact echo of the base rate cannot pass
+  either.
+  - It is now prepared, dormant, as `calibration/proper_score_skill.py`, with a test reproducing
+    finding A6: a static skew on an up-drifting market passes the directional gate and fails the
+    proper-score gate.
+- **§4 holds, more strongly.** The displayed split is not a visible 50/50 artefact. It is a
+  plausible-looking 52/48 that no current market state drives, so it reads as a forecast even more
+  easily. The recommendation (show P(move beyond the band) against P(timeout), and state that no
+  directional claim is made) is unchanged. The mechanical rule generalizes: **never derive a
+  direction from the static skew**, not only from the tie order.
+- **§5 holds.** `ECE_top` buckets by whichever label the skew makes top. The knock-on for any future
+  calibration criterion on a zero-location candidate is unchanged.
+- **Nothing in the product changes.** The deployed default is `heuristic-v1-wave4b0`, whose
+  direction comes from its own signal. Neither distributional methodology is selected for users.
+

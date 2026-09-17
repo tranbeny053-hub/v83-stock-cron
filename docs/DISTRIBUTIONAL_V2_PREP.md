@@ -109,10 +109,19 @@ None of these changes the method. The first is a serving rule; the others are nu
 
 - **(a) Skill gate.** The directional skill gate cannot evaluate a zero-drift model. The recommended
   proper-score gate is in `docs/R2_ZERO_DRIFT_GATE_AND_DISPLAY.md` §2.
-- **(b) Display.** The directional split is fixed at 50/50 by construction. The recommended display
-  is in the same document, §4.
+  - It is prepared, dormant, as `calibration/proper_score_skill.py`.
+  - Adopting it also needs per-row probabilities from the repository, and the repository is pinned.
+- **(b) Display.** The directional split is not 50/50. The skewed shape tables fix it at about 48–54%
+  up, per cell and ratio, with no current market state behind it (the correction in
+  `docs/R2_ZERO_DRIFT_GATE_AND_DISPLAY.md` §7). The recommended display is in the same document, §4.
 - **(c) Wiring.**
   - A methodology selector branch and a version constant are needed.
+  - What the branch would call after computing the probabilities is prepared, and not wired.
+    `quant/distributional_v2_state.py` builds, from a v2 triplet:
+    - v1's exact `probability_state`; a test compares it field by field with v1's builder;
+    - a `horizon_timeout_state` with v1's status, method and timeout fields. v2's own scale facts
+      (`profile_mean`, `session`, `candles_used`) replace v1's `sigma_bar`. The schema leaves that
+      object open, and nothing reads `sigma_bar`.
   - Both live in files pinned by the §5A evaluator (`quant/pipeline.py`, `config/defaults.py`), so
     wiring needs the owner's §2.6 authorization.
   - The 15m wiring also consumes the candle-history capability.
