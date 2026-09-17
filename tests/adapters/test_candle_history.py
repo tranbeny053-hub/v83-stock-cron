@@ -167,15 +167,29 @@ def test_the_snapshot_request_is_unchanged_for_both_providers(timeframe: str) ->
 
 
 def test_no_production_path_calls_the_history_capability() -> None:
-    """Zero behaviour change: the first caller is a future, owner-authorized wiring."""
+    """Zero behaviour change: the first caller is a future, owner-authorized wiring.
+
+    Outside the adapters, only the dormant distributional-v2 serving path names the capability,
+    and nothing imports that path.
+    """
 
     package = ROOT / "src" / "crypto_probability_engine"
-    callers = sorted(
-        str(path.relative_to(package))
+    sources = {
+        path.relative_to(package).as_posix(): path.read_text(encoding="utf-8")
         for path in package.rglob("*.py")
-        if "candle_history" in path.read_text(encoding="utf-8")
-    )
-    assert callers == ["adapters/candle_history.py", "adapters/public_market.py"]
+    }
+    callers = sorted(name for name, text in sources.items() if "candle_history" in text)
+    assert callers == [
+        "adapters/candle_history.py",
+        "adapters/public_market.py",
+        "quant/distributional_v2_serving.py",
+    ]
+    importers = [
+        name
+        for name, text in sources.items()
+        if "distributional_v2_serving" in text and name != "quant/distributional_v2_serving.py"
+    ]
+    assert importers == []
 
 
 # --------------------------------------------------------------------------- request bounds

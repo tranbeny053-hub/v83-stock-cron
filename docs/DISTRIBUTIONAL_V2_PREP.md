@@ -34,9 +34,9 @@ R2 arm **CB** (`docs/R2_FRONTIER_REPORT.md` §5–6, `docs/r2_evidence/SEALED_AT
 - **Any other symbol or timeframe, or any window that is not the full run of closed, adjacent,
   UTC-aligned, well-formed candles, fails closed.**
 - **The 15m window exceeds the snapshot.** 673 is more than the 204 candles a market snapshot
-  carries, so serving 15m needs the candle-history capability prepared separately
-  (`adapters/candle_history.py`, branch `prep/l3-candle-width`). 1H and 4H fit inside the existing
-  snapshot.
+  carries, so serving 15m needs the candle-history capability (`adapters/candle_history.py`, merged
+  with PR #101). 1H and 4H fit inside the existing snapshot. `quant/distributional_v2_serving.py`
+  applies exactly this split, and nothing calls it yet.
 
 ## Where the constants came from
 
@@ -124,7 +124,10 @@ None of these changes the method. The first is a serving rule; the others are nu
       object open, and nothing reads `sigma_bar`.
   - Both live in files pinned by the §5A evaluator (`quant/pipeline.py`, `config/defaults.py`), so
     wiring needs the owner's §2.6 authorization.
-  - The 15m wiring also consumes the candle-history capability.
+  - The 15m wiring also consumes the candle-history capability. Where each window comes from is
+    prepared, and not wired: `quant/distributional_v2_serving.py` serves 1H and 4H from the
+    snapshot with no extra request. It fetches exactly 673 closed 15m candles, once, from the
+    snapshot's own provider, and requires them to extend the snapshot. Anything else fails closed.
 - **(d) Freeze.**
   - Whether to freeze these exact constants, or refit on data up to a new T_freeze. Either way
     there is no tuning against the consumed §5A holdout.
