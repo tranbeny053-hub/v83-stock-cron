@@ -1,9 +1,9 @@
 # STATE
 
-Updated: 2026-09-18. The R4 Stage-B pre-look package is prepared locally (research only, in
-.work/research3/r4/stage_b) and its digest commitment is frozen; the look itself has NOT run and no F1/F2 byte
-was read. Earlier the same day: R4 Stage A, audited once with its fixes re-checked. main is 535248d1 (#111,
-merged outside this loop, CI green). hf is unchanged at 00705c55. This record is the T3 publication candidate.
+Updated: 2026-09-18. The R4 Stage-B pre-look package is at FREEZE 4 (research only, .work/research3/r4/stage_b):
+the independent Fable pre-look audit returned NO-GO on freeze 3, the owner accepted it, and freeze 4 applies every
+change it listed. The look itself has NOT run and no F1/F2 byte was read. main is 535248d1 (#111, merged outside
+this loop, CI green). hf is unchanged at 00705c55. This record is the T3 publication candidate.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -13,6 +13,11 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER: R4 Stage-B pre-look package ready (local only). Nothing is run or pushed.
+  - Pre-look audit ruling (owner, 2026-09-18), verbatim in the freeze-4 commitment: "Fable NO-GO accepted:
+    re-freeze #4 with I2/I8/I10 exactly tightened; fix M3 in code with deterministic pre-claim resume/no manual
+    deletion, refuse --workdir in look mode, bundle L2+L4, and L3=YES only for predeclared diagnostic summaries
+    (weekly block means + fixed-band deployment effects; no raw rows; never tuning). Treat this as stricter
+    pre-look interpretation, not a §5.8-2 edit."
   - Stage-A rulings (owner, 2026-09-18), verbatim in r4/stage_b/STAGE_B_COMMITMENT.json:
     - the F2 + F1 confirmation look = YES (to be run only as OWNER_BOUNDARY describes);
     - 4H is excluded from R4 fresh scoring only; live/product 4H is unchanged;
@@ -64,9 +69,9 @@ LAST_GREEN_SHA=535248d1 (main, PR #111: the last two Node-20-era workflows moved
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
-  - Re-run for this R4 Stage-B pre-look record, on the STATE branch at a8d7920 plus this change: the same result
-    (2445 passed, scanners 3/3), 2026-09-18. R4 is entirely inside gitignored .work/, so the change is
-    STATE.md alone (T0). The same held for the Stage-A record at da794b1.
+  - Re-run for this R4 freeze-4 record, on the STATE branch at acf6f95 plus this change: the same result (2445
+    passed, scanners 3/3), 2026-09-18. R4 is entirely inside gitignored .work/, so the change is STATE.md alone
+    (T0). The same held for the freeze-3 record at a8d7920 and the Stage-A record at da794b1.
   - Re-run for the R3 Wave-2 record, on the STATE branch at 529ec7e plus that change: the same result
     (2445 passed, scanners 3/3). The same held for the Wave-1 record at 56ca7f8.
   - Composition c641fec2 (B, C, D, A onto 08c77f09) has tree 2e1667b4, equal to main e22ce337.
@@ -91,17 +96,17 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The R4 Stage-A decisions are ruled (LOOP_STATE). What remains, in order:
-  1. RECOMMENDED FIRST: one read-only Fable pre-look audit of r4/stage_b/FABLE_PRELOOK_AUDIT_PACK.md. It must not
-     open F1/F2. A TIGHTEN or a finding is applied BEFORE the push by a deliberate re-freeze (delete
-     STAGE_B_DIGESTS.log, rebuild, rerun rehearse_b.py); nothing may be loosened.
+  1. RECOMMENDED FIRST: one read-only Fable review of freeze 4 (r4/stage_b/FABLE_PRELOOK_AUDIT_PACK.md, which
+     maps each of its findings H1, M1-M3, L1-L4 to the change and the evidence). It must not open F1/F2. Anything
+     it asks for is applied BEFORE the push by a deliberate freeze 5; nothing may be loosened.
   2. T3 (owner authorizes, once): publish this record = push chore/state-post-110 to origin, open a PR to main,
      CI green, merge. The push is the external timestamp of the Stage-B digest commitment (adjudication §6:
-     "publish STATE + push the digest commitment" precedes the look). 8 commits, STATE.md only; the last-known
+     "publish STATE + push the digest commitment" precedes the look). 9 commits, STATE.md only; the last-known
      origin/main (535248d1) changed no STATE.md, to be re-confirmed by a fetch at push time.
   3. The look (one-shot and irreversible, T4 semantics; owner authorizes that specific run): the owner's words are
-     written verbatim to r4/stage_b/AUTHORIZATION.txt with COMMITMENT_SHA256=d53c404a…f755c8; then
-     `look.py --look` runs once. It spends F2 and F1 at 15m and 1H forever; 4H stays unspent. It never reruns
-     except as the recovery in r4/stage_b/RECOVERY.md.
+     written verbatim to r4/stage_b/AUTHORIZATION.txt with COMMITMENT_SHA256=154a75c4…2211; then
+     `look.py --look` runs once, with no other flag. It spends F2 and F1 at 15m and 1H forever; 4H stays unspent.
+     It never reruns except as the recovery in r4/stage_b/RECOVERY.md.
   4. Standing: collector HOLD until a carried candidate exists. Gate research CLOSED for this generation by
      V2a's pre-declared closure; reopening needs a new generation and a new digest.
   R3 decisions requested in
@@ -139,9 +144,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The R4 Stage-A decisions are ruled (LOOP
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner: the Fable pre-look audit, then the T3 publication, then the look's authorization
-  (OWNER_BOUNDARY 1-3). look.py --look refuses without AUTHORIZATION.txt. No R3 step before a ruling on
-  WAVE2_REPORT.md §6.
+NEXT_ACTION=WAIT for the owner: the Fable review of freeze 4, then the T3 publication, then the look's
+  authorization (OWNER_BOUNDARY 1-3). look.py --look refuses without AUTHORIZATION.txt and refuses any extra flag.
+  No R3 step before a ruling on WAVE2_REPORT.md §6.
   - The prepared F3 tool (.work/research3/wave2/f3/f3_accumulate.py) refuses before 2026-09-21T00:00Z and must
     not be run without ruling 3.
   - Candidate next work, once approved (WAVE2_REPORT.md §7): W3-A long-holdout protocol (only if 1b);
@@ -196,52 +201,70 @@ R4=Research generation 4, Stage A, in .work/research3/r4 (gitignored). Analysis 
     rather than wording (V1's band scope, V0's fold matching, M1's claim-before-score ordering). The ONE
     bounded re-check (recheck_stage_a.py) asserts every finding's fix mechanically: 40/40 pass.
 R4_STAGE_B=The pre-look package, .work/research3/r4/stage_b (gitignored; nothing in it has read F1 or F2).
-  - Digest commitment, frozen locally 2026-09-18T10:49:01Z (freeze-once; the third local freeze - two earlier
-    ones were superseded before any push and are kept in stage_b/superseded/ with the reason). These lines are
-    what the T3 push timestamps; every other pin (49 code files, 28 sealed-input digests, environment,
-    constants, rulings, interpretations) is inside the commitment and bound by its sha256:
+  - Digest commitment: FREEZE 4, frozen locally 2026-09-18T14:01:42Z (freeze-once). Freezes 1-3 were superseded
+    before any push and are kept in stage_b/superseded/ with their reasons; freeze 3 (d53c404a) got the Fable
+    NO-GO. These lines are what the T3 push timestamps; every other pin (49 code files, 28 sealed-input digests,
+    environment, constants, rulings, 15 interpretations, the diagnostics declaration) is inside the commitment,
+    and every other R4 file is inside evidence_r4.sha256:
     ```
-    d53c404ae68b7176198e33ebe5b42936d00d0ed7e42ae4747abed121f8f755c8  r4/stage_b/STAGE_B_COMMITMENT.json
+    154a75c48d89bb3e9ff76914b4b1926d91fecc4a48bf9448c1e4f93b628e2211  r4/stage_b/STAGE_B_COMMITMENT.json
     8249c4297066127c9eb440ee62e2b7919842a7a2c98c3c1d34a51c0b54ae2b13  r4/m0/R4_CANDIDATES.json
     94280cddbf789258bdff4db03bb534f146d3a0f9d43a1dc87b9f8682a2132bd3  r4/m0/R4_DECISION_RULES.json
     81160254fce7a3fdfffbb1b17cfb4e4fb5e29189c6ec427b63d4792ba1a65c35  r4/v1/REFERENCE_SPEC_V2.json
-    62ccbe8a590dd8b5a0640661c413c32a9fb23da37c51dd7e3cfb1315f48360a0  r4/stage_b/decision.py
-    092a23b2dc6bb72abafe8178fe5569ba137ab402fa931a53ea8e1fd08c8dec32  r4/stage_b/look.py
-    629691a8870f9e1d6fe22fdabd4955e651256d702acbb362cecafeb1e8c85543  r4/m1/pipeline.py
-    b538f7c4973722c902bb1238d8103423dbd2b031b9391407153465cd9664ecc3  r4/stage_b/F2_PROVENANCE.json
+    77a4ebc008674d01b2ff723fcc0a9593c19d1b96b311f7976c1249948f618f47  r4/stage_b/decision.py
+    c69404b826ee134fe1e4ed74b7a1c4dbe07cdaf83d7bcf89f6d3e5b90d44a245  r4/stage_b/look.py
+    a6a258992e50c05c99ff8129373c6d55cea091f6559263080cb329f1fa6eba24  r4/m1/pipeline.py
+    a8afc590df368850c5dc7c98c1834594e64fb94e77f9a4abc70638ce8dfcd79f  r4/stage_b/F2_PROVENANCE.json
+    80f4940f5cc2af078741e8e9a1752df0c6ef9ba070ed592a56d07cb393746371  r4/stage_b/REHEARSAL_B.json
+    dcc2b8ff005185785cabb4f06ba83fffdbfb8f806688b0fee602f5595caa8fbc  r4/stage_b/RECHECK_PRELOOK.json
+    622fbc84f29b937693048e8a628fdf4ab2f6f6f0ea11d53ba506dfc8ac8fc2f9  r4/stage_b/RECOVERY.md
+    6519f495942012ec3fd0fee66b0c99f8416e70b98080ff47dbf71ab737ed7174  r4/stage_b/FABLE_PRELOOK_AUDIT_PACK.md
+    93bb78751cd71dcb7664f63d7c93451d343927c9ffe14b5d33a64dac41116b93  evidence_r4.sha256
     092a93043f789b82869c06fec6dfdd16f754dc3c7fd97f7c357828cecd9bc3ad  evidence_wave2.sha256
     5633c49bb9232f906feb5a65ba5c9be8d981264be59e5428b4a2694341510bf0  r4/FABLE_R4_ARCHITECTURE_ADJUDICATION.md
     ```
-  - Scope: 15m and 1H; 4H NOT SCORED (owner ruling). Candidates C1 < C0 < C2 < C3 in the fixed sequence (15m
-    C1 -> C2 -> C3, since C0 = C1 there; 1H C1 -> C0 -> C2 -> C3); controls static day-type (must fail) and
-    B3Dev; comparator = reference generation 2 (15m 7 days, 1H 28 days). F2 = build_f2.py's grid, a deployment
-    is one grid fold; F1 = DEV folds 1-6 exactly as E8, with no cross asset (unused by every model). 14
-    interpretations of the rule text, each literal or the stricter reading, are listed in decision.py and in the
-    commitment. The look imports 14 product modules through R2's code (B3Dev's frozen parameters, calibration
-    metrics); they are pinned and byte-identical on the main worktree (2c6df51) and on main (535248d1).
+  - Freeze 4 answers the Fable audit (session 'Fable 5.1 MAX audit', 2026-09-18) as the owner ruled, as a
+    stricter pre-look interpretation and not a §5.8-2 edit (M0 byte-identical, no sealed score exists, the pass
+    region only shrinks):
+    - H1/I8, M1/I2, M2/I10: the audit's texts verbatim. Every candidate carried at any point must pass the
+      primary rule; each score is counted separately on F2 deployments and F1 symbols; a knob-free 90% MCS is
+      computed from the ordered-pair p-values, reported, never used.
+    - M3: a crash before the claim resumes deterministically (same blind map, copies verified, completed or
+      atomically replaced, the resume recorded in the claim); nothing is deleted by hand.
+    - L1: look mode refuses every flag but --look and creates nothing before its checks; a single-use claim
+      reserves its sets in m0/LOOKS_CONSUMED.log at claim time, so an orphaned claim can never be replaced.
+    - L2: the control must demonstrably fail on EACH set, else UNINFORMATIVE; recovery re-checks the blind map.
+    - L3 (owner: YES): predeclared diagnostics only - weekly block means and per-unit deployment effects of model
+      minus reference, both scores, bands 0.002 / 0.003 / 0.0045; no raw rows; never read by the decision; never
+      used to tune.
+    - L4: AUTHORIZATION.txt is snapshotted into the claim; this digest block is extended.
+    - L5: unchanged (the audit judged it irrelevant for `python look.py`).
+  - Scope: 15m and 1H; 4H is excluded (owner ruling) and is never reported as a status. Candidates C1 < C0 < C2 <
+    C3 in the fixed sequence (15m C1 -> C2 -> C3, since C0 = C1 there; 1H C1 -> C0 -> C2 -> C3); controls static
+    day-type (must fail) and B3Dev; comparator = reference generation 2 (15m 7 days, 1H 28 days). F2 =
+    build_f2.py's grid, a deployment is one grid fold; F1 = DEV folds 1-6 exactly as E8, with no cross asset
+    (unused by every model). The look imports 14 product modules through R2's code (B3Dev's frozen parameters,
+    calibration metrics); they are pinned and byte-identical on the main worktree (2c6df51) and on main.
   - Provenance (F2_PROVENANCE.json, from code, manifests and reports only): F2's only reader was
     wave2/gate/build_f2.py, which fitted B3Dev only and scored B3Dev and the 28-day references under the
-    'reference_model' guard; its outputs fed only the N4 null and the E-7 re-derivation. No C0-C3 candidate was
-    ever fitted or scored on F2. F1 has never been read by any scoring code. Supports the owner's statement.
-  - Claim-before-score and immutable-snapshot recovery: the claim (rules, registry, snapshot and blind-map
-    digests, blinded roles) is fsynced before any score; the 28 sealed files are copied read-only at claim
-    time and the look reads only the copies; RUN_LOG.txt markers and m0/LOOKS_CONSUMED.log make a spent look
-    unrepeatable even if files are deleted. RECOVERY.md states the rules and the one case code cannot settle
-    (a recurring code-defect crash after the claim = an owner decision).
-  - Rehearsal (REHEARSAL_B.json, 9/9 PASS, stand-ins only, under an audit-hook tripwire that raises on any
-    sealed open): the F2 builder reproduces DEV's stored rows (81 features) exactly; the F1 path reproduces
-    693,670 attested E8 predictions bit for bit; 18,729,090 predictions of all six models are identical with
-    and without a cross asset; crash-after-claim recovers from the snapshot; a rerun, a deleted result and a
-    tampered copy are refused; look mode verified the commitment, registry, code, environment and constants
-    and then refused for the missing authorization, before any sealed read.
+    'reference_model' guard. No C0-C3 candidate was ever fitted or scored on F2. F1 has never been read by any
+    scoring code. The audit re-derived this independently.
+  - Rehearsal REHEARSAL_B.json 11/11 PASS against freeze 4 (stand-ins only, under an audit-hook tripwire): B1-B4
+    and B9 data paths exact; B5 crash after the claim recovers, a crash before the claim resumes with the same
+    blind map and a damaged copy repaired, and a rerun, a deleted result, a tampered copy and a changed blind map
+    are refused; B6 look mode refuses every extra flag and, with no flag, passes commitment, registry, code,
+    environment and constants and stops only at the missing authorization, creating nothing; B7 decision cases
+    incl. the audit's counterexample; B10 diagnostics present and inert; B11 claim-time reservation. The one
+    bounded re-check of the diff, RECHECK_PRELOOK.json, passes 24/24 and shows nothing outside the diff moved.
   - Disclosed: Stage A's evidence-manifest builds hashed the sealed files' bytes when re-verifying the Wave-2
-    manifest (integrity only: no parse, no score). From the Stage-B preparation on, that script skips them.
+    manifest (integrity only; the audit judged this consistent with "no F-look"). From the Stage-B preparation
+    on, that script skips them.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
   - Wave 1: lanes/wave1/README.md, evidence_wave1.sha256 (235 files, chained, unchanged).
   - Wave 2: wave2/README.md, evidence_wave2.sha256 (chained).
-  - R4: r4/README.md, evidence_r4.sha256 (46 entries, chained to all three earlier manifests, 0 mismatches).
+  - R4: r4/README.md, evidence_r4.sha256 (68 entries, chained to all three earlier manifests, 0 mismatches).
   - E0 PASS, exact.
     - R2's code is archived byte-identical, without the sealed attestation, so sealed folds stay refused.
     - The store was rebuilt from the digest-verified R1 cache: 6 cells × 75 arrays, bit-identical.
