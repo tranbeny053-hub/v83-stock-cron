@@ -1,8 +1,9 @@
 # STATE
 
-Updated: 2026-09-17. R3 Wave 2 is complete (research only, in .work/research3/wave2), audited once with its
-fixes re-checked. Earlier the same day: R3 Wave 1, the 0010 T4 acceptance, E0 and G1. main is 535248d1 (#111,
-merged outside this loop, CI green). Nothing is authorized or pending. hf is unchanged at 00705c55.
+Updated: 2026-09-18. R4 Stage A is complete (research only, in .work/research3/r4), audited once with its
+fixes re-checked. Before it, on 2026-09-17: R3 Waves 1 and 2, the 0010 T4 acceptance, E0 and G1. main is
+535248d1 (#111, merged outside this loop, CI green). Nothing is authorized or pending. hf is unchanged at
+00705c55.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -11,7 +12,14 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER after R3 Wave 2 (research only). Nothing is authorized or pending.
+LOOP_STATE=WAITING FOR THE OWNER after R4 Stage A (research only). Nothing is authorized or pending.
+  - R4 rulings (owner, 2026-09-18): O-1, O-2, O-3, O-5, O-6, O-7 = yes; O-4 = yes ONLY under the
+    adjudication's §8. Stage A only; no network, F-look, F3, product, pinned, DB, collector, wiring, freeze
+    or T0.
+  - R4 owner amendment (2026-09-18), recorded verbatim in m0/R4_DECISION_RULES.json: F2 was touched once, in
+    Wave 2, candidate-blind - only B3Dev and the references were scored on it, for the N4 real-regime null.
+    No C0-C3 candidate was ever fitted or scored on F2 and no rule or constant was tuned on it. F2 was not
+    re-read in Stage A, so V1 chose the reference memory on DEV alone.
   - Wave-2 rulings (owner, 2026-09-17):
     - Wave 2 GO; R3C and the three exploratory arms are research-only;
     - v2 exact symmetry, v1 unchanged;
@@ -32,9 +40,9 @@ LOOP_STATE=WAITING FOR THE OWNER after R3 Wave 2 (research only). Nothing is aut
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=R3 frontier research, Wave 2 COMPLETE (R3); Wave 1, E0 and G1 before it. The post-release prep is
+CURRENT_MILESTONE=R4 Stage A COMPLETE (research only); R3 Waves 1-2, E0 and G1 before it. The post-release prep is
   merged, and 0010 is applied. Still excluded: consumed-holdout evaluation, pinned-file changes, wiring, a v2 freeze, a new T0,
-  any database action, any HF deploy.
+  any database action, any HF deploy. R4 Stage B (the single F1 + F2 look) is NOT authorized.
 CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
   main has since moved to 535248d1 (#111), which changed no STATE.md, so publishing merges cleanly.
   The batch branches are merged, and remain on origin:
@@ -50,7 +58,9 @@ LAST_GREEN_SHA=535248d1 (main, PR #111: the last two Node-20-era workflows moved
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
-  - Re-run for this R3 Wave-2 record, on the STATE branch at 529ec7e plus this change: the same result
+  - Re-run for this R4 Stage-A record, on the STATE branch at da794b1: the same result (2445 passed,
+    scanners 3/3), 2026-09-18. R4 is entirely inside gitignored .work/, so this change is STATE.md alone (T0).
+  - Re-run for the R3 Wave-2 record, on the STATE branch at 529ec7e plus that change: the same result
     (2445 passed, scanners 3/3). The same held for the Wave-1 record at 56ca7f8.
   - Composition c641fec2 (B, C, D, A onto 08c77f09) has tree 2e1667b4, equal to main e22ce337.
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
@@ -67,13 +77,30 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
     - Its outputs equal the first implementation: 8,856 deterministic values, max diff 1.7e-17.
     - Scope: allowances, effects, N4 rates and method-A power. The Monte Carlo nulls, N3, N5, method B and the
       selection code were not re-derived.
-  - R3 Waves 1 and 2 were each audited once by a single read-only Claude review agent, followed by one bounded
-    re-check of the findings.
+  - R3 Waves 1 and 2 and R4 Stage A were each audited once by a single read-only Claude review agent,
+    followed by one bounded re-check of the findings. R4 Stage A used no Codex.
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested in
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R4 Stage-B decisions requested in
+  .work/research3/r4/R4_STAGE_A_REPORT.md §9. Stage B is ONE run: the single attested look at F1 and F2
+  together. It is not authorized and Stage A opened neither set.
+  1. whether to spend the look at all. V2a found no qualifying prospective design for 15m, so the ceiling for
+     this generation is HISTORICALLY CONFIRMED, never PROSPECTIVE-ELIGIBLE. The look still answers whether the
+     15m DEV advantage survives on unmined data, permanently, either way - but it buys no gate;
+  2. whether 4H enters the look. On DEV every 4H candidate fails the primary rule on the Brier p-value alone,
+     and the 4H comparator is measurably noisy. Recommendation: EXCLUDE 4H and record why. DEV is mined, so a
+     DEV failure is not a prediction about F2;
+  3. whether a collector is worth four months of shadow collection on 15m (r4/r1/REPLACEMENT_CLAIM.md).
+     Independent of the look; 15m or nothing; 18 weeks before a first look is possible. A collector is T2 on
+     the serving path and T3/T4 to run in production;
+  4. the D0 §1 rewrite: the literal closure rule failed on one number (15m Brier weakest-fold weeks 22 -> 25,
+     conservative). The rewrite is applied and no verdict moved, but the owner may treat the FAIL as a stop
+     point rather than a remedy-and-continue.
+  Also open from R4: gate research for this generation is CLOSED by V2a's pre-declared closure. Reopening it
+  would need a new generation and a new digest.
+  R3 decisions requested in
   .work/research3/wave2/WAVE2_REPORT.md §6:
   1. gate scope after the G3 exclusion:
      (a) research only, recommended;
@@ -108,7 +135,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. R3 decisions requested in
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner. No R3 step runs before a ruling on WAVE2_REPORT.md §6.
+NEXT_ACTION=WAIT for the owner. No R4 step runs before the Stage-B decisions in r4/R4_STAGE_A_REPORT.md §9,
+  and no R3 step before a ruling on WAVE2_REPORT.md §6.
   - The prepared F3 tool (.work/research3/wave2/f3/f3_accumulate.py) refuses before 2026-09-21T00:00Z and must
     not be run without ruling 3.
   - Candidate next work, once approved (WAVE2_REPORT.md §7): W3-A long-holdout protocol (only if 1b);
@@ -116,11 +144,58 @@ NEXT_ACTION=WAIT for the owner. No R3 step runs before a ruling on WAVE2_REPORT.
   - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, the 0010 apply, or the PROD-SAFE-3
     deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
+R4=Research generation 4, Stage A, in .work/research3/r4 (gitignored). Analysis only; no sealed set was
+  opened, no network call was made, and nothing outside r4/ was written (verified by mtime across research3).
+  - Input: FABLE_R4_ARCHITECTURE_ADJUDICATION.md, sha256 5633c49b…, 610 lines. An independent review, advice
+    only. It is NOT in git; the owner supplied it into the gitignored .work tree.
+  - Package: r4/R4_STAGE_A_REPORT.md, R4_STAGE_A_TABLES.md (generated by render_tables.py), README.md,
+    RECHECK_STAGE_A.json, and ../evidence_r4.sha256.
+  - Registry frozen by digest: m0/R4_CANDIDATES.json 8249c429…, m0/R4_DECISION_RULES.json 94280cdd….
+    m1/pipeline.guard() refuses to open a confirmation run if either moves; build_registry.py refuses to
+    rewrite the digest log once it exists. The registry was frozen LAST, over the final lane code: what it
+    binds is Stage B, and the Stage-A lanes are bound by evidence_r4.sha256 instead.
+  - D0 (the gate on every other lane): 98 of 99 §1 headlines reproduce inside the 10% rule. The miss is 15m
+    Brier weakest-fold weeks 22 -> 25 (13.6%, conservative), so the literal closure rule FAILED and its
+    prescribed remedy was applied before anything else ran: §1 re-derived into d0/D0_SECTION1_REWRITE.md. No
+    §1 verdict changes. Two definitional findings: "fold effect" has two admissible readings (rows kept by the
+    block design reproduce §1.1; fold means of block means reproduce D-3), and Appendix A's delta log loss is
+    measured on all rows with finite IV, not on the lattice.
+  - V1 (reference generation 2, candidate-blind, DEV only): the adjudication's "strictly harder to beat" guard
+    applies at all three bands, because §5.5 checks the sign at 0.003 and 0.0045. Only 15m admits a change
+    (28 -> 7 days). 1H and 4H keep generation 1: the memories a band-0.002-only rule would have picked (1H 56
+    days, 4H cumulative) are EASIER to beat at the sign-check bands, which would have weakened the frozen
+    Stage-B test. Spec digest dd74e881….
+  - M1 (the confirmation pipeline, rehearsed, never used on a sealed set): R3C's pooled DEV log loss
+    reproduces exactly (1.044444 / 1.032848 / 0.910918); the E8 replay re-derives 1,416 floats and 96 booleans
+    with 0 mismatches (worst 2.1e-17); the crash test passes 9 conditions, including scoring-before-claim
+    refused and a m0/LOOKS_CONSUMED.log ledger that refuses a second look even after the run directory is
+    deleted. On DEV, 15m and 1H pass the §5.5 primary rule and 4H fails on the Brier p-value alone
+    (log loss -0.0123 at p 0.0004; Brier -0.0007). DEV is mined: these are rehearsal numbers, not claims.
+  - V0 (staleness, fold-matched): 15m is flat to 361 days (0.98 / 0.98 / 0.93 / 0.97); 1H is 0.92 at 242 days
+    and 0.73 at 403; 4H is 0.58 at 363. A 52-week 4H holdout is not covered by the 25% haircut.
+  - V3: PSG-2's |A - B| <= 0.10 agreement rule rejects CORRECT designs up to 69% of the time (33% at the 15m
+    L16 cell). The one-sided A >= B - 2*SE_A holds 96-99%. No PSG-2 verdict changes: the cell that failed had
+    A above B.
+  - U1 (nonlinear closure probe, never a candidate): a boosted regressor is WORSE than linear on every
+    timeframe (-3.2% / -5.6% / -18.9% pooled, 2/0/0 of 6 folds improved). The family is closed for this
+    generation.
+  - V2a (PSG-3 design freeze for 15m, run only because O-4 = yes under §8): 30 designs, ZERO qualify. Without
+    the regime allowance size is 0.093-0.197 against a 0.050 ceiling; with it, power is 0.05-0.20 against
+    0.80; beyond L = 26 the allowance is not estimable at all (N_eff = 1 at L 39 and 52). N5 is 0.000
+    everywhere. The pre-declared closure fires: 15m is prospectively ungateable under this estimand and GATE
+    RESEARCH STOPS FOR THIS GENERATION. PSG-2 was read, never rerun or amended.
+  - Design papers (advisory, binding nothing): s1/STATUS_VOCABULARY.md (four statuses, the estimand sentence,
+    forbidden words) and r1/REPLACEMENT_CLAIM.md (the claim R4 cannot make, the minimal collector, and the
+    18-week floor on 15m).
+  - Audited once, read-only: 3 HIGH, 9 MEDIUM, 12 LOW. All bounded findings fixed; three changed results
+    rather than wording (V1's band scope, V0's fold matching, M1's claim-before-score ordering). The ONE
+    bounded re-check (recheck_stage_a.py) asserts every finding's fix mechanically: 40/40 pass.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
   - Wave 1: lanes/wave1/README.md, evidence_wave1.sha256 (235 files, chained, unchanged).
   - Wave 2: wave2/README.md, evidence_wave2.sha256 (chained).
+  - R4: r4/README.md, evidence_r4.sha256 (46 entries, chained to all three earlier manifests, 0 mismatches).
   - E0 PASS, exact.
     - R2's code is archived byte-identical, without the sealed attestation, so sealed folds stay refused.
     - The store was rebuilt from the digest-verified R1 cache: 6 cells × 75 arrays, bit-identical.
