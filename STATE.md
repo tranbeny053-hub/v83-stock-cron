@@ -1,9 +1,13 @@
 # STATE
 
-Updated: 2026-09-18. The R4 Stage-B pre-look package is at FREEZE 4 (research only, .work/research3/r4/stage_b):
-the independent Fable pre-look audit returned NO-GO on freeze 3, the owner accepted it, and freeze 4 applies every
-change it listed. The look itself has NOT run and no F1/F2 byte was read. main is 535248d1 (#111, merged outside
-this loop, CI green). hf is unchanged at 00705c55. This record is the T3 publication candidate.
+Updated: 2026-09-19. R4's single F2 + F1 look RAN ONCE (owner T4, 2026-09-18T16:29Z, claim 95c339ef…) and is
+consumed: 15m and 1H are HISTORICALLY CONFIRMED, with C1 carried at both. 4H was excluded, never read, and is still
+unspent. STAGE C IS CLOSED: C1 wrote the decision record; C2 (V2b) STOPPED, because V2b's frozen machinery needs F2
+rows the look never persisted and the freeze already records V2b as not run; C3's bounded Codex second
+implementation reproduced the decision, and the independent Fable re-audit returned ACCEPT WITH FINDINGS, whose six
+corrections are applied; C4 wrote the owner package and the closure record. The collector stays OFF, and the next
+lane is its pre-registration and dependency plan, on paper. main is 9bb2cde (#112, the freeze-4 publication, CI
+green). hf is unchanged at 00705c55. This record is local; publishing it is a T3.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -12,7 +16,32 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: R4 Stage-B pre-look package ready (local only). Nothing is run or pushed.
+LOOP_STATE=WAITING FOR THE OWNER: R4 is closed through C4; publishing this record is the only open R4 step.
+  Nothing is pushed.
+  - Stage-C closure ruling (owner, 2026-09-20), verbatim in r4/stage_c/c4/FABLE_C3_VERDICT.txt: the independent
+    Fable C3 re-audit returned ACCEPT WITH FINDINGS; apply its six corrections exactly (the F2-15m long-memory
+    caveat and range; no 1e-28-class evidence-strength claim; the thinnest robustness margin is F2 15m; C3 is 173
+    computed plus 16 presence-only fields; the sign flip addresses non-normality, not serial dependence; the 1H-F2
+    MCS exclusion is marginal); keep 15m and 1H HISTORICALLY CONFIRMED with C1 carried and 4H unread and unspent;
+    build C4 from persisted evidence only; the collector stays OFF and the next lane is its pre-registration and
+    dependency plan; remove the proven foreign housekeeping only if re-confirmed; stop before any push, collector,
+    wiring, freeze or deploy.
+  - Stage-C instruction (owner, 2026-09-19), verbatim: "Continue from the completed R4 Stage-B one-look. Treat the
+    one-look as final: F1/F2 15m+1H are consumed and must never be reopened, rescored, retuned or rerun; 4H remains
+    unread/unspent. Execute Stage C exactly as frozen: C1 create the durable R4 decision record from the
+    already-persisted look evidence; C2 run V2b mechanically using only inputs already preserved by the look plus
+    DEV, first proving those persisted summaries are sufficient—if any raw F1/F2 reread would be required, STOP
+    instead. No model search or rule changes. Then prepare C3: one minimal bounded Codex second
+    implementation/Monte-Carlo task only, optimized for minimal Codex tokens, and a separate minimal Fable MAX
+    independent-audit pack. Do not substitute Codex for Fable judgment. Finish deterministic/local verification,
+    update STATE locally, and stop before any push, collector activation, freeze/wiring/deploy or other T3/T4.
+    Also report whether C2 changes any Stage-B status and the exact Fable handoff needed next."
+  - The R4 look T4 (owner, 2026-09-18) is CONSUMED and VERIFIED. The owner's words are verbatim in
+    r4/stage_b/AUTHORIZATION.txt (sha256 b344bfb1…). One command, one clean pass; evidence in
+    r4/stage_b/look_evidence (R4_STAGE_B, R4_STAGE_C).
+  - The freeze-4 publication T3 (owner, 2026-09-18) is CONSUMED and VERIFIED as PR #112 -> 9bb2cde. It was
+    re-authorized once, only to correct the post-merge tree check. Both texts are verbatim in
+    r4/stage_c/b_run/T3_112_AUTHORIZATION.txt.
   - Pre-look audit ruling (owner, 2026-09-18), verbatim in the freeze-4 commitment: "Fable NO-GO accepted:
     re-freeze #4 with I2/I8/I10 exactly tightened; fix M3 in code with deterministic pre-claim resume/no manual
     deletion, refuse --workdir in look mode, bundle L2+L4, and L3=YES only for predeclared diagnostic summaries
@@ -51,24 +80,37 @@ LOOP_STATE=WAITING FOR THE OWNER: R4 Stage-B pre-look package ready (local only)
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=R4 Stage-B PRE-LOOK PACKAGE READY (research only); Stage A, R3 Waves 1-2, E0 and G1 before it. The
-  post-release prep is merged, and 0010 is applied. Still excluded: consumed-holdout evaluation, pinned-file changes,
-  wiring, a v2 freeze, a new T0, any database action, any HF deploy. The single F1 + F2 look has NOT run.
-CURRENT_BRANCH=chore/state-post-110 (LOCAL), from main e22ce337: this record, unpublished (OWNER_BOUNDARY).
-  main has since moved to 535248d1 (#111), which changed no STATE.md, so publishing merges cleanly.
+CURRENT_MILESTONE=R4 CLOSED THROUGH C4 (research only). C1 record, C2 STOP, C3 second implementation plus the
+  independent re-audit (ACCEPT WITH FINDINGS, corrections applied), C4 owner package and closure record. Stage B's
+  look is consumed; Stage A, R3 Waves 1-2, E0 and G1 came before it. The next lane is the prospective collector's
+  pre-registration and dependency plan, on paper. Still excluded: collector activation, a freeze, wiring, a new T0,
+  any database action, any HF deploy, and any further F1/F2 read.
+CURRENT_BRANCH=chore/state-post-112 (LOCAL, no upstream), from main 9bb2cde: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-110 is merged (#112) and stays on origin: its push is the commitment's timestamp.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=535248d1 (main, PR #111: the last two Node-20-era workflows moved to the reviewed Node-24 pins).
+LAST_GREEN_SHA=9bb2cde (main, PR #112: the R4 freeze-4 publication, STATE.md only).
+  - Merged 2026-09-18T16:03:50Z by this loop under the owner's T3, with --match-head-commit 2860ab3e.
+  - Parents (535248d1, 2860ab3e); tree f3df2035; STATE.md blob 24ae56b4. #111's three files are byte-identical to
+    535248d1.
+  - The exact-head check `test` passed at 15:37:46Z and the exact-main check `test` at 16:06:40Z (2026-09-18).
+  Before it: 535248d1 (PR #111: the last two Node-20-era workflows moved to the reviewed Node-24 pins).
   - Merged 2026-09-17T07:36:36Z from the owner's account. It was not created or merged by this loop.
   - Parents (e22ce337, e0dd56ac). It changes only oos-pair-evidence.yml, resolve-outcomes.yml and a new
     workflow test; no src/, ops/ or STATE.md.
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2445 passed | schemas+smoke ok | scanners 3/3 · 2026-09-17 (local).
+LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-19 (local).
+  - Run for this R4 Stage-C record on chore/state-post-112, i.e. main 9bb2cde plus this change. R4 lives in
+    gitignored .work/, so the change is STATE.md alone (T0). 2450 = the earlier 2445 + the 5 tests of #111's
+    workflow test file, now on main.
+  - Re-run after the C4 closure, on the same branch: the same result (2450 passed, scanners 3/3), 2026-09-20.
+  - Stage C's own checks: verify_stage_c.py 16/16 (STAGE_C_VERIFIED). Since the look, nothing outside r4/stage_c
+    changed under .work/research3, and src/ and the tracked tree are unchanged.
   - Re-run for this R4 freeze-4 record, on the STATE branch at acf6f95 plus this change: the same result (2445
     passed, scanners 3/3), 2026-09-18. R4 is entirely inside gitignored .work/, so the change is STATE.md alone
     (T0). The same held for the freeze-3 record at a8d7920 and the Stage-A record at da794b1.
@@ -91,24 +133,27 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
       selection code were not re-derived.
   - R3 Waves 1 and 2 and R4 Stage A were each audited once by a single read-only Claude review agent,
     followed by one bounded re-check of the findings. R4 Stage A used no Codex.
+  - R4 Stage C used the one bounded C3 delegation plus its one targeted repair (2 of 4 delegations).
+    - task-822 stopped BLOCKED in its comparison adapter, because the task under-described the recorded layout.
+      The first causal failure is preserved: result-822.json, codex-822.log and c3/second_impl.attempt1.py.
+    - task-823 (DONE) changed only that adapter.
+    - Codex read only the two blinded evidence files and its own task and script. It opened no sealed file, no
+      snapshot copy and none of decision.py, look.py or pipeline.py.
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The R4 Stage-A decisions are ruled (LOOP_STATE). What remains, in order:
-  1. RECOMMENDED FIRST: one read-only Fable review of freeze 4 (r4/stage_b/FABLE_PRELOOK_AUDIT_PACK.md, which
-     maps each of its findings H1, M1-M3, L1-L4 to the change and the evidence). It must not open F1/F2. Anything
-     it asks for is applied BEFORE the push by a deliberate freeze 5; nothing may be loosened.
-  2. T3 (owner authorizes, once): publish this record = push chore/state-post-110 to origin, open a PR to main,
-     CI green, merge. The push is the external timestamp of the Stage-B digest commitment (adjudication §6:
-     "publish STATE + push the digest commitment" precedes the look). 9 commits, STATE.md only; the last-known
-     origin/main (535248d1) changed no STATE.md, to be re-confirmed by a fetch at push time.
-  3. The look (one-shot and irreversible, T4 semantics; owner authorizes that specific run): the owner's words are
-     written verbatim to r4/stage_b/AUTHORIZATION.txt with COMMITMENT_SHA256=154a75c4…2211; then
-     `look.py --look` runs once, with no other flag. It spends F2 and F1 at 15m and 1H forever; 4H stays unspent.
-     It never reruns except as the recovery in r4/stage_b/RECOVERY.md.
-  4. Standing: collector HOLD until a carried candidate exists. Gate research CLOSED for this generation by
-     V2a's pre-declared closure; reopening needs a new generation and a new digest.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record, in order: the Fable review of freeze 4
+  (GO_FOR_T3), the T3 publication (#112) and the look (T4). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-112, STATE.md only). It is the only open R4 step.
+  2. The next lane, on paper only: the prospective collector's pre-registration and dependency plan,
+     r4/stage_c/c4/PROSPECTIVE_COLLECTOR_PLAN.md. Its own boundary is in §6 of that file: research and paper only.
+     Going beyond paper needs three separate authorizations, after that lane's audit — a T2 for the serving-path
+     change, §2.6 for the pinned files, and a T4 for any production database write.
+  3. The collector stays OFF (owner, 2026-09-20). Its HOLD condition is met, since C1 is carried at 15m and 1H, but
+     activation remains the owner's call and nothing in R4 or in the plan activates it.
+  4. Standing: gate research is CLOSED for this generation (V2a; C2 did not reopen it). F1/F2 at 15m and 1H are
+     spent forever, and 4H is unspent. No freeze, wiring or deploy follows from R4 without Stage D (§6, §9).
   R3 decisions requested in
   .work/research3/wave2/WAVE2_REPORT.md §6:
   1. gate scope after the G3 exclusion:
@@ -132,7 +177,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The R4 Stage-A decisions are ruled (LOOP
   favours the lattice).
   CONSUMED, with each authorization kept verbatim:
   - the batch T3 (.work/817/t3-batch/authorization.txt);
-  - the 0010 T4 (.work/818/t4-apply-0010/authorization.txt).
+  - the 0010 T4 (.work/818/t4-apply-0010/authorization.txt);
+  - the R4 freeze-4 publication T3, PR #112 (.work/research3/r4/stage_c/b_run/T3_112_AUTHORIZATION.txt);
+  - the R4 Stage-B look T4, claim 95c339ef… (.work/research3/r4/stage_b/AUTHORIZATION.txt).
   Open, each needing its own authorization:
   - Product decisions:
     (a) adopt the proper-score skill gate for zero-location methodologies (R2 doc §2). This needs the
@@ -144,8 +191,13 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. The R4 Stage-A decisions are ruled (LOOP
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner: the Fable review of freeze 4, then the T3 publication, then the look's
-  authorization (OWNER_BOUNDARY 1-3). look.py --look refuses without AUTHORIZATION.txt and refuses any extra flag.
+NEXT_ACTION=WAIT for the owner. R4 is closed through C4, so the only open R4 step is the T3 that publishes this
+  record (OWNER_BOUNDARY 1). Read r4/stage_c/c4/C4_OWNER_PACKAGE.md first: it carries the result, what R4 does not
+  claim, the six applied corrections and the decisions.
+  - The next lane, when the owner opens it, is paper only: r4/stage_c/c4/PROSPECTIVE_COLLECTOR_PLAN.md. Its first
+    deliverable is the dependency matrix; its duration arithmetic must be re-derived under weekly dependence and
+    may never use the consumed F1/F2 sets.
+  - look.py --look refuses forever. Never run rehearse_b.py again.
   No R3 step before a ruling on WAVE2_REPORT.md §6.
   - The prepared F3 tool (.work/research3/wave2/f3/f3_accumulate.py) refuses before 2026-09-21T00:00Z and must
     not be run without ruling 3.
@@ -259,6 +311,68 @@ R4_STAGE_B=The pre-look package, .work/research3/r4/stage_b (gitignored; nothing
   - Disclosed: Stage A's evidence-manifest builds hashed the sealed files' bytes when re-verifying the Wave-2
     manifest (integrity only; the audit judged this consistent with "no F-look"). From the Stage-B preparation
     on, that script skips them.
+  - THE LOOK RAN ONCE: owner T4, 2026-09-18T16:29:19Z-16:29:52Z, claim 95c339ef…2b40, authorization b344bfb1….
+    Before any sealed open, 30/30 preconditions passed. It was one command, one clean pass, exit 0.
+    - Result, code-decided: 15m HISTORICALLY CONFIRMED and 1H HISTORICALLY CONFIRMED, with C1 carried at both.
+    - C1 passes 13/13 primary checks at each timeframe. The static control fails 13/13 on each set, so the look
+      is informative.
+    - 15m C2 and 1H C0 miss the F2 materiality floor (their deltas are about half of it), so C1 stays carried.
+    - The 90% MCS is reported, never used: 15m {C2}; 1H {C0} on F2 and {C0, C3} on F1. C1 lies outside it: the
+      challengers are statistically, but not materially, better.
+    - 4H was excluded, never read, and is unspent. The runner's 182 sealed opens equal the 28 committed 15m/1H
+      files × 5 plus the 14 pairs × 3.
+    - Evidence: r4/stage_b/look_evidence (read-only), with a 45-entry manifest 1e40020e…. The ledger shows F2 15m,
+      F2 1H, F1 15m and F1 1H CONSUMED. The run record is r4/stage_c/b_run/B_RUN_RECORD.md.
+R4_STAGE_C=Stage C (adjudication §6), mechanical, in .work/research3/r4/stage_c (gitignored). Nothing re-read
+  F1/F2: every Stage-C script runs under an audit hook that refuses the sealed paths and the 28 snapshot copies.
+  - C1: R4_DECISION_RECORD.json (sha256 7618fa40…41d3; .md 78c4827a…). It restates the code-decided result
+    verbatim from the look's evidence copies (17 entries re-verified; the snapshot copies are never re-read), with the
+    provenance chain and the 4H accounting. make_decision_record.py --verify rebuilds it byte for byte.
+  - C2: STOP (C2_V2B_SUFFICIENCY.json 64d3f272…).
+    - V2b's frozen machinery (run_v2a.calibrate, and the sigma_R,UB script regime_allowance.py) consumes
+      row-level score differences with fold labels, and it defines F2 deployment effects as fold means of weekly
+      block means.
+    - The look persisted neither: its longest array is 282 weekly blocks, against 18,014-126,418 rows scored,
+      and it holds no fold or grid key.
+    - A mechanical V2b would therefore need raw F2. Under the owner's rule that means STOP; nothing was computed.
+    - The frozen commitment already records "V2b is not run" (V2a's closure, §5.8-3).
+    - C2 changes no Stage-B status.
+  - C3, Codex (bounded, one delegation plus its one repair):
+    - The decision is reproduced: of the 189 recorded fields, 173 are computed independently and 16 are
+      presence-only (the 15 interpretation names and the one 4H exclusion entry, which C3 does not compute).
+      The agreement claim covers the 173. 0 mismatches.
+    - Block-t was re-derived from the persisted weekly block means: the series match exactly, the pairs within
+      1.8e-15. The unit edges are equal.
+    - 52 sign-flip tests (N = 100,000) with 0 threshold flips. The sign flip permutes signs within the same
+      blocks, so it addresses non-normality of the block means, NOT serial dependence.
+    - Report-only sensitivity: C1's weekly series are serially dependent, lag-1 up to +0.62 at 15m on F2, where
+      R3's G1 also recorded regime long memory. A single AR(1) adjustment is a lower bound, so the honest
+      statement is a range of effectively independent units at 15m on F2, from 25 (the deployments, 25/25
+      negative) to about 76 (AR(1) on the 282 weekly blocks); every check the decision used holds across it. The
+      nominal p-values, down to 1.9e-28, are the frozen test's output under an independence assumption that does
+      not hold, and are never cited as evidence strength. The thinnest robustness margin is F2 15m, not 1H F2,
+      whose lag-1 is negative and whose test is therefore conservative.
+  - C3's independent Fable re-audit: ACCEPT WITH FINDINGS, relayed by the owner 2026-09-20
+    (c4/FABLE_C3_VERDICT.txt). Its six required corrections are applied, in c4/R4_CLOSURE_RECORD.json
+    ("corrections"), in c4/C4_OWNER_PACKAGE.md and here. No status, carried candidate or number changed: the
+    corrections are about what may be claimed. Pack: FABLE_STAGE_C_AUDIT_PACK.md (f104f25f…).
+  - C4: R4_CLOSURE_RECORD.json (2d345356…) and C4_OWNER_PACKAGE.md (3725ad02…), built only from the persisted
+    Stage-B and Stage-C records: nothing was recomputed, re-read or re-tested. The 1H-F2 MCS exclusions of C1
+    (p 0.0196) and C3 (0.0236) against a 0.0333 threshold are marginal, and the MCS is reported, never used.
+    The collector stays OFF; the next lane is c4/PROSPECTIVE_COLLECTOR_PLAN.md, on paper, carrying the F2-15m
+    dependence caveat into any duration arithmetic (r1's 18-week floor assumed independent weeks).
+  - Verification: verify_stage_c.py, 16/16 PASS, STAGE_C_VERIFIED (it rebuilds C1, C2 and C4 byte for byte,
+    checks C3's recorded outcome, the manifest and the publication commit).
+  - Manifest: STAGE_C.sha256, 29 entries, sha256 c2913d364439dd9410d7995895a68819282dd142d6b0690993f781ed6fcce4ca.
+    It includes the Codex task, result and log files. The T3 and T4 run records are in stage_c/b_run/. The
+    Fable-audited manifest was 1d9cc519…, the same files without the C4 additions.
+  - Housekeeping (owner-authorized, mechanical, outside every evidence and freeze input): the foreign IDRM memory
+    note and its one MEMORY.md index line, written into Claude's UCPE memory by an IDRM session on 2026-09-18,
+    and the two deferred Finder files (the repo root .DS_Store and .work/.DS_Store) were moved to
+    ~/.Trash/UCPE-foreign-quarantine-2026-09-20/ with a MEMORY.md backup. Untouched: r4/.DS_Store, which IS an
+    entry in evidence_r4.sha256 (digest 70207ebf…), and the other .DS_Store files inside .work/research3.
+  - evidence_r4.sha256 verifies 67 of 68 entries. The single difference is m0/LOOKS_CONSUMED.log, which the look
+    appended to by design; the manifest's own digest is unchanged at 93bb7875….
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -390,6 +504,11 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
   - Every T3 batch through PR #106, and the post-release batch T3 (PRs #107-#110).
+  - The R4 freeze-4 publication T3 (PR #112).
+  - The R4 Stage-B look: claim 95c339ef…, 2026-09-18T16:29Z. look.py --look refuses forever, because of the result,
+    the run log and the ledger. Never run rehearse_b.py again: AUTHORIZATION.txt exists. Never delete or edit
+    r4/stage_b/look_run/, look_evidence/, AUTHORIZATION.txt or r4/m0/LOOKS_CONSUMED.log. Never read the 28 snapshot
+    copies again.
 SECTION_5A_RESULT=Consumed once, 2026-09-15, and recomputed offline with identical results.
   - authorized_cells = [] (NONE).
   - 15m (466 pairs), 1H (257) and 4H (86) are each NOT_PASS: "requirement(s) not met: A, B2".
