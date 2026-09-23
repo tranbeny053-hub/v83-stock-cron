@@ -1,13 +1,13 @@
 # STATE
 
-Updated: 2026-09-23. R4, the B lane and the NEXTGEN lane are published (main eabf0e94, PR #115). 15m and 1H are
-HISTORICALLY CONFIRMED with C1 carried, and F3 is KEEP UNSPENT. The owner has now ruled all six D-1 decisions, so
-**D-1 is CLOSED** (nextgen/D1_RULING.md). Path A's claim template, its USER_REQUESTED-only evidence class, the
-REPLACEMENT_* verdicts, R2 §2 in principle only, R2 §4's display through an additive backend field, and hiding
-H_extended from users are all fixed on paper; none is implemented. A separate owner brief on opening a new
-generation and on order-flow collection is ready (nextgen/NEWGEN_ORDERFLOW_BRIEF.md). Nothing ran and nothing was
-fetched; the product is unchanged. The collector stays OFF. hf is unchanged at 00705c55. This record is local;
-publishing it is a T3.
+Updated: 2026-09-23. R4, the B lane, the NEXTGEN lane, D-1 and the new-generation brief are published (main
+18d0985e, PR #116). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED
+(not implemented). The owner has now opened **NG-1: GO, research-only and free-data-only**. Its paper-only
+admissibility map for historical spot trades/aggTrades and its pre-registered bounded falsification pilot are
+prepared, audited once (REJECT → one bounded repair → re-check PASS) and sealed locally (nextgen/ng1, NG1.sha256).
+Nothing ran and nothing was fetched: no collector, production path, F3 action or market-data download. The product
+is unchanged and hf is unchanged at 00705c55. This record is local; publishing it is a T3, and that publication is
+also the pilot pre-registration's external timestamp.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -16,8 +16,14 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: D-1 CLOSED; the new-generation / order-flow brief awaits a ruling. Nothing is
-  pushed.
+LOOP_STATE=WAITING FOR THE OWNER: NG-1 OPENED; its admissibility map and pilot pre-registration are sealed locally
+  (paper). Nothing is pushed, run or fetched.
+  - NG-1 ruling (owner, 2026-09-23), verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. Owner ruling: **NG-1 GO,
+    research-only/free-data-only**; no collector, production path, F3, or market-data download yet. First prepare
+    and audit a paper-only admissibility map for historical Spot Trades/AggTrades excluding all consumed
+    F1/F2/sealed evidence, plus a preregistered bounded falsification pilot with fixed materiality/kill gates; stop
+    before any fetch/network action or new owner/T2+ boundary."
+  - The D-1 / new-generation brief STATE T3 (#116 → main 18d0985e) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
   - D-1 ruling (owner, 2026-09-23), verbatim: "Owner D-1 ruling: (1) adopt §2 template: one-sided α=.025,
     candidate-refusal cap, A-specific predeclared H range; (2) A evidence class = USER_REQUESTED only, never mixed
     with scheduled shadow; (3) use REPLACEMENT_SUPPORTED / _NOT_SUPPORTED / _PENDING / _UNINFORMATIVE and drop the
@@ -106,19 +112,27 @@ LOOP_STATE=WAITING FOR THE OWNER: D-1 CLOSED; the new-generation / order-flow br
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=D-1 CLOSED (owner-ruled, paper). NEW-GENERATION / ORDER-FLOW BRIEF READY (paper). Still
-  excluded: any implementation of the D-1 rulings, ruling 3, any F3 fetch, any collector (product evidence or
-  research data), network or storage beyond reading, a freeze, wiring, a new T0, any database action, any HF
-  deploy, and any further F1/F2 read.
-CURRENT_BRANCH=chore/state-post-115 (LOCAL, no upstream), from main eabf0e94: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on
-  origin; -110's push is the R4 commitment's timestamp.
+CURRENT_MILESTONE=NG-1 OPENED (owner, research-only/free-data-only). Admissibility map and bounded falsification
+  pilot PRE-REGISTERED (paper; audited; sealed locally; not run and not authorized to run). Still excluded: any
+  pilot stage, any market-data download or research-data fetch, ruling 3, any F3 fetch, any collector (product
+  evidence or research data), a freeze, wiring, a new T0, any database action, any HF deploy, any further F1/F2
+  read, and any implementation of the D-1 rulings.
+CURRENT_BRANCH=chore/state-post-116 (LOCAL, no upstream), from main 18d0985e: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged
+  and stay on origin; -110's push is the R4 commitment's timestamp.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=eabf0e94 (main, PR #115: the NEXTGEN STATE record, STATE.md only).
+LAST_GREEN_SHA=18d0985e (main, PR #116: the D-1 closure, new-generation brief and archive-note STATE record,
+  STATE.md only).
+  - Merged 2026-09-23 by this loop under the owner's T3, with --match-head-commit a7407f5a.
+  - The first push was refused by GitHub (HTTP 500) and published nothing. After every precondition was re-checked,
+    one identical push succeeded.
+  - Parents (eabf0e94, a7407f5a); tree abe678d3, recorded before the push and matched after; STATE.md blob 9efa8e43.
+  - The exact-head check `test` passed at 14:48:39Z and the exact-main check `test` at 14:52:43Z (2026-09-23).
+  Before it: eabf0e94 (PR #115: the NEXTGEN STATE record, STATE.md only).
   - Merged 2026-09-23 by this loop under the owner's T3, with --match-head-commit 7ceafdeb.
   - Parents (08cb148f, 7ceafdeb); tree 30a7b313, recorded before the push and matched after; STATE.md blob 66ab63c4.
   - The exact-head check `test` passed at 13:31:40Z and the exact-main check `test` at 13:34:59Z (2026-09-23).
@@ -145,7 +159,11 @@ LAST_GREEN_SHA=eabf0e94 (main, PR #115: the NEXTGEN STATE record, STATE.md only)
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-23 (local).
-  - Run for this D-1 closure record on chore/state-post-115 (main eabf0e94 plus this STATE.md change; T0).
+  - Run for this NG-1 record on chore/state-post-116 (main 18d0985e plus this STATE.md change; T0).
+  - NG-1's own checks, local and read-only: NG1.sha256 4/4 OK; CLOSURE_CHECK=PASS (81 checks); NEXTGEN.sha256 7/7,
+    NEXTGEN_ADDENDUM.sha256 2/2, ARCHIVE_NOTE.sha256 1/1 and B_LANE.sha256 6/6 still OK; r4/u1/U1_RESULTS.json
+    still matches evidence_r4.sha256.
+  - Earlier, for the D-1 closure record on chore/state-post-115 (main eabf0e94 plus that STATE.md change; T0).
   - Local checks: NEXTGEN.sha256 7/7 and NEXTGEN_ADDENDUM.sha256 2/2 OK; the D-1 draft is unchanged.
   - Re-run after the archive note: ARCHIVE_NOTE.sha256 1/1 OK; the NEXTGEN manifests are unchanged.
   - Run for this NEXTGEN record on chore/state-post-114 (main 08cb148f plus this STATE.md change; T0).
@@ -196,18 +214,31 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
   - The NEXTGEN lane used one bounded read-only Codex inventory (task-825, DONE). It read product wording only
     through git at origin/main, because the working tree is stale, and wrote one file. It then had one read-only
     Claude audit (ACCEPT_WITH_FINDINGS; all 16 findings closed).
+  - The NG-1 lane used no Codex. It had one read-only Claude audit (REJECT: 1 HIGH, 4 MEDIUM, 4 LOW), one bounded
+    repair, a mechanical closure check and one bounded re-check by the same auditor (RECHECK: PASS; its seven new
+    LOW items were fixed before sealing and verified mechanically).
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NEXTGEN STATE publication T3 (#115).
-  D-1 is ruled and CLOSED (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-115, STATE.md only).
-  2. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the D-1 / new-generation brief STATE
+  publication T3 (#116). NG-1 is OPEN, research-only and free-data-only (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-116, STATE.md only). It is also the external
+     timestamp of the pilot pre-registration (NG1.sha256, below), which the pilot's Stage 0 requires.
+  2. NG-1 pilot Stage 0 (owner authorizes; local; no network; one-shot). It runs 0a (anchors, data and causality
+     checks, controls) and then, only if the design is shown to be powered, 0b (the kline-flow K arm). The envelope
+     is chosen with this authorization and is final once 0b starts:
+     - strict (advisory): the literal "exclude all consumed" envelope, about 34 weeks. Under the audited H ceiling
+       it is a kill test: it can close the free-data route but cannot demonstrate an entry-bar-sized effect;
+     - option W: per-timeframe accounting for trade data too, about 80 weeks. It can also demonstrate, but it
+       departs from the literal reading of the ruling.
+  3. NG-1 pilot Stage 1 (owner authorizes, only if Stage 0 allows): the exact aggTrades fetch (spot BTCUSDT and
+     ETHUSDT, UTC days 2024-08-21 → 2025-04-13, ≤ 30 GB, public keyless, $0) and the one-shot T-arm run.
+  4. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
      newly opened generation.
-  3. D-1: CLOSED, owner-ruled 2026-09-23. nextgen/D1_RULING.md governs; the draft is kept as digested. Fixed for
+  5. D-1: CLOSED, owner-ruled 2026-09-23. nextgen/D1_RULING.md governs; the draft is kept as digested. Fixed for
      path A:
      - the §2 template: one-sided α 0.025, a candidate-refusal cap, and an A-specific H range declared before any
        collection;
@@ -222,26 +253,15 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      D-4, D-6 (§2.6), D-7 (T4), collector activation, an H-explicit analysis on the serving lattice at the
      USER_REQUESTED arrival rate, and Stage D. The standing rule stays: if A may use B's calendar period, A's design
      and preregistration are digested before any B look is read.
-  4. New generation / order-flow: the owner brief nextgen/NEWGEN_ORDERFLOW_BRIEF.md is ready (paper). Options:
-     - NG-0: no new generation now;
-     - NG-1: open a generation on free sources only, whose priors are below the 15m floor;
-     - NG-2: a research order-flow data collector first;
-     - NG-3: open the generation and collect now.
-     The order-flow route is realistically 2.5 years at best and 6+ years in the plausible case.
-     Advisory sequence: first decide whether a stronger 15m model is worth that at all (else NG-0). The archive
-     question the brief left open is now RESOLVED (nextgen/ARCHIVE_VERIFICATION_NOTE.md, read-only docs only, no
-     data downloaded):
-     - spot trades and aggTrades archives exist, and the official downloader defaults from 2020-01-01;
-     - no spot order-book or depth archive is listed, and none is inferred.
-     Retrospective trade-flow research may therefore need no collector, and NG-2 narrows to depth only. That proves
-     nothing about candidate value. The 2020+ BTC/ETH span is largely consumed or mined data, so which spans are
-     usable is a new generation's adjudication question. Choosing NG-0 to NG-3 remains the owner's.
-     A research data collector is a different object from path A's evidence collector; both are OFF. Implied
-     volatility stays barred by invariant 5.
-  5. The collector stays OFF (owner, 2026-09-20); activation remains the owner's call.
-  6. Additive reconciliation of the superseded "25 to about 76" wording in the write-once C4 record: open, not
+  6. New generation: NG-1 RULED GO 2026-09-23 (research-only, free-data-only; no collector, production path, F3
+     or download yet). NG-2 and NG-3, the collector routes, were not chosen. The archive question is RESOLVED
+     (nextgen/ARCHIVE_VERIFICATION_NOTE.md): spot trades and aggTrades are archived, and no depth archive is listed.
+     A research data collector and path A's evidence collector are both OFF. Implied volatility stays barred by
+     invariant 5.
+  7. The collector stays OFF (owner, 2026-09-20); activation remains the owner's call.
+  8. Additive reconciliation of the superseded "25 to about 76" wording in the write-once C4 record: open, not
      authorized. Its only admissible form is a separately digested addendum. R4_STAGE_C below carries a notice.
-  7. Standing: gate research is CLOSED for this generation (V2a). F1/F2 at 15m and 1H are spent forever, and 4H is
+  9. Standing: gate research is CLOSED for this generation (V2a). F1/F2 at 15m and 1H are spent forever, and 4H is
      unspent. No freeze, wiring or deploy follows from R4 or the B lane without Stage D (§6, §9).
   R3 decisions requested in
   .work/research3/wave2/WAVE2_REPORT.md §6:
@@ -282,11 +302,15 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1, 4). Read first:
-  - .work/research3/nextgen/NEWGEN_ORDERFLOW_BRIEF.md §5-§7, the options, the advice and what each needs;
-  - D1_RULING.md records the closed D-1;
-  - STRONGER_CANDIDATE_PATH.md §0 and AUDIT_AND_CLOSURE.md give the background.
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-3). Read first:
+  - .work/research3/nextgen/ng1/NG1_PILOT_PREREG.md §6 (gates), §8 (stages) and §11 (power);
+  - NG1_ADMISSIBILITY_MAP.md §2 (the map), §3 (the envelope) and §4 (option W);
+  - NG1_AUDIT_AND_CLOSURE.md, the audit and its closure;
+  - background: nextgen/NEWGEN_ORDERFLOW_BRIEF.md, D1_RULING.md and STRONGER_CANDIDATE_PATH.md.
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
+  - No pilot stage and no download: the pre-registration needs its external timestamp (T3) and the owner's
+    Stage-0 authorization first.
+  - Never import or run r4/u1/run_u1.py: it executes at import and rewrites U1_RESULTS.json.
   - No F3 action of any kind: F3 is ruled KEEP UNSPENT, the tool stays unrun, and ruling 3 is not issued.
   - Never import r4/v2a/run_v2a.py: it runs main() on import and rewrites V2A_RESULTS.json.
   - look.py --look refuses forever. Never run rehearse_b.py again.
@@ -552,6 +576,38 @@ NEXTGEN=Next-generation dependency closure, paper only, in .work/research3/nextg
     - no spot order-book or depth archive is listed, and none is inferred.
     It may remove the need for a collector for retrospective trade-flow research. It does not prove candidate
     value, and the evidence budget still binds. The brief and D1_RULING bytes are unchanged.
+NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), paper only, in
+  .work/research3/nextgen/ng1 (gitignored). Manifest NG1.sha256
+  a6af7eec6fe02c124f275d528c89de7298a58045b35b79fc9adf177dff816db0 (4 entries). Nothing was fetched, run or changed
+  in the product.
+  - NG1_ADMISSIBILITY_MAP.md (c5f4212a…):
+    - Rule R-1: trade data are resolution-free, so a UTC day is admissible only if no timeframe's consumed, sealed
+      or reserved span covers it.
+    - Admissible BTC/ETH calendar [2024-08-20T09:30Z, 2025-04-14T00:00Z), about 34 weeks, seen or mined, never
+      confirmatory.
+    - Download envelope: spot aggTrades, UTC days 2024-08-21 → 2025-04-13 (236 days); monthly files only for whole
+      admissible months; nothing else. Not authorized.
+    - Option W (owner only): per-timeframe accounting for trade data, to 2026-03-03 (about 80 weeks).
+    - Additive corrections to STRONGER_CANDIDATE_PATH §4: the 4H R2 sealed span (2025-04-14T12:00Z → 2026-08-11)
+      and the 4H DEV cells; pre-2019 EXCLUDED; F3 weeks archived for trade flow (an inference).
+  - NG1_PILOT_PREREG.md (6ce529d6…) and NG1_PILOT_PREREG.json (ddff855d…), v2: the bounded falsification pilot.
+    - Question: does free flow and activity information (K: kline fields; T: aggTrades) reduce C1's out-of-sample
+      15m log-variance forecast error materially?
+    - f = the error fraction removed; f_mat 0.19 (λ 0.10); f_floor 0.065; α 0.0125 one-sided; H ∈ [0.50, 0.85], the
+      audited ceiling.
+    - Verdicts: VOID first; KILLED if UCB < 0.19; CONTINUE only if f̂ ≥ 0.19, LCB > 0.065, every fold, each symbol,
+      ≥ 70% of blocks and the translation guard; otherwise NOT_DEMONSTRATED.
+    - Stages: 0a controls (anchors, causality, NEG, POS_low must be KILLED, POS_high) → 0b K arm (local) → 1 T arm
+      (fetch). W(b), after NOT_DEMONSTRATED, is kill-only.
+    - Under the audited ceiling the strict envelope is a kill test: it kills f̂ below about 0.068 and cannot
+      demonstrate below about 0.335. Option W kills below about 0.087 and demonstrates above about 0.233 [I: power
+      sketch].
+  - NG1_AUDIT_AND_CLOSURE.md (1e324df9…): one read-only Claude audit, one bounded repair, CLOSURE_CHECK=PASS (81)
+    and one bounded re-check (PASS). The audit's REJECT findings: H_max 0.70 lacked a basis and acted as a rescue;
+    Stage 0 ran K alongside its precision gate; NEG was blind to look-ahead; anchor A1 would have rewritten
+    U1_RESULTS.json; the features were missing from the .md; plus LOW items.
+  - The pre-registration is externally anchored only when this STATE record is published (T3). No stage may run
+    before that.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
