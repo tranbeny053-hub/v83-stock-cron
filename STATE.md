@@ -1,14 +1,13 @@
 # STATE
 
-Updated: 2026-09-23. R4 and the B lane are closed and published (main 08cb148f, PR #114). 15m and 1H are
-HISTORICALLY CONFIRMED with C1 carried. Confirmatory B is infeasible only for the current C1 under the declared
-design and H = [0.50, 0.85]. The owner then ruled **F3 = KEEP UNSPENT** for a future generation or a stronger
-candidate. The next-generation paper lane (NEXTGEN) is ready and audited once:
-- the stronger-candidate path confirms the adjudication's §3 — no materially stronger candidate exists within
-  UCPE's constraints, and the only plausible route, order flow, needs collected data;
-- a D-1 estimand/status/display DRAFT for a later path A awaits the owner's ruling.
-Nothing ran, nothing was fetched, and nothing changed in the product. The collector stays OFF. hf is unchanged at
-00705c55. This record is local; publishing it is a T3.
+Updated: 2026-09-23. R4, the B lane and the NEXTGEN lane are published (main eabf0e94, PR #115). 15m and 1H are
+HISTORICALLY CONFIRMED with C1 carried, and F3 is KEEP UNSPENT. The owner has now ruled all six D-1 decisions, so
+**D-1 is CLOSED** (nextgen/D1_RULING.md). Path A's claim template, its USER_REQUESTED-only evidence class, the
+REPLACEMENT_* verdicts, R2 §2 in principle only, R2 §4's display through an additive backend field, and hiding
+H_extended from users are all fixed on paper; none is implemented. A separate owner brief on opening a new
+generation and on order-flow collection is ready (nextgen/NEWGEN_ORDERFLOW_BRIEF.md). Nothing ran and nothing was
+fetched; the product is unchanged. The collector stays OFF. hf is unchanged at 00705c55. This record is local;
+publishing it is a T3.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -17,7 +16,17 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: next-generation paper lane ready (NEXTGEN). Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER: D-1 CLOSED; the new-generation / order-flow brief awaits a ruling. Nothing is
+  pushed.
+  - D-1 ruling (owner, 2026-09-23), verbatim: "Owner D-1 ruling: (1) adopt §2 template: one-sided α=.025,
+    candidate-refusal cap, A-specific predeclared H range; (2) A evidence class = USER_REQUESTED only, never mixed
+    with scheduled shadow; (3) use REPLACEMENT_SUPPORTED / _NOT_SUPPORTED / _PENDING / _UNINFORMATIVE and drop the
+    bare “skill” reservation; (4) adopt R2 §2 in principle only with rule/reference replaced before wiring, and
+    adopt §4 display via additive backend field; (5) hide H_extended from user display until validated; (6)
+    accept the revised D-1 Done criterion with research statuses kept research-only." The same message continued:
+    "Record/seal D-1 locally, verify, then prepare only a separate owner brief on opening a new generation +
+    order-flow collection. No collector/network/storage/product implementation or T3/T4."
+  - The NEXTGEN STATE T3 (#115 → main eabf0e94) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
   - F3 ruling (owner, 2026-09-23), verbatim: "Owner ruling: **keep F3 unspent** for a future generation/stronger
     candidate; do not narrow H, do not open a non-confirmatory monitor, and do not issue ruling 3 or fetch F3."
     The same instruction continued paper-only: "map the stronger-candidate path and prepare D-1
@@ -97,19 +106,23 @@ LOOP_STATE=WAITING FOR THE OWNER: next-generation paper lane ready (NEXTGEN). No
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NEXT-GENERATION PAPER LANE READY (NEXTGEN), after the B lane closed and F3 was ruled KEEP UNSPENT.
-  Two paper deliverables: the stronger-candidate path, and the D-1 estimand/status/display proposal for a later
-  path A. Still excluded: ruling 3, any F3 fetch, collector activation, a freeze, wiring, a new T0, any database
-  action, any HF deploy, and any further F1/F2 read.
-CURRENT_BRANCH=chore/state-post-114 (LOCAL, no upstream), from main 08cb148f: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-113 (#114), chore/state-post-112 (#113) and chore/state-post-110 (#112) are
-  merged and stay on origin; the last one's push is the R4 commitment's timestamp.
+CURRENT_MILESTONE=D-1 CLOSED (owner-ruled, paper). NEW-GENERATION / ORDER-FLOW BRIEF READY (paper). Still
+  excluded: any implementation of the D-1 rulings, ruling 3, any F3 fetch, any collector (product evidence or
+  research data), network or storage beyond reading, a freeze, wiring, a new T0, any database action, any HF
+  deploy, and any further F1/F2 read.
+CURRENT_BRANCH=chore/state-post-115 (LOCAL, no upstream), from main eabf0e94: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on
+  origin; -110's push is the R4 commitment's timestamp.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=08cb148f (main, PR #114: the B-lane closure STATE record, STATE.md only).
+LAST_GREEN_SHA=eabf0e94 (main, PR #115: the NEXTGEN STATE record, STATE.md only).
+  - Merged 2026-09-23 by this loop under the owner's T3, with --match-head-commit 7ceafdeb.
+  - Parents (08cb148f, 7ceafdeb); tree 30a7b313, recorded before the push and matched after; STATE.md blob 66ab63c4.
+  - The exact-head check `test` passed at 13:31:40Z and the exact-main check `test` at 13:34:59Z (2026-09-23).
+  Before it: 08cb148f (PR #114: the B-lane closure STATE record, STATE.md only).
   - Merged 2026-09-23 by this loop under the owner's T3, with --match-head-commit f7d87f94.
   - Parents (075133cc, f7d87f94); tree 596d740a, recorded before the push and matched after; STATE.md blob a1bb5e39.
   - The exact-head check `test` passed at 09:25:36Z and the exact-main check `test` at 09:29:00Z (2026-09-23).
@@ -132,6 +145,8 @@ LAST_GREEN_SHA=08cb148f (main, PR #114: the B-lane closure STATE record, STATE.m
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-23 (local).
+  - Run for this D-1 closure record on chore/state-post-115 (main eabf0e94 plus this STATE.md change; T0).
+  - Local checks: NEXTGEN.sha256 7/7 and NEXTGEN_ADDENDUM.sha256 2/2 OK; the D-1 draft is unchanged.
   - Run for this NEXTGEN record on chore/state-post-114 (main 08cb148f plus this STATE.md change; T0).
   - NEXTGEN's own checks, local and read-only:
     - NEXTGEN.sha256 7/7 OK;
@@ -184,31 +199,39 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the B-lane STATE publication T3 (#114).
-  F3 is ruled KEEP UNSPENT (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-114, STATE.md only).
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NEXTGEN STATE publication T3 (#115).
+  D-1 is ruled and CLOSED (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-115, STATE.md only).
   2. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
      newly opened generation.
-  3. D-1 (for path A): the DRAFT nextgen/D1_ESTIMAND_STATUS_DISPLAY.md awaits the owner's ruling on its §5. D-1
-     is not closed until then. The ruling covers:
-     - the estimand template, with α, the candidate refusal cap, and A's own H range;
-     - A's evidence class (USER_REQUESTED or SCHEDULED_SHADOW_EVIDENCE, never mixed);
-     - the A verdict names, and superseding S1/r1 on "skill";
-     - R2 §2 in principle only (G20/§9.12 replacement plus the dependence decision), and R2 §4's display rule
-       through an additive backend field — together these are product decisions (a) and (b);
-     - H_extended display;
-     - the changed D-1 "Done" criterion.
-     Path A still needs D-2, D-3, D-4, D-6 (§2.6), D-7 (T4), collector activation, an H-explicit analysis on the
-     serving lattice, and Stage D. The standing rule stays: if A may use B's calendar period, A's design and
-     preregistration are digested before any B look is read.
-  4. A stronger candidate (nextgen/STRONGER_CANDIDATE_PATH.md) — the adjudication's §3 holds: "a materially
-     stronger candidate … does not exist within UCPE's constraints". The only admissible route rated plausible,
-     order flow, needs months of collected data first. So the owner decisions are:
-     (a) whether to open a new generation at all;
-     (b) whether order-flow data may be collected — a collector-class decision, plus network and storage.
-     Implied volatility stays barred by invariant 5.
+  3. D-1: CLOSED, owner-ruled 2026-09-23. nextgen/D1_RULING.md governs; the draft is kept as digested. Fixed for
+     path A:
+     - the §2 template: one-sided α 0.025, a candidate-refusal cap, and an A-specific H range declared before any
+       collection;
+     - the evidence class: USER_REQUESTED only;
+     - the verdicts REPLACEMENT_SUPPORTED / _NOT_SUPPORTED / _PENDING / _UNINFORMATIVE, with no new bare "skill"
+       and Change-A wording untouched;
+     - R2 §2 in principle only, with its rule and reference replaced before any wiring;
+     - R2 §4's display through an additive backend field;
+     - H_extended hidden from user display until validated (the API field stays);
+     - research statuses kept research-only.
+     Implementing any of it is future T1/T2 work, each needing its own authorization. Path A still needs D-2, D-3,
+     D-4, D-6 (§2.6), D-7 (T4), collector activation, an H-explicit analysis on the serving lattice at the
+     USER_REQUESTED arrival rate, and Stage D. The standing rule stays: if A may use B's calendar period, A's design
+     and preregistration are digested before any B look is read.
+  4. New generation / order-flow: the owner brief nextgen/NEWGEN_ORDERFLOW_BRIEF.md is ready (paper). Options:
+     - NG-0: no new generation now;
+     - NG-1: open a generation on free sources only, whose priors are below the 15m floor;
+     - NG-2: a research order-flow data collector first;
+     - NG-3: open the generation and collect now.
+     The order-flow route is realistically 2.5 years at best and 6+ years in the plausible case.
+     Advisory sequence: first decide whether a stronger 15m model is worth that at all (else NG-0). If it is,
+     first verify, with a one-time read-only network authorization, whether trade-level order-flow history is
+     freely archived — that could remove the need for a collector for trade flow. Only then choose NG-2 or NG-3.
+     A research data collector is a different object from path A's evidence collector; both are OFF. Implied
+     volatility stays barred by invariant 5.
   5. The collector stays OFF (owner, 2026-09-20); activation remains the owner's call.
   6. Additive reconciliation of the superseded "25 to about 76" wording in the write-once C4 record: open, not
      authorized. Its only admissible form is a separately digested addendum. R4_STAGE_C below carries a notice.
@@ -231,7 +254,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      pick (the Wave-1 simplicity rule; sub-floor, a 6e-5 tie-break, one band only, and ETH would need BTC
      klines);
   5. the estimand sentence and the gating comparator (moot until item 1 opens a gate path);
-  6. still open from Wave 1 (Lane S): H_extended; zero-location dispositions; additive fields and display.
+  6. from Wave 1 (Lane S): H_extended, zero-location dispositions, additive fields and display — RULED by D-1
+     (2026-09-23; nextgen/D1_RULING.md). Implementation pending authorization.
   Wave-1 rulings already given: the candidate (R3C), the venue policy, v2/v1 symmetry, the 4H slope rule,
   Wave-2 GO. Still open from Wave-1 Lane I: the ledger columns, gate_trace storage, the evidence source (G4 now
   favours the lattice).
@@ -242,19 +266,20 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - the R4 Stage-B look T4, claim 95c339ef… (.work/research3/r4/stage_b/AUTHORIZATION.txt).
   Open, each needing its own authorization:
   - Product decisions:
-    (a) adopt the proper-score skill gate for zero-location methodologies (R2 doc §2). This needs the
-        dependence decision and the detail-view wording (REVIEW);
-    (b) the directional display (R2 doc §4). The §7 correction applies: the split is a fixed skew of about
-        48-54% up, not 50/50;
+    (a) the proper-score gate for zero-location methodologies (R2 doc §2): RULED IN PRINCIPLE by D-1 (2026-09-23)
+        — adopt the principle only; the rule and reference are replaced before any wiring and the dependence
+        decision is taken. Implementation is not authorized;
+    (b) the directional display (R2 doc §4): RULED by D-1 (2026-09-23) — P(move beyond ±band) against P(timeout),
+        "no directional claim", through an additive backend field. Implementation is not authorized;
     (c) §2.6 authorization to wire v2. quant/pipeline.py and config/defaults.py are evaluator-pinned;
     (d) freeze sequencing and a new pre-registered holdout.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1, 3, 4). Read first:
-  - .work/research3/nextgen/STRONGER_CANDIDATE_PATH.md §0, the bottom line;
-  - then D1_ESTIMAND_STATUS_DISPLAY.md §5, the decisions D-1 needs;
-  - AUDIT_AND_CLOSURE.md records the one audit.
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1, 4). Read first:
+  - .work/research3/nextgen/NEWGEN_ORDERFLOW_BRIEF.md §5-§7, the options, the advice and what each needs;
+  - D1_RULING.md records the closed D-1;
+  - STRONGER_CANDIDATE_PATH.md §0 and AUDIT_AND_CLOSURE.md give the background.
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
   - No F3 action of any kind: F3 is ruled KEEP UNSPENT, the tool stays unrun, and ruling 3 is not issued.
   - Never import r4/v2a/run_v2a.py: it runs main() on import and rewrites V2A_RESULTS.json.
@@ -505,6 +530,13 @@ NEXTGEN=Next-generation dependency closure, paper only, in .work/research3/nextg
     08cb148f; its errata are in D-1 §6.
   - AUDIT_AND_CLOSURE.md (7598884e…): the one audit, ACCEPT_WITH_FINDINGS (2 HIGH, 7 MEDIUM, 7 LOW), with every
     finding closed by one bounded repair and a mechanical closure check.
+  - Added 2026-09-23, additively; NEXTGEN.sha256 is unchanged. NEXTGEN_ADDENDUM.sha256
+    31abac07896faef4180967c5e8a41149304c4f479721d686fb849f99d47f46b2 covers:
+    - D1_RULING.md (b477c6ed…): the owner's D-1 ruling verbatim, with what is now fixed. D-1 is CLOSED and this
+      record governs the draft;
+    - NEWGEN_ORDERFLOW_BRIEF.md (aa14a798…): the owner brief on opening a new generation and on order-flow
+      collection — options NG-0 to NG-3, the realistic timeline, the archive question to verify, and the
+      authorizations each option needs. Paper only; nothing is started.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
