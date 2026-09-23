@@ -147,6 +147,7 @@ LAST_GREEN_SHA=eabf0e94 (main, PR #115: the NEXTGEN STATE record, STATE.md only)
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-23 (local).
   - Run for this D-1 closure record on chore/state-post-115 (main eabf0e94 plus this STATE.md change; T0).
   - Local checks: NEXTGEN.sha256 7/7 and NEXTGEN_ADDENDUM.sha256 2/2 OK; the D-1 draft is unchanged.
+  - Re-run after the archive note: ARCHIVE_NOTE.sha256 1/1 OK; the NEXTGEN manifests are unchanged.
   - Run for this NEXTGEN record on chore/state-post-114 (main 08cb148f plus this STATE.md change; T0).
   - NEXTGEN's own checks, local and read-only:
     - NEXTGEN.sha256 7/7 OK;
@@ -227,9 +228,14 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      - NG-2: a research order-flow data collector first;
      - NG-3: open the generation and collect now.
      The order-flow route is realistically 2.5 years at best and 6+ years in the plausible case.
-     Advisory sequence: first decide whether a stronger 15m model is worth that at all (else NG-0). If it is,
-     first verify, with a one-time read-only network authorization, whether trade-level order-flow history is
-     freely archived — that could remove the need for a collector for trade flow. Only then choose NG-2 or NG-3.
+     Advisory sequence: first decide whether a stronger 15m model is worth that at all (else NG-0). The archive
+     question the brief left open is now RESOLVED (nextgen/ARCHIVE_VERIFICATION_NOTE.md, read-only docs only, no
+     data downloaded):
+     - spot trades and aggTrades archives exist, and the official downloader defaults from 2020-01-01;
+     - no spot order-book or depth archive is listed, and none is inferred.
+     Retrospective trade-flow research may therefore need no collector, and NG-2 narrows to depth only. That proves
+     nothing about candidate value. The 2020+ BTC/ETH span is largely consumed or mined data, so which spans are
+     usable is a new generation's adjudication question. Choosing NG-0 to NG-3 remains the owner's.
      A research data collector is a different object from path A's evidence collector; both are OFF. Implied
      volatility stays barred by invariant 5.
   5. The collector stays OFF (owner, 2026-09-20); activation remains the owner's call.
@@ -537,6 +543,15 @@ NEXTGEN=Next-generation dependency closure, paper only, in .work/research3/nextg
     - NEWGEN_ORDERFLOW_BRIEF.md (aa14a798…): the owner brief on opening a new generation and on order-flow
       collection — options NG-0 to NG-3, the realistic timeline, the archive question to verify, and the
       authorizations each option needs. Paper only; nothing is started.
+  - Added 2026-09-23, additively: ARCHIVE_VERIFICATION_NOTE.md (b6401d14…), digested by ARCHIVE_NOTE.sha256
+    d0db23ea1f1bb8b2c2a821d8004ea5dba5cbd1f902d6ba6b2c07fc3bcd0111bc. It is the owner-authorized, bounded, read-only
+    check of the official binance-public-data docs. Two network reads, both documentation (the repo README and
+    the python/README), and no market data. It resolves the brief's open question:
+    - spot trades and aggTrades archives exist (daily and monthly ZIP files, with the buyer-maker flag);
+    - the official downloader defaults from 2020-01-01; earlier archive depth is not stated and not inferred;
+    - no spot order-book or depth archive is listed, and none is inferred.
+    It may remove the need for a collector for retrospective trade-flow research. It does not prove candidate
+    value, and the evidence budget still binds. The brief and D1_RULING bytes are unchanged.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
