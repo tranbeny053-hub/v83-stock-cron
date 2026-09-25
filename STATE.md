@@ -5,7 +5,7 @@ records and the reviewed Stage-1 repair are published (main 563372f0, PR #120). 
 with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **The NG-1 pilot is complete; it stops
 under pre-registration §8:**
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
-- Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data.
+- Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data was parsed.
 - Stage 1, attempt 2: the owner-authorized single rerun of the reviewed repair (manifest 55c7794c…). It COMPLETED
   with **NOT_DEMONSTRATED**, and its pre-registered audit returned ACCEPT_WITH_FINDINGS (0 HIGH, 2 MEDIUM
   interpretive, 4 LOW). The governing wording is the audit's exact text: "On the admissible STRICT span (seen, mined
@@ -176,8 +176,9 @@ CURRENT_BRANCH=chore/state-post-120 (LOCAL, no upstream), from main 563372f0: th
   -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's
   timestamp.
   The main checkout (/Users/kha/Documents/Kha-app/UCPE) is still on chore/state-post-104 at 2c6df51 with src/
-  clean. It was kept untouched through the Stage-1 rerun (repair review F3). The rerun is consumed, so that freeze
-  has done its job, but nothing requires moving the checkout. STATE records are made in separate worktrees.
+  clean. It was kept untouched through the Stage-1 rerun (repair review F3); the verification `git fetch` changed
+  only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job, but nothing
+  requires moving the checkout. STATE records are made in separate worktrees.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
@@ -189,8 +190,8 @@ LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, ST
   - Verified by this loop: parents (fe19792c, a880ebff); tree f9467c52 equals the recorded tree; STATE.md blob
     ce70158b; the only change is STATE.md.
   - The exact-head check `test` passed at 10:04:55Z and the exact-main check `test` at 10:07:57Z (2026-09-25).
-  - This publication is the repair's external timestamp: manifest 55c7794c…, pins, prep seal and review. It
-    preceded the rerun (10:12:41Z).
+  - This publication is the repair's external timestamp: manifest 55c7794c…, pins and prep seal (the review by
+    digest prefix only). It preceded the rerun (10:12:41Z).
   Before it: fe19792c (PR #119: the NG-1 Stage-1 VOID and audit STATE record, STATE.md only).
   - This loop pushed chore/state-post-118 at 6118883c under the owner's T3 (tree f32c70c7 recorded before the
     push). Opening the PR was refused by the Claude Code auto-mode permission check ("Out-of-Place Publication");
@@ -244,6 +245,7 @@ LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, ST
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
   - Run for this NG-1 Stage-1 result record on chore/state-post-120 (main 563372f0 plus this STATE.md change; T0).
+  - Re-run after the §9 wording re-check's fixes, on the same branch: the same result.
   - The run's own checks, local and read-only:
     - attempt 2: STAGE1_RESULTS.attempt2.sha256 11/11, STAGE1_AUDIT.attempt2.sha256 1/1,
       STAGE1_CODE.attempt2.sha256 40/40, STAGE1_PREP.attempt2.sha256 22/22 and
@@ -338,8 +340,8 @@ GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the repair STATE T3 (#120), and the
   NG-1 Stage-1 rerun authorization (one run, then the audit; LOOP_STATE). What remains, in order:
   1. T3 (owner authorizes): publish this record (chore/state-post-120, STATE.md only). It also timestamps the
-     attempt-2 result, seal and audit digests externally. §9's one bounded re-check of this record's wording is
-     recommended before the publication.
+     attempt-2 result, seal and audit digests externally. §9's one bounded re-check of this record's wording was
+     run: it FAILED (2 blocking, 5 LOW), and every fix was applied word for word and confirmed mechanically (NG1).
   2. NG-1's next step (owner decides; under §8, NOT_DEMONSTRATED means stop). Either:
      (a) end NG-1 here: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED, the free-data route not demonstrated;
          F3 stays unspent;
@@ -369,8 +371,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      USER_REQUESTED arrival rate, and Stage D. The standing rule stays: if A may use B's calendar period, A's design
      and preregistration are digested before any B look is read.
   6. New generation: NG-1 RULED GO 2026-09-23 (research-only, free-data-only; no collector, production path, F3
-     or download yet; the only download since is Stage 1's, separately authorized). The NG-1 pilot is complete: K
-     KILLED, T NOT_DEMONSTRATED. NG-2 and NG-3, the collector routes, were not chosen. The archive question is RESOLVED
+     or download yet; the only download since is Stage 1's, separately authorized).
+     The NG-1 pilot is complete: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED. NG-2 and NG-3, the collector
+     routes, were not chosen. The archive question is RESOLVED
      (nextgen/ARCHIVE_VERIFICATION_NOTE.md): spot trades and aggTrades are archived, and no depth archive is listed.
      A research data collector and path A's evidence collector are both OFF. Implied volatility stays barred by
      invariant 5.
@@ -719,8 +722,8 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
     - Stages: 0a controls (anchors, causality, NEG, POS_low must be KILLED, POS_high) → 0b K arm (local) → 1 T arm
       (fetch). W(b), after NOT_DEMONSTRATED, is kill-only.
     - Under the audited ceiling the strict envelope is a kill test: it kills f̂ below about 0.068 and cannot
-      demonstrate below about 0.335. Option W kills below about 0.087 and demonstrates above about 0.233 [I: power
-      sketch].
+      demonstrate below about 0.335. Option W (the 68-block W(a), lapsed; not W(b), which is kill-only) kills below
+      about 0.087 and demonstrates above about 0.233 [I: power sketch].
   - NG1_AUDIT_AND_CLOSURE.md (1e324df9…): one read-only Claude audit, one bounded repair, CLOSURE_CHECK=PASS (81)
     and one bounded re-check (PASS). The audit's REJECT findings: H_max 0.70 lacked a basis and acted as a rescue;
     Stage 0 ran K alongside its precision gate; NEG was blind to look-ahead; anchor A1 would have rewritten
@@ -807,8 +810,8 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
     - Sealed: STAGE1_PREP.attempt2.sha256 5f225f11de512d0925eda55f424a8bf8e646f823586e98a979f7afa8bf10046a (22
       entries: the captures, the code manifest and the attempt-1 copy).
     - STAGE1_REPAIR_REVIEW.attempt2.md (f8623310…; STAGE1_REPAIR_REVIEW.attempt2.sha256 87bb0d9e…): one
-      independent read-only Claude review, ACCEPT_WITH_FINDINGS (0 HIGH, 0 MEDIUM, 6 LOW). It is ready to be named
-      in one rerun authorization with the F3 terms (OWNER_BOUNDARY 2). Two corrections are recorded there:
+      independent read-only Claude review, ACCEPT_WITH_FINDINGS (0 HIGH, 0 MEDIUM, 6 LOW). The reviewed repair
+      (manifest 55c7794c…) was named in the one rerun authorization (LOOP_STATE). Two corrections are recorded there:
       - the review brief wrongly said the synthetic suites write nothing; they use temporary folders and test the
         hook's refusals;
       - "sealed" overstates R2_ARCHIVE_MANIFEST.json: it is read-only, and its 4H digests are anchored in git
@@ -829,9 +832,10 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
     - Result STAGE1_RESULT.attempt2.json 2b3aeb9b… (it cites manifest 55c7794c…). It is sealed with its raw capture
       in STAGE1_RESULTS.attempt2.sha256 d7c4e8ad9bffcd6b4a3489a80983e03f43bc0fc884e49c45ede4f70d184894f5
       (11 entries).
-    - STAGE1_AUDIT.attempt2.md (f20ef34a…; STAGE1_AUDIT.attempt2.sha256 e86072c4…): the pre-registered independent
-      read-only audit, ACCEPT_WITH_FINDINGS (0 HIGH, 2 MEDIUM interpretive, 4 LOW). Every statistic recomputed with
-      a largest difference of 0.0, and the verdict stands.
+    - STAGE1_AUDIT.attempt2.md (f20ef34a…; STAGE1_AUDIT.attempt2.sha256
+      e86072c489befef21fb6a5ac1d37e707370b6d4e5616264625ddeb248ebe90fb): the pre-registered independent read-only
+      audit, ACCEPT_WITH_FINDINGS (0 HIGH, 2 MEDIUM interpretive, 4 LOW). Every statistic recomputed with a largest
+      difference of 0.0, and the verdict stands.
       - M1: not being KILLED depends on the top of the H grid (the UCB crosses 0.19 at H ≈ 0.815). The crossing may
         be disclosed only as a caveat; reading "KILLED for H ≤ 0.80" would pick H after seeing the result.
       - M2: no sub-group claim (fold 2, ETH); W(b) is kill-only.
@@ -840,6 +844,10 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
     - Governing wording: the audit's exact text, quoted in the header above.
     - Not concluded: that T is KILLED; any exclusion for a narrower H range; that the free-data route is closed;
       anything about depth or other trade constructions; "T adds nothing beyond K"; profitability.
+    - §9's one bounded re-check of this record's wording (read-only Claude, 2026-09-25) FAILED on two blocking
+      points: the Stage-0 claim in OWNER_BOUNDARY 6 lacked "valid for H ≤ 0.85", and the audit seal was cited only by
+      prefix. It also made five LOW notes: stale rerun pointers, the verification fetch, the review carried by digest
+      prefix only, "was parsed", and the W(a) label. All were applied word for word and confirmed mechanically.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -975,8 +983,8 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - NG-1 pilot Stage 0: run once 2026-09-23T17:01:00Z (DESIGN_OK; K KILLED, valid for H ≤ 0.85). ng1_pilot.py
     --stage0 refuses once STAGE0A_RESULT.json exists. Never delete or edit nextgen/ng1/pilot/STAGE0*_RESULT.json
     or the RUN_STAGE0.* capture.
-  - NG-1 pilot Stage 1: fetched once (2026-09-25T06:18:59Z) and run once (06:28:29Z, VOID). ng1_stage1.py --stage1
-    refuses once STAGE1_RESULT.json exists; a rerun needs a fresh owner authorization (OWNER_BOUNDARY 2). Never
+  - NG-1 pilot Stage 1: fetched once (2026-09-25T06:18:59Z) and run once (06:28:29Z, VOID). The attempt-1 code
+    (ng1_stage1.attempt1.py) refused once STAGE1_RESULT.json existed; its one rerun was attempt 2 (below). Never
     delete or edit STAGE1_RESULT.json, the RUN_STAGE1.* and RUN_FETCH.* capture, or anything in nextgen/ng1/data/;
     never re-download.
   - The NG-1 Stage-1 repair's pin run (attempt 2, 2026-09-25T09:29:16Z): ng1_stage1.py --pin-deps refuses once
