@@ -1,9 +1,11 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1 and NG-1, through its Stage-1 attempt-2 result and
-audit, are published (main 21b89c5a, PR #121). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP
-UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED** (owner ruling, 2026-09-25: close NG-1; W(b) is not
-run). Its record:
+Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
+83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2 is done as a paper brief:** the
+live directional-skill gate counts repeated and overlapping outcomes as independent evidence, and 1H and 4H passed it
+on the contract's cohort. It now waits at the methodology owner boundary (OWNER_BOUNDARY 2). 15m and 1H are
+HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
+(owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
 - Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data was parsed.
 - Stage 1, attempt 2: the owner-authorized single rerun of the reviewed repair (manifest 55c7794c…). It COMPLETED
@@ -29,10 +31,36 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent), and the closure is recorded
-  locally and verified. Lane H1 (resumability and evidence-integrity hardening) was selected, and its local steps
-  are DONE: the STATE cleanup in this record, and the two R4 result files made read-only. Its T3 push and the
-  main-checkout fast-forward remain (OWNER_BOUNDARY 1-2). Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-gate dependence brief is DONE
+  (paper, read-only): .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md, with seven questions for the owner
+  (OWNER_BOUNDARY 2). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  - H2 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. H2 AUTHORIZED, paper/read-only only. Audit the current live skill gate
+    end-to-end against canonical STATE/contracts/implementation/tests: identify exactly where overlapping outcomes
+    or repeated rows are treated as independent evidence, what claim/status that currently licenses, and whether the
+    dependence structure can inflate confidence or prematurely satisfy the gate. Produce a bounded owner brief with
+    the current estimand, evidence unit, overlap/dependence failure modes, affected timeframes/paths, and 2–3
+    correction designs with trade-offs; preserve USER_REQUESTED vs SCHEDULED_SHADOW evidence classes and D-1
+    wording. Do not change code/tests/data, access consumed F1/F2 raw evidence, run production analysis, or touch
+    DB/serving/pinned/F3. Stop at the methodology owner boundary with the exact questions requiring ruling."
+    CONSUMED:
+    - Brief v2 is 0918f1484e968defb5e188719ea7b3d59f1cd59e392eba22e2507866f0c4ea69, sealed by
+      H2_SKILL_GATE_BRIEF.v2.sha256 08c6a9e604760b80c1ed16005d30ec4be8a1eaf3c06211ad9abb8262f71596b0. v2 governs.
+    - v1 (H2_SKILL_GATE_BRIEF.md c67ddb61…) is kept unchanged: it was sealed before one §3 research citation was
+      corrected, because a parallel tool batch sealed the file while one edit failed. No finding changed.
+    - No code, test, data, database, serving, pinned, F3 or F1/F2 raw evidence was touched, and no production
+      analysis was run.
+  - H1 step (c) authorization (owner, 2026-09-25) is CONSUMED. The main checkout was switched from
+    chore/state-post-104 @ 2c6df51 to main and fast-forwarded to exactly 83b099de; no other git change or deletion.
+    - Its working-tree STATE.md byte-equals origin/main's.
+    - The NG-1 seals verify (STAGE1_CODE.sha256 38/39 by design), and so do the R4 seals: evidence_r4.sha256 67/68,
+      the documented LOOKS_CONSUMED.log difference; STAGE_C.sha256 29/29.
+    - U1/V2A results are unchanged and read-only.
+  - The H1 STATE T3 (push only; #122 → main 83b099de) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
+  Earlier in this loop:
+  - NG-1 was CLOSED by owner ruling (W(b) not run; F3 unspent), and the closure was recorded and verified.
+  - Lane H1 was selected, and its local steps were done: the STATE cleanup, and the two R4 result files made
+    read-only.
   - H1 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
     "CONTINUE CURRENT — Opus 5 HIGH. H1 AUTHORIZED, local-only. On `chore/state-post-121`, make only
     semantic-preserving STATE cleanup: correct stale/superseded pointers, mark moot items only where current
@@ -198,28 +226,37 @@ LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 un
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the
-  free-data route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+CURRENT_MILESTONE=H2 PAPER BRIEF COMPLETE (the live skill gate's dependence; methodology owner boundary). H1
+  COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
+  route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+  - any change to the live skill gate, its tests or its data before the owner's H2 rulings, then each change's own
+    authorization (it is a hard gate, so treat it as T2), and any production read to measure it (H2 Q5);
   - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-121 (LOCAL, no upstream), from main 21b89c5a: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116),
-  -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4
-  commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is still on chore/state-post-104 at 2c6df51 with src/
-  clean. It was kept untouched through the Stage-1 rerun (repair review F3); the verification `git fetch` changed
-  only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job. Its working-tree
-  STATE.md is the stale 09-17 record. Fast-forwarding it to main is H1 step (c), which awaits its own authorization
-  after the T3 (OWNER_BOUNDARY 2). STATE records are made in separate worktrees.
+CURRENT_BRANCH=chore/state-post-122 (LOCAL, no upstream), from main 83b099de: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-121 (#122), -120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117),
+  -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is
+  the R4 commitment's timestamp.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 83b099de (H1 step (c), 2026-09-25), clean,
+  and its working-tree STATE.md is current as of that commit. Before that it was frozen on chore/state-post-104 at
+  2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept. STATE records are still
+  made in separate worktrees, and ./verify.sh never runs in the main checkout (STANDING_RULES).
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
+LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cleanup STATE record, STATE.md only).
+  - This loop pushed chore/state-post-121 at 79acf1e5 under the owner's push-only T3; the merge tree 7606c5b0 was
+    recorded before the push. #122 was opened and merged from the owner's account on GitHub (2026-09-25T15:39:47Z).
+  - Verified by this loop: parents (21b89c5a, 79acf1e5); tree 7606c5b0 equals the recorded tree; STATE.md blob
+    02d22e2e; the only change is STATE.md (three commits: f283738f, c6170032, 79acf1e5).
+  - The exact-head check `test` passed at 15:25:52Z and the exact-main check `test` at 15:42:34Z (2026-09-25).
+  - This publication is the external timestamp of the NG-1 closure record and of lane H1's selection and cleanup.
+  Before it: 21b89c5a (PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
   - This loop pushed chore/state-post-120 at ea4d5b33 under the owner's push-only T3; the merge tree a36b096b was
     recorded before the push. #121 was opened and merged from the owner's account on GitHub (2026-09-25T14:02:38Z).
   - Verified by this loop: parents (563372f0, ea4d5b33); tree a36b096b equals the recorded tree; STATE.md blob
@@ -286,7 +323,9 @@ LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and au
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this NG-1 closure record on chore/state-post-121 (main 21b89c5a plus this STATE.md change; T0).
+  - Run for this H2 record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its worktree.
+  - H2's own checks, read-only: H2_SKILL_GATE_BRIEF.v2.sha256 1/1 and H2_SKILL_GATE_BRIEF.sha256 (v1) 1/1.
+  - Earlier, for the NG-1 closure record on chore/state-post-121 (main 21b89c5a plus that change; T0).
   - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
     the same result each time.
   - The closure's own checks, local and read-only:
@@ -388,11 +427,43 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-1 result STATE T3
-  (#121), and the NG-1 closure ruling (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-121, STATE.md only). It also timestamps the NG-1
-     closure record externally.
-  2. NEXT LANE, H1: resumability and evidence-integrity hardening. It was selected paper-only on 2026-09-25 at the
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
+  authorization, and the H2 paper authorization (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
+     brief's digest externally.
+  2. CURRENT LANE, H2: the METHODOLOGY OWNER BOUNDARY for the live directional-skill gate. Brief:
+     .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md (0918f148…). Its findings:
+     - The gate counts every USER_REQUESTED resolved row (all symbols pooled) as an independent trial.
+       - The test is z = (2h − n)/√n ≥ 1.96 with n ≥ 100, against a 50% coin.
+       - Sources: calibration/skill.py:43-58; calibration/service.py:112-131; the repository's calibration query
+         has no DISTINCT; the ledger's only key is prediction_id.
+     - Repeated analyses of one candle share one outcome window. Overlapping 6-bar windows, cross-symbol pooling
+       and regime runs inflate the evidence. Research measured a design effect of 1.4–4.1
+       (.work/research3/g1/G1_REPORT.md:99).
+     - A pass lifts the SKILL_NOT_DEMONSTRATED hard block and licenses LONG/SHORT_CANDIDATE ("for planning only").
+       On the contract's 2026-08-16 cohort, 1H (z 2.85) and 4H (z 4.31) passed (V1_QUANT_CONTRACT.md:18-26,
+       107-108).
+       - 1H's pass breaks once the design effect exceeds 2.12; 4H's once it exceeds 4.84.
+       - Against the contract's majority-direction baselines, neither passes even as independent rows (z ≈ 0.68 and
+         1.18).
+     - Correction designs:
+       - D1: one row per candle;
+       - D2: one row per non-overlapping window;
+       - D3: a window-mean block test, the §5A A1 pattern; recommended.
+       Each keeps USER_REQUESTED-only counting and the D-1/Change-A wording, and fits the unpinned
+       calibration/service.py and skill.py. It changes a hard gate, so treat it as T2, with no deploy without its own
+       authorization.
+     Questions for the owner's ruling:
+     - Q1 — the evidence unit: one row per candle? Recommended: yes.
+     - Q2 — D1, D2 or D3, and for D3 the windows and their minimum count? Recommended: D3.
+     - Q3 — the reference rate: 50%, or drift-aware? Is this also D-1(a)'s pending "dependence decision"?
+     - Q4 — does the same unit apply to the calibration sample gate (MEASURED → decision strength HIGH)?
+     - Q5 — a read-only aggregate production query of counts (its own database authorization) before any change,
+       and acceptance of the product change if 1H or 4H flips?
+     - Q6 — may the display wording "resolved outcomes" change to name the unit, given D-1 keeps Change-A wording?
+     - Q7 — keep counting untagged legacy rows as USER_REQUESTED, or require an explicit origin?
+  2-H1. H1, resumability and evidence-integrity hardening: COMPLETE 2026-09-25. Its steps: (a) and (d) as below;
+     (b) #122 → main 83b099de; (c) the main checkout on main @ 83b099de. It was selected paper-only on 2026-09-25 at the
      owner's direction, after three parallel read-only reviews (the STATE decisions; Git, CI and production health;
      the .work lanes). Its steps:
      (a) T0 on chore/state-post-121, semantic-preserving STATE cleanup: DONE, owner-authorized, in this record.
@@ -420,7 +491,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      - The alternatives rank lower now:
        - H2, a paper brief on dependence in the live directional-skill gate: the most product-relevant, but latent.
          The gate needs n ≥ 100 per timeframe; sampled resolver logs show outcomes accruing only a few per day; the
-         fix is serving or pinned work, excluded now. It is next after H1;
+         fix is serving or pinned work, excluded now. It is next after H1.
+         CORRECTED 2026-09-25 by the H2 audit: "latent" was wrong. On the contract's 2026-08-16 cohort, 1H
+         (142 directional rows, z 2.85) and 4H (151, z 4.31) already passed the gate (V1_QUANT_CONTRACT.md:18-26,
+         107-108), so it has been licensing candidates on those timeframes;
        - H3, verify.sh speed to the doctrine's 30 s (now about 110–180 s, almost all pytest): loop cost only;
        - H4, recording the resolver's 50-bar coupling and the unpinned runtime dependencies as known hazards
          (their fixes touch the database writer or serving);
@@ -503,9 +577,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record, batched with lane H1). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; the H2 rulings Q1–Q7). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
+  - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md: the H2 brief (it governs; v1 is superseded, kept unchanged);
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
