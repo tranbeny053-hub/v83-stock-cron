@@ -1,18 +1,18 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1's pre-registration and its Stage-0 record are
-published (main 91232022, PR #118). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and
-D-1 is CLOSED (not implemented). NG-1 pilot Stage 0: DESIGN_OK, and the kline family K is KILLED (valid for
-H ≤ 0.85). **NG-1 pilot Stage 1 ran once** (owner-authorized, STRICT window):
-- The exact pre-registered download was fetched and verified: 62 spot aggTrades ZIPs, 10.06 GB, each equal to its
-  official checksum. It is local, read-only and gitignored.
-- The run was **VOID** at its dependency-pin guard, before any trade data was parsed: the shared row build loaded
-  two unpinned 4H candle caches. No T feature and no statistic exists.
-- One independent audit: ACCEPT_WITH_FINDINGS. One bounded repair plus one rerun on the same download is
-  legitimate only under a fresh owner authorization; closing Stage 1 as VOID is equally coherent.
-- The trade-level family T is therefore still untested.
+Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1's pre-registration and its Stage-0 and Stage-1
+records are published (main fe19792c, PR #119). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP
+UNSPENT, and D-1 is CLOSED (not implemented). NG-1 pilot Stage 0: DESIGN_OK, and the kline family K is KILLED (valid
+for H ≤ 0.85). NG-1 pilot Stage 1 ran once and was VOID at its dependency-pin guard, before any trade data was
+parsed (62 verified aggTrades ZIPs, 10.06 GB, stay local and read-only). **Its one bounded repair is prepared and
+reviewed** (owner-authorized, preparation only):
+- Only ng1_stage1.py changed. The pins now follow the run's own build path (38 = attempt 1's 36 unchanged plus the
+  two 4H caches), and the preflight passed with loaded = pinned in both directions.
+- Code manifest STAGE1_CODE.attempt2.sha256 55c7794c…. One independent review: ACCEPT_WITH_FINDINGS (0 HIGH,
+  0 MEDIUM, 6 LOW), ready to be named in one rerun authorization.
+- The rerun is NOT authorized, and the trade-level family T is still untested.
 No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. This
-record is local; publishing it is a T3, which also timestamps the Stage-1 digests.
+record is local; publishing it is a T3, which also timestamps the repair's digests before any rerun.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -21,8 +21,20 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: NG-1 pilot Stage 1 ran once and is VOID (dependency-pin guard, before any trade
-  data); audited ACCEPT_WITH_FINDINGS. No repair or rerun is authorized. Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER: the NG-1 Stage-1 repair is PREPARED and REVIEWED (manifest 55c7794c…;
+  ACCEPT_WITH_FINDINGS, 0 HIGH / 0 MEDIUM / 6 LOW). The rerun is not authorized. Nothing is pushed.
+  - NG-1 Stage-1 repair authorization (owner, 2026-09-25), verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. First verify
+    `origin/main` is merge commit `fe19792c164414024628ebae8abebf7908c80046`, then prepare the NG-1 Stage-1 repair
+    only, once, under all nine binding conditions in `.work/research3/nextgen/ng1/pilot/STAGE1_AUDIT.md`: change
+    only `ng1_stage1.py`; pin from the exact run build path; require loaded↔pinned equality both ways; re-pin the
+    unchanged 36 plus exactly the two missed 4H caches or STOP; use attempt-suffixed outputs; run both synthetic
+    suites + captured preflight; digest final code; commission one independent read-only repair-diff review;
+    report the reviewed manifest digest and stop. No
+    rerun/network/download/F3/collector/DB/serving/pinned/wiring/freeze/deploy." It is CONSUMED: one pin run
+    (09:29:16Z; a wrapper error at 09:28:38Z started nothing), the tests, one preflight (PASS) and one review.
+  - The NG-1 Stage-1 STATE T3 (#119 → main fe19792c) is CONSUMED and VERIFIED (LAST_GREEN_SHA). This loop pushed
+    the branch; opening the PR was refused by the Claude Code auto-mode permission check, and #119 was opened and
+    merged from the owner's account on GitHub.
   - NG-1 Stage-1 authorization (owner, 2026-09-25), verbatim: "NG-1 STAGE 1 AUTHORIZED once under the frozen
     STRICT preregistration. Before network access, pin+digest the two audited out-of-tree dependencies, add the
     required row-placement guard, and synthetic-test Binance Spot timestamp parsing on both sides of the
@@ -133,22 +145,34 @@ LOOP_STATE=WAITING FOR THE OWNER: NG-1 pilot Stage 1 ran once and is VOID (depen
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 PILOT STAGE 1 VOID (no T verdict): run once; first causal failure at dependency_pins;
-  audited (ACCEPT_WITH_FINDINGS). Stage 0 stands: DESIGN_OK; K KILLED (valid for H ≤ 0.85). Still excluded:
-  - any Stage-1 repair or rerun, any further download or research-data fetch, and option W. W(a) lapsed when 0b
-    started; W(b) exists only after a NOT_DEMONSTRATED Stage-1 verdict, as a kill-only look (a VOID is not one);
+CURRENT_MILESTONE=NG-1 STAGE-1 REPAIR PREPARED AND REVIEWED (attempt 2; not run). Attempt 1 stays VOID (no T
+  verdict). Stage 0 stands: DESIGN_OK; K KILLED (valid for H ≤ 0.85). Still excluded:
+  - the Stage-1 rerun (it needs an owner authorization citing 55c7794c…), any further download or research-data
+    fetch, and option W. W(a) lapsed when 0b started; W(b) exists only after a NOT_DEMONSTRATED Stage-1 verdict, as
+    a kill-only look (a VOID is not one);
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings.
-CURRENT_BRANCH=chore/state-post-118 (LOCAL, no upstream), from main 91232022: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113)
-  and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's timestamp.
+CURRENT_BRANCH=chore/state-post-119 (LOCAL, no upstream), from main fe19792c: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-118 (#119), -117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114),
+  -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's timestamp.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) must stay on chore/state-post-104 at 2c6df51, with src/
+  clean and untouched, until the Stage-1 rerun: its HEAD and src/ files are pinned (repair review F3). STATE
+  records are made in separate worktrees.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=91232022 (main, PR #118: the NG-1 pilot Stage-0 STATE record, STATE.md only).
+LAST_GREEN_SHA=fe19792c (main, PR #119: the NG-1 Stage-1 VOID and audit STATE record, STATE.md only).
+  - This loop pushed chore/state-post-118 at 6118883c under the owner's T3 (tree f32c70c7 recorded before the
+    push). Opening the PR was refused by the Claude Code auto-mode permission check ("Out-of-Place Publication");
+    #119 was opened and merged from the owner's account on GitHub (2026-09-25T09:14:10Z).
+  - Verified by this loop: parents (91232022, 6118883c); tree f32c70c7 equals the recorded tree; STATE.md blob
+    036fd6f8; the only change is STATE.md.
+  - The exact-head check `test` passed at 08:54:22Z and the exact-main check `test` at 09:17:02Z (2026-09-25).
+  - This publication is the external timestamp of the attempt-1 Stage-1 code, pin, result and audit digests.
+  Before it: 91232022 (PR #118: the NG-1 pilot Stage-0 STATE record, STATE.md only).
   - Merged 2026-09-25 by this loop under the owner's T3, with --match-head-commit 52d51fd0.
   - Parents (d82ca2dc, 52d51fd0); tree 8a7afcd2, recorded before the push and matched after; STATE.md blob 4bfe9ba1.
   - The exact-head check `test` passed at 05:46:45Z and the exact-main check `test` at 05:50:37Z (2026-09-25).
@@ -192,7 +216,12 @@ LAST_GREEN_SHA=91232022 (main, PR #118: the NG-1 pilot Stage-0 STATE record, STA
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this NG-1 Stage-1 record on chore/state-post-118 (main 91232022 plus this STATE.md change; T0).
+  - Run for this NG-1 Stage-1 repair record on chore/state-post-119 (main fe19792c plus this STATE.md change; T0).
+  - The repair's own checks, local and read-only: STAGE1_CODE.attempt2.sha256 40/40, STAGE1_PREP.attempt2.sha256
+    22/22 and STAGE1_REPAIR_REVIEW.attempt2.sha256 1/1 OK; attempt 1's STAGE1_RESULTS.sha256 16/16 and
+    STAGE1_AUDIT.sha256 1/1 OK; the 38 pinned files unchanged after this verification; the main checkout still at
+    2c6df51 with src/ clean.
+  - Earlier, for the NG-1 Stage-1 record on chore/state-post-118 (main 91232022 plus that STATE.md change; T0).
   - Stage 1's own checks, local and read-only: STAGE1_CODE.sha256 39/39, STAGE1_RESULTS.sha256 16/16 and
     STAGE1_AUDIT.sha256 1/1 OK; the 36 pinned files unchanged; the synthetic tests pass 37/37 (Stage 1) and 51/51
     (Stage 0); PILOT_CODE.sha256 37/37, PILOT_RESULTS.sha256 8/8, STAGE0_AUDIT.sha256 1/1 and NG1.sha256 4/4 OK.
@@ -264,23 +293,26 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
   - NG-1 pilot Stage 1 used no Codex. Claude wrote the Stage-1 code; it was tested on synthetic data (37/37,
     including the 2025-01-01 ms→µs boundary) and digested before the fetch and the one run. One independent
     read-only Claude audit of the VOID followed (ACCEPT_WITH_FINDINGS: 0 HIGH, 1 MEDIUM, 6 LOW).
+  - The Stage-1 repair (attempt 2) used no Codex. Claude wrote it; one independent read-only Claude review of the
+    repair diff followed (ACCEPT_WITH_FINDINGS: 0 HIGH, 0 MEDIUM, 6 LOW).
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-0 STATE T3 (#118), and
-  the NG-1 pilot Stage-1 authorization (one fetch, one run; LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-118, STATE.md only). It also timestamps the
-     Stage-1 code, pin, result and audit digests externally (NG1 below).
-  2. NG-1 Stage 1's disposition (owner decides). Stage 1 is VOID, so no T verdict exists. Either:
-     (a) the bounded repair, in two owner steps, under the nine conditions in nextgen/ng1/pilot/STAGE1_AUDIT.md:
-         - first, authorize preparing ONE repair of ng1_stage1.py only: the pins follow the run's exact build path,
-           the preflight requires loaded = pinned in both directions, and new files are attempt-suffixed. The new
-           pins must be the 36 unchanged plus exactly the two 4H caches (BTC 45cc136f…, ETH c98b5059…). An
-           independent read-only review of the repair diff follows, and the new code-manifest digest is reported;
-         - then, a separate authorization citing that digest for ONE rerun on the same verified download
-           (FETCH_SUMMARY 9d69aa97…): no network, the VOID record byte-identical, the result final, then the
-           pre-registered audit, and stop;
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-1 STATE T3 (#119), and
+  the Stage-1 repair-preparation authorization (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-119, STATE.md only). It also timestamps the
+     repair's code manifest (55c7794c…), pins, prep seal and review externally, before any rerun.
+  2. NG-1 Stage 1's disposition (owner decides). Either:
+     (a) authorize ONE rerun of the reviewed repair, citing STAGE1_CODE.attempt2.sha256
+         55c7794c516676980dc3f323b60ab86374943fc6e620dffdc51e2c895de8f825, on the same verified download
+         (FETCH_SUMMARY 9d69aa97…), with no network. Per the review (F3) the authorization should also:
+         - name the main checkout's HEAD 2c6df51 (chore/state-post-104) and forbid any git action on it until the
+           rerun;
+         - state that a refusal at preconditions (exit 2, no result written) does not consume the rerun and is
+           reported, not retried.
+         The rerun's result is final. The pre-registered read-only audit follows; it must confirm that the result's
+         run.stage1_code_manifest_sha256 equals 55c7794c…. Then stop;
      (b) or close Stage 1 as VOID. NG-1 then ends with K KILLED (valid for H ≤ 0.85) and T untested.
      Under the strict window a rerun is a kill test. A T CONTINUE would need the archive, because K did not
      CONTINUE. The download (10.06 GB) stays local and read-only either way.
@@ -356,12 +388,16 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2). Read first:
-  - .work/research3/nextgen/ng1/pilot/STAGE1_AUDIT.md: the VOID, the audit and the repair conditions;
-  - STAGE1_RESULT.json (write-once), and STAGE0_AUDIT.md for the governing Stage-0 wording;
+  - .work/research3/nextgen/ng1/pilot/STAGE1_REPAIR_REVIEW.attempt2.md: the review and the rerun terms;
+  - STAGE1_REPAIR.attempt2.md (the repair) and STAGE1_AUDIT.md (the VOID and the nine conditions);
+  - STAGE1_RESULT.json (attempt 1, write-once), and STAGE0_AUDIT.md for the governing Stage-0 wording;
   - NG1_PILOT_PREREG.md §8 (stages) and §10 (claims).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
-  - Never run ng1_stage1.py --stage1 again without the owner's authorization: it refuses once STAGE1_RESULT.json
-    exists. A repair never edits the Stage-1 files or their seals; it uses attempt-suffixed names only.
+  - Run ng1_stage1.py --stage1 only under an owner authorization citing 55c7794c…, captured as the repair note
+    fixes (RUN_STAGE1.attempt2.*, the command written literally). It refuses once STAGE1_RESULT.attempt2.json exists.
+  - Never edit attempt 1's files or any attempt-2 file. Never run --pin-deps again: it refuses once
+    STAGE1_DEPS.attempt2.json exists.
+  - No git action on the main checkout until the rerun (CURRENT_BRANCH).
   - Never run fetch_stage1.py again: the download is consumed, verified and read-only.
   - Never run ng1_pilot.py --stage0 again: it refuses once STAGE0A_RESULT.json exists (NEVER_RERUN).
   - Never import or run r4/u1/run_u1.py: it executes at import and rewrites U1_RESULTS.json.
@@ -633,7 +669,7 @@ NEXTGEN=Next-generation dependency closure, paper only, in .work/research3/nextg
 NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
   .work/research3/nextgen/ng1 (gitignored). Manifest NG1.sha256
   a6af7eec6fe02c124f275d528c89de7298a58045b35b79fc9adf177dff816db0 (4 entries). Nothing changed in the product.
-  Pilot Stage 0 ran once; Stage 1 fetched its data and ran once, VOID (below).
+  Pilot Stage 0 ran once; Stage 1 fetched its data and ran once, VOID; its one repair is prepared and reviewed (below).
   - NG1_ADMISSIBILITY_MAP.md (c5f4212a…):
     - Rule R-1: trade data are resolution-free, so a UTC day is admissible only if no timeframe's consumed, sealed
       or reserved span covers it.
@@ -716,10 +752,39 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
       62 ZIPs (0 mismatches), and confirmed the VOID, the pre-network provenance and the one-run rule.
       - MEDIUM 1: the pins came from a stand-in path, not the run's exact path (the VOID's cause).
       - LOW: the pin check runs once; the 4H inputs are undeclared but inert (mf=False; their digests equal the
-        sealed R2 archive manifest); venue_parity's trade-id flag is hard-coded; no log of the pin and preflight
+        read-only R2 archive manifest); venue_parity's trade-id flag is hard-coded; no log of the pin and preflight
         runs; the row-placement guard is untested and never ran; the data folder was writable (now 0555).
     - Concluded: Stage 1 is VOID and no T verdict exists. Nothing is claimed about trade-level data, depth, or the
       free-data route beyond Stage 0's kline result.
+  - STAGE-1 REPAIR, attempt 2 (owner-authorized 2026-09-25, preparation only; not run), in the same folder:
+    - The change is to ng1_stage1.py only; attempt 1's bytes are kept as ng1_stage1.attempt1.py (a5bfef6d…).
+      - The pin and preflight modes run the run's own steps before its pin check: preconditions, data
+        preconditions, P.research_imports, P.load_minutes for both symbols, P.build_stage.
+      - The preflight requires loaded = pinned in both directions; verification hashing is not counted as a load.
+      - The pin mode stops unless the new pins are attempt 1's 36 unchanged plus exactly the two 4H caches.
+      - Outputs are attempt-suffixed. Attempt 1's record, the fetch summary, src/ cleanliness and the
+        unchanged-code rule are preconditions.
+      - Step order, constants, seeds, features and gates are unchanged. Repair note: STAGE1_REPAIR.attempt2.md
+        (3d1ed069…).
+    - Re-pin (RUN_PIN_DEPS.attempt2.*, 09:29:16Z, exit 0): preconditions 121/121; 38 files = 36 unchanged +
+      BTCUSDT_4H.pkl 45cc136f… + ETHUSDT_4H.pkl c98b5059…; HEAD 2c6df51, src/ clean. STAGE1_DEPS.attempt2.json is
+      e3babf74…. A first wrapper invocation failed before Python started (zsh, exit 127) and wrote nothing; its
+      capture is kept as RUN_PIN_DEPS.attempt2.wrapper_error.*.
+    - Code digested: STAGE1_CODE.attempt2.sha256 55c7794c516676980dc3f323b60ab86374943fc6e620dffdc51e2c895de8f825
+      (40 entries: attempt 1's 39, with ng1_stage1.py at 125076d7… and the new pins in place of the old, plus the
+      note).
+    - Then, against the digested code: the synthetic tests pass 37/37 and 51/51 (RUN_TESTS.attempt2.*); the
+      preflight (RUN_PREFLIGHT.attempt2.*) passes, with preconditions 210/210 and loaded 38 = pinned 38.
+    - Sealed: STAGE1_PREP.attempt2.sha256 5f225f11de512d0925eda55f424a8bf8e646f823586e98a979f7afa8bf10046a (22
+      entries: the captures, the code manifest and the attempt-1 copy).
+    - STAGE1_REPAIR_REVIEW.attempt2.md (f8623310…; STAGE1_REPAIR_REVIEW.attempt2.sha256 87bb0d9e…): one
+      independent read-only Claude review, ACCEPT_WITH_FINDINGS (0 HIGH, 0 MEDIUM, 6 LOW). It is ready to be named
+      in one rerun authorization with the F3 terms (OWNER_BOUNDARY 2). Two corrections are recorded there:
+      - the review brief wrongly said the synthetic suites write nothing; they use temporary folders and test the
+        hook's refusals;
+      - "sealed" overstates R2_ARCHIVE_MANIFEST.json: it is read-only, and its 4H digests are anchored in git
+        elsewhere.
+    - No T data was read and no pilot statistic was computed. The rerun is not authorized.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -859,6 +924,8 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
     refuses once STAGE1_RESULT.json exists; a rerun needs a fresh owner authorization (OWNER_BOUNDARY 2). Never
     delete or edit STAGE1_RESULT.json, the RUN_STAGE1.* and RUN_FETCH.* capture, or anything in nextgen/ng1/data/;
     never re-download.
+  - The NG-1 Stage-1 repair's pin run (attempt 2, 2026-09-25T09:29:16Z): ng1_stage1.py --pin-deps refuses once
+    STAGE1_DEPS.attempt2.json exists. Never edit or delete any attempt-2 file or capture.
   - The R4 Stage-B look: claim 95c339ef…, 2026-09-18T16:29Z. look.py --look refuses forever, because of the result,
     the run log and the ledger. Never run rehearse_b.py again: AUTHORIZATION.txt exists. Never delete or edit
     r4/stage_b/look_run/, look_evidence/, AUTHORIZATION.txt or r4/m0/LOOKS_CONSUMED.log. Never read the 28 snapshot
