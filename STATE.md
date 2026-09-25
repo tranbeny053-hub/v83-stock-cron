@@ -1,9 +1,10 @@
 # STATE
 
 Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
-83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2 is done as a paper brief:** the
-live directional-skill gate counts repeated and overlapping outcomes as independent evidence, and 1H and 4H passed it
-on the contract's cohort. It now waits at the methodology owner boundary (OWNER_BOUNDARY 2). 15m and 1H are
+83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2 is done as a paper brief (v3,
+after a bounded repair for the owner's review findings):** the live directional-skill gate counts near-duplicate and
+overlapping outcomes as independent evidence. 1H and 4H passed it as of 2026-08-16 and are unread since. It now waits
+at the methodology owner boundary (OWNER_BOUNDARY 2). 15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
@@ -32,8 +33,38 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-gate dependence brief is DONE
-  (paper, read-only): .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md, with seven questions for the owner
-  (OWNER_BOUNDARY 2). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  (paper, read-only), and v3 governs: .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md, with eight questions for the
+  owner (OWNER_BOUNDARY 2). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  - H2 bounded-repair authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form),
+    verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. H2 bounded repair only: preserve sealed v1/v2 and create an additive
+    sealed `H2_SKILL_GATE_BRIEF.v3.md`, then update local STATE to match. Close every Fable finding explicitly:
+    1. Remove the false decision-strength/HIGH coupling: production analysis uses constant `INSUFFICIENT_SAMPLE`;
+    calibration sample status is diagnostics-only. Reframe Q4 as non-decision-bearing reporting consistency/T1.
+    2. Replace inert “untagged legacy rows” Q7: origin is NOT NULL/default USER_REQUESTED since migration 0007.
+    Frame the real issue as a created_at cutoff around cohort separation/backfill; add that count to Q5. Declare the
+    known 2026-08-17 CONTROLLED_SMOKE canary mis-stamped USER_REQUESTED (BTC 1M), with no effect on 1H/4H.
+    3. Replace all current-status claims with: 1H/4H passed as of 2026-08-16 and are unread since; Q5 would measure
+    current state. Do not say they currently license candidates. 4. Reframe Q3: D-1 adopted R2 §2 only for
+    zero-location path A and left live Change-A directional wording unchanged. A proper-score/null change for the
+    live gate is a new owner ruling and changes population because TIMEOUT rows enter. 5. Rename H2 failure modes
+    F1–F4 to M1–M4. 6. Add a separate owner question for interim product posture while correction is designed: keep
+    current 1H/4H candidate licensing behavior vs a temporary T2 measure. 7. Relabel same-candle rows as
+    near-duplicates/inferred dependence, not proven identical, because the band uses request-time fees + live
+    spread. 8. Correct cache wording: TTL is 900s; after expiry the gate reads INSUFFICIENT_EVIDENCE until refresh
+    completes. 9. State methodology_version remains unchanged by the correction; under D1 the sample floor counts
+    distinct candles. Keep Q1/Q2/Q5/Q6 otherwise intact, refound Q3/Q4/Q7, and include the new interim-posture
+    question. Do not query production/DB or alter code/tests/data. Seal v3 additively, mechanically audit each
+    finding FIXED/NOT_FIXED, run verification only from a safe worktree, and report the new exact branch SHA. Do not
+    push, implement, access consumed F1/F2/F3 raw evidence, or fold H4 into H2." CONSUMED:
+    - Each finding's fact was first re-verified in code or record: the constant reliability status
+      (quant/calibration_metrics.py:8-14); migration 0007's NOT NULL default; the canary (commit 9bc195e); D-1's
+      path-A scope (D1_RULING.md:15-21); the band's live spread (execution_realism/realism.py:8-22); the cache
+      (calibration/skill.py:76-98).
+    - v3 is d5049ac94f5dab3988d7e9bc69fcc021045463e043c2f1030aebec34c0effdcf, sealed by H2_SKILL_GATE_BRIEF.v3.sha256
+      c21d99ceb8999bd3db88887a8b4d95042ff1dec1a4ae50be11231ca4f34d8de9. v1 and v2 are kept unchanged and verify.
+    - Mechanical audit of v3 §§1-6: findings 1-9 all FIXED; Q1/Q2/Q5/Q6 kept (Q5 adds the created_at count); H4 not
+      folded in.
+    - No code, test, data, production or database access.
   - H2 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
     "CONTINUE CURRENT — Opus 5 XHIGH. H2 AUTHORIZED, paper/read-only only. Audit the current live skill gate
     end-to-end against canonical STATE/contracts/implementation/tests: identify exactly where overlapping outcomes
@@ -45,7 +76,8 @@ LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-
     DB/serving/pinned/F3. Stop at the methodology owner boundary with the exact questions requiring ruling."
     CONSUMED:
     - Brief v2 is 0918f1484e968defb5e188719ea7b3d59f1cd59e392eba22e2507866f0c4ea69, sealed by
-      H2_SKILL_GATE_BRIEF.v2.sha256 08c6a9e604760b80c1ed16005d30ec4be8a1eaf3c06211ad9abb8262f71596b0. v2 governs.
+      H2_SKILL_GATE_BRIEF.v2.sha256 08c6a9e604760b80c1ed16005d30ec4be8a1eaf3c06211ad9abb8262f71596b0. v2 governed
+      until v3 superseded it (above).
     - v1 (H2_SKILL_GATE_BRIEF.md c67ddb61…) is kept unchanged: it was sealed before one §3 research citation was
       corrected, because a parallel tool batch sealed the file while one edit failed. No finding changed.
     - No code, test, data, database, serving, pinned, F3 or F1/F2 raw evidence was touched, and no production
@@ -226,7 +258,8 @@ LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 PAPER BRIEF COMPLETE (the live skill gate's dependence; methodology owner boundary). H1
+CURRENT_MILESTONE=H2 PAPER BRIEF v3 COMPLETE (the live skill gate's dependence; the owner's review findings closed;
+  methodology owner boundary). H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
   - any change to the live skill gate, its tests or its data before the owner's H2 rulings, then each change's own
@@ -324,7 +357,8 @@ LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cl
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
   - Run for this H2 record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its worktree.
-  - H2's own checks, read-only: H2_SKILL_GATE_BRIEF.v2.sha256 1/1 and H2_SKILL_GATE_BRIEF.sha256 (v1) 1/1.
+  - H2's own checks, read-only: H2_SKILL_GATE_BRIEF.v3.sha256 1/1, v2 1/1 and v1 1/1.
+  - Re-run after the H2 v3 repair, on the same branch, in its worktree: the same result.
   - Earlier, for the NG-1 closure record on chore/state-post-121 (main 21b89c5a plus that change; T0).
   - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
     the same result each time.
@@ -432,36 +466,52 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
      brief's digest externally.
   2. CURRENT LANE, H2: the METHODOLOGY OWNER BOUNDARY for the live directional-skill gate. Brief:
-     .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md (0918f148…). Its findings:
+     .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md (d5049ac9…; it supersedes v2 0918f148… and v1 c67ddb61…, both
+     kept). Its findings:
      - The gate counts every USER_REQUESTED resolved row (all symbols pooled) as an independent trial.
        - The test is z = (2h − n)/√n ≥ 1.96 with n ≥ 100, against a 50% coin.
        - Sources: calibration/skill.py:43-58; calibration/service.py:112-131; the repository's calibration query
          has no DISTINCT; the ledger's only key is prediction_id.
-     - Repeated analyses of one candle share one outcome window. Overlapping 6-bar windows, cross-symbol pooling
-       and regime runs inflate the evidence. Research measured a design effect of 1.4–4.1
-       (.work/research3/g1/G1_REPORT.md:99).
+       - Origin has been NOT NULL DEFAULT 'USER_REQUESTED' since migration 0007, so the query's coalesce is inert.
+       - The cache TTL is 900 s. After expiry, the gate reads INSUFFICIENT_EVIDENCE until a refresh completes.
+     - Its dependence mechanisms:
+       - M1: same-candle near-duplicates. They share one window and price path, but the band uses request-time fees
+         and the live spread, so they are not proven identical; the dependence is inferred.
+       - M2: overlapping 6-bar windows. M3: cross-symbol pooling. M4: regime runs.
+       - Research measured a design effect of 1.4–4.1 (.work/research3/g1/G1_REPORT.md:99).
      - A pass lifts the SKILL_NOT_DEMONSTRATED hard block and licenses LONG/SHORT_CANDIDATE ("for planning only").
-       On the contract's 2026-08-16 cohort, 1H (z 2.85) and 4H (z 4.31) passed (V1_QUANT_CONTRACT.md:18-26,
-       107-108).
-       - 1H's pass breaks once the design effect exceeds 2.12; 4H's once it exceeds 4.84.
-       - Against the contract's majority-direction baselines, neither passes even as independent rows (z ≈ 0.68 and
+       1H (z 2.85) and 4H (z 4.31) passed as of 2026-08-16 (V1_QUANT_CONTRACT.md:18-26, 107-108) and are unread
+       since; Q5 would measure the current state.
+       - On those numbers, 1H's pass would not survive a design effect above 2.12, and 4H's above 4.84.
+       - Against the contract's majority-direction baselines, neither passed even as independent rows (z ≈ 0.68 and
          1.18).
+     - Decision strength never reaches HIGH in production: analysis uses the constant reliability status
+       INSUFFICIENT_SAMPLE, and the calibration sample status is diagnostics-only.
+     - The one known mis-stamped row is the 2026-08-17 CONTROLLED_SMOKE canary, recorded as USER_REQUESTED (BTC 1M,
+       run_0294f782…; commit 9bc195e). It has no effect on 1H or 4H.
      - Correction designs:
-       - D1: one row per candle;
+       - D1: one row per candle; the sample floor then counts distinct candles;
        - D2: one row per non-overlapping window;
        - D3: a window-mean block test, the §5A A1 pattern; recommended.
-       Each keeps USER_REQUESTED-only counting and the D-1/Change-A wording, and fits the unpinned
-       calibration/service.py and skill.py. It changes a hard gate, so treat it as T2, with no deploy without its own
-       authorization.
+       Each keeps USER_REQUESTED-only counting, the D-1/Change-A wording and methodology_version unchanged, and fits
+       the unpinned calibration/service.py and skill.py. It changes a hard gate, so treat it as T2, with no deploy
+       without its own authorization.
      Questions for the owner's ruling:
      - Q1 — the evidence unit: one row per candle? Recommended: yes.
      - Q2 — D1, D2 or D3, and for D3 the windows and their minimum count? Recommended: D3.
-     - Q3 — the reference rate: 50%, or drift-aware? Is this also D-1(a)'s pending "dependence decision"?
-     - Q4 — does the same unit apply to the calibration sample gate (MEASURED → decision strength HIGH)?
+     - Q3 — reference and scoring. This is a new ruling, outside D-1: D-1 adopted R2 §2 only for zero-location path A
+       and left the live Change-A directional wording unchanged. Keep the 50% directional null, or change it for the
+       live gate? A proper score would change the population, because TIMEOUT rows enter.
+     - Q4 — reporting consistency (non-decision-bearing, T1): should the diagnostic calibration report use the same
+       unit?
      - Q5 — a read-only aggregate production query of counts (its own database authorization) before any change,
-       and acceptance of the product change if 1H or 4H flips?
+       and acceptance of the product change if 1H or 4H flips? It would count, per timeframe: n, h, distinct candles,
+       and rows created before migration 0007's cohort separation.
      - Q6 — may the display wording "resolved outcomes" change to name the unit, given D-1 keeps Change-A wording?
-     - Q7 — keep counting untagged legacy rows as USER_REQUESTED, or require an explicit origin?
+     - Q7 — cohort cutoff: exclude rows created before a created_at cutoff at cohort separation or backfill (0007)?
+       Q5 counts them first.
+     - Q8 — interim product posture while the correction is designed: keep the current behaviour (the gate may
+       license 1H/4H candidates if it still passes), or a temporary T2 measure?
   2-H1. H1, resumability and evidence-integrity hardening: COMPLETE 2026-09-25. Its steps: (a) and (d) as below;
      (b) #122 → main 83b099de; (c) the main checkout on main @ 83b099de. It was selected paper-only on 2026-09-25 at the
      owner's direction, after three parallel read-only reviews (the STATE decisions; Git, CI and production health;
@@ -493,8 +543,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
          The gate needs n ≥ 100 per timeframe; sampled resolver logs show outcomes accruing only a few per day; the
          fix is serving or pinned work, excluded now. It is next after H1.
          CORRECTED 2026-09-25 by the H2 audit: "latent" was wrong. On the contract's 2026-08-16 cohort, 1H
-         (142 directional rows, z 2.85) and 4H (151, z 4.31) already passed the gate (V1_QUANT_CONTRACT.md:18-26,
-         107-108), so it has been licensing candidates on those timeframes;
+         (142 directional rows, z 2.85) and 4H (151, z 4.31) had already passed the gate as of 2026-08-16
+         (V1_QUANT_CONTRACT.md:18-26, 107-108). They are unread since; H2's Q5 would measure the current state;
        - H3, verify.sh speed to the doctrine's 30 s (now about 110–180 s, almost all pytest): loop cost only;
        - H4, recording the resolver's 50-bar coupling and the unpinned runtime dependencies as known hazards
          (their fixes touch the database writer or serving);
@@ -580,7 +630,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
 NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; the H2 rulings Q1–Q7). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
-  - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v2.md: the H2 brief (it governs; v1 is superseded, kept unchanged);
+  - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md: the H2 brief (it governs; v2 and v1 are superseded, kept
+    unchanged);
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
