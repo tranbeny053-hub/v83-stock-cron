@@ -6,7 +6,9 @@ that the live directional-skill gate counts near-duplicate and overlapping outco
 4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one contribution per
 candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture. The four paper
 deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256 ea4bc8de…). Nothing is
-implemented, queried or deployed, and the product is unchanged. H2 now waits at its next owner boundaries
+implemented, queried or deployed, and the product is unchanged. After a second review, the owner also ruled point
+12(a) on 2026-09-26: a predeclared fail-closed drift guard. The additive v2 records are sealed (H2_PREP_12A.sha256
+c795c177…). **H2's D3 methodology is BLOCKED pending the separately authorized Q5 count-only density read**
 (OWNER_BOUNDARY 2). 15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
@@ -35,10 +37,62 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER at H2's post-ruling boundaries (OWNER_BOUNDARY 2): the confirmation points
-  (a)–(e), the count-only database read, and the T2 hold implementation. The rulings are recorded and the four paper
-  deliverables are sealed in .work/h2_skill_gate/ (H2_PREP.sha256). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is
-  pushed.
+LOOP_STATE=WAITING FOR THE OWNER. H2's D3 methodology is BLOCKED pending the separately authorized Q5 count-only
+  density read (OWNER_BOUNDARY 2). The 12(a) ruling and the second review's fixes are recorded as additive v2
+  records, sealed by H2_PREP_12A.sha256; the earlier package (H2_PREP.sha256) is unchanged. H1 is COMPLETE, and NG-1
+  is CLOSED. Nothing is pushed.
+  - H2 ruling on point 12(a) (owner, 2026-09-26; it arrived as pasted text in the owner's established form; its
+    anchors verify: the sealed package ea4bc8de… and point 12(a) of H2_D3_PREREG.md §12), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 ruling for unresolved point 12(a): use a predeclared fail-closed
+    drift guard; do NOT use F3/contemporaneous data and do NOT use same-cohort conditional margins as the
+    reference. Preserve the sealed `ea4bc8de…` package and create additive repaired paper records only.
+
+    Close the HIGH finding by freezing the guard construction/bound before Q5 results, making `UNAVAILABLE`
+    mandatory when realized drift exceeds it or when observed density lies outside the validated envelope, and
+    requiring validation at Q5 min/median/max contributions per window before the permanent gate can be accepted.
+    Repair the LOW findings too: settle-filter before collapse; define a call by sign(`p_up-p_down`) with exact
+    ties NO_CALL; clarify cutoff-M evidence/direct-serving observation plus stale-local-writer class; declare
+    per-timeframe vs cross-timeframe multiplicity; declare informative directional-call count and prepare a
+    non-arbitrary directional-call floor rule; add exact PLAN_COMPLETED dates when k>52. Preserve
+    methodology_version and all prior owner rulings.
+
+    Update local STATE to say methodology remains BLOCKED pending the separately authorized Q5 count-only density
+    read. Mechanically audit every second-review finding FIXED/NOT_FIXED, verify from the safe worktree, commit
+    STATE.md only, and report the new exact SHA. No push, DB query, code/tests implementation, hold deployment,
+    F3, collector or serving change." CONSUMED:
+    - Recorded additively in .work/h2_skill_gate/H2_RULING_12A.md: the ruling verbatim, the second review's
+      findings, and the closure table. The second review's own text is not in the repository or .work; its findings
+      are taken from the ruling (one HIGH, in three parts, and six LOW).
+    - The v2 records (they supersede the v1 documents, which stay sealed and unchanged): H2_D3_PREREG.v2.md,
+      H2_CUTOFF_DERIVATION.v2.md and H2_COUNT_QUERY_PLAN.v2.md. Support files: H2_DRIFT_GUARD_CALC.py/.out and
+      H2_PLAN_DATES.py/.out. H2_FAILCLOSED_T2_DESIGN.md is unaffected.
+    - HIGH fixed:
+      - The drift guard is frozen before any Q5 result. Either part makes the verdict UNAVAILABLE (DRIFT_GUARD):
+        - the bias bound |β̂| > g·SE, where β̂ = (π̂ − π_T)·Δq̂ and g = 0.2407, the headroom between α_look 0.002 and
+          the calibrated 0.004177;
+        - the drift envelope |π̂ − π_T| > 0.10.
+      - The density envelope [D_lo, D_hi] comes from Q5. Outside it, the verdict is UNAVAILABLE (DENSITY_ENVELOPE).
+      - Validation must run at each timeframe's Q5 minimum, median and maximum density before the permanent gate
+        can be accepted.
+      - The synthetic check: without the guard, false passes reached 73.6% and 99.9% at 30 contributions per
+        window; with the bias bound, every scenario stayed at or below 1.51%.
+    - LOW fixed:
+      - the settle filter now comes before the collapse;
+      - the call is sign(p_up − p_down), with exact ties NO_CALL;
+      - the cutoff-(M) evidence is classified: dbe9bf8 is a deployment-source record, and the only direct-serving
+        observation in the interval is 2026-08-16T09:44Z (a4bd2ac). This repository has no commits from
+        2026-07-13T15:37Z to 2026-08-15T09:49Z. The stale-local-writer class is declared for both cutoffs;
+      - multiplicity is declared: controlled per timeframe, not across timeframes;
+      - the informative count m is declared, with the floor rule m ≥ 100 (point (f));
+      - the exact PLAN_COMPLETED dates, at the earliest: 15m/1H/4H 2027-07-21T00:00Z (M) and 2027-08-25T00:00Z (I);
+        1D 2030-07-24T00:00Z (M) and 2030-08-21T00:00Z (I).
+    - Mechanical audit (H2_SECOND_REVIEW_CHECK.py/.out): ALL PASS. HIGH H-1 to H-3 and LOW 1–6 are FIXED
+      (mechanical); the v1 seal is intact (15/15); Q1–Q4 are byte-identical to v1; the new texts contain no bare
+      "skill". It checks presence and absence only, not correctness. No independent re-audit was run.
+    - Seal: H2_PREP_12A.sha256 c795c17757919498e5e9db5cd53af05ac09aab21259973e9578ffd0d1e58a512 (10/10 files, all
+      0444). H2_PREP.sha256 ea4bc8de… still verifies 15/15.
+    - No push, database query, code or test implementation, hold deployment, F3, collector or serving change.
+      methodology_version and every prior owner ruling are preserved.
   - H2 rulings (owner, 2026-09-26; they arrived as pasted text in the owner's established form), verbatim:
     "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 rulings: Q1 YES—max one candle-level contribution per
     `(symbol,timeframe,reference_close)` before further aggregation, with exact collapse rule frozen on paper; Q2
@@ -316,8 +370,8 @@ LOOP_STATE=WAITING FOR THE OWNER at H2's post-ruling boundaries (OWNER_BOUNDARY 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 RULINGS RECORDED; PAPER PREPARATION COMPLETE (the D3 preregistration, the cutoff derivation,
-  the count-only query plan and the fail-closed T2 design; audited once, repaired, sealed). H1
+CURRENT_MILESTONE=H2 RULINGS Q1–Q8 AND 12(a) RECORDED; THE v2 PAPER RECORDS SEALED; THE D3 METHODOLOGY BLOCKED
+  pending the separately authorized Q5 count-only density read. H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
   - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
@@ -415,10 +469,11 @@ LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cl
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
-  - Run for this H2 rulings record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
+  - Run for this H2 12(a) record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
     worktree.
-  - The H2 package's own checks, read-only: H2_PREP.sha256 15/15; H2_SKILL_GATE_BRIEF.v3.sha256, v2 and v1 1/1
-    each.
+  - H2's own checks, read-only: H2_PREP_12A.sha256 10/10; H2_PREP.sha256 15/15; H2_SKILL_GATE_BRIEF.v3.sha256, v2
+    and v1 1/1 each; H2_SECOND_REVIEW_CHECK ALL PASS.
+  - Earlier on this branch (2026-09-26), for the H2 rulings record: the same result.
   - Earlier on this branch (2026-09-25), for the H2 brief and its v3 repair: the same result each time.
   - Earlier, for the NG-1 closure record on chore/state-post-121 (main 21b89c5a plus that change; T0).
   - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
@@ -523,27 +578,34 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
-  authorization, and the H2 paper, bounded-repair and rulings authorizations (LOOP_STATE). What remains, in order:
+  authorization, and the H2 paper, bounded-repair, rulings and 12(a) authorizations (LOOP_STATE). What remains, in
+  order:
   1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
      brief's and the H2 package's digests externally.
-  2. CURRENT LANE, H2 — RULED 2026-09-26 (Q1–Q8, LOOP_STATE). The paper package is sealed (H2_PREP.sha256
-     ea4bc8de…). The next owner boundaries each need their own authorization:
-     a. Confirm or change the five points in H2_D3_PREREG.md §12. Each has a frozen default:
-        - (a) the π_T reference span: NG-1's R-1 span;
-        - (b) no hardening beyond the per-look level of 0.002;
-        - (c) exact ties are no-calls;
-        - (d) the D3 replacement texts, which change the Change-A wording;
-        - (e) the cutoff: (M) 2026-07-13T04:20:01Z (the default) or (I) 2026-08-19T08:31:57Z.
-        The count-only read returns no performance figures, so it may come first.
-     b. The count-only database read. The owner runs the five sealed statements of H2_COUNT_QUERY_PLAN.md §3, each
-        once, in the Supabase SQL editor, and returns the raw output (suggested wording in its §5). No write.
-     c. The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md: implementation on a branch, ./verify.sh in a
-        worktree and Claude's review of the diff; then a T3; then a separate deploy authorization. Until it is
-        deployed, the live gate behaves as today.
-     d. Optional: one re-audit of the repaired package. The auditor asked for it; the one authorized audit is
-        consumed.
-     e. Later: the D3 implementation (T2); π_T's computation (from the archive through its load mask, or under a
-        fetch authorization); the §10 validation; then the owner's authorization to replace the hold, and a deploy.
+  2. CURRENT LANE, H2 — RULED 2026-09-26 (Q1–Q8 and point 12(a); LOOP_STATE). **The D3 methodology is BLOCKED
+     pending the separately authorized Q5 count-only density read.**
+     - Sealed: H2_PREP.sha256 ea4bc8de… (the v1 package) and H2_PREP_12A.sha256 c795c177… (the v2 records, which
+       govern where they exist).
+     - The next owner boundaries each need their own authorization:
+     a. **The count-only density read, which unblocks the methodology.** The owner runs the five sealed statements of
+        H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL editor, and returns the raw output (suggested
+        wording in its §5). No write.
+        - It returns no performance figures and no outcome-direction counts, so it cannot inform the frozen guard.
+        - It yields the density envelope, the validation densities and the call mix.
+     b. Confirm or change the open points in H2_D3_PREREG.v2.md §15. Each has a frozen default:
+        - (b) no hardening beyond α_look 0.002 and the drift guard;
+        - (d) the D3 replacement texts, now including DRIFT_GUARD and DENSITY_ENVELOPE (a Change-A wording change);
+        - (e) the cutoff: (M) 2026-07-13T04:20:01Z (the default) or (I) 2026-08-19T08:31:57Z;
+        - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
+          only if they hold an informative call.
+        - (a) is RULED (the drift guard). (c) is SETTLED: the call is sign(p_up − p_down), with exact ties NO_CALL.
+     c. The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md (unchanged): implementation on a branch,
+        ./verify.sh in a worktree and Claude's review of the diff; then a T3; then a separate deploy authorization.
+        Until it is deployed, the live gate behaves as today.
+     d. Optional: an independent review of the v2 records. Their fixes are checked mechanically only.
+     e. Later, after the read: the §13 validation at the Q5 densities; the D3 implementation (T2); π_T's
+        computation (from the archive through its load mask, or under a fetch authorization); then the owner's
+        authorization to replace the hold, and a deploy.
      For reference, the brief's findings and questions (Q1–Q8 are now ruled; LOOP_STATE). Brief:
      .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md (d5049ac9…; it supersedes v2 0918f148… and v1 c67ddb61…, both
      kept). Its findings:
@@ -706,20 +768,23 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then H2's confirmation points, the
-  count-only database read and the T2 hold authorization). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then the Q5 count-only density read,
+  which unblocks H2's methodology; H2's open points; and the T2 hold authorization). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
-  - .work/h2_skill_gate/H2_RULINGS.md: the rulings, the package, the audit and the repair. Then H2_D3_PREREG.md,
-    H2_CUTOFF_DERIVATION.md, H2_COUNT_QUERY_PLAN.md and H2_FAILCLOSED_T2_DESIGN.md. All are sealed by
-    H2_PREP.sha256; never edit them, and make any change additively;
+  - .work/h2_skill_gate/H2_RULING_12A.md: the 12(a) ruling, the second review's findings and their closure. Then
+    the governing v2 records: H2_D3_PREREG.v2.md, H2_CUTOFF_DERIVATION.v2.md and H2_COUNT_QUERY_PLAN.v2.md (sealed
+    by H2_PREP_12A.sha256). H2_FAILCLOSED_T2_DESIGN.md still governs the hold;
+  - .work/h2_skill_gate/H2_RULINGS.md: the Q1–Q8 rulings, the first audit and its repair. It and the four v1
+    documents are sealed by H2_PREP.sha256 and superseded where a v2 exists. Never edit a sealed file; make every
+    change additively;
   - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md: the H2 brief (it governs; v2 and v1 are superseded, kept
     unchanged);
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
-  - H2: no database query except the sealed count-only statements, each once, under the owner's authorization. No
-    implementation of the hold or of D3 without its own authorization.
+  - H2: no database query except the five sealed statements of H2_COUNT_QUERY_PLAN.v2.md, each once, under the
+    owner's authorization. No implementation of the hold or of D3 without its own authorization.
   - Never run ng1_stage1.py --stage1 again: attempt 2's result is final, and the run refuses once
     STAGE1_RESULT.attempt2.json exists.
   - Never edit attempt 1's files or any attempt-2 file. Never run --pin-deps again: it refuses once
