@@ -1,16 +1,18 @@
 # STATE
 
-Updated: 2026-09-24. R4, the B lane, the NEXTGEN lane, D-1 and NG-1's pre-registration are published (main
-d82ca2dc, PR #117). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED
-(not implemented). **NG-1 pilot Stage 0 ran once** (owner-authorized, STRICT window, local, no network):
-- Stage 0a returned **DESIGN_OK**.
-- Stage 0b: the kline family K is **KILLED**. On the admissible span its reduction of C1's out-of-sample 15m
-  log-variance error is below 19% (λ < 0.10) at one-sided 98.75% confidence, valid for H ≤ 0.85. The estimate is
-  f̂ 0.010 (UCB 0.156; at the report-only H 0.90 the UCB is 0.205).
-- One independent audit: ACCEPT_WITH_FINDINGS.
-- The trade-level family T is untested; Stage 1 (its download) is the owner's call.
-Nothing was downloaded, and no F3, collector or production path was touched. The product is unchanged and hf is
-unchanged at 00705c55. This record is local; publishing it is a T3, which also timestamps the Stage-0 digests.
+Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1's pre-registration and its Stage-0 record are
+published (main 91232022, PR #118). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and
+D-1 is CLOSED (not implemented). NG-1 pilot Stage 0: DESIGN_OK, and the kline family K is KILLED (valid for
+H ≤ 0.85). **NG-1 pilot Stage 1 ran once** (owner-authorized, STRICT window):
+- The exact pre-registered download was fetched and verified: 62 spot aggTrades ZIPs, 10.06 GB, each equal to its
+  official checksum. It is local, read-only and gitignored.
+- The run was **VOID** at its dependency-pin guard, before any trade data was parsed: the shared row build loaded
+  two unpinned 4H candle caches. No T feature and no statistic exists.
+- One independent audit: ACCEPT_WITH_FINDINGS. One bounded repair plus one rerun on the same download is
+  legitimate only under a fresh owner authorization; closing Stage 1 as VOID is equally coherent.
+- The trade-level family T is therefore still untested.
+No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. This
+record is local; publishing it is a T3, which also timestamps the Stage-1 digests.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -19,8 +21,17 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: NG-1 pilot Stage 0 DONE (DESIGN_OK; K KILLED, valid for H ≤ 0.85). Stage 1 is
-  not authorized. Nothing is pushed or fetched.
+LOOP_STATE=WAITING FOR THE OWNER: NG-1 pilot Stage 1 ran once and is VOID (dependency-pin guard, before any trade
+  data); audited ACCEPT_WITH_FINDINGS. No repair or rerun is authorized. Nothing is pushed.
+  - NG-1 Stage-1 authorization (owner, 2026-09-25), verbatim: "NG-1 STAGE 1 AUTHORIZED once under the frozen
+    STRICT preregistration. Before network access, pin+digest the two audited out-of-tree dependencies, add the
+    required row-placement guard, and synthetic-test Binance Spot timestamp parsing on both sides of the
+    2025-01-01 ms→µs boundary; then digest the exact final code. Only if every preflight passes, download exactly
+    the preregistered BTC/ETH Spot trade data and official checksums for the strict window, verify every file, run
+    Stage 1 once, seal raw capture/results, commission the preregistered read-only audit, and stop. No
+    dataset/type/window substitution, F3, collector, DB, serving/pinned/wiring/freeze/deploy." It is CONSUMED: one
+    fetch (2026-09-25T06:18:59Z → 06:28:01Z, exit 0) and one run (06:28:29Z → 06:28:39Z, exit 3, VOID).
+  - The NG-1 Stage-0 STATE T3 (#118 → main 91232022) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
   - NG-1 Stage-0 authorization (owner, 2026-09-23), verbatim: "NG-1 PILOT STAGE 0 AUTHORIZED once using the
     **STRICT** window under `NG1_PILOT_PREREG v2` (`NG1.sha256 a6af7eec…`, externally anchored by `origin/main
     d82ca2dc`). Digest the exact pilot code before execution; run Stage 0a once, then Stage 0b only if the frozen
@@ -122,22 +133,27 @@ LOOP_STATE=WAITING FOR THE OWNER: NG-1 pilot Stage 0 DONE (DESIGN_OK; K KILLED, 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 PILOT STAGE 0 COMPLETE: DESIGN_OK; K KILLED (valid for H ≤ 0.85); audited
-  (ACCEPT_WITH_FINDINGS). Still excluded:
-  - Stage 1, any market-data download or research-data fetch, and option W. W(a) lapsed when 0b started; W(b) exists
-    only after a NOT_DEMONSTRATED Stage-1 verdict, as a kill-only look;
+CURRENT_MILESTONE=NG-1 PILOT STAGE 1 VOID (no T verdict): run once; first causal failure at dependency_pins;
+  audited (ACCEPT_WITH_FINDINGS). Stage 0 stands: DESIGN_OK; K KILLED (valid for H ≤ 0.85). Still excluded:
+  - any Stage-1 repair or rerun, any further download or research-data fetch, and option W. W(a) lapsed when 0b
+    started; W(b) exists only after a NOT_DEMONSTRATED Stage-1 verdict, as a kill-only look (a VOID is not one);
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings.
-CURRENT_BRANCH=chore/state-post-117 (LOCAL, no upstream), from main d82ca2dc: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112)
-  are merged and stay on origin; -110's push is the R4 commitment's timestamp.
+CURRENT_BRANCH=chore/state-post-118 (LOCAL, no upstream), from main 91232022: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113)
+  and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's timestamp.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=d82ca2dc (main, PR #117: the NG-1 opening and pilot pre-registration STATE record, STATE.md only).
+LAST_GREEN_SHA=91232022 (main, PR #118: the NG-1 pilot Stage-0 STATE record, STATE.md only).
+  - Merged 2026-09-25 by this loop under the owner's T3, with --match-head-commit 52d51fd0.
+  - Parents (d82ca2dc, 52d51fd0); tree 8a7afcd2, recorded before the push and matched after; STATE.md blob 4bfe9ba1.
+  - The exact-head check `test` passed at 05:46:45Z and the exact-main check `test` at 05:50:37Z (2026-09-25).
+  - This publication is the external timestamp of the Stage-0 code and result digests (Stage-0 audit LOW 3).
+  Before it: d82ca2dc (PR #117: the NG-1 opening and pilot pre-registration STATE record, STATE.md only).
   - Merged 2026-09-23 by this loop under the owner's T3, with --match-head-commit 6f9f1b25.
   - Parents (18d0985e, 6f9f1b25); tree 6bc53f54, recorded before the push and matched after; STATE.md blob c8ceda7a.
   - The exact-head check `test` passed at 16:33:15Z and the exact-main check `test` at 16:37:23Z (2026-09-23).
@@ -175,8 +191,12 @@ LAST_GREEN_SHA=d82ca2dc (main, PR #117: the NG-1 opening and pilot pre-registrat
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-24 (local).
-  - Run for this NG-1 Stage-0 record on chore/state-post-117 (main d82ca2dc plus this STATE.md change; T0).
+LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
+  - Run for this NG-1 Stage-1 record on chore/state-post-118 (main 91232022 plus this STATE.md change; T0).
+  - Stage 1's own checks, local and read-only: STAGE1_CODE.sha256 39/39, STAGE1_RESULTS.sha256 16/16 and
+    STAGE1_AUDIT.sha256 1/1 OK; the 36 pinned files unchanged; the synthetic tests pass 37/37 (Stage 1) and 51/51
+    (Stage 0); PILOT_CODE.sha256 37/37, PILOT_RESULTS.sha256 8/8, STAGE0_AUDIT.sha256 1/1 and NG1.sha256 4/4 OK.
+  - Earlier, for the NG-1 Stage-0 record on chore/state-post-117 (main d82ca2dc plus that STATE.md change; T0).
   - Stage 0's own checks, local and read-only: PILOT_CODE.sha256 37/37, PILOT_RESULTS.sha256 8/8,
     STAGE0_AUDIT.sha256 1/1 and NG1.sha256 4/4 OK. The pilot's synthetic tests pass 51/51. U1_RESULTS.json still
     matches evidence_r4.sha256, and DEV_INPUTS.json still matches B_LANE.sha256.
@@ -241,25 +261,31 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
   - NG-1 pilot Stage 0 used no Codex. Claude wrote the pilot, and it was tested on synthetic data (51/51) and
     digested before the one run. One independent read-only Claude audit of the result followed (ACCEPT_WITH_FINDINGS:
     0 HIGH, 2 MEDIUM wording, 6 LOW), then one bounded re-check of this record's wording.
+  - NG-1 pilot Stage 1 used no Codex. Claude wrote the Stage-1 code; it was tested on synthetic data (37/37,
+    including the 2025-01-01 ms→µs boundary) and digested before the fetch and the one run. One independent
+    read-only Claude audit of the VOID followed (ACCEPT_WITH_FINDINGS: 0 HIGH, 1 MEDIUM, 6 LOW).
   The previous change closed at 3 of its 4 delegations (task-818 to 820; .work/816/codex-818-820/).
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 pre-registration STATE T3
-  (#117), and the NG-1 pilot Stage-0 authorization (one run; LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-117, STATE.md only). It also timestamps the
-     Stage-0 code and result digests externally (NG1 below).
-  2. NG-1 pilot Stage 1 (owner decides; only this stage remains). Stage 0 allows it: DESIGN_OK, and K was KILLED
-     (valid for H ≤ 0.85; UCB 0.205 at the report-only H 0.90), not CONTINUE.
-     - It is the exact aggTrades fetch (spot BTCUSDT and ETHUSDT, UTC days 2024-08-21 → 2025-04-13, ≤ 30 GB, public
-       keyless, $0), plus the one-shot run of the T arm (K + trade-level features) against B0, which gives the
-       primary verdict.
-     - Before it: digest the out-of-tree imports (the product package commit and the dataset pickles) and add the
-       row-placement assertion (Stage-0 audit, LOW 4 and 7).
-     - Under the strict window it is a kill test. A T CONTINUE would need the archive, because K did not CONTINUE.
-     - The alternative is to end NG-1 here, with the kline family closed and the trade-level family untested.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-0 STATE T3 (#118), and
+  the NG-1 pilot Stage-1 authorization (one fetch, one run; LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-118, STATE.md only). It also timestamps the
+     Stage-1 code, pin, result and audit digests externally (NG1 below).
+  2. NG-1 Stage 1's disposition (owner decides). Stage 1 is VOID, so no T verdict exists. Either:
+     (a) the bounded repair, in two owner steps, under the nine conditions in nextgen/ng1/pilot/STAGE1_AUDIT.md:
+         - first, authorize preparing ONE repair of ng1_stage1.py only: the pins follow the run's exact build path,
+           the preflight requires loaded = pinned in both directions, and new files are attempt-suffixed. The new
+           pins must be the 36 unchanged plus exactly the two 4H caches (BTC 45cc136f…, ETH c98b5059…). An
+           independent read-only review of the repair diff follows, and the new code-manifest digest is reported;
+         - then, a separate authorization citing that digest for ONE rerun on the same verified download
+           (FETCH_SUMMARY 9d69aa97…): no network, the VOID record byte-identical, the result final, then the
+           pre-registered audit, and stop;
+     (b) or close Stage 1 as VOID. NG-1 then ends with K KILLED (valid for H ≤ 0.85) and T untested.
+     Under the strict window a rerun is a kill test. A T CONTINUE would need the archive, because K did not
+     CONTINUE. The download (10.06 GB) stays local and read-only either way.
   3. Option W: W(a) LAPSED (the envelope became final at 0b). W(b) exists only after a NOT_DEMONSTRATED Stage-1
-     verdict, as a kill-only look on the added weeks alone.
+     verdict, as a kill-only look on the added weeks alone. A VOID opens nothing.
   4. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
@@ -280,7 +306,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      USER_REQUESTED arrival rate, and Stage D. The standing rule stays: if A may use B's calendar period, A's design
      and preregistration are digested before any B look is read.
   6. New generation: NG-1 RULED GO 2026-09-23 (research-only, free-data-only; no collector, production path, F3
-     or download yet). NG-2 and NG-3, the collector routes, were not chosen. The archive question is RESOLVED
+     or download yet; the only download since is Stage 1's, separately authorized). NG-2 and NG-3, the collector
+     routes, were not chosen. The archive question is RESOLVED
      (nextgen/ARCHIVE_VERIFICATION_NOTE.md): spot trades and aggTrades are archived, and no depth archive is listed.
      A research data collector and path A's evidence collector are both OFF. Implied volatility stays barred by
      invariant 5.
@@ -329,12 +356,14 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2). Read first:
-  - .work/research3/nextgen/ng1/pilot/STAGE0_AUDIT.md: the result, the audit and the governing wording;
-  - STAGE0A_RESULT.json and STAGE0B_RESULT.json (write-once);
+  - .work/research3/nextgen/ng1/pilot/STAGE1_AUDIT.md: the VOID, the audit and the repair conditions;
+  - STAGE1_RESULT.json (write-once), and STAGE0_AUDIT.md for the governing Stage-0 wording;
   - NG1_PILOT_PREREG.md §8 (stages) and §10 (claims).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
+  - Never run ng1_stage1.py --stage1 again without the owner's authorization: it refuses once STAGE1_RESULT.json
+    exists. A repair never edits the Stage-1 files or their seals; it uses attempt-suffixed names only.
+  - Never run fetch_stage1.py again: the download is consumed, verified and read-only.
   - Never run ng1_pilot.py --stage0 again: it refuses once STAGE0A_RESULT.json exists (NEVER_RERUN).
-  - No download before the owner's Stage-1 authorization.
   - Never import or run r4/u1/run_u1.py: it executes at import and rewrites U1_RESULTS.json.
   - No F3 action of any kind: F3 is ruled KEEP UNSPENT, the tool stays unrun, and ruling 3 is not issued.
   - Never import r4/v2a/run_v2a.py: it runs main() on import and rewrites V2A_RESULTS.json.
@@ -603,8 +632,8 @@ NEXTGEN=Next-generation dependency closure, paper only, in .work/research3/nextg
     value, and the evidence budget still binds. The brief and D1_RULING bytes are unchanged.
 NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
   .work/research3/nextgen/ng1 (gitignored). Manifest NG1.sha256
-  a6af7eec6fe02c124f275d528c89de7298a58045b35b79fc9adf177dff816db0 (4 entries). Nothing was fetched or changed in
-  the product; pilot Stage 0 ran once (below).
+  a6af7eec6fe02c124f275d528c89de7298a58045b35b79fc9adf177dff816db0 (4 entries). Nothing changed in the product.
+  Pilot Stage 0 ran once; Stage 1 fetched its data and ran once, VOID (below).
   - NG1_ADMISSIBILITY_MAP.md (c5f4212a…):
     - Rule R-1: trade data are resolution-free, so a UTC day is admissible only if no timeframe's consumed, sealed
       or reserved span covers it.
@@ -663,6 +692,34 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
         out-of-envelope values in memory only (the masking-wrapper exception).
       - LOW 4 and 7 are Stage-1 requirements: digest the out-of-tree imports; assert row placement.
       - LOW 6 and 8 are report-only.
+  - PILOT STAGE 1 (owner-authorized 2026-09-25, STRICT window, once), in .work/research3/nextgen/ng1/pilot:
+    - Before the network: the out-of-tree loads were pinned (STAGE1_DEPS.json 0825fd0d…, 36 files: the product
+      package from src/ at 2c6df51 (clean; 32 files), research1's dataset.py and its .pyc, and the two 15m candle
+      caches); the row-placement guard was added; the synthetic tests pass 37/37, including both sides of the
+      2025-01-01 ms→µs timestamp boundary and a mixed-unit refusal. Code digested: STAGE1_CODE.sha256
+      b1e31fbd4ccb0029776fa29d3e852bbff533648ee855ce73c238f7f5e5ef7649 (39 entries). The preflight passed 108/108
+      (its output was not captured to a file; audit LOW 5).
+    - Fetch (2026-09-25T06:18:59Z → 06:28:01Z, exit 0): sized first (10,062,297,617 bytes, under the 30 GB cap),
+      then exactly the 62 pre-registered spot aggTrades ZIPs and their 62 official checksums. Every ZIP equals its
+      official checksum and passes the ZIP integrity test. FETCH_SUMMARY.json 9d69aa97…; the files are read-only
+      and gitignored in nextgen/ng1/data/.
+    - Run (06:28:29Z → 06:28:39Z, exit 3): preconditions 173/173 and the data checks passed, then VOID at step
+      dependency_pins. The first causal failure, preserved: two unpinned out-of-tree files were loaded,
+      .work/research/cache/datasets/BTCUSDT_4H.pkl and ETHUSDT_4H.pkl (38 loaded, 36 pinned). The shared row build
+      (arms.prepare → week_from_4h) reads the 4H caches, while the pin and preflight modes exercised only the 15m
+      loads. No aggTrades file was parsed; no T feature, statistic or Stage-0b reproduction exists.
+    - Results: STAGE1_RESULTS.sha256 78954b230887d19cdb283f5c934cba302625e802b5cd18a440d90494a43ead3e (16 entries,
+      including STAGE1_RESULT.json 95fd8d14…, the RUN_FETCH.* and RUN_STAGE1.* capture and the fetch manifests).
+      Write-once and read-only.
+    - STAGE1_AUDIT.md (73c802d2…; STAGE1_AUDIT.sha256 68c9a1313b9a93df32070039c6fcf5953e91152cd1e7b8d0e2715e5de07b1ca9):
+      one independent read-only Claude audit, ACCEPT_WITH_FINDINGS. It re-derived the 62-file plan, re-hashed all
+      62 ZIPs (0 mismatches), and confirmed the VOID, the pre-network provenance and the one-run rule.
+      - MEDIUM 1: the pins came from a stand-in path, not the run's exact path (the VOID's cause).
+      - LOW: the pin check runs once; the 4H inputs are undeclared but inert (mf=False; their digests equal the
+        sealed R2 archive manifest); venue_parity's trade-id flag is hard-coded; no log of the pin and preflight
+        runs; the row-placement guard is untested and never ran; the data folder was writable (now 0555).
+    - Concluded: Stage 1 is VOID and no T verdict exists. Nothing is claimed about trade-level data, depth, or the
+      free-data route beyond Stage 0's kline result.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -798,6 +855,10 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - NG-1 pilot Stage 0: run once 2026-09-23T17:01:00Z (DESIGN_OK; K KILLED, valid for H ≤ 0.85). ng1_pilot.py
     --stage0 refuses once STAGE0A_RESULT.json exists. Never delete or edit nextgen/ng1/pilot/STAGE0*_RESULT.json
     or the RUN_STAGE0.* capture.
+  - NG-1 pilot Stage 1: fetched once (2026-09-25T06:18:59Z) and run once (06:28:29Z, VOID). ng1_stage1.py --stage1
+    refuses once STAGE1_RESULT.json exists; a rerun needs a fresh owner authorization (OWNER_BOUNDARY 2). Never
+    delete or edit STAGE1_RESULT.json, the RUN_STAGE1.* and RUN_FETCH.* capture, or anything in nextgen/ng1/data/;
+    never re-download.
   - The R4 Stage-B look: claim 95c339ef…, 2026-09-18T16:29Z. look.py --look refuses forever, because of the result,
     the run log and the ledger. Never run rehearse_b.py again: AUTHORIZATION.txt exists. Never delete or edit
     r4/stage_b/look_run/, look_evidence/, AUTHORIZATION.txt or r4/m0/LOOKS_CONSUMED.log. Never read the 28 snapshot
