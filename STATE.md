@@ -1,9 +1,9 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1's pre-registration, its Stage-0 and Stage-1
-records and the reviewed Stage-1 repair are published (main 563372f0, PR #120). 15m and 1H are HISTORICALLY CONFIRMED
-with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **The NG-1 pilot is complete; it stops
-under pre-registration §8:**
+Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1 and NG-1, through its Stage-1 attempt-2 result and
+audit, are published (main 21b89c5a, PR #121). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP
+UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED** (owner ruling, 2026-09-25: close NG-1; W(b) is not
+run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
 - Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data was parsed.
 - Stage 1, attempt 2: the owner-authorized single rerun of the reviewed repair (manifest 55c7794c…). It COMPLETED
@@ -16,8 +16,11 @@ under pre-registration §8:**
   and the owner decides, including the kill-only option W(b)."
 - Not concluded: that T is KILLED; any exclusion for a narrower H range; that the free-data route is closed;
   anything about depth or other trade constructions; profitability.
-No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. The
-62 verified aggTrades ZIPs (10.06 GB) stay local and read-only. This record is local; publishing it is a T3.
+- The owner then closed NG-1. It ends with the free-data route not demonstrated and F3 unspent. Every NG-1 record
+  and the 62 verified aggTrades ZIPs (10.06 GB) are kept read-only. The closure record is
+  .work/research3/nextgen/ng1/NG1_CLOSURE.md.
+No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. This
+record is local; publishing it is a T3.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -26,9 +29,41 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: the NG-1 Stage-1 rerun (attempt 2) ran once: NOT_DEMONSTRATED; audited
-  (ACCEPT_WITH_FINDINGS). The pilot stops under §8; the owner decides (end NG-1, or the kill-only W(b)). Nothing is
-  pushed.
+LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent), and the closure is recorded
+  locally and verified. Lane H1 (resumability and evidence-integrity hardening) was selected, and its local steps
+  are DONE: the STATE cleanup in this record, and the two R4 result files made read-only. Its T3 push and the
+  main-checkout fast-forward remain (OWNER_BOUNDARY 1-2). Nothing is pushed.
+  - H1 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. H1 AUTHORIZED, local-only. On `chore/state-post-121`, make only
+    semantic-preserving STATE cleanup: correct stale/superseded pointers, mark moot items only where current
+    authority proves closure, preserve all irreversibles/open decisions/recovery facts, state the F3 guard as
+    procedural-only, and require `./verify.sh` from a safe worktree rather than the stale main checkout; do not
+    inspect F3 again. Separately, verify the sealed digests of `.work/research3/r4/u1/U1_RESULTS.json` and
+    `r4/v2a/V2A_RESULTS.json`, chmod exactly those files `0444`, then re-hash and prove they are non-writable
+    without importing/running their producers. Run `./verify.sh` in the worktree, commit STATE.md only, and report
+    the exact SHA plus before/after evidence-file digests. No push, main-checkout git action, scanner
+    implementation change, deletion, NG-1/R4 reopening, F3, collector, DB, serving/pinned/wiring/freeze/deploy."
+    CONSUMED:
+    - STATE cleanup, semantic-preserving: pointers corrected; R3 §6 items 1, 3, 4 and 5 and W3-A/W3-E marked moot or
+      answered, each citing its authority; the F3 guard stated as procedural-only; the verify-in-worktree,
+      no-log-deletion and F3 rules added to STANDING_RULES. No compaction; nothing irreversible or open was removed.
+    - chmod 0444 on exactly r4/u1/U1_RESULTS.json and r4/v2a/V2A_RESULTS.json. Digests before = after = sealed
+      (evidence_r4.sha256): U1 0e69805c8dee8d789690dec16f29976c7a68185b5721bf3407c235e652c328b4, V2A
+      da5d2a9ca5d8f5b7d1ca07065bf01f51f103cfecbda2f9a7d137e053e5f4d47d. Mode 644 became 444, and `test -w` is false for
+      the owner (uid 501, not root). Both producers write through r4lib.write_json → Path.write_text (in place),
+      which a read-only file blocks. Their folders stay writable, so a same-user unlink or rename is still possible.
+      Neither producer was imported or run.
+  - Disclosure (2026-09-25, during the selection audit): one read-only helper command by this loop listed the
+    directory .work/research3/wave2/f3 by mistake. That breaks the standing "never open, list or hash wave2/f3"
+    rule. The output was discarded unseen (piped into a failing `head -0`). Nothing inside was opened, read or hashed,
+    and no market data was fetched or seen. F3 remains unspent.
+  - NG-1 closure ruling (owner, 2026-09-25), verbatim: "Owner ruling: **CLOSE NG-1; do not run W(b)**. Preserve all
+    sealed NG-1 records/data and keep F3 unspent; record the closure locally and verify. Then, paper-only, audit
+    current canonical STATE/Git/.work and select the single highest-value safe UCPE lane remaining after NG-1,
+    using dependency-aware parallel review where independent; do not reopen NG-1/R4, start new model research,
+    collector, F3, DB, serving/pinned/wiring/freeze/deploy. Return the next exact owner/T2+ boundary and why it
+    outranks alternatives."
+  - The NG-1 Stage-1 result STATE T3 (push only; #121 → main 21b89c5a) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
   - NG-1 Stage-1 rerun authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form),
     verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. First verify `origin/main` is merge commit
     `563372f07bacf9879aa4e1891196122b7e1cb618` from PR #120 and that the main project checkout is still exactly at
@@ -163,28 +198,35 @@ LOOP_STATE=WAITING FOR THE OWNER: the NG-1 Stage-1 rerun (attempt 2) ran once: N
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 PILOT COMPLETE: K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED (Stage 1 attempt 2,
-  audited ACCEPT_WITH_FINDINGS); the free-data route not demonstrated. Still excluded:
-  - any further Stage-1 run (attempt 2's result is final), any further download or research-data fetch, and W(b)
-    until the owner rules it. W(a) lapsed when 0b started. W(b) is now open to the owner only as a new, separately
-    pre-registered, kill-only look on the added weeks alone (OWNER_BOUNDARY 2);
+CURRENT_MILESTONE=NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the
+  free-data route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+  - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
-  - any further F1/F2 read, and any implementation of the D-1 rulings.
-CURRENT_BRANCH=chore/state-post-120 (LOCAL, no upstream), from main 563372f0: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116), -114 (#115),
-  -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's
-  timestamp.
+  - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
+    (OWNER_BOUNDARY 5).
+CURRENT_BRANCH=chore/state-post-121 (LOCAL, no upstream), from main 21b89c5a: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116),
+  -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4
+  commitment's timestamp.
   The main checkout (/Users/kha/Documents/Kha-app/UCPE) is still on chore/state-post-104 at 2c6df51 with src/
   clean. It was kept untouched through the Stage-1 rerun (repair review F3); the verification `git fetch` changed
-  only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job, but nothing
-  requires moving the checkout. STATE records are made in separate worktrees.
+  only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job. Its working-tree
+  STATE.md is the stale 09-17 record. Fast-forwarding it to main is H1 step (c), which awaits its own authorization
+  after the T3 (OWNER_BOUNDARY 2). STATE records are made in separate worktrees.
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, STATE.md only).
+LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
+  - This loop pushed chore/state-post-120 at ea4d5b33 under the owner's push-only T3; the merge tree a36b096b was
+    recorded before the push. #121 was opened and merged from the owner's account on GitHub (2026-09-25T14:02:38Z).
+  - Verified by this loop: parents (563372f0, ea4d5b33); tree a36b096b equals the recorded tree; STATE.md blob
+    5461be13; the only change is STATE.md (two commits: 0a5600cf, then the §9 wording fixes ea4d5b33).
+  - The exact-head check `test` passed at 14:00:35Z and the exact-main check `test` at 14:05:58Z (2026-09-25).
+  - This publication is the external timestamp of the attempt-2 result, seal and audit digests.
+  Before it: 563372f0 (PR #120: the NG-1 Stage-1 repair STATE record, STATE.md only).
   - This loop pushed chore/state-post-119 at a880ebff under the owner's push-only T3; tree f9467c52 was recorded
     before the push. #120 was opened and merged from the owner's account on GitHub (2026-09-25T10:05:31Z).
   - Verified by this loop: parents (fe19792c, a880ebff); tree f9467c52 equals the recorded tree; STATE.md blob
@@ -244,7 +286,16 @@ LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, ST
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this NG-1 Stage-1 result record on chore/state-post-120 (main 563372f0 plus this STATE.md change; T0).
+  - Run for this NG-1 closure record on chore/state-post-121 (main 21b89c5a plus this STATE.md change; T0).
+  - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
+    the same result each time.
+  - The closure's own checks, local and read-only:
+    - NG1_CLOSURE.sha256 1/1;
+    - every NG-1 seal listed in NG1_CLOSURE.md verifies (STAGE1_CODE.sha256 38/39 by design; all others
+      complete);
+    - data/ is read-only, with 127 files and FETCH_SUMMARY.json 9d69aa97…;
+    - no file under nextgen/ng1/ is writable.
+  - Earlier, for the NG-1 Stage-1 result record on chore/state-post-120 (main 563372f0 plus that change; T0).
   - Re-run after the §9 wording re-check's fixes, on the same branch: the same result.
   - The run's own checks, local and read-only:
     - attempt 2: STAGE1_RESULTS.attempt2.sha256 11/11, STAGE1_AUDIT.attempt2.sha256 1/1,
@@ -337,24 +388,52 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the repair STATE T3 (#120), and the
-  NG-1 Stage-1 rerun authorization (one run, then the audit; LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-120, STATE.md only). It also timestamps the
-     attempt-2 result, seal and audit digests externally. §9's one bounded re-check of this record's wording was
-     run: it FAILED (2 blocking, 5 LOW), and every fix was applied word for word and confirmed mechanically (NG1).
-  2. NG-1's next step (owner decides; under §8, NOT_DEMONSTRATED means stop). Either:
-     (a) end NG-1 here: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED, the free-data route not demonstrated;
-         F3 stays unspent;
-     (b) or option W(b): a new, separately pre-registered, kill-only look at the pre-declared T arm on the added
-         weeks alone (map rows 7–8). It returns KILLED or NOT_DEMONSTRATED, never CONTINUE. It needs a digested
-         addendum fixing its folds and blocks, an external timestamp, and its own owner authorization for the fetch
-         and the run.
-     The download (10.06 GB) stays local and read-only either way.
-  3. Option W: W(a) LAPSED (the envelope became final at 0b). W(b) is available only as in 2(b).
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-1 result STATE T3
+  (#121), and the NG-1 closure ruling (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-121, STATE.md only). It also timestamps the NG-1
+     closure record externally.
+  2. NEXT LANE, H1: resumability and evidence-integrity hardening. It was selected paper-only on 2026-09-25 at the
+     owner's direction, after three parallel read-only reviews (the STATE decisions; Git, CI and production health;
+     the .work lanes). Its steps:
+     (a) T0 on chore/state-post-121, semantic-preserving STATE cleanup: DONE, owner-authorized, in this record.
+         The proposed compaction was not done, because the owner limited H1 to semantic-preserving cleanup;
+     (b) T3: push that exact commit, then the owner opens and merges the PR. NEXT: item 1;
+     (c) after the merge, fast-forward the main checkout (/Users/kha/Documents/Kha-app/UCPE) from 2c6df51 to main.
+         This is local and reversible, makes its working-tree STATE.md current, and needs its own authorization;
+     (d) chmod 0444 on r4/u1/U1_RESULTS.json and r4/v2a/V2A_RESULTS.json: DONE, owner-authorized (digests
+         unchanged; LOOP_STATE).
+     Not in H1: any scanner change (narrowing needs its own owner decision), the resolver, runtime dependencies,
+     workflows, product code, the database or any deploy.
+     Why H1 outranks the alternatives (doctrine: safe learning, "leave it resumable"; evidence, not argument):
+     - Its hazards fire on a fresh session's most routine steps:
+       - the working-tree STATE.md is the 2c6df51 record from 09-17, 58 commits behind main, with no NG-1, 0010
+         apply or run_u1/run_v2a import warnings;
+       - ./verify.sh in the main checkout runs check_no_secrets.py over ROOT.rglob("*"), and .work is not in
+         SKIP_DIRS. It would read every sealed path and the 10 GB of NG-1 data;
+       - OPEN_ITEMS told readers to "delete stale .work/*.log files", yet codex-822/823.log are digested in
+         r4/stage_c/STAGE_C.sha256 (codex-822.log is C3's preserved first failure) and codex-825.log in
+         nextgen/NEXTGEN.sha256. Corrected in place below;
+       - U1_RESULTS.json and V2A_RESULTS.json are writable (0644), and their scripts rewrite them on import;
+       - F3's tool date guard lapsed on 2026-09-21. Once the first F3 week completes (2026-09-28T02:00Z), only the
+         written rule protects F3.
+     - Cost: $0, no product risk, every step reversible, one owner message.
+     - The alternatives rank lower now:
+       - H2, a paper brief on dependence in the live directional-skill gate: the most product-relevant, but latent.
+         The gate needs n ≥ 100 per timeframe; sampled resolver logs show outcomes accruing only a few per day; the
+         fix is serving or pinned work, excluded now. It is next after H1;
+       - H3, verify.sh speed to the doctrine's 30 s (now about 110–180 s, almost all pytest): loop cost only;
+       - H4, recording the resolver's 50-bar coupling and the unpinned runtime dependencies as known hazards
+         (their fixes touch the database writer or serving);
+       - low value: the H_extended scope ruling (it shows only in raw JSON and the download); the C4 "25 to about
+         76" addendum (5 passages in 3 write-once files); merged-branch deletion (T3); R3 §6 bookkeeping; the GPT
+         package's disposition; CLAUDE.md's Codex delegation against the owner's Claude-implements directive.
+  3. NG-1: CLOSED by the owner, 2026-09-25. W(b) is not run, and option W closes with NG-1.
   4. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
      newly opened generation.
+     - The F3 tool's date guard expired on 2026-09-21, so only this written rule now stops a run.
+     - See LOOP_STATE for the 2026-09-25 disclosure: an accidental listing of wave2/f3; nothing was read.
   5. D-1: CLOSED, owner-ruled 2026-09-23. nextgen/D1_RULING.md governs; the draft is kept as digested. Fixed for
      path A:
      - the §2 template: one-sided α 0.025, a candidate-refusal cap, and an A-specific H range declared before any
@@ -372,8 +451,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      and preregistration are digested before any B look is read.
   6. New generation: NG-1 RULED GO 2026-09-23 (research-only, free-data-only; no collector, production path, F3
      or download yet; the only download since is Stage 1's, separately authorized).
-     The NG-1 pilot is complete: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED. NG-2 and NG-3, the collector
-     routes, were not chosen. The archive question is RESOLVED
+     NG-1 is CLOSED (owner, 2026-09-25): K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED, W(b) not run. NG-2 and
+     NG-3, the collector routes, were not chosen. The archive question is RESOLVED
      (nextgen/ARCHIVE_VERIFICATION_NOTE.md): spot trades and aggTrades are archived, and no depth archive is listed.
      A research data collector and path A's evidence collector are both OFF. Implied volatility stays barred by
      invariant 5.
@@ -384,7 +463,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      unspent. No freeze, wiring or deploy follows from R4 or the B lane without Stage D (§6, §9).
   R3 decisions requested in
   .work/research3/wave2/WAVE2_REPORT.md §6:
-  1. gate scope after the G3 exclusion:
+  1. gate scope after the G3 exclusion (MOOT for this generation: gate research is CLOSED by V2a, OWNER_BOUNDARY 9):
      (a) research only, recommended;
      (b) a 15m long-holdout design (R4, L up to 52 weeks), which changes the L_max ruling and needs a
          re-audit. 15m R4 at L16 was the nearest miss: it failed only N2's d = 0.20 case and method B /
@@ -392,13 +471,16 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      (c) a window-conditional estimand, not recommended;
      (d) research toward a stronger candidate;
   2. 4H: no demonstrated Brier skill beyond a day-type base rate at the primary band, a product question. The
-     kept slope rule also blocks every 4H element that leaves R3C's miscalibration in place;
+     kept slope rule also blocks every 4H element that leaves R3C's miscalibration in place. STILL OPEN;
   3. F3: (a) weekly public-kline accumulation from 2026-09-28T02:00Z (labels only); (b) exclusion-window klines
-     as inputs for the first F3 week;
+     as inputs for the first F3 week. ANSWERED by the F3 ruling of 2026-09-23 (KEEP UNSPENT, OWNER_BOUNDARY 4):
+     neither (a) nor (b) is authorized;
   4. the 1H BTC factor: keep R3C (recommended; the Wave-2 adoption rule), or take recompose v3's primary-band
      pick (the Wave-1 simplicity rule; sub-floor, a 6e-5 tie-break, one band only, and ETH would need BTC
-     klines);
-  5. the estimand sentence and the gating comparator (moot until item 1 opens a gate path);
+     klines). MOOT: R4 carried C1, the plain symmetric CB, not R3C, at 15m and 1H (c4/R4_CLOSURE_RECORD.json
+     "carried"; the owner's Stage-C closure ruling of 2026-09-20);
+  5. the estimand sentence and the gating comparator (moot until item 1 opens a gate path). MOOT for this
+     generation (item 1);
   6. from Wave 1 (Lane S): H_extended, zero-location dispositions, additive fields and display — RULED by D-1
      (2026-09-23; nextgen/D1_RULING.md). Implementation pending authorization.
   Wave-1 rulings already given: the candidate (R3C), the venue policy, v2/v1 symmetry, the 4H slope rule,
@@ -421,10 +503,11 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2). Read first:
-  - .work/research3/nextgen/ng1/pilot/STAGE1_AUDIT.attempt2.md: the result, the audit and the governing wording;
-  - STAGE1_RESULT.attempt2.json (write-once), and STAGE0_AUDIT.md for the governing Stage-0 wording;
-  - NG1_PILOT_PREREG.md §8 (stages; W(b)) and §10 (claims).
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record, batched with lane H1). Never run
+  ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
+  worktree. Read first:
+  - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
+  - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
   - Never run ng1_stage1.py --stage1 again: attempt 2's result is final, and the run refuses once
     STAGE1_RESULT.attempt2.json exists.
@@ -432,15 +515,21 @@ NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2). Read first:
     STAGE1_DEPS.attempt2.json exists.
   - Never run fetch_stage1.py again: the download is consumed, verified and read-only.
   - Never run ng1_pilot.py --stage0 again: it refuses once STAGE0A_RESULT.json exists (NEVER_RERUN).
-  - Never import or run r4/u1/run_u1.py: it executes at import and rewrites U1_RESULTS.json.
+  - Never import or run r4/u1/run_u1.py: it executes at import and rewrites U1_RESULTS.json. Since 2026-09-25
+    that file is read-only (0444), so an accidental import would fail at its in-place write_text; the rule stands.
   - No F3 action of any kind: F3 is ruled KEEP UNSPENT, the tool stays unrun, and ruling 3 is not issued.
-  - Never import r4/v2a/run_v2a.py: it runs main() on import and rewrites V2A_RESULTS.json.
+  - Never import r4/v2a/run_v2a.py: it runs main() on import and rewrites V2A_RESULTS.json. Since 2026-09-25 that
+    file is read-only (0444) too; the rule stands.
   - look.py --look refuses forever. Never run rehearse_b.py again.
-  No R3 step before a ruling on WAVE2_REPORT.md §6.
-  - The prepared F3 tool (.work/research3/wave2/f3/f3_accumulate.py) refuses before 2026-09-21T00:00Z and must
-    not be run without ruling 3.
-  - Candidate next work, once approved (WAVE2_REPORT.md §7): W3-A long-holdout protocol (only if 1b);
-    W3-B weak-fold diagnosis; W3-C 4H calibration; W3-D serving contract; W3-E F3 accumulation.
+  No R3 step before a ruling on WAVE2_REPORT.md §6. Item 2 (4H) is the only one still open; items 1, 3, 4 and 5
+  are moot or answered, and 6 is ruled (OWNER_BOUNDARY, R3 decisions).
+  - The prepared F3 tool (.work/research3/wave2/f3/f3_accumulate.py) must not be run without ruling 3. Its
+    built-in date guard (refusing before 2026-09-21T00:00Z) has expired, so this rule is now PROCEDURAL ONLY.
+  - Candidate next work, once approved (WAVE2_REPORT.md §7):
+    - W3-A long-holdout protocol (only if 1b): MOOT for this generation (item 1);
+    - W3-B weak-fold diagnosis; W3-C 4H calibration; W3-D serving contract: not ruled, and currently excluded by
+      the owner's 2026-09-25 constraints (new model research, serving);
+    - W3-E F3 accumulation: not authorized (the F3 ruling, OWNER_BOUNDARY 4).
   - NEVER run again: §5A consume, the 0009 route, the audit, the 0008 apply, the 0010 apply, or the PROD-SAFE-3
     deploy.
   - No analysis call against production. Never push to hf without a deploy authorization.
@@ -595,7 +684,9 @@ R4_STAGE_C=Stage C (adjudication §6), mechanical, in .work/research3/r4/stage_c
       sensitivity crosses the 0.025 bar within H = 0.80–0.85 (p 0.017/0.020 at H = 0.80; 0.065/0.072 at 0.85, per
       the C3 re-audit), so the result is not robust across that range; the status is unchanged. The same wording
       stands in the write-once c4/R4_CLOSURE_RECORD.json; its reconciliation is additive-only and not authorized
-      (OWNER_BOUNDARY 5).
+      (OWNER_BOUNDARY 8). Pointer corrected 2026-09-25: the item was OWNER_BOUNDARY 5 when this was written. The
+      superseded wording also stands in c4/C4_OWNER_PACKAGE.md (line 17), and c4/PROSPECTIVE_COLLECTOR_PLAN.md
+      works from the same AR(1) figure (line 43).
   - C3's independent Fable re-audit: ACCEPT WITH FINDINGS, relayed by the owner 2026-09-20
     (c4/FABLE_C3_VERDICT.txt). Its six required corrections are applied, in c4/R4_CLOSURE_RECORD.json
     ("corrections"), in c4/C4_OWNER_PACKAGE.md and here. No status, carried candidate or number changed: the
@@ -605,6 +696,9 @@ R4_STAGE_C=Stage C (adjudication §6), mechanical, in .work/research3/r4/stage_c
     (p 0.0196) and C3 (0.0236) against a 0.0333 threshold are marginal, and the MCS is reported, never used.
     The collector stays OFF; the next lane is c4/PROSPECTIVE_COLLECTOR_PLAN.md, on paper, carrying the F2-15m
     dependence caveat into any duration arithmetic (r1's 18-week floor assumed independent weeks).
+    SUPERSEDED as "next lane": that paper lane was taken (COLLECTOR_LANE). Later rulings govern: collector OFF
+    (OWNER_BOUNDARY 7), D-5 (B now, A later), F3 KEEP UNSPENT, D-1 CLOSED and NG-1 CLOSED. The current next lane
+    is in OWNER_BOUNDARY 2.
   - Verification: verify_stage_c.py, 16/16 PASS, STAGE_C_VERIFIED (it rebuilds C1, C2 and C4 byte for byte,
     checks C3's recorded outcome, the manifest and the publication commit).
   - Manifest: STAGE_C.sha256, 29 entries, sha256 c2913d364439dd9410d7995895a68819282dd142d6b0690993f781ed6fcce4ca.
@@ -848,6 +942,11 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
       points: the Stage-0 claim in OWNER_BOUNDARY 6 lacked "valid for H ≤ 0.85", and the audit seal was cited only by
       prefix. It also made five LOW notes: stale rerun pointers, the verification fetch, the review carried by digest
       prefix only, "was parsed", and the W(a) label. All were applied word for word and confirmed mechanically.
+  - CLOSED by the owner, 2026-09-25 ("CLOSE NG-1; do not run W(b)").
+    - Closure record: NG1_CLOSURE.md (97afaffc…; NG1_CLOSURE.sha256
+      9b2a37ec12742641332a4883d170e7340766cc13239994e6a7a7146e152c31e4).
+    - Every seal was re-verified at closure, and every record and data file is kept read-only.
+    - W(b) is not run, and F3 stays unspent.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -933,7 +1032,8 @@ R3=Research in .work/research3 (gitignored).
         refuses bad windows. It MISSED the 1e-9 criterion set before the first run against R2's stored
         features (2.1e-9 on ETH 15m/4H); the cause is measured stored-feature rounding.
     - F3 tool prepared: labels only; it refuses before 2026-09-21T00:00Z and inside the exclusion window
-      without a ruling.
+      without a ruling. That date guard has since expired: running it is now barred only procedurally
+      (NEXT_ACTION; OWNER_BOUNDARY 4).
     - Network: public Binance GETs only (5,108 requests). F1 is stored only; F2 was used only for the
       candidate-blind B3Dev null.
 PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
@@ -992,6 +1092,8 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - The NG-1 Stage-1 rerun (attempt 2, 2026-09-25T10:12:41Z, NOT_DEMONSTRATED): final. ng1_stage1.py --stage1
     refuses once STAGE1_RESULT.attempt2.json exists. Never delete or edit it, the RUN_STAGE1.attempt2.* capture,
     STAGE1_RESULTS.attempt2.sha256 or the audit record.
+  - NG-1 is CLOSED (owner, 2026-09-25): no NG-1 stage, fetch or W(b) may run. Never edit or delete any NG-1 file,
+    seal or data file (NG1_CLOSURE.md).
   - The R4 Stage-B look: claim 95c339ef…, 2026-09-18T16:29Z. look.py --look refuses forever, because of the result,
     the run log and the ledger. Never run rehearse_b.py again: AUTHORIZATION.txt exists. Never delete or edit
     r4/stage_b/look_run/, look_evidence/, AUTHORIZATION.txt or r4/m0/LOOKS_CONSUMED.log. Never read the 28 snapshot
@@ -1142,11 +1244,19 @@ STANDING_RULES=
     - constant system_status fields stay hidden unless a real operator use case appears.
   - The collector has been stopped on main since #88; restoring its schedule fails the build. The outcome resolver
     stays scheduled (resolve-outcomes.yml, cron "17 * * * *").
+  - Run ./verify.sh only in a clean worktree made from origin/main (as every STATE record here is), never in the
+    main checkout. scripts/check_no_secrets.py walks ROOT.rglob("*") and .work is not in SKIP_DIRS, so there it
+    would read every sealed path and the NG-1 data. Narrowing the scanner needs its own owner decision.
+  - Never delete .work logs or evidence files: several are digested in sealed manifests (OPEN_ITEMS).
+  - Never run the F3 tool without ruling 3. Its date guard expired on 2026-09-21, so this rule is procedural only.
   - Owner rulings D1-D4, J1-J3, K1-K2, L1-L3, M1 and N1-N3 are applied. Their full text is in 2c6df51:STATE.md.
+    They are an earlier series: their D1-D4 are not the D-1 to D-7 decisions of 2026-09-23.
 OPEN_ITEMS=Non-blocking; none is authorized.
   - scripts/check_no_secrets.py also scans .work/ (SKIP_DIRS omits it), so a stale gitignored log can fail
     ./verify.sh on a clean tree. Fixing it narrows a mandatory scanner, which needs an explicit owner decision.
-    Meanwhile, delete stale .work/*.log files.
+    CORRECTED 2026-09-25: the old advice here, "delete stale .work/*.log files", was unsafe. codex-822.log and
+    codex-823.log are digested in r4/stage_c/STAGE_C.sha256, and codex-825.log in nextgen/NEXTGEN.sha256. Never
+    delete .work logs. Verify only in a clean worktree, never in the main checkout.
   - (Resolved by #111: oos-pair-evidence.yml and resolve-outcomes.yml are now on the Node-24 pins.)
   - Merged branches remain on origin, including release/prod-safe-1 to -3. Deleting any of them needs the owner.
   - As of 2026-08-22, per-timeframe calibration MEASURED needed about 3x more operator traffic (134-172 samples per
@@ -1184,5 +1294,6 @@ Update this block on every pause, every milestone change and every GPT consultat
 - **Database:** migration 0010 is applied (2026-09-17), so the legacy tables' security is now codified in the
   migrations.
 - **Merged, not in production:** the unwired v2 prep (#108, #109).
-- **Next, owner-gated:** the v2 decisions (a) to (d).
+- **Owner-gated, still open:** the v2 decisions (a) to (d); D-1 ruled (a) and (b) in principle, not implemented
+  (OWNER_BOUNDARY, product decisions). The current next lane is H1 (OWNER_BOUNDARY 2).
   A v2 promotion needs its own freeze, T0, holdout and one look.
