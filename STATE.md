@@ -29,8 +29,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent). The closure is recorded locally and verified. The
-  owner-directed, paper-only selection of the next lane follows (NEXT_ACTION). Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent), and the closure is recorded
+  locally and verified. The owner-directed, paper-only lane selection is DONE: lane H1, resumability and
+  evidence-integrity hardening (OWNER_BOUNDARY 2). Nothing is pushed.
+  - Disclosure (2026-09-25, during the selection audit): one read-only helper command by this loop listed the
+    directory .work/research3/wave2/f3 by mistake. That breaks the standing "never open, list or hash wave2/f3"
+    rule. The output was discarded unseen (piped into a failing `head -0`). Nothing inside was opened, read or hashed,
+    and no market data was fetched or seen. F3 remains unspent.
   - NG-1 closure ruling (owner, 2026-09-25), verbatim: "Owner ruling: **CLOSE NG-1; do not run W(b)**. Preserve all
     sealed NG-1 records/data and keep F3 unspent; record the closure locally and verify. Then, paper-only, audit
     current canonical STATE/Git/.work and select the single highest-value safe UCPE lane remaining after NG-1,
@@ -362,13 +367,50 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   (#121), and the NG-1 closure ruling (LOOP_STATE). What remains, in order:
   1. T3 (owner authorizes): publish this record (chore/state-post-121, STATE.md only). It also timestamps the NG-1
      closure record externally.
-  2. The next lane after NG-1: selected paper-only by this loop at the owner's direction (NEXT_ACTION). Its exact
-     boundary is recorded here once it is selected.
+  2. NEXT LANE, H1: resumability and evidence-integrity hardening. It was selected paper-only on 2026-09-25 at the
+     owner's direction, after three parallel read-only reviews (the STATE decisions; Git, CI and production health;
+     the .work lanes). The owner's boundary is one message, batched with item 1, authorizing:
+     (a) T0 by this loop on chore/state-post-121:
+         - compact STATE (18.6 KB on 09-17 → 102.7 KB now) and correct its hazards: stale pointers; moot R3 §6
+           items; F3's lapsed date guard stated as procedure-only; the verify-in-worktree rule;
+         - then ./verify.sh and a local commit;
+     (b) T3: push that exact commit; the owner opens and merges the PR;
+     (c) after the merge, fast-forward the main checkout (/Users/kha/Documents/Kha-app/UCPE) from 2c6df51 to main.
+         This is local and reversible, and makes its working-tree STATE.md current;
+     (d) chmod 0444 on r4/u1/U1_RESULTS.json and r4/v2a/V2A_RESULTS.json, after re-checking their digests against
+         evidence_r4.sha256 (both matched on 2026-09-25).
+     Not in H1: any scanner change (narrowing needs its own owner decision), the resolver, runtime dependencies,
+     workflows, product code, the database or any deploy.
+     Why H1 outranks the alternatives (doctrine: safe learning, "leave it resumable"; evidence, not argument):
+     - Its hazards fire on a fresh session's most routine steps:
+       - the working-tree STATE.md is the 2c6df51 record from 09-17, 58 commits behind main, with no NG-1, 0010
+         apply or run_u1/run_v2a import warnings;
+       - ./verify.sh in the main checkout runs check_no_secrets.py over ROOT.rglob("*"), and .work is not in
+         SKIP_DIRS. It would read every sealed path and the 10 GB of NG-1 data;
+       - OPEN_ITEMS told readers to "delete stale .work/*.log files", yet codex-822/823.log are digested in
+         r4/stage_c/STAGE_C.sha256 (codex-822.log is C3's preserved first failure) and codex-825.log in
+         nextgen/NEXTGEN.sha256. Corrected in place below;
+       - U1_RESULTS.json and V2A_RESULTS.json are writable (0644), and their scripts rewrite them on import;
+       - F3's tool date guard lapsed on 2026-09-21. Once the first F3 week completes (2026-09-28T02:00Z), only the
+         written rule protects F3.
+     - Cost: $0, no product risk, every step reversible, one owner message.
+     - The alternatives rank lower now:
+       - H2, a paper brief on dependence in the live directional-skill gate: the most product-relevant, but latent.
+         The gate needs n ≥ 100 per timeframe; sampled resolver logs show outcomes accruing only a few per day; the
+         fix is serving or pinned work, excluded now. It is next after H1;
+       - H3, verify.sh speed to the doctrine's 30 s (now about 110–180 s, almost all pytest): loop cost only;
+       - H4, recording the resolver's 50-bar coupling and the unpinned runtime dependencies as known hazards
+         (their fixes touch the database writer or serving);
+       - low value: the H_extended scope ruling (it shows only in raw JSON and the download); the C4 "25 to about
+         76" addendum (5 passages in 3 write-once files); merged-branch deletion (T3); R3 §6 bookkeeping; the GPT
+         package's disposition; CLAUDE.md's Codex delegation against the owner's Claude-implements directive.
   3. NG-1: CLOSED by the owner, 2026-09-25. W(b) is not run, and option W closes with NG-1.
   4. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
      newly opened generation.
+     - The F3 tool's date guard expired on 2026-09-21, so only this written rule now stops a run.
+     - See LOOP_STATE for the 2026-09-25 disclosure: an accidental listing of wave2/f3; nothing was read.
   5. D-1: CLOSED, owner-ruled 2026-09-23. nextgen/D1_RULING.md governs; the draft is kept as digested. Fixed for
      path A:
      - the §2 template: one-sided α 0.025, a candidate-refusal cap, and an A-specific H range declared before any
@@ -435,10 +477,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Paper-only, as the owner directed: audit current STATE, Git and .work and select the single
-  highest-value safe lane after NG-1. That excludes reopening NG-1 or R4, new model research, a collector, F3, the
-  database, serving, pinned files, wiring, a freeze and a deploy. Then WAIT at that lane's exact boundary
-  (OWNER_BOUNDARY 2). Read first:
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record, batched with lane H1). Never run
+  ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
+  worktree. Read first:
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
@@ -1169,7 +1210,9 @@ STANDING_RULES=
 OPEN_ITEMS=Non-blocking; none is authorized.
   - scripts/check_no_secrets.py also scans .work/ (SKIP_DIRS omits it), so a stale gitignored log can fail
     ./verify.sh on a clean tree. Fixing it narrows a mandatory scanner, which needs an explicit owner decision.
-    Meanwhile, delete stale .work/*.log files.
+    CORRECTED 2026-09-25: the old advice here, "delete stale .work/*.log files", was unsafe. codex-822.log and
+    codex-823.log are digested in r4/stage_c/STAGE_C.sha256, and codex-825.log in nextgen/NEXTGEN.sha256. Never
+    delete .work logs. Verify only in a clean worktree, never in the main checkout.
   - (Resolved by #111: oos-pair-evidence.yml and resolve-outcomes.yml are now on the Node-24 pins.)
   - Merged branches remain on origin, including release/prod-safe-1 to -3. Deleting any of them needs the owner.
   - As of 2026-08-22, per-timeframe calibration MEASURED needed about 3x more operator traffic (134-172 samples per
