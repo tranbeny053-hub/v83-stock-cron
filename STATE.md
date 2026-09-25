@@ -1,10 +1,13 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
-83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2 is done as a paper brief (v3,
-after a bounded repair for the owner's review findings):** the live directional-skill gate counts near-duplicate and
-overlapping outcomes as independent evidence. 1H and 4H passed it as of 2026-08-16 and are unread since. It now waits
-at the methodology owner boundary (OWNER_BOUNDARY 2). 15m and 1H are
+Updated: 2026-09-26. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
+83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper brief (v3) found
+that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent evidence; 1H and
+4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one contribution per
+candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture. The four paper
+deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256 ea4bc8de…). Nothing is
+implemented, queried or deployed, and the product is unchanged. H2 now waits at its next owner boundaries
+(OWNER_BOUNDARY 2). 15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
@@ -32,9 +35,64 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-gate dependence brief is DONE
-  (paper, read-only), and v3 governs: .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md, with eight questions for the
-  owner (OWNER_BOUNDARY 2). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER at H2's post-ruling boundaries (OWNER_BOUNDARY 2): the confirmation points
+  (a)–(e), the count-only database read, and the T2 hold implementation. The rulings are recorded and the four paper
+  deliverables are sealed in .work/h2_skill_gate/ (H2_PREP.sha256). H1 is COMPLETE, and NG-1 is CLOSED. Nothing is
+  pushed.
+  - H2 rulings (owner, 2026-09-26; they arrived as pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 rulings: Q1 YES—max one candle-level contribution per
+    `(symbol,timeframe,reference_close)` before further aggregation, with exact collapse rule frozen on paper; Q2
+    D3—non-overlapping time-window means as inference units, aggregating same-window cross-symbol evidence, with
+    anchor/min-window rule preregistered; Q3 replace the 50% coin with a predeclared drift-aware **directional**
+    reference estimated outside the evaluation cohort—do not convert the live gate to proper scoring; Q4 YES,
+    diagnostics use the same corrected unit but remain non-decision-bearing; Q5 YES, prepare a count-only
+    current-state/provenance query for separate DB authorization and accept that corrected 1H/4H may lose pass; Q6
+    YES, diagnostics may name the new evidence unit; Q7 admit only rows after the earliest deterministically
+    proven clean provenance/cohort-separation cutoff, excluding default-backfilled earlier rows and declaring the
+    known BTC-1M controlled-smoke misclassification; Q8 interim posture = fail-closed: current skill pass must not
+    lift the product hard block until the corrected gate is implemented and validated, while diagnostics may still
+    report. Keep methodology_version unchanged. Record these rulings additively, prepare only the D3/drift-aware
+    preregistration, exact cutoff derivation, count-only query plan, and bounded T2 fail-closed
+    implementation/test/rollback design; update local STATE, audit once, verify from the safe worktree, and stop.
+    No DB query, code/test implementation, push, serving/pinned/F3/deploy." CONSUMED:
+    - Recorded additively in .work/h2_skill_gate/H2_RULINGS.md: the rulings verbatim, the deliverables, the audit
+      and the repair. Prepared, paper only:
+      - H2_D3_PREREG.md, the D3 preregistration:
+        - the earliest request per candle is kept; exact ties are no-calls;
+        - Monday-anchored 7-day windows (28-day for 1D; 1W and 1M out of scope), purged, and counted only once
+          closed and settled (48 h); k ≥ 12 and n ≥ 100;
+        - π_T from NG-1's R-1 span;
+        - a one-sided window t-test at a per-look level of 0.002, over looks k = 12…52;
+        - the outputs, and the replacement texts;
+      - H2_CUTOFF_DERIVATION.md, two cutoffs:
+        - (M) 2026-07-13T04:20:01Z, the default and the literal Q7 reading: dbe9bf8 pins production to 30d4982,
+          which writes the origin on every insert;
+        - (I) 2026-08-19T08:31:57Z, stricter: 5df51cd is the first proof that HTTP test traffic is classifiable;
+        - the canary is declared and excluded by run id;
+      - H2_COUNT_QUERY_PLAN.md: five SELECT-only aggregate statements, with stop and report rules fixed in
+        advance;
+      - H2_FAILCLOSED_T2_DESIGN.md: the interim hold (a switch and one helper in calibration/skill.py, the single
+        consumption point, one display branch), ten tests, and the rollback.
+    - The audit ran ONCE, as authorized, and returned REJECT (2 HIGH, 5 MEDIUM, 2 LOW).
+      - It is kept verbatim in H2_PREP_AUDIT.md; the audited files are kept read-only as *.audited.md.
+      - Each finding was verified, then repaired on paper. The mechanical closure check (H2_REPAIR_CHECK.out) reads
+        ALL PASS.
+      - NOT re-audited: the auditor asked for one re-audit, but the owner authorized one audit, now consumed.
+    - Digests (SHA-256, first 16 hex):
+      - H2_RULINGS.md da476caa52d0c840; H2_D3_PREREG.md 0ad0e2fcd8954a57;
+      - H2_CUTOFF_DERIVATION.md 7088b54a15d1d5fd; H2_COUNT_QUERY_PLAN.md 6dc9731fce44253b;
+      - H2_FAILCLOSED_T2_DESIGN.md 7600cfacb753a915; H2_PREP_AUDIT.md 4f15ba95ec1a98cf.
+      - The seal is H2_PREP.sha256 ea4bc8de785689e8c2d6921455cab49803e302a6d2d4ec9601283603ada7033e. It covers 15
+        files (15/15 OK), all 0444.
+    - Found during the repair:
+      - on 2026-08-19 the 15m, 1H, 4H and 1M cards read Up = Down exactly (RELEASE_GATE.md:127), and the legacy count
+        scores every such tie as an UP call;
+      - the audited single-look design would falsely pass about 10.7% of the time over a year of weekly looks
+        (H2_ALPHA_LOOK_CALC.out);
+      - a production query had found 5 legacy CONTROLLED_SMOKE and 2 SCHEDULED_SHADOW rows by 2026-08-16
+        (RELEASE_GATE.md:408-409).
+    - No code, test, data, database, production, serving, pinned, F3 or deploy action. methodology_version is
+      unchanged.
   - H2 bounded-repair authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form),
     verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. H2 bounded repair only: preserve sealed v1/v2 and create an additive
     sealed `H2_SKILL_GATE_BRIEF.v3.md`, then update local STATE to match. Close every Fable finding explicitly:
@@ -258,12 +316,13 @@ LOOP_STATE=WAITING FOR THE OWNER at the H2 methodology boundary. The live skill-
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 PAPER BRIEF v3 COMPLETE (the live skill gate's dependence; the owner's review findings closed;
-  methodology owner boundary). H1
+CURRENT_MILESTONE=H2 RULINGS RECORDED; PAPER PREPARATION COMPLETE (the D3 preregistration, the cutoff derivation,
+  the count-only query plan and the fail-closed T2 design; audited once, repaired, sealed). H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
-  - any change to the live skill gate, its tests or its data before the owner's H2 rulings, then each change's own
-    authorization (it is a hard gate, so treat it as T2), and any production read to measure it (H2 Q5);
+  - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
+    without its own authorization (it is a hard gate, so treat it as T2); and the count-only production read
+    without its own database authorization;
   - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
@@ -355,10 +414,12 @@ LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cl
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this H2 record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its worktree.
-  - H2's own checks, read-only: H2_SKILL_GATE_BRIEF.v3.sha256 1/1, v2 1/1 and v1 1/1.
-  - Re-run after the H2 v3 repair, on the same branch, in its worktree: the same result.
+LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
+  - Run for this H2 rulings record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
+    worktree.
+  - The H2 package's own checks, read-only: H2_PREP.sha256 15/15; H2_SKILL_GATE_BRIEF.v3.sha256, v2 and v1 1/1
+    each.
+  - Earlier on this branch (2026-09-25), for the H2 brief and its v3 repair: the same result each time.
   - Earlier, for the NG-1 closure record on chore/state-post-121 (main 21b89c5a plus that change; T0).
   - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
     the same result each time.
@@ -462,10 +523,28 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
-  authorization, and the H2 paper authorization (LOOP_STATE). What remains, in order:
+  authorization, and the H2 paper, bounded-repair and rulings authorizations (LOOP_STATE). What remains, in order:
   1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
-     brief's digest externally.
-  2. CURRENT LANE, H2: the METHODOLOGY OWNER BOUNDARY for the live directional-skill gate. Brief:
+     brief's and the H2 package's digests externally.
+  2. CURRENT LANE, H2 — RULED 2026-09-26 (Q1–Q8, LOOP_STATE). The paper package is sealed (H2_PREP.sha256
+     ea4bc8de…). The next owner boundaries each need their own authorization:
+     a. Confirm or change the five points in H2_D3_PREREG.md §12. Each has a frozen default:
+        - (a) the π_T reference span: NG-1's R-1 span;
+        - (b) no hardening beyond the per-look level of 0.002;
+        - (c) exact ties are no-calls;
+        - (d) the D3 replacement texts, which change the Change-A wording;
+        - (e) the cutoff: (M) 2026-07-13T04:20:01Z (the default) or (I) 2026-08-19T08:31:57Z.
+        The count-only read returns no performance figures, so it may come first.
+     b. The count-only database read. The owner runs the five sealed statements of H2_COUNT_QUERY_PLAN.md §3, each
+        once, in the Supabase SQL editor, and returns the raw output (suggested wording in its §5). No write.
+     c. The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md: implementation on a branch, ./verify.sh in a
+        worktree and Claude's review of the diff; then a T3; then a separate deploy authorization. Until it is
+        deployed, the live gate behaves as today.
+     d. Optional: one re-audit of the repaired package. The auditor asked for it; the one authorized audit is
+        consumed.
+     e. Later: the D3 implementation (T2); π_T's computation (from the archive through its load mask, or under a
+        fetch authorization); the §10 validation; then the owner's authorization to replace the hold, and a deploy.
+     For reference, the brief's findings and questions (Q1–Q8 are now ruled; LOOP_STATE). Brief:
      .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md (d5049ac9…; it supersedes v2 0918f148… and v1 c67ddb61…, both
      kept). Its findings:
      - The gate counts every USER_REQUESTED resolved row (all symbols pooled) as an independent trial.
@@ -496,7 +575,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
        Each keeps USER_REQUESTED-only counting, the D-1/Change-A wording and methodology_version unchanged, and fits
        the unpinned calibration/service.py and skill.py. It changes a hard gate, so treat it as T2, with no deploy
        without its own authorization.
-     Questions for the owner's ruling:
+     Questions for the owner's ruling (RULED 2026-09-26; see LOOP_STATE):
      - Q1 — the evidence unit: one row per candle? Recommended: yes.
      - Q2 — D1, D2 or D3, and for D3 the windows and their minimum count? Recommended: D3.
      - Q3 — reference and scoring. This is a new ruling, outside D-1: D-1 adopted R2 §2 only for zero-location path A
@@ -627,14 +706,20 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; the H2 rulings Q1–Q7). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then H2's confirmation points, the
+  count-only database read and the T2 hold authorization). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
+  - .work/h2_skill_gate/H2_RULINGS.md: the rulings, the package, the audit and the repair. Then H2_D3_PREREG.md,
+    H2_CUTOFF_DERIVATION.md, H2_COUNT_QUERY_PLAN.md and H2_FAILCLOSED_T2_DESIGN.md. All are sealed by
+    H2_PREP.sha256; never edit them, and make any change additively;
   - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md: the H2 brief (it governs; v2 and v1 are superseded, kept
     unchanged);
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
+  - H2: no database query except the sealed count-only statements, each once, under the owner's authorization. No
+    implementation of the hold or of D3 without its own authorization.
   - Never run ng1_stage1.py --stage1 again: attempt 2's result is final, and the run refuses once
     STAGE1_RESULT.attempt2.json exists.
   - Never edit attempt 1's files or any attempt-2 file. Never run --pin-deps again: it refuses once
