@@ -1,9 +1,9 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1, NG-1's pre-registration, its Stage-0 and Stage-1
-records and the reviewed Stage-1 repair are published (main 563372f0, PR #120). 15m and 1H are HISTORICALLY CONFIRMED
-with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **The NG-1 pilot is complete; it stops
-under pre-registration §8:**
+Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1 and NG-1, through its Stage-1 attempt-2 result and
+audit, are published (main 21b89c5a, PR #121). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP
+UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED** (owner ruling, 2026-09-25: close NG-1; W(b) is not
+run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
 - Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data was parsed.
 - Stage 1, attempt 2: the owner-authorized single rerun of the reviewed repair (manifest 55c7794c…). It COMPLETED
@@ -16,8 +16,11 @@ under pre-registration §8:**
   and the owner decides, including the kill-only option W(b)."
 - Not concluded: that T is KILLED; any exclusion for a narrower H range; that the free-data route is closed;
   anything about depth or other trade constructions; profitability.
-No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. The
-62 verified aggTrades ZIPs (10.06 GB) stay local and read-only. This record is local; publishing it is a T3.
+- The owner then closed NG-1. It ends with the free-data route not demonstrated and F3 unspent. Every NG-1 record
+  and the 62 verified aggTrades ZIPs (10.06 GB) are kept read-only. The closure record is
+  .work/research3/nextgen/ng1/NG1_CLOSURE.md.
+No F3, collector or production path was touched. The product is unchanged and hf is unchanged at 00705c55. This
+record is local; publishing it is a T3.
 
 **Compacted on 2026-09-17.** The uncompacted record is `git show 2c6df51:STATE.md` (2,068 lines). It holds every
 earlier LOOP_STATE, the full text of each boundary and ruling, the Codex verifications, the run records and the
@@ -26,9 +29,15 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: the NG-1 Stage-1 rerun (attempt 2) ran once: NOT_DEMONSTRATED; audited
-  (ACCEPT_WITH_FINDINGS). The pilot stops under §8; the owner decides (end NG-1, or the kill-only W(b)). Nothing is
-  pushed.
+LOOP_STATE=NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent). The closure is recorded locally and verified. The
+  owner-directed, paper-only selection of the next lane follows (NEXT_ACTION). Nothing is pushed.
+  - NG-1 closure ruling (owner, 2026-09-25), verbatim: "Owner ruling: **CLOSE NG-1; do not run W(b)**. Preserve all
+    sealed NG-1 records/data and keep F3 unspent; record the closure locally and verify. Then, paper-only, audit
+    current canonical STATE/Git/.work and select the single highest-value safe UCPE lane remaining after NG-1,
+    using dependency-aware parallel review where independent; do not reopen NG-1/R4, start new model research,
+    collector, F3, DB, serving/pinned/wiring/freeze/deploy. Return the next exact owner/T2+ boundary and why it
+    outranks alternatives."
+  - The NG-1 Stage-1 result STATE T3 (push only; #121 → main 21b89c5a) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
   - NG-1 Stage-1 rerun authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form),
     verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. First verify `origin/main` is merge commit
     `563372f07bacf9879aa4e1891196122b7e1cb618` from PR #120 and that the main project checkout is still exactly at
@@ -163,18 +172,16 @@ LOOP_STATE=WAITING FOR THE OWNER: the NG-1 Stage-1 rerun (attempt 2) ran once: N
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 PILOT COMPLETE: K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED (Stage 1 attempt 2,
-  audited ACCEPT_WITH_FINDINGS); the free-data route not demonstrated. Still excluded:
-  - any further Stage-1 run (attempt 2's result is final), any further download or research-data fetch, and W(b)
-    until the owner rules it. W(a) lapsed when 0b started. W(b) is now open to the owner only as a new, separately
-    pre-registered, kill-only look on the added weeks alone (OWNER_BOUNDARY 2);
+CURRENT_MILESTONE=NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the
+  free-data route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+  - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings.
-CURRENT_BRANCH=chore/state-post-120 (LOCAL, no upstream), from main 563372f0: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116), -114 (#115),
-  -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4 commitment's
-  timestamp.
+CURRENT_BRANCH=chore/state-post-121 (LOCAL, no upstream), from main 21b89c5a: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116),
+  -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4
+  commitment's timestamp.
   The main checkout (/Users/kha/Documents/Kha-app/UCPE) is still on chore/state-post-104 at 2c6df51 with src/
   clean. It was kept untouched through the Stage-1 rerun (repair review F3); the verification `git fetch` changed
   only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job, but nothing
@@ -184,7 +191,14 @@ CURRENT_BRANCH=chore/state-post-120 (LOCAL, no upstream), from main 563372f0: th
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, STATE.md only).
+LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
+  - This loop pushed chore/state-post-120 at ea4d5b33 under the owner's push-only T3; the merge tree a36b096b was
+    recorded before the push. #121 was opened and merged from the owner's account on GitHub (2026-09-25T14:02:38Z).
+  - Verified by this loop: parents (563372f0, ea4d5b33); tree a36b096b equals the recorded tree; STATE.md blob
+    5461be13; the only change is STATE.md (two commits: 0a5600cf, then the §9 wording fixes ea4d5b33).
+  - The exact-head check `test` passed at 14:00:35Z and the exact-main check `test` at 14:05:58Z (2026-09-25).
+  - This publication is the external timestamp of the attempt-2 result, seal and audit digests.
+  Before it: 563372f0 (PR #120: the NG-1 Stage-1 repair STATE record, STATE.md only).
   - This loop pushed chore/state-post-119 at a880ebff under the owner's push-only T3; tree f9467c52 was recorded
     before the push. #120 was opened and merged from the owner's account on GitHub (2026-09-25T10:05:31Z).
   - Verified by this loop: parents (fe19792c, a880ebff); tree f9467c52 equals the recorded tree; STATE.md blob
@@ -244,7 +258,14 @@ LAST_GREEN_SHA=563372f0 (main, PR #120: the NG-1 Stage-1 repair STATE record, ST
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this NG-1 Stage-1 result record on chore/state-post-120 (main 563372f0 plus this STATE.md change; T0).
+  - Run for this NG-1 closure record on chore/state-post-121 (main 21b89c5a plus this STATE.md change; T0).
+  - The closure's own checks, local and read-only:
+    - NG1_CLOSURE.sha256 1/1;
+    - every NG-1 seal listed in NG1_CLOSURE.md verifies (STAGE1_CODE.sha256 38/39 by design; all others
+      complete);
+    - data/ is read-only, with 127 files and FETCH_SUMMARY.json 9d69aa97…;
+    - no file under nextgen/ng1/ is writable.
+  - Earlier, for the NG-1 Stage-1 result record on chore/state-post-120 (main 563372f0 plus that change; T0).
   - Re-run after the §9 wording re-check's fixes, on the same branch: the same result.
   - The run's own checks, local and read-only:
     - attempt 2: STAGE1_RESULTS.attempt2.sha256 11/11, STAGE1_AUDIT.attempt2.sha256 1/1,
@@ -337,20 +358,13 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the repair STATE T3 (#120), and the
-  NG-1 Stage-1 rerun authorization (one run, then the audit; LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-120, STATE.md only). It also timestamps the
-     attempt-2 result, seal and audit digests externally. §9's one bounded re-check of this record's wording was
-     run: it FAILED (2 blocking, 5 LOW), and every fix was applied word for word and confirmed mechanically (NG1).
-  2. NG-1's next step (owner decides; under §8, NOT_DEMONSTRATED means stop). Either:
-     (a) end NG-1 here: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED, the free-data route not demonstrated;
-         F3 stays unspent;
-     (b) or option W(b): a new, separately pre-registered, kill-only look at the pre-declared T arm on the added
-         weeks alone (map rows 7–8). It returns KILLED or NOT_DEMONSTRATED, never CONTINUE. It needs a digested
-         addendum fixing its folds and blocks, an external timestamp, and its own owner authorization for the fetch
-         and the run.
-     The download (10.06 GB) stays local and read-only either way.
-  3. Option W: W(a) LAPSED (the envelope became final at 0b). W(b) is available only as in 2(b).
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-1 result STATE T3
+  (#121), and the NG-1 closure ruling (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-121, STATE.md only). It also timestamps the NG-1
+     closure record externally.
+  2. The next lane after NG-1: selected paper-only by this loop at the owner's direction (NEXT_ACTION). Its exact
+     boundary is recorded here once it is selected.
+  3. NG-1: CLOSED by the owner, 2026-09-25. W(b) is not run, and option W closes with NG-1.
   4. F3: RULED 2026-09-23 — KEEP UNSPENT for a future generation or a stronger candidate. Narrowing H and a
      non-confirmatory monitor are declined by that ruling. Ruling 3 is not issued and no F3 fetch is authorized.
      Spending F3 later requires a candidate that clears the entry bar (NEXTGEN, STRONGER_CANDIDATE_PATH §1) inside a
@@ -372,8 +386,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      and preregistration are digested before any B look is read.
   6. New generation: NG-1 RULED GO 2026-09-23 (research-only, free-data-only; no collector, production path, F3
      or download yet; the only download since is Stage 1's, separately authorized).
-     The NG-1 pilot is complete: K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED. NG-2 and NG-3, the collector
-     routes, were not chosen. The archive question is RESOLVED
+     NG-1 is CLOSED (owner, 2026-09-25): K KILLED (valid for H ≤ 0.85), T NOT_DEMONSTRATED, W(b) not run. NG-2 and
+     NG-3, the collector routes, were not chosen. The archive question is RESOLVED
      (nextgen/ARCHIVE_VERIFICATION_NOTE.md): spot trades and aggTrades are archived, and no depth archive is listed.
      A research data collector and path A's evidence collector are both OFF. Implied volatility stays barred by
      invariant 5.
@@ -421,10 +435,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2). Read first:
-  - .work/research3/nextgen/ng1/pilot/STAGE1_AUDIT.attempt2.md: the result, the audit and the governing wording;
-  - STAGE1_RESULT.attempt2.json (write-once), and STAGE0_AUDIT.md for the governing Stage-0 wording;
-  - NG1_PILOT_PREREG.md §8 (stages; W(b)) and §10 (claims).
+NEXT_ACTION=Paper-only, as the owner directed: audit current STATE, Git and .work and select the single
+  highest-value safe lane after NG-1. That excludes reopening NG-1 or R4, new model research, a collector, F3, the
+  database, serving, pinned files, wiring, a freeze and a deploy. Then WAIT at that lane's exact boundary
+  (OWNER_BOUNDARY 2). Read first:
+  - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
+  - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
   - Never run ng1_stage1.py --stage1 again: attempt 2's result is final, and the run refuses once
     STAGE1_RESULT.attempt2.json exists.
@@ -848,6 +864,11 @@ NG1=Next generation 1 (owner GO 2026-09-23: research-only, free-data-only), in
       points: the Stage-0 claim in OWNER_BOUNDARY 6 lacked "valid for H ≤ 0.85", and the audit seal was cited only by
       prefix. It also made five LOW notes: stale rerun pointers, the verification fetch, the review carried by digest
       prefix only, "was parsed", and the W(a) label. All were applied word for word and confirmed mechanically.
+  - CLOSED by the owner, 2026-09-25 ("CLOSE NG-1; do not run W(b)").
+    - Closure record: NG1_CLOSURE.md (97afaffc…; NG1_CLOSURE.sha256
+      9b2a37ec12742641332a4883d170e7340766cc13239994e6a7a7146e152c31e4).
+    - Every seal was re-verified at closure, and every record and data file is kept read-only.
+    - W(b) is not run, and F3 stays unspent.
 R3=Research in .work/research3 (gitignored).
   - E0/G1: README.md and evidence.sha256. After the audit-required G1 repair, and the Wave-2 audit's D7 label
     fix, it holds 93 files. The pre-repair manifest (74 files) is kept as evidence_pre_g1_repair.sha256.
@@ -992,6 +1013,8 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - The NG-1 Stage-1 rerun (attempt 2, 2026-09-25T10:12:41Z, NOT_DEMONSTRATED): final. ng1_stage1.py --stage1
     refuses once STAGE1_RESULT.attempt2.json exists. Never delete or edit it, the RUN_STAGE1.attempt2.* capture,
     STAGE1_RESULTS.attempt2.sha256 or the audit record.
+  - NG-1 is CLOSED (owner, 2026-09-25): no NG-1 stage, fetch or W(b) may run. Never edit or delete any NG-1 file,
+    seal or data file (NG1_CLOSURE.md).
   - The R4 Stage-B look: claim 95c339ef…, 2026-09-18T16:29Z. look.py --look refuses forever, because of the result,
     the run log and the ledger. Never run rehearse_b.py again: AUTHORIZATION.txt exists. Never delete or edit
     r4/stage_b/look_run/, look_evidence/, AUTHORIZATION.txt or r4/m0/LOOKS_CONSUMED.log. Never read the 28 snapshot
