@@ -1,14 +1,14 @@
 # STATE
 
-Updated: 2026-09-26. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
-83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper brief (v3) found
-that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent evidence; 1H and
-4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one contribution per
-candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture. The four paper
-deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256 ea4bc8de…). Nothing is
-implemented, queried or deployed, and the product is unchanged. After a second review, the owner also ruled point
-12(a) on 2026-09-26: a predeclared fail-closed drift guard. The additive v2 records are sealed (H2_PREP_12A.sha256
-c795c177…).
+Updated: 2026-09-26. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
+are published (main 597e5c95, PR #123). H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper
+brief (v3) found that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent
+evidence; 1H and 4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one
+contribution per candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture.
+The four paper deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256
+ea4bc8de…). Nothing is implemented, queried or deployed, and the product is unchanged. After a second review, the
+owner also ruled point 12(a) on 2026-09-26: a predeclared fail-closed drift guard. The additive v2 records are sealed
+(H2_PREP_12A.sha256 c795c177…).
 - An owner-ordered analytic validation then rejected that guard's thresholds (g 0.2407; 0.10 as error control;
   H2_GUARD_VALIDATION.sha256 745075ad…).
 - The owner ruled an error budget: ≤ 5% across four timeframes, ≤ 1.25% per timeframe, 0.9375% of it modeled. They
@@ -20,7 +20,16 @@ c795c177…).
   coverage-only, with the same budget.
 - **Its single predeclared acceptance PASSED all 36 binding scenarios.** The envelope S01 has an upper bound of
   0.90519% ≤ 0.9375%. Across four timeframes with the reserve: 4.8707% ≤ 5%.
-- **H2-G2 is PASSED pending Q5 operating-density confirmation, not fully accepted** (OWNER_BOUNDARY 2).
+- **H2-G2 is PASSED pending Q5 operating-density confirmation, not fully accepted.**
+- **The owner-run Q5 count-only read** (Q1–Q3 and Q5; Q4 excluded as performance) passed every provenance check
+  after one correction. A smoke-row expectation had been built from an outcome-linked count; a follow-up count
+  (6 | 5) confirmed the cause.
+- **Q5 adjudication: UNAVAILABLE.**
+  - Operating density is 1–6 contributions per counted window.
+  - The informative-call floor (m ≥ 100, k ≥ 12) is unmet everywhere; the best is m 10 and k 4. At the observed
+    rates it would be met around 2028 or later.
+  - H2-G2 keeps its modeled PASS, but the frozen gate would return INSUFFICIENT_EVIDENCE for years. The interim
+    fail-closed posture stands (OWNER_BOUNDARY 2).
 15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
@@ -50,11 +59,88 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
-  - **H2-G2 PASSED its single predeclared modeled-error acceptance (36/36).** It is recorded as PASSED pending Q5
-    operating-density confirmation, not fully accepted. The next step is the Q5 count-only density read, which needs
-    its own authorization (OWNER_BOUNDARY 2).
+  - **The Q5 adjudication is UNAVAILABLE** (H2_Q5_ADJUDICATION.md; OWNER_BOUNDARY 2).
+    - H2-G2 keeps its modeled PASS (36/36).
+    - Its operating-density confirmation is UNAVAILABLE: provenance passes, but the density is not yet validated
+      and the floor is unmet.
   - H2 v3 (g 0.09) stays permanently FAILED.
-  - Every seal and result is preserved. H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  - Every seal and result is preserved. H1 is COMPLETE, and NG-1 is CLOSED. This record is unpushed.
+  - Q5 adjudication ruling (owner, 2026-09-26; pasted text in the owner's established form; its anchors verify:
+    the sealed follow-up 37b87c28…, 6 | 5, and the expected-12 stop), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Confirmation for the sealed Q5 follow-up: the single SELECT was run exactly
+    once, unedited, and no other query was run in that session. Owner ruling: accept the predeclared `6 | 5`
+    confirmation; preserve the original expected-12 stop failure historically and record additively that it came
+    from mixing outcome-linked counts with prediction-row counts. Correct the prediction-row expectation to 13
+    total CONTROLLED_SMOKE rows, 7 at/after 2026-08-19, and lift the Q5 interpretation stop.
+
+    Now interpret only the already-sealed Q5 count/density/provenance results. Apply the frozen H2-G2 design
+    without retuning: report each cutoff/timeframe’s min/median/max density, informative-call density, counted
+    windows and provenance checks; adjudicate whether actual operating density lies inside the frozen G2
+    validation envelope and whether the informative-call floor can be satisfied. Do not query DB again,
+    expose/derive performance, change `g=.07`, `alpha=.001`, N/CI/scenarios, or touch F3. Record the Q5
+    adjudication additively, update local STATE, verify in the safe worktree, and return PASSED / BLOCKED /
+    UNAVAILABLE plus the exact new SHA. No push, hold implementation or deploy." CONSUMED:
+    - Recorded in H2_Q5_RULING.md:
+      - the attestation: the follow-up ran once, unedited, with no other query;
+      - the expected-12 stop failure kept as history;
+      - its cause: an outcome-linked count mixed with a prediction-row count;
+      - R2 corrected to 13 in total, 7 at or after (I);
+      - the stop lifted.
+    - Adjudicated (H2_Q5_ADJUDICATION.py/.out/.md). All of it, with H2_Q5_RULING.md, is sealed as
+      H2_Q5_ADJUDICATION.sha256 d3e3dd01a847cbc70f557b35527987956a267477d4cc669b7ab5738674ca7a23.
+      - **Provenance PASS:** R1–R4, the follow-up, and consistency (admitted rows M 72 ≤ 97; I 17 ≤ 26).
+      - **Density min/median/max per counted window (k, m):**
+        - (M) 15m 1/1/2 (3, 4); 1H 2/2.5/4 (4, 10); 4H 1/2/4 (4, 9); 1D 1/2/6 (3, 8);
+        - (I) 15m none (0, 0); 1H 2/2/2 (1, 2); 4H 2/2/2 (1, 2); 1D 1/1/1 (1, 1).
+      - **Envelope:** inside by construction, but NOT YET VALIDATED. H2-G2's modeled acceptance was density-free
+        (Gaussian windows), and §13.3 has not been run.
+      - **Floor (m ≥ 100, k ≥ 12):** unmet on every timeframe and cutoff. At the observed rates, under (M): 1H
+        about 2028-06, 4H about 2028-08, 1D about 2029-05, and 15m not within the plan; (I) later still.
+      - **Verdict rule** (set in the adjudication script before it ran): BLOCKED if provenance fails; PASSED only
+        if provenance passes, the density is validated and the floor is met; otherwise UNAVAILABLE. Result:
+        **UNAVAILABLE**.
+      - No new query, no performance read, and nothing retuned (g 0.07, α 0.001, N, CI and the scenarios all kept).
+  - Q5 follow-up authorization (owner, 2026-09-26, a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. Owner selects Q5 option B. Authorize exactly one additional count-only
+    production read to test the sealed discrepancy hypothesis: verify `H2_Q5_CHECK.md` §4, print its exact single
+    SELECT verbatim plus expected columns/rows and stop; do not touch the DB yourself. The query may only
+    determine whether the older CONTROLLED_SMOKE set contains 6 predictions but 5 outcome-linked predictions. Do
+    not rerun Q1/Q2/Q3/Q5, inspect or interpret Q5 density/call figures, expose performance, modify the query, or
+    touch F3/hold/serving/deploy." CONSUMED:
+    - The owner ran the single sealed SELECT (H2_Q5_CHECK.md §4) at 21:50 BKK. **6 | 5 → CONFIRMED** by the rules
+      fixed before the run. The raw result was saved first; sealed as H2_Q5_FOLLOWUP.sha256
+      37b87c28fc2cd4c4c4ad8c330ecd9d70dbefafdbccd20f1ceff7b85f8d2cdb04.
+  - Q5 count-only read authorization (owner, 2026-09-26; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. First fetch and verify canonical `origin/main` is PR #123 merge
+    `597e5c958a2d2bcb11abaab0808f2dfb1149c9cf`, then fast-forward the clean local main checkout to it if needed.
+    Q5 count-only production read is AUTHORIZED, but you must not access the DB yourself: verify the sealed H2
+    query plan and print the exact five SELECT statements from `H2_COUNT_QUERY_PLAN.v2.md` verbatim, with the
+    precise Supabase SQL Editor run order, expected columns, and a single result template for me to paste back.
+
+    Q5 may measure only frozen density/provenance facts needed for H2-G2: min/median/max contributions per window,
+    informative directional-call counts, and cutoff/provenance counts. Do not compute or expose skill/performance
+    outcomes, up/down success rates, scores, probabilities, or anything usable to retune `g=0.07`, `alpha=0.001`,
+    N, CI, or the 36-scenario family. No writes, temp tables, functions, migrations, DB settings, F3, collector,
+    hold implementation, serving/pinned/wiring/freeze/deploy. Stop after giving the exact owner runbook."
+    CONSUMED:
+    - origin/main was verified as the PR #123 merge 597e5c95, and the main checkout was fast-forwarded to it
+      (LAST_GREEN_SHA).
+    - The runbook gave Q1, Q2, Q3 and Q5 of H2_COUNT_QUERY_PLAN.v2.md verbatim. Q4 was excluded because it computes
+      directional hits and a z-score, which the owner's constraint forbids.
+    - The owner ran them at 14:34:23Z. The raw capture was saved unchanged first (H2_Q5_RAW_RESULTS.txt 1f838996…)
+      and is complete.
+    - **Stop rule R2 fired** (13 against an expected 12): STOP, with no count used. Sealed as H2_Q5.sha256
+      dbc9987d396dfb54ce537806e7196751eccbaa0d36a91838d448803356e8dc02 (H2_Q5_CHECK.py/.out/.md).
+  - T3 authorization for chore/state-post-122 (owner, 2026-09-26, a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. T3 AUTHORIZED once: verify `origin/main` is still the canonical post-PR#122
+    main, all H2 seals including G2 still verify, branch `chore/state-post-122` is exactly
+    `57b8443f055a16e70aff1f890d04b0a31276ac5c`, and the complete Git diff vs main is STATE.md only. Then push only
+    that exact branch/SHA to origin, never hf; stop after confirming the remote branch. No PR/merge, Q5/DB,
+    code/tests implementation, F3, hold build/deploy, serving/pinned/wiring/freeze/deploy." CONSUMED:
+    - The pre-push checks passed.
+    - Exactly 57b8443f was pushed to origin chore/state-post-122, never to hf. The merge tree 8b4f07d8 was recorded
+      before the push.
+    - PR #123 was opened and merged from the owner's account at 2026-09-26T13:57:52Z (LAST_GREEN_SHA).
   - H2-G2 selection (owner, 2026-09-26; it arrived as pasted text in the owner's established form; its anchors
     verify: option A of H2_V3_RESULT.md §6, and v3 kept FAILED), verbatim:
     "CONTINUE CURRENT — Opus 5 XHIGH. Owner selects option A as a NEW candidate generation, not a repair/retry:
@@ -495,9 +581,10 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2-G2 (α 0.001, g 0.07) PASSED its predeclared modeled acceptance (36/36), pending Q5
-  operating-density confirmation; not fully accepted. History: the v2 guard was analytically REJECTED; the budget was
-  RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
+CURRENT_MILESTONE=H2 Q5 ADJUDICATED: UNAVAILABLE. H2-G2 (α 0.001, g 0.07) keeps its modeled PASS (36/36). Its
+  operating density (1–6 contributions per counted window) is not yet validated, and the informative-call floor is
+  unmet everywhere (at the observed rates, around 2028 or later). History: the v2 guard was analytically REJECTED;
+  the budget was RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
   - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
@@ -508,20 +595,31 @@ CURRENT_MILESTONE=H2-G2 (α 0.001, g 0.07) PASSED its predeclared modeled accept
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-122 (LOCAL, no upstream), from main 83b099de: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-121 (#122), -120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117),
-  -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is
-  the R4 commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 83b099de (H1 step (c), 2026-09-25), clean,
-  and its working-tree STATE.md is current as of that commit. Before that it was frozen on chore/state-post-104 at
-  2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept. STATE records are still
-  made in separate worktrees, and ./verify.sh never runs in the main checkout (STANDING_RULES).
+CURRENT_BRANCH=chore/state-post-123 (LOCAL, no upstream), from main 597e5c95: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-122 (#123), -121 (#122), -120 (#121), -119 (#120), -118 (#119), -117 (#118),
+  -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin;
+  -110's push is the R4 commitment's timestamp.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 597e5c95 (fast-forwarded 2026-09-26 under the
+  Q5 authorization), clean, and its working-tree STATE.md is current as of that commit. Before that it was frozen on
+  chore/state-post-104 at 2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept.
+  STATE records are still made in separate worktrees, and ./verify.sh never runs in the main checkout
+  (STANDING_RULES).
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cleanup STATE record, STATE.md only).
+LAST_GREEN_SHA=597e5c95 (main, PR #123: the H2 record through H2-G2, STATE.md only).
+  - This loop pushed chore/state-post-122 at 57b8443f under the owner's push-only T3. The merge tree 8b4f07d8 was
+    recorded before the push. #123 was merged from the owner's account at 2026-09-26T13:57:52Z.
+  - Verified by this loop:
+    - parents (83b099de, 57b8443f);
+    - tree 8b4f07d8, equal to the recorded tree;
+    - STATE.md blob 2906e80e;
+    - the only change is STATE.md, over six commits.
+  - The exact-head check `CI` passed (run created 08:46:36Z), and so did the exact-main check `CI` (13:57:54Z),
+    2026-09-26.
+  Before it: 83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cleanup STATE record, STATE.md only).
   - This loop pushed chore/state-post-121 at 79acf1e5 under the owner's push-only T3; the merge tree 7606c5b0 was
     recorded before the push. #122 was opened and merged from the owner's account on GitHub (2026-09-25T15:39:47Z).
   - Verified by this loop: parents (21b89c5a, 79acf1e5); tree 7606c5b0 equals the recorded tree; STATE.md blob
@@ -595,8 +693,11 @@ LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cl
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
-  - Run for this H2-G2 record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
-    worktree.
+  - Run for this H2 Q5-adjudication record on chore/state-post-123 (main 597e5c95 plus this STATE.md change; T0), in
+    its worktree.
+  - H2's own checks, read-only: all eleven H2 seals verify, including H2_Q5 4/4, H2_Q5_FOLLOWUP 4/4 and
+    H2_Q5_ADJUDICATION 4/4.
+  - Earlier, for the H2-G2 record on chore/state-post-122 (main 83b099de plus that change; T0).
   - H2's own checks, read-only:
     - H2_PREP 15/15, H2_PREP_12A 10/10, H2_GUARD_VALIDATION 5/5, H2_V3_PREREG 4/4, H2_V3_RESULT 4/4,
       H2_G2_PREREG 4/4, H2_G2_RESULT 4/4;
@@ -713,12 +814,20 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
-  authorization, and the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
-  authorizations (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
-     brief's and the H2 package's digests externally.
-  2. CURRENT LANE, H2 — **H2-G2 PASSED pending Q5 operating-density confirmation; not fully accepted.** It was
-     ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, and the H2-G2 selection (LOOP_STATE).
+  authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
+  authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
+  (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-123, STATE.md only).
+  2. CURRENT LANE, H2 — **Q5 adjudication UNAVAILABLE. H2-G2 keeps its modeled PASS; its operating density is not
+     confirmed.** It was ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, the H2-G2 selection, and the Q5
+     rulings (LOOP_STATE).
+     - The Q5 read is CONSUMED: provenance PASS (R2 corrected); density not yet validated; floor unmet everywhere
+       (H2_Q5_ADJUDICATION.md).
+     - The owner's next decisions:
+       - the cutoff at (e), which fixes the envelope §13.3 validates;
+       - whether and when to run §13.3, a no-database simulation at the recorded densities;
+       - whether to wait for usage, or to reconsider the architecture (a new ruling);
+       - the open points (b), (d) and (f), and the T2 hold.
      - H2-G2 (α 0.001, g 0.07) passed all 36 binding scenarios (H2_G2_D3_PREREG.md, H2_G2_RESULT.md).
      - The v3 candidate (α 0.001, g 0.09) **FAILED** in S01 and stays on record, unreplaced (H2_D3_PREREG.v3.md,
        H2_V3_RESULT.md).
@@ -727,13 +836,15 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
        - H2_PREP_12A c795c177… (v2);
        - H2_GUARD_VALIDATION 745075ad… (v2's guard rejected);
        - H2_V3_PREREG cfcf773b… and H2_V3_RESULT 01839fd1… (v3, FAILED);
-       - H2_G2_PREREG 06af15c7… and H2_G2_RESULT 070b6276… (H2-G2, PASSED pending Q5).
+       - H2_G2_PREREG 06af15c7… and H2_G2_RESULT 070b6276… (H2-G2, PASSED pending Q5);
+       - H2_Q5 dbc9987d…, H2_Q5_FOLLOWUP 37b87c28… and H2_Q5_ADJUDICATION d3e3dd01… (Q5: UNAVAILABLE).
      - The next owner boundaries each need their own authorization:
      0. CONSUMED 2026-09-26: after the v3 FAIL the owner selected (A) as a new generation, H2-G2 (g 0.07), which PASSED.
         The parameter search is closed.
-     a. **The count-only density read: the next step, and the operating-density confirmation H2-G2 is pending on.**
-        The owner runs the five sealed statements of H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL
-        editor, and returns the raw output (suggested wording in its §5). No write.
+     a. CONSUMED 2026-09-26: the count-only density read (Q1–Q3 and Q5; Q4 excluded), the follow-up, and the
+        adjudication (UNAVAILABLE). The text below is kept as history. The read had been specified thus: the owner runs
+        the five sealed statements of H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL editor, and returns
+        the raw output (suggested wording in its §5). No write.
         - It returns no performance figures and no outcome-direction counts, so it cannot inform the frozen guard.
         - It yields the density envelope, the validation densities and the call mix.
      b. Confirm or change the open points (H2_G2_D3_PREREG.md §15). Each has a frozen default:
@@ -912,10 +1023,13 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then the Q5 count-only density read,
-  which confirms H2-G2's operating density; H2's open points; and the T2 hold authorization). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then H2's next decisions after the
+  UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, the open points, and the T2 hold). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
+  - .work/h2_skill_gate/H2_Q5_ADJUDICATION.md: the Q5 adjudication (UNAVAILABLE), and H2_Q5_RULING.md. Then
+    H2_Q5_CHECK.md, the historical R2 stop, and H2_Q5_FOLLOWUP.md (6 | 5). Never query the database for H2 without
+    the owner's authorization, and never re-run a consumed statement;
   - .work/h2_skill_gate/H2_G2_RESULT.md: the single H2-G2 acceptance run (36/36 PASS) and the budget accounting.
     Then H2_G2_RULING.md, H2_G2_ACCEPTANCE_PROTOCOL.md and H2_G2_D3_PREREG.md, the governing candidate, PASSED
     pending Q5. Never re-run H2_G2_ACCEPTANCE.py: its single run is consumed. No further parameter search;
