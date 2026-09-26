@@ -21,9 +21,13 @@ DRIFT_SHA = "d" * 40
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
 # What stands in it now is analysis_service.py, the H2 interim fail-closed hold (owner ruling
-# Q8, 2026-09-26), merged locally but not yet deployed; it clears when a deploy lands and the
-# baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = ["src/crypto_probability_engine/api/analysis_service.py"]
+# Q8, 2026-09-26), merged by PR #125 but not yet deployed; and config/build_info.py, the
+# UCPE-PROD-H2-HOLD-20260927-A release identity that names the next deploy. Both clear when
+# that deploy lands and the baseline is re-pinned.
+CURRENT_DELTA_PATHS: list[str] = [
+    "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/config/build_info.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
