@@ -37,11 +37,8 @@ _BLOCKING_REASON_COPY = {
 
 _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional candidates are paused"
 _DIRECTIONAL_EVIDENCE_HOLD_DETAIL = (
-    "The directional-accuracy evidence is being recounted so that repeated analyses of "
-    "one candle and overlapping outcome windows are no longer counted as independent "
-    "results. Until the corrected check is in place and validated, no directional "
-    "candidate is issued on any timeframe. Any uncorrected result is still reported for "
-    "diagnostics."
+    "Directional candidates are paused while evidence is being corrected. Diagnostic "
+    "evidence, when available, is still reported."
 )
 
 
