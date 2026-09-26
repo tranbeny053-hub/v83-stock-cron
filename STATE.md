@@ -1,9 +1,29 @@
 # STATE
 
-Updated: 2026-09-25. R4, the B lane, the NEXTGEN lane, D-1 and NG-1, through its Stage-1 attempt-2 result and
-audit, are published (main 21b89c5a, PR #121). 15m and 1H are HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP
-UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED** (owner ruling, 2026-09-25: close NG-1; W(b) is not
-run). Its record:
+Updated: 2026-09-26. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed) and lane H1 are published (main
+83b099de, PR #122). H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper brief (v3) found
+that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent evidence; 1H and
+4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one contribution per
+candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture. The four paper
+deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256 ea4bc8de…). Nothing is
+implemented, queried or deployed, and the product is unchanged. After a second review, the owner also ruled point
+12(a) on 2026-09-26: a predeclared fail-closed drift guard. The additive v2 records are sealed (H2_PREP_12A.sha256
+c795c177…).
+- An owner-ordered analytic validation then rejected that guard's thresholds (g 0.2407; 0.10 as error control;
+  H2_GUARD_VALIDATION.sha256 745075ad…).
+- The owner ruled an error budget: ≤ 5% across four timeframes, ≤ 1.25% per timeframe, 0.9375% of it modeled. They
+  froze the v3 candidate: α_look 0.001, g 0.09 SE.
+- **The v3 candidate FAILED its predeclared modeled acceptance in 1 of 36 scenarios (S01, the design rule's
+  envelope; upper bound 0.95485% > 0.9375%).** The 35 actual-gate scenarios passed.
+- The v3 candidate stays permanently FAILED on record, unreplaced.
+- **The owner then selected a new candidate generation, H2-G2**, not a retry: α_look 0.001, g 0.07 SE, and 0.10 as
+  coverage-only, with the same budget.
+- **Its single predeclared acceptance PASSED all 36 binding scenarios.** The envelope S01 has an upper bound of
+  0.90519% ≤ 0.9375%. Across four timeframes with the reserve: 4.8707% ≤ 5%.
+- **H2-G2 is PASSED pending Q5 operating-density confirmation, not fully accepted** (OWNER_BOUNDARY 2).
+15m and 1H are
+HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
+(owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
 - Stage 1, attempt 1: VOID at its dependency-pin guard, before any trade data was parsed.
 - Stage 1, attempt 2: the owner-authorized single rerun of the reviewed repair (manifest 55c7794c…). It COMPLETED
@@ -29,10 +49,287 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 unspent), and the closure is recorded
-  locally and verified. Lane H1 (resumability and evidence-integrity hardening) was selected, and its local steps
-  are DONE: the STATE cleanup in this record, and the two R4 result files made read-only. Its T3 push and the
-  main-checkout fast-forward remain (OWNER_BOUNDARY 1-2). Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER.
+  - **H2-G2 PASSED its single predeclared modeled-error acceptance (36/36).** It is recorded as PASSED pending Q5
+    operating-density confirmation, not fully accepted. The next step is the Q5 count-only density read, which needs
+    its own authorization (OWNER_BOUNDARY 2).
+  - H2 v3 (g 0.09) stays permanently FAILED.
+  - Every seal and result is preserved. H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  - H2-G2 selection (owner, 2026-09-26; it arrived as pasted text in the owner's established form; its anchors
+    verify: option A of H2_V3_RESULT.md §6, and v3 kept FAILED), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner selects option A as a NEW candidate generation, not a repair/retry:
+    preserve H2 v3 `g=0.09` permanently as FAILED and freeze H2-G2 at `α_look=0.001`, drift guard `g=0.07 SE`,
+    absolute 0.10 coverage-only, product FWER≤5%, per-timeframe total≤1.25%, modeled allowance≤0.9375%,
+    reserve=0.3125%. Predeclare additively before execution; use the same frozen 36-scenario family updated only
+    where `g` mechanically changes the admitted-bias envelope, fixed N=400,000/scenario, fresh independent seeds,
+    one-sided exact 95% binomial UCB≤0.9375%, and derive the exact pass-count threshold mechanically.
+
+    Run exactly one acceptance execution after the new prereg seal; no adaptive stopping, scenario removal,
+    confidence/sample-size change, or parameter retuning. Do not justify acceptance by prior “chance of passing”;
+    adjudicate only the fresh frozen run. If any binding scenario fails, H2 remains BLOCKED and parameter search
+    STOPS—do not try 0.06/0.05/etc.; return to owner for architecture reconsideration. If all pass, record H2-G2
+    as PASSED pending Q5 operating-density confirmation, not fully accepted. Preserve all earlier seals/results,
+    update local STATE additively, verify from the safe worktree, and report prereg/result seals, all binding
+    scenario rates/UCBs, exact budget accounting and new SHA. No push, Q5/DB, F3, code/tests implementation, hold
+    deployment or serving change." CONSUMED:
+    - Predeclared, then sealed BEFORE the run as H2_G2_PREREG.sha256
+      06af15c7b149fb1dadf4ac6cab3046539df9e2e077a125a1fbdc6e0c700dbbc1 (14:38:50+07:00). It covers:
+      - H2_G2_RULING.md, the ruling verbatim;
+      - H2_G2_D3_PREREG.md, identical to v3 except g = 0.07;
+      - H2_G2_ACCEPTANCE_PROTOCOL.md: v3's 36-scenario family, changed only in S01's admitted residual
+        (0.09 → 0.07); a fixed N = 400,000 each; fresh seeds default_rng([20261002, s]); pass iff x ≤ 3,649, derived
+        mechanically. It uses no prior pass estimate;
+      - H2_G2_ACCEPTANCE.py: model code byte-identical to v3's, and it refuses to run without the seal.
+    - **The single run** (14:39:16+07:00; H2_G2_ACCEPTANCE.out 6fb6c9ed…): **ALL 36 PASS.**
+      - S01, the admitted-bias envelope (0.07 at every look, no guard): x = 3,522, p̂ 0.88050%, upper bound
+        0.90519%.
+      - The actual gate's worst is S03 (ρ → 0, δ 0.015): p̂ 0.75650%, upper bound 0.77943%.
+      - With no bias (S02): p̂ 0.74675%, upper bound 0.76953%.
+      - Analytic checks: at δ = g, one look runs ×1.21–×1.25 of 0.001 with the exact t-test, and ×1.05–×1.16 with the
+        real guard. The normal approximation gives ×1.263.
+    - **Budget accounting:**
+      - per-timeframe modeled 0.90519% ≤ 0.9375% (+0.03231 pp);
+      - with the 0.3125% reserve, 1.21769% ≤ 1.25%;
+      - four timeframes: modeled union 3.6207% (independent 3.5719%); with the reserve, union 4.8707% ≤ 5%.
+    - Recorded in H2_G2_RESULT.md with H2_G2_CLOSURE_CHECK.py/.out, sealed as H2_G2_RESULT.sha256
+      070b62765851871a3b896ddec4e5aa948e6d28ea2b0ba30341fe8dc4534260d5.
+      - All checks OK: every seal intact; the seal preceded the run; the family differs from v3 only in S01; the model
+        code is identical; the record matches the raw output.
+    - **Not fully accepted.** Still required: the Q5 read; the §13.3 validation of the total ≤ 1.25% per timeframe
+      at the observed densities (N = 400,000, exact 95% bound, coverage envelope off); the other §13 items; and the
+      open points (b), (d), (e) and (f).
+    - **Parameter search is closed** by the ruling: had G2 failed, no other g would be tried.
+    - No push, Q5/DB, F3, code or test implementation, hold deployment or serving change.
+  - Before that, the v3 candidate (α_look 0.001, g 0.09 SE, 0.10 as coverage-only) FAILED its predeclared
+    modeled-error acceptance in scenario S01. It stays on record, unreplaced (below).
+  - H2 error-budget ruling and frozen v3 candidate (owner, 2026-09-26; it arrived as pasted text in the owner's
+    established form; its anchors verify against H2_GUARD_VALIDATION.md §2 and §6), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner ruling: control false-unblock FWER at ≤5% across the four evaluated
+    timeframes over the full plan. Allocate ≤1.25% total per timeframe, of which only 75% = 0.9375% may be
+    consumed by modeled error; reserve 0.3125% per timeframe for unmodelled effects. Freeze candidate repair at
+    per-look α=0.001 and drift bound=0.09 SE; keep absolute 0.10 as coverage-only with zero error-budget credit.
+
+    Create additive v3 records only; preserve every existing seal. Validate the frozen design
+    analytically/numerically where possible and, for Monte Carlo acceptance, use a predeclared fixed N=400,000
+    independent cohorts per frozen adversarial scenario and require the one-sided exact 95% binomial upper bound
+    on modeled false-unblock probability to be ≤0.9375% per timeframe. No adaptive simulation stopping or retuning
+    after results. Include repeated-look and four-timeframe budget accounting explicitly. If any scenario fails,
+    methodology stays BLOCKED and do not alter parameters without returning to owner.
+
+    Update local STATE only if the frozen design passes; otherwise record BLOCKED without replacing the failed
+    candidate. Verify in the safe worktree and report the additive seal, exact probabilities/upper bounds, finding
+    closure, and new SHA. No push, Q5/DB, code/tests implementation, F3, hold deployment or serving change."
+    CONSUMED:
+    - Predeclared, then sealed BEFORE the run as H2_V3_PREREG.sha256
+      cfcf773b9494e5fa5636e28123b7f9da7959dc62ffae15b298405f01e392b19d (14:11:06+07:00). It covers:
+      - H2_RULING_V3.md, the ruling verbatim;
+      - H2_D3_PREREG.v3.md, the full candidate specification, which supersedes v2;
+      - H2_V3_ACCEPTANCE_PROTOCOL.md: 36 frozen adversarial scenarios, a fixed N = 400,000 cohorts each with its own
+        seed, and pass iff x ≤ 3,649, i.e. an exact one-sided 95% upper bound ≤ 0.9375%. It disclosed before the
+        run that S01 had about a 62% chance to pass;
+      - H2_V3_ACCEPTANCE.py, which refuses to run without that seal.
+    - **The single run** (14:11:31+07:00; H2_V3_ACCEPTANCE.out 54411982…): **FAIL in 1 of 36.**
+      - S01, the design rule's envelope (the residual 0.09 admitted at every look, no guard): x = 3,718,
+        p̂ 0.92950%, upper bound 0.95485% > 0.9375%. With an earlier independent run (0.908%), the pooled estimate
+        is about 0.919%, too close to the limit to certify at N = 400,000.
+      - The 35 actual-gate scenarios all PASS. The worst is S05 (ρ → 0, δ 0.045): p̂ 0.80550%, upper bound
+        0.82914%. With no bias (S02): 0.72725%, upper bound 0.74974%.
+      - Analytic checks: at the residual 0.09, the one-look rate is ×1.28–×1.33 of 0.001 with the exact t-test, and
+        ×1.07–×1.21 with the real guard.
+    - **Budget accounting** (binding, S01 included):
+      - per-timeframe modeled 0.95485% > 0.9375%;
+      - with the reserve, 1.26735% > 1.25%;
+      - four timeframes, union 5.0694% > 5%.
+      - For information only: without S01, 0.82914%, 1.14164% and 4.5666%.
+    - Recorded in H2_V3_RESULT.md with H2_V3_CLOSURE_CHECK.py/.out, sealed as H2_V3_RESULT.sha256
+      01839fd18fc0fb6d8d78439e8a1fa3c7e4398da56b9ef064cbdc2a67c5d9ac1c.
+      - All checks OK: every seal intact; the seal preceded the run; the record matches the raw output; the
+        repairs for findings V1–V5 are recorded.
+      - The candidate is NOT accepted.
+      - The owner's options are in H2_V3_RESULT.md §6. The recommendation is (A), a new candidate at g = 0.07 with a
+        fresh predeclared run. Nothing was changed.
+    - No push, Q5/DB, code or test implementation, F3, hold deployment or serving change.
+  - H2 guard validation (owner, 2026-09-26, a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Before any T3/Q5, analytically validate the frozen drift guard: derive the
+    maximum admissible positive drift residual relative to SE under the actual one-look test and the repeated
+    weekly-look rule, and separately quantify four-timeframe any-false-unblock risk. Do not assume `0.24 SE` or
+    absolute `0.10` are valid; prove or reject each, including the simple sanity case where α=.002 and +0.24 SE
+    bias increases one-look false-pass above nominal. Preserve all sealed records; paper-only, no DB/Q5, tuning on
+    production density, code/tests, push, F3, implementation or deploy. Return a derivation, target error budget,
+    verdict on both guard thresholds, and exact repair needed if either fails." CONSUMED:
+    - H2_GUARD_VALIDATION.md, with its CALC and REFINE scripts and outputs, sealed as H2_GUARD_VALIDATION.sha256
+      745075ad39a8e3ace0f67a3e4fa4348cb1469fb813c97f73755a768b045d05ff. It is density-free, in SE units.
+    - One look: the admissible residual at the nominal level is 0; +0.24 SE turns 0.002 into 0.0042.
+    - 41 looks:
+      - the idealized rate at α 0.002 is 2.34% with the residual 0.2407 admitted (1.31% with no residual);
+      - the real guard is lower (1.755%);
+      - four timeframes: up to 9.4%.
+    - Verdicts: **g 0.2407 REJECTED**; **0.10 REJECTED as error control** (harmless as a withholding rule).
+      Recommended repair: α 0.001 with g 0.09, which the owner then froze and which failed above.
+  - H2 ruling on point 12(a) (owner, 2026-09-26; it arrived as pasted text in the owner's established form; its
+    anchors verify: the sealed package ea4bc8de… and point 12(a) of H2_D3_PREREG.md §12), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 ruling for unresolved point 12(a): use a predeclared fail-closed
+    drift guard; do NOT use F3/contemporaneous data and do NOT use same-cohort conditional margins as the
+    reference. Preserve the sealed `ea4bc8de…` package and create additive repaired paper records only.
+
+    Close the HIGH finding by freezing the guard construction/bound before Q5 results, making `UNAVAILABLE`
+    mandatory when realized drift exceeds it or when observed density lies outside the validated envelope, and
+    requiring validation at Q5 min/median/max contributions per window before the permanent gate can be accepted.
+    Repair the LOW findings too: settle-filter before collapse; define a call by sign(`p_up-p_down`) with exact
+    ties NO_CALL; clarify cutoff-M evidence/direct-serving observation plus stale-local-writer class; declare
+    per-timeframe vs cross-timeframe multiplicity; declare informative directional-call count and prepare a
+    non-arbitrary directional-call floor rule; add exact PLAN_COMPLETED dates when k>52. Preserve
+    methodology_version and all prior owner rulings.
+
+    Update local STATE to say methodology remains BLOCKED pending the separately authorized Q5 count-only density
+    read. Mechanically audit every second-review finding FIXED/NOT_FIXED, verify from the safe worktree, commit
+    STATE.md only, and report the new exact SHA. No push, DB query, code/tests implementation, hold deployment,
+    F3, collector or serving change." CONSUMED:
+    - Recorded additively in .work/h2_skill_gate/H2_RULING_12A.md: the ruling verbatim, the second review's
+      findings, and the closure table. The second review's own text is not in the repository or .work; its findings
+      are taken from the ruling (one HIGH, in three parts, and six LOW).
+    - The v2 records (they supersede the v1 documents, which stay sealed and unchanged): H2_D3_PREREG.v2.md,
+      H2_CUTOFF_DERIVATION.v2.md and H2_COUNT_QUERY_PLAN.v2.md. Support files: H2_DRIFT_GUARD_CALC.py/.out and
+      H2_PLAN_DATES.py/.out. H2_FAILCLOSED_T2_DESIGN.md is unaffected.
+    - HIGH fixed:
+      - The drift guard is frozen before any Q5 result. Either part makes the verdict UNAVAILABLE (DRIFT_GUARD):
+        - the bias bound |β̂| > g·SE, where β̂ = (π̂ − π_T)·Δq̂ and g = 0.2407, the headroom between α_look 0.002 and
+          the calibrated 0.004177;
+        - the drift envelope |π̂ − π_T| > 0.10.
+      - The density envelope [D_lo, D_hi] comes from Q5. Outside it, the verdict is UNAVAILABLE (DENSITY_ENVELOPE).
+      - Validation must run at each timeframe's Q5 minimum, median and maximum density before the permanent gate
+        can be accepted.
+      - The synthetic check: without the guard, false passes reached 73.6% and 99.9% at 30 contributions per
+        window; with the bias bound, every scenario stayed at or below 1.51%.
+    - LOW fixed:
+      - the settle filter now comes before the collapse;
+      - the call is sign(p_up − p_down), with exact ties NO_CALL;
+      - the cutoff-(M) evidence is classified: dbe9bf8 is a deployment-source record, and the only direct-serving
+        observation in the interval is 2026-08-16T09:44Z (a4bd2ac). This repository has no commits from
+        2026-07-13T15:37Z to 2026-08-15T09:49Z. The stale-local-writer class is declared for both cutoffs;
+      - multiplicity is declared: controlled per timeframe, not across timeframes;
+      - the informative count m is declared, with the floor rule m ≥ 100 (point (f));
+      - the exact PLAN_COMPLETED dates, at the earliest: 15m/1H/4H 2027-07-21T00:00Z (M) and 2027-08-25T00:00Z (I);
+        1D 2030-07-24T00:00Z (M) and 2030-08-21T00:00Z (I).
+    - Mechanical audit (H2_SECOND_REVIEW_CHECK.py/.out): ALL PASS. HIGH H-1 to H-3 and LOW 1–6 are FIXED
+      (mechanical); the v1 seal is intact (15/15); Q1–Q4 are byte-identical to v1; the new texts contain no bare
+      "skill". It checks presence and absence only, not correctness. No independent re-audit was run.
+    - Seal: H2_PREP_12A.sha256 c795c17757919498e5e9db5cd53af05ac09aab21259973e9578ffd0d1e58a512 (10/10 files, all
+      0444). H2_PREP.sha256 ea4bc8de… still verifies 15/15.
+    - No push, database query, code or test implementation, hold deployment, F3, collector or serving change.
+      methodology_version and every prior owner ruling are preserved.
+  - H2 rulings (owner, 2026-09-26; they arrived as pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 rulings: Q1 YES—max one candle-level contribution per
+    `(symbol,timeframe,reference_close)` before further aggregation, with exact collapse rule frozen on paper; Q2
+    D3—non-overlapping time-window means as inference units, aggregating same-window cross-symbol evidence, with
+    anchor/min-window rule preregistered; Q3 replace the 50% coin with a predeclared drift-aware **directional**
+    reference estimated outside the evaluation cohort—do not convert the live gate to proper scoring; Q4 YES,
+    diagnostics use the same corrected unit but remain non-decision-bearing; Q5 YES, prepare a count-only
+    current-state/provenance query for separate DB authorization and accept that corrected 1H/4H may lose pass; Q6
+    YES, diagnostics may name the new evidence unit; Q7 admit only rows after the earliest deterministically
+    proven clean provenance/cohort-separation cutoff, excluding default-backfilled earlier rows and declaring the
+    known BTC-1M controlled-smoke misclassification; Q8 interim posture = fail-closed: current skill pass must not
+    lift the product hard block until the corrected gate is implemented and validated, while diagnostics may still
+    report. Keep methodology_version unchanged. Record these rulings additively, prepare only the D3/drift-aware
+    preregistration, exact cutoff derivation, count-only query plan, and bounded T2 fail-closed
+    implementation/test/rollback design; update local STATE, audit once, verify from the safe worktree, and stop.
+    No DB query, code/test implementation, push, serving/pinned/F3/deploy." CONSUMED:
+    - Recorded additively in .work/h2_skill_gate/H2_RULINGS.md: the rulings verbatim, the deliverables, the audit
+      and the repair. Prepared, paper only:
+      - H2_D3_PREREG.md, the D3 preregistration:
+        - the earliest request per candle is kept; exact ties are no-calls;
+        - Monday-anchored 7-day windows (28-day for 1D; 1W and 1M out of scope), purged, and counted only once
+          closed and settled (48 h); k ≥ 12 and n ≥ 100;
+        - π_T from NG-1's R-1 span;
+        - a one-sided window t-test at a per-look level of 0.002, over looks k = 12…52;
+        - the outputs, and the replacement texts;
+      - H2_CUTOFF_DERIVATION.md, two cutoffs:
+        - (M) 2026-07-13T04:20:01Z, the default and the literal Q7 reading: dbe9bf8 pins production to 30d4982,
+          which writes the origin on every insert;
+        - (I) 2026-08-19T08:31:57Z, stricter: 5df51cd is the first proof that HTTP test traffic is classifiable;
+        - the canary is declared and excluded by run id;
+      - H2_COUNT_QUERY_PLAN.md: five SELECT-only aggregate statements, with stop and report rules fixed in
+        advance;
+      - H2_FAILCLOSED_T2_DESIGN.md: the interim hold (a switch and one helper in calibration/skill.py, the single
+        consumption point, one display branch), ten tests, and the rollback.
+    - The audit ran ONCE, as authorized, and returned REJECT (2 HIGH, 5 MEDIUM, 2 LOW).
+      - It is kept verbatim in H2_PREP_AUDIT.md; the audited files are kept read-only as *.audited.md.
+      - Each finding was verified, then repaired on paper. The mechanical closure check (H2_REPAIR_CHECK.out) reads
+        ALL PASS.
+      - NOT re-audited: the auditor asked for one re-audit, but the owner authorized one audit, now consumed.
+    - Digests (SHA-256, first 16 hex):
+      - H2_RULINGS.md da476caa52d0c840; H2_D3_PREREG.md 0ad0e2fcd8954a57;
+      - H2_CUTOFF_DERIVATION.md 7088b54a15d1d5fd; H2_COUNT_QUERY_PLAN.md 6dc9731fce44253b;
+      - H2_FAILCLOSED_T2_DESIGN.md 7600cfacb753a915; H2_PREP_AUDIT.md 4f15ba95ec1a98cf.
+      - The seal is H2_PREP.sha256 ea4bc8de785689e8c2d6921455cab49803e302a6d2d4ec9601283603ada7033e. It covers 15
+        files (15/15 OK), all 0444.
+    - Found during the repair:
+      - on 2026-08-19 the 15m, 1H, 4H and 1M cards read Up = Down exactly (RELEASE_GATE.md:127), and the legacy count
+        scores every such tie as an UP call;
+      - the audited single-look design would falsely pass about 10.7% of the time over a year of weekly looks
+        (H2_ALPHA_LOOK_CALC.out);
+      - a production query had found 5 legacy CONTROLLED_SMOKE and 2 SCHEDULED_SHADOW rows by 2026-08-16
+        (RELEASE_GATE.md:408-409).
+    - No code, test, data, database, production, serving, pinned, F3 or deploy action. methodology_version is
+      unchanged.
+  - H2 bounded-repair authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form),
+    verbatim: "CONTINUE CURRENT — Opus 5 XHIGH. H2 bounded repair only: preserve sealed v1/v2 and create an additive
+    sealed `H2_SKILL_GATE_BRIEF.v3.md`, then update local STATE to match. Close every Fable finding explicitly:
+    1. Remove the false decision-strength/HIGH coupling: production analysis uses constant `INSUFFICIENT_SAMPLE`;
+    calibration sample status is diagnostics-only. Reframe Q4 as non-decision-bearing reporting consistency/T1.
+    2. Replace inert “untagged legacy rows” Q7: origin is NOT NULL/default USER_REQUESTED since migration 0007.
+    Frame the real issue as a created_at cutoff around cohort separation/backfill; add that count to Q5. Declare the
+    known 2026-08-17 CONTROLLED_SMOKE canary mis-stamped USER_REQUESTED (BTC 1M), with no effect on 1H/4H.
+    3. Replace all current-status claims with: 1H/4H passed as of 2026-08-16 and are unread since; Q5 would measure
+    current state. Do not say they currently license candidates. 4. Reframe Q3: D-1 adopted R2 §2 only for
+    zero-location path A and left live Change-A directional wording unchanged. A proper-score/null change for the
+    live gate is a new owner ruling and changes population because TIMEOUT rows enter. 5. Rename H2 failure modes
+    F1–F4 to M1–M4. 6. Add a separate owner question for interim product posture while correction is designed: keep
+    current 1H/4H candidate licensing behavior vs a temporary T2 measure. 7. Relabel same-candle rows as
+    near-duplicates/inferred dependence, not proven identical, because the band uses request-time fees + live
+    spread. 8. Correct cache wording: TTL is 900s; after expiry the gate reads INSUFFICIENT_EVIDENCE until refresh
+    completes. 9. State methodology_version remains unchanged by the correction; under D1 the sample floor counts
+    distinct candles. Keep Q1/Q2/Q5/Q6 otherwise intact, refound Q3/Q4/Q7, and include the new interim-posture
+    question. Do not query production/DB or alter code/tests/data. Seal v3 additively, mechanically audit each
+    finding FIXED/NOT_FIXED, run verification only from a safe worktree, and report the new exact branch SHA. Do not
+    push, implement, access consumed F1/F2/F3 raw evidence, or fold H4 into H2." CONSUMED:
+    - Each finding's fact was first re-verified in code or record: the constant reliability status
+      (quant/calibration_metrics.py:8-14); migration 0007's NOT NULL default; the canary (commit 9bc195e); D-1's
+      path-A scope (D1_RULING.md:15-21); the band's live spread (execution_realism/realism.py:8-22); the cache
+      (calibration/skill.py:76-98).
+    - v3 is d5049ac94f5dab3988d7e9bc69fcc021045463e043c2f1030aebec34c0effdcf, sealed by H2_SKILL_GATE_BRIEF.v3.sha256
+      c21d99ceb8999bd3db88887a8b4d95042ff1dec1a4ae50be11231ca4f34d8de9. v1 and v2 are kept unchanged and verify.
+    - Mechanical audit of v3 §§1-6: findings 1-9 all FIXED; Q1/Q2/Q5/Q6 kept (Q5 adds the created_at count); H4 not
+      folded in.
+    - No code, test, data, production or database access.
+  - H2 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. H2 AUTHORIZED, paper/read-only only. Audit the current live skill gate
+    end-to-end against canonical STATE/contracts/implementation/tests: identify exactly where overlapping outcomes
+    or repeated rows are treated as independent evidence, what claim/status that currently licenses, and whether the
+    dependence structure can inflate confidence or prematurely satisfy the gate. Produce a bounded owner brief with
+    the current estimand, evidence unit, overlap/dependence failure modes, affected timeframes/paths, and 2–3
+    correction designs with trade-offs; preserve USER_REQUESTED vs SCHEDULED_SHADOW evidence classes and D-1
+    wording. Do not change code/tests/data, access consumed F1/F2 raw evidence, run production analysis, or touch
+    DB/serving/pinned/F3. Stop at the methodology owner boundary with the exact questions requiring ruling."
+    CONSUMED:
+    - Brief v2 is 0918f1484e968defb5e188719ea7b3d59f1cd59e392eba22e2507866f0c4ea69, sealed by
+      H2_SKILL_GATE_BRIEF.v2.sha256 08c6a9e604760b80c1ed16005d30ec4be8a1eaf3c06211ad9abb8262f71596b0. v2 governed
+      until v3 superseded it (above).
+    - v1 (H2_SKILL_GATE_BRIEF.md c67ddb61…) is kept unchanged: it was sealed before one §3 research citation was
+      corrected, because a parallel tool batch sealed the file while one edit failed. No finding changed.
+    - No code, test, data, database, serving, pinned, F3 or F1/F2 raw evidence was touched, and no production
+      analysis was run.
+  - H1 step (c) authorization (owner, 2026-09-25) is CONSUMED. The main checkout was switched from
+    chore/state-post-104 @ 2c6df51 to main and fast-forwarded to exactly 83b099de; no other git change or deletion.
+    - Its working-tree STATE.md byte-equals origin/main's.
+    - The NG-1 seals verify (STAGE1_CODE.sha256 38/39 by design), and so do the R4 seals: evidence_r4.sha256 67/68,
+      the documented LOOKS_CONSUMED.log difference; STAGE_C.sha256 29/29.
+    - U1/V2A results are unchanged and read-only.
+  - The H1 STATE T3 (push only; #122 → main 83b099de) is CONSUMED and VERIFIED (LAST_GREEN_SHA).
+  Earlier in this loop:
+  - NG-1 was CLOSED by owner ruling (W(b) not run; F3 unspent), and the closure was recorded and verified.
+  - Lane H1 was selected, and its local steps were done: the STATE cleanup, and the two R4 result files made
+    read-only.
   - H1 authorization (owner, 2026-09-25; it arrived as pasted text in the owner's established form), verbatim:
     "CONTINUE CURRENT — Opus 5 HIGH. H1 AUTHORIZED, local-only. On `chore/state-post-121`, make only
     semantic-preserving STATE cleanup: correct stale/superseded pointers, mark moot items only where current
@@ -198,28 +495,40 @@ LOOP_STATE=WAITING FOR THE OWNER: NG-1 CLOSED (owner ruling; W(b) not run; F3 un
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the
-  free-data route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+CURRENT_MILESTONE=H2-G2 (α 0.001, g 0.07) PASSED its predeclared modeled acceptance (36/36), pending Q5
+  operating-density confirmation; not fully accepted. History: the v2 guard was analytically REJECTED; the budget was
+  RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
+  COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
+  route not demonstrated; W(b) not run; F3 unspent. Still excluded:
+  - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
+    without its own authorization (it is a hard gate, so treat it as T2); and the count-only production read
+    without its own database authorization;
   - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-121 (LOCAL, no upstream), from main 21b89c5a: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117), -115 (#116),
-  -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is the R4
-  commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is still on chore/state-post-104 at 2c6df51 with src/
-  clean. It was kept untouched through the Stage-1 rerun (repair review F3); the verification `git fetch` changed
-  only the remote-tracking ref (audit L3). The rerun is consumed, so that freeze has done its job. Its working-tree
-  STATE.md is the stale 09-17 record. Fast-forwarding it to main is H1 step (c), which awaits its own authorization
-  after the T3 (OWNER_BOUNDARY 2). STATE records are made in separate worktrees.
+CURRENT_BRANCH=chore/state-post-122 (LOCAL, no upstream), from main 83b099de: this record, unpublished
+  (OWNER_BOUNDARY). chore/state-post-121 (#122), -120 (#121), -119 (#120), -118 (#119), -117 (#118), -116 (#117),
+  -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin; -110's push is
+  the R4 commitment's timestamp.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 83b099de (H1 step (c), 2026-09-25), clean,
+  and its working-tree STATE.md is current as of that commit. Before that it was frozen on chore/state-post-104 at
+  2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept. STATE records are still
+  made in separate worktrees, and ./verify.sh never runs in the main checkout (STANDING_RULES).
   The batch branches are merged, and remain on origin:
   - prep/0010-legacy-table-security;
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
+LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cleanup STATE record, STATE.md only).
+  - This loop pushed chore/state-post-121 at 79acf1e5 under the owner's push-only T3; the merge tree 7606c5b0 was
+    recorded before the push. #122 was opened and merged from the owner's account on GitHub (2026-09-25T15:39:47Z).
+  - Verified by this loop: parents (21b89c5a, 79acf1e5); tree 7606c5b0 equals the recorded tree; STATE.md blob
+    02d22e2e; the only change is STATE.md (three commits: f283738f, c6170032, 79acf1e5).
+  - The exact-head check `test` passed at 15:25:52Z and the exact-main check `test` at 15:42:34Z (2026-09-25).
+  - This publication is the external timestamp of the NG-1 closure record and of lane H1's selection and cleanup.
+  Before it: 21b89c5a (PR #121: the NG-1 Stage-1 attempt-2 result and audit STATE record, STATE.md only).
   - This loop pushed chore/state-post-120 at ea4d5b33 under the owner's push-only T3; the merge tree a36b096b was
     recorded before the push. #121 was opened and merged from the owner's account on GitHub (2026-09-25T14:02:38Z).
   - Verified by this loop: parents (563372f0, ea4d5b33); tree a36b096b equals the recorded tree; STATE.md blob
@@ -285,8 +594,23 @@ LAST_GREEN_SHA=21b89c5a (main, PR #121: the NG-1 Stage-1 attempt-2 result and au
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-25 (local).
-  - Run for this NG-1 closure record on chore/state-post-121 (main 21b89c5a plus this STATE.md change; T0).
+LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
+  - Run for this H2-G2 record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
+    worktree.
+  - H2's own checks, read-only:
+    - H2_PREP 15/15, H2_PREP_12A 10/10, H2_GUARD_VALIDATION 5/5, H2_V3_PREREG 4/4, H2_V3_RESULT 4/4,
+      H2_G2_PREREG 4/4, H2_G2_RESULT 4/4;
+    - H2_G2_CLOSURE_CHECK: all OK.
+  - Earlier on this branch (2026-09-26), for the H2 v3-BLOCKED record: the same result.
+  - H2's own checks, read-only:
+    - H2_PREP 15/15, H2_PREP_12A 10/10, H2_GUARD_VALIDATION 5/5, H2_V3_PREREG 4/4, H2_V3_RESULT 4/4;
+    - H2_V3_CLOSURE_CHECK: all OK.
+  - Earlier on this branch (2026-09-26), for the H2 12(a) record: the same result.
+  - H2's own checks, read-only: H2_PREP_12A.sha256 10/10; H2_PREP.sha256 15/15; H2_SKILL_GATE_BRIEF.v3.sha256, v2
+    and v1 1/1 each; H2_SECOND_REVIEW_CHECK ALL PASS.
+  - Earlier on this branch (2026-09-26), for the H2 rulings record: the same result.
+  - Earlier on this branch (2026-09-25), for the H2 brief and its v3 repair: the same result each time.
+  - Earlier, for the NG-1 closure record on chore/state-post-121 (main 21b89c5a plus that change; T0).
   - Re-run after the lane-selection commit and again after the H1 cleanup, on the same branch, in its worktree:
     the same result each time.
   - The closure's own checks, local and read-only:
@@ -388,11 +712,93 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the NG-1 Stage-1 result STATE T3
-  (#121), and the NG-1 closure ruling (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-121, STATE.md only). It also timestamps the NG-1
-     closure record externally.
-  2. NEXT LANE, H1: resumability and evidence-integrity hardening. It was selected paper-only on 2026-09-25 at the
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
+  authorization, and the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
+  authorizations (LOOP_STATE). What remains, in order:
+  1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
+     brief's and the H2 package's digests externally.
+  2. CURRENT LANE, H2 — **H2-G2 PASSED pending Q5 operating-density confirmation; not fully accepted.** It was
+     ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, and the H2-G2 selection (LOOP_STATE).
+     - H2-G2 (α 0.001, g 0.07) passed all 36 binding scenarios (H2_G2_D3_PREREG.md, H2_G2_RESULT.md).
+     - The v3 candidate (α 0.001, g 0.09) **FAILED** in S01 and stays on record, unreplaced (H2_D3_PREREG.v3.md,
+       H2_V3_RESULT.md).
+     - Sealed:
+       - H2_PREP ea4bc8de… (v1);
+       - H2_PREP_12A c795c177… (v2);
+       - H2_GUARD_VALIDATION 745075ad… (v2's guard rejected);
+       - H2_V3_PREREG cfcf773b… and H2_V3_RESULT 01839fd1… (v3, FAILED);
+       - H2_G2_PREREG 06af15c7… and H2_G2_RESULT 070b6276… (H2-G2, PASSED pending Q5).
+     - The next owner boundaries each need their own authorization:
+     0. CONSUMED 2026-09-26: after the v3 FAIL the owner selected (A) as a new generation, H2-G2 (g 0.07), which PASSED.
+        The parameter search is closed.
+     a. **The count-only density read: the next step, and the operating-density confirmation H2-G2 is pending on.**
+        The owner runs the five sealed statements of H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL
+        editor, and returns the raw output (suggested wording in its §5). No write.
+        - It returns no performance figures and no outcome-direction counts, so it cannot inform the frozen guard.
+        - It yields the density envelope, the validation densities and the call mix.
+     b. Confirm or change the open points (H2_G2_D3_PREREG.md §15). Each has a frozen default:
+        - (b) no hardening beyond α_look 0.001, g 0.07 and the budget's reserve;
+        - (d) the D3 replacement texts, now including DRIFT_GUARD and DENSITY_ENVELOPE (a Change-A wording change);
+        - (e) the cutoff: (M) 2026-07-13T04:20:01Z (the default) or (I) 2026-08-19T08:31:57Z;
+        - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
+          only if they hold an informative call.
+        - (a) is RULED (the drift guard). (c) is SETTLED: the call is sign(p_up − p_down), with exact ties NO_CALL.
+     c. The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md (unchanged): implementation on a branch,
+        ./verify.sh in a worktree and Claude's review of the diff; then a T3; then a separate deploy authorization.
+        Until it is deployed, the live gate behaves as today.
+     d. Optional: an independent review of the v2 records. Their fixes are checked mechanically only.
+     e. Later, after the read: the §13 validation at the Q5 densities; the D3 implementation (T2); π_T's
+        computation (from the archive through its load mask, or under a fetch authorization); then the owner's
+        authorization to replace the hold, and a deploy.
+     For reference, the brief's findings and questions (Q1–Q8 are now ruled; LOOP_STATE). Brief:
+     .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md (d5049ac9…; it supersedes v2 0918f148… and v1 c67ddb61…, both
+     kept). Its findings:
+     - The gate counts every USER_REQUESTED resolved row (all symbols pooled) as an independent trial.
+       - The test is z = (2h − n)/√n ≥ 1.96 with n ≥ 100, against a 50% coin.
+       - Sources: calibration/skill.py:43-58; calibration/service.py:112-131; the repository's calibration query
+         has no DISTINCT; the ledger's only key is prediction_id.
+       - Origin has been NOT NULL DEFAULT 'USER_REQUESTED' since migration 0007, so the query's coalesce is inert.
+       - The cache TTL is 900 s. After expiry, the gate reads INSUFFICIENT_EVIDENCE until a refresh completes.
+     - Its dependence mechanisms:
+       - M1: same-candle near-duplicates. They share one window and price path, but the band uses request-time fees
+         and the live spread, so they are not proven identical; the dependence is inferred.
+       - M2: overlapping 6-bar windows. M3: cross-symbol pooling. M4: regime runs.
+       - Research measured a design effect of 1.4–4.1 (.work/research3/g1/G1_REPORT.md:99).
+     - A pass lifts the SKILL_NOT_DEMONSTRATED hard block and licenses LONG/SHORT_CANDIDATE ("for planning only").
+       1H (z 2.85) and 4H (z 4.31) passed as of 2026-08-16 (V1_QUANT_CONTRACT.md:18-26, 107-108) and are unread
+       since; Q5 would measure the current state.
+       - On those numbers, 1H's pass would not survive a design effect above 2.12, and 4H's above 4.84.
+       - Against the contract's majority-direction baselines, neither passed even as independent rows (z ≈ 0.68 and
+         1.18).
+     - Decision strength never reaches HIGH in production: analysis uses the constant reliability status
+       INSUFFICIENT_SAMPLE, and the calibration sample status is diagnostics-only.
+     - The one known mis-stamped row is the 2026-08-17 CONTROLLED_SMOKE canary, recorded as USER_REQUESTED (BTC 1M,
+       run_0294f782…; commit 9bc195e). It has no effect on 1H or 4H.
+     - Correction designs:
+       - D1: one row per candle; the sample floor then counts distinct candles;
+       - D2: one row per non-overlapping window;
+       - D3: a window-mean block test, the §5A A1 pattern; recommended.
+       Each keeps USER_REQUESTED-only counting, the D-1/Change-A wording and methodology_version unchanged, and fits
+       the unpinned calibration/service.py and skill.py. It changes a hard gate, so treat it as T2, with no deploy
+       without its own authorization.
+     Questions for the owner's ruling (RULED 2026-09-26; see LOOP_STATE):
+     - Q1 — the evidence unit: one row per candle? Recommended: yes.
+     - Q2 — D1, D2 or D3, and for D3 the windows and their minimum count? Recommended: D3.
+     - Q3 — reference and scoring. This is a new ruling, outside D-1: D-1 adopted R2 §2 only for zero-location path A
+       and left the live Change-A directional wording unchanged. Keep the 50% directional null, or change it for the
+       live gate? A proper score would change the population, because TIMEOUT rows enter.
+     - Q4 — reporting consistency (non-decision-bearing, T1): should the diagnostic calibration report use the same
+       unit?
+     - Q5 — a read-only aggregate production query of counts (its own database authorization) before any change,
+       and acceptance of the product change if 1H or 4H flips? It would count, per timeframe: n, h, distinct candles,
+       and rows created before migration 0007's cohort separation.
+     - Q6 — may the display wording "resolved outcomes" change to name the unit, given D-1 keeps Change-A wording?
+     - Q7 — cohort cutoff: exclude rows created before a created_at cutoff at cohort separation or backfill (0007)?
+       Q5 counts them first.
+     - Q8 — interim product posture while the correction is designed: keep the current behaviour (the gate may
+       license 1H/4H candidates if it still passes), or a temporary T2 measure?
+  2-H1. H1, resumability and evidence-integrity hardening: COMPLETE 2026-09-25. Its steps: (a) and (d) as below;
+     (b) #122 → main 83b099de; (c) the main checkout on main @ 83b099de. It was selected paper-only on 2026-09-25 at the
      owner's direction, after three parallel read-only reviews (the STATE decisions; Git, CI and production health;
      the .work lanes). Its steps:
      (a) T0 on chore/state-post-121, semantic-preserving STATE cleanup: DONE, owner-authorized, in this record.
@@ -420,7 +826,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
      - The alternatives rank lower now:
        - H2, a paper brief on dependence in the live directional-skill gate: the most product-relevant, but latent.
          The gate needs n ≥ 100 per timeframe; sampled resolver logs show outcomes accruing only a few per day; the
-         fix is serving or pinned work, excluded now. It is next after H1;
+         fix is serving or pinned work, excluded now. It is next after H1.
+         CORRECTED 2026-09-25 by the H2 audit: "latent" was wrong. On the contract's 2026-08-16 cohort, 1H
+         (142 directional rows, z 2.85) and 4H (151, z 4.31) had already passed the gate as of 2026-08-16
+         (V1_QUANT_CONTRACT.md:18-26, 107-108). They are unread since; H2's Q5 would measure the current state;
        - H3, verify.sh speed to the doctrine's 30 s (now about 110–180 s, almost all pytest): loop cost only;
        - H4, recording the resolver's 50-bar coupling and the unpinned runtime dependencies as known hazards
          (their fixes touch the database writer or serving);
@@ -503,12 +912,30 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record, batched with lane H1). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then the Q5 count-only density read,
+  which confirms H2-G2's operating density; H2's open points; and the T2 hold authorization). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
+  - .work/h2_skill_gate/H2_G2_RESULT.md: the single H2-G2 acceptance run (36/36 PASS) and the budget accounting.
+    Then H2_G2_RULING.md, H2_G2_ACCEPTANCE_PROTOCOL.md and H2_G2_D3_PREREG.md, the governing candidate, PASSED
+    pending Q5. Never re-run H2_G2_ACCEPTANCE.py: its single run is consumed. No further parameter search;
+  - .work/h2_skill_gate/H2_V3_RESULT.md: the single v3 acceptance run (FAIL in S01), the budget accounting and the
+    owner's options. Then H2_RULING_V3.md, H2_V3_ACCEPTANCE_PROTOCOL.md and H2_D3_PREREG.v3.md, the failed candidate
+    (on record, not governing), and H2_GUARD_VALIDATION.md, the rejection of v2's guard thresholds. Never re-run
+    H2_V3_ACCEPTANCE.py for this candidate: its single run is consumed;
+  - .work/h2_skill_gate/H2_RULING_12A.md: the 12(a) ruling, the second review's findings and their closure. Then
+    the governing v2 records: H2_D3_PREREG.v2.md, H2_CUTOFF_DERIVATION.v2.md and H2_COUNT_QUERY_PLAN.v2.md (sealed
+    by H2_PREP_12A.sha256). H2_FAILCLOSED_T2_DESIGN.md still governs the hold;
+  - .work/h2_skill_gate/H2_RULINGS.md: the Q1–Q8 rulings, the first audit and its repair. It and the four v1
+    documents are sealed by H2_PREP.sha256 and superseded where a v2 exists. Never edit a sealed file; make every
+    change additively;
+  - .work/h2_skill_gate/H2_SKILL_GATE_BRIEF.v3.md: the H2 brief (it governs; v2 and v1 are superseded, kept
+    unchanged);
   - .work/research3/nextgen/ng1/NG1_CLOSURE.md: the closure, the preserved records and the governing wording;
   - pilot/STAGE1_AUDIT.attempt2.md and STAGE0_AUDIT.md (the governing Stage-1 and Stage-0 wording).
   The B lane's record is b_lane/B_LANE_CLOSURE_ADDENDUM.md.
+  - H2: no database query except the five sealed statements of H2_COUNT_QUERY_PLAN.v2.md, each once, under the
+    owner's authorization. No implementation of the hold or of D3 without its own authorization.
   - Never run ng1_stage1.py --stage1 again: attempt 2's result is final, and the run refuses once
     STAGE1_RESULT.attempt2.json exists.
   - Never edit attempt 1's files or any attempt-2 file. Never run --pin-deps again: it refuses once
