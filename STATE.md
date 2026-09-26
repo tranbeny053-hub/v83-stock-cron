@@ -8,8 +8,16 @@ candle, D3 window means, a drift-aware directional reference, and an interim FAI
 deliverables are prepared, audited once (REJECT), repaired on paper and sealed (H2_PREP.sha256 ea4bc8de…). Nothing is
 implemented, queried or deployed, and the product is unchanged. After a second review, the owner also ruled point
 12(a) on 2026-09-26: a predeclared fail-closed drift guard. The additive v2 records are sealed (H2_PREP_12A.sha256
-c795c177…). **H2's D3 methodology is BLOCKED pending the separately authorized Q5 count-only density read**
-(OWNER_BOUNDARY 2). 15m and 1H are
+c795c177…).
+- An owner-ordered analytic validation then rejected that guard's thresholds (g 0.2407; 0.10 as error control;
+  H2_GUARD_VALIDATION.sha256 745075ad…).
+- The owner ruled an error budget: ≤ 5% across four timeframes, ≤ 1.25% per timeframe, 0.9375% of it modeled. They
+  froze the v3 candidate: α_look 0.001, g 0.09 SE.
+- **The v3 candidate FAILED its predeclared modeled acceptance in 1 of 36 scenarios (S01, the design rule's
+  envelope; upper bound 0.95485% > 0.9375%).** The 35 actual-gate scenarios passed.
+- **H2's D3 methodology is BLOCKED.** The failed candidate stays on record, no parameter was changed, and it returns
+  to the owner (OWNER_BOUNDARY 2).
+15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
 - Stage 0: DESIGN_OK. The kline family K is KILLED (valid for H ≤ 0.85).
@@ -37,10 +45,76 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER. H2's D3 methodology is BLOCKED pending the separately authorized Q5 count-only
-  density read (OWNER_BOUNDARY 2). The 12(a) ruling and the second review's fixes are recorded as additive v2
-  records, sealed by H2_PREP_12A.sha256; the earlier package (H2_PREP.sha256) is unchanged. H1 is COMPLETE, and NG-1
-  is CLOSED. Nothing is pushed.
+LOOP_STATE=WAITING FOR THE OWNER. H2 is BLOCKED (OWNER_BOUNDARY 2).
+  - The frozen v3 candidate (α_look 0.001, g 0.09 SE, 0.10 as coverage-only) FAILED its predeclared modeled-error
+    acceptance in scenario S01. The methodology stays BLOCKED, and the failed candidate stays on record, unreplaced.
+    No parameter was changed.
+  - It was already blocked pending the Q5 count-only density read.
+  - Every seal is preserved. H1 is COMPLETE, and NG-1 is CLOSED. Nothing is pushed.
+  - H2 error-budget ruling and frozen v3 candidate (owner, 2026-09-26; it arrived as pasted text in the owner's
+    established form; its anchors verify against H2_GUARD_VALIDATION.md §2 and §6), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Owner ruling: control false-unblock FWER at ≤5% across the four evaluated
+    timeframes over the full plan. Allocate ≤1.25% total per timeframe, of which only 75% = 0.9375% may be
+    consumed by modeled error; reserve 0.3125% per timeframe for unmodelled effects. Freeze candidate repair at
+    per-look α=0.001 and drift bound=0.09 SE; keep absolute 0.10 as coverage-only with zero error-budget credit.
+
+    Create additive v3 records only; preserve every existing seal. Validate the frozen design
+    analytically/numerically where possible and, for Monte Carlo acceptance, use a predeclared fixed N=400,000
+    independent cohorts per frozen adversarial scenario and require the one-sided exact 95% binomial upper bound
+    on modeled false-unblock probability to be ≤0.9375% per timeframe. No adaptive simulation stopping or retuning
+    after results. Include repeated-look and four-timeframe budget accounting explicitly. If any scenario fails,
+    methodology stays BLOCKED and do not alter parameters without returning to owner.
+
+    Update local STATE only if the frozen design passes; otherwise record BLOCKED without replacing the failed
+    candidate. Verify in the safe worktree and report the additive seal, exact probabilities/upper bounds, finding
+    closure, and new SHA. No push, Q5/DB, code/tests implementation, F3, hold deployment or serving change."
+    CONSUMED:
+    - Predeclared, then sealed BEFORE the run as H2_V3_PREREG.sha256
+      cfcf773b9494e5fa5636e28123b7f9da7959dc62ffae15b298405f01e392b19d (14:11:06+07:00). It covers:
+      - H2_RULING_V3.md, the ruling verbatim;
+      - H2_D3_PREREG.v3.md, the full candidate specification, which supersedes v2;
+      - H2_V3_ACCEPTANCE_PROTOCOL.md: 36 frozen adversarial scenarios, a fixed N = 400,000 cohorts each with its own
+        seed, and pass iff x ≤ 3,649, i.e. an exact one-sided 95% upper bound ≤ 0.9375%. It disclosed before the
+        run that S01 had about a 62% chance to pass;
+      - H2_V3_ACCEPTANCE.py, which refuses to run without that seal.
+    - **The single run** (14:11:31+07:00; H2_V3_ACCEPTANCE.out 54411982…): **FAIL in 1 of 36.**
+      - S01, the design rule's envelope (the residual 0.09 admitted at every look, no guard): x = 3,718,
+        p̂ 0.92950%, upper bound 0.95485% > 0.9375%. With an earlier independent run (0.908%), the pooled estimate
+        is about 0.919%, too close to the limit to certify at N = 400,000.
+      - The 35 actual-gate scenarios all PASS. The worst is S05 (ρ → 0, δ 0.045): p̂ 0.80550%, upper bound
+        0.82914%. With no bias (S02): 0.72725%, upper bound 0.74974%.
+      - Analytic checks: at the residual 0.09, the one-look rate is ×1.28–×1.33 of 0.001 with the exact t-test, and
+        ×1.07–×1.21 with the real guard.
+    - **Budget accounting** (binding, S01 included):
+      - per-timeframe modeled 0.95485% > 0.9375%;
+      - with the reserve, 1.26735% > 1.25%;
+      - four timeframes, union 5.0694% > 5%.
+      - For information only: without S01, 0.82914%, 1.14164% and 4.5666%.
+    - Recorded in H2_V3_RESULT.md with H2_V3_CLOSURE_CHECK.py/.out, sealed as H2_V3_RESULT.sha256
+      01839fd18fc0fb6d8d78439e8a1fa3c7e4398da56b9ef064cbdc2a67c5d9ac1c.
+      - All checks OK: every seal intact; the seal preceded the run; the record matches the raw output; the
+        repairs for findings V1–V5 are recorded.
+      - The candidate is NOT accepted.
+      - The owner's options are in H2_V3_RESULT.md §6. The recommendation is (A), a new candidate at g = 0.07 with a
+        fresh predeclared run. Nothing was changed.
+    - No push, Q5/DB, code or test implementation, F3, hold deployment or serving change.
+  - H2 guard validation (owner, 2026-09-26, a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Before any T3/Q5, analytically validate the frozen drift guard: derive the
+    maximum admissible positive drift residual relative to SE under the actual one-look test and the repeated
+    weekly-look rule, and separately quantify four-timeframe any-false-unblock risk. Do not assume `0.24 SE` or
+    absolute `0.10` are valid; prove or reject each, including the simple sanity case where α=.002 and +0.24 SE
+    bias increases one-look false-pass above nominal. Preserve all sealed records; paper-only, no DB/Q5, tuning on
+    production density, code/tests, push, F3, implementation or deploy. Return a derivation, target error budget,
+    verdict on both guard thresholds, and exact repair needed if either fails." CONSUMED:
+    - H2_GUARD_VALIDATION.md, with its CALC and REFINE scripts and outputs, sealed as H2_GUARD_VALIDATION.sha256
+      745075ad39a8e3ace0f67a3e4fa4348cb1469fb813c97f73755a768b045d05ff. It is density-free, in SE units.
+    - One look: the admissible residual at the nominal level is 0; +0.24 SE turns 0.002 into 0.0042.
+    - 41 looks:
+      - the idealized rate at α 0.002 is 2.34% with the residual 0.2407 admitted (1.31% with no residual);
+      - the real guard is lower (1.755%);
+      - four timeframes: up to 9.4%.
+    - Verdicts: **g 0.2407 REJECTED**; **0.10 REJECTED as error control** (harmless as a withholding rule).
+      Recommended repair: α 0.001 with g 0.09, which the owner then froze and which failed above.
   - H2 ruling on point 12(a) (owner, 2026-09-26; it arrived as pasted text in the owner's established form; its
     anchors verify: the sealed package ea4bc8de… and point 12(a) of H2_D3_PREREG.md §12), verbatim:
     "CONTINUE CURRENT — Opus 5 XHIGH. Owner H2 ruling for unresolved point 12(a): use a predeclared fail-closed
@@ -370,8 +444,9 @@ LOOP_STATE=WAITING FOR THE OWNER. H2's D3 methodology is BLOCKED pending the sep
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 RULINGS Q1–Q8 AND 12(a) RECORDED; THE v2 PAPER RECORDS SEALED; THE D3 METHODOLOGY BLOCKED
-  pending the separately authorized Q5 count-only density read. H1
+CURRENT_MILESTONE=H2 BLOCKED: the v2 guard was analytically REJECTED; the error budget was RULED; the frozen v3
+  candidate (α 0.001, g 0.09) FAILED its predeclared modeled acceptance (S01). The failed candidate stays on record;
+  the owner decides next. (Also still pending: the Q5 count-only density read.) H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
   - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
@@ -469,8 +544,12 @@ LAST_GREEN_SHA=83b099de (main, PR #122: the NG-1 closure, H1 selection and H1 cl
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
-  - Run for this H2 12(a) record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
+  - Run for this H2 v3-BLOCKED record on chore/state-post-122 (main 83b099de plus this STATE.md change; T0), in its
     worktree.
+  - H2's own checks, read-only:
+    - H2_PREP 15/15, H2_PREP_12A 10/10, H2_GUARD_VALIDATION 5/5, H2_V3_PREREG 4/4, H2_V3_RESULT 4/4;
+    - H2_V3_CLOSURE_CHECK: all OK.
+  - Earlier on this branch (2026-09-26), for the H2 12(a) record: the same result.
   - H2's own checks, read-only: H2_PREP_12A.sha256 10/10; H2_PREP.sha256 15/15; H2_SKILL_GATE_BRIEF.v3.sha256, v2
     and v1 1/1 each; H2_SECOND_REVIEW_CHECK ALL PASS.
   - Earlier on this branch (2026-09-26), for the H2 rulings record: the same result.
@@ -578,22 +657,36 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
-  authorization, and the H2 paper, bounded-repair, rulings and 12(a) authorizations (LOOP_STATE). What remains, in
-  order:
+  authorization, and the H2 paper, bounded-repair, rulings, 12(a), guard-validation and v3 budget authorizations
+  (LOOP_STATE). What remains, in order:
   1. T3 (owner authorizes): publish this record (chore/state-post-122, STATE.md only). It also timestamps the H2
      brief's and the H2 package's digests externally.
-  2. CURRENT LANE, H2 — RULED 2026-09-26 (Q1–Q8 and point 12(a); LOOP_STATE). **The D3 methodology is BLOCKED
-     pending the separately authorized Q5 count-only density read.**
-     - Sealed: H2_PREP.sha256 ea4bc8de… (the v1 package) and H2_PREP_12A.sha256 c795c177… (the v2 records, which
-       govern where they exist).
+  2. CURRENT LANE, H2 — **BLOCKED.** It was ruled on 2026-09-26: Q1–Q8, point 12(a), and the error budget
+     (LOOP_STATE).
+     - The frozen v3 candidate (α 0.001, g 0.09) **FAILED** its predeclared modeled acceptance in S01. It stays on
+       record, unreplaced (H2_D3_PREREG.v3.md, H2_V3_RESULT.md).
+     - Sealed:
+       - H2_PREP ea4bc8de… (v1);
+       - H2_PREP_12A c795c177… (v2);
+       - H2_GUARD_VALIDATION 745075ad… (v2's guard rejected);
+       - H2_V3_PREREG cfcf773b… and H2_V3_RESULT 01839fd1… (v3, FAILED).
      - The next owner boundaries each need their own authorization:
-     a. **The count-only density read, which unblocks the methodology.** The owner runs the five sealed statements of
-        H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL editor, and returns the raw output (suggested
-        wording in its §5). No write.
+     0. **Decide how to proceed from the FAIL** (H2_V3_RESULT.md §6):
+        - (A) a new frozen candidate with a smaller bound, every standard kept. The recommendation is g = 0.07; the
+          estimated chance of passing S01 is about 97–99%. At g = 0.08 it is about 80–95%;
+        - (B) rule that modeled error means the actual gate (S02–S36), which passed with a worst upper bound of
+          0.82914%. That changes the acceptance standard set before the run;
+        - (C) keep g 0.09 and raise N or lower the confidence. Not recommended: it would retune the test after the
+          result.
+        - Any new candidate needs a fresh predeclared run with new seeds.
+     a. **The count-only density read,** still required before the methodology can be accepted. The owner runs the
+        five sealed statements of H2_COUNT_QUERY_PLAN.v2.md §3, each once, in the Supabase SQL editor, and returns
+        the raw output (suggested wording in its §5). No write.
         - It returns no performance figures and no outcome-direction counts, so it cannot inform the frozen guard.
         - It yields the density envelope, the validation densities and the call mix.
-     b. Confirm or change the open points in H2_D3_PREREG.v2.md §15. Each has a frozen default:
-        - (b) no hardening beyond α_look 0.002 and the drift guard;
+     b. Confirm or change the open points (H2_D3_PREREG.v2.md §15; v3 §15 for the failed candidate). Each has a
+        frozen default:
+        - (b) no hardening beyond the accepted candidate's α_look and g. There is no accepted candidate yet;
         - (d) the D3 replacement texts, now including DRIFT_GUARD and DENSITY_ENVELOPE (a Change-A wording change);
         - (e) the cutoff: (M) 2026-07-13T04:20:01Z (the default) or (I) 2026-08-19T08:31:57Z;
         - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
@@ -768,10 +861,14 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then the Q5 count-only density read,
-  which unblocks H2's methodology; H2's open points; and the T2 hold authorization). Never run
+NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; the decision after the v3 FAIL; then
+  the Q5 count-only density read, H2's open points, and the T2 hold authorization). Never run
   ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
   worktree. Read first:
+  - .work/h2_skill_gate/H2_V3_RESULT.md: the single v3 acceptance run (FAIL in S01), the budget accounting and the
+    owner's options. Then H2_RULING_V3.md, H2_V3_ACCEPTANCE_PROTOCOL.md and H2_D3_PREREG.v3.md, the failed candidate
+    (on record, not governing), and H2_GUARD_VALIDATION.md, the rejection of v2's guard thresholds. Never re-run
+    H2_V3_ACCEPTANCE.py for this candidate: its single run is consumed;
   - .work/h2_skill_gate/H2_RULING_12A.md: the 12(a) ruling, the second review's findings and their closure. Then
     the governing v2 records: H2_D3_PREREG.v2.md, H2_CUTOFF_DERIVATION.v2.md and H2_COUNT_QUERY_PLAN.v2.md (sealed
     by H2_PREP_12A.sha256). H2_FAILCLOSED_T2_DESIGN.md still governs the hold;
