@@ -19,10 +19,11 @@ SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
-# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-SAFE-3
-# deployed main's own tree, so nothing stands in it: analysis_service.py, the standing
-# clean-room delta of the backport lineage, cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
+# What stands in it now is analysis_service.py, the H2 interim fail-closed hold (owner ruling
+# Q8, 2026-09-26), merged locally but not yet deployed; it clears when a deploy lands and the
+# baseline is re-pinned.
+CURRENT_DELTA_PATHS: list[str] = ["src/crypto_probability_engine/api/analysis_service.py"]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.

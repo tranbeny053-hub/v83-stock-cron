@@ -59,11 +59,21 @@ def _probability_bytes(payload: dict) -> bytes:
     ).encode()
 
 
-def test_probability_triplets_are_byte_identical_with_gate_active_and_inactive() -> None:
+def test_probability_triplets_are_byte_identical_with_gate_active_and_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _client()
+    monkeypatch.setattr(
+        "crypto_probability_engine.calibration.skill.LEGACY_PASS_LIFTS_HARD_BLOCK",
+        True,
+    )
     cache_skill_evidence("4H", classify_directional_skill(151, 102))
     inactive = _analyze(client)
 
+    monkeypatch.setattr(
+        "crypto_probability_engine.calibration.skill.LEGACY_PASS_LIFTS_HARD_BLOCK",
+        False,
+    )
     cache_skill_evidence("4H", classify_directional_skill(151, 75))
     active = _analyze(client)
 
