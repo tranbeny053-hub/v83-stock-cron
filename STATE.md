@@ -1,7 +1,9 @@
 # STATE
 
 Updated: 2026-09-26. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
-are published (main 597e5c95, PR #123). H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper
+are published (main 597e5c95, PR #123), and the H2 record through the Q5 adjudication too (main 1dfe2d22, PR #124).
+**The T2 fail-closed hold (Q8) is IMPLEMENTED LOCALLY only (feat/h2-failclosed-hold); it is NOT PUSHED, NOT MERGED,
+NOT DEPLOYED and NOT LIVE (below).** H1 is COMPLETE, and the main checkout is now on main. **Lane H2:** its paper
 brief (v3) found that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent
 evidence; 1H and 4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one
 contribution per candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture.
@@ -30,6 +32,12 @@ owner also ruled point 12(a) on 2026-09-26: a predeclared fail-closed drift guar
     rates it would be met around 2028 or later.
   - H2-G2 keeps its modeled PASS, but the frozen gate would return INSUFFICIENT_EVIDENCE for years. The interim
     fail-closed posture stands (OWNER_BOUNDARY 2).
+- **The T2 fail-closed hold (Q8) is IMPLEMENTED LOCALLY only. Q8 is NOT LIVE.**
+  - Branch feat/h2-failclosed-hold, from main 1dfe2d22: e669e06f (the hold) and ebfe2073 (the owner's final
+    wording), then this record.
+  - It is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE. The live gate behaves as today, and hf is unchanged at
+    00705c55.
+  - Q5 stays UNAVAILABLE.
 15m and 1H are
 HISTORICALLY CONFIRMED with C1 carried, F3 is KEEP UNSPENT, and D-1 is CLOSED (not implemented). **NG-1 is CLOSED**
 (owner ruling, 2026-09-25: close NG-1; W(b) is not run). Its record:
@@ -59,6 +67,126 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **The H2 T2 fail-closed hold (Q8) is IMPLEMENTED LOCALLY only. Q8 is NOT LIVE.**
+    - Branch feat/h2-failclosed-hold (LOCAL, no upstream), from main 1dfe2d22:
+      - e669e06ff629dda7d367a27106e2da2b8f6206f5 (the hold);
+      - ebfe20730c99285967958fc4350de95f7349c719 (the owner's final wording);
+      - then this STATE record.
+    - It is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE. Until a deploy, the live gate behaves as today: in
+      production (hf 00705c55), a cached or shadow-arm SKILL_DEMONSTRATED still lifts the hard block.
+    - The Q5 adjudication stays UNAVAILABLE (below).
+  - Hold wording finalization and STATE (owner, 2026-09-26; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. Before T3, make one bounded local finalization on
+    `feat/h2-failclosed-hold @ e669e06ff629dda7d367a27106e2da2b8f6206f5`: replace the hold display wording with
+    exactly “Directional candidates are paused while evidence is being corrected. Diagnostic evidence, when
+    available, is still reported.” Update focused tests accordingly.
+
+    Then update STATE.md additively to record the hold as IMPLEMENTED LOCALLY only: exact branch/SHA, NOT
+    PUSHED/MERGED/DEPLOYED/LIVE, evaluator pin 0/69 touched, `analysis_service.py` as the declared
+    changed-but-not-deployed production-source-guard path, tests/verify results and both rollback routes. Keep
+    Q5=UNAVAILABLE and Q8=NOT LIVE. Use Codex for code/test edits per doctrine; STATE may be updated in the normal
+    orchestration loop. Re-run targeted tests + full `./verify.sh`, inspect the final diff, commit locally only and
+    report exact new SHA/files/results. No push, DB, F3, collector, resolver, workflow or deploy." CONSUMED:
+    - task-828 (Codex, DONE) set the hold's blocking-reason detail to exactly that text. The headline stays
+      "Directional candidates are paused", and the focused test pins both. Commit ebfe2073.
+    - The overview card joins the two as "Directional candidates are paused: Directional candidates are paused while
+      evidence is being corrected. Diagnostic evidence, when available, is still reported."
+    - This record.
+  - T2 hold authorization (owner, 2026-09-26; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. First fetch and fast-forward the clean local `main` to canonical PR #124
+    merge `1dfe2d22cbe3b7df4c2f38aac099db9f225176b9`. Then T2 AUTHORIZED, local-only: implement the smallest
+    temporary fail-closed H2 hold at the single analysis-path consumption point so neither cached nor shadow-arm
+    `SKILL_DEMONSTRATED` can lift the product hard block while corrected H2 evidence is UNAVAILABLE;
+    probabilities/model outputs and diagnostics must remain unchanged.
+
+    Use an explicit non-secret `hold_reason`; missing/None evidence must also remain blocked. Cover `/v1/analyze`
+    and `/v1/analyze_batch`, existing passing verdicts, missing evidence, probability byte-identity,
+    blocking-reason display/export, and rollback behavior. Preflight actual pin membership before editing and
+    avoid evaluator-pinned files; if a pinned change is truly required, STOP and report rather than crossing §2.6.
+    Do not change DB, methodology_version, H2 thresholds, Q5 records, F3, collector, resolver, workflow,
+    release/deploy or production.
+
+    Run targeted tests plus full verification from a safe worktree, inspect the actual diff, and perform one
+    consolidated self-audit for bypass paths, schema/export masking, single/batch parity and rollback. Commit
+    locally only on a fresh branch from `1dfe2d2`, no push. Return exact changed files, tests, audit findings,
+    rollback, pin status and local commit SHA." CONSUMED:
+    - main was fast-forwarded to the PR #124 merge 1dfe2d22 (LAST_GREEN_SHA).
+    - **What the hold does** (e669e06f, 6 files):
+      - calibration/skill.py: a rollback switch, LEGACY_PASS_LIFTS_HARD_BLOCK = False, and evidence_for_gate().
+        When the verdict is SKILL_DEMONSTRATED, or evidence is missing or malformed, the gate receives an
+        INSUFFICIENT_EVIDENCE copy plus a non-secret hold record: {active: true, hold_reason:
+        EVIDENCE_UNIT_UNDER_CORRECTION, legacy_verdict}.
+      - api/analysis_service.py: the single consumption point hands the gate that copy and attaches the hold as
+        gate_result.directional_evidence_hold. The response's skill_evidence still reports the legacy verdict, for
+        diagnostics.
+      - detail/frontend_display.py: the interim blocking-reason copy while the hold is active.
+      - tests/api/test_h2_failclosed_hold.py (new, 20 tests); tests/api/test_skill_gating.py (its pass-through
+        branch now runs with the switch on; every assertion kept); tests/scripts/test_source_integrity_guard.py.
+      - Unchanged: probabilities and model outputs, methodology_version, the H2 thresholds, gates/composite.py, the
+        cache, the schemas, the database and every evaluator-pinned file.
+    - **Pins:**
+      - the evaluator pin (ops/section_5a_evaluator_pin.json): 0 of 69 files touched, so no §2.6 crossing;
+      - the production source guard (ops/hf_runtime_baseline.json, pin 00705c55):
+        src/crypto_probability_engine/api/analysis_service.py is the declared changed-but-not-deployed path
+        (CURRENT_DELTA_PATHS in tests/scripts/test_source_integrity_guard.py; precedent be2104e).
+        - The baseline is NOT re-pinned. The declaration clears only when a deploy re-pins it.
+        - After a merge, the scheduled guard lists the path as an advisory delta (SCHEDULER_AHEAD_OF_PIN). Its exit
+          code depends only on the runtime probe.
+    - **Tests and verify:**
+      - the new tests:
+        - T1: the helper's matrix;
+        - T2: /v1/analyze is blocked;
+        - T3: /v1/analyze_batch blocks BTC and ETH;
+        - T4: the existing blocking verdicts are unchanged;
+        - T5: missing evidence stays blocked;
+        - T6: probability bytes are identical;
+        - T7: seniority;
+        - T8: both OOS arms are held;
+        - T9: the text, and export leaves the hold unmasked;
+        - T10: rollback;
+      - targeted suites: 167 passed;
+      - ./verify.sh PASS (ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3), on e669e06f and again on
+        ebfe2073, in worktree lanes2/h2hold (LAST_VERIFY).
+    - **Self-audit** (one, consolidated):
+      - bypass: none. Every skill-gate route goes through the one held point:
+        - /v1/analyze and /v1/analyze_batch (a per-item loop);
+        - the OOS arms;
+        - scripts/live_smoke.py;
+        - the shadow collector, via analyze_request.
+
+        The pipeline's own gate call passes no evidence and is re-gated afterwards;
+      - no evidence feedback: no evidence-counting query filters on gate outcome;
+      - schemas and export: responses validate against the unchanged schemas, and the hold survives
+        sanitize_for_export unmasked;
+      - a leaf-by-leaf probe against 1dfe2d22 (fixture mode, no database; run_id and analysis_hash excluded):
+        - with the hold active, 80 decision fields change per result and 0 probability fields;
+        - single and batch change the same set;
+        - the NO_DEMONSTRATED and INSUFFICIENT paths are identical.
+    - **Deviations from H2_FAILCLOSED_T2_DESIGN.md, following the owner's words:**
+      - the key is hold_reason; the design's reason_code would be masked on export;
+      - missing evidence is held; the design let it pass;
+      - the detail text is now the owner's final wording (ebfe2073).
+    - **Rollback: two routes, both checked on ebfe2073 against 1dfe2d22:**
+      1. Set LEGACY_PASS_LIFTS_HARD_BLOCK = True in calibration/skill.py. Result: 0 differing fields in all 6 probe
+         scenarios. The guard declaration stays until a deploy re-pins or the commits are reverted.
+      2. Revert both hold commits, newest first (git revert ebfe2073 e669e06f). Result: the code tree equals
+         1dfe2d22 (dry run), and CURRENT_DELTA_PATHS returns to [].
+
+      Either route reaches users only through verify, a T3 and a separate deploy authorization.
+    - Codex, 3 of 4 delegations (CODEX_PENDING):
+      - task-826: BLOCKED at the source-integrity guard test (the first causal failure, preserved);
+      - task-827: DONE (the one targeted repair);
+      - task-828: DONE (the wording).
+  - T3 authorization for chore/state-post-123 (owner, 2026-09-26, a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. T3 AUTHORIZED once: verify `origin/main` is still PR #123 merge
+    `597e5c958a2d2bcb11abaab0808f2dfb1149c9cf`, all H2/Q5 seals verify, and `chore/state-post-123` is exactly
+    `2e0ecfd722a780eed3052320de34ae9f31fbe73c` with STATE.md-only diff. Push only that exact branch/SHA to origin,
+    never hf, and stop. No PR/merge, DB/query, simulation, cutoff ruling, F3, hold implementation,
+    serving/pinned/wiring/freeze/deploy." CONSUMED:
+    - The pre-push checks passed.
+    - Exactly 2e0ecfd7 was pushed to origin chore/state-post-123, never to hf. The merge tree 188f8419 was recorded
+      before the push.
+    - PR #124 was merged from the owner's account at 2026-09-26T15:52:23Z (LAST_GREEN_SHA).
   - **The Q5 adjudication is UNAVAILABLE** (H2_Q5_ADJUDICATION.md; OWNER_BOUNDARY 2).
     - H2-G2 keeps its modeled PASS (36/36).
     - Its operating-density confirmation is UNAVAILABLE: provenance passes, but the density is not yet validated
@@ -581,26 +709,34 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 Q5 ADJUDICATED: UNAVAILABLE. H2-G2 (α 0.001, g 0.07) keeps its modeled PASS (36/36). Its
+CURRENT_MILESTONE=H2 T2 FAIL-CLOSED HOLD IMPLEMENTED LOCALLY (feat/h2-failclosed-hold: e669e06f + ebfe2073, from main
+  1dfe2d22). It is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE (Q8 NOT LIVE).
+  H2 Q5 ADJUDICATED: UNAVAILABLE. H2-G2 (α 0.001, g 0.07) keeps its modeled PASS (36/36). Its
   operating density (1–6 contributions per counted window) is not yet validated, and the informative-call floor is
   unmet everywhere (at the observed rates, around 2028 or later). History: the v2 guard was analytically REJECTED;
   the budget was RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
-  - any implementation of the H2 hold or of D3, and any change to the live skill gate, its tests or its data,
-    without its own authorization (it is a hard gate, so treat it as T2); and the count-only production read
-    without its own database authorization;
+  - the hold's push (T3), merge and deploy, each without its own authorization (the hold was implemented locally
+    under the owner's T2 authorization; LOOP_STATE);
+  - any implementation of D3, and any other change to the live skill gate, its tests or its data, without its own
+    authorization (it is a hard gate, so treat it as T2); and the count-only production read without its own
+    database authorization;
   - any NG-1 run, fetch or W(b); reopening NG-1 or R4; any new model research;
   - ruling 3, any F3 fetch, and any collector (product evidence or research data);
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-123 (LOCAL, no upstream), from main 597e5c95: this record, unpublished
-  (OWNER_BOUNDARY). chore/state-post-122 (#123), -121 (#122), -120 (#121), -119 (#120), -118 (#119), -117 (#118),
-  -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin;
+CURRENT_BRANCH=feat/h2-failclosed-hold (LOCAL, no upstream), from main 1dfe2d22: e669e06f (the hold), ebfe2073 (the
+  wording) and this record, unpublished (OWNER_BOUNDARY 1). Its worktree is lanes2/h2hold in the session scratchpad;
+  the branch itself lives in the main repository's refs. By the owner's direction, this STATE record rides on the
+  hold's branch rather than on a separate chore/state branch.
+  chore/state-post-123 (#124), chore/state-post-122 (#123), -121 (#122), -120 (#121), -119 (#120), -118 (#119),
+  -117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin;
   -110's push is the R4 commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 597e5c95 (fast-forwarded 2026-09-26 under the
-  Q5 authorization), clean, and its working-tree STATE.md is current as of that commit. Before that it was frozen on
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 1dfe2d22 (fast-forwarded 2026-09-26 under the
+  T2 hold authorization; before that 597e5c95, under the Q5 authorization), clean, and its working-tree STATE.md is
+  current as of that commit. Before that it was frozen on
   chore/state-post-104 at 2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept.
   STATE records are still made in separate worktrees, and ./verify.sh never runs in the main checkout
   (STANDING_RULES).
@@ -609,7 +745,18 @@ CURRENT_BRANCH=chore/state-post-123 (LOCAL, no upstream), from main 597e5c95: th
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=597e5c95 (main, PR #123: the H2 record through H2-G2, STATE.md only).
+LAST_GREEN_SHA=1dfe2d22 (main, PR #124: the H2 Q5-adjudication record, STATE.md only).
+  - This loop pushed chore/state-post-123 at 2e0ecfd7 under the owner's push-only T3. The merge tree 188f8419 was
+    recorded before the push. #124 was merged from the owner's account at 2026-09-26T15:52:23Z.
+  - Verified by this loop:
+    - parents (597e5c95, 2e0ecfd7);
+    - tree 188f8419, equal to the recorded tree;
+    - STATE.md blob dfe3a28b.
+  - Checks, 2026-09-26, all passed:
+    - the exact-head check CI (run 36253224197, created 15:48:34Z);
+    - the exact-main check CI (run 36253449747, 15:52:25Z);
+    - the scheduled Runtime Source Integrity Guard on 1dfe2d22 (run 36255867709, 16:33:16Z).
+  Before it: 597e5c95 (main, PR #123: the H2 record through H2-G2, STATE.md only).
   - This loop pushed chore/state-post-122 at 57b8443f under the owner's push-only T3. The merge tree 8b4f07d8 was
     recorded before the push. #123 was merged from the owner's account at 2026-09-26T13:57:52Z.
   - Verified by this loop:
@@ -692,8 +839,13 @@ LAST_GREEN_SHA=597e5c95 (main, PR #123: the H2 record through H2-G2, STATE.md on
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
-  - Run for this H2 Q5-adjudication record on chore/state-post-123 (main 597e5c95 plus this STATE.md change; T0), in
+LAST_VERIFY=PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026-09-26 (local).
+  - Run for the H2 hold on feat/h2-failclosed-hold, in worktree lanes2/h2hold:
+    - on e669e06f (the hold) and again on ebfe2073 (the wording); the targeted suites passed 167 each time;
+    - this STATE record (T0) was verified the same way before its commit.
+  - H2's own checks, read-only: all thirteen H2 seal files verify (the ten H2/Q5 seals and the three brief seals).
+  - Earlier: PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3.
+  - Run for the H2 Q5-adjudication record on chore/state-post-123 (main 597e5c95 plus that STATE.md change; T0), in
     its worktree.
   - H2's own checks, read-only: all eleven H2 seals verify, including H2_Q5 4/4, H2_Q5_FOLLOWUP 4/4 and
     H2_Q5_ADJUDICATION 4/4.
@@ -773,6 +925,13 @@ LAST_VERIFY=PASS ruff ok | 2450 passed | schemas+smoke ok | scanners 3/3 · 2026
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - The H2 hold (T2) used Codex for its code and test edits, 3 of its 4 delegations. The finalization's own words
+    were "Use Codex for code/test edits per doctrine".
+    - task-826: BLOCKED at the source-integrity guard test (the first causal failure, preserved);
+    - task-827: DONE, the one targeted repair (the guard declaration);
+    - task-828: DONE, the wording.
+    - Files: .work/task-826.md to task-828.md, result-826.json to result-828.json, and codex-826.log to
+      codex-828.log.
   - The batch and R3 Wave 1 used no Codex.
   - R3 Wave 2 used one bounded delegation: the audit's E-7 independent re-derivation.
     - Files: .work/task-820.md, result-820.json (DONE) and codex-820.log.
@@ -813,11 +972,14 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the H1 STATE T3 (#122), the H1 step (c)
-  authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the Q5-adjudication STATE T3 (#124), the
+  T2 hold authorization and the hold wording finalization (LOOP_STATE). Consumed before it: the H1 STATE T3 (#122),
+  the H1 step (c) authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): publish this record (chore/state-post-123, STATE.md only).
+  1. T3 (owner authorizes): push feat/h2-failclosed-hold (e669e06f, ebfe2073 and this record) to origin, never hf.
+     The owner opens and merges the PR. Merging does not deploy: Q8 stays NOT LIVE until item 2c's separate deploy
+     authorization.
   2. CURRENT LANE, H2 — **Q5 adjudication UNAVAILABLE. H2-G2 keeps its modeled PASS; its operating density is not
      confirmed.** It was ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, the H2-G2 selection, and the Q5
      rulings (LOOP_STATE).
@@ -827,7 +989,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
        - the cutoff at (e), which fixes the envelope §13.3 validates;
        - whether and when to run §13.3, a no-database simulation at the recorded densities;
        - whether to wait for usage, or to reconsider the architecture (a new ruling);
-       - the open points (b), (d) and (f), and the T2 hold.
+       - the open points (b), (d) and (f), and the T2 hold's publication and deploy (item c; implemented locally).
      - H2-G2 (α 0.001, g 0.07) passed all 36 binding scenarios (H2_G2_D3_PREREG.md, H2_G2_RESULT.md).
      - The v3 candidate (α 0.001, g 0.09) **FAILED** in S01 and stays on record, unreplaced (H2_D3_PREREG.v3.md,
        H2_V3_RESULT.md).
@@ -854,7 +1016,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
         - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
           only if they hold an informative call.
         - (a) is RULED (the drift guard). (c) is SETTLED: the call is sign(p_up − p_down), with exact ties NO_CALL.
-     c. The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md (unchanged): implementation on a branch,
+     c. IMPLEMENTED LOCALLY 2026-09-26: feat/h2-failclosed-hold, e669e06f + ebfe2073 (LOOP_STATE), with three
+        recorded deviations from the design, each following the owner's words. What remains:
+        - the T3 (item 1) and the merge;
+        - then a separate deploy authorization (a push to hf is a deploy).
+        Until it is deployed, the live gate behaves as today (Q8 NOT LIVE). The text below is kept as history.
+        The T2 fail-closed hold (Q8), per H2_FAILCLOSED_T2_DESIGN.md (unchanged): implementation on a branch,
         ./verify.sh in a worktree and Claude's review of the diff; then a T3; then a separate deploy authorization.
         Until it is deployed, the live gate behaves as today.
      d. Optional: an independent review of the v2 records. Their fixes are checked mechanically only.
@@ -1023,10 +1190,15 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (OWNER_BOUNDARY 1-2: the T3 for this record; then H2's next decisions after the
-  UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, the open points, and the T2 hold). Never run
-  ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a clean
-  worktree. Read first:
+NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
+  - the T3 for feat/h2-failclosed-hold (the locally implemented hold and this record);
+  - then the hold's separate deploy decision (Q8 NOT LIVE until then);
+  - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
+    the open points.
+  Never run ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a
+  clean worktree. Read first:
+  - the hold: git show e669e06f ebfe2073 (branch feat/h2-failclosed-hold) and .work/task-826.md to task-828.md with
+    their results. Never re-run a consumed delegation;
   - .work/h2_skill_gate/H2_Q5_ADJUDICATION.md: the Q5 adjudication (UNAVAILABLE), and H2_Q5_RULING.md. Then
     H2_Q5_CHECK.md, the historical R2 stop, and H2_Q5_FOLLOWUP.md (6 | 5). Never query the database for H2 without
     the owner's authorization, and never re-run a consumed statement;
@@ -1835,6 +2007,7 @@ Update this block on every pause, every milestone change and every GPT consultat
 - **Database:** migration 0010 is applied (2026-09-17), so the legacy tables' security is now codified in the
   migrations.
 - **Merged, not in production:** the unwired v2 prep (#108, #109).
+- **Implemented locally; not pushed, merged or deployed:** the H2 T2 fail-closed hold (Q8; feat/h2-failclosed-hold).
 - **Owner-gated, still open:** the v2 decisions (a) to (d); D-1 ruled (a) and (b) in principle, not implemented
   (OWNER_BOUNDARY, product decisions). The current next lane is H1 (OWNER_BOUNDARY 2).
   A v2 promotion needs its own freeze, T0, holdout and one look.
