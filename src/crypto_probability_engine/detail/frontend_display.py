@@ -35,6 +35,12 @@ _BLOCKING_REASON_COPY = {
     ),
 }
 
+_DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional evidence under review"
+_DIRECTIONAL_EVIDENCE_HOLD_DETAIL = (
+    "Directional candidates are paused while evidence is being corrected. Diagnostic "
+    "evidence, when available, is still reported."
+)
+
 
 def _skill_blocking_reason(skill_evidence: dict | None) -> tuple[str, str]:
     evidence = skill_evidence if isinstance(skill_evidence, dict) else {}
@@ -75,7 +81,12 @@ def _blocking_reasons(gate: dict, skill_evidence: dict | None) -> list[dict[str,
     for raw_code in gate.get("hard_blocks", []):
         code = str(raw_code)
         if code == "SKILL_NOT_DEMONSTRATED":
-            headline, detail = _skill_blocking_reason(skill_evidence)
+            hold = gate.get("directional_evidence_hold")
+            if isinstance(hold, dict) and hold.get("active"):
+                headline = _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE
+                detail = _DIRECTIONAL_EVIDENCE_HOLD_DETAIL
+            else:
+                headline, detail = _skill_blocking_reason(skill_evidence)
         else:
             headline, detail = _BLOCKING_REASON_COPY.get(
                 code,

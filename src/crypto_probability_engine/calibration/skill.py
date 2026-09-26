@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from threading import Lock
-from typing import cast
+from typing import Any, cast
 
 from crypto_probability_engine.calibration.schemas import SkillEvidence, SkillVerdict
 from crypto_probability_engine.config.defaults import (
@@ -18,6 +19,44 @@ _CacheEntry = tuple[float, SkillEvidence]
 _cache: dict[str, _CacheEntry] = {}
 _cache_lock = Lock()
 _refresh_in_flight = False
+
+# H2 interim fail-closed hold (owner ruling Q8, 2026-09-26). While corrected H2
+# evidence is UNAVAILABLE, a legacy SKILL_DEMONSTRATED verdict, or missing evidence,
+# must not lift the SKILL_NOT_DEMONSTRATED hard block.
+# ROLLBACK: set LEGACY_PASS_LIFTS_HARD_BLOCK = True (restores the pre-hold behaviour exactly).
+LEGACY_PASS_LIFTS_HARD_BLOCK: bool = False
+H2_HOLD_REASON = "EVIDENCE_UNIT_UNDER_CORRECTION"
+
+
+def evidence_for_gate(evidence: Any) -> tuple[Any, dict[str, object] | None]:
+    """Return fail-closed gate evidence while preserving the legacy diagnostic."""
+
+    if LEGACY_PASS_LIFTS_HARD_BLOCK:
+        return evidence, None
+    if isinstance(evidence, Mapping) and evidence.get("verdict") != "SKILL_DEMONSTRATED":
+        return evidence, None
+
+    n = evidence.get("n") if isinstance(evidence, Mapping) else 0
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        n = 0
+    observed_rate: Any = (
+        evidence.get("observed_directional_rate")
+        if isinstance(evidence, Mapping)
+        else None
+    )
+    legacy_verdict = evidence.get("verdict") if isinstance(evidence, Mapping) else None
+    return (
+        {
+            "verdict": "INSUFFICIENT_EVIDENCE",
+            "n": n,
+            "observed_directional_rate": observed_rate,
+        },
+        {
+            "active": True,
+            "hold_reason": H2_HOLD_REASON,
+            "legacy_verdict": legacy_verdict,
+        },
+    )
 
 
 def classify_directional_skill(

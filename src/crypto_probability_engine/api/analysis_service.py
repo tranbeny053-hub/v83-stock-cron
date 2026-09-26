@@ -24,6 +24,7 @@ from crypto_probability_engine.api.schemas import (
     ErrorCode,
 )
 from crypto_probability_engine.calibration.skill import (
+    evidence_for_gate,
     get_cached_skill_evidence,
     insufficient_skill_evidence,
 )
@@ -244,7 +245,12 @@ def analyze_request(
         if arm_context is not None
         else _skill_evidence_for_analysis(request.timeframe)
     )
-    quant_result = _apply_skill_evidence_gate(quant_result, skill_evidence)
+    gate_evidence, directional_evidence_hold = evidence_for_gate(skill_evidence)
+    quant_result = _apply_skill_evidence_gate(
+        quant_result,
+        gate_evidence,
+        directional_evidence_hold,
+    )
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
@@ -433,11 +439,19 @@ def _oos_arm_context(
     return pair_context.for_arm(arm)
 
 
-def _apply_skill_evidence_gate(quant_result: dict, skill_evidence: dict) -> dict:
-    gate = apply_skill_gate(
-        quant_result.get("gate_result") or {},
-        skill_state=skill_evidence,
+def _apply_skill_evidence_gate(
+    quant_result: dict,
+    skill_evidence: dict,
+    directional_evidence_hold: dict[str, object] | None = None,
+) -> dict:
+    gate = dict(
+        apply_skill_gate(
+            quant_result.get("gate_result") or {},
+            skill_state=skill_evidence,
+        )
     )
+    if directional_evidence_hold is not None:
+        gate["directional_evidence_hold"] = dict(directional_evidence_hold)
     score = dict(quant_result.get("score_stack") or {})
     forced_disposition = gate.get("forced_score_disposition")
     if forced_disposition:
