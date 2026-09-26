@@ -36,7 +36,7 @@ _HOLD = {
     "hold_reason": "EVIDENCE_UNIT_UNDER_CORRECTION",
     "legacy_verdict": "SKILL_DEMONSTRATED",
 }
-_HOLD_HEADLINE = "Directional candidates are paused"
+_HOLD_HEADLINE = "Directional evidence under review"
 _HOLD_DETAIL = (
     "Directional candidates are paused while evidence is being corrected. Diagnostic "
     "evidence, when available, is still reported."

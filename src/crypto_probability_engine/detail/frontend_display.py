@@ -35,7 +35,7 @@ _BLOCKING_REASON_COPY = {
     ),
 }
 
-_DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional candidates are paused"
+_DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional evidence under review"
 _DIRECTIONAL_EVIDENCE_HOLD_DETAIL = (
     "Directional candidates are paused while evidence is being corrected. Diagnostic "
     "evidence, when available, is still reported."
