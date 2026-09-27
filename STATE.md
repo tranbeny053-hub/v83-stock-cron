@@ -2,12 +2,12 @@
 
 Updated: 2026-09-27. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
 are published (main 597e5c95, PR #123), the H2 record through the Q5 adjudication too (main 1dfe2d22, PR #124), and
-the T2 fail-closed hold with its record (main fa5c0da7, PR #125), and the release identity (main 080f20a9, PR #126).
-**PRODUCTION IS NOW PROD-H2-HOLD: hf/main and the running commit are 080f20a9, build UCPE-PROD-H2-HOLD-20260927-A
-(deployed 2026-09-26T19:47:36Z).** The H2 fail-closed hold is live in the deployed code. **Its functional
-CONTROLLED_SMOKE is NOT_RUN** (the contract is sealed, paper only). **The baseline re-pin is PREPARED LOCALLY
-(release/prod-h2-hold); it is NOT PUSHED and NOT MERGED (below).** H1 is COMPLETE, and the main checkout is now on
-main. **Lane H2:** its paper
+the T2 fail-closed hold with its record (main fa5c0da7, PR #125), the release identity (main 080f20a9, PR #126), and
+the production re-pin (main 9a1db2dd, PR #127). **PRODUCTION IS PROD-H2-HOLD: hf/main and the running commit are
+080f20a9, build UCPE-PROD-H2-HOLD-20260927-A (deployed 2026-09-26T19:47:36Z). The canonical guard is HEALTHY (run
+36310977790).** **The CONTROLLED_SMOKE returned PASS_PROVEN (2026-09-27): production held the legacy 4H and 1H
+SKILL_DEMONSTRATED verdicts closed, with no USER_REQUESTED contamination (below).** H1 is COMPLETE, and the main
+checkout is now on main. **Lane H2:** its paper
 brief (v3) found that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent
 evidence; 1H and 4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one
 contribution per candle, D3 window means, a drift-aware directional reference, and an interim FAIL-CLOSED posture.
@@ -36,7 +36,14 @@ owner also ruled point 12(a) on 2026-09-26: a predeclared fail-closed drift guar
     rates it would be met around 2028 or later.
   - H2-G2 keeps its modeled PASS, but the frozen gate would return INSUFFICIENT_EVIDENCE for years. The interim
     fail-closed posture stands (OWNER_BOUNDARY 2).
-- **The H2 fail-closed hold is DEPLOYED: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A (2026-09-26T19:47:36Z).**
+- **The H2 fail-closed hold is DEPLOYED and VERIFIED LIVE: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.**
+  - The CONTROLLED_SMOKE returned **PASS_PROVEN**. The legacy SKILL_DEMONSTRATED verdicts on 4H (n 164) and 1H (n 154)
+    were held (NO_TRADE, "Directional evidence under review"), with no directional candidate and no USER_REQUESTED
+    contamination.
+  - The re-pin is MERGED (PR #127, main 9a1db2dd), and the canonical guard dispatch is HEALTHY (run 36310977790).
+  - Q5 stays UNAVAILABLE.
+- History (2026-09-27, before PR #127 and the smoke): **The H2 fail-closed hold is DEPLOYED: production 080f20a9 /
+  UCPE-PROD-H2-HOLD-20260927-A (2026-09-26T19:47:36Z).**
   - Its functional CONTROLLED_SMOKE is NOT_RUN; the contract is sealed, paper only.
   - The baseline re-pin is PREPARED LOCALLY (release/prod-h2-hold: edc64df2, then this record). It is NOT PUSHED and
     NOT MERGED. With the new pin, the guard is HEALTHY against production.
@@ -84,7 +91,135 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
-  - **PRODUCTION IS PROD-H2-HOLD: hf/main and the running commit are 080f20a9, build UCPE-PROD-H2-HOLD-20260927-A.**
+  - **THE H2 HOLD IS VERIFIED LIVE: the CONTROLLED_SMOKE returned PASS_PROVEN (2026-09-27).**
+    - Production: 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A. The canonical guard dispatch on main 9a1db2dd is HEALTHY
+      (run 36310977790).
+    - Branch chore/state-post-127 (LOCAL, no upstream), from main 9a1db2dd: this STATE record. NOT PUSHED.
+    - The Q5 adjudication stays UNAVAILABLE (below).
+  - Smoke adjudication (owner, 2026-09-27T10:27Z; a direct instruction), verbatim:
+    "The authorized H2 controlled smoke has run once. Do not make any new production request or DB query. Adjudicate
+    only the sealed raw files with the predeclared adjudicator, record the exact terminal state PROVEN / NOT_EXERCISED
+    / FAIL / ERROR, run IDs, provenance checks, actions/hold wording, and whether any USER_REQUESTED contamination
+    occurred. Then record PR #127 + guard run 36310977790 + smoke result additively in STATE on a fresh branch, verify
+    locally, commit only, and stop with the exact SHA." CONSUMED:
+    - No new production request or database query: the adjudication read only the sealed raw files.
+    - Seals verified:
+      - the tools: H2_HOLD_SMOKE_TOOLS.sha256, digest 5a7aa1bc… (executor bebcdab8…, adjudicator 35b02282…);
+      - the run's raw files: MANIFEST.sha256, digest e1f5b64d…, 21 of 21 OK;
+      - no STOPPED file.
+    - The sealed adjudicator, run from a 9a1db2dd checkout: **PASS_PROVEN**, 0 errors, 0 fails.
+      - W, 4H, run_32235dd8013547c4ad56ff041926b374: legacy INSUFFICIENT_EVIDENCE (n 0; the cache was cold after the
+        restart). The ordinary block "Directional skill has not been evaluated"; NO_TRADE.
+      - B1, 4H, run_8acc966078ef4e1d8a823d9e90c573f6: legacy SKILL_DEMONSTRATED (n 164), HELD:
+        - the exact hold record {active, EVIDENCE_UNIT_UNDER_CORRECTION, SKILL_DEMONSTRATED}, equal in detail_view;
+        - "Directional evidence under review" with the approved detail;
+        - NO_TRADE.
+      - B2, 1H, run_ef3b3dde9126411fa91e9a47964d8e0f: legacy SKILL_DEMONSTRATED (n 154), HELD, the same way.
+      - For all three:
+        - hard_gate_passed false, and SKILL_NOT_DEMONSTRATED blocked;
+        - no LONG or SHORT candidate, and disposition NO_TRADE;
+        - every probability triplet sums to 1.
+      - observed_directional_rate was not transcribed.
+    - Provenance: /v1/analyze/detail returned 404 RUN_NOT_FOUND for all three runs, and /v1/runs listed none of them.
+      There was NO USER_REQUESTED contamination; the 3 prediction rows are CONTROLLED_SMOKE (13 → 16).
+    - Result seal: H2_HOLD_SMOKE_RESULT.sha256, digest 52898b3b…. It covers the run manifest, ADJUDICATION.json
+      (adbdb84a…) and the adjudicator's output (91103e3e…); all are 0444.
+    - **Correction.** Before the run, Claude predicted NOT_EXERCISED.
+      - The reasoning: production persists through Supabase REST (per RELEASE_GATE's HF-secrets table), and the
+        skill-evidence refresh runs only for the direct Postgres repository.
+      - The smoke disproved it: 60 s after W (n 0), B saw refreshed verdicts (n 164 and 154). Production therefore
+        runs the SUPABASE_POSTGRES repository, and the table does not describe the live configuration.
+      - So before the hold, the legacy 4H and 1H passes COULD lift the hard block in production. The hold now provably
+        blocks them.
+      - The table discrepancy is recorded for the owner, not changed here.
+    - This record.
+  - Smoke execution (owner, 2026-09-27T10:08Z; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Canonical source-integrity guard is HEALTHY on `main` after PR #127. Owner
+    AUTHORIZES exactly one execution of the sealed `H2_HOLD_SMOKE_CONTRACT.md`; first verify its seal, canonical main
+    `9a1db2dddd117ce832e44bd1a93fd62ed3004a9a`, production/running `080f20a95241504bd7cf96088bf075d1ebaf4f55`, build
+    `UCPE-PROD-H2-HOLD-20260927-A`, health 200, and guard HEALTHY.
+
+    Before any request, give me the exact owner execution steps without asking for or displaying the secret: the
+    plaintext credential is `UCPE_SMOKE_ACCESS_CODE`, stored in my password manager/secure record; production verifies
+    it via `CONTROLLED_SMOKE_CODE_HASH`. Execute only through a session authenticated with that controlled-smoke
+    credential. Follow the sealed contract exactly: one BTC 4H warm-up, wait 60 seconds, then one batch containing BTC
+    4H and BTC 1H; no extra exploratory calls or retries.
+
+    Capture the raw responses/run IDs before adjudication. Require CONTROLLED_SMOKE provenance, no USER_REQUESTED
+    contamination, no directional candidate, and when a legacy SKILL_DEMONSTRATED verdict appears require the exact
+    hold record/approved wording. Terminal rules stay frozen: PROVEN if at least one old pass is shown held;
+    NOT_EXERCISED if no old pass appears, with no additional calls; FAIL/ERROR on any provenance/behavior mismatch and
+    stop immediately. Record the smoke plus PR #127/guard run additively in STATE, verify from a safe worktree, but do
+    not push yet. No F3, Q5/methodology change, collector, resolver, deploy or extra DB query."
+    CONSUMED (executed once by the owner):
+    - Pre-checks (Claude):
+      - the contract seal is OK (28f995fb…; seal fe174497…);
+      - main 9a1db2dd, with the local main fast-forwarded and clean;
+      - production: 080f20a9 RUNNING; /healthcheck 200; build UCPE-PROD-H2-HOLD-20260927-A;
+      - the local guard is HEALTHY.
+    - Tools, sealed before the run in H2_HOLD_SMOKE_TOOLS.sha256 (0444):
+      - the owner-run executor .work/h2_smoke/run_h2_hold_smoke.sh:
+        - it reads the credential at a hidden prompt and pipes it to one login, so it is never in argv or on disk;
+        - the cookie jar is private and deleted on exit;
+        - a one-shot EXECUTED marker is set just before the login;
+        - any failure stops and seals the run; the raw files are sealed in MANIFEST.sha256;
+      - the adjudicator .work/h2_smoke/adjudicate_h2_hold_smoke.py.
+    - A local dry run validated both: 127.0.0.1, fixture data, stateless, test codes, and 4H seeded as
+      SKILL_DEMONSTRATED.
+      - The seeded run gave PASS_PROVEN.
+      - A tampered provenance file gave FAIL.
+      - A wrong code stopped at the 401 login, sealed, and gave ERROR.
+      - It caught one bug before sealing (a log line appended after the seal), which was fixed.
+    - The owner ran it once, 2026-09-27T10:21:23Z to 10:26:47Z:
+      - login 200; W 200; the 60 s wait; B 200;
+      - detail 404 ×3; runs 200; logout 200.
+      The raw files are sealed in .work/h2_smoke/run_20260927T102123Z.
+  - Canonical guard verification (owner, 2026-09-27T09:55Z; a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. Verify `origin/main` is PR #127 merge `9a1db2dddd117ce832e44bd1a93fd62ed3004a9a`
+    and production remains HF/running `080f20a95241504bd7cf96088bf075d1ebaf4f55` with build
+    `UCPE-PROD-H2-HOLD-20260927-A`. Then, using only the current canonical workflow/runbook, dispatch exactly one
+    source-integrity guard verification on `main` and wait for its terminal result.
+
+    Require the canonical re-pinned baseline to report HEALTHY/PASS with no pending production delta; report exact
+    workflow/run identity, commit checked, guard verdict and any warning. No code/STATE change, push, deploy, smoke,
+    DB, F3, Q5/methodology, collector or resolver action." CONSUMED:
+    - main 9a1db2dd was verified as the PR #127 merge:
+      - parents (080f20a9, e4f601fa);
+      - tree 16fa5289, the recorded merge tree;
+      - exactly the 3 files;
+      - the exact-main check CI (run 36310830119) passed.
+      Production: 080f20a9, RUNNING, 200, PROD-H2-HOLD.
+    - One workflow_dispatch of source-integrity-guard.yml on main: run 36310977790 (job verify 108596704479,
+      09:57:06Z to 09:57:53Z), success.
+      - final_classification HEALTHY, exit 0;
+      - hf_main and pinned are both 080f20a9;
+      - critical_source_match and frontend_asset_match are true;
+      - the live id is PROD-H2-HOLD;
+      - deployment_delta_paths is [].
+    - Advisory SCHEDULER_DIVERGENT_FROM_PIN: the shallow CI checkout cannot prove ancestry. It is non-failing.
+    - One notice: ubuntu-latest moves to Ubuntu 26 from 2026-10-19.
+    - The 3 earlier failed scheduled runs (36272601454, 36283410894, 36306125622) were PIN_DRIFT against 00705c55, in
+      the expected window between the deploy and the re-pin.
+  - T3 for release/prod-h2-hold (owner, 2026-09-27T08:27Z; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. T3 AUTHORIZED once for the completed production re-pin. Verify canonical
+    `origin/main=080f20a95241504bd7cf96088bf075d1ebaf4f55`, branch `release/prod-h2-hold` is exactly
+    `e4f601fa2f35e3e5a74d9833908b9d74ae5b97bb`, and the complete Git diff is only `ops/hf_runtime_baseline.json`,
+    `tests/scripts/test_source_integrity_guard.py`, and `STATE.md`. Reconfirm the baseline names production `080f20a9`
+    / `UCPE-PROD-H2-HOLD-20260927-A`, all 11 watched hashes match production, evaluator pin is 0/69, full verify is
+    green, and the source-integrity guard is HEALTHY.
+
+    Then push only this exact branch/SHA to GitHub origin, never hf, and stop after confirming the remote branch. No
+    PR/merge, Space push/restart, smoke, DB, F3, methodology/Q5, collector, resolver or deploy action." CONSUMED:
+    - The pre-push checks passed:
+      - origin/main 080f20a9; the branch exactly e4f601fa; the 3 files;
+      - the baseline names 080f20a9 / PROD-H2-HOLD, and all 11 watched hashes equal production;
+      - evaluator pin 0/69; verify PASS 2470; guard HEALTHY;
+      - the merge tree 16fa5289, recorded before the push.
+    - Exactly e4f601fa was pushed to origin release/prod-h2-hold, never to hf.
+    - PR #127: the head CI (run 36310550050) passed, and it was merged from the owner's account at
+      2026-09-27T09:54:04Z (LAST_GREEN_SHA).
+  - History (before PR #127 and the smoke): **PRODUCTION IS PROD-H2-HOLD: hf/main and the running commit are
+    080f20a9, build UCPE-PROD-H2-HOLD-20260927-A.**
     - Deployed 2026-09-26T19:47:36Z by one non-force fast-forward from 00705c55, RUNNING at 19:48:20Z. The H2
       fail-closed hold is live in the deployed code.
     - The functional CONTROLLED_SMOKE is NOT_RUN. Its contract is sealed, paper only
@@ -994,18 +1129,18 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=H2 HOLD DEPLOYED: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A (2026-09-26T19:47:36Z; the hold
-  and the release identity, PRs #125 and #126). The functional CONTROLLED_SMOKE is NOT_RUN (contract sealed, paper).
-  BASELINE RE-PIN PREPARED LOCALLY (release/prod-h2-hold: edc64df2, from main 080f20a9); NOT PUSHED, NOT MERGED. With
-  it, the guard is HEALTHY against production; until it merges, guard runs from main report PIN_DRIFT.
+CURRENT_MILESTONE=H2 HOLD VERIFIED LIVE: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A. The CONTROLLED_SMOKE
+  returned PASS_PROVEN (the legacy 4H and 1H SKILL_DEMONSTRATED verdicts held; no contamination). The re-pin is MERGED
+  (PR #127, main 9a1db2dd), and the canonical guard is HEALTHY (run 36310977790). This STATE record is local
+  (chore/state-post-127).
   H2 Q5 ADJUDICATED: UNAVAILABLE. H2-G2 (α 0.001, g 0.07) keeps its modeled PASS (36/36). Its
   operating density (1–6 contributions per counted window) is not yet validated, and the informative-call floor is
   unmet everywhere (at the observed rates, around 2028 or later). History: the v2 guard was analytically REJECTED;
   the budget was RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
-  - the re-pin's push (T3), merge and guard dispatch, and the CONTROLLED_SMOKE, each without its own authorization
-    (LOOP_STATE); any rollback or second deploy without a new T4;
+  - any second CONTROLLED_SMOKE (the executor refuses a second run), and any rollback or later deploy without a new
+    T4;
   - any implementation of D3, and any other change to the live skill gate, its tests or its data, without its own
     authorization (it is a hard gate, so treat it as T2); and the count-only production read without its own
     database authorization;
@@ -1014,18 +1149,18 @@ CURRENT_MILESTONE=H2 HOLD DEPLOYED: production 080f20a9 / UCPE-PROD-H2-HOLD-2026
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=release/prod-h2-hold (LOCAL, no upstream), from main 080f20a9: edc64df2 (the re-pin) and this record,
-  unpublished (OWNER_BOUNDARY 1). Its worktree is lanes2/repin in the session scratchpad; the branch itself lives in
-  the main repository's refs. The name follows release/prod-safe-3, which carried the PROD-SAFE-3 pin.
-  prep/release-identity-h2-hold (#126) and feat/h2-failclosed-hold (#125) are merged and stay on origin.
+CURRENT_BRANCH=chore/state-post-127 (LOCAL, no upstream), from main 9a1db2dd: this record, unpublished
+  (OWNER_BOUNDARY 1). Its worktree is lanes2/state127 in the session scratchpad.
+  release/prod-h2-hold (#127), prep/release-identity-h2-hold (#126) and feat/h2-failclosed-hold (#125) are merged and
+  stay on origin.
   chore/state-post-123 (#124), chore/state-post-122 (#123), -121 (#122), -120 (#121), -119 (#120), -118 (#119),
   -117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin;
   -110's push is the R4 commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 080f20a9, clean, and its working-tree STATE.md is
-  current as of that commit. It was fast-forwarded under the fresh T4's preconditions, on 2026-09-26 UTC. Before that
-  it was on fa5c0da7 (the first T4's preconditions), 1dfe2d22 (T2 hold authorization) and 597e5c95 (Q5
-  authorization). Before that it was frozen on chore/state-post-104 at 2c6df51 through the NG-1 Stage-1 rerun (repair
-  review F3; audit L3). That branch is kept.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 9a1db2dd, clean, and its working-tree STATE.md is
+  current as of that commit. It was fast-forwarded under the smoke authorization's pre-checks, on 2026-09-27. Before
+  that it was on 080f20a9 (the fresh T4's preconditions), fa5c0da7 (the first T4's preconditions), 1dfe2d22 (T2 hold
+  authorization) and 597e5c95 (Q5 authorization). Before that it was frozen on chore/state-post-104 at 2c6df51
+  through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept.
   STATE records are still made in separate worktrees, and ./verify.sh never runs in the main checkout
   (STANDING_RULES).
   The batch branches are merged, and remain on origin:
@@ -1033,7 +1168,18 @@ CURRENT_BRANCH=release/prod-h2-hold (LOCAL, no upstream), from main 080f20a9: ed
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=080f20a9 (main, PR #126: the release identity UCPE-PROD-H2-HOLD-20260927-A and its STATE record).
+LAST_GREEN_SHA=9a1db2dd (main, PR #127: the production re-pin and its STATE record).
+  - This loop pushed release/prod-h2-hold at e4f601fa under the owner's push-only T3. The merge tree 16fa5289 was
+    recorded before the push. #127 was merged from the owner's account at 2026-09-27T09:54:04Z.
+  - Verified by this loop:
+    - parents (080f20a9, e4f601fa);
+    - tree 16fa5289, equal to the recorded tree;
+    - exactly the 3 files.
+  - Checks, 2026-09-27, all passed:
+    - the exact-head check CI (run 36310550050, created 09:48:42Z);
+    - the exact-main check CI (run 36310830119, 09:54:06Z);
+    - the canonical guard dispatch (run 36310977790), HEALTHY.
+  Before it: 080f20a9 (main, PR #126: the release identity UCPE-PROD-H2-HOLD-20260927-A and its STATE record).
   - This loop pushed prep/release-identity-h2-hold at 8e1b98f0 under the owner's push-only T3. The merge tree
     474f4fe1 was recorded before the push. #126 was merged from the owner's account at 2026-09-26T18:51:28Z.
   - Verified by this loop:
@@ -1149,7 +1295,9 @@ LAST_GREEN_SHA=080f20a9 (main, PR #126: the release identity UCPE-PROD-H2-HOLD-2
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026-09-27 (local).
-  - Run for the re-pin on release/prod-h2-hold, in worktree lanes2/repin:
+  - Run for this record on chore/state-post-127 (main 9a1db2dd plus this STATE.md change; T0), in worktree
+    lanes2/state127.
+  - Earlier, the same result for the re-pin on release/prod-h2-hold, in worktree lanes2/repin:
     - on edc64df2; the 6 guard, baseline and build-info test files passed 113;
     - the guard, read-only against production with the new pin: HEALTHY, exit 0;
     - this STATE record (T0) was verified the same way before its commit.
@@ -1243,6 +1391,7 @@ LAST_VERIFY=PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - The smoke, its adjudication and this record used no Codex.
   - The re-pin used no Codex: the sanctioned deterministic tool, adapted in 3 recorded places (LOOP_STATE).
   - The release identity, a new change, used 1 of its 4 delegations: task-830, DONE. Files: .work/task-830.md,
     result-830.json and codex-830.log.
@@ -1295,6 +1444,10 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP_STATE):
+  - the re-pin T3 (#127, merged);
+  - the canonical guard dispatch (run 36310977790, HEALTHY);
+  - the smoke execution (PASS_PROVEN) and its adjudication.
+  Consumed in the record before (LOOP_STATE):
   - the release-identity T3 (#126, merged);
   - the first fresh T4 (FAILED_AUTH / NO_MUTATION);
   - dry-run 1 (not authenticated) and dry-run 2 (authenticated);
@@ -1306,14 +1459,13 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP
   authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. What remains for the deployed hold, each step with its own owner authorization:
-     a. T3: push release/prod-h2-hold (edc64df2 and this record) to origin, never hf. The owner opens and merges the
-        PR. Then one source-integrity-guard.yml dispatch (runbook §6), expected HEALTHY with deployment_delta_paths
-        [].
-     b. The CONTROLLED_SMOKE, run by the owner exactly as sealed in .work/h2_skill_gate/H2_HOLD_SMOKE_CONTRACT.md: 3
-        analyses through the controlled-smoke login. Claude adjudicates the saved raw responses.
-     c. Rollback stays available as a new T4: force-with-lease back to 00705c55, then a PR reverting the re-pin.
-     The earlier deploy path (the identity T3, the credential refresh and the T4 deploy) is CONSUMED (LOOP_STATE).
+  1. T3 (owner authorizes): push chore/state-post-127 (this record, STATE.md only) to origin, never hf.
+     - The deployed hold's verification is COMPLETE: the re-pin is merged, the guard is HEALTHY and the smoke returned
+       PASS_PROVEN.
+     - Rollback stays available only as a new T4: force-with-lease back to 00705c55, then a PR reverting the re-pin.
+     - Recorded for the owner: RELEASE_GATE's HF-secrets table documents REST persistence, but production runs the
+       direct Postgres repository (the smoke proved that the skill-evidence refresh runs). Reconciling the table is a
+       separate, docs-only decision.
   2. CURRENT LANE, H2 — **Q5 adjudication UNAVAILABLE. H2-G2 keeps its modeled PASS; its operating density is not
      confirmed.** It was ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, the H2-G2 selection, and the Q5
      rulings (LOOP_STATE).
@@ -1323,7 +1475,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP
        - the cutoff at (e), which fixes the envelope §13.3 validates;
        - whether and when to run §13.3, a no-database simulation at the recorded densities;
        - whether to wait for usage, or to reconsider the architecture (a new ruling);
-       - the open points (b), (d) and (f), and the hold's re-pin publication and smoke (item c; deployed; item 1).
+       - the open points (b), (d) and (f). The hold itself is verified live (item c).
      - H2-G2 (α 0.001, g 0.07) passed all 36 binding scenarios (H2_G2_D3_PREREG.md, H2_G2_RESULT.md).
      - The v3 candidate (α 0.001, g 0.09) **FAILED** in S01 and stays on record, unreplaced (H2_D3_PREREG.v3.md,
        H2_V3_RESULT.md).
@@ -1350,8 +1502,11 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP
         - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
           only if they hold an informative call.
         - (a) is RULED (the drift guard). (c) is SETTLED: the call is sign(p_up − p_down), with exact ties NO_CALL.
-     c. DEPLOYED 2026-09-26T19:47:36Z (production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A). What remains is item 1:
-        the re-pin's publication and the CONTROLLED_SMOKE. The text below is kept as history.
+     c. VERIFIED LIVE 2026-09-27: the CONTROLLED_SMOKE returned PASS_PROVEN, the re-pin is merged (#127) and the guard
+        is HEALTHY (run 36310977790). The hold stays until the corrected D3 gate is implemented and validated (Q8). The
+        text below is kept as history.
+        DEPLOYED 2026-09-26T19:47:36Z (production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A). What remained then was
+        item 1: the re-pin's publication and the CONTROLLED_SMOKE.
         MERGED 2026-09-26 (PR #125, main fa5c0da7); NOT DEPLOYED. Its T4 stopped before any mutation, and the
         release identity was prepared (LOOP_STATE). What remained then was item 1, a to e.
         IMPLEMENTED LOCALLY 2026-09-26: feat/h2-failclosed-hold, e669e06f + ebfe2073 + 4ea42593 (LOOP_STATE), with
@@ -1529,10 +1684,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
-  - the T3 for release/prod-h2-hold (the re-pin and this record), then one guard dispatch (expected HEALTHY);
-  - the owner-run CONTROLLED_SMOKE, under its own authorization, exactly per the sealed contract;
+  - the T3 for chore/state-post-127 (this record);
   - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
-    the open points.
+    the open points. The hold stays in force meanwhile.
   Before any rollback or later deploy, re-read this record's LOOP_STATE (the deploy sequence, its checks and the
   rollback) and .work/816/l1/runbook.md §4-§6.
   Never run ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a
@@ -2094,8 +2248,10 @@ PRODUCTION=PROD-H2-HOLD, live since 2026-09-26T19:47:36Z (RUNNING at 19:48:20Z).
     UCPE-PROD-H2-HOLD-20260927-A; /healthcheck 200 (LOOP_STATE).
   - In it: the H2 fail-closed hold (#125), the release identity (#126), and the unwired v2 prep (#108, #109; nothing
     imports it).
-  - Guard: HEALTHY against the prepared re-pin (local run); PIN_DRIFT against main's committed pin until the re-pin
-    merges.
+  - Guard: HEALTHY on main 9a1db2dd after the re-pin merged (canonical dispatch, run 36310977790).
+  - Functional: the CONTROLLED_SMOKE returned PASS_PROVEN (2026-09-27). The legacy 4H and 1H SKILL_DEMONSTRATED
+    verdicts were held, and the runs are CONTROLLED_SMOKE, with no USER_REQUESTED contamination.
+  - Production runs the direct Postgres repository: the skill-evidence refresh runs there.
   - Rollback is a new T4: git push --force-with-lease=refs/heads/main:080f20a9… hf 00705c55…:refs/heads/main.
   History: PROD-SAFE-3, live from 2026-09-17T03:39:17Z to 2026-09-26T19:47:36Z.
   - Re-read on 2026-09-26 UTC, after the T4 authorization of 17:44Z, public reads only:
@@ -2146,6 +2302,9 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - The H2 hold deploy: the single push at 2026-09-26T19:47:36Z (exit 0, 00705c55 → 080f20a9). Also consumed: the
     rejected push at 18:58:37Z (FAILED_AUTH / NO_MUTATION) and the dry-runs at 19:17:27Z and 19:36:37Z. A rollback or
     any later deploy needs a new T4.
+  - The H2 hold CONTROLLED_SMOKE, run 2026-09-27T10:21:23Z (PASS_PROVEN). The executor refuses a second run
+    (.work/h2_smoke/EXECUTED). Never delete or edit the run directory, the seals or the adjudication.
+  - The canonical guard dispatch 36310977790.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
   - Every T3 batch through PR #106, and the post-release batch T3 (PRs #107-#110).
@@ -2365,8 +2524,9 @@ Update this block on every pause, every milestone change and every GPT consultat
 - **Database:** migration 0010 is applied (2026-09-17), so the legacy tables' security is now codified in the
   migrations.
 - **Deployed 2026-09-26 (PROD-H2-HOLD):** the unwired v2 prep (#108, #109), the H2 T2 fail-closed hold (Q8; PR #125)
-  and the release identity UCPE-PROD-H2-HOLD-20260927-A (PR #126). The hold's functional smoke is NOT_RUN.
-- **Prepared locally; not pushed or merged:** the baseline re-pin (release/prod-h2-hold).
+  and the release identity UCPE-PROD-H2-HOLD-20260927-A (PR #126).
+  - The hold is VERIFIED LIVE: the CONTROLLED_SMOKE returned PASS_PROVEN (2026-09-27).
+  - The baseline re-pin is merged (PR #127), and the guard is HEALTHY.
 - **Owner-gated, still open:** the v2 decisions (a) to (d); D-1 ruled (a) and (b) in principle, not implemented
   (OWNER_BOUNDARY, product decisions). The current next lane is H1 (OWNER_BOUNDARY 2).
   A v2 promotion needs its own freeze, T0, holdout and one look.
