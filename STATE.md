@@ -2,10 +2,11 @@
 
 Updated: 2026-09-27. R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
 are published (main 597e5c95, PR #123), the H2 record through the Q5 adjudication too (main 1dfe2d22, PR #124), and
-the T2 fail-closed hold with its record (main fa5c0da7, PR #125). **The hold (Q8) is MERGED but NOT DEPLOYED and NOT
-LIVE: production is still 00705c55 / UCPE-PROD-SAFE-3-20260915-A.** The deploy (T4) stopped before any mutation.
-**The next production build's name, UCPE-PROD-H2-HOLD-20260927-A, is PREPARED LOCALLY (prep/release-identity-h2-hold);
-it is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE (below).** H1 is COMPLETE, and the main checkout is now on
+the T2 fail-closed hold with its record (main fa5c0da7, PR #125), and the release identity (main 080f20a9, PR #126).
+**PRODUCTION IS NOW PROD-H2-HOLD: hf/main and the running commit are 080f20a9, build UCPE-PROD-H2-HOLD-20260927-A
+(deployed 2026-09-26T19:47:36Z).** The H2 fail-closed hold is live in the deployed code. **Its functional
+CONTROLLED_SMOKE is NOT_RUN** (the contract is sealed, paper only). **The baseline re-pin is PREPARED LOCALLY
+(release/prod-h2-hold); it is NOT PUSHED and NOT MERGED (below).** H1 is COMPLETE, and the main checkout is now on
 main. **Lane H2:** its paper
 brief (v3) found that the live directional-skill gate counts near-duplicate and overlapping outcomes as independent
 evidence; 1H and 4H passed it as of 2026-08-16 and are unread since. **The owner ruled Q1–Q8 on 2026-09-26:** one
@@ -35,7 +36,13 @@ owner also ruled point 12(a) on 2026-09-26: a predeclared fail-closed drift guar
     rates it would be met around 2028 or later.
   - H2-G2 keeps its modeled PASS, but the frozen gate would return INSUFFICIENT_EVIDENCE for years. The interim
     fail-closed posture stands (OWNER_BOUNDARY 2).
-- **The T2 fail-closed hold (Q8) is MERGED (PR #125 → main fa5c0da7) but NOT DEPLOYED. Q8 is NOT LIVE.**
+- **The H2 fail-closed hold is DEPLOYED: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A (2026-09-26T19:47:36Z).**
+  - Its functional CONTROLLED_SMOKE is NOT_RUN; the contract is sealed, paper only.
+  - The baseline re-pin is PREPARED LOCALLY (release/prod-h2-hold: edc64df2, then this record). It is NOT PUSHED and
+    NOT MERGED. With the new pin, the guard is HEALTHY against production.
+  - Q5 stays UNAVAILABLE.
+- History (2026-09-26, before the deploy): **The T2 fail-closed hold (Q8) is MERGED (PR #125 → main fa5c0da7) but
+  NOT DEPLOYED. Q8 is NOT LIVE.**
   - The owner-authorized deploy (T4) stopped before any mutation and was not consumed. The local HF credential is
     invalid, and the release identity had not moved since PROD-SAFE-3.
   - **The release identity UCPE-PROD-H2-HOLD-20260927-A is PREPARED LOCALLY:** branch prep/release-identity-h2-hold,
@@ -77,12 +84,159 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
-  - **The next production build's name, UCPE-PROD-H2-HOLD-20260927-A, is PREPARED LOCALLY.**
+  - **PRODUCTION IS PROD-H2-HOLD: hf/main and the running commit are 080f20a9, build UCPE-PROD-H2-HOLD-20260927-A.**
+    - Deployed 2026-09-26T19:47:36Z by one non-force fast-forward from 00705c55, RUNNING at 19:48:20Z. The H2
+      fail-closed hold is live in the deployed code.
+    - The functional CONTROLLED_SMOKE is NOT_RUN. Its contract is sealed, paper only
+      (.work/h2_skill_gate/H2_HOLD_SMOKE_CONTRACT.md).
+    - **The baseline re-pin is PREPARED LOCALLY:** branch release/prod-h2-hold (LOCAL, no upstream), from main
+      080f20a9: edc64df28a22ded3ae56d27a63e4ebc4bfe15dcb (the pin), then this STATE record. It is NOT PUSHED and NOT
+      MERGED.
+      - Against production, the guard is HEALTHY with the new pin (local read-only run).
+      - The committed pin on main still describes 00705c55, so every guard run from main reports PIN_DRIFT until
+        the re-pin merges. That is expected and is not an incident.
+    - The Q5 adjudication stays UNAVAILABLE (below).
+  - Re-pin and smoke contract (owner, 2026-09-27T06:44Z; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. Production deploy PASSed at `080f20a95241504bd7cf96088bf075d1ebaf4f55` with build
+    `UCPE-PROD-H2-HOLD-20260927-A`; functional smoke is still NOT_RUN. Start a fresh local change from canonical main
+    and, following the current source-integrity runbook exactly, re-pin the production baseline to this deployed
+    revision/build and the two expected watched-file hashes (`analysis_service.py`, `build_info.py`), clear only the
+    changed-but-not-deployed declarations that the runbook permits after deployment, update directly required guard
+    tests and STATE, and preserve the full failed-auth/dry-run/deploy history additively.
+
+    In parallel, paper-only, prepare the smallest CONTROLLED_SMOKE verification contract for the live H2 hold: exact
+    route/input, evidence class, expected blocked action/hold wording, how to prove the legacy pass cannot lift the
+    hard block, what DB/write side effects are expected, rollback/stop conditions, and how to avoid contaminating
+    USER_REQUESTED evidence. Do not execute the smoke yet and do not touch F3.
+
+    Run targeted guard tests + full `./verify.sh`, run the source-integrity guard read-only against production, and
+    require `HEALTHY` before committing locally. Inspect the final diff, commit locally only on a fresh branch, and
+    report exact SHA/files/tests/guard result plus the prepared smoke contract. No push, deploy, DB query/write beyond
+    the future smoke plan, or production analysis call." CONSUMED:
+    - The re-pin follows .work/816/l1/runbook.md §2 with .work/816/l1/prepare_pin_commit.py, run as a scratch copy
+      adapted in exactly 3 places, each asserted to occur once:
+      - (1) the declaration anchor, because the guard test now reads `CURRENT_DELTA_PATHS: list[str] = [` and the
+        original searched `CURRENT_DELTA_PATHS = [` (0 occurrences, so the original would have crashed);
+      - (2) the PROD-SAFE-3 comment text becomes PROD-H2-HOLD;
+      - (3) the PROD-SAFE-3 commit message becomes PROD-H2-HOLD, with the Co-Authored-By line.
+      The manifest logic is unchanged: R's bytes, read through the guard's own helpers. The original tool
+      (sha256 44787d07…) is untouched; the adapted copy is ed264603….
+    - Pin commit edc64df2: parent 080f20a9; exactly ops/hf_runtime_baseline.json and
+      tests/scripts/test_source_integrity_guard.py; author "UCPE release" with R's date, so it is deterministic.
+      - The manifest: hf_main_sha 080f20a9; release_id, label, milestone and fingerprint PROD-H2-HOLD. Only the
+        digests of analysis_service.py (c77663f5…) and build_info.py (ab6eb72d…) change; the other 9 and the
+        frontend tokens are unchanged.
+      - The guard test: PIN_SHA 080f20a9; the identity assertions become PROD-H2-HOLD; CURRENT_DELTA_PATHS becomes
+        [], the only declaration the runbook clears after a deploy.
+    - Checked independently:
+      - the new pin's hf_main_sha equals the fetched hf/main;
+      - all 11 guarded digests equal HF main's bytes;
+      - the 6 test files that touch the baseline, the guard or build-info passed 113;
+      - ./verify.sh PASS 2470 on edc64df2 (LAST_VERIFY).
+    - The guard, read-only against production from the re-pin checkout (2026-09-27T06:49:02Z): HEALTHY, exit 0.
+      - hf_main and pinned are both 080f20a9;
+      - critical_source_match and frontend_asset_match are true;
+      - the live release_id, fingerprint and milestone equal the intended PROD-H2-HOLD values;
+      - deployment_delta_paths is [], and the advisory is SCHEDULER_AHEAD_OF_PIN (1 ahead). This is what runbook §6
+        expects.
+    - The smoke contract is sealed (predeclared, not executed): H2_HOLD_SMOKE_CONTRACT.md, sha256 28f995fb…;
+      H2_HOLD_SMOKE_CONTRACT.sha256, digest fe174497…; both 0444.
+      - Calls: 3 CONTROLLED_SMOKE analyses (a BTC 4H warm-up; a batch of BTC 4H and 1H 60 s later) through the
+        controlled-smoke login only.
+      - Provenance, in-app: detail must return 404, and the runs must be absent from /v1/runs.
+      - Verdicts: PASS_PROVEN, PASS_NOT_EXERCISED, FAIL, ERROR.
+      - Declared: CONTROLLED_SMOKE predictions rise from 13 to 16.
+    - This record.
+  - T4 deploy (owner, 2026-09-26T19:46Z; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Fresh T4 AUTHORIZED once. The authenticated dry-run already PASSed and proved
+    the exact non-force fast-forward `00705c55e7eb291d01b4e02d4cca859122083f28 →
+    080f20a95241504bd7cf96088bf075d1ebaf4f55`. Reconfirm immediately before mutation that canonical/local main is
+    clean at `080f20a95241504bd7cf96088bf075d1ebaf4f55`, HF main/running is still
+    `00705c55e7eb291d01b4e02d4cca859122083f28`, build is still `UCPE-PROD-SAFE-3-20260915-A`, health is 200, and auth
+    is beny053.
+
+    If and only if those anchors still match, execute exactly one real non-force push of
+    `080f20a95241504bd7cf96088bf075d1ebaf4f55` to HF main. Do not retry or perform a second deploy. After the push,
+    perform only read-only settle checks until the Space is RUNNING: HF main and running revision, `/healthcheck`,
+    `/v1/build-info` which must be exactly `UCPE-PROD-H2-HOLD-20260927-A`, relevant source/frontend hashes, and the
+    local source-integrity guard. Record the earlier FAILED_AUTH/NO_MUTATION attempt and both dry-runs additively for
+    the next STATE update. Do not run product-analysis smoke yet; no DB, F3, Q5/methodology, collector, resolver,
+    workflow, secret or other production mutation. Report exact deployed/running SHA, runtime/build identity, guard
+    result, baseline re-pin requirement and rollback readiness." CONSUMED:
+    - Reconfirmed at 19:47:28Z; every anchor matched:
+      - origin and local main 080f20a9, and the local main clean;
+      - hf/main and runtime.sha 00705c55, RUNNING;
+      - build UCPE-PROD-SAFE-3-20260915-A; /healthcheck 200;
+      - user=beny053; no guard run in progress or queued.
+    - The single push, `GIT_TERMINAL_PROMPT=0 git push hf 080f20a95241504bd7cf96088bf075d1ebaf4f55:refs/heads/main`,
+      at 19:47:36Z: exit 0, `00705c5..080f20a  080f20a95241504bd7cf96088bf075d1ebaf4f55 -> main`.
+    - Settle: RUNNING_BUILDING at 19:47:59Z, then RUNNING with runtime.sha 080f20a9 at 19:48:20Z.
+    - Post-deploy checks (19:49:01Z):
+      - /healthcheck 200;
+      - /v1/build-info exactly UCPE-PROD-H2-HOLD-20260927-A, the whole payload equal to 080f20a9's;
+      - the live index.html, app.js and styles.css are byte-identical to 080f20a9;
+      - on HF main, 9 of the 11 guarded files match the old pin, and the 2 declared ones differ;
+      - the local guard with the old pin: PIN_DRIFT, exit 1, as expected.
+    - Raw captures: .work/deploy-080f20a9/ (ATTEMPT_RECORD.md, sections A to D).
+  - Dry-run 2 (owner, 2026-09-26T19:35Z; a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. The owner has now used `hf auth switch --add-to-git-credential`; macOS reports
+    `HF_GIT_CREDENTIAL=FOUND` and `hf auth whoami=beny053`. Do not deploy. Verify canonical/local
+    main=`080f20a95241504bd7cf96088bf075d1ebaf4f55` and production remains HF/running `00705c55` with build
+    `UCPE-PROD-SAFE-3-20260915-A`; then run exactly one non-mutating `git push --dry-run hf
+    080f20a95241504bd7cf96088bf075d1ebaf4f55:refs/heads/main`. Stop after reporting authentication success/failure and
+    the exact fast-forward `from → to`. No real push, deploy, DB, F3, smoke or other mutation." CONSUMED:
+    - One `git push --dry-run` at 19:36:37Z: exit 0, `00705c5..080f20a … -> main`.
+    - AUTHENTICATED: the push endpoint returns 401 without credentials. The update is a fast-forward, 00705c55 →
+      080f20a9.
+    - hf/main was unchanged afterwards.
+  - Dry-run 1 (owner, 2026-09-26T19:15Z; a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. The owner refreshed the HF Git credential. Do not deploy yet. Verify `hf auth
+    whoami=beny053`, production is still HF/running `00705c55` with build `UCPE-PROD-SAFE-3-20260915-A`, and canonical
+    main remains `080f20a95241504bd7cf96088bf075d1ebaf4f55`; then run exactly one non-mutating `git push --dry-run hf
+    080f20a95241504bd7cf96088bf075d1ebaf4f55:refs/heads/main`. Record the prior rejected deploy attempt additively for
+    the next STATE update. Stop after reporting whether the dry-run authenticates and would fast-forward. No real
+    push, deploy, DB, F3, smoke or other production mutation." CONSUMED:
+    - One dry-run at 19:17:27Z: exit 128, "could not read Username for 'https://huggingface.co': terminal prompts
+      disabled".
+    - NOT authenticated: osxkeychain held no huggingface.co credential. hf/main was unchanged.
+  - First fresh T4 (owner, 2026-09-26T18:55Z; pasted text in the owner's established form), verbatim:
+    "CONTINUE CURRENT — Opus 5 XHIGH. Fresh owner T4 AUTHORIZED once for exact canonical `main` merge
+    `080f20a95241504bd7cf96088bf075d1ebaf4f55`. Before mutation verify origin/local main exact and clean, PR #126 CI
+    green, all H2/Q5 seals intact, `hf auth whoami=beny053`, and production is still HF/running `00705c55` with
+    `/v1/build-info=UCPE-PROD-SAFE-3-20260915-A`; re-derive the sanctioned deploy path from current
+    RELEASE_GATE/STATE/runbook and STOP on any conflict.
+
+    If all pass, deploy exactly `080f20a95241504bd7cf96088bf075d1ebaf4f55` once by the sanctioned non-force
+    fast-forward path to HF. Make no DB/secret/F3/Q5/methodology/collector/resolver/workflow changes. Afterward
+    perform only read-only settle checks: HF main/running revision, RUNNING state, `/healthcheck`, `/v1/build-info`
+    which must be exactly `UCPE-PROD-H2-HOLD-20260927-A`, relevant frontend/source hashes, and local source-integrity
+    guard. Do not run an analysis/product smoke yet and do not redeploy/retry. Report exact deployed/running SHA,
+    health/build identity, guard state, whether baseline re-pin is required, and the exact remaining
+    production-verification boundary." CONSUMED as FAILED_AUTH / NO_MUTATION:
+    - Every precondition passed, and the release tool routed the release to a fast-forward.
+    - The single push at 18:58:37Z exited 128: "remote: Invalid username or password" / "Authentication failed". The
+      stale git keychain credential was the cause; `hf auth login` saves the token for git only with
+      --add-to-git-credential.
+    - Production was byte-identical afterwards, and the guard was HEALTHY. It was not retried.
+  - T3 for prep/release-identity-h2-hold (owner, 2026-09-26T18:31Z; a direct instruction), verbatim:
+    "CONTINUE CURRENT — Opus 5 HIGH. T3 AUTHORIZED once: verify `origin/main` is still PR #125 merge
+    `fa5c0da7439b926f95c03a8a1e60898e0a9737e5`, branch `prep/release-identity-h2-hold` is exactly
+    `8e1b98f09259193ab2357c54c953e336b0b95491`, and the complete diff is only `config/build_info.py`,
+    `tests/api/test_build_info.py`, `tests/scripts/test_source_integrity_guard.py`, and `STATE.md`. Confirm build
+    identity is exactly `UCPE-PROD-H2-HOLD-20260927-A`, evaluator pin remains 0/69, and verify remains green; then
+    push only that exact branch/SHA to origin, never hf, and stop. No PR/merge, deploy, DB, F3, Q5/methodology, smoke
+    or production mutation." CONSUMED:
+    - The pre-push checks passed; the merge tree 474f4fe1 was recorded before the push.
+    - Exactly 8e1b98f0 was pushed to origin prep/release-identity-h2-hold, never to hf.
+    - PR #126 was merged from the owner's account at 2026-09-26T18:51:28Z (LAST_GREEN_SHA).
+  - History (2026-09-26, before PR #126 and the deploy): **The next production build's name,
+    UCPE-PROD-H2-HOLD-20260927-A, is PREPARED LOCALLY.**
     - Branch prep/release-identity-h2-hold (LOCAL, no upstream), from main fa5c0da7:
       - 2b575abb0ad9a3e428bdd669d7a6210eae197272 (the release identity);
       - then this STATE record.
     - It is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE.
-  - **The H2 T2 fail-closed hold (Q8) is MERGED (PR #125 → main fa5c0da7) but NOT DEPLOYED. Q8 is NOT LIVE.**
+  - History (before the deploy): **The H2 T2 fail-closed hold (Q8) is MERGED (PR #125 → main fa5c0da7) but NOT
+    DEPLOYED. Q8 is NOT LIVE.**
     - Production is still 00705c55 / UCPE-PROD-SAFE-3-20260915-A. Until a deploy, a cached or shadow-arm
       SKILL_DEMONSTRATED still lifts the hard block in production.
     - The Q5 adjudication stays UNAVAILABLE (below).
@@ -840,19 +994,18 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=RELEASE IDENTITY UCPE-PROD-H2-HOLD-20260927-A PREPARED LOCALLY (prep/release-identity-h2-hold:
-  2b575abb, from main fa5c0da7). It is NOT PUSHED, NOT MERGED, NOT DEPLOYED and NOT LIVE.
-  The H2 T2 FAIL-CLOSED HOLD is MERGED (PR #125, main fa5c0da7: e669e06f + ebfe2073 + 4ea42593) but NOT DEPLOYED
-  and NOT LIVE (Q8 NOT LIVE). Its T4 deploy stopped before any mutation (NOT CONSUMED). Production:
-  00705c55 / UCPE-PROD-SAFE-3-20260915-A.
+CURRENT_MILESTONE=H2 HOLD DEPLOYED: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A (2026-09-26T19:47:36Z; the hold
+  and the release identity, PRs #125 and #126). The functional CONTROLLED_SMOKE is NOT_RUN (contract sealed, paper).
+  BASELINE RE-PIN PREPARED LOCALLY (release/prod-h2-hold: edc64df2, from main 080f20a9); NOT PUSHED, NOT MERGED. With
+  it, the guard is HEALTHY against production; until it merges, guard runs from main report PIN_DRIFT.
   H2 Q5 ADJUDICATED: UNAVAILABLE. H2-G2 (α 0.001, g 0.07) keeps its modeled PASS (36/36). Its
   operating density (1–6 contributions per counted window) is not yet validated, and the informative-call floor is
   unmet everywhere (at the observed rates, around 2028 or later). History: the v2 guard was analytically REJECTED;
   the budget was RULED; v3 (g 0.09) FAILED (S01) and stays on record. H1
   COMPLETE. NG-1 CLOSED (owner ruling, 2026-09-25): K KILLED (valid for H ≤ 0.85); T NOT_DEMONSTRATED; the free-data
   route not demonstrated; W(b) not run; F3 unspent. Still excluded:
-  - the release identity's push (T3) and merge, and the hold's deploy (T4), each without its own authorization.
-    The hold was pushed and merged under the owner's T3, and the identity was prepared locally (LOOP_STATE);
+  - the re-pin's push (T3), merge and guard dispatch, and the CONTROLLED_SMOKE, each without its own authorization
+    (LOOP_STATE); any rollback or second deploy without a new T4;
   - any implementation of D3, and any other change to the live skill gate, its tests or its data, without its own
     authorization (it is a hard gate, so treat it as T2); and the count-only production read without its own
     database authorization;
@@ -861,18 +1014,18 @@ CURRENT_MILESTONE=RELEASE IDENTITY UCPE-PROD-H2-HOLD-20260927-A PREPARED LOCALLY
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=prep/release-identity-h2-hold (LOCAL, no upstream), from main fa5c0da7: 2b575abb (the release
-  identity) and this record, unpublished (OWNER_BOUNDARY 1). Its worktree is lanes2/relid in the session scratchpad;
-  the branch itself lives in the main repository's refs. As with the hold, this STATE record rides on the change's
-  own branch.
-  feat/h2-failclosed-hold (#125) is merged and stays on origin; it carried the hold and its STATE record.
+CURRENT_BRANCH=release/prod-h2-hold (LOCAL, no upstream), from main 080f20a9: edc64df2 (the re-pin) and this record,
+  unpublished (OWNER_BOUNDARY 1). Its worktree is lanes2/repin in the session scratchpad; the branch itself lives in
+  the main repository's refs. The name follows release/prod-safe-3, which carried the PROD-SAFE-3 pin.
+  prep/release-identity-h2-hold (#126) and feat/h2-failclosed-hold (#125) are merged and stay on origin.
   chore/state-post-123 (#124), chore/state-post-122 (#123), -121 (#122), -120 (#121), -119 (#120), -118 (#119),
   -117 (#118), -116 (#117), -115 (#116), -114 (#115), -113 (#114), -112 (#113) and -110 (#112) are merged and stay on origin;
   -110's push is the R4 commitment's timestamp.
-  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at fa5c0da7, clean, and its working-tree STATE.md is
-  current as of that commit. It was fast-forwarded under the T4 deploy authorization's preconditions, on 2026-09-26
-  UTC. Before that it was on 1dfe2d22 (T2 hold authorization) and 597e5c95 (Q5 authorization). Before that it was
-  frozen on chore/state-post-104 at 2c6df51 through the NG-1 Stage-1 rerun (repair review F3; audit L3). That branch is kept.
+  The main checkout (/Users/kha/Documents/Kha-app/UCPE) is on main at 080f20a9, clean, and its working-tree STATE.md is
+  current as of that commit. It was fast-forwarded under the fresh T4's preconditions, on 2026-09-26 UTC. Before that
+  it was on fa5c0da7 (the first T4's preconditions), 1dfe2d22 (T2 hold authorization) and 597e5c95 (Q5
+  authorization). Before that it was frozen on chore/state-post-104 at 2c6df51 through the NG-1 Stage-1 rerun (repair
+  review F3; audit L3). That branch is kept.
   STATE records are still made in separate worktrees, and ./verify.sh never runs in the main checkout
   (STANDING_RULES).
   The batch branches are merged, and remain on origin:
@@ -880,7 +1033,18 @@ CURRENT_BRANCH=prep/release-identity-h2-hold (LOCAL, no upstream), from main fa5
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=fa5c0da7 (main, PR #125: the H2 fail-closed hold and its STATE record).
+LAST_GREEN_SHA=080f20a9 (main, PR #126: the release identity UCPE-PROD-H2-HOLD-20260927-A and its STATE record).
+  - This loop pushed prep/release-identity-h2-hold at 8e1b98f0 under the owner's push-only T3. The merge tree
+    474f4fe1 was recorded before the push. #126 was merged from the owner's account at 2026-09-26T18:51:28Z.
+  - Verified by this loop:
+    - parents (fa5c0da7, 8e1b98f0);
+    - tree 474f4fe1, equal to the recorded tree;
+    - exactly the 4 files.
+  - Checks, 2026-09-26, both passed:
+    - the exact-head check CI (run 36263793970, created 18:47:35Z);
+    - the exact-main check CI (run 36264018888, 18:51:31Z).
+  - 080f20a9 is also the production commit (deployed 2026-09-26T19:47:36Z).
+  Before it: fa5c0da7 (main, PR #125: the H2 fail-closed hold and its STATE record).
   - This loop pushed feat/h2-failclosed-hold at 19b24a6b under the owner's push-only T3. The merge tree 1dc79429 was
     recorded before the push. #125 was merged from the owner's account at 2026-09-26T17:41:34Z.
   - Verified by this loop:
@@ -985,7 +1149,11 @@ LAST_GREEN_SHA=fa5c0da7 (main, PR #125: the H2 fail-closed hold and its STATE re
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026-09-27 (local).
-  - Run for the release identity on prep/release-identity-h2-hold, in worktree lanes2/relid:
+  - Run for the re-pin on release/prod-h2-hold, in worktree lanes2/repin:
+    - on edc64df2; the 6 guard, baseline and build-info test files passed 113;
+    - the guard, read-only against production with the new pin: HEALTHY, exit 0;
+    - this STATE record (T0) was verified the same way before its commit.
+  - Earlier, the same result for the release identity on prep/release-identity-h2-hold, in worktree lanes2/relid:
     - on 2b575abb; the targeted suites passed 111;
     - this STATE record (T0) was verified the same way before its commit.
   - H2's own checks, read-only: all thirteen H2 seal files verify.
@@ -1075,6 +1243,7 @@ LAST_VERIFY=PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - The re-pin used no Codex: the sanctioned deterministic tool, adapted in 3 recorded places (LOOP_STATE).
   - The release identity, a new change, used 1 of its 4 delegations: task-830, DONE. Files: .work/task-830.md,
     result-830.json and codex-830.log.
   - The H2 hold (T2) used Codex for its code and test edits: all 4 of its 4 delegations, so the change's budget is
@@ -1125,30 +1294,26 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the hold's T3 (#125, merged) and the
-  release-identity preparation (LOOP_STATE). NOT consumed: the T4 deploy authorization, which stopped before any
-  mutation. Consumed before them: the Q5-adjudication STATE T3 (#124), the T2 hold authorization, the hold wording
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record (LOOP_STATE):
+  - the release-identity T3 (#126, merged);
+  - the first fresh T4 (FAILED_AUTH / NO_MUTATION);
+  - dry-run 1 (not authenticated) and dry-run 2 (authenticated);
+  - the deploy T4 (DEPLOYED 080f20a9);
+  - the re-pin with the smoke contract.
+  Consumed before them: the hold's T3 (#125, merged) and the release-identity preparation; the stopped T4 was not
+  consumed. Earlier still: the Q5-adjudication STATE T3 (#124), the T2 hold authorization, the hold wording
   finalization and the headline polish (LOOP_STATE). Consumed before those: the H1 STATE T3 (#122), the H1 step (c)
   authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. The deploy path for the hold, each step with its own owner authorization:
-     a. T3: push prep/release-identity-h2-hold (2b575abb and this record) to origin, never hf. The owner opens and
-        merges the PR.
-     b. The owner refreshes the local HF credential (hf auth login --force; then hf auth whoami shows beny053).
-        Claude never handles tokens.
-     c. T4, a fresh authorization: deploy the resulting main by fast-forward (git push hf <main>:refs/heads/main,
-        never --force). Then the read-only checks:
-        - the Space API reports runtime.stage RUNNING and runtime.sha == <main>;
-        - /healthcheck returns 200;
-        - /v1/build-info reports UCPE-PROD-H2-HOLD-20260927-A;
-        - the frontend digests are unchanged;
-        - the guard reports PIN_DRIFT until the re-pin.
-     d. T2/T3: re-pin. ops/hf_runtime_baseline.json takes the deployed commit and identity;
-        test_source_integrity_guard.py's PIN_SHA takes the deployed commit and CURRENT_DELTA_PATHS returns to [].
-        Then one guard dispatch, expected HEALTHY.
-     e. Later, under its own authorization: the product-analysis smoke that shows the hold active in production.
-     Until c lands, Q8 stays NOT LIVE.
+  1. What remains for the deployed hold, each step with its own owner authorization:
+     a. T3: push release/prod-h2-hold (edc64df2 and this record) to origin, never hf. The owner opens and merges the
+        PR. Then one source-integrity-guard.yml dispatch (runbook §6), expected HEALTHY with deployment_delta_paths
+        [].
+     b. The CONTROLLED_SMOKE, run by the owner exactly as sealed in .work/h2_skill_gate/H2_HOLD_SMOKE_CONTRACT.md: 3
+        analyses through the controlled-smoke login. Claude adjudicates the saved raw responses.
+     c. Rollback stays available as a new T4: force-with-lease back to 00705c55, then a PR reverting the re-pin.
+     The earlier deploy path (the identity T3, the credential refresh and the T4 deploy) is CONSUMED (LOOP_STATE).
   2. CURRENT LANE, H2 — **Q5 adjudication UNAVAILABLE. H2-G2 keeps its modeled PASS; its operating density is not
      confirmed.** It was ruled on 2026-09-26: Q1–Q8, point 12(a), the error budget, the H2-G2 selection, and the Q5
      rulings (LOOP_STATE).
@@ -1158,7 +1323,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
        - the cutoff at (e), which fixes the envelope §13.3 validates;
        - whether and when to run §13.3, a no-database simulation at the recorded densities;
        - whether to wait for usage, or to reconsider the architecture (a new ruling);
-       - the open points (b), (d) and (f), and the T2 hold's deploy (item c; merged, not deployed; item 1).
+       - the open points (b), (d) and (f), and the hold's re-pin publication and smoke (item c; deployed; item 1).
      - H2-G2 (α 0.001, g 0.07) passed all 36 binding scenarios (H2_G2_D3_PREREG.md, H2_G2_RESULT.md).
      - The v3 candidate (α 0.001, g 0.09) **FAILED** in S01 and stays on record, unreplaced (H2_D3_PREREG.v3.md,
        H2_V3_RESULT.md).
@@ -1185,8 +1350,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
         - (f) NEW: the directional-call floor rule. The default is m ≥ 100 informative calls, and windows count
           only if they hold an informative call.
         - (a) is RULED (the drift guard). (c) is SETTLED: the call is sign(p_up − p_down), with exact ties NO_CALL.
-     c. MERGED 2026-09-26 (PR #125, main fa5c0da7); NOT DEPLOYED. Its T4 stopped before any mutation, and the
-        release identity is prepared (LOOP_STATE). What remains is item 1, a to e. The text below is kept as history.
+     c. DEPLOYED 2026-09-26T19:47:36Z (production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A). What remains is item 1:
+        the re-pin's publication and the CONTROLLED_SMOKE. The text below is kept as history.
+        MERGED 2026-09-26 (PR #125, main fa5c0da7); NOT DEPLOYED. Its T4 stopped before any mutation, and the
+        release identity was prepared (LOOP_STATE). What remained then was item 1, a to e.
         IMPLEMENTED LOCALLY 2026-09-26: feat/h2-failclosed-hold, e669e06f + ebfe2073 + 4ea42593 (LOOP_STATE), with
         three recorded deviations from the design, each following the owner's words. What remains:
         - the T3 (item 1) and the merge;
@@ -1362,13 +1529,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the previous record: the 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
-  - the T3 for prep/release-identity-h2-hold (the prepared release identity and this record);
-  - the owner's HF credential refresh;
-  - then a fresh T4 deploy of the resulting main by fast-forward (Q8 NOT LIVE until then), then the re-pin;
+  - the T3 for release/prod-h2-hold (the re-pin and this record), then one guard dispatch (expected HEALTHY);
+  - the owner-run CONTROLLED_SMOKE, under its own authorization, exactly per the sealed contract;
   - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
     the open points.
-  Before any deploy, re-read this record's LOOP_STATE (the stopped T4: the derived path, the checks and the rollback)
-  and .work/816/l1/runbook.md §4-§6.
+  Before any rollback or later deploy, re-read this record's LOOP_STATE (the deploy sequence, its checks and the
+  rollback) and .work/816/l1/runbook.md §4-§6.
   Never run ./verify.sh in the main checkout: its secret scanner walks .work, sealed paths included. Verify only in a
   clean worktree. Read first:
   - the hold: git show e669e06f ebfe2073 4ea42593 (branch feat/h2-failclosed-hold) and .work/task-826.md to
@@ -1923,7 +2089,15 @@ R3=Research in .work/research3 (gitignored).
       (NEXT_ACTION; OWNER_BOUNDARY 4).
     - Network: public Binance GETs only (5,108 requests). F1 is stored only; F2 was used only for the
       candidate-blind B3Dev null.
-PRODUCTION=PROD-SAFE-3, live since 2026-09-17T03:39:17Z.
+PRODUCTION=PROD-H2-HOLD, live since 2026-09-26T19:47:36Z (RUNNING at 19:48:20Z).
+  - hf/main and the running commit are 080f20a9, main's own commit (a fast-forward from 00705c55). Build
+    UCPE-PROD-H2-HOLD-20260927-A; /healthcheck 200 (LOOP_STATE).
+  - In it: the H2 fail-closed hold (#125), the release identity (#126), and the unwired v2 prep (#108, #109; nothing
+    imports it).
+  - Guard: HEALTHY against the prepared re-pin (local run); PIN_DRIFT against main's committed pin until the re-pin
+    merges.
+  - Rollback is a new T4: git push --force-with-lease=refs/heads/main:080f20a9… hf 00705c55…:refs/heads/main.
+  History: PROD-SAFE-3, live from 2026-09-17T03:39:17Z to 2026-09-26T19:47:36Z.
   - Re-read on 2026-09-26 UTC, after the T4 authorization of 17:44Z, public reads only:
     - hf/main 00705c55;
     - the Space API reports runtime.stage RUNNING and runtime.sha 00705c55;
@@ -1969,6 +2143,9 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - The 0008 apply 35164080476.
   - The PROD-SAFE-3 deploy: attempt 4, pushed at 03:39:17Z. Attempts 1-3 failed safely and changed nothing.
   - Its guard dispatch 35179229959.
+  - The H2 hold deploy: the single push at 2026-09-26T19:47:36Z (exit 0, 00705c55 → 080f20a9). Also consumed: the
+    rejected push at 18:58:37Z (FAILED_AUTH / NO_MUTATION) and the dry-runs at 19:17:27Z and 19:36:37Z. A rollback or
+    any later deploy needs a new T4.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
   - Every T3 batch through PR #106, and the post-release batch T3 (PRs #107-#110).
@@ -2178,7 +2355,8 @@ Update this block on every pause, every milestone change and every GPT consultat
   NOT_PASS on every timeframe, and nothing was promoted.
 - **R2 frontier research** is closed. It recommends distributional-v2 as the next candidate; the candidate is not
   frozen.
-- **In production (PROD-SAFE-3):**
+- **In production (PROD-H2-HOLD, since 2026-09-26):** the H2 fail-closed hold, its release identity and the unwired
+  v2 prep, on top of PROD-SAFE-3's content:
   - Recent Analysis History and durable Detail;
   - session and auth hardening;
   - provider byte caps and deadlines;
@@ -2186,10 +2364,9 @@ Update this block on every pause, every milestone change and every GPT consultat
   - the accumulated reviewed UI work.
 - **Database:** migration 0010 is applied (2026-09-17), so the legacy tables' security is now codified in the
   migrations.
-- **Merged, not in production:** the unwired v2 prep (#108, #109).
-- **Merged, not in production:** the H2 T2 fail-closed hold (Q8; PR #125).
-- **Prepared locally; not pushed, merged or deployed:** the release identity UCPE-PROD-H2-HOLD-20260927-A
-  (prep/release-identity-h2-hold).
+- **Deployed 2026-09-26 (PROD-H2-HOLD):** the unwired v2 prep (#108, #109), the H2 T2 fail-closed hold (Q8; PR #125)
+  and the release identity UCPE-PROD-H2-HOLD-20260927-A (PR #126). The hold's functional smoke is NOT_RUN.
+- **Prepared locally; not pushed or merged:** the baseline re-pin (release/prod-h2-hold).
 - **Owner-gated, still open:** the v2 decisions (a) to (d); D-1 ruled (a) and (b) in principle, not implemented
   (OWNER_BOUNDARY, product decisions). The current next lane is H1 (OWNER_BOUNDARY 2).
   A v2 promotion needs its own freeze, T0, holdout and one look.
