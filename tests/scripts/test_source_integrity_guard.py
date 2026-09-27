@@ -14,20 +14,16 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "00705c55e7eb291d01b4e02d4cca859122083f28"
+PIN_SHA = "080f20a95241504bd7cf96088bf075d1ebaf4f55"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
-# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# What stands in it now is analysis_service.py, the H2 interim fail-closed hold (owner ruling
-# Q8, 2026-09-26), merged by PR #125 but not yet deployed; and config/build_info.py, the
-# UCPE-PROD-H2-HOLD-20260927-A release identity that names the next deploy. Both clear when
-# that deploy lands and the baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = [
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-H2-HOLD
+# (UCPE-PROD-H2-HOLD-20260927-A) deployed main's own tree, so nothing stands in it:
+# analysis_service.py (the H2 fail-closed hold) and config/build_info.py (the release
+# identity) cleared with that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -265,11 +261,11 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-PROD-SAFE-3-20260915-A"
-    assert intended.release_label == "PROD-SAFE-3 convergence release of main"
+    assert intended.release_id == "UCPE-PROD-H2-HOLD-20260927-A"
+    assert intended.release_label == "PROD-H2-HOLD release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "prod-safe-3-convergence"
-    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-SAFE-3-20260915-A"
+    assert intended.source_milestone == "prod-h2-hold"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-H2-HOLD-20260927-A"
     assert intended.asset_tokens == {
         "app_js": "w4c1-ka1-20260828-a",
         "styles_css": "w4c1-ka1-20260828-a",

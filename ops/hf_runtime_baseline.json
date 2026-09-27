@@ -6,21 +6,21 @@
     "frontend/styles.css": "c7be1c9db153391f1712530a34d28e3732ebb596208cf09e8d50bdad74a31247",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "3ce0282dfb5e5640d3722c0749b7445a87c0acec63a8607a296e287164ea560f",
+    "src/crypto_probability_engine/api/analysis_service.py": "c77663f56a438fee9d5fff4391963fe264306427221ab055c659f97ac478017f",
     "src/crypto_probability_engine/api/app.py": "63db9e18fa9ca076f40f3303da3db48356a0e57798f5b48c1bc7102af1d7ca14",
-    "src/crypto_probability_engine/config/build_info.py": "2c7450ed155f5e9c7765310a54f3b547df1c11bbf843ed6f5fc5f0f8adeccbec",
+    "src/crypto_probability_engine/config/build_info.py": "ab6eb72dd738e0c4199d3aec792235c34cd2302996d68789cb228a4e9159fb0c",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · PROD-SAFE-3-20260915-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-H2-HOLD-20260927-A",
   "frontend_asset_tokens": {
     "app_js": "w4c1-ka1-20260828-a",
     "styles_css": "w4c1-ka1-20260828-a"
   },
-  "hf_main_sha": "00705c55e7eb291d01b4e02d4cca859122083f28",
-  "release_id": "UCPE-PROD-SAFE-3-20260915-A",
-  "release_label": "PROD-SAFE-3 convergence release of main",
+  "hf_main_sha": "080f20a95241504bd7cf96088bf075d1ebaf4f55",
+  "release_id": "UCPE-PROD-H2-HOLD-20260927-A",
+  "release_label": "PROD-H2-HOLD release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "prod-safe-3-convergence"
+  "source_milestone": "prod-h2-hold"
 }
