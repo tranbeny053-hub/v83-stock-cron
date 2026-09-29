@@ -1,6 +1,15 @@
 # STATE
 
-Updated: 2026-09-29 (post-0011 T4). **MIGRATION 0011 IS APPLIED IN PRODUCTION. The owner-authorized one-shot T4
+Updated: 2026-09-29 (post-0012 T4). **MIGRATION 0012 IS APPLIED IN PRODUCTION. The owner-authorized one-shot T4
+APPLY-MIGRATION-0012-ONCE is CONSUMED and PASSED: run 36586262979 on main b11a8e53, committed.**
+- public.prediction_resolution_status now exists, exactly the adopted D5 schema, and empty.
+- Row-level security is on with no policy and no privilege for PUBLIC, anon, authenticated or service_role.
+- Every existing table's security is unchanged, and 0011's four columns are present before and after.
+- Both migrations are live. Nothing writes the new columns or the new table yet: the writer does not stamp, and the
+  resolver does not use the status table.
+- No deploy, DB console or manual SQL: hf and the running Space stay at 080f20a9.
+- This record is local (chore/state-post-0011-0012-apply).
+Previously (post-0011 T4): **MIGRATION 0011 IS APPLIED IN PRODUCTION. The owner-authorized one-shot T4
 APPLY-MIGRATION-0011-ONCE is CONSUMED and PASSED: run 36583531813 on main b11a8e53, committed.**
 - The owner merged #133 (the post-132 record), #134 (the 0011 route) and #135 (the 0012 route). Main is
   b11a8e53; each merge tree equals the tree recorded before the push; CI success.
@@ -115,6 +124,51 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **MIGRATION 0012 APPLIED: T4 APPLY-MIGRATION-0012-ONCE CONSUMED, PASS (2026-09-29).**
+    - The authorization came from the owner's pasted prompt: verify origin/main = b11a8e53 and zero prior 0012
+      dispatches; dispatch exactly once; any refusal => STOP, NO RERUN.
+    - Preconditions:
+      - origin/main was b11a8e53 (fetch and ls-remote) at 14:55:09Z and again at 14:55:37Z;
+      - apply-migration-0012.yml (id 370217427, active) had zero prior runs (list and API total_count);
+      - the 0012 route on main is byte-identical to the reviewed 6ccf60eb;
+      - the migration's sha256 is e7f6cbda… and equals the pinned value;
+      - CI succeeded on b11a8e53;
+      - nothing was queued or running.
+    - The dispatch: exactly once, at 14:55:40Z, with expected_sha=b11a8e53… and confirm=APPLY-MIGRATION-0012-ONCE.
+      Run 36586262979 (workflow_dispatch, main, attempt 1) completed with success at 14:56:20Z. Every step succeeded:
+      - attest: dispatch_verified; CPython 3.13.14; no database;
+      - rehearse: PostgreSQL 16 (160015), with 0001-0010 plus 0011. APPLIED once, then refused the second apply
+        ("1 relations named prediction_resolution_status already exist in public") before any migration ran. The
+        assertions and 31 probes passed on the rehearsal database and on the rebuild without 0011;
+      - in-job tests: 437 passed;
+      - apply: the only step with the secret;
+      - upload.
+    - Raw capture before parsing, in the session scratchpad t4-0012/:
+      - run.json (sha256 ff4e2700…), run.log (cf03fe53…, 2599 lines) and artifacts.json;
+      - the artifact migration-0012-apply-report, id 11041507410; its zip sha256 16f6802c… equals GitHub's digest.
+        Inside it: migration-0012-apply-report.json (4ebd293b…) and migration-0012-rehearsal-report.json
+        (4f23704a…).
+    - The apply report:
+      - outcome APPLIED, committed true;
+      - the executed migration sha256 equals the pinned e7f6cbda…;
+      - server_version_num 170006; 3 API roles; eight table privileges asked, MAINTAIN included.
+    - The exact production shape, re-derived by Claude from the raw post reads:
+      - Relations in public named prediction_resolution_status, its pkey and its retry index went from 0/0/0 to 1/1/1.
+      - The table is ordinary and owned by the applying role, with row-level security on and not forced, 0 policies,
+        no PUBLIC or column grant, and NO privilege for anon, authenticated or service_role.
+      - Its 13 columns are exactly the adopted ones. The only default is updated_at_utc now(). There is no identity,
+        generation or column ACL.
+      - Its 9 constraints are the pkey plus 8 CHECKs, all validated, with the exact columns and literals.
+      - There is no foreign key into or out of it, and no trigger.
+      - Indexes: the pkey (unique, prediction_id), and prediction_resolution_status_retry_idx on (next_eligible_utc,
+        prediction_id) WHERE resolution_status = 'RETRYABLE'::text.
+      - Row count: 0.
+      - The security of all 14 existing tables is unchanged, including predictions.
+      - 0011's columns were present before and after, identically.
+    - 0011's column types and checks were read by 0011's own post-check (run 36583531813). 0012's statements name
+      only public.prediction_resolution_status, as its migration test proves.
+    - The log's only connection string is the rehearsal's local socket. The secret appears only masked.
+    - NEVER dispatch apply-migration-0012 again: it is consumed, and the route refuses a second apply.
   - **MIGRATION 0011 APPLIED: T4 APPLY-MIGRATION-0011-ONCE CONSUMED, PASS (2026-09-29).**
     - Preconditions:
       - origin/main was b11a8e53 (fetch and ls-remote) at 14:32:28Z and again at 14:33:12Z;
@@ -1256,7 +1310,12 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=MIGRATION 0011 APPLIED (T4 PASS, run 36583531813, 2026-09-29):
+CURRENT_MILESTONE=MIGRATIONS 0011 AND 0012 APPLIED (T4 PASS: run 36583531813, then run 36586262979, 2026-09-29):
+  - predictions carries the tc-v1 stamp columns;
+  - prediction_resolution_status exists, empty and locked down;
+  - nothing writes either yet.
+  This record is local (chore/state-post-0011-0012-apply).
+  Before it: MIGRATION 0011 APPLIED (T4 PASS, run 36583531813, 2026-09-29):
   - main is b11a8e53, with #133, #134 and #135 merged;
   - predictions carries the four tc-v1 stamp columns and three CHECKs, and no row is stamped;
   - 0012 is merged, not applied.
@@ -1292,8 +1351,9 @@ CURRENT_MILESTONE=MIGRATION 0011 APPLIED (T4 PASS, run 36583531813, 2026-09-29):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-0011-apply (LOCAL, no upstream), from main b11a8e53: this record, unpublished. Its
-  worktree is lanes7/state-t4-0011 in the session scratchpad.
+CURRENT_BRANCH=chore/state-post-0011-0012-apply (LOCAL, no upstream), from main b11a8e53: two STATE-only commits, the
+  0011 record (5a0cc567) and this 0012 record, both unpublished. Its worktree is lanes7/state-t4-0011 in the session
+  scratchpad.
   - Merged, and staying on origin:
     - chore/state-post-132 (#133, 853f1eb2);
     - feat/migration-0011-provenance (#134, 500e5b83);
@@ -1462,7 +1522,8 @@ LAST_GREEN_SHA=b11a8e53 (main, PR #135: the 0012 route), after b207a1a6 (PR #134
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
-  - Run on this STATE-only record, on main b11a8e53 (which carries both migration routes), in a clean worktree.
+  - Run on this STATE-only record, on main b11a8e53 (which carries both migration routes), in a clean worktree. The
+    0012 record was re-verified the same way: PASS 3673.
   - Post-132: PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
   - Run on feat/migration-0012-resolution-status 6ccf60eb (main 30b40662 + 0011 + 0012), in a clean worktree.
   - 0011 alone, at 500e5b83: PASS 3221.
@@ -1639,6 +1700,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
   - the one-shot T3: 853f1eb2, 500e5b83 and 6ccf60eb pushed with no force, then merged by the owner (PRs #133,
     #134, #135; main b11a8e53);
   - the one-shot T4 APPLY-MIGRATION-0011-ONCE: run 36583531813, PASS. 0011 is live; never rerun it.
+  - the one-shot T4 APPLY-MIGRATION-0012-ONCE: run 36586262979, PASS. 0012 is live; never rerun it.
   Consumed since the post-129 record (7f59be5a):
   - T3-S129 (pushed 7f59be5a) and its merge by the owner (PR #130);
   - the one-shot T3 for N1 and N2 (pushed 0208978d and 87c01876) and their merges by the owner (PRs #131, #132);
@@ -1678,8 +1740,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
      - a and b are CONSUMED (#133, #134, #135);
      - c is moot, because both routes are merged and each dispatch rehearses on a real PostgreSQL;
      - d's 0011 half is CONSUMED (PASS);
-     - OPEN: the 0012 T4 (d), the writer (e: now unblocked, since 0011 is live), the resolver (f: after 0012) and
-       the methodology acceptance (g).
+     - the 0012 half of d is CONSUMED too (PASS, run 36586262979);
+     - OPEN: the writer (e: §2.6 Route B; unblocked) and the resolver (f: Route C; unblocked, since 0012 is live),
+       both prepared locally in the post-0012 continuation, and the methodology acceptance (g).
      a. T3: push chore/state-post-132 (this record, STATE.md only), then its PR.
      b. T3: push feat/migration-0011-provenance (500e5b83), then its PR and merge. Then the same for
         feat/migration-0012-resolution-status (6ccf60eb), which is stacked on it. Merging makes each dispatch-only
@@ -1939,7 +2002,7 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
   - item 1, remaining:
-    - the T4 APPLY-MIGRATION-0012-ONCE: one-shot, at the then-current main SHA. 0012 needs nothing from 0011;
+    - the T4 APPLY-MIGRATION-0012-ONCE: CONSUMED, PASS (run 36586262979);
     - the writer route decision (§2.6, Route B recommended), now unblocked by 0011 being live, followed by its guarded
       change, deploy T4, smoke and re-pin;
     - the resolver (Route C), after 0012 is live;
