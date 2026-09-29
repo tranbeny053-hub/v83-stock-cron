@@ -1,10 +1,20 @@
 # STATE
 
-Updated: 2026-09-29 (post-129). **RESOLVER_P1 is MERGED: PR #129, main 6fb3e8b4 (merged by the owner at
-2026-09-29T06:42:05Z; CI success). Its §2.6 publication T3 is CONSUMED and §2.6 is CLOSED for publication. The first
-scheduled resolver run on 6fb3e8b4 is NOT_YET_OBSERVED.** No deploy: hf and the running Space stay at 080f20a9.
-c7cb70f8 and fb765188 remain unaccepted and are on main as history only. This post-129 record is local
-(chore/state-post-129). The 2026-09-27 record below was published as PR #128 (main 6f5038d0).
+Updated: 2026-09-29 (post-132). **The owner MERGED three PRs:**
+- **#130,** the post-129 STATE record, at 12:49:38Z;
+- **#131,** N1, target contract v1, at 12:53:59Z;
+- **#132,** N2, resolver hardening, at 12:58:46Z.
+**Main is 30b40662, CI success; each merge tree equals the recomputed merge of its parents.** D4 (retry/quarantine
+policy rq-v1) and D5 (status table 0012) are owner-adopted.
+**Migrations 0011 and 0012, with their one-shot dispatch-only apply routes, are REBUILT on 30b40662 as local
+publication candidates (500e5b83, 6ccf60eb).** Both pass VERIFY in a clean worktree, and bounded Codex reviews found
+NONE. They are not pushed, merged or applied.
+The writer/resolver integration pack is decision-ready (OWNER_BOUNDARY 1). The first scheduled resolver run on
+6fb3e8b4 printed due=0; no run has happened on 30b40662 yet. No deploy, dispatch or DB action: hf and the running
+Space stay at 080f20a9. This record is local (chore/state-post-132).
+Earlier on 2026-09-29: **RESOLVER_P1 is MERGED: PR #129, main 6fb3e8b4 (merged by the owner at 2026-09-29T06:42:05Z;
+CI success). Its §2.6 publication T3 is CONSUMED and §2.6 is CLOSED for publication.** c7cb70f8 and fb765188 remain
+unaccepted and are on main as history only. The 2026-09-27 record below was published as PR #128 (main 6f5038d0).
 Previously (2026-09-27). R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
 are published (main 597e5c95, PR #123), the H2 record through the Q5 adjudication too (main 1dfe2d22, PR #124), and
 the T2 fail-closed hold with its record (main fa5c0da7, PR #125), the release identity (main 080f20a9, PR #126), and
@@ -96,6 +106,49 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **POST-132 (2026-09-29, continuous mode; everything local).**
+    - The owner merged three PRs: #130 (chore/state-post-129 → 133c68f6), #131 (N1 → 201bdd22) and #132 (N2 →
+      30b40662). Claude verified:
+      - each merge tree equals the recomputed merge of its parents;
+      - the N1, N2 and STATE content on main equals the pushed heads;
+      - CI success on 30b40662 (run 36571791856), 201bdd22 and 133c68f6, and on each PR head.
+    - Owner decisions in force:
+      - D1 = B;
+      - D2: provenance first;
+      - D3 = hybrid;
+      - D4 rq-v1 and D5 schema 0012: ADOPTED.
+    - The earlier local candidates 3433d306 (0011), bc92e873 (0012) and e11ded96 (their STATE record) are
+      superseded. They were built on pre-merge ancestry and never published, and are kept on local archive/*
+      branches.
+    - MIGRATION 0011, rebuilt: feat/migration-0011-provenance = main 30b40662 + 500e5b83. Its diff equals the reviewed
+      candidate's except:
+      - The file is renamed to migrations/0011_prediction_target_provenance.sql; the content (sha256 de83e973…) is
+        unchanged. N1's guard test_nothing_in_the_product_imports_the_target_contract substring-matches
+        "contract_v1" in scripts/*.py. That test was not narrowed.
+      - docs/TARGET_CONTRACT_V1.md now says 0011 is authored and not applied.
+      - The values test imports the merged contract_v1 directly.
+      VERIFY=PASS 3221. Codex: on 20fbd542 the delta was PROVEN, NONE; the one-file delta to 500e5b83 was PROVEN,
+      NONE.
+    - MIGRATION 0012, rebuilt: feat/migration-0012-resolution-status = 500e5b83 + 6ccf60eb. Its diff equals the
+      reviewed candidate's except:
+      - the renamed 0011 file in its rehearsal;
+      - its values test, which now requires N2's SKIP_REASONS and ERROR_REASONS to equal the reviewed keys.
+      VERIFY=PASS 3673. Codex: both deltas PROVEN, NONE.
+    - Neither package touches an evaluator-pinned, runtime-guarded or OOS-frozen file. No SQL has run on a real
+      PostgreSQL. The first real execution is each dispatch job's no-secret rehearsal, before its secret step.
+    - The scheduled resolver, read-only, never dispatched: the workflow is active. The latest run is still
+      36543287240 on 6fb3e8b4 (due=0); none had run on 30b40662 as of 13:19Z.
+    - The writer/resolver integration map (read-only) is summarized in OWNER_BOUNDARY 1. Its key facts, verified
+      in code:
+      - The Postgres writer's pinned INSERT (persistence/repository.py `_insert_prediction`) names 25 columns and
+        silently drops the four stamp fields. Persisting them needs either §2.6 (Route B: a conditional INSERT) or
+        an unpinned extraction.
+      - Stamping must follow `_prediction_row`: a byte-invariance test calls it twice.
+      - Stamping needs an injected clock: a whole-row invariance test compares two runs, and validate_v1's I3
+        depends on the current time.
+      - The resolver side (Route C) needs no pinned, guarded or frozen file.
+    - Not done: no push, merge, workflow enablement, dispatch, DB access, migration apply, deploy, production
+      request, live API or F3.
   - **RESOLVER_P1 IS MERGED (post-129, 2026-09-29): PR #129 -> main 6fb3e8b4, merged by the owner at 06:42:05Z (merge
     parents 6f5038d0 + 9de97e0d; its tree 82ed6bad equals the candidate tree recorded before the push). CI success on
     main 6fb3e8b4 (run 36532446966) and on the PR head 9de97e0d (run 36531824106).**
@@ -1153,9 +1206,15 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=RESOLVER_P1 MERGED (post-129): PR #129, main 6fb3e8b4; CI success; §2.6 CLOSED for publication; the
-  first scheduled resolver run on 6fb3e8b4 is NOT_YET_OBSERVED. This post-129 STATE record is local
-  (chore/state-post-129). Earlier on 2026-09-29: the local candidate 35545f4d (code PASS) and its STATE record 9de97e0d;
+CURRENT_MILESTONE=POST-132 (2026-09-29):
+  - PRs #130, #131 and #132 MERGED (main 30b40662, CI success);
+  - D4 rq-v1 and D5 0012 ADOPTED;
+  - migrations 0011 (500e5b83) and 0012 (6ccf60eb) REBUILT on 30b40662 as local publication candidates, verified
+    and reviewed, not pushed or applied;
+  - the writer/resolver integration pack is decision-ready.
+  This record is local (chore/state-post-132).
+  Before it: RESOLVER_P1 MERGED (post-129): PR #129, main 6fb3e8b4; CI success; §2.6 CLOSED for publication. Its
+  STATE record merged as PR #130. Earlier on 2026-09-29: the local candidate 35545f4d (code PASS) and its STATE record 9de97e0d;
   c7cb70f8 and fb765188 stay unaccepted.
   Previous milestone, 2026-09-27: H2 HOLD VERIFIED LIVE: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.
   The CONTROLLED_SMOKE
@@ -1178,8 +1237,18 @@ CURRENT_MILESTONE=RESOLVER_P1 MERGED (post-129): PR #129, main 6fb3e8b4; CI succ
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-129 (LOCAL, no upstream), from main 6fb3e8b4: this record, unpublished (OWNER_BOUNDARY
-  1). Its worktree is lanes4/state129 in the session scratchpad; a read-only checkout of 6fb3e8b4 is lanes4/read-6fb3e8b.
+CURRENT_BRANCH=chore/state-post-132 (LOCAL, no upstream), from main 30b40662: this record, unpublished (OWNER_BOUNDARY
+  1). Its worktree is lanes7/state132 in the session scratchpad.
+  - Local publication candidates, not pushed:
+    - feat/migration-0011-provenance at 500e5b83 (lanes7/m0011);
+    - feat/migration-0012-resolution-status at 6ccf60eb (lanes7/m0012), stacked on it.
+  - Superseded local candidates, never published:
+    - archive/migration-0011-on-6fb3e8b (3433d306);
+    - archive/migration-0012-on-3433d30 (bc92e873);
+    - archive/state-e11ded9-on-7f59be5 (e11ded96).
+  - Merged, and staying on origin: chore/state-post-129 (#130), feat/target-contract-v1 (#131) and
+    feat/resolver-hardening-b80 (#132).
+  - A read-only checkout of 30b40662 is lanes7/read-30b4066.
   feat/resolver-eligibility-phase1b (#129) is merged and stays on origin. feat/resolver-exactness-phase1a (local,
   517887fc) is contained in it.
   chore/state-post-127 was published and merged as PR #128 (main 6f5038d0); its worktree was lanes2/state127.
@@ -1200,7 +1269,10 @@ CURRENT_BRANCH=chore/state-post-129 (LOCAL, no upstream), from main 6fb3e8b4: th
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=6fb3e8b4 (main, PR #129: RESOLVER_P1). CI success (run 36532446966); its tree equals the locally verified
+LAST_GREEN_SHA=30b40662 (main, PR #132: N2), after 201bdd22 (PR #131: N1) and 133c68f6 (PR #130: the post-129 record).
+  CI success on each (runs 36571791856, 36571237239 and 36570739861). Each merge tree equals the recomputed merge of
+  its parents.
+  Before them: 6fb3e8b4 (main, PR #129: RESOLVER_P1). CI success (run 36532446966); its tree equals the locally verified
   9de97e0d tree (clean worktree VERIFY=PASS 2757). Before it: 6f5038d0 (main, PR #128) and 9a1db2dd (main, PR #127:
   the production re-pin and its STATE record).
   - This loop pushed release/prod-h2-hold at e4f601fa under the owner's push-only T3. The merge tree 16fa5289 was
@@ -1328,7 +1400,11 @@ LAST_GREEN_SHA=6fb3e8b4 (main, PR #129: RESOLVER_P1). CI success (run 3653244696
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 2757 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
+LAST_VERIFY=PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
+  - Run on feat/migration-0012-resolution-status 6ccf60eb (main 30b40662 + 0011 + 0012), in a clean worktree.
+  - 0011 alone, at 500e5b83: PASS 3221.
+  - This STATE-only record (T0) is re-verified on its own commit, in a clean worktree, before it is reported.
+  - Post-129: PASS ruff ok | 2757 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
   - Run on the RESOLVER_P1 tree (9de97e0d, identical to main 6fb3e8b4) in a clean detached worktree. This post-129
     STATE-only record (T0) is re-verified on its own commit in a clean worktree before it is reported.
   - Previous: PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026-09-27 (local), run for the
@@ -1427,6 +1503,16 @@ LAST_VERIFY=PASS ruff ok | 2757 passed, 23 warnings | schemas+smoke ok | scanner
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - Post-132 (2026-09-29): Codex did bounded read-only reviews only:
+    - the rebuilt 0011, 20fbd542: delta PROVEN, NONE;
+    - the rebuilt 0012, 6ccf60eb, together with the one-file 0011 delta to 500e5b83: both PROVEN, NONE.
+  - Earlier today:
+    - N1 646206fe: M1, repaired in 0208978d;
+    - N2 87c01876: NONE;
+    - 3433d306: NONE;
+    - bc92e873: NONE.
+  - Claude subagents implemented under Claude-written specs, and a read-only Plan lane mapped the integration. The
+    task files are in the session scratchpad (p1/), not in .work/.
   - Post-129 (2026-09-29): this record used no Codex. The read-only Phase-1 prep used two read-only Claude lanes, the
     owner-permitted maximum.
   - RESOLVER_P1 (2026-09-29) used Codex for code and test edits under Claude-written specs; Claude owned the design,
@@ -1486,7 +1572,14 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 9de97e0d record (post-129):
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-129 record (7f59be5a):
+  - T3-S129 (pushed 7f59be5a) and its merge by the owner (PR #130);
+  - the one-shot T3 for N1 and N2 (pushed 0208978d and 87c01876) and their merges by the owner (PRs #131, #132);
+  - the local-only authoring and rehearsal authorization for 0011, then 0012 (candidates 3433d306 and bc92e873,
+    since superseded);
+  - the post-132 continuous-mode direction: rebuild on fresh main (500e5b83, 6ccf60eb), the read-only integration
+    map, bounded Codex reviews, no push.
+  Consumed since the 9de97e0d record (post-129):
   - the RESOLVER_P1 publication T3 (branch pushed by Claude; PR #129 opened and merged by the owner; main 6fb3e8b4);
   - the direction for this local post-129 STATE-only record and the read-only Phase-1 prep.
   Consumed since the 2026-09-27 record (RESOLVER_P1):
@@ -1512,9 +1605,39 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 9de97e0d record (post
   authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. T3 (owner authorizes): push chore/state-post-129 (this record, STATE.md only) to origin, never hf, then a PR and
-     its merge. Claude's `gh pr create` was refused by the auto-mode classifier on 2026-09-29, so the owner opens and
-     merges the PR, unless a permission rule allows it.
+  1. OWNER DECISIONS AND T3s, in this order. Claude's `gh pr create` is refused by the auto-mode classifier, so the
+     owner opens and merges each PR:
+     a. T3: push chore/state-post-132 (this record, STATE.md only), then its PR.
+     b. T3: push feat/migration-0011-provenance (500e5b83), then its PR and merge. Then the same for
+        feat/migration-0012-resolution-status (6ccf60eb), which is stacked on it. Merging makes each dispatch-only
+        workflow dispatchable, so each merge is also its enablement T3.
+     c. Optional: a pull_request-triggered, no-secret rehearsal workflow for 0011 and 0012, like 0010's, so that the
+        SQL runs on a real PostgreSQL before merge. It is excluded under the "dispatch-only" ruling.
+     d. T4, one-shot each, never rerun:
+        - dispatch apply-migration-0011 at the merged main SHA with APPLY-MIGRATION-0011-ONCE, then verify;
+        - then apply-migration-0012 with APPLY-MIGRATION-0012-ONCE, then verify.
+     e. The writer (TC-D), after 0011 is live. Decide the route:
+        - Route B, recommended: a §2.6 change to the pinned `_insert_prediction` that names the four stamp columns
+          only for stamped rows, with write_pin and a STATE record in the same PR;
+        - or an unpinned extraction.
+        Then:
+        - a guarded analysis_service.py change that stamps after `_prediction_row`, with an injected clock;
+        - a new release identity and CURRENT_DELTA_PATHS;
+        - a deploy T4;
+        - a smoke; proving storage needs one owner-authorized DB read;
+        - the guard re-pin T3.
+     f. The resolver (Route C, no pinned file), after 0011 and 0012 are live:
+        - a new unpinned module with its own Postgres queries: the due scan widened to stamped CROSS_PROVIDER tc-v1
+          rows, status reads, and one batched upsert per run under rq-v1;
+        - a preflight with a visible fallback;
+        - a new RESOLVER_VERSION;
+        - any new reason key reviewed against 0012's pattern.
+        It needs no deploy.
+     g. Methodology acceptance:
+        - resolved CROSS_PROVIDER outcomes enter the evidence base;
+        - legacy stuck rows can be quarantined.
+        Both change the evidence permanently. Unstamped legacy CROSS_PROVIDER rows stay unresolvable.
+     The previous item 1 (the T3 for chore/state-post-129) is CONSUMED (PR #130).
      CONSUMED (post-129): the RESOLVER_P1 T3 (PR #129, main 6fb3e8b4). It published the candidate as merged history
      without squashing; c7cb70f8 and fb765188 remain unaccepted on main.
      Carried from the consumed chore/state-post-127 item (PR #128):
@@ -1742,10 +1865,13 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 9de97e0d record (post
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
-  - the T3 for chore/state-post-129 (this record);
-  - the owner's choice from the Phase-1 prep pack of 2026-09-29 (target/provenance contract; resolution status, fair
-    batching and quarantine), and a read-only look at the first scheduled resolver run on 6fb3e8b4 (no dispatch).
-    RESOLVER_P1 bears on H2's "waiting": new USER_REQUESTED outcomes now come only from exact-source rows;
+  - item 1, a-g:
+    - this record's T3;
+    - the migration branches' T3s, then the 0011 and 0012 T4s, one-shot each;
+    - then the writer route decision (§2.6) and the resolver, each under its own authorization;
+    - the methodology acceptance in g.
+    Resolution stays idle meanwhile: under the exact-venue filters no normal row is due. No new USER_REQUESTED
+    outcome accrues until the writer stamps reference_venue, which bears on H2's "waiting";
   - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
     the open points. The hold stays in force meanwhile.
   Before any rollback or later deploy, re-read this record's LOOP_STATE (the deploy sequence, its checks and the
