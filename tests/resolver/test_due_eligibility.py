@@ -99,6 +99,47 @@ def test_empty_filters_never_query(monkeypatch, postgres, rest, filters):
         assert repo.fetch_due_unresolved_predictions(NOW, 50, **filters) == []
 
 
+@pytest.fixture(params=["memory", "postgres", "rest"])
+def no_query_repository(request, monkeypatch, postgres, rest):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Invalid eligibility filter reached a query path")
+
+    class NoQueryPredictions(dict):
+        values = unexpected
+
+    memory = InMemoryPersistenceRepository()
+    monkeypatch.setattr(memory, "_predictions", NoQueryPredictions())
+    monkeypatch.setattr(postgres, "_direct_connection", unexpected)
+    monkeypatch.setattr(postgres, "_run_db", unexpected)
+    monkeypatch.setattr(rest, "_run_rest", unexpected)
+    monkeypatch.setattr(rest, "_request", unexpected)
+    monkeypatch.setattr(rest, "_fetch_existing_outcome_ids", unexpected)
+    monkeypatch.setattr(rest._fallback, "fetch_due_unresolved_predictions", unexpected)
+    return {"memory": memory, "postgres": postgres, "rest": rest}[request.param]
+
+
+@pytest.mark.parametrize("name,value", [
+    ("data_sources", "BINANCE_PUBLIC"), ("timeframes", "4H"),
+])
+@pytest.mark.parametrize("other_filter", [None, ()])
+def test_bare_string_filters_never_query(no_query_repository, name, value, other_filter):
+    filters = {"data_sources": other_filter, "timeframes": other_filter, name: value}
+    with pytest.raises(TypeError, match=f"{name} must be a collection of strings"):
+        no_query_repository.fetch_due_unresolved_predictions(NOW, 50, **filters)
+
+
+@pytest.mark.parametrize("name", ["data_sources", "timeframes"])
+@pytest.mark.parametrize("value", [
+    'BINANCE_PUBLIC","OKX_PUBLIC', "BINANCE_PUBLIC,OKX_PUBLIC", " OKX_PUBLIC",
+    "OKX PUBLIC", "", 1, None, r"a\b", "(x)",
+])
+@pytest.mark.parametrize("other_filter", [None, ()])
+def test_invalid_filter_values_never_query(no_query_repository, name, value, other_filter):
+    filters = {"data_sources": other_filter, "timeframes": other_filter, name: (value,)}
+    with pytest.raises(ValueError, match=f"{name} values must match"):
+        no_query_repository.fetch_due_unresolved_predictions(NOW, 50, **filters)
+
+
 class RecordingCursor:
     def __init__(self):
         self.calls = []

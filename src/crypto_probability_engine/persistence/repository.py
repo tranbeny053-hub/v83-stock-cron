@@ -83,7 +83,8 @@ class PersistenceRepository(Protocol):
         timeframes: Collection[str] | None = None,
     ) -> list[dict]:
         """Fetch due unresolved live rows; None is unfiltered, empty returns [] without a query.
-        Match non-NULL sources/timeframes exactly (case/space preserved) before ordering/limit."""
+        Match non-NULL sources/timeframes exactly (case/space preserved) before ordering/limit.
+        Values must match [A-Za-z0-9_]+ (else ValueError); a bare string is a TypeError."""
 
     def fetch_latest_oos_occasion(
         self, normalized_symbol: str, timeframe: str
@@ -333,6 +334,8 @@ class InMemoryPersistenceRepository:
         data_sources: Collection[str] | None = None,
         timeframes: Collection[str] | None = None,
     ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
         if (data_sources is not None and not data_sources) or (
             timeframes is not None and not timeframes
         ):
@@ -1059,6 +1062,8 @@ class SupabasePersistenceRepository:
         data_sources: Collection[str] | None = None,
         timeframes: Collection[str] | None = None,
     ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
         if (data_sources is not None and not data_sources) or (
             timeframes is not None and not timeframes
         ):
@@ -1795,6 +1800,8 @@ class SupabaseRestRepository:
         data_sources: Collection[str] | None = None,
         timeframes: Collection[str] | None = None,
     ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
         if (data_sources is not None and not data_sources) or (
             timeframes is not None and not timeframes
         ):
@@ -2983,6 +2990,21 @@ def _rest_returned_inserted_snapshot(value: Any) -> bool:
         and isinstance(value[0], Mapping)
         and value[0].get("snapshot_hash")
     )
+
+
+_DUE_FILTER_VALUE = re.compile(r"[A-Za-z0-9_]+")
+
+
+def _checked_due_filter(name: str, values: Collection[str] | None) -> Collection[str] | None:
+    """Return ``values`` unchanged, or refuse values that cannot be matched exactly everywhere."""
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes)):
+        raise TypeError(f"{name} must be a collection of strings, not a single string")
+    for value in values:
+        if not isinstance(value, str) or _DUE_FILTER_VALUE.fullmatch(value) is None:
+            raise ValueError(f"{name} values must match [A-Za-z0-9_]+")
+    return values
 
 
 def _execute_due_prediction_query(
