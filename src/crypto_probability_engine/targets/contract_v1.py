@@ -285,11 +285,11 @@ def _violations(row: Mapping[str, Any]) -> list[str]:
         found.append(NOT_LIVE_DATA)
     if not (_text(row.get("normalized_symbol")) or "").strip():
         found.append(NORMALIZED_SYMBOL_INVALID)
-    price = _finite_float(row.get("reference_price"))
-    if price is None or price <= 0.0:
+    price = _finite_number(row.get("reference_price"))
+    if price is None or price <= 0:
         found.append(REFERENCE_PRICE_INVALID)
-    band = _finite_float(row.get("decision_band_frac"))
-    if band is None or band < 0.0:
+    band = _finite_number(row.get("decision_band_frac"))
+    if band is None or band < 0:
         found.append(BAND_INVALID)
 
     timeframe = _text(row.get("timeframe"))
@@ -330,11 +330,11 @@ def _violations(row: Mapping[str, Any]) -> list[str]:
     if horizon_end is not None and issued is not None and horizon_end <= issued:
         found.append(I3_NO_REMAINING_DURATION)
 
-    values = [_finite_float(row.get(key)) for key in PROBABILITY_FIELDS]
-    probabilities = [value for value in values if value is not None and 0.0 <= value <= 1.0]
+    values = [_finite_number(row.get(key)) for key in PROBABILITY_FIELDS]
+    probabilities = [value for value in values if value is not None and 0 <= value <= 1]
     if len(probabilities) != len(values):
         found.append(I5_PROBABILITY_INVALID)
-    elif abs(math.fsum(probabilities) - 1.0) > PROBABILITY_SUM_TOLERANCE:
+    elif abs(math.fsum(float(value) for value in probabilities) - 1.0) > PROBABILITY_SUM_TOLERANCE:
         found.append(I5_PROBABILITY_SUM)
 
     venue = _text(row.get("reference_venue"))
@@ -369,14 +369,20 @@ def _strict_int(value: object) -> int | None:
     return value
 
 
-def _finite_float(value: object) -> float | None:
+def _finite_number(value: object) -> int | float | Decimal | None:
+    """Return a finite int, float or Decimal unchanged, else None (bool and strings are refused).
+
+    The value keeps its own type, so bounds are checked exactly: converting a Decimal to float first
+    would round 1.00000000000000000001 down to 1.0 and -1E-400 up to -0.0 and let them through.
+    """
+
     if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
         return None
-    try:
-        number = float(value)
-    except (ArithmeticError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return value
 
 
 def _parse_utc(value: object) -> datetime | None:

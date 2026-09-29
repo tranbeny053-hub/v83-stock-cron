@@ -229,6 +229,39 @@ def test_database_shaped_rows_validate_like_writer_rows() -> None:
     assert tc.validate_v1(as_datetimes) == ()
 
 
+@pytest.mark.parametrize(
+    ("overrides", "code"),
+    [
+        (
+            {
+                "p_up_frac": Decimal("1.00000000000000000001"),
+                "p_down_frac": Decimal("0"),
+                "p_timeout_frac": Decimal("0"),
+            },
+            tc.I5_PROBABILITY_INVALID,
+        ),
+        (
+            {
+                "p_up_frac": Decimal("-1E-400"),
+                "p_down_frac": Decimal("0.5"),
+                "p_timeout_frac": Decimal("0.5"),
+            },
+            tc.I5_PROBABILITY_INVALID,
+        ),
+        ({"p_up_frac": Decimal("NaN")}, tc.I5_PROBABILITY_INVALID),
+        ({"decision_band_frac": Decimal("-1E-400")}, tc.BAND_INVALID),
+        ({"reference_price": Decimal("0E-10")}, tc.REFERENCE_PRICE_INVALID),
+        ({"reference_price": Decimal("NaN")}, tc.REFERENCE_PRICE_INVALID),
+    ],
+)
+def test_decimal_bounds_are_checked_exactly(overrides: dict, code: str) -> None:
+    # Postgres NUMERIC columns arrive as Decimal. Converting to float first would round these
+    # out-of-bounds values onto a bound (1.0 or -0.0) and let them through.
+    row = _row(**overrides)
+    assert code in tc.validate_v1(_candidate(row))
+    assert _stamp(row) == row
+
+
 def test_contract_and_timestamps_are_built_from_a_valid_row() -> None:
     row = _row("1H", data_source="CROSS_PROVIDER", cross_provider_state="COHERENT")
     stamped = _stamp(row, "okx")
