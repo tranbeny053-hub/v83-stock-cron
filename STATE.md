@@ -1,9 +1,10 @@
 # STATE
 
-Updated: 2026-09-29. **RESOLVER_P1 is a LOCAL candidate only** (feat/resolver-eligibility-phase1b: 35545f4d plus this
-STATE-only record; code PASS on 35545f4d; no live effect). c7cb70f8 and fb765188 are local unaccepted execution without
-prior explicit owner authorization. §2.6 publication closure is pending a future owner T3 that states the final what
-and why (RESOLVER_P1). The 2026-09-27 record below was published as PR #128 (main 6f5038d0).
+Updated: 2026-09-29 (post-129). **RESOLVER_P1 is MERGED: PR #129, main 6fb3e8b4 (merged by the owner at
+2026-09-29T06:42:05Z; CI success). Its §2.6 publication T3 is CONSUMED and §2.6 is CLOSED for publication. The first
+scheduled resolver run on 6fb3e8b4 is NOT_YET_OBSERVED.** No deploy: hf and the running Space stay at 080f20a9.
+c7cb70f8 and fb765188 remain unaccepted and are on main as history only. This post-129 record is local
+(chore/state-post-129). The 2026-09-27 record below was published as PR #128 (main 6f5038d0).
 Previously (2026-09-27). R4, the B lane, the NEXTGEN lane, D-1, NG-1 (closed), lane H1 and the H2 record through H2-G2
 are published (main 597e5c95, PR #123), the H2 record through the Q5 adjudication too (main 1dfe2d22, PR #124), and
 the T2 fail-closed hold with its record (main fa5c0da7, PR #125), the release identity (main 080f20a9, PR #126), and
@@ -95,14 +96,24 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
-  - **RESOLVER_P1 IS A LOCAL CANDIDATE ONLY (2026-09-29): feat/resolver-eligibility-phase1b, LOCAL, no upstream =
-    main 6f5038d0 + 517887fc + c7cb70f8 + fb765188 + 35545f4d + this STATE-only record. No live effect.**
+  - **RESOLVER_P1 IS MERGED (post-129, 2026-09-29): PR #129 -> main 6fb3e8b4, merged by the owner at 06:42:05Z (merge
+    parents 6f5038d0 + 9de97e0d; its tree 82ed6bad equals the candidate tree recorded before the push). CI success on
+    main 6fb3e8b4 (run 36532446966) and on the PR head 9de97e0d (run 36531824106).**
+    - The T3 (owner, 2026-09-29) is CONSUMED. Claude verified origin/main = 6f5038d0 at 06:22:38Z, recorded the
+      candidate tree and pushed the branch at 9de97e0d (no force). Claude's `gh pr create` was refused by the Claude
+      Code auto-mode classifier, so the owner opened PR #129 and merged it in the GitHub UI (a merge commit).
+    - §2.6 is CLOSED for publication: the T3 stated the final what and why (RESOLVER_P1).
+    - First scheduled resolver run on 6fb3e8b4: NOT_YET_OBSERVED. The latest scheduled run, 36510363045, ran on
+      6f5038d0 at 01:57:57Z; there was none on 6fb3e8b4 as of 06:50Z. Scheduled runs arrive every few hours, not hourly.
+    - No deploy, workflow dispatch, DB action or F3 access.
+  - Pre-merge record (2026-09-29, superseded above): RESOLVER_P1 was a local candidate, feat/resolver-eligibility-phase1b
+    = main 6f5038d0 + 517887fc + c7cb70f8 + fb765188 + 35545f4d + 9de97e0d (its STATE-only record).
     - 517887fc (P1-A) is owner-authorized local execution; its read-only closure audit returned LOCAL_MILESTONE_PASS.
     - c7cb70f8 and fb765188 are local unaccepted execution without prior explicit owner authorization. They are never
       to be marked authorized or PASS, retroactively or otherwise (owner ruling, 2026-09-29).
     - The owner later authorized keeping fb765188 only as an unaccepted candidate and prospectively authorized the
       repair that produced 35545f4d. Code PASS on 35545f4d (RESOLVER_P1).
-    - §2.6 publication closure is pending a future owner T3 that states the final what and why (OWNER_BOUNDARY 1).
+    - §2.6 publication closure was then pending a T3; that T3 is now consumed (above).
   - The chore/state-post-127 record below was published as PR #128 (main 6f5038d0).
   - **THE H2 HOLD IS VERIFIED LIVE: the CONTROLLED_SMOKE returned PASS_PROVEN (2026-09-27).**
     - Production: 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A. The canonical guard dispatch on main 9a1db2dd is HEALTHY
@@ -1142,9 +1153,10 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=RESOLVER_P1 LOCAL CANDIDATE (2026-09-29): 35545f4d plus this STATE-only record; code PASS (clean
-  VERIFY=PASS 2757; Codex read-only review: no findings); no live effect. c7cb70f8 and fb765188 stay unaccepted. §2.6
-  publication closure is pending a future owner T3 that states the final what and why.
+CURRENT_MILESTONE=RESOLVER_P1 MERGED (post-129): PR #129, main 6fb3e8b4; CI success; §2.6 CLOSED for publication; the
+  first scheduled resolver run on 6fb3e8b4 is NOT_YET_OBSERVED. This post-129 STATE record is local
+  (chore/state-post-129). Earlier on 2026-09-29: the local candidate 35545f4d (code PASS) and its STATE record 9de97e0d;
+  c7cb70f8 and fb765188 stay unaccepted.
   Previous milestone, 2026-09-27: H2 HOLD VERIFIED LIVE: production 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.
   The CONTROLLED_SMOKE
   returned PASS_PROVEN (the legacy 4H and 1H SKILL_DEMONSTRATED verdicts held; no contamination). The re-pin is MERGED
@@ -1166,9 +1178,10 @@ CURRENT_MILESTONE=RESOLVER_P1 LOCAL CANDIDATE (2026-09-29): 35545f4d plus this S
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/resolver-eligibility-phase1b (LOCAL, no upstream): 35545f4d plus this STATE-only record, from main
-  6f5038d0 (RESOLVER_P1; OWNER_BOUNDARY 1). Its worktree is lanes3/resolver-eligibility in the session scratchpad.
-  feat/resolver-exactness-phase1a (LOCAL, no upstream) is 517887fc.
+CURRENT_BRANCH=chore/state-post-129 (LOCAL, no upstream), from main 6fb3e8b4: this record, unpublished (OWNER_BOUNDARY
+  1). Its worktree is lanes4/state129 in the session scratchpad; a read-only checkout of 6fb3e8b4 is lanes4/read-6fb3e8b.
+  feat/resolver-eligibility-phase1b (#129) is merged and stays on origin. feat/resolver-exactness-phase1a (local,
+  517887fc) is contained in it.
   chore/state-post-127 was published and merged as PR #128 (main 6f5038d0); its worktree was lanes2/state127.
   release/prod-h2-hold (#127), prep/release-identity-h2-hold (#126) and feat/h2-failclosed-hold (#125) are merged and
   stay on origin.
@@ -1187,9 +1200,9 @@ CURRENT_BRANCH=feat/resolver-eligibility-phase1b (LOCAL, no upstream): 35545f4d 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=35545f4d (local RESOLVER_P1 candidate; clean detached worktree VERIFY=PASS 2757). This STATE-only record
-  is verified on its own commit before it is reported. Published main is 6f5038d0 (PR #128). Before it:
-  9a1db2dd (main, PR #127: the production re-pin and its STATE record).
+LAST_GREEN_SHA=6fb3e8b4 (main, PR #129: RESOLVER_P1). CI success (run 36532446966); its tree equals the locally verified
+  9de97e0d tree (clean worktree VERIFY=PASS 2757). Before it: 6f5038d0 (main, PR #128) and 9a1db2dd (main, PR #127:
+  the production re-pin and its STATE record).
   - This loop pushed release/prod-h2-hold at e4f601fa under the owner's push-only T3. The merge tree 16fa5289 was
     recorded before the push. #127 was merged from the owner's account at 2026-09-27T09:54:04Z.
   - Verified by this loop:
@@ -1316,8 +1329,8 @@ LAST_GREEN_SHA=35545f4d (local RESOLVER_P1 candidate; clean detached worktree VE
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 2757 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
-  - Run on the RESOLVER_P1 candidate 35545f4d in a clean detached worktree (lanes3/audit-35545f4). This STATE-only
-    record (T0) is re-verified on its own commit in a clean worktree before it is reported.
+  - Run on the RESOLVER_P1 tree (9de97e0d, identical to main 6fb3e8b4) in a clean detached worktree. This post-129
+    STATE-only record (T0) is re-verified on its own commit in a clean worktree before it is reported.
   - Previous: PASS ruff ok | 2470 passed | schemas+smoke ok | scanners 3/3 · 2026-09-27 (local), run for the
     chore/state-post-127 record (main 9a1db2dd plus that STATE.md change; T0) in worktree lanes2/state127.
   - Earlier, the same result for the re-pin on release/prod-h2-hold, in worktree lanes2/repin:
@@ -1414,6 +1427,8 @@ LAST_VERIFY=PASS ruff ok | 2757 passed, 23 warnings | schemas+smoke ok | scanner
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - Post-129 (2026-09-29): this record used no Codex. The read-only Phase-1 prep used two read-only Claude lanes, the
+    owner-permitted maximum.
   - RESOLVER_P1 (2026-09-29) used Codex for code and test edits under Claude-written specs; Claude owned the design,
     the dependency proofs and every diff review. 517887fc: 3 delegations (2 implementation, the first BLOCKED on a
     .work/ wording conflict in its spec; 1 read-only review). c7cb70f8 and fb765188 (unaccepted): 3 (implementation,
@@ -1471,13 +1486,16 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 2026-09-27 record (RESOLVER_P1):
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 9de97e0d record (post-129):
+  - the RESOLVER_P1 publication T3 (branch pushed by Claude; PR #129 opened and merged by the owner; main 6fb3e8b4);
+  - the direction for this local post-129 STATE-only record and the read-only Phase-1 prep.
+  Consumed since the 2026-09-27 record (RESOLVER_P1):
   - the T3 for chore/state-post-127 (PR #128, main 6f5038d0);
   - the local P1-A authorization (517887fc);
   - the local P1-RESOLVER-ELIGIBILITY-B-REPAIR authorization (35545f4d), which also kept fb765188 only as an
     unaccepted candidate. c7cb70f8 and fb765188 consumed no authorization: they were local unaccepted execution
     without prior explicit owner authorization;
-  - the direction for this local STATE-only record.
+  - the direction for the 9de97e0d STATE-only record.
   Consumed in the 2026-09-27 record (LOOP_STATE):
   - the re-pin T3 (#127, merged);
   - the canonical guard dispatch (run 36310977790, HEALTHY);
@@ -1494,13 +1512,11 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 2026-09-27 record (RE
   authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. T3 for RESOLVER_P1 (owner authorizes once; the authorization must state the final what and why, which closes
-     §2.6 for publication): push feat/resolver-eligibility-phase1b at this record's commit to origin, never hf; the
-     owner opens and merges the PR. From the next hourly resolve-outcomes run, production would write
-     resolver-v2a-exact-eligibility outcomes for USER_REQUESTED exact-source rows only. The T3 must accept or resolve
-     RESOLVER_P1's carried risks, and decide whether the unaccepted c7cb70f8 and fb765188 (whose commit messages
-     wrongly say "owner-authorized") are published as history or squashed or reworded first. No deploy, migration or
-     DB action.
+  1. T3 (owner authorizes): push chore/state-post-129 (this record, STATE.md only) to origin, never hf, then a PR and
+     its merge. Claude's `gh pr create` was refused by the auto-mode classifier on 2026-09-29, so the owner opens and
+     merges the PR, unless a permission rule allows it.
+     CONSUMED (post-129): the RESOLVER_P1 T3 (PR #129, main 6fb3e8b4). It published the candidate as merged history
+     without squashing; c7cb70f8 and fb765188 remain unaccepted on main.
      Carried from the consumed chore/state-post-127 item (PR #128):
      - The deployed hold's verification is COMPLETE: the re-pin is merged, the guard is HEALTHY and the smoke returned
        PASS_PROVEN.
@@ -1726,8 +1742,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the 2026-09-27 record (RE
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
-  - the RESOLVER_P1 T3, whose owner authorization must state the final what and why (§2.6 publication closure);
-    if published, new USER_REQUESTED outcomes come only from exact-source rows, which bears on H2's "waiting";
+  - the T3 for chore/state-post-129 (this record);
+  - the owner's choice from the Phase-1 prep pack of 2026-09-29 (target/provenance contract; resolution status, fair
+    batching and quarantine), and a read-only look at the first scheduled resolver run on 6fb3e8b4 (no dispatch).
+    RESOLVER_P1 bears on H2's "waiting": new USER_REQUESTED outcomes now come only from exact-source rows;
   - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
     the open points. The hold stays in force meanwhile.
   Before any rollback or later deploy, re-read this record's LOOP_STATE (the deploy sequence, its checks and the
@@ -2389,10 +2407,11 @@ V2_STATUS=distributional-v2 is on main as an unwired module (#102). It is NOT fr
   - Wiring needs §2.6 authorization.
   - Adopting the proper-score gate also needs per-row probabilities from persistence/repository.py, which is pinned.
   - Correction (lane C): with mu = 0, the up share is not 50/50. The shape tables fix it between 0.4794 and 0.5427.
-RESOLVER_P1=Resolver exactness and eligibility. LOCAL CANDIDATE ONLY; no live effect: nothing is pushed, merged or
-  deployed, and production still resolves outcomes with the v1 resolver from main. Branch
-  feat/resolver-eligibility-phase1b (LOCAL, no upstream) = main 6f5038d0 + 517887fc + c7cb70f8 + fb765188 +
-  35545f4d + this STATE-only record; feat/resolver-exactness-phase1a = 517887fc. Code files versus main (5):
+RESOLVER_P1=Resolver exactness and eligibility. MERGED: PR #129, main 6fb3e8b4 (merged by the owner at
+  2026-09-29T06:42:05Z; CI success). Its production effect begins with the first scheduled resolver run on 6fb3e8b4
+  (NOT_YET_OBSERVED at the post-129 record). No deploy: the Space still runs 080f20a9, and only the resolver uses the
+  due query. Merged history: main 6f5038d0 + 517887fc + c7cb70f8 + fb765188 + 35545f4d + 9de97e0d (merge 6fb3e8b4);
+  feat/resolver-exactness-phase1a = 517887fc. Code files versus 6f5038d0 (5):
   scripts/resolve_outcomes.py, src/crypto_probability_engine/persistence/repository.py,
   ops/section_5a_evaluator_pin.json, tests/resolver/test_resolve_outcomes.py, tests/resolver/test_due_eligibility.py.
   - History (owner ruling, 2026-09-29; never re-grade it):
@@ -2405,6 +2424,8 @@ RESOLVER_P1=Resolver exactness and eligibility. LOCAL CANDIDATE ONLY; no live ef
       repair that produced 35545f4d.
     - 35545f4d: the owner-authorized repair (P1-RESOLVER-ELIGIBILITY-B-REPAIR) and the only candidate for
       publication. Nothing on the branch is accepted before its T3.
+    - Published by the T3 as merged history (6fb3e8b4) without squashing: c7cb70f8 and fb765188 remain unaccepted on
+      main.
   - Owner authorizations, 2026-09-29, verbatim (session prefix omitted):
     - 517887fc: "Implement local-only `P1-RESOLVER-EXACTNESS-A` on `feat/resolver-exactness-phase1a`: only resolver
       script/tests; exact stored BINANCE_PUBLIC/OKX_PUBLIC only, ambiguous source=>0 provider calls/writes/resolved;
@@ -2421,8 +2442,9 @@ RESOLVER_P1=Resolver exactness and eligibility. LOCAL CANDIDATE ONLY; no live ef
     pin, requires explicit owner authorization that states what changed and why, and is recorded in STATE.md. Under
     §24 the evaluator is its import closure, which includes persistence/repository.py. The evaluator itself is
     consumed (SECTION_5A_RESULT) and is never rerun; its look-time pin stays reproducible from git history.
-    - STATUS: OPEN. §2.6 publication closure still requires a future owner T3 authorization that states the final
-      what and why.
+    - STATUS: CLOSED for publication (2026-09-29). The owner's T3 stated the final what and why, verbatim: "§2.6 what:
+      pinned due-query gains explicit pre-LIMIT origin/source/timeframe eligibility and regenerated pin; why:
+      non-resolvable rows must not starve resolvable rows. I accept the recorded carried risks."
     - What changed in the pinned closure (candidate 35545f4d versus main): persistence/repository.py only, and there
       only the due query: fetch_due_unresolved_predictions (protocol, in-memory, Postgres, REST),
       _execute_due_prediction_query, _fetch_due_prediction_rows and the helper _checked_due_filter. It gains
@@ -2451,16 +2473,21 @@ RESOLVER_P1=Resolver exactness and eligibility. LOCAL CANDIDATE ONLY; no live ef
   - CODE PASS on 35545f4d (local): clean detached worktree VERIFY=PASS ruff ok | 2757 passed, 23 warnings |
     schemas+smoke ok | scanners 3/3 | 35545f4; Codex read-only review of the repair: no findings. This verifies the
     candidate's code only; it neither accepts nor authorizes the branch's history.
-  - Carried risks the publishing T3 must accept or resolve: CROSS_PROVIDER USER_REQUESTED rows stay unresolved
+  - Carried risks, accepted by the owner in the publication T3: CROSS_PROVIDER USER_REQUESTED rows stay unresolved
     (recoverable later under an approved venue rule), so calibration and the held H2 gate would grow only from
     single-venue rows, pooling v1 with v2a outcomes; CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE rows would no
     longer be resolved (a future OOS collection must revisit the resolver's origin set; V1_QUANT_CONTRACT §5A.5
     describes the consumed frame); eligible rows whose terminal bar never appears are skipped every run (phase-B
     quarantine is the structural fix); a single-venue outage fails the hourly run until the venue returns; live
     Binance/OKX windowed-endpoint behaviour was not probed (every failure mode skips or fails; none writes).
-  - Publication needs its own T3, authorized by the owner with the final what and why (OWNER_BOUNDARY 1). The
-    resolver job runs main, so a merge changes production outcomes from the next hourly run. No deploy, migration or
-    DB action.
+  - Publication T3, CONSUMED (owner, 2026-09-29, verbatim): "I authorize one-shot T3 publication of
+    `feat/resolver-eligibility-phase1b` only, candidate `9de97e0d8711f6c01c400af88ef5b526d628c34c`. First verify
+    `origin/main` is still `6f5038d0491ff5fb64ae0759a5ad512daba16720`; mismatch => STOP. §2.6 what: pinned due-query
+    gains explicit pre-LIMIT origin/source/timeframe eligibility and regenerated pin; why: non-resolvable rows must not
+    starve resolvable rows. I accept the recorded carried risks. Push/PR/merge only; no workflow dispatch, DB action,
+    HF deploy or F3 access." Executed: origin/main verified at 6f5038d0 (06:22:38Z); candidate tree 82ed6bad recorded;
+    branch pushed at 9de97e0d; Claude's PR creation was refused by the auto-mode classifier; the owner opened PR #129
+    and merged it (merge commit 6fb3e8b4, tree 82ed6bad). No deploy, migration, DB action or dispatch.
 BATCH_0010=MERGED as PR #107 (merge 2b7edf0b), then APPLIED ONCE on 2026-09-17 by the owner-authorized T4.
   The T4 is recorded below. Lane B had four commits:
   - e5677406: the route;
