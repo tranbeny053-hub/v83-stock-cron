@@ -24,7 +24,10 @@ STATS_KEYS = (
     "scanned", "selected", "fresh", "stuck",
     "skip_ineligible", "skip_invalid_target", "skip_not_due", "skip_terminal_bar_missing",
     "error_row_unreadable", "error_provider_rejected", "error_provider_unavailable",
-    "error_candle_invalid", "error_save_not_ok", "error_save_exception", "error_other",
+    "error_candle_invalid", "error_save_not_ok", "error_save_exception",
+    "error_outcome_conflict", "error_other",
+    "status_written", "status_quarantined", "status_resolved", "status_outage_suppressed",
+    "status_error",
 )
 
 
@@ -394,7 +397,7 @@ def test_outcome_row_contains_resolver_version_and_no_prediction_update_fields()
     )
 
     assert row is not None
-    assert row["resolver_version"] == "resolver-v2a-exact-eligibility"
+    assert row["resolver_version"] == "resolver-v2b-tc-v1-rq-v1"
     assert row["resolver_version"] == resolve_outcomes.RESOLVER_VERSION
     assert RESOLVER_VERSION == "resolver-v1-wave4b2"
     assert "calibration_status" not in row

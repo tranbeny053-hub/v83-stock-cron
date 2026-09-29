@@ -17,6 +17,7 @@ import pytest
 
 from crypto_probability_engine.adapters.types import MarketCandle, ProviderError
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.resolution.status_store import DueScan
 from scripts import resolve_outcomes
 
 NOW = datetime(2026, 6, 8, 0, 5, tzinfo=UTC)
@@ -30,12 +31,20 @@ FILTERS = {
 REASON_KEYS = (
     "skip_ineligible", "skip_invalid_target", "skip_not_due", "skip_terminal_bar_missing",
     "error_row_unreadable", "error_provider_rejected", "error_provider_unavailable",
-    "error_candle_invalid", "error_save_not_ok", "error_save_exception", "error_other",
+    "error_candle_invalid", "error_save_not_ok", "error_save_exception",
+    "error_outcome_conflict", "error_other",
 )
-DETAIL_KEYS = ("scanned", "selected", "fresh", "stuck", "deferred", "budget_s", *REASON_KEYS)
+STATUS_COUNT_KEYS = (
+    "status_written", "status_quarantined", "status_resolved", "status_outage_suppressed",
+    "status_error",
+)
+DETAIL_KEYS = (
+    "scanned", "selected", "fresh", "stuck", "deferred", "budget_s", *REASON_KEYS,
+    "route", "status_store", *STATUS_COUNT_KEYS,
+)
 STATS_KEYS = (
     "due", "resolved", "skipped", "failed", "deferred", "scanned", "selected", "fresh", "stuck",
-    *REASON_KEYS,
+    *REASON_KEYS, *STATUS_COUNT_KEYS,
 )
 
 
@@ -151,7 +160,7 @@ def _ids(rows):
     return [row["prediction_id"] for row in rows]
 
 
-def _resolve(repo, *, limit=10, now=NOW, fetch=None, clock=None, budget=600):
+def _resolve(repo, *, limit=10, now=NOW, fetch=None, clock=None, budget=600, status_store=None):
     return resolve_outcomes.resolve_due_predictions(
         repo,
         settings=Settings(),
@@ -160,7 +169,24 @@ def _resolve(repo, *, limit=10, now=NOW, fetch=None, clock=None, budget=600):
         fetch_candles=fetch if fetch is not None else Fetch(),
         time_budget_seconds=budget,
         monotonic=clock if clock is not None else Clock(),
+        status_store=status_store,
     )
+
+
+class NoOutcomeStore:
+    """A Route C store that serves the rows given and never finds the saved outcome."""
+
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    def fetch_due(self, now_utc, limit, **filters):
+        return DueScan(rows=tuple(self.rows[:limit]), statuses={})
+
+    def read_outcome(self, prediction_id):
+        return None
+
+    def write_batch(self, writes):
+        raise AssertionError("an outcome conflict writes no status")
 
 
 def _expected(*, scanned, fresh, stuck, selected, resolved=0, deferred=0, **reasons):
@@ -434,6 +460,8 @@ REASON_CASES = [
     ("error_candle_invalid", {}, _wrong_duration, "OK", True),
     ("error_save_not_ok", {}, None, "UNAVAILABLE", True),
     ("error_save_exception", {}, None, RuntimeError("synthetic save failure"), True),
+    # Route C only: the save returned OK, but reading the outcome back finds no row.
+    ("error_outcome_conflict", {}, None, "OK", True),
     ("error_other", {}, _raising(RuntimeError("synthetic unexpected failure")), "OK", True),
     ("error_other", {}, lambda window: (object(),), "OK", True),  # not a candle at all
     # A ValueError from the provider side is not one of the resolver's own candle checks.
@@ -451,15 +479,17 @@ def test_each_unresolved_row_is_counted_under_exactly_one_reason(
 ) -> None:
     repo = Repository([_row("r", **overrides)], status=status)
     fetch = Fetch(behaviour=behaviour)
+    conflict = reason == "error_outcome_conflict"
+    store = NoOutcomeStore(repo.rows) if conflict else None
 
-    stats = _resolve(repo, fetch=fetch)
+    stats = _resolve(repo, fetch=fetch, status_store=store)
 
     stuck = 1 if overrides.get("horizon_end_utc") == "not-a-time" else 0
     assert stats == _expected(
         scanned=1, fresh=1 - stuck, stuck=stuck, selected=1, **{reason: 1}
     )
     assert fetch.calls == (["r"] if fetched else [])
-    assert repo.saved == (["r"] if reason.startswith("error_save") else [])
+    assert repo.saved == (["r"] if reason.startswith("error_save") or conflict else [])
     _assert_consistent(stats)
 
 
@@ -553,7 +583,10 @@ def test_main_keeps_the_summary_line_and_adds_a_fixed_order_detail_line(
         "resolver_detail scanned=5 selected=5 fresh=5 stuck=0 deferred=2 budget_s=250 "
         "skip_ineligible=0 skip_invalid_target=0 skip_not_due=0 skip_terminal_bar_missing=3 "
         "error_row_unreadable=0 error_provider_rejected=0 error_provider_unavailable=0 "
-        "error_candle_invalid=0 error_save_not_ok=0 error_save_exception=0 error_other=0",
+        "error_candle_invalid=0 error_save_not_ok=0 error_save_exception=0 "
+        "error_outcome_conflict=0 error_other=0 "
+        "route=legacy status_store=absent status_written=0 status_quarantined=0 "
+        "status_resolved=0 status_outage_suppressed=0 status_error=0",
     ]
     assert repo.closed
 
@@ -600,7 +633,7 @@ def test_the_detail_line_lists_every_key_in_order_and_no_key_contains_failed() -
     old_shape = {"due": 1, "resolved": 1, "skipped": 0, "failed": 0}
     assert {value for _, value in _pairs(
         resolve_outcomes.format_detail_line(old_shape, budget_s=9)
-    )} == {"0", "9"}
+    )} == {"0", "9", "legacy", "absent"}  # route= and status_store= default to the legacy path
 
 
 def test_main_database_failure_still_prints_only_its_single_line(monkeypatch, capsys) -> None:
@@ -669,7 +702,7 @@ GOLDEN_OUTCOME = {  # computed by the resolver as it was before fair selection a
     "max_favorable_frac": 0.07,
     "max_adverse_frac": -0.06,
     "candles_observed": 6,
-    "resolver_version": "resolver-v2a-exact-eligibility",
+    "resolver_version": "resolver-v2b-tc-v1-rq-v1",
     "data_source": "BINANCE_PUBLIC",
     "is_live_data": True,
 }
@@ -700,7 +733,7 @@ def test_outcome_row_values_are_unchanged() -> None:
     )
 
     assert row == GOLDEN_OUTCOME
-    assert resolve_outcomes.RESOLVER_VERSION == "resolver-v2a-exact-eligibility"
+    assert resolve_outcomes.RESOLVER_VERSION == "resolver-v2b-tc-v1-rq-v1"
 
 
 def test_a_run_writes_exactly_that_outcome_row() -> None:

@@ -37,6 +37,7 @@ RESOLVER_ERROR_REASONS = (
     "error_candle_invalid",
     "error_save_not_ok",
     "error_save_exception",
+    "error_outcome_conflict",
     "error_other",
 )
 

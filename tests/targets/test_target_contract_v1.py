@@ -656,7 +656,17 @@ def test_the_contract_imports_only_the_standard_library_and_config_defaults() ->
     ]
 
 
+# The explicit allowlist: the resolver (Route C, RC1) and its status store, which reads the stamp
+# columns. Nothing else under src/ or scripts/ may even name the contract.
+CONTRACT_IMPORTERS = (
+    "scripts/resolve_outcomes.py",
+    "src/crypto_probability_engine/resolution/status_store.py",
+)
+
+
 def test_nothing_in_the_product_imports_the_target_contract() -> None:
+    """Nothing but the allowlisted resolver files, and each of them really imports it."""
+
     importers = []
     for path in [*PACKAGE.rglob("*.py"), *(ROOT / "scripts").rglob("*.py")]:
         if path.parent == TARGETS:
@@ -664,7 +674,15 @@ def test_nothing_in_the_product_imports_the_target_contract() -> None:
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "crypto_probability_engine.targets" in text or "contract_v1" in text:
             importers.append(path.relative_to(ROOT).as_posix())
-    assert importers == []
+    assert sorted(importers) == sorted(CONTRACT_IMPORTERS)
+    for name in CONTRACT_IMPORTERS:
+        tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+        assert [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and node.module == "crypto_probability_engine.targets.contract_v1"
+        ], name
 
 
 def test_the_section_5a_evaluator_pin_still_verifies_without_the_contract() -> None:
