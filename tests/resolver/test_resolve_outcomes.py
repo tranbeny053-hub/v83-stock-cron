@@ -39,9 +39,13 @@ class RecordingRepository:
         self.predictions = predictions
         self.status = status
         self.saved = []
+        self.due_calls = []
 
-    def fetch_due_unresolved_predictions(self, now_utc, limit):
-        return self.predictions[:limit]
+    def fetch_due_unresolved_predictions(
+        self, now_utc, limit, *, data_sources=None, timeframes=None
+    ):
+        self.due_calls.append((now_utc, limit, data_sources, timeframes))
+        return self.predictions
 
     def save_prediction_outcome(self, row):
         self.saved.append(row)
@@ -200,7 +204,9 @@ def test_main_db_fetch_failure_is_visible_without_secret_leak(
         def repository_type(self) -> str:
             return "SUPABASE_POSTGRES"
 
-        def fetch_due_unresolved_predictions(self, now_utc, limit):  # noqa: ANN001
+        def fetch_due_unresolved_predictions(
+            self, now_utc, limit, *, data_sources=None, timeframes=None
+        ):
             raise RuntimeError("SUPABASE_POSTGRES due query failed or unavailable.")
 
     monkeypatch.setattr(
@@ -1011,3 +1017,45 @@ def _assert_binance_request(client, prediction):
             "provider": "binance",
         }
     ]
+
+
+def test_resolver_passes_exact_eligibility_filters() -> None:
+    repo = RecordingRepository([])
+    now = _dt("2026-06-08T00:05:00Z")
+    assert _resolve(repo, now_utc=now, limit=50) == {
+        "due": 0, "resolved": 0, "skipped": 0, "failed": 0,
+    }
+    assert repo.due_calls == [
+        (now, 50, ("BINANCE_PUBLIC", "OKX_PUBLIC"), ("15m", "1D", "1H", "1W", "4H"))
+    ]
+
+
+def test_resolver_eligible_row_is_not_starved_by_older_cross_provider_rows() -> None:
+    class SavingRepository(InMemoryPersistenceRepository):
+        def save_prediction_outcome(self, row):
+            super().save_prediction_outcome(row)
+            return "OK"
+
+    repo = SavingRepository()
+    for index in range(60):
+        repo.save_prediction({
+            **_prediction(prediction_id=f"cross-{index}"),
+            "data_source": "CROSS_PROVIDER",
+            "horizon_end_utc": "2026-06-07T00:00:00Z",
+        })
+    exact = _prediction(prediction_id="exact")
+    repo.save_prediction(exact)
+    calls = []
+
+    def fetch(window, settings):
+        calls.append(window)
+        return _terminal_candles(window, settings)
+
+    assert _resolve(repo, limit=50, fetch_candles=fetch) == {
+        "due": 1, "resolved": 1, "skipped": 0, "failed": 0,
+    }
+    assert len(calls) == 1
+    assert calls[0].data_source == "BINANCE_PUBLIC"
+    assert calls[0].terminal_close_utc == _dt(exact["horizon_end_utc"])
+    assert list(repo._prediction_outcomes) == ["exact"]
+    assert repo._prediction_outcomes["exact"]["prediction_id"] == "exact"

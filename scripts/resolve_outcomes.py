@@ -88,7 +88,12 @@ def resolve_due_predictions(
 
     settings = settings or Settings.from_env()
     now = _coerce_utc(now_utc or datetime.now(tz=UTC))
-    due_predictions = repository.fetch_due_unresolved_predictions(now, limit)
+    due_predictions = repository.fetch_due_unresolved_predictions(
+        now,
+        limit,
+        data_sources=tuple(EXACT_SOURCE_PROVIDERS),
+        timeframes=tuple(sorted(EXACT_TIMEFRAMES)),
+    )
     stats = {"due": len(due_predictions), "resolved": 0, "skipped": 0, "failed": 0}
     candle_fetcher = fetch_candles or fetch_public_candles
     for prediction in due_predictions:
