@@ -7,7 +7,7 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
@@ -74,8 +74,19 @@ class PersistenceRepository(Protocol):
     ) -> DerivativesSnapshotWriteStatus:
         """Persist immutable prediction-linked derivatives evidence."""
 
-    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
-        """Fetch due live predictions with no immutable outcome row yet."""
+    def fetch_due_unresolved_predictions(
+        self,
+        now_utc: Any,
+        limit: int,
+        *,
+        data_sources: Collection[str] | None = None,
+        timeframes: Collection[str] | None = None,
+        prediction_origins: Collection[str] | None = None,
+    ) -> list[dict]:
+        """Fetch due unresolved live rows; None is unfiltered, empty returns [] without a query.
+        Match non-NULL sources/timeframes exactly (case/space preserved) before ordering/limit.
+        prediction_origins matches supported origins exactly.
+        Values must match [A-Za-z0-9_]+ (else ValueError); a bare string is a TypeError."""
 
     def fetch_latest_oos_occasion(
         self, normalized_symbol: str, timeframe: str
@@ -317,13 +328,45 @@ class InMemoryPersistenceRepository:
         row = self._derivatives_snapshots.get(prediction_id)
         return deepcopy(row) if row is not None else None
 
-    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+    def fetch_due_unresolved_predictions(
+        self,
+        now_utc: Any,
+        limit: int,
+        *,
+        data_sources: Collection[str] | None = None,
+        timeframes: Collection[str] | None = None,
+        prediction_origins: Collection[str] | None = None,
+    ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
+        prediction_origins = _checked_due_filter("prediction_origins", prediction_origins)
+        if (
+            (data_sources is not None and not data_sources)
+            or (timeframes is not None and not timeframes)
+            or (prediction_origins is not None and not prediction_origins)
+        ):
+            return []
         due = [
             dict(row)
             for row in self._predictions.values()
             if row.get("is_live_data") is True
             and str(row.get("prediction_id", "")) not in self._prediction_outcomes
             and _timestamp_before(row.get("horizon_end_utc"), now_utc)
+            and (
+                data_sources is None
+                or (row.get("data_source") is not None and row["data_source"] in data_sources)
+            )
+            and (
+                timeframes is None
+                or (row.get("timeframe") is not None and row["timeframe"] in timeframes)
+            )
+            and (
+                prediction_origins is None
+                or (
+                    row.get("prediction_origin") is not None
+                    and row["prediction_origin"] in prediction_origins
+                )
+            )
         ]
         due.sort(key=lambda row: str(row.get("horizon_end_utc", "")))
         return due[: max(0, int(limit))]
@@ -1024,7 +1067,24 @@ class SupabasePersistenceRepository:
             return DerivativesSnapshotWriteStatus.UNAVAILABLE
         return result
 
-    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+    def fetch_due_unresolved_predictions(
+        self,
+        now_utc: Any,
+        limit: int,
+        *,
+        data_sources: Collection[str] | None = None,
+        timeframes: Collection[str] | None = None,
+        prediction_origins: Collection[str] | None = None,
+    ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
+        prediction_origins = _checked_due_filter("prediction_origins", prediction_origins)
+        if (
+            (data_sources is not None and not data_sources)
+            or (timeframes is not None and not timeframes)
+            or (prediction_origins is not None and not prediction_origins)
+        ):
+            return []
         if not self.maybe_can_attempt():
             raise RuntimeError(
                 "SUPABASE_POSTGRES due query failed: RuntimeError [circuit] CircuitOpen"
@@ -1036,7 +1096,14 @@ class SupabasePersistenceRepository:
                     phase = "set_timeout"
                     _set_local_statement_timeout(cursor, self._statement_timeout_ms)
                     phase = "query"
-                    _execute_due_prediction_query(cursor, now_utc, max(0, int(limit)))
+                    _execute_due_prediction_query(
+                        cursor,
+                        now_utc,
+                        max(0, int(limit)),
+                        data_sources=data_sources,
+                        timeframes=timeframes,
+                        prediction_origins=prediction_origins,
+                    )
                     phase = "fetch"
                     rows = cursor.fetchall()
                     phase = "convert"
@@ -1743,7 +1810,24 @@ class SupabaseRestRepository:
             return DerivativesSnapshotWriteStatus.CONFLICT
         return DerivativesSnapshotWriteStatus.UNAVAILABLE
 
-    def fetch_due_unresolved_predictions(self, now_utc: Any, limit: int) -> list[dict]:
+    def fetch_due_unresolved_predictions(
+        self,
+        now_utc: Any,
+        limit: int,
+        *,
+        data_sources: Collection[str] | None = None,
+        timeframes: Collection[str] | None = None,
+        prediction_origins: Collection[str] | None = None,
+    ) -> list[dict]:
+        data_sources = _checked_due_filter("data_sources", data_sources)
+        timeframes = _checked_due_filter("timeframes", timeframes)
+        prediction_origins = _checked_due_filter("prediction_origins", prediction_origins)
+        if (
+            (data_sources is not None and not data_sources)
+            or (timeframes is not None and not timeframes)
+            or (prediction_origins is not None and not prediction_origins)
+        ):
+            return []
         status, rows = self._run_rest(
             lambda: self._request(
                 "GET",
@@ -1761,11 +1845,26 @@ class SupabaseRestRepository:
                     "is_live_data": "eq.true",
                     "order": "horizon_end_utc.asc",
                     "limit": str(limit),
+                    **(
+                        {"data_source": f"in.({_postgrest_csv(list(data_sources))})"}
+                        if data_sources is not None else {}
+                    ),
+                    **(
+                        {"timeframe": f"in.({_postgrest_csv(list(timeframes))})"}
+                        if timeframes is not None else {}
+                    ),
+                    **(
+                        {"prediction_origin": f"in.({_postgrest_csv(list(prediction_origins))})"}
+                        if prediction_origins is not None else {}
+                    ),
                 },
             )
         )
         if status == "UNAVAILABLE" or not isinstance(rows, list):
-            return self._fallback.fetch_due_unresolved_predictions(now_utc, limit)
+            return self._fallback.fetch_due_unresolved_predictions(
+                now_utc, limit, data_sources=data_sources, timeframes=timeframes,
+                prediction_origins=prediction_origins,
+            )
         prediction_ids = [str(row.get("prediction_id", "")) for row in rows]
         existing = self._fetch_existing_outcome_ids(prediction_ids)
         return [dict(row) for row in rows if str(row.get("prediction_id", "")) not in existing]
@@ -2920,9 +3019,45 @@ def _rest_returned_inserted_snapshot(value: Any) -> bool:
     )
 
 
-def _execute_due_prediction_query(cursor, now_utc: Any, limit: int) -> None:
+_DUE_FILTER_VALUE = re.compile(r"[A-Za-z0-9_]+")
+
+
+def _checked_due_filter(name: str, values: Collection[str] | None) -> Collection[str] | None:
+    """Return ``values`` unchanged, or refuse values that cannot be matched exactly everywhere."""
+    if values is None:
+        return None
+    if isinstance(values, (str, bytes)):
+        raise TypeError(f"{name} must be a collection of strings, not a single string")
+    for value in values:
+        if not isinstance(value, str) or _DUE_FILTER_VALUE.fullmatch(value) is None:
+            raise ValueError(f"{name} values must match [A-Za-z0-9_]+")
+        if name == "prediction_origins":
+            validate_prediction_origin(value)
+    return values
+
+
+def _execute_due_prediction_query(
+    cursor,
+    now_utc: Any,
+    limit: int,
+    *,
+    data_sources: Collection[str] | None = None,
+    timeframes: Collection[str] | None = None,
+    prediction_origins: Collection[str] | None = None,
+) -> None:
+    filters = ""
+    params = {"now_utc": now_utc, "limit": limit}
+    if data_sources is not None:
+        filters += "\n          AND p.data_source = ANY(%(data_sources)s)"
+        params["data_sources"] = list(data_sources)
+    if timeframes is not None:
+        filters += "\n          AND p.timeframe = ANY(%(timeframes)s)"
+        params["timeframes"] = list(timeframes)
+    if prediction_origins is not None:
+        filters += "\n          AND p.prediction_origin = ANY(%(prediction_origins)s)"
+        params["prediction_origins"] = list(prediction_origins)
     cursor.execute(
-        """
+        f"""
         SELECT p.prediction_id, p.run_id, p.operator_id, p.symbol, p.normalized_symbol,
                p.timeframe, p.horizon_bars, p.predicted_at_utc, p.reference_close_utc,
                p.reference_price, p.horizon_end_utc, p.p_up_frac, p.p_down_frac,
@@ -2935,16 +3070,27 @@ def _execute_due_prediction_query(cursor, now_utc: Any, limit: int) -> None:
           ON o.prediction_id = p.prediction_id
         WHERE o.prediction_id IS NULL
           AND p.is_live_data = true
-          AND p.horizon_end_utc < %(now_utc)s
+          AND p.horizon_end_utc < %(now_utc)s{filters}
         ORDER BY p.horizon_end_utc ASC
         LIMIT %(limit)s
         """,
-        {"now_utc": now_utc, "limit": limit},
+        params,
     )
 
 
-def _fetch_due_prediction_rows(cursor, now_utc: Any, limit: int):
-    _execute_due_prediction_query(cursor, now_utc, limit)
+def _fetch_due_prediction_rows(
+    cursor,
+    now_utc: Any,
+    limit: int,
+    *,
+    data_sources: Collection[str] | None = None,
+    timeframes: Collection[str] | None = None,
+    prediction_origins: Collection[str] | None = None,
+):
+    _execute_due_prediction_query(
+        cursor, now_utc, limit, data_sources=data_sources, timeframes=timeframes,
+        prediction_origins=prediction_origins,
+    )
     return cursor.fetchall()
 
 
