@@ -124,6 +124,35 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **PHASE-1 PREPARATION AFTER 0012 (2026-09-29; local only; no T3, T4, pin, deploy, production or F3 boundary
+    crossed).**
+    - RC1, the Route C resolver: feat/resolver-route-c-rq-v1 = main b11a8e53 + f1924495 (18 files; no pinned,
+      runtime-guarded or OOS-frozen file). VERIFY=PASS 3917; Codex review: dc4ec20f drew one LOW finding, L1 (the status counters included CAS-rejected upserts). It was fixed in f241b84e (each upsert RETURNs its id; only applied rows count), whose delta review PROVED (1)-(5) with one LOW docstring note, fixed in f1924495 (docstring only).
+      - Every row resolves on contract_v1.resolution_venue.
+      - Route C runs with the direct-Postgres repository after a passing preflight. Its due scan is the pinned
+        query's semantics, widened to stamped CROSS_PROVIDER tc-v1 rows, with the status LEFT JOIN excluding
+        QUARANTINED and backing-off rows before LIMIT.
+      - A saved outcome is read back (the new error_outcome_conflict).
+      - rq-v1 writes statuses after the run, in one compare-and-set batch. A failed batch gives status_error=1
+        and exit 1.
+      - The legacy path is unchanged for REST and in-memory repositories.
+      - RESOLVER_VERSION is resolver-v2b-tc-v1-rq-v1.
+      - It needs no deploy. Merging it (a T3) changes the next scheduled run: route=c, and status rows for
+        unresolved exact-venue rows.
+    - W26, the writer §2.6 package: PATCH ONLY, never applied. The pinned persistence/repository.py was never
+      modified in any checkout (sha256 719f6ece…); ops/** is untouched; write_pin was not run.
+      - Session scratchpad p1/writer26/:
+        - writer26.patch (sha256 bc84fa80…, against main b11a8e53, 7 files);
+        - writer26-on-rc1.patch (3360eca6…, built on RC1 dc4ec20f and applying cleanly on f1924495, 8 files;
+          the same pinned hunk, with the allowlist union and the docs merged);
+        - PIN_CONTRACT.md: the proposed §2.6 what and why. Only closure_digest changes, 212ea637… → 3ffc21e9…
+          (predicted); the 69-file set is unchanged;
+        - VALIDATION.md and an out-of-repo harness (77 passed).
+      - The pinned hunk: _insert_prediction names the four stamp columns only when all four are present and not
+        None; every other INSERT stays byte-identical.
+      - The guarded hunk: api/analysis_service.py stamps after _prediction_row and both snapshots, with an
+        injectable clock, never for OOS arms or SCHEDULED_SHADOW_EVIDENCE.
+      - Codex (W26): all six properties PROVEN; one LOW wording note, fixed.
   - **MIGRATION 0012 APPLIED: T4 APPLY-MIGRATION-0012-ONCE CONSUMED, PASS (2026-09-29).**
     - The authorization came from the owner's pasted prompt: verify origin/main = b11a8e53 and zero prior 0012
       dispatches; dispatch exactly once; any refusal => STOP, NO RERUN.
@@ -1310,7 +1339,9 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=MIGRATIONS 0011 AND 0012 APPLIED (T4 PASS: run 36583531813, then run 36586262979, 2026-09-29):
+CURRENT_MILESTONE=PHASE-1 PREPARED (2026-09-29): RC1 (the Route C resolver, f1924495) committed locally and
+  verified; W26 (the writer §2.6 package) prepared as patches, never applied. Both await owner boundaries.
+  Before it: MIGRATIONS 0011 AND 0012 APPLIED (T4 PASS: run 36583531813, then run 36586262979, 2026-09-29):
   - predictions carries the tc-v1 stamp columns;
   - prediction_resolution_status exists, empty and locked down;
   - nothing writes either yet.
@@ -1351,8 +1382,9 @@ CURRENT_MILESTONE=MIGRATIONS 0011 AND 0012 APPLIED (T4 PASS: run 36583531813, th
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-0011-0012-apply (LOCAL, no upstream), from main b11a8e53: two STATE-only commits, the
-  0011 record (5a0cc567) and this 0012 record, both unpublished. Its worktree is lanes7/state-t4-0011 in the session
+CURRENT_BRANCH=chore/state-post-0011-0012-apply (LOCAL, no upstream), from main b11a8e53: three STATE-only commits:
+  the 0011 record (5a0cc567), the 0012 record (894a393d) and this Phase-1 preparation record. All are unpublished.
+  - Also local and unpushed: feat/resolver-route-c-rq-v1 at f1924495 (worktree lanes8/resolver-rq1). Its worktree is lanes7/state-t4-0011 in the session
   scratchpad.
   - Merged, and staying on origin:
     - chore/state-post-132 (#133, 853f1eb2);
@@ -1701,6 +1733,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
     #134, #135; main b11a8e53);
   - the one-shot T4 APPLY-MIGRATION-0011-ONCE: run 36583531813, PASS. 0011 is live; never rerun it.
   - the one-shot T4 APPLY-MIGRATION-0012-ONCE: run 36586262979, PASS. 0012 is live; never rerun it.
+  - the continuation direction: RC1 implemented locally (f1924495) and W26 prepared as patches, with nothing
+    applied.
   Consumed since the post-129 record (7f59be5a):
   - T3-S129 (pushed 7f59be5a) and its merge by the owner (PR #130);
   - the one-shot T3 for N1 and N2 (pushed 0208978d and 87c01876) and their merges by the owner (PRs #131, #132);
@@ -1741,8 +1775,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
      - c is moot, because both routes are merged and each dispatch rehearses on a real PostgreSQL;
      - d's 0011 half is CONSUMED (PASS);
      - the 0012 half of d is CONSUMED too (PASS, run 36586262979);
-     - OPEN: the writer (e: §2.6 Route B; unblocked) and the resolver (f: Route C; unblocked, since 0012 is live),
-       both prepared locally in the post-0012 continuation, and the methodology acceptance (g).
+     - OPEN, and prepared:
+       - f, the resolver: RC1 f1924495, awaiting its T3 (push, PR, merge; no deploy);
+       - e, the writer: W26, awaiting the §2.6 authorization. Use writer26-on-rc1.patch if RC1 merges first,
+         otherwise writer26.patch. Then local execution with write_pin and a STATE record, a T3, the release
+         identity, a deploy T4, a smoke with one owner-authorized DB read, and the guard re-pin T3;
+       - g, the methodology acceptance, before the writer's effect.
      a. T3: push chore/state-post-132 (this record, STATE.md only), then its PR.
      b. T3: push feat/migration-0011-provenance (500e5b83), then its PR and merge. Then the same for
         feat/migration-0012-resolution-status (6ccf60eb), which is stacked on it. Merging makes each dispatch-only
@@ -2002,6 +2040,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
   - item 1, remaining:
+    - the T3 for RC1 (f1924495): the owner opens and merges the PR. It takes effect at the next scheduled resolver
+      run, with no deploy;
+    - the §2.6 authorization for W26 (PIN_CONTRACT.md), then its chain;
     - the T4 APPLY-MIGRATION-0012-ONCE: CONSUMED, PASS (run 36586262979);
     - the writer route decision (§2.6, Route B recommended), now unblocked by 0011 being live, followed by its guarded
       change, deploy T4, smoke and re-pin;
