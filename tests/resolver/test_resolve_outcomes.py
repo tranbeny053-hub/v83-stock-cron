@@ -42,9 +42,9 @@ class RecordingRepository:
         self.due_calls = []
 
     def fetch_due_unresolved_predictions(
-        self, now_utc, limit, *, data_sources=None, timeframes=None
+        self, now_utc, limit, *, data_sources=None, timeframes=None, prediction_origins=None
     ):
-        self.due_calls.append((now_utc, limit, data_sources, timeframes))
+        self.due_calls.append((now_utc, limit, data_sources, timeframes, prediction_origins))
         return self.predictions
 
     def save_prediction_outcome(self, row):
@@ -205,7 +205,7 @@ def test_main_db_fetch_failure_is_visible_without_secret_leak(
             return "SUPABASE_POSTGRES"
 
         def fetch_due_unresolved_predictions(
-            self, now_utc, limit, *, data_sources=None, timeframes=None
+            self, now_utc, limit, *, data_sources=None, timeframes=None, prediction_origins=None
         ):
             raise RuntimeError("SUPABASE_POSTGRES due query failed or unavailable.")
 
@@ -375,7 +375,9 @@ def test_outcome_row_contains_resolver_version_and_no_prediction_update_fields()
     )
 
     assert row is not None
-    assert row["resolver_version"] == RESOLVER_VERSION
+    assert row["resolver_version"] == "resolver-v2a-exact-eligibility"
+    assert row["resolver_version"] == resolve_outcomes.RESOLVER_VERSION
+    assert RESOLVER_VERSION == "resolver-v1-wave4b2"
     assert "calibration_status" not in row
     assert "reliability_status" not in row
     assert "profitability_claim" not in row
@@ -1026,7 +1028,8 @@ def test_resolver_passes_exact_eligibility_filters() -> None:
         "due": 0, "resolved": 0, "skipped": 0, "failed": 0,
     }
     assert repo.due_calls == [
-        (now, 50, ("BINANCE_PUBLIC", "OKX_PUBLIC"), ("15m", "1D", "1H", "1W", "4H"))
+        (now, 50, ("BINANCE_PUBLIC", "OKX_PUBLIC"),
+         ("15m", "1D", "1H", "1W", "4H"), ("USER_REQUESTED",))
     ]
 
 
@@ -1059,3 +1062,40 @@ def test_resolver_eligible_row_is_not_starved_by_older_cross_provider_rows() -> 
     assert calls[0].terminal_close_utc == _dt(exact["horizon_end_utc"])
     assert list(repo._prediction_outcomes) == ["exact"]
     assert repo._prediction_outcomes["exact"]["prediction_id"] == "exact"
+
+
+def test_resolver_user_row_is_not_starved_by_older_shadow_and_smoke_rows() -> None:
+    class SavingRepository(InMemoryPersistenceRepository):
+        def save_prediction_outcome(self, row):
+            super().save_prediction_outcome(row)
+            return "OK"
+
+    repo = SavingRepository()
+    excluded = [
+        (f"shadow-{index}", "SCHEDULED_SHADOW_EVIDENCE") for index in range(60)
+    ] + [
+        (f"oosb-{index:032x}:4H:BASELINE", "SCHEDULED_SHADOW_EVIDENCE")
+        for index in range(3)
+    ] + [(f"smoke-{index}", "CONTROLLED_SMOKE") for index in range(5)]
+    for identifier, origin in excluded:
+        repo.save_prediction({
+            **_prediction(prediction_id=identifier),
+            "prediction_origin": origin,
+            "horizon_end_utc": "2026-06-07T00:00:00Z",
+        })
+    repo.save_prediction({
+        **_prediction(prediction_id="user"), "prediction_origin": "USER_REQUESTED",
+    })
+    calls = []
+
+    def fetch(window, settings):
+        calls.append(window)
+        return _terminal_candles(window, settings)
+
+    assert _resolve(repo, limit=50, fetch_candles=fetch) == {
+        "due": 1, "resolved": 1, "skipped": 0, "failed": 0,
+    }
+    assert len(calls) == 1
+    assert calls[0].data_source == "BINANCE_PUBLIC"
+    assert list(repo._prediction_outcomes) == ["user"]
+    assert repo._prediction_outcomes["user"]["prediction_id"] == "user"

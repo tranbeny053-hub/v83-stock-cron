@@ -12,6 +12,7 @@ from crypto_probability_engine.persistence.repository import (
 
 NOW = "2026-06-08T00:05:00Z"
 SOURCES = ("BINANCE_PUBLIC", "OKX_PUBLIC")
+ORIGINS = ("USER_REQUESTED",)
 TIMEFRAMES = ("15m", "1D", "1H", "1W", "4H")
 
 
@@ -84,7 +85,9 @@ def rest():
     repo.close()
 
 
-@pytest.mark.parametrize("filters", [{"data_sources": ()}, {"timeframes": []}])
+@pytest.mark.parametrize("filters", [
+    {"data_sources": ()}, {"timeframes": []}, {"prediction_origins": ()},
+])
 def test_empty_filters_never_query(monkeypatch, postgres, rest, filters):
     def unexpected(*args, **kwargs):
         pytest.fail("Empty eligibility filter issued a query")
@@ -120,6 +123,7 @@ def no_query_repository(request, monkeypatch, postgres, rest):
 
 @pytest.mark.parametrize("name,value", [
     ("data_sources", "BINANCE_PUBLIC"), ("timeframes", "4H"),
+    ("prediction_origins", "USER_REQUESTED"),
 ])
 @pytest.mark.parametrize("other_filter", [None, ()])
 def test_bare_string_filters_never_query(no_query_repository, name, value, other_filter):
@@ -128,7 +132,7 @@ def test_bare_string_filters_never_query(no_query_repository, name, value, other
         no_query_repository.fetch_due_unresolved_predictions(NOW, 50, **filters)
 
 
-@pytest.mark.parametrize("name", ["data_sources", "timeframes"])
+@pytest.mark.parametrize("name", ["data_sources", "timeframes", "prediction_origins"])
 @pytest.mark.parametrize("value", [
     'BINANCE_PUBLIC","OKX_PUBLIC', "BINANCE_PUBLIC,OKX_PUBLIC", " OKX_PUBLIC",
     "OKX PUBLIC", "", 1, None, r"a\b", "(x)",
@@ -154,19 +158,25 @@ class RecordingCursor:
 def _assert_filtered_query(sql, params):
     source_clause = "AND p.data_source = ANY(%(data_sources)s)"
     timeframe_clause = "AND p.timeframe = ANY(%(timeframes)s)"
+    origin_clause = "AND p.prediction_origin = ANY(%(prediction_origins)s)"
     assert (
         sql.index("AND p.horizon_end_utc") < sql.index(source_clause)
-        < sql.index(timeframe_clause) < sql.index("ORDER BY") < sql.index("LIMIT")
+        < sql.index(timeframe_clause) < sql.index(origin_clause)
+        < sql.index("ORDER BY") < sql.index("LIMIT")
     )
     assert params == {
         "now_utc": NOW, "limit": 50,
         "data_sources": list(SOURCES), "timeframes": list(TIMEFRAMES),
+        "prediction_origins": list(ORIGINS),
     }
 
 
 def test_postgres_query_filters_and_unchanged_default_sql():
     cursor = RecordingCursor()
-    _execute_due_prediction_query(cursor, NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES)
+    _execute_due_prediction_query(
+        cursor, NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES,
+        prediction_origins=ORIGINS,
+    )
     sql, params = cursor.calls[-1]
     _assert_filtered_query(sql, params)
     _execute_due_prediction_query(cursor, NOW, 50)
@@ -175,9 +185,12 @@ def test_postgres_query_filters_and_unchanged_default_sql():
     assert default_params == {"now_utc": NOW, "limit": 50}
     assert default_sql == sql.replace(
         "\n          AND p.data_source = ANY(%(data_sources)s)", ""
-    ).replace("\n          AND p.timeframe = ANY(%(timeframes)s)", "")
+    ).replace("\n          AND p.timeframe = ANY(%(timeframes)s)", "").replace(
+        "\n          AND p.prediction_origin = ANY(%(prediction_origins)s)", ""
+    )
     assert _fetch_due_prediction_rows(
-        cursor, NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES
+        cursor, NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES,
+        prediction_origins=ORIGINS,
     ) == []
     _assert_filtered_query(*cursor.calls[-1])
 
@@ -191,7 +204,8 @@ def test_postgres_public_method_forwards_filters(monkeypatch, postgres):
 
     monkeypatch.setattr(postgres, "_direct_connection", lambda: nullcontext(Connection()))
     assert postgres.fetch_due_unresolved_predictions(
-        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES
+        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES,
+        prediction_origins=ORIGINS,
     ) == []
     assert len(cursor.calls) == 2  # Statement timeout, then the due query.
     _assert_filtered_query(*cursor.calls[-1])
@@ -206,16 +220,19 @@ def test_rest_filter_params_and_unchanged_defaults(monkeypatch, rest):
 
     monkeypatch.setattr(rest, "_request", request)
     assert rest.fetch_due_unresolved_predictions(
-        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES
+        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES,
+        prediction_origins=ORIGINS,
     ) == []
     assert len(calls) == 1
     method, table, params = calls[-1]
     assert (method, table) == ("GET", "predictions")
     assert params["data_source"] == 'in.("BINANCE_PUBLIC","OKX_PUBLIC")'
+    assert params["prediction_origin"] == 'in.("USER_REQUESTED")'
     assert params["timeframe"] == 'in.("15m","1D","1H","1W","4H")'
     assert rest.fetch_due_unresolved_predictions(NOW, 50) == []
     assert calls[-1][2] == {
-        key: value for key, value in params.items() if key not in {"data_source", "timeframe"}
+        key: value for key, value in params.items()
+        if key not in {"data_source", "timeframe", "prediction_origin"}
     }
 
 
@@ -226,15 +243,76 @@ def test_rest_unavailable_forwards_filters_to_fallback(monkeypatch, rest):
     def request(*args, **kwargs):
         raise RuntimeError("synthetic unavailable")
 
-    def fallback(now_utc, limit, *, data_sources=None, timeframes=None):
-        calls.append((now_utc, limit, data_sources, timeframes))
+    def fallback(now_utc, limit, *, data_sources=None, timeframes=None, prediction_origins=None):
+        calls.append((now_utc, limit, data_sources, timeframes, prediction_origins))
         return expected
 
     monkeypatch.setattr(rest, "_request", request)
     monkeypatch.setattr(rest._fallback, "fetch_due_unresolved_predictions", fallback)
     assert rest.fetch_due_unresolved_predictions(
-        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES
+        NOW, 50, data_sources=SOURCES, timeframes=TIMEFRAMES,
+        prediction_origins=ORIGINS,
     ) == expected
-    assert calls == [(NOW, 50, SOURCES, TIMEFRAMES)]
+    assert calls == [(NOW, 50, SOURCES, TIMEFRAMES, ORIGINS)]
     assert calls[0][2] is SOURCES
     assert calls[0][3] is TIMEFRAMES
+    assert calls[0][4] is ORIGINS
+
+
+@pytest.mark.parametrize(
+    "origin", ["USER_REQUESTED", "CONTROLLED_SMOKE", "SCHEDULED_SHADOW_EVIDENCE"]
+)
+def test_memory_origin_filter_and_generic_unfiltered_behavior(origin):
+    repo = InMemoryPersistenceRepository()
+    rows = [
+        _prediction("user", prediction_origin="USER_REQUESTED"),
+        _prediction("smoke", prediction_origin="CONTROLLED_SMOKE"),
+        _prediction("shadow", prediction_origin="SCHEDULED_SHADOW_EVIDENCE"),
+        _prediction(f"oosb-{'a' * 32}:4H:BASELINE", prediction_origin="SCHEDULED_SHADOW_EVIDENCE"),
+    ]
+    for row in rows:
+        repo.save_prediction(row)
+    assert repo.fetch_due_unresolved_predictions(NOW, 50) == rows
+    assert repo.fetch_due_unresolved_predictions(NOW, 50, prediction_origins=(origin,)) == [
+        row for row in rows if row["prediction_origin"] == origin
+    ]
+
+
+def test_memory_origin_filter_precedes_order_and_limit():
+    repo = InMemoryPersistenceRepository()
+    repo.save_prediction(_prediction("user"))
+    for index in range(60):
+        repo.save_prediction(_prediction(
+            f"non-user-{index}",
+            prediction_origin=("CONTROLLED_SMOKE", "SCHEDULED_SHADOW_EVIDENCE")[index % 2],
+            horizon_end_utc="2026-06-07T00:00:00Z",
+        ))
+    unfiltered = repo.fetch_due_unresolved_predictions(NOW, 50)
+    assert len(unfiltered) == 50
+    assert all(row["prediction_origin"] != "USER_REQUESTED" for row in unfiltered)
+    filtered = repo.fetch_due_unresolved_predictions(NOW, 50, prediction_origins=ORIGINS)
+    assert [row["prediction_id"] for row in filtered] == ["user"]
+
+
+@pytest.mark.parametrize("value", ["USER_REQUESTD", "user_requested"])
+@pytest.mark.parametrize("other_filter", [None, ()])
+def test_unknown_origins_never_query(no_query_repository, value, other_filter):
+    with pytest.raises(ValueError, match="Unsupported prediction origin"):
+        no_query_repository.fetch_due_unresolved_predictions(
+            NOW, 50, data_sources=other_filter, timeframes=other_filter,
+            prediction_origins=(value,),
+        )
+
+
+def test_postgres_origin_only_query():
+    cursor = RecordingCursor()
+    _execute_due_prediction_query(cursor, NOW, 50, prediction_origins=ORIGINS)
+    sql, params = cursor.calls[-1]
+    assert params == {"now_utc": NOW, "limit": 50, "prediction_origins": ["USER_REQUESTED"]}
+    _execute_due_prediction_query(cursor, NOW, 50)
+    default_sql, _ = cursor.calls[-1]
+    assert sql == default_sql.replace(
+        "AND p.horizon_end_utc < %(now_utc)s",
+        "AND p.horizon_end_utc < %(now_utc)s"
+        "\n          AND p.prediction_origin = ANY(%(prediction_origins)s)",
+    )

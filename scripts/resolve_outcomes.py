@@ -24,11 +24,11 @@ from crypto_probability_engine.adapters.mappers import (
 from crypto_probability_engine.adapters.types import MarketCandle, ProviderError
 from crypto_probability_engine.config.defaults import (
     DEFAULT_PHASE1A,
-    RESOLVER_VERSION,
     TIMEFRAME_SECONDS,
 )
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
+from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.repository import (
     InMemoryPersistenceRepository,
     PersistenceRepository,
@@ -36,6 +36,7 @@ from crypto_probability_engine.persistence.repository import (
     SupabaseRestRepository,
 )
 
+RESOLVER_VERSION = "resolver-v2a-exact-eligibility"
 EXACT_SOURCE_PROVIDERS = MappingProxyType({"BINANCE_PUBLIC": "binance", "OKX_PUBLIC": "okx"})
 # Fixed-duration bars only. 1M uses an approximate 30-day duration, so it has no exact terminal bar.
 EXACT_TIMEFRAMES = frozenset({"15m", "1H", "4H", "1D", "1W"})
@@ -93,6 +94,7 @@ def resolve_due_predictions(
         limit,
         data_sources=tuple(EXACT_SOURCE_PROVIDERS),
         timeframes=tuple(sorted(EXACT_TIMEFRAMES)),
+        prediction_origins=(PredictionOrigin.USER_REQUESTED.value,),
     )
     stats = {"due": len(due_predictions), "resolved": 0, "skipped": 0, "failed": 0}
     candle_fetcher = fetch_candles or fetch_public_candles
