@@ -11,8 +11,8 @@ wired.**
   - Tests: `tests/targets/test_target_contract_v1.py`.
 - **Nothing imports it.** The writer, the resolver, the API and the §5A evaluator are unchanged.
   The module is outside the evaluator pin closure. A test checks both facts.
-- **No stored row carries a stamp.** No migration exists for the stamp columns yet, so every row
-  today is v0.
+- **No stored row carries a stamp.** Migration 0011 adds the stamp columns, but it is authored and
+  not applied, and nothing writes them. Every row today is v0.
 
 ## Purpose
 
@@ -92,14 +92,21 @@ one of them and is never compared.
 - **New names.** quant_v2's `computed_at_utc` actually means as_of. tc-v1 therefore introduces
   `core_computed_at_utc` and `issued_at_utc` rather than reusing that name.
 
-### Planned columns: migration 0011
+### Columns: migration 0011 (authored, not applied)
 
 - **Columns.** `target_version`, `reference_venue`, `core_computed_at_utc` and `issued_at_utc`
-  (`STAMP_FIELDS`). Planned types: text for the first two, and timestamps like the existing
-  `*_utc` columns for the two times.
-- **Nullable.** NULL means v0.
+  (`STAMP_FIELDS`, in that order). Types: text for the first two, and `TIMESTAMPTZ`, like the
+  existing `*_utc` columns, for the two times.
+- **Nullable, with no default.** NULL in all four means v0.
 - **No backfill.**
-- **Not authored.** 0011 does not exist yet.
+- **Checks.**
+  - `target_version` is NULL or `tc-v1`.
+  - `reference_venue` is NULL or a venue label.
+  - A row carries either none of the four or all four, and when it carries them,
+    `core_computed_at_utc <= issued_at_utc`.
+- **Authored, not applied.** The file is `migrations/0011_prediction_target_provenance.sql`.
+  - Its only route is `scripts/apply_migration_0011.py`.
+  - The route is dispatched once, by `.github/workflows/apply-migration-0011.yml`, as a T4 action.
 
 ## Invariants
 
@@ -179,7 +186,8 @@ is exact.
 
 ## Planned order
 
-1. **Author migration 0011.** Four nullable columns; NULL = v0; no backfill.
+1. **Author migration 0011.** Done: the migration and its one-shot apply route. Four nullable
+   columns; NULL = v0; no backfill.
 2. **Apply 0011 live.** This is a T4 action.
 3. **Stamp in the writer.** The writer calls `stamp_v1` with `snapshot.provider`, the core-finished
    instant and the response instant.
