@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts import resolve_outcomes
 from tests.workflows._workflow_steps import (
     install_stub,
     read_jobs,
@@ -26,6 +27,20 @@ TEXT = (ROOT / ".github/workflows/resolve-outcomes.yml").read_text(encoding="utf
 JOB = read_jobs(TEXT)["resolve"]
 RESOLVER = next(step for step in JOB.steps if step.name == "Run outcome resolver")
 CONTEXTS = {"secrets.SUPABASE_DB_URL": "postgresql://stub-never-contacted.invalid/none"}
+
+# The resolver prints a summary line, then a detail line. The step greps EVERY line for
+# failed=[1-9], so only the summary's failed= may decide the step: the detail lines below are the
+# resolver's own formatter output, one of them with every count non-zero.
+SUMMARY = "resolved_outcomes repository=SUPABASE_POSTGRES limit=50 due=10 resolved=4 skipped=2 "
+DETAIL_DEFERRED = resolve_outcomes.format_detail_line(
+    {"scanned": 63, "selected": 10, "fresh": 3, "stuck": 60, "deferred": 4,
+     "skip_terminal_bar_missing": 2},
+    budget_s=600,
+)
+DETAIL_EVERY_COUNT = resolve_outcomes.format_detail_line(
+    dict.fromkeys((*resolve_outcomes.DETAIL_COUNT_KEYS, *resolve_outcomes.REASON_KEYS), 3),
+    budget_s=600,
+)
 
 
 def _environment(**stub: str) -> dict[str, str]:
@@ -51,6 +66,24 @@ def test_the_resolver_step_pipes_its_output_under_pipefail() -> None:
         ("1", "due=4 resolved=3 skipped=0 failed=1\n", 1),  # it failed and said so
         ("0", "due=4 resolved=2 skipped=0 failed=2\n", 1),  # it exited 0 but reported failures
         ("0", "due=4 resolved=4 skipped=0 failed=0\n", 0),  # the only green run
+        # Deferred and skipped rows never turn the step red.
+        pytest.param("0", f"{SUMMARY}failed=0\n{DETAIL_DEFERRED}\n", 0, id="detail-deferred"),
+        # Synthetic: non-zero error_* counts and deferred rows in the detail line cannot turn the
+        # step red. (A real run with errors also reports them in the summary's failed=.)
+        pytest.param(
+            "0", f"{SUMMARY}failed=0\n{DETAIL_EVERY_COUNT}\n", 0, id="detail-every-count"
+        ),
+        pytest.param(  # failures in the summary line stay red
+            "1", f"{SUMMARY}failed=3\n{DETAIL_EVERY_COUNT}\n", 1, id="summary-failed"
+        ),
+        # The control: a detail key ENDING in "failed" would turn a green run red. That is why no
+        # detail key may contain "failed=".
+        pytest.param(
+            "0",
+            f"{SUMMARY}failed=0\nresolver_detail deferred=0 save_failed=2\n",
+            1,
+            id="control-save_failed",
+        ),
     ],
 )
 def test_the_resolver_step_fails_whenever_the_resolver_fails(

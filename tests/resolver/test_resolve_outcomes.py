@@ -19,6 +19,25 @@ from crypto_probability_engine.persistence.repository import (
 from scripts import resolve_outcomes
 
 ROOT = Path(__file__).resolve().parents[2]
+STATS_KEYS = (
+    "due", "resolved", "skipped", "failed", "deferred",
+    "scanned", "selected", "fresh", "stuck",
+    "skip_ineligible", "skip_invalid_target", "skip_not_due", "skip_terminal_bar_missing",
+    "error_row_unreadable", "error_provider_rejected", "error_provider_unavailable",
+    "error_candle_invalid", "error_save_not_ok", "error_save_exception", "error_other",
+)
+
+
+def _stats(*, due, resolved=0, skipped=0, failed=0, stuck=0, **reasons):
+    """The whole stats dict of a run that selected every scanned row and deferred none."""
+
+    expected = dict.fromkeys(STATS_KEYS, 0)
+    expected.update(
+        due=due, resolved=resolved, skipped=skipped, failed=failed,
+        scanned=due, selected=due, fresh=due - stuck, stuck=stuck,
+    )
+    expected.update(reasons)  # a misspelt reason adds a key, so the comparison fails
+    return expected
 
 
 @pytest.fixture(autouse=True)
@@ -286,7 +305,7 @@ def test_stale_window_overshoot_skips_outcome_and_writes_nothing() -> None:
         fetch_candles=lambda _window, _settings: stale_candles,
     )
 
-    assert stats == {"due": 1, "resolved": 0, "skipped": 1, "failed": 0}
+    assert stats == _stats(due=1, skipped=1, skip_terminal_bar_missing=1)
     assert repo._prediction_outcomes == {}  # noqa: SLF001
 
 
@@ -344,7 +363,7 @@ def test_resolve_due_predictions_isolates_bad_prediction_failure() -> None:
         fetch_candles=fetch,
     )
 
-    assert stats == {"due": 2, "resolved": 1, "skipped": 0, "failed": 1}
+    assert stats == _stats(due=2, resolved=1, failed=1, error_other=1)
     assert [row["prediction_id"] for row in repo.saved] == ["good:4H"]
 
 
@@ -493,12 +512,9 @@ def test_ambiguous_source_skips_without_fetch_or_save(source) -> None:
 
     assert _build(prediction, fetch) is None
     repo = RecordingRepository([prediction])
-    assert _resolve(repo, fetch_candles=fetch) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 1,
-        "failed": 0,
-    }
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=1, skipped=1, skip_ineligible=1
+    )
     assert calls == []
     assert repo.saved == []
 
@@ -548,7 +564,7 @@ def test_binance_default_fetch_is_bounded_and_resolves_exactly(recording_client,
     repo = RecordingRepository([prediction])
     now = _dt(prediction["horizon_end_utc"]) + timedelta(minutes=5)
 
-    assert _resolve(repo, now_utc=now) == {"due": 1, "resolved": 1, "skipped": 0, "failed": 0}
+    assert _resolve(repo, now_utc=now) == _stats(due=1, resolved=1)
     _assert_binance_request(recording_client, prediction)
     assert repo.saved[0]["outcome_close_utc"] == prediction["horizon_end_utc"]
     assert repo.saved[0]["candles_observed"] == 6
@@ -562,7 +578,7 @@ def test_binance_dropped_terminal_bar_is_skipped_without_save(recording_client) 
     recording_client.payload = _binance_payload(prediction)[:6]
     repo = RecordingRepository([prediction])
 
-    assert _resolve(repo) == {"due": 1, "resolved": 0, "skipped": 1, "failed": 0}
+    assert _resolve(repo) == _stats(due=1, skipped=1, skip_terminal_bar_missing=1)
     _assert_binance_request(recording_client, prediction)
     assert repo.saved == []
 
@@ -584,7 +600,7 @@ def test_okx_default_fetch_uses_target_age_and_exact_bounds(
 
     stats = _resolve(repo, now_utc=horizon + timedelta(days=age_days, minutes=5))
 
-    assert stats == {"due": 1, "resolved": 1, "skipped": 0, "failed": 0}
+    assert stats == _stats(due=1, resolved=1, stuck=1 if age_days else 0)
     assert recording_client.calls == [
         {
             "base_url": resolve_outcomes.OKX_BASE_URL,
@@ -636,7 +652,7 @@ def test_venue_failure_never_falls_back(recording_client, source, provider, base
     recording_client.error = error
     repo = RecordingRepository([prediction])
 
-    assert _resolve(repo) == {"due": 1, "resolved": 0, "skipped": 0, "failed": 1}
+    assert _resolve(repo) == _stats(due=1, failed=1, error_provider_unavailable=1)
     assert len(recording_client.calls) == 1
     assert recording_client.calls[0]["provider"] == provider
     assert recording_client.calls[0]["base_url"] == base_url
@@ -653,7 +669,7 @@ def test_outage_longer_than_latest_50_bars_resolves_exact_target(recording_clien
     repo = RecordingRepository([prediction])
     now = _dt(prediction["horizon_end_utc"]) + timedelta(hours=13)
 
-    assert _resolve(repo, now_utc=now) == {"due": 1, "resolved": 1, "skipped": 0, "failed": 0}
+    assert _resolve(repo, now_utc=now) == _stats(due=1, resolved=1)
     _assert_binance_request(recording_client, prediction)
     assert repo.saved[0]["outcome_close_utc"] == prediction["horizon_end_utc"]
     assert repo.saved[0]["candles_observed"] == 6
@@ -674,19 +690,18 @@ def test_outage_longer_than_latest_50_bars_resolves_exact_target(recording_clien
 def test_resolved_requires_save_ok(status, resolved, failed) -> None:
     repo = RecordingRepository([_prediction()], status=status)
     stats = _resolve(repo, fetch_candles=_terminal_candles)
-    assert stats == {"due": 1, "resolved": resolved, "skipped": 0, "failed": failed}
+    reason = "error_save_exception" if isinstance(status, Exception) else "error_save_not_ok"
+    reasons = {reason: failed} if failed else {}
+    assert stats == _stats(due=1, resolved=resolved, failed=failed, **reasons)
     assert len(repo.saved) == 1
 
 
 def test_real_memory_repository_stateless_save_is_not_resolved() -> None:
     repo = InMemoryPersistenceRepository()
     repo.save_prediction(_prediction())
-    assert _resolve(repo, fetch_candles=_terminal_candles) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 0,
-        "failed": 1,
-    }
+    assert _resolve(repo, fetch_candles=_terminal_candles) == _stats(
+        due=1, failed=1, error_save_not_ok=1
+    )
 
 
 @pytest.mark.parametrize("offset", [timedelta(0), -timedelta(microseconds=1)])
@@ -734,12 +749,10 @@ def test_malformed_target_skips_before_fetch(updates) -> None:
 
     assert _build(prediction, fetch, now_utc=_dt("2026-07-01T00:00:00Z")) is None
     repo = RecordingRepository([prediction])
-    assert _resolve(repo, fetch_candles=fetch, now_utc=_dt("2026-07-01T00:00:00Z")) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 1,
-        "failed": 0,
-    }
+    reason = "skip_ineligible" if "timeframe" in updates else "skip_invalid_target"
+    assert _resolve(repo, fetch_candles=fetch, now_utc=_dt("2026-07-01T00:00:00Z")) == _stats(
+        due=1, skipped=1, stuck=1, **{reason: 1}
+    )
     assert calls == []
     assert repo.saved == []
 
@@ -756,12 +769,12 @@ def test_parse_errors_propagate_and_count_failed_without_fetch(field) -> None:
     with pytest.raises(ValueError):
         _build(prediction, fetch)
     repo = RecordingRepository([prediction])
-    assert _resolve(repo, fetch_candles=fetch) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 0,
-        "failed": 1,
-    }
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=1,
+        failed=1,
+        stuck=1 if field == "horizon_end_utc" else 0,  # an unreadable horizon counts as stuck
+        error_row_unreadable=1,
+    )
     assert calls == []
     assert repo.saved == []
 
@@ -803,12 +816,9 @@ def test_conflicting_duplicates_fail_without_save(field, value) -> None:
     with pytest.raises(ValueError, match="^conflicting duplicate candles in resolver window$"):
         _build(_prediction(), fetch)
     repo = RecordingRepository([_prediction()])
-    assert _resolve(repo, fetch_candles=fetch) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 0,
-        "failed": 1,
-    }
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=1, failed=1, error_candle_invalid=1
+    )
     assert repo.saved == []
 
 
@@ -819,12 +829,9 @@ def test_identical_duplicates_collapse_and_outside_window_is_ignored() -> None:
     anchor = _candle(_dt("2026-06-07T00:00:00Z"), close=1.0)
     candles = (terminal, earlier, replace(terminal), later, anchor, replace(later, close=2.0))
     repo = RecordingRepository([_prediction()])
-    assert _resolve(repo, fetch_candles=lambda window, settings: candles) == {
-        "due": 1,
-        "resolved": 1,
-        "skipped": 0,
-        "failed": 0,
-    }
+    assert _resolve(repo, fetch_candles=lambda window, settings: candles) == _stats(
+        due=1, resolved=1
+    )
     assert repo.saved[0]["candles_observed"] == 2
     assert repo.saved[0]["max_favorable_frac"] == 0.02
     assert repo.saved[0]["max_adverse_frac"] == -0.01
@@ -844,12 +851,9 @@ def test_wrong_duration_in_window_fails_without_save(close_time) -> None:
     with pytest.raises(ValueError, match="^resolver candle does not span exactly one bar$"):
         _build(_prediction(), fetch)
     repo = RecordingRepository([_prediction()])
-    assert _resolve(repo, fetch_candles=fetch) == {
-        "due": 1,
-        "resolved": 0,
-        "skipped": 0,
-        "failed": 1,
-    }
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=1, failed=1, error_candle_invalid=1
+    )
     assert repo.saved == []
 
 
@@ -873,12 +877,9 @@ def test_mixed_batch_fetches_and_saves_only_exact_sources() -> None:
         calls.append(window.provider)
         return _terminal_candles(window, settings)
 
-    assert _resolve(repo, fetch_candles=fetch) == {
-        "due": 3,
-        "resolved": 2,
-        "skipped": 1,
-        "failed": 0,
-    }
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=3, resolved=2, skipped=1, skip_ineligible=1
+    )
     assert calls == ["binance", "okx"]
     assert [row["prediction_id"] for row in repo.saved] == ["0", "2"]
     assert [row["data_source"] for row in repo.saved] == ["BINANCE_PUBLIC", "OKX_PUBLIC"]
@@ -1024,11 +1025,10 @@ def _assert_binance_request(client, prediction):
 def test_resolver_passes_exact_eligibility_filters() -> None:
     repo = RecordingRepository([])
     now = _dt("2026-06-08T00:05:00Z")
-    assert _resolve(repo, now_utc=now, limit=50) == {
-        "due": 0, "resolved": 0, "skipped": 0, "failed": 0,
-    }
+    assert _resolve(repo, now_utc=now, limit=50) == _stats(due=0)
+    # It scans min(max(limit * 20, limit), 1000) rows, so stuck rows cannot starve fresh ones.
     assert repo.due_calls == [
-        (now, 50, ("BINANCE_PUBLIC", "OKX_PUBLIC"),
+        (now, 1000, ("BINANCE_PUBLIC", "OKX_PUBLIC"),
          ("15m", "1D", "1H", "1W", "4H"), ("USER_REQUESTED",))
     ]
 
@@ -1054,9 +1054,7 @@ def test_resolver_eligible_row_is_not_starved_by_older_cross_provider_rows() -> 
         calls.append(window)
         return _terminal_candles(window, settings)
 
-    assert _resolve(repo, limit=50, fetch_candles=fetch) == {
-        "due": 1, "resolved": 1, "skipped": 0, "failed": 0,
-    }
+    assert _resolve(repo, limit=50, fetch_candles=fetch) == _stats(due=1, resolved=1)
     assert len(calls) == 1
     assert calls[0].data_source == "BINANCE_PUBLIC"
     assert calls[0].terminal_close_utc == _dt(exact["horizon_end_utc"])
@@ -1092,9 +1090,7 @@ def test_resolver_user_row_is_not_starved_by_older_shadow_and_smoke_rows() -> No
         calls.append(window)
         return _terminal_candles(window, settings)
 
-    assert _resolve(repo, limit=50, fetch_candles=fetch) == {
-        "due": 1, "resolved": 1, "skipped": 0, "failed": 0,
-    }
+    assert _resolve(repo, limit=50, fetch_candles=fetch) == _stats(due=1, resolved=1)
     assert len(calls) == 1
     assert calls[0].data_source == "BINANCE_PUBLIC"
     assert list(repo._prediction_outcomes) == ["user"]
