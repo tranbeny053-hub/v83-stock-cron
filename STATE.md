@@ -1,6 +1,15 @@
 # STATE
 
-Updated: 2026-09-29 (post-132). **The owner MERGED three PRs:**
+Updated: 2026-09-29 (post-0011 T4). **MIGRATION 0011 IS APPLIED IN PRODUCTION. The owner-authorized one-shot T4
+APPLY-MIGRATION-0011-ONCE is CONSUMED and PASSED: run 36583531813 on main b11a8e53, committed.**
+- The owner merged #133 (the post-132 record), #134 (the 0011 route) and #135 (the 0012 route). Main is
+  b11a8e53; each merge tree equals the tree recorded before the push; CI success.
+- The exact production delta: predictions gained the four nullable, no-default stamp columns and the three validated
+  CHECKs. Everything else was verified unchanged.
+- 0012 is merged, NOT applied. No row is stamped yet: the writer does not stamp.
+- No deploy, DB console or manual SQL: hf and the running Space stay at 080f20a9.
+- This record is local (chore/state-post-0011-apply).
+Previously (post-132): **The owner MERGED three PRs:**
 - **#130,** the post-129 STATE record, at 12:49:38Z;
 - **#131,** N1, target contract v1, at 12:53:59Z;
 - **#132,** N2, resolver hardening, at 12:58:46Z.
@@ -11,7 +20,7 @@ publication candidates (500e5b83, 6ccf60eb).** Both pass VERIFY in a clean workt
 NONE. They are not pushed, merged or applied.
 The writer/resolver integration pack is decision-ready (OWNER_BOUNDARY 1). The first scheduled resolver run on
 6fb3e8b4 printed due=0; no run has happened on 30b40662 yet. No deploy, dispatch or DB action: hf and the running
-Space stay at 080f20a9. This record is local (chore/state-post-132).
+Space stay at 080f20a9. That record was published as PR #133 (main f844452b).
 Earlier on 2026-09-29: **RESOLVER_P1 is MERGED: PR #129, main 6fb3e8b4 (merged by the owner at 2026-09-29T06:42:05Z;
 CI success). Its §2.6 publication T3 is CONSUMED and §2.6 is CLOSED for publication.** c7cb70f8 and fb765188 remain
 unaccepted and are on main as history only. The 2026-09-27 record below was published as PR #128 (main 6f5038d0).
@@ -106,6 +115,47 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **MIGRATION 0011 APPLIED: T4 APPLY-MIGRATION-0011-ONCE CONSUMED, PASS (2026-09-29).**
+    - Preconditions:
+      - origin/main was b11a8e53 (fetch and ls-remote) at 14:32:28Z and again at 14:33:12Z;
+      - the merge trees of #133, #134 and #135 equal e6971e2b, d47aa6e9 and c95d4431;
+      - the 0011 route on main is byte-identical to the reviewed 500e5b83;
+      - the migration's sha256 is de83e973… and equals the pinned value;
+      - the workflow was registered and active (id 370213093), with zero prior runs;
+      - CI succeeded on b11a8e53 (run 36580184092);
+      - nothing was queued or running.
+    - The dispatch: exactly once, at 14:33:16Z, with expected_sha=b11a8e53… and confirm=APPLY-MIGRATION-0011-ONCE.
+      Run 36583531813 (workflow_dispatch, main, attempt 1) completed with success at 14:33:59Z. Every step succeeded:
+      - attest: dispatch_verified; CPython 3.13.14, isolated; no database;
+      - rehearse: PostgreSQL 16 (160015) scratch databases. The route APPLIED once and refused the second apply as
+        "not a first apply", before any migration ran. 20_assert_contract.sql passed on the rehearsal database
+        and on the rebuild;
+      - in-job tests: 261 passed;
+      - apply: the only step with the secret;
+      - upload.
+    - Raw capture before parsing, in the session scratchpad t4-0011/:
+      - run.json (sha256 baf6b00f…), run.log (ebedb0b9…, 3605 lines) and artifacts.json;
+      - the artifact migration-0011-apply-report, id 11040916714; its zip sha256 0700f54e… equals GitHub's digest.
+        Inside it: migration-0011-apply-report.json (b0df023d…) and migration-0011-rehearsal-report.json
+        (bf0f6657…).
+    - The apply report:
+      - outcome APPLIED, committed true;
+      - the executed migration sha256 equals the pinned de83e973…;
+      - server_version_num 170006; 3 API roles; eight table privileges asked, MAINTAIN included.
+    - The exact production delta, re-derived by Claude from the raw pre and post reads:
+      - predictions' columns went from 26 to 30. The 26 are unchanged and in order. Appended: target_version text,
+        reference_venue text, core_computed_at_utc timestamptz and issued_at_utc timestamptz. All are nullable,
+        with no default, identity, generation or column grant.
+      - Its constraints went from 2 to 5. The 2 are unchanged. Added, each type c and validated:
+        - predictions_target_version_chk ({tc-v1});
+        - predictions_reference_venue_chk ({BINANCE_PUBLIC, OKX_PUBLIC});
+        - predictions_target_stamp_chk (all four or none; core <= issued).
+      - Unchanged: the 5 indexes; the triggers (none); predictions' security (RLS on, not forced, 0 policies, no
+        PUBLIC, anon or authenticated privilege, service_role's eight); and the security of the 13 other tables.
+    - The log's only connection string is the rehearsal's local socket. The secret appears only masked.
+    - NEVER dispatch apply-migration-0011 again: it is consumed, and the route refuses a second apply.
+    - Not done: no 0012 dispatch, DB console, manual SQL, deploy or F3. Nothing writes the new columns yet, so every
+      row stays v0.
   - **POST-132 (2026-09-29, continuous mode; everything local).**
     - The owner merged three PRs: #130 (chore/state-post-129 → 133c68f6), #131 (N1 → 201bdd22) and #132 (N2 →
       30b40662). Claude verified:
@@ -1206,7 +1256,12 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-132 (2026-09-29):
+CURRENT_MILESTONE=MIGRATION 0011 APPLIED (T4 PASS, run 36583531813, 2026-09-29):
+  - main is b11a8e53, with #133, #134 and #135 merged;
+  - predictions carries the four tc-v1 stamp columns and three CHECKs, and no row is stamped;
+  - 0012 is merged, not applied.
+  This record is local (chore/state-post-0011-apply).
+  Before it: POST-132 (2026-09-29):
   - PRs #130, #131 and #132 MERGED (main 30b40662, CI success);
   - D4 rq-v1 and D5 0012 ADOPTED;
   - migrations 0011 (500e5b83) and 0012 (6ccf60eb) REBUILT on 30b40662 as local publication candidates, verified
@@ -1237,11 +1292,12 @@ CURRENT_MILESTONE=POST-132 (2026-09-29):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-post-132 (LOCAL, no upstream), from main 30b40662: this record, unpublished (OWNER_BOUNDARY
-  1). Its worktree is lanes7/state132 in the session scratchpad.
-  - Local publication candidates, not pushed:
-    - feat/migration-0011-provenance at 500e5b83 (lanes7/m0011);
-    - feat/migration-0012-resolution-status at 6ccf60eb (lanes7/m0012), stacked on it.
+CURRENT_BRANCH=chore/state-post-0011-apply (LOCAL, no upstream), from main b11a8e53: this record, unpublished. Its
+  worktree is lanes7/state-t4-0011 in the session scratchpad.
+  - Merged, and staying on origin:
+    - chore/state-post-132 (#133, 853f1eb2);
+    - feat/migration-0011-provenance (#134, 500e5b83);
+    - feat/migration-0012-resolution-status (#135, 6ccf60eb).
   - Superseded local candidates, never published:
     - archive/migration-0011-on-6fb3e8b (3433d306);
     - archive/migration-0012-on-3433d30 (bc92e873);
@@ -1269,7 +1325,12 @@ CURRENT_BRANCH=chore/state-post-132 (LOCAL, no upstream), from main 30b40662: th
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=30b40662 (main, PR #132: N2), after 201bdd22 (PR #131: N1) and 133c68f6 (PR #130: the post-129 record).
+LAST_GREEN_SHA=b11a8e53 (main, PR #135: the 0012 route), after b207a1a6 (PR #134: the 0011 route) and f844452b (PR #133:
+  the post-132 record).
+  - CI success on b11a8e53 (run 36580184092), b207a1a6 and f844452b.
+  - Each merge tree equals the tree recorded before the push: c95d4431, d47aa6e9 and e6971e2b.
+  - The 0011 apply ran on b11a8e53 (run 36583531813, PASS).
+  Before them: 30b40662 (main, PR #132: N2), after 201bdd22 (PR #131: N1) and 133c68f6 (PR #130: the post-129 record).
   CI success on each (runs 36571791856, 36571237239 and 36570739861). Each merge tree equals the recomputed merge of
   its parents.
   Before them: 6fb3e8b4 (main, PR #129: RESOLVER_P1). CI success (run 36532446966); its tree equals the locally verified
@@ -1401,6 +1462,8 @@ LAST_GREEN_SHA=30b40662 (main, PR #132: N2), after 201bdd22 (PR #131: N1) and 13
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
+  - Run on this STATE-only record, on main b11a8e53 (which carries both migration routes), in a clean worktree.
+  - Post-132: PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
   - Run on feat/migration-0012-resolution-status 6ccf60eb (main 30b40662 + 0011 + 0012), in a clean worktree.
   - 0011 alone, at 500e5b83: PASS 3221.
   - This STATE-only record (T0) is re-verified on its own commit, in a clean worktree, before it is reported.
@@ -1572,7 +1635,11 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-129 record (7f59be5a):
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-132 record (853f1eb2):
+  - the one-shot T3: 853f1eb2, 500e5b83 and 6ccf60eb pushed with no force, then merged by the owner (PRs #133,
+    #134, #135; main b11a8e53);
+  - the one-shot T4 APPLY-MIGRATION-0011-ONCE: run 36583531813, PASS. 0011 is live; never rerun it.
+  Consumed since the post-129 record (7f59be5a):
   - T3-S129 (pushed 7f59be5a) and its merge by the owner (PR #130);
   - the one-shot T3 for N1 and N2 (pushed 0208978d and 87c01876) and their merges by the owner (PRs #131, #132);
   - the local-only authoring and rehearsal authorization for 0011, then 0012 (candidates 3433d306 and bc92e873,
@@ -1605,8 +1672,14 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-129 record (7f59
   authorization, the H2 paper, bounded-repair, rulings, 12(a), guard-validation, v3 budget and H2-G2
   authorizations, the H2-G2 STATE T3 (#123), the Q5 read, the Q5 follow-up, and the Q5 adjudication ruling
   (LOOP_STATE). What remains, in order:
-  1. OWNER DECISIONS AND T3s, in this order. Claude's `gh pr create` is refused by the auto-mode classifier, so the
-     owner opens and merges each PR:
+  1. OWNER DECISIONS, T3s AND T4s, in this order. Claude's `gh pr create` is refused by the auto-mode classifier, so
+     the owner opens and merges each PR.
+     STATUS after the 0011 T4:
+     - a and b are CONSUMED (#133, #134, #135);
+     - c is moot, because both routes are merged and each dispatch rehearses on a real PostgreSQL;
+     - d's 0011 half is CONSUMED (PASS);
+     - OPEN: the 0012 T4 (d), the writer (e: now unblocked, since 0011 is live), the resolver (f: after 0012) and
+       the methodology acceptance (g).
      a. T3: push chore/state-post-132 (this record, STATE.md only), then its PR.
      b. T3: push feat/migration-0011-provenance (500e5b83), then its PR and merge. Then the same for
         feat/migration-0012-resolution-status (6ccf60eb), which is stacked on it. Merging makes each dispatch-only
@@ -1865,11 +1938,14 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed since the post-129 record (7f59
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
-  - item 1, a-g:
-    - this record's T3;
-    - the migration branches' T3s, then the 0011 and 0012 T4s, one-shot each;
-    - then the writer route decision (§2.6) and the resolver, each under its own authorization;
-    - the methodology acceptance in g.
+  - item 1, remaining:
+    - the T4 APPLY-MIGRATION-0012-ONCE: one-shot, at the then-current main SHA. 0012 needs nothing from 0011;
+    - the writer route decision (§2.6, Route B recommended), now unblocked by 0011 being live, followed by its guarded
+      change, deploy T4, smoke and re-pin;
+    - the resolver (Route C), after 0012 is live;
+    - the methodology acceptance in g;
+    - this record's T3 (STATE.md only).
+    Never dispatch apply-migration-0011 again: it is consumed, and the route refuses a second apply.
     Resolution stays idle meanwhile: under the exact-venue filters no normal row is due. No new USER_REQUESTED
     outcome accrues until the writer stamps reference_venue, which bears on H2's "waiting";
   - then H2's next decisions after the UNAVAILABLE adjudication: the cutoff (e), §13.3, waiting or architecture, and
