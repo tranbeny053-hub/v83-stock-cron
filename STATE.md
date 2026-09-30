@@ -1,6 +1,17 @@
 # STATE
 
-Updated: 2026-09-30 (W26 RELEASE CLOSED). **W26_RELEASE_CLOSED: the tc-v1 writer stamp is deployed and PROVEN stored in
+Updated: 2026-09-30 (F1 governed automation, LOCAL). **F1-GOVERNED-AUTOMATION-LOCAL-A is committed and verified
+LOCALLY on feat/f1-governed-automation (028ded8, 4f9ae93, 0bc11ff plus this record), VERIFY=PASS 4324. It is NOT
+pushed, NOT deployed and NOT enabled. No credential was issued, and migration 0013 is authored, NOT applied.**
+- The machine route POST /v1/automation/radar-evidence (radar_evidence.v1) ships OFF (503 AUTOMATION_DISABLED). Even
+  enabled, it fails closed (503 LEDGER_UNAVAILABLE) until 0013 is applied.
+- Cohort isolation is structural. AUTOMATED_RADAR is not a PredictionOrigin. analyze_request_isolated writes no
+  cohort row, and its analysis is proven byte-identical. The isolated ledger is the only store.
+- No evaluator-pinned file changed. The guarded delta on this branch is analysis_service.py and api/app.py.
+- Production is unchanged: D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A. The rollback target is 080f20a9.
+- The Codex quota was exhausted mid-milestone (it resets 2026-10-01 02:35 +07). The repair's test updates and its
+  delta review were done by Claude instead, and that substitution is recorded here.
+Previously (W26 RELEASE CLOSED): **W26_RELEASE_CLOSED: the tc-v1 writer stamp is deployed and PROVEN stored in
 production. SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.**
 - Production: D = 2096af6d1b3d54461b40c47fd96c265882e5af40 / UCPE-PROD-TC-V1-STAMP-20260930-A.
   - Deploy PASS, with settle PASS.
@@ -179,6 +190,48 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30; the owner's pasted prompt; local T0/T1/T2 only).**
+    - Source: UOR's proposal files 04 and 05 in UCPE-Radar/.work/HANDOFF_FINAL_PHASE, read only. The owner-only
+      grading key and the trap prompt were NOT opened. UCPE canon wins.
+    - Commits on feat/f1-governed-automation (from main f19d7575; local):
+      - 028ded8: the implementation;
+      - 4f9ae93: the test suites, examples and docs;
+      - 0bc11ff: the review repair;
+      - this STATE record.
+    - Design: see docs/automation/RADAR_EVIDENCE_V1.md.
+      - The route is POST /v1/automation/radar-evidence, off by default.
+      - Route-only machine auth: the header X-UCPE-Automation-Credential, SHA-256 digests only, compared in constant
+        time. Human session cookies are refused (403), and machine credentials get 401 on all 14 human
+        method-paths.
+      - The origin is server-stamped AUTOMATED_RADAR, in the isolated automation domain.
+      - The contract is strict radar_evidence.v1 plus radar_evidence_error.v1 (schema sha256 pins), with RFC 8785
+        JCS for the evidence_hash and the wire bytes.
+      - Deadlines run to the ledger commit. Quota is 6 per 5 minutes and 120 per day by default (owner G6). One
+        analysis slot.
+      - Strict idempotency and audit live in the isolated ledger (migration 0013).
+      - The kill switch is UCPE_AUTOMATION_ENABLED.
+      - The handoff is docs/automation/UOR_HANDOFF.md: every file with its digest, plus two synthetic examples and
+        one error example.
+    - analysis_service: analyze_request keeps its exact signature. Its body moved into _analyze, and the new
+      analyze_request_isolated takes no origin, run store, pair or cadence. It never builds a prediction row or
+      parks persistence.
+    - Tests: 325 automation and migration tests (Codex D1 plus Claude). They cover isolation, security, refusals,
+      idempotency, quota, deadlines, the hashes, JCS vectors, human-route non-regression and the examples.
+    - Codex delegations:
+      - D1, the tests: DONE; one spec clarification (the full build-info payload).
+      - D2, the adversarial review plus the cohort-reader audit: 10 findings (F1 HIGH; F2-F6 MEDIUM; F7-F10 LOW),
+        all repaired in 0bc11ff. The audit verdict is that sharing AUTOMATED_RADAR would leak through generic
+        readers; it is kept as docs/automation/COHORT_READER_AUDIT.md.
+      - D3, the test updates: FAILED on the Codex quota and changed nothing. Claude did the work.
+      - The delta review is NOT_RUN (quota), replaced by Claude's diff review plus the regression tests.
+    - Residual, honest:
+      - the Postgres ledger path is fake-connection tested only: NOT_RUN on real PostgreSQL;
+      - SUPABASE_DB_URL on the Space is unverified;
+      - the deadline compares the app clock with the database clock;
+      - there is one analysis slot per app process.
+    - Pin boundary: NONE required. Evaluator-pinned files touched: 0.
+    - NOT_RUN / not done: push, PR, deploy, enablement, credential issuance, the 0013 apply route and its apply, any
+      UOR mutation.
   - **W26 RELEASE CLOSED (2026-09-30): the CONTROLLED_SMOKE is PASS_HTTP and the DB proof is PASS_PROVEN. Both are
     CONSUMED and never rerun.**
     - Run directory: .work/w26_smoke/run_20260930T124617Z. The marker .work/w26_smoke/EXECUTED names it, so the
@@ -1660,7 +1713,9 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
+CURRENT_MILESTONE=F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and verified LOCALLY
+  (feat/f1-governed-automation). Not pushed, deployed or enabled; 0013 is not applied.
+  Before it: W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
   - the W26 CONTROLLED_SMOKE ran once: PASS_HTTP. The one-row DB proof: PASS_PROVEN (run_af48fd1e…);
   - the H2 hold is unchanged; there is no directional, skill or model PASS;
   - production is D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A;
@@ -1729,7 +1784,9 @@ CURRENT_MILESTONE=W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILE
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
+CURRENT_BRANCH=feat/f1-governed-automation (LOCAL, no upstream), from main f19d7575: 028ded8, 4f9ae93, 0bc11ff and
+  this STATE record. Its worktree is lanes12/f1 in the session scratchpad.
+  Before it: chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
   release STATE records a80c54e5 and c61adbb, plus this W26-closure record. Its worktree is lanes11/state in the session
   scratchpad.
   - Merged by Claude under the standing authorization: prep/release-identity-tc-v1-stamp (#141 → D 2096af6d) and
@@ -1915,7 +1972,9 @@ LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
+LAST_VERIFY=PASS ruff ok | 4324 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1 at
+  0bc11ff; the three scanners are unmodified).
+  Before it: PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
   - On P 24c66816, in a clean worktree: PASS 3999. The release record: PASS 3999. This W26-closure record: PASS 3999.
   - On the identity commit e7309c31, in a clean worktree; this record: PASS 3999.
   - Run on W26 be4b9939 (RC1 + W26 + the regenerated pin), in a clean worktree.
@@ -2026,6 +2085,13 @@ LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanner
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - F1 (2026-09-30):
+    - D1 tests: DONE.
+    - D2 review and audit: DONE (10 findings, all repaired).
+    - D3 test updates: FAILED on the Codex usage limit, with no change made.
+    - The delta review: NOT_RUN (quota).
+    - MODEL SUBSTITUTION: Claude did D3's work and the delta review. The quota resets 2026-10-01 02:35 +07. An
+      optional Codex delta review of 0bc11ff may run after that; it is not required.
   - Identity prep (2026-09-30): the bounded read-only review of e7309c31 plus this record: DONE (base a20a46c9):
     (1)-(5) PROVEN; findings NONE.
   - Post-W26 (2026-09-30): the bounded read-only review of be4b9939 PROVED (1)-(6), NONE. The release preparation was
@@ -2099,8 +2165,16 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION. The next work
-  needs a new owner instruction.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. F1 is local and complete for its safe scope. Owner decisions (none taken):
+  - G2: accept or modify the interface;
+  - T3: publish feat/f1-governed-automation;
+  - G6: the quota level;
+  - T3: confirm SUPABASE_DB_URL on the Space;
+  - build the 0013 apply route, then its T4 apply;
+  - T4: the release, then the T3 re-pin;
+  - credential issuance, the enable T3 and a controlled canary.
+  Before it: W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION. The next work needs a new owner
+  instruction.
   Consumed on 2026-09-30:
   - the one-row DB read (pack §6): run once by the owner; PASS → PASS_PROVEN;
   - the publication and merge of this STATE record, under the standing authorization;
@@ -2440,7 +2514,10 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. W26_RELEASE_CLOSED; SAFE_MILESTONE_REACH
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).
+NEXT_ACTION=WAIT for the owner's F1 decisions (OWNER_BOUNDARY): G2 on docs/automation/RADAR_EVIDENCE_V1.md and
+  F1_NODE_CLASSIFICATION.md, and the T3 to publish feat/f1-governed-automation. Nothing F1 enables anything in
+  production.
+  Before it: WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).
   - Nothing is pending in the W26 chain. The smoke and its DB read are consumed and never rerun.
   - DONE before it: the one-row DB read → PASS_PROVEN, adjudicated with
     `adjudicate_w26_stamp_smoke.py .work/w26_smoke/run_20260930T124617Z --db-read .work/w26_release/W26_DB_READ.csv`.
