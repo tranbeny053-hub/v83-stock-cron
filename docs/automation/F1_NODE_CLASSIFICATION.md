@@ -21,13 +21,13 @@ Both are proposals, not canon. UCPE canon wins. The contract that results is `RA
 | 1.2 | One symbol per call; any batch is a separate endpoint | INTEGRATED | One symbol per call. No batch endpoint is offered. |
 | 1.3 | "Same inputs at the same `as_of_utc` on the same release give the same analysis" | MODIFIED | The canonical inputs are named: the market snapshot, the published skill-gate state and the release with its settings. Per-call identity and time fields are excluded. Equality is proven on fixed inputs. A repeated LIVE call is not reproducible (`live_repeat_reproducible: false`). |
 | 2.1–2.3 | Dedicated credential, route-scoped, header only | INTEGRATED | `X-UCPE-Automation-Credential` holds `ucpea.<id>.<value>`; the server keeps sha256 digests and compares them with compare_digest on every well-formed token. A malformed token is refused on its format alone. A human session is refused here (403); the credential gets 401 on all 14 human method-paths (tested). |
-| 2.4 | Rotation and revocation | INTEGRATED + OWNER | The registry supports several ACTIVE records, REVOKED and `not_after_utc`. Issuing any credential is owner-performed; UCPE never issues or stores a value, it only hashes the presented one in memory. |
+| 2.4 | Rotation and revocation | INTEGRATED + OWNER | Zero-downtime rotation and immediate revocation. The registry is the database table `automation_credential` (0013), read on every request with no cache, so a change applies to the next request with no Space restart. Several ACTIVE rows may overlap; there are REVOKED rows and `not_after_utc`. Tested in unit tests and on real PostgreSQL in the PR rehearsal. Issuing, rotating and revoking are owner T4 actions (`CREDENTIAL_ROTATION.md`). UCPE never issues or stores a value; it only hashes the presented one in memory. |
 | 2.5 | UOR resolves the credential by NAME | SERIAL | UOR side (step F3). |
 | 3.1 | Server-stamped `evidence_origin` | INTEGRATED | Stamped from the credential, never from the client. |
 | 3.2 | "Persisted with the run" | MODIFIED | Persisted only in the isolated `automation_radar_ledger`, never with the shared run or prediction rows. The owner's rule: no `AUTOMATED_RADAR` in shared prediction-origin or storage semantics. |
 | 3.3 / 9.1 | Isolated from calibration and control | INTEGRATED | Structural. `analyze_request_isolated` has no origin, row, persistence or run store, and there are regression tests. |
 | 4 | Strict request, `client_request_id`, no free-form fields | INTEGRATED | Strict parser plus schema. `deadline_ms` is 5000–60000; timeframes are `15m/1H/4H/1D`; the mode is always METRICS_ONLY. |
-| 4.1 | Idempotency: the same run or 409, never a second run | INTEGRATED | Reserved before analysis; replay, conflict, in-progress and abandoned are handled while the key is retained: 90 days in production (until an owner purge), about 26 hours in the in-memory test ledger. The durable ledger is authored (0013). Its Postgres path is tested with a fake connection only: **NOT_RUN on real PostgreSQL.** |
+| 4.1 | Idempotency: the same run or 409, never a second run | INTEGRATED | Reserved before analysis; replay, conflict, in-progress and abandoned are handled while the key is retained: 90 days in production (until an owner purge), about 26 hours in the in-memory test ledger. The durable ledger is authored (0013). Its Postgres path is exercised on a real scratch PostgreSQL by `scripts/migration_0013_rehearsal/probe_app_sql.py` in the PR rehearsal workflow. |
 | 5.1 | New pinned schema version | INTEGRATED | `radar_evidence.v1` and `radar_evidence_error.v1`, pinned by sha256. |
 | 5.2 | Required fields, **including the sample count behind each probability** | MODIFIED | Every field is present except that no sample count is fabricated: `sample_count: null` with `sample_count_basis: "NONE_UNCALIBRATED_HEURISTIC"`. UCPE's probabilities are uncalibrated heuristics (`INSUFFICIENT_SAMPLE`). A horizon whose status is not OK carries null numbers. The projection holds codes only, never prose. |
 | 5.3 | Shadow blocks omitted | INTEGRATED | `quant_v2` and `derivatives_intelligence` are never carried. |
@@ -42,7 +42,7 @@ Both are proposals, not canon. UCPE canon wins. The contract that results is `RA
 | 8.3 | The cost model is stated | INTEGRATED | Public market data plus Space CPU; no paid API. |
 | 9.2 | Section 5A never used or inferable | SATISFIED | The route reads live data and the published gate only. The automation package imports no oos, calibration or resolution module (tested). |
 | 9.3 | Isolation provable | INTEGRATED + OWNER | Regression tests, plus the audit SQL in the contract. Running it needs an enabled route and an owner database read. |
-| 10.1–10.2 | Per-call audit; retention stated | INTEGRATED | One ledger row per (credential, client_request_id). Its repeats are answered from that row and not recorded separately. Retention 90 days; the purge is owner-authorized. |
+| 10.1–10.2 | Per-call audit; retention stated | INTEGRATED | One ledger row per (credential, client_request_id). Its repeats are answered from that row and not recorded separately. Unauthenticated and malformed calls are never recorded. Retention is at least 90 days, with no automated purge; the audit and its capacity arithmetic are in `RETENTION_AND_IDEMPOTENCY.md`. |
 | 11.1 | `build_info.release_id` and fingerprint in every response | INTEGRATED (success bodies) | Every 200 carries the full six-field `GET /v1/build-info` payload. Error bodies carry only the catalogued error. |
 | 11.2 | UOR release allowlist | SERIAL + OWNER | UOR side; **G2**. |
 | 12.1 | Kill switch | INTEGRATED | `UCPE_AUTOMATION_ENABLED`, default OFF (503). |
@@ -50,7 +50,7 @@ Both are proposals, not canon. UCPE canon wins. The contract that results is `RA
 | 13 | Schemas plus sha256; at least 2 non-holdout, provenance-declared examples; hash algorithm, quota, errors, credential procedure | INTEGRATED | `docs/automation/UOR_HANDOFF.md` lists every file with its sha256: schemas, contract, examples and their manifest, classification, audit. |
 | 14 | UOR's prepared boundary | SERIAL | UOR side; UCPE never writes into UOR. |
 | F1-a | Ledger migration 0013 | INTEGRATED (authored) | Applying it is an owner **T4**. |
-| F1-b | Dedicated one-shot apply route for 0013 (script plus dispatch-only workflow, real-PostgreSQL rehearsal) | SERIAL | Built when the owner schedules enablement, following the 0012 pattern. |
+| F1-b | Dedicated one-shot apply route for 0013 (script plus dispatch-only workflow, real-PostgreSQL rehearsal) | INTEGRATED | `scripts/apply_migration_0013.py`, `.github/workflows/apply-migration-0013.yml` (dispatch-only, one shot) and `apply-migration-0013-rehearsal.yml` (every PR, no secret), in the 0012 pattern. The bulk `apply_migrations.py` is never used, and no workflow runs it (tested). The apply is an owner **T4**. |
 | F1-c | `SUPABASE_DB_URL` present on the Space for the ledger | OWNER | T3 configuration check. Unverified. |
 | F1-d | Release carrying F1, deploy, guard re-pin | OWNER | T4 deploy and T3 re-pin. The guarded delta is `analysis_service.py` and `api/app.py`. |
 | F1-e | Enable plus a CONTROLLED canary call | OWNER / SERIAL | T3 Space configuration, then a canary under its own authorization. |
@@ -70,10 +70,14 @@ Both are proposals, not canon. UCPE canon wins. The contract that results is `RA
 
 The pin-test attestation: the reviewer's sandbox could not run the pin tests, so that item was NOT_RUN. Claude's full `./verify.sh` covers the pin and closure tests, and it passes. The planned Codex delta review of the repair could not run either, because the Codex quota was exhausted. It was replaced by Claude's own diff review and the regression tests in `tests/automation/test_repair_contract.py` and `test_canonical.py`.
 
-**Owner decisions this surfaces (none is taken):**
-- **G2:** accept or modify this interface.
-- **G6:** the quota level.
-- The T3 configuration check of `SUPABASE_DB_URL`.
-- The 0013 apply route build, then its T4 apply.
-- A release T4 and the re-pin T3.
-- Credential issuance, the enable T3, and the canary.
+**Owner decisions this surfaces:**
+- **G2:** ACCEPTED by the owner as the local contract candidate.
+- **G6:** provisional at 6 per 5 minutes and 120 per day. This is not an activation or spend
+  approval.
+- The rest, none of it taken, in the order of `F1_RELEASE_PLAN.md`:
+  - the merge (T3);
+  - the 0013 apply (T4);
+  - a release (T4) and the re-pin (T3);
+  - credential issuance (T4);
+  - the enable (T3);
+  - the canary.

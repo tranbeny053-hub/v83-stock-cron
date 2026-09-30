@@ -326,10 +326,13 @@ class PostgresAutomationLedger:
             import psycopg
 
             connect = psycopg.connect
+        # No server-side prepared statements, like the repository's connections: they break
+        # behind Supabase's transaction pooler.
         return connect(
             self._database_url,
             connect_timeout=max(1, math.ceil(timeout_seconds)),
             autocommit=False,
+            prepare_threshold=None,
         )
 
     def reserve(

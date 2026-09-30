@@ -1,6 +1,7 @@
 """One call of POST /v1/automation/radar-evidence, fail closed at every step.
 
-Order: kill switch; human session refused; machine credential; strict request; ledger
+Order: kill switch; human session refused; machine credential (read from the database registry on
+every call, so a rotation or revocation applies to the next request); strict request; ledger
 reservation (idempotency: replay, conflict, in progress); quota; concurrency; the isolated
 analysis; the pinned radar_evidence.v1 body; the ledger record. The service never raises and never
 echoes a credential or a request field.
@@ -45,7 +46,9 @@ from crypto_probability_engine.automation.contract import (
 )
 from crypto_probability_engine.automation.credentials import (
     CredentialRefusal,
+    CredentialRegistry,
     MachinePrincipal,
+    RegistryUnavailable,
     authenticate,
 )
 from crypto_probability_engine.automation.ledger import (
@@ -116,6 +119,7 @@ class RadarEvidenceService:
         *,
         settings: Settings,
         ledger: AutomationLedger,
+        registry: CredentialRegistry,
         analyzer: Callable[[RadarEvidenceRequest], dict[str, Any]] | None = None,
         config_loader: Callable[[], AutomationConfig] | None = None,
         clock: Callable[[], datetime] | None = None,
@@ -125,6 +129,7 @@ class RadarEvidenceService:
         concurrency: ConcurrencyGate | None = None,
     ) -> None:
         self._ledger = ledger
+        self._registry = registry
         self._analyzer = analyzer or (lambda req: run_isolated_analysis(req, settings=settings))
         self._config_loader = config_loader or (lambda: load_config(os.environ))
         self._clock = clock or (lambda: datetime.now(UTC))
@@ -165,7 +170,10 @@ class RadarEvidenceService:
         if any(name in cookies for name in HUMAN_SESSION_COOKIES):
             return _error(ErrorCode.HUMAN_SESSION_REFUSED)
         received = self._clock()
-        principal = authenticate(credential, config.credentials, now=received)
+        try:
+            principal = authenticate(credential, self._registry, now=received)
+        except RegistryUnavailable:  # the registry lives in the ledger's database: fail closed
+            return _error(ErrorCode.LEDGER_UNAVAILABLE)
         if principal is CredentialRefusal.MISSING:
             return _error(ErrorCode.CREDENTIAL_REQUIRED)
         if not isinstance(principal, MachinePrincipal):

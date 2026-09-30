@@ -1,9 +1,11 @@
--- The automation ledger of the governed machine route POST /v1/automation/radar-evidence (F1).
+-- The automation ledger and the machine-credential registry of the governed machine route
+-- POST /v1/automation/radar-evidence (F1).
 --
--- AUTHORED, NOT APPLIED. Applying this is a T4 action requiring owner authorization, through a
--- dedicated one-shot route that is not yet built. The default scripts/apply_migrations.py applies
--- EVERY migration and must never be used for it. Until it is applied the route has no ledger and
--- answers every authenticated call with 503 LEDGER_UNAVAILABLE: it fails closed.
+-- AUTHORED, NOT APPLIED. Applying this is a T4 action requiring owner authorization, through its
+-- dedicated one-shot route only: .github/workflows/apply-migration-0013.yml running
+-- scripts/apply_migration_0013.py. The default scripts/apply_migrations.py applies EVERY migration
+-- and must never be used for it. Until it is applied the route has no registry and no ledger and
+-- answers every well-formed credential with 503 LEDGER_UNAVAILABLE: it fails closed.
 --
 -- WHY. Automated runs must never enter the human cohorts that calibration and control count. The
 -- route therefore writes nothing to the shared prediction tables: it computes an isolated analysis
@@ -18,17 +20,31 @@
 --   status and the exact response body, so a repeat replays it byte for byte.
 -- - A SUCCEEDED row carries the run id, the analysis hash, the evidence hash and a 200 body.
 -- - arl_credential_received serves the quota counts.
--- - Retention is 90 days (stated in docs/automation/RADAR_EVIDENCE_V1.md); a purge is a separate
---   owner-authorized step.
+-- - Retention is at least 90 days (docs/automation/RETENTION_AND_IDEMPOTENCY.md). Nothing purges
+--   it automatically; a purge is a separate owner-authorized step.
+--
+-- THE REGISTRY, public.automation_credential, one row per machine credential ever issued:
+-- - credential_id and the lowercase hex SHA-256 of the credential's value. The value itself is
+--   never stored anywhere in UCPE, and no two credentials may share a digest.
+-- - status ACTIVE or REVOKED; a REVOKED row carries its revocation time, an ACTIVE one none.
+-- - not_after_utc, optional, is when the credential stops working; it must follow its creation.
+-- The route reads this table on every call, with no cache, so a change applies to the next request
+-- with no restart: a rotation inserts the new ACTIVE row before the old one is revoked (both work
+-- in between), and a revocation refuses the next request presenting it. The owner writes it through
+-- the procedure in docs/automation/CREDENTIAL_ROTATION.md; the application only reads it. Rows are
+-- never deleted: a revoked row stays as the audit record of its credential.
 --
 -- NO FOREIGN KEY and no reference to any other table: no calibration, control or resolution reader
--- reads this table, and applying it takes no lock on any existing table.
+-- reads these tables, and applying them takes no lock on any existing table.
 --
--- ACCESS, the 0009 pattern: row-level security on, no policy, and no privilege for PUBLIC, anon,
--- authenticated or service_role. Supabase's default privileges grant every new table to the API
--- roles, so they are revoked explicitly. Only the owning role reads or writes it, through
--- SUPABASE_DB_URL. Row-level security that is not forced does not restrict an owner. The REST
--- repository never touches it.
+-- NULL-SAFE CHECKS. A CHECK whose expression is NULL passes, so every comparison of a nullable
+-- column is guarded by IS NOT NULL: a SUCCEEDED row without its run id or hashes is refused.
+--
+-- ACCESS, the 0009 pattern, for both tables: row-level security on, no policy, and no privilege for
+-- PUBLIC, anon, authenticated or service_role. Supabase's default privileges grant every new table
+-- to the API roles, so they are revoked explicitly. Only the owning role reads or writes them,
+-- through SUPABASE_DB_URL. Row-level security that is not forced does not restrict an owner. The
+-- REST repository never touches them.
 CREATE TABLE IF NOT EXISTS public.automation_radar_ledger (
     credential_id       TEXT        NOT NULL,
     client_request_id   UUID        NOT NULL,
@@ -60,17 +76,41 @@ CREATE TABLE IF NOT EXISTS public.automation_radar_ledger (
             AND completed_at_utc >= received_at_utc)),
     CONSTRAINT arl_success_shape CHECK (
         outcome_code IS DISTINCT FROM 'SUCCEEDED'
-        OR (http_status = 200 AND run_id ~ '^run_[0-9a-f]{32}$'
-            AND analysis_hash ~ '^sha256:[0-9a-f]{64}$'
-            AND evidence_hash ~ '^sha256:[0-9a-f]{64}$')),
+        OR (http_status IS NOT NULL AND http_status = 200
+            AND run_id IS NOT NULL AND run_id ~ '^run_[0-9a-f]{32}$'
+            AND analysis_hash IS NOT NULL AND analysis_hash ~ '^sha256:[0-9a-f]{64}$'
+            AND evidence_hash IS NOT NULL AND evidence_hash ~ '^sha256:[0-9a-f]{64}$')),
     CONSTRAINT arl_refusal_shape CHECK (
         outcome_code IS NULL OR outcome_code = 'SUCCEEDED'
-        OR (http_status BETWEEN 400 AND 599 AND run_id IS NULL
-            AND analysis_hash IS NULL AND evidence_hash IS NULL))
+        OR (http_status IS NOT NULL AND http_status BETWEEN 400 AND 599
+            AND run_id IS NULL AND analysis_hash IS NULL AND evidence_hash IS NULL))
 );
 CREATE INDEX IF NOT EXISTS arl_credential_received
     ON public.automation_radar_ledger (credential_id, received_at_utc);
 ALTER TABLE public.automation_radar_ledger ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.automation_radar_ledger FROM PUBLIC;
 REVOKE ALL ON TABLE public.automation_radar_ledger FROM anon, authenticated, service_role;
+-- No policy, no GRANT (0009 pattern): only the owning SUPABASE_DB_URL role reads/writes it.
+CREATE TABLE IF NOT EXISTS public.automation_credential (
+    credential_id   TEXT        NOT NULL,
+    secret_sha256   TEXT        NOT NULL,
+    status          TEXT        NOT NULL,
+    not_after_utc   TIMESTAMPTZ,
+    created_at_utc  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at_utc  TIMESTAMPTZ,
+    CONSTRAINT automation_credential_pkey PRIMARY KEY (credential_id),
+    CONSTRAINT ac_secret_sha256_unique UNIQUE (secret_sha256),
+    CONSTRAINT ac_credential_id_format CHECK (credential_id ~ '^[a-z0-9][a-z0-9-]{2,31}$'),
+    CONSTRAINT ac_secret_sha256_format CHECK (secret_sha256 ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ac_status_valid CHECK (status IN ('ACTIVE', 'REVOKED')),
+    CONSTRAINT ac_revocation_shape CHECK (
+        (status = 'ACTIVE' AND revoked_at_utc IS NULL)
+        OR (status = 'REVOKED' AND revoked_at_utc IS NOT NULL
+            AND revoked_at_utc >= created_at_utc)),
+    CONSTRAINT ac_expiry_after_creation CHECK (
+        not_after_utc IS NULL OR not_after_utc > created_at_utc)
+);
+ALTER TABLE public.automation_credential ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.automation_credential FROM PUBLIC;
+REVOKE ALL ON TABLE public.automation_credential FROM anon, authenticated, service_role;
 -- No policy, no GRANT (0009 pattern): only the owning SUPABASE_DB_URL role reads/writes it.

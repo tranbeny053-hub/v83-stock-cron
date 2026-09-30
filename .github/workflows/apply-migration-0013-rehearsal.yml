@@ -1,0 +1,75 @@
+name: Migration 0013 rehearsal (scratch PostgreSQL, no secrets)
+
+# Proves, BEFORE the route can merge, that migration 0013, its apply route and the application's own
+# SQL work on a real PostgreSQL. It builds a scratch database from migrations 0001-0012, production's
+# expected state, applies 0013 once through scripts/apply_migration_0013.py --mode=rehearse and
+# requires a second apply to refuse; then every API role must be refused every read and write of
+# both tables, and scripts/migration_0013_rehearsal/probe_app_sql.py drives the production registry
+# and ledger classes against them: rotation and revocation with no restart, idempotency, the
+# deadline, the quota, every constraint hazard, and fail-closed transport. A second scratch database
+# built from migrations 0001-0010 alone must take the same apply by itself. It references no secret
+# and touches no real database. The job is named `test` so the owner-authorized merge procedure
+# waits for it.
+
+"on":
+  pull_request:
+    paths:
+      - scripts/apply_migration_0013.py
+      - scripts/migration_0013_rehearsal/**
+      - .github/workflows/apply-migration-0013.yml
+      - .github/workflows/apply-migration-0013-rehearsal.yml
+      - migrations/**
+      - src/crypto_probability_engine/automation/**
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse the apply and probe the application's SQL on scratch local PostgreSQL
+        shell: bash
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres createdb -O "$(id -un)" migration_0013_rehearsal
+          sudo -u postgres createdb -O "$(id -un)" migration_0013_rebuild
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql > "$RUNNER_TEMP/migrations_0001_0010.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0011_prediction_target_provenance.sql
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0012_prediction_resolution_status.sql
+          MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rehearsal?host=/var/run/postgresql" PYTHONPATH=src python scripts/apply_migration_0013.py --mode=rehearse --report=migration-0013-rehearsal-report.json
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
+          MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rehearsal?host=/var/run/postgresql" python scripts/migration_0013_rehearsal/probe_app_sql.py
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
+          MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rebuild?host=/var/run/postgresql" PYTHONPATH=src python scripts/apply_migration_0013.py --mode=rehearse --report=migration-0013-rebuild-report.json
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
+
+      - name: Upload the rehearsal reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: migration-0013-rehearsal-report
+          path: |
+            migration-0013-rehearsal-report.json
+            migration-0013-rebuild-report.json
+          if-no-files-found: warn

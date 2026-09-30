@@ -50,16 +50,22 @@ two differ, and the differences are listed in `F1_NODE_CLASSIFICATION.md`.
   - A request that carries a human session cookie (`ucpe_session` or `ucpe_dev_session`) is refused
     here with 403 `HUMAN_SESSION_REFUSED`, even alongside a valid machine credential.
   - CORS does not allow the credential header, so a browser cannot send it cross-origin.
-- **Registry.** The environment variable `UCPE_AUTOMATION_CREDENTIALS` holds a JSON array of
-  `{"credential_id", "secret_sha256", "status": "ACTIVE"|"REVOKED", "not_after_utc"?}`. It holds
-  digests only.
-- **Issuance (owner-performed; UCPE never issues or sees a value outside a request).**
-  1. On the owner's machine, generate the value, e.g. with Python's `secrets.token_urlsafe(32)` (43
-     characters).
-  2. Compute its SHA-256 hex digest.
-  3. Add the record to the Space secret (T3).
-  4. Hand the full `ucpea.<id>.<value>` token to UOR's governed secret store, by NAME only.
-- **Rotation.** Add the new record, move UOR over, verify, then mark the old record `REVOKED`.
+- **Registry.** The database table `public.automation_credential` (migration 0013) holds one row per
+  credential:
+  - `credential_id`, `secret_sha256`, `status` (`ACTIVE` or `REVOKED`), and the optional
+    `not_after_utc`, `created_at_utc` and `revoked_at_utc`;
+  - digests only, never a value.
+  The environment holds no credential and no digest.
+- **Read on every request, with no cache.** A registry change applies to the next request, with no
+  restart:
+  - a rotation overlaps: the new row works at once and the old one until it is revoked;
+  - a revocation refuses the next request presenting that credential, including a replay.
+  Each read is bounded (2 s), and at most two are in flight at once. A registry that cannot be read,
+  or holds a malformed row, authenticates nothing: 503 `LEDGER_UNAVAILABLE`, with no row written.
+- **Issuance, rotation and revocation** are owner-performed T4 actions on the production database,
+  following `CREDENTIAL_ROTATION.md`. UCPE never issues a credential, never sees a value outside a
+  request, and never writes to the registry. UOR keeps the full `ucpea.<id>.<value>` token in its
+  governed secret store, referred to by NAME only.
 
 ## 3. Provenance and cohort isolation (non-negotiable)
 
@@ -224,7 +230,11 @@ degraded guess.
   - Past the deadline plus 60 s, the key is closed and answered 503 `DEADLINE_EXCEEDED`, never re-run.
 - **A different request under the same key:** 409 `IDEMPOTENCY_CONFLICT`.
 - **Refusals that write no row.** 400, 401, 403 and 422 happen before the reservation, so the key
-  stays usable.
+  stays usable. So does a 503 answered before it (disabled, misconfigured, or the registry or the
+  ledger unreachable).
+- **Scope and lifetime.** Idempotency is per credential and lasts as long as the row: at least the
+  90-day retention (`RETENTION_AND_IDEMPOTENCY.md`). After a rotation, a retry uses the credential it
+  began under.
 - **An unknown outcome.** A 503 `LEDGER_UNAVAILABLE` answer after an analysis means the outcome is
   unknown: the record's commit may or may not have landed. Only a replay of that key can reveal it.
   UOR, which never retries inside a cycle, simply treats the symbol as having no evidence.
@@ -245,7 +255,9 @@ degraded guess.
 
 - **The switch.** `UCPE_AUTOMATION_ENABLED` is on only for `1` or `true` (case-insensitive,
   surrounding spaces ignored). It defaults to off. Clearing it (a T3 Space configuration change)
-  returns every call to 503 `AUTOMATION_DISABLED`.
+  returns every call to 503 `AUTOMATION_DISABLED`. A Space configuration change restarts the Space.
+- **The faster stop.** Revoking the credential stops a consumer at its next request, with no restart
+  (`CREDENTIAL_ROTATION.md`).
 - **The consumer** falls back to no evidence on any error.
 - **Versioning.** Any breaking or semantic change is a new schema version. A version is retired only
   after notice, and the schema files are pinned by sha256 (`UOR_HANDOFF.md`).
@@ -260,18 +272,23 @@ degraded guess.
   - `state`, `outcome_code`, `http_status` and the exact `response_body`;
   - `run_id`, `analysis_hash`, `evidence_hash`, `release_id`;
   - `deadline_ms`, `received_at_utc` and `completed_at_utc` (never before reception).
-- **Retention** is 90 days. The purge is a separate owner-authorized operation.
+- **Retention** is at least 90 days. Nothing purges automatically; a purge is a separate,
+  not-yet-built, owner-authorized route. Unauthenticated and malformed calls are never recorded. The
+  full audit, with its capacity arithmetic, is `RETENTION_AND_IDEMPOTENCY.md`.
 
 ## 13. Enablement prerequisites (all owner-gated; none is done)
 
 1. **G2:** the owner accepts or modifies this interface.
-2. **Ledger:** a dedicated one-shot apply route for migration 0013 is built (0012 pattern, with a
-   real-PostgreSQL rehearsal), then applied (T4).
-3. **Database access:** the Space has `SUPABASE_DB_URL` for the ledger's own connection (T3; unverified
-   today).
+2. **Registry and ledger:** the dedicated one-shot apply route for migration 0013 is BUILT
+   (`scripts/apply_migration_0013.py` and `.github/workflows/apply-migration-0013.yml`, the 0012
+   pattern). It is rehearsed on a real PostgreSQL on every pull request that touches it, and again
+   inside the dispatch before the secret is handed out. The apply itself is a T4.
+3. **Database access:** the route uses the Space's `SUPABASE_DB_URL`. The human persistence already
+   reaches the database through it (W26 PASS_PROVEN). The route's own connections stay unproven
+   until the canary, and they fail closed until then.
 4. **Release:** a release carrying F1 is deployed (T4), and the source guard is re-pinned (T3).
-5. **Credential and quota:** the owner issues the credential (T3 Space secret) and decides the quota
-   (G6).
+5. **Credential and quota:** the owner issues the credential by inserting its digest into the
+   registry (T4, `CREDENTIAL_ROTATION.md`) and decides the quota (G6, a T3 Space variable).
 6. **Enable:** `UCPE_AUTOMATION_ENABLED=1` (T3). A controlled canary call follows, under its own
    authorization.
 7. **UOR side:** registries and the transport, built in UOR's own sessions. UCPE never writes into

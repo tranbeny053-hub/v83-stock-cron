@@ -13,7 +13,6 @@ from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import ErrorCode as ApiErrorCode
 from crypto_probability_engine.automation.config import (
-    ENV_CREDENTIALS,
     ENV_ENABLED,
     ENV_QUOTA_PER_5MIN,
     ENV_QUOTA_PER_DAY,
@@ -23,7 +22,10 @@ from crypto_probability_engine.automation.contract import (
     RADAR_EVIDENCE_SCHEMA_FILE,
     parse_request,
 )
-from crypto_probability_engine.automation.credentials import CREDENTIAL_HEADER
+from crypto_probability_engine.automation.credentials import (
+    CREDENTIAL_HEADER,
+    RegistryUnavailable,
+)
 from crypto_probability_engine.automation.ledger import LedgerUnavailable, Outcome
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings
@@ -31,7 +33,9 @@ from tests.automation.conftest import (
     AUTOMATION_PATH,
     CREDENTIAL_ID,
     SYNTHETIC_SECRET,
+    active_record,
     credential_env,
+    registry,
     request_body,
     token,
     utc,
@@ -84,7 +88,7 @@ def seed(harness, *, body=None, now=NOW, outcome=None):
 
 
 def test_plain_app_kill_switch_defaults_off(monkeypatch):
-    for name in (ENV_ENABLED, ENV_CREDENTIALS, ENV_QUOTA_PER_5MIN, ENV_QUOTA_PER_DAY):
+    for name in (ENV_ENABLED, ENV_QUOTA_PER_5MIN, ENV_QUOTA_PER_DAY):
         monkeypatch.delenv(name, raising=False)
     # Explicit fixture Settings avoids reading any real environment configuration.
     with TestClient(create_app(Settings(data_mode="fixture"))) as client:
@@ -94,10 +98,56 @@ def test_plain_app_kill_switch_defaults_off(monkeypatch):
     assert_error(response, "AUTOMATION_DISABLED", 503)
 
 
-def test_enabled_without_active_credentials_is_not_configured(harness_factory):
-    harness = harness_factory(env=credential_env(records=[]))
-    assert_error(harness.post(), "NOT_CONFIGURED", 503)
+def test_enabled_with_an_empty_registry_refuses_every_credential(harness_factory):
+    harness = harness_factory(credential_registry=registry(active_record("someone-else")))
+    assert_error(harness.post(), "CREDENTIAL_INVALID", 401)
     assert harness.ledger.entries() == []
+
+
+class _DownRegistry:
+    def __init__(self):
+        self.lookups = 0
+
+    def lookup(self, credential_id):
+        self.lookups += 1
+        raise RegistryUnavailable("synthetic outage")
+
+
+def test_an_unavailable_registry_fails_closed_and_writes_no_row(harness_factory):
+    down = _DownRegistry()
+    harness = harness_factory(credential_registry=down)
+    assert_error(harness.post(), "LEDGER_UNAVAILABLE", 503)
+    assert down.lookups == 1 and harness.ledger.entries() == []
+    response = harness.client.post(AUTOMATION_PATH, json=request_body())
+    assert_error(response, "CREDENTIAL_REQUIRED", 401)
+    assert down.lookups == 1, "a missing credential never reaches the registry"
+
+
+def test_rotation_and_revocation_apply_to_the_next_request_with_no_restart(harness_factory):
+    rotated_secret = "SYNTHETIC-rotated-secret-not-a-credential-1"
+    harness = harness_factory()
+    assert harness.post(body=request_body(client_request_id=str(uuid4()))).status_code == 200
+    harness.registry.put(active_record("test-radar-2", rotated_secret))
+    rotated = {CREDENTIAL_HEADER: token("test-radar-2", rotated_secret)}
+    for headers in (None, rotated):
+        response = harness.post(body=request_body(client_request_id=str(uuid4())), headers=headers)
+        assert response.status_code == 200, "both credentials work during the overlap"
+    harness.registry.put(active_record(status="REVOKED"))
+    assert_error(
+        harness.post(body=request_body(client_request_id=str(uuid4()))), "CREDENTIAL_INVALID", 401
+    )
+    response = harness.post(body=request_body(client_request_id=str(uuid4())), headers=rotated)
+    assert response.status_code == 200
+    assert harness.registry.lookups == 5, "the registry was read on every request: no cache"
+
+
+def test_a_revoked_credential_cannot_replay_its_earlier_evidence(harness_factory):
+    harness = harness_factory()
+    first = harness.post()
+    assert first.status_code == 200
+    harness.registry.put(active_record(status="REVOKED"))
+    assert_error(harness.post(), "CREDENTIAL_INVALID", 401)
+    assert len(harness.ledger.entries()) == 1
 
 
 @pytest.mark.parametrize("cookie", ["ucpe_session", "ucpe_dev_session"])

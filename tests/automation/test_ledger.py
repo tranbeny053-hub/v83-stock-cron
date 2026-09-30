@@ -204,7 +204,11 @@ def test_postgres_reserves_atomically_in_one_committed_transaction():
     assert (result.counted_5min, result.counted_day) == (2, 8)
     assert (result.oldest_5min, result.oldest_day) == (oldest_five, oldest_day)
     assert len(db.connect_calls) == 1
-    assert db.connect_calls[0][1] == {"connect_timeout": 3, "autocommit": False}
+    assert db.connect_calls[0][1] == {
+        "connect_timeout": 3,
+        "autocommit": False,
+        "prepare_threshold": None,  # safe behind a transaction pooler
+    }
     assert db.events == ["enter", "enter", *["execute"] * 5, "commit", "exit", "exit"]
     sql = [" ".join(statement.split()) for statement, _ in db.statements]
     assert "set_config('statement_timeout'" in sql[0] and "set_config('lock_timeout'" in sql[0]

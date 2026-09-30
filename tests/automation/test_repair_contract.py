@@ -143,9 +143,9 @@ def test_a_horizon_that_is_not_ok_carries_no_numbers(fixture_market):  # F5
 def test_free_prose_cannot_ride_in_a_code_field(fixture_market):  # F5
     del fixture_market
     body = json.loads(
-        (contract.SCHEMA_DIR.parent / "docs/automation/examples").joinpath(
-            "radar_evidence.v1.synthetic-btc-4h-gate-blocked.json"
-        ).read_text()
+        (contract.SCHEMA_DIR.parent / "docs/automation/examples")
+        .joinpath("radar_evidence.v1.synthetic-btc-4h-gate-blocked.json")
+        .read_text()
     )
     body["calibration_state"]["reliability_status"] = "observed_directional_rate=0.58"
     body["evidence_hash"] = contract.evidence_hash(body)
@@ -196,8 +196,14 @@ def _reserve(ledger, now=NOW):
     )
 
 
-SUCCESS = Outcome("SUCCEEDED", 200, {"synthetic": "evidence"}, "run_" + "a" * 32,
-                  "sha256:" + "1" * 64, "sha256:" + "2" * 64)
+SUCCESS = Outcome(
+    "SUCCEEDED",
+    200,
+    {"synthetic": "evidence"},
+    "run_" + "a" * 32,
+    "sha256:" + "1" * 64,
+    "sha256:" + "2" * 64,
+)
 LATE = Outcome("DEADLINE_EXCEEDED", 503, {"synthetic": "late"})
 
 
@@ -265,7 +271,11 @@ def _pg(rows):
 def test_postgres_success_on_time_commits_once():  # F1
     db, ledger = _pg([("row",)])
     assert _complete_success(ledger, now=NOW, deadline=NOW + timedelta(seconds=3)) is True
-    assert db.commits == 1 and db.connect_kwargs == {"connect_timeout": 3, "autocommit": False}
+    assert db.commits == 1 and db.connect_kwargs == {
+        "connect_timeout": 3,
+        "autocommit": False,
+        "prepare_threshold": None,
+    }
     (timeout_sql, timeout_params), (update_sql, params) = db.statements
     assert "set_config('statement_timeout'" in timeout_sql and timeout_params["timeout"] == "2500ms"
     assert "clock_timestamp() <= %(deadline_at_utc)s" in update_sql

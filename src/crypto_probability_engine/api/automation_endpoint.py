@@ -4,7 +4,9 @@ All policy lives in ``automation.service``. This module only reads the request (
 header, the cookie names and a byte-bounded body), runs the service off the event loop and writes
 its answer as the RFC 8785 JCS bytes of the body, so a replay is byte-identical to the first
 answer. The deadline budget starts here, before the body is read. The route shares no session,
-run store, persistence repository or skill-evidence refresh with the human routes.
+run store, persistence repository or skill-evidence refresh with the human routes. Nothing here
+connects to the database at startup: the ledger and the credential registry connect per call,
+with bounded timeouts, and fail closed (503) when the database is missing or unreachable.
 """
 
 from __future__ import annotations
@@ -15,7 +17,10 @@ from starlette.concurrency import run_in_threadpool
 
 from crypto_probability_engine.automation.config import REQUEST_BODY_MAX_BYTES
 from crypto_probability_engine.automation.contract import render
-from crypto_probability_engine.automation.credentials import CREDENTIAL_HEADER
+from crypto_probability_engine.automation.credentials import (
+    CREDENTIAL_HEADER,
+    PostgresCredentialRegistry,
+)
 from crypto_probability_engine.automation.ledger import PostgresAutomationLedger
 from crypto_probability_engine.automation.service import RadarEvidenceService
 from crypto_probability_engine.config.settings import Settings
@@ -27,6 +32,7 @@ def register_automation_endpoint(app: FastAPI, *, settings: Settings) -> None:
     app.state.automation_service = RadarEvidenceService(
         settings=settings,
         ledger=PostgresAutomationLedger(settings.supabase_db_url),
+        registry=PostgresCredentialRegistry(settings.supabase_db_url),
     )
 
     @app.post(AUTOMATION_PATH, include_in_schema=False)

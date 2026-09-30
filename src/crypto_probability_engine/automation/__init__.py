@@ -6,8 +6,8 @@ evidence, or feeds calibration and control. Automated runs live only in the auto
 One module owns each contract:
 
 - ``origin``: the server-stamped automation origin;
-- ``config``: the kill switch, the credential registry and the quota bounds;
-- ``credentials``: route-only machine authentication;
+- ``config``: the kill switch and the quota bounds;
+- ``credentials``: route-only machine authentication against the database credential registry;
 - ``contract``: the strict request, the pinned ``radar_evidence.v1`` response, errors and hashes;
 - ``ledger``: idempotency and audit, isolated from the cohort tables;
 - ``quota``: the per-credential rate bounds;

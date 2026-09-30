@@ -1,13 +1,12 @@
 """Shared fixtures for the automation route (F1). Synthetic only: no holdout, no network, no secret.
 
 Market data is the repository's deterministic fixture snapshot, served through the real analysis
-pipeline with ``select_market_data`` replaced. Credentials are generated per test from a fixed,
-obviously synthetic secret; no real credential exists anywhere in the tests.
+pipeline with ``select_market_data`` replaced. Credentials live in an in-memory registry holding the
+digest of a fixed, obviously synthetic value; no real credential exists anywhere in the tests.
 """
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,7 +18,12 @@ from crypto_probability_engine.adapters.provider_selection import ProviderSelect
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.app import create_app
 from crypto_probability_engine.automation import config as automation_config
-from crypto_probability_engine.automation.credentials import CREDENTIAL_HEADER, secret_digest
+from crypto_probability_engine.automation.credentials import (
+    CREDENTIAL_HEADER,
+    CredentialRecord,
+    InMemoryCredentialRegistry,
+    secret_digest,
+)
 from crypto_probability_engine.automation.ledger import InMemoryAutomationLedger
 from crypto_probability_engine.automation.service import RadarEvidenceService
 from crypto_probability_engine.config.settings import Settings
@@ -36,25 +40,29 @@ def token(credential_id: str = CREDENTIAL_ID, secret: str = SYNTHETIC_SECRET) ->
     return f"ucpea.{credential_id}.{secret}"
 
 
-def credential_env(
-    *,
-    enabled: str = "1",
-    records: list[dict] | None = None,
-    **extra: str,
-) -> dict[str, str]:
-    if records is None:
-        records = [
-            {
-                "credential_id": CREDENTIAL_ID,
-                "secret_sha256": secret_digest(SYNTHETIC_SECRET),
-                "status": "ACTIVE",
-            }
-        ]
-    return {
-        automation_config.ENV_ENABLED: enabled,
-        automation_config.ENV_CREDENTIALS: json.dumps(records),
-        **extra,
+def credential_env(*, enabled: str = "1", **extra: str) -> dict[str, str]:
+    """The route's environment: the kill switch and quotas only, never a credential."""
+
+    return {automation_config.ENV_ENABLED: enabled, **extra}
+
+
+def active_record(
+    credential_id: str = CREDENTIAL_ID, secret: str = SYNTHETIC_SECRET, **changes: object
+) -> CredentialRecord:
+    fields = {
+        "credential_id": credential_id,
+        "secret_sha256": secret_digest(secret),
+        "status": "ACTIVE",
+        "not_after_utc": None,
+        **changes,
     }
+    return CredentialRecord(**fields)
+
+
+def registry(*records: CredentialRecord) -> InMemoryCredentialRegistry:
+    """The synthetic registry; with no argument it holds the one ACTIVE test credential."""
+
+    return InMemoryCredentialRegistry(records or (active_record(),))
 
 
 def request_body(**overrides: object) -> dict:
@@ -110,6 +118,7 @@ class AutomationHarness:
     ledger: InMemoryAutomationLedger
     app: object
     env: dict[str, str]
+    registry: InMemoryCredentialRegistry
 
     def post(self, body: object = None, *, headers: dict | None = None, raw: bytes | None = None):
         send = {CREDENTIAL_HEADER: token()} if headers is None else headers
@@ -130,11 +139,13 @@ def harness_factory(fixture_market) -> Callable[..., AutomationHarness]:
         clock=None,
         monotonic=None,
         ledger: InMemoryAutomationLedger | None = None,
+        credential_registry: InMemoryCredentialRegistry | None = None,
     ) -> AutomationHarness:
         settings = Settings(data_mode="fixture")
         app = create_app(settings)
         chosen_env = credential_env() if env is None else env
         chosen_ledger = ledger or InMemoryAutomationLedger()
+        chosen_registry = registry() if credential_registry is None else credential_registry
         kwargs = {}
         if analyzer is not None:
             kwargs["analyzer"] = analyzer
@@ -145,10 +156,11 @@ def harness_factory(fixture_market) -> Callable[..., AutomationHarness]:
         app.state.automation_service = RadarEvidenceService(
             settings=settings,
             ledger=chosen_ledger,
+            registry=chosen_registry,
             config_loader=lambda: automation_config.load_config(chosen_env),
             **kwargs,
         )
-        return AutomationHarness(TestClient(app), chosen_ledger, app, chosen_env)
+        return AutomationHarness(TestClient(app), chosen_ledger, app, chosen_env, chosen_registry)
 
     return build
 
