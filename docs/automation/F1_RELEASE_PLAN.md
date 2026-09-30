@@ -47,8 +47,9 @@ default), no credential exists, and the route fails closed at every layer.
   - the settle checks;
   - the source-integrity guard re-pin; its guarded delta includes `api/analysis_service.py` and
     `api/app.py`.
-- Rollback target: the production release before it, today
-  `2096af6d1b3d54461b40c47fd96c265882e5af40` / `UCPE-PROD-TC-V1-STAMP-20260930-A`.
+- Rollback target: sealed when that release is prepared, as in W26. It is the production release
+  being replaced: today `2096af6d1b3d54461b40c47fd96c265882e5af40` /
+  `UCPE-PROD-TC-V1-STAMP-20260930-A`, and never `00705c55`.
 - Human routes: unchanged. The non-regression suite covers every human method and path.
 
 ## 4. Issue the credential (T4, owner)

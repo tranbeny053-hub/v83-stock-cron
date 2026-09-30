@@ -430,7 +430,7 @@ def probe_fail_closed() -> None:
             ledger_closed = False
         check(
             registry_closed and ledger_closed,
-            f"transport: a {what} database fails the registry and the ledger closed",
+            f"transport: the registry and the ledger fail closed when the database is {what}",
         )
 
 

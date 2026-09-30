@@ -14,7 +14,7 @@
 | `docs/automation/COHORT_READER_AUDIT.md` | why the origin is isolated | `ad8b0b9c770a82063106c24f5db6f071657efdfada2913d9e84d7a505fd1b19f` |
 | `docs/automation/CREDENTIAL_ROTATION.md` | credential issue, rotation and revocation | `4e1a9f3e28033705a89248cba841b85a921331cfc40842f8d01b2c148a4b8e2f` |
 | `docs/automation/RETENTION_AND_IDEMPOTENCY.md` | retention and idempotency audit | `dd9e923cd85c00e8550f8a84b9e1bb48ecdc44fd4221250503e166359285a6e7` |
-| `docs/automation/F1_RELEASE_PLAN.md` | the owner-gated release plan | `47c01dd6845efb667bcaf4bffd6a5fc3ff96d3dc1d230aa84095320e83155fbf` |
+| `docs/automation/F1_RELEASE_PLAN.md` | the owner-gated release plan | `44d09b1cc4cdf1ec1dd70aaac99d09e0441d50394221a173aed5894b5ca5120c` |
 | `docs/automation/examples/MANIFEST.json` | example provenance and digests | `484c03ec6252277a7b3acba5015778f725c5977e724ba1164c8c1fcad5d0b466` |
 | `docs/automation/examples/radar_evidence.v1.synthetic-btc-4h-gate-blocked.json` | synthetic example: gate blocked | `c47e0e5ef6f30725d488c56e6b3b73849b445ef19f7079aac1bc98cbd872620f` |
 | `docs/automation/examples/radar_evidence.v1.synthetic-eth-1h-h2-hold.json` | synthetic example: H2 hold | `2c33037891d5d44f9f625f47681bba1f281e0de7c37bb025aea11f84048b5c65` |

@@ -1,6 +1,29 @@
 # STATE
 
-Updated: 2026-09-30 (F1 governed automation, LOCAL). **F1-GOVERNED-AUTOMATION-LOCAL-A is committed and verified
+Updated: 2026-09-30 (F1 merge readiness). **F1-MERGE-READINESS-A: draft PR #144 (feat/f1-governed-automation),
+published without force and NOT merged. The code gaps the owner named are closed. The mandatory independent Codex
+security review is OPEN: the Codex quota is exhausted until about 19:35Z. No PASS is substituted.**
+- Credentials: a DB registry (public.automation_credential, migration 0013), read on every request with no cache.
+  Rotation has zero downtime and revocation applies at the next request, with no Space restart. Proven on real
+  PostgreSQL.
+- Migration 0013 now holds the registry and the ledger. Its CHECKs are now NULL-safe: a CHECK that evaluates to NULL
+  passes, so a SUCCEEDED row without its run id or hashes used to be accepted. Found while writing the probe.
+- The dedicated one-shot 0013 apply route is BUILT, in the 0012 pattern: scripts/apply_migration_0013.py and the
+  dispatch-only apply-migration-0013.yml, which rehearses on scratch PostgreSQL before its one secret step.
+- The PR rehearsal apply-migration-0013-rehearsal.yml (no secret) passed on real PostgreSQL at d9df2371, run
+  36747080987:
+  - APPLIED, then the second apply refused;
+  - all 33 API-role probes refused;
+  - PROBE PASS 49 checks (rotation, revocation, JCS replay through JSONB, the DB-clock deadline, quota, every
+    constraint hazard, fail-closed transport);
+  - the rebuild from 0001-0010 APPLIED.
+- Retention and idempotency are audited (at least 90 days; no automated purge; an owner capacity item). The
+  transport is reconfirmed fail-closed; the Space's connectivity is not assumed.
+- The bulk apply_migrations.py stays forbidden for 0013, and no workflow runs it (tested).
+- VERIFY=PASS 4496; scanners 3/3; no evaluator-pinned file touched.
+- Nothing is applied, deployed, enabled or issued. Production is unchanged: D 2096af6d.
+- MODEL SUBSTITUTION: Codex was unavailable (usage limit), so Claude implemented this change. It is recorded here.
+Previously (F1 LOCAL): **F1-GOVERNED-AUTOMATION-LOCAL-A is committed and verified
 LOCALLY on feat/f1-governed-automation (028ded8, 4f9ae93, 0bc11ff plus this record), VERIFY=PASS 4324. It is NOT
 pushed, NOT deployed and NOT enabled. No credential was issued, and migration 0013 is authored, NOT applied.**
 - The machine route POST /v1/automation/radar-evidence (radar_evidence.v1) ships OFF (503 AUTOMATION_DISABLED). Even
@@ -189,7 +212,45 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER.
+LOOP_STATE=IN PROGRESS: F1 merge readiness. The Codex review gate is OPEN until the quota resets.
+  - **F1-MERGE-READINESS-A (2026-09-30; the owner's prompt: G2 accepted; G6 provisional at 6 per 5 minutes and 120 per
+    day, not an activation or spend approval; do not merge, release or enable).**
+    - PR: verified 446260c16cd21fb972082d6e94b702f55803e6d7 = main f19d7575 + 4 commits.
+      - Pushed without force → draft PR #144 (base main, not merged). CI on 446260c: success.
+      - d9df2371: the merge-readiness commit, pushed as a fast-forward.
+    - (a) Rotation and revocation: DB registry public.automation_credential (0013).
+      - It is read per request with no cache; bounded (2 s timeouts; at most 2 reads in flight, refused not queued);
+        fail closed (503 LEDGER_UNAVAILABLE, no row).
+      - The env credential path is removed. Owner procedure: docs/automation/CREDENTIAL_ROTATION.md (issue, rotate
+        and revoke are owner T4 SQL).
+    - (b) The retention and idempotency audit: docs/automation/RETENTION_AND_IDEMPOTENCY.md.
+      - At least 90 days; no automated purge (a test scans for one); idempotency per credential for the row's
+        lifetime.
+      - Capacity: about 150 MB/year at the G6 maximum, so a future purge route is an owner item (not a merge
+        blocker).
+    - (c) The 0013 apply route: scripts/apply_migration_0013.py.
+      - attest / rehearse / apply; the pinned digest; advisory lock 5000013; pre-checks make a second apply refuse.
+      - Post-checks cover both tables: columns, constraints with literal and integer sets, indexes, RLS, privileges,
+        no row, no FK or trigger, and every existing table's security unchanged.
+      - .github/workflows/apply-migration-0013.yml is dispatch-only; the rehearsal runs before the one secret step.
+      - .github/workflows/apply-migration-0013-rehearsal.yml runs on PRs with no secret.
+    - (d) Tests: hazards, reapply, refusals, RLS and privileges.
+      - Unit: tests/scripts/test_apply_migration_0013.py (97), tests/workflows/test_apply_migration_0013_workflow.py,
+        tests/migrations/test_automation_radar_ledger_migration.py.
+      - Real PG: scripts/migration_0013_rehearsal/probe_app_sql.py and 20_assert_api_roles_refused.sql.
+    - (e) Transport fail-closed: tests/automation/test_transport_fail_closed.py.
+      - Nothing connects at startup; refused callers never reach the database; prepare_threshold=None (the
+        transaction pooler); 503 when the database is missing or unreachable.
+      - The Space's connectivity is NOT assumed. The human persistence reaches the database (W26 PASS_PROVEN); the
+        route's own connections stay unproven until the canary.
+    - Release, apply, canary and handoff prep: docs/automation/F1_RELEASE_PLAN.md (owner-gated, nothing executed).
+      UOR_HANDOFF.md pins the new docs.
+    - Real-PG proof: PR rehearsal run 36747080987 at d9df2371: success (see the header).
+    - Found and fixed: the 0013 ledger CHECKs passed on NULL (arl_success_shape accepted a SUCCEEDED row without its
+      run id or hashes). They are now guarded by IS NOT NULL and proven on real PG.
+    - OPEN: the mandatory independent Codex security and adversarial review. Task:
+      scratchpad/lanes12/f1/.work/task-f1-review2.md. BLOCKED by the Codex usage limit until about 19:35Z.
+      **Never substituted.**
   - **F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30; the owner's pasted prompt; local T0/T1/T2 only).**
     - Source: UOR's proposal files 04 and 05 in UCPE-Radar/.work/HANDOFF_FINAL_PHASE, read only. The owner-only
       grading key and the trap prompt were NOT opened. UCPE canon wins.
@@ -1713,7 +1774,10 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and verified LOCALLY
+CURRENT_MILESTONE=F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
+  closed, and the real-PG rehearsal passed. The Codex review gate is OPEN (quota). Nothing is applied, deployed,
+  enabled or issued.
+  Before it: F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and verified LOCALLY
   (feat/f1-governed-automation). Not pushed, deployed or enabled; 0013 is not applied.
   Before it: W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
   - the W26 CONTROLLED_SMOKE ran once: PASS_HTTP. The one-row DB proof: PASS_PROVEN (run_af48fd1e…);
@@ -1784,8 +1848,12 @@ CURRENT_MILESTONE=F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and ver
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/f1-governed-automation (LOCAL, no upstream), from main f19d7575: 028ded8, 4f9ae93, 0bc11ff and
-  this STATE record. Its worktree is lanes12/f1 in the session scratchpad.
+CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged), from main f19d7575:
+  - 028ded8, 4f9ae93, 0bc11ff and 446260c (the earlier record);
+  - d9df2371 (merge readiness);
+  - this STATE record.
+  Its worktree is lanes12/f1 in the session scratchpad.
+  Before it: feat/f1-governed-automation (then LOCAL): 028ded8, 4f9ae93, 0bc11ff and its STATE record.
   Before it: chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
   release STATE records a80c54e5 and c61adbb, plus this W26-closure record. Its worktree is lanes11/state in the session
   scratchpad.
@@ -1829,7 +1897,8 @@ CURRENT_BRANCH=feat/f1-governed-automation (LOCAL, no upstream), from main f19d7
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
+LAST_GREEN_SHA=f19d7575 (main, PR #143: the W26 closure record). CI success (run 36722645234).
+  Before it: 6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
   Before it: 2096af6d (D, main, PR #141: the identity). CI success (run 36714014523); tree 68917d99 as recorded.
   Before it: 86c9496f (main, PR #140: the STATE repair). CI success (run 36703760641); its tree equals the
   recomputed merge.
@@ -1972,7 +2041,11 @@ LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4324 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1 at
+LAST_VERIFY=PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1
+  merge readiness at d9df2371; the scanners are unmodified).
+  - PR CI at d9df2371: the 0013 real-PG rehearsal succeeded (run 36747080987); the 0010 rehearsal succeeded.
+  - This record (with the row-width guard and doc fixes): PASS 4498.
+  Before it: PASS ruff ok | 4324 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1 at
   0bc11ff; the three scanners are unmodified).
   Before it: PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
   - On P 24c66816, in a clean worktree: PASS 3999. The release record: PASS 3999. This W26-closure record: PASS 3999.
@@ -2083,8 +2156,13 @@ LAST_VERIFY=PASS ruff ok | 4324 passed, 23 warnings | schemas+smoke ok | scanner
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
-  is kept for bounded mechanical or adversarial verification.
+CODEX_PENDING=F1 review2, the MANDATORY independent post-repair security and adversarial review, a merge gate.
+  - Task: scratchpad/lanes12/f1/.work/task-f1-review2.md; the report goes to .work/f1-review2/REVIEW.md.
+  - BLOCKED on the Codex usage limit until about 2026-09-30 19:35Z. The gate stays OPEN, and no PASS is substituted.
+  - MODEL SUBSTITUTION (2026-09-30): Codex was unavailable, so Claude implemented F1 merge readiness: the registry,
+    the apply route, the workflows, the tests and the docs.
+  The owner directed that Claude owns critical reasoning and implementation, and that Codex is kept for bounded
+  mechanical or adversarial verification.
   - F1 (2026-09-30):
     - D1 tests: DONE.
     - D2 review and audit: DONE (10 findings, all repaired).
@@ -2165,7 +2243,18 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. F1 is local and complete for its safe scope. Owner decisions (none taken):
+OWNER_BOUNDARY=Do not merge, release or enable F1 (the owner, 2026-09-30).
+  - Authorized and done: publishing PR #144 (draft) and using its CI.
+  - Next owner boundary, after the Codex gate passes: the T3 merge of PR #144.
+  - Then, in the order of docs/automation/F1_RELEASE_PLAN.md:
+    - the 0013 apply (T4);
+    - a release (T4) and the re-pin (T3);
+    - credential issuance (T4);
+    - the enable (T3);
+    - the canary.
+  - G2 is ACCEPTED as the local contract candidate. G6 is provisional (6/5min, 120/day).
+  Before it (F1 local): NO ACTION IS AUTHORIZED. F1 is local and complete for its safe scope. Owner decisions (none
+  taken):
   - G2: accept or modify the interface;
   - T3: publish feat/f1-governed-automation;
   - G6: the quota level;
@@ -2514,7 +2603,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. F1 is local and complete for its safe sc
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner's F1 decisions (OWNER_BOUNDARY): G2 on docs/automation/RADAR_EVIDENCE_V1.md and
+NEXT_ACTION=After the Codex quota resets (about 19:35Z), run the mandatory review in the worktree:
+  `./delegate.sh .work/task-f1-review2.md workspace-write xhigh`
+  - If it finds a HIGH or MEDIUM: one consolidated repair, then ./verify.sh, a push without force, and CI.
+  - If clean: record it, and report F1 MERGE_READY to the owner, whose T3 merge comes next.
+  - If Codex stays unavailable: the gate stays OPEN, and the owner is told so.
+  Before it (F1 local): WAIT for the owner's F1 decisions (OWNER_BOUNDARY): G2 on docs/automation/RADAR_EVIDENCE_V1.md and
   F1_NODE_CLASSIFICATION.md, and the T3 to publish feat/f1-governed-automation. Nothing F1 enables anything in
   production.
   Before it: WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).

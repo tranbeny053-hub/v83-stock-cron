@@ -222,4 +222,6 @@ class PostgresCredentialRegistry:
             raise RegistryUnavailable("the credential registry could not be read") from exc
         if row is None:
             return None
+        if len(row) != 4:
+            raise RegistryUnavailable("a registry record is malformed")
         return validated_record(*row)

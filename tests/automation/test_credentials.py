@@ -318,8 +318,16 @@ def test_a_database_failure_fails_closed_without_leaking_its_message(failure):
     assert "synthetic" not in str(refused.value) and "host" not in str(refused.value)
 
 
-def test_a_malformed_stored_row_fails_closed():
-    driver = FakeDriver((CREDENTIAL_ID, "not-a-digest", "ACTIVE", None))
+@pytest.mark.parametrize(
+    "row",
+    [
+        (CREDENTIAL_ID, "not-a-digest", "ACTIVE", None),
+        (CREDENTIAL_ID, secret_digest(SYNTHETIC_SECRET), "ACTIVE"),
+        (CREDENTIAL_ID, secret_digest(SYNTHETIC_SECRET), "ACTIVE", None, "extra"),
+    ],
+)
+def test_a_malformed_stored_row_fails_closed(row):
+    driver = FakeDriver(row)
     with pytest.raises(RegistryUnavailable):
         PostgresCredentialRegistry("synthetic", connect=driver.connect).lookup(CREDENTIAL_ID)
 
