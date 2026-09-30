@@ -165,6 +165,29 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **W26 CONTROLLED_SMOKE: RUN ONCE BY THE OWNER; PASS_HTTP (2026-09-30). The one-row DB read is NOT_RUN.**
+    - Run directory: .work/w26_smoke/run_20260930T124617Z. The marker .work/w26_smoke/EXECUTED names it, so the
+      smoke is CONSUMED and never runs again.
+    - Integrity, verified before adjudication:
+      - MANIFEST.sha256 25/25 with nothing unlisted; the tool seal W26_SMOKE_TOOLS.sha256 8/8;
+      - the run pins EXPECT_SHA = D 2096af6d… and EXPECT_GUARD_RUN = 36715108033; the executor sha256 equals the
+        sealed 2e08a59f…;
+      - no secret leakage: the login and logout bodies are {"ok"} only, with no echo; no cookie or token string in any
+        file; the jar is deleted; the only "code" keys are the enums SKILL_NOT_DEMONSTRATED and RUN_NOT_FOUND.
+    - Route (run.log), one pass: every pre-check OK; one login (200); S (200); detail 404 RUN_NOT_FOUND; /v1/runs 200
+      (S not listed); logout 200.
+    - Sealed adjudicator: **PASS_HTTP**, with 27 PASS, 5 INFO and 0 ERROR/FAIL.
+      - Schema-valid, and no stamp key anywhere in the response.
+      - hard_gate_passed false, with the SKILL_NOT_DEMONSTRATED block; disposition NO_TRADE; no candidate label.
+      - The probabilities sum to 1 on both horizons. Legacy verdict INSUFFICIENT_EVIDENCE (n 0), so there is no hold
+        key and the ordinary text appears.
+    - run_id run_af48fd1e0dea4e69a231b64d6569cc63; request window 12:47:23.840027Z .. 12:47:29.547042Z (operator
+      clock).
+    - Expectation, an inference and not proof: data_quality.data_source is OKX_PUBLIC (single-provider fallback;
+      cross_provider_state UNAVAILABLE) with live data, so the row should carry a tc-v1 stamp.
+    - The DB read is NOT_RUN. DB_READ_FILLED.sql, in the run directory, is pack §6 byte for byte with only the
+      literal filled; sha256 4b712902a7bb94a8411977da58832e8a1c4334903464e5086f247ce8284f9742.
+    - Operational PASS only, not directional or model evidence.
   - **TC-V1-STAMP RELEASE EXECUTED (2026-09-30; the owner's standing authorization of the prepared chain).**
     Raw evidence: .work/w26_release/exec/ (one directory per consequential step), deploy/precheck_20260930T122340Z
     and deploy/settle_20260930T122426Z.
@@ -1612,6 +1635,7 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=TC-V1-STAMP RELEASED (2026-09-30):
+  - the W26 CONTROLLED_SMOKE ran once and is PASS_HTTP (run_af48fd1e…); the one-row DB read is NOT_RUN (owner);
   - production is D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A;
   - re-pinned (#142 → 6becb100); guard 36715108033 HEALTHY;
   - smoke tools SEALED; the real smoke and the DB read are NOT_RUN.
@@ -2047,10 +2071,12 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE REAL CONTROLLED_SMOKE (T4) waits for the owner's own run.
-  - The owner runs the sealed executor once and types the access code at its hidden prompt.
-  - Then comes the one-row DB read, under the owner's database authorization.
+OWNER_BOUNDARY=THE ONE-ROW DB READ (pack §6) waits for the owner.
+  - The owner pastes .work/w26_smoke/run_20260930T124617Z/DB_READ_FILLED.sql unchanged into the Supabase SQL editor
+    and runs it once.
+  - They export the result as CSV to .work/w26_release/W26_DB_READ.csv.
   Consumed on 2026-09-30:
+  - the real CONTROLLED_SMOKE (T4): run once by the owner, PASS_HTTP. It is never run again;
   - the standing authorization of the TC-v1 release chain: identity #141, the deploy T4 of D (PASS), re-pin #142, two
     guard dispatches, and the smoke-tools seal;
   - the owner's merge of #140 (86c9496f) and closure of #139 (unmerged);
@@ -2386,8 +2412,10 @@ OWNER_BOUNDARY=THE REAL CONTROLLED_SMOKE (T4) waits for the owner's own run.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner runs, once, in their own terminal:
-  `bash /Users/kha/Documents/Kha-app/UCPE/.work/w26_smoke/run_w26_stamp_smoke.sh`
+NEXT_ACTION=The owner runs the one-row DB read (DB_READ_FILLED.sql, above) and saves the CSV. Claude then runs
+  `adjudicate_w26_stamp_smoke.py .work/w26_smoke/run_20260930T124617Z --db-read .work/w26_release/W26_DB_READ.csv`,
+  giving PASS_PROVEN, PASS_HTTP (NOT_EXERCISED) or FAIL, and records it here.
+  DONE before it: the owner ran, once, `bash /Users/kha/Documents/Kha-app/UCPE/.work/w26_smoke/run_w26_stamp_smoke.sh`
   - They type the CONTROLLED_SMOKE code at the hidden prompt, and nothing else, then tell Claude.
   - Claude adjudicates the sealed run directory.
   - If PASS_HTTP, the owner runs DB_READ_FILLED.sql, from that run directory, in the Supabase SQL editor and saves the
