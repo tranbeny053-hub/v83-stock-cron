@@ -2882,6 +2882,12 @@ def _insert_prediction(
     reject_conflict: bool = False,
 ) -> None:
     conflict_clause = "" if reject_conflict else "ON CONFLICT (prediction_id) DO NOTHING"
+    # Migration 0011's tc-v1 stamp columns are named only when all four values are present and
+    # not None. Any other row, a partial stamp included, gets today's statement byte for byte.
+    stamp = ("target_version", "reference_venue", "core_computed_at_utc", "issued_at_utc")
+    stamped = all(row.get(name) is not None for name in stamp)
+    stamp_columns = "".join(f", {name}" for name in stamp) if stamped else ""
+    stamp_values = "".join(f", %({name})s" for name in stamp) if stamped else ""
     cursor.execute(
         f"""
         INSERT INTO predictions (
@@ -2891,7 +2897,7 @@ def _insert_prediction(
           p_timeout_frac, decision_band_frac, model_version, methodology_version,
           calibration_status, reliability_status, epistemic_sufficiency,
           gate_action, data_source, is_live_data, cross_provider_state,
-          prediction_origin
+          prediction_origin{stamp_columns}
         )
         VALUES (
           %(prediction_id)s, %(run_id)s, %(operator_id)s, %(symbol)s,
@@ -2902,7 +2908,7 @@ def _insert_prediction(
           %(methodology_version)s, %(calibration_status)s,
           %(reliability_status)s, %(epistemic_sufficiency)s, %(gate_action)s,
           %(data_source)s, %(is_live_data)s, %(cross_provider_state)s,
-          %(prediction_origin)s
+          %(prediction_origin)s{stamp_values}
         )
         {conflict_clause}
         """,

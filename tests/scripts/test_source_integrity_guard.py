@@ -20,10 +20,11 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-H2-HOLD
-# (UCPE-PROD-H2-HOLD-20260927-A) deployed main's own tree, so nothing stands in it:
+# (UCPE-PROD-H2-HOLD-20260927-A) deployed main's own tree, so nothing stood in it:
 # analysis_service.py (the H2 fail-closed hold) and config/build_info.py (the release
-# identity) cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+# identity) cleared with that release. W26 (the tc-v1 writer stamp) changes
+# analysis_service.py again; it stands here until a release deploys it.
+CURRENT_DELTA_PATHS: list[str] = ["src/crypto_probability_engine/api/analysis_service.py"]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
