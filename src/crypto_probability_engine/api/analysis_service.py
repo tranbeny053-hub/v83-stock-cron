@@ -38,6 +38,7 @@ from crypto_probability_engine.config.defaults import (
 )
 from crypto_probability_engine.config.env_flags import QUANT_V2_SHADOW_ENABLED
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.config.unit_discipline import utc_now
 from crypto_probability_engine.derivatives_intel.block import build_derivatives_intelligence
 from crypto_probability_engine.derivatives_intel.schemas import (
     METHODOLOGY_VERSION_V0,
@@ -76,6 +77,7 @@ from crypto_probability_engine.persistence.repository import (
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
+from crypto_probability_engine.targets.contract_v1 import stamp_v1
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
     validate_market_snapshot,
@@ -95,6 +97,9 @@ _ALLOWED_DERIVATIVES_METHODOLOGY_VERSIONS = frozenset(
         METHODOLOGY_VERSION_V1,
     }
 )
+# The app clock of the tc-v1 stamp (core_computed_at_utc, issued_at_utc). Tests freeze it: stamp_v1
+# checks I3 (horizon_end_utc > issued_at_utc), so whether a row is stamped depends on "now".
+_stamp_clock = utc_now
 
 
 @dataclass(frozen=True)
@@ -240,6 +245,7 @@ def analyze_request(
         provider_state,
         methodology_version=methodology_version,
     )
+    core_computed_at = _stamp_clock()
     skill_evidence = (
         arm_context.resolved_skill_evidence
         if arm_context is not None
@@ -399,6 +405,20 @@ def analyze_request(
         )
     except Exception:
         derivatives_snapshot_row = None
+    # tc-v1 stamp, after every artifact that reads the row: the response, analysis_hash,
+    # detail_view and both snapshots are already built and never see it. Never for an OOS arm or a
+    # SCHEDULED_SHADOW_EVIDENCE row (the arms and the cadence); validate_v1 refuses them too.
+    if (
+        prediction_row is not None
+        and arm_context is None
+        and prediction_origin != OOS_PREDICTION_ORIGIN
+    ):
+        prediction_row = stamp_v1(
+            prediction_row,
+            snapshot_provider=snapshot.provider,
+            core_computed_at=core_computed_at,
+            issued_at=_stamp_clock(),
+        )
     if prediction_row is not None:
         _remember_prediction_persistence(
             run_id,

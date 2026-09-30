@@ -1,8 +1,8 @@
 # Target contract v1 (`tc-v1`)
 
 Written 2026-09-29 under owner decision D1: dedicated provenance columns. Migration 0011 added
-them (applied 2026-09-29). **The resolver reads the contract (Route C); the writer does not stamp
-yet.**
+them (applied 2026-09-29). **The resolver reads the contract (Route C), and the writer stamps live
+rows (§2.6 package W26).**
 
 ## Status
 
@@ -10,11 +10,12 @@ yet.**
   - It is pure. It imports only the standard library and `config/defaults.py`
     (`TIMEFRAME_SECONDS`).
   - Tests: `tests/targets/test_target_contract_v1.py`.
-- **Only the resolver imports it**, through `scripts/resolve_outcomes.py` and
-  `resolution/status_store.py`. The writer, the API and the §5A evaluator do not. The module is
+- **The resolver and the writer import it:** `scripts/resolve_outcomes.py` and
+  `resolution/status_store.py` (Route C), and `api/analysis_service.py` (W26). The §5A evaluator
+  does not. The module is
   outside the evaluator pin closure. A test checks both facts.
-- **No stored row carries a stamp.** Migration 0011's columns are live (2026-09-29, run
-  36583531813), but nothing writes them yet. Every row today is v0.
+- **Stored stamps.** Migration 0011's columns are live (2026-09-29, run 36583531813). The writer
+  stamps only after W26 is deployed; until then every stored row is v0.
 
 ## Purpose
 
@@ -192,14 +193,20 @@ is exact.
 1. **Author migration 0011.** Done: the migration and its one-shot apply route. Four nullable
    columns; NULL = v0; no backfill.
 2. **Apply 0011 live.** Done: the owner's one-shot T4 (2026-09-29, run 36583531813, PASS).
-3. **Stamp in the writer.** The writer calls `stamp_v1` with `snapshot.provider`, the core-finished
-   instant and the response instant.
+3. **Stamp in the writer.** W26, under §2.6. The writer calls `stamp_v1` with `snapshot.provider`,
+   the core-finished instant and the response instant.
+   - `api/analysis_service.py` (runtime-guarded, not pinned) takes both instants from an
+     injectable app clock, `_stamp_clock`. It stamps after `_prediction_row` and after both
+     snapshot builders, so the response, `analysis_hash`, the detail view and the snapshots are
+     unchanged. It never stamps an OOS arm or a `SCHEDULED_SHADOW_EVIDENCE` row.
    - The REST writer posts the whole row, so stamping before 0011 is live would break its
      prediction writes.
    - The Postgres writer names its columns in the pinned `persistence/repository.py`. That
      column list changes only under §2.6, and only if actually required. It is required: the
-     fixed 25-column INSERT drops the stamp. The prepared §2.6 package (W26) awaits
-     authorization.
+     fixed 25-column INSERT drops the stamp. W26's pinned hunk names the four stamp columns
+     only when all four are present and not None; for every other row the statement stays
+     byte-identical. It came with the owner's §2.6 authorization, `evaluator_pin.write_pin()`
+     and a STATE record.
 4. **Resolver.** Implemented locally (RC1, branch `feat/resolver-route-c-rq-v1`; not merged or
    deployed). `scripts/resolve_outcomes.py` resolves every row on `resolution_venue(row)`. Route C
    (`crypto_probability_engine/resolution/`, unpinned) reads `reference_venue` and the other stamp

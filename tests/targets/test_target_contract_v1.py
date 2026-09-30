@@ -657,9 +657,11 @@ def test_the_contract_imports_only_the_standard_library_and_config_defaults() ->
 
 
 # The explicit allowlist: the resolver (Route C, RC1) and its status store, which reads the stamp
-# columns. Nothing else under src/ or scripts/ may even name the contract.
+# columns, and the writer (W26), which stamps tc-v1. Nothing else under src/ or scripts/ may even
+# name the contract.
 CONTRACT_IMPORTERS = (
     "scripts/resolve_outcomes.py",
+    "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/resolution/status_store.py",
 )
 
