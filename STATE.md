@@ -1,6 +1,20 @@
 # STATE
 
-Updated: 2026-09-30 (TC-V1-STAMP released). **PRODUCTION IS D = 2096af6d1b3d54461b40c47fd96c265882e5af40 /
+Updated: 2026-09-30 (W26 RELEASE CLOSED). **W26_RELEASE_CLOSED: the tc-v1 writer stamp is deployed and PROVEN stored in
+production. SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.**
+- Production: D = 2096af6d1b3d54461b40c47fd96c265882e5af40 / UCPE-PROD-TC-V1-STAMP-20260930-A.
+  - Deploy PASS, with settle PASS.
+  - Post-deploy guard run 36715108033: HEALTHY in all 3 rounds, delta [], pin = live = D.
+- The real CONTROLLED_SMOKE, run once by the owner (run_af48fd1e0dea4e69a231b64d6569cc63): PASS_HTTP.
+- The one-row DB read, run once by the owner in the Supabase SQL editor: pack §6 PASS → **PASS_PROVEN**.
+  - The row is CONTROLLED_SMOKE, tc-v1, OKX_PUBLIC.
+  - Both stamp timestamps lie inside the logged request window, and all four invariant checks are true.
+- The H2 hold is unchanged. This proves operation and storage only: there is no directional, skill or model PASS.
+- From now on, eligible USER_REQUESTED rows are stamped at write time. RC1 resolves them on their stored
+  reference_venue in scheduled runs (the owner ruling of 2026-09-30). There is no legacy reclassification.
+- The only rollback target is 080f20a95241504bd7cf96088bf075d1ebaf4f55 (H2-HOLD); never 00705c55.
+- This record: chore/state-tc-v1-release, published and merged under the owner's standing authorization.
+Previously (TC-V1-STAMP released): **PRODUCTION IS D = 2096af6d1b3d54461b40c47fd96c265882e5af40 /
 UCPE-PROD-TC-V1-STAMP-20260930-A (the W26 tc-v1 writer stamp). It was deployed under the owner's standing authorization
 of the prepared chain.**
 - Claude merged identity PR #141 at 12:19:50Z, giving D (parents 86c9496f + 0c015a59, tree 68917d99).
@@ -165,7 +179,8 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
-  - **W26 CONTROLLED_SMOKE: RUN ONCE BY THE OWNER; PASS_HTTP (2026-09-30). The one-row DB read is NOT_RUN.**
+  - **W26 RELEASE CLOSED (2026-09-30): the CONTROLLED_SMOKE is PASS_HTTP and the DB proof is PASS_PROVEN. Both are
+    CONSUMED and never rerun.**
     - Run directory: .work/w26_smoke/run_20260930T124617Z. The marker .work/w26_smoke/EXECUTED names it, so the
       smoke is CONSUMED and never runs again.
     - Integrity, verified before adjudication:
@@ -185,8 +200,19 @@ LOOP_STATE=WAITING FOR THE OWNER.
       clock).
     - Expectation, an inference and not proof: data_quality.data_source is OKX_PUBLIC (single-provider fallback;
       cross_provider_state UNAVAILABLE) with live data, so the row should carry a tc-v1 stamp.
-    - The DB read is NOT_RUN. DB_READ_FILLED.sql, in the run directory, is pack §6 byte for byte with only the
-      literal filled; sha256 4b712902a7bb94a8411977da58832e8a1c4334903464e5086f247ce8284f9742.
+    - DB PROOF (pack §6): run once by the owner in the Supabase SQL editor, with DB_READ_FILLED.sql (pack §6 byte for
+      byte, only the literal filled; sha256 4b712902a7bb94a8411977da58832e8a1c4334903464e5086f247ce8284f9742).
+      - The untouched CSV, /Users/kha/Downloads/Supabase Snippet Untitled query.csv (257 bytes, sha256
+        cd3e04cc48b82f2105498fcddd8dcdeb1834a5f60096e0cc1f1c37e44f7470ae), is copied byte-identically to
+        .work/w26_release/W26_DB_READ.csv (0444).
+      - One row: CONTROLLED_SMOKE, tc-v1, OKX_PUBLIC.
+        - core_computed_at_utc 12:47:28.904687Z and issued_at_utc 12:47:28.907957Z, both inside the logged request
+          window: 5.06 s after its start and 0.64 s before its end.
+        - i1_asof_le_core, i1_core_le_issued, i3_time_left and i8_venue_ok are all true.
+      - The sealed adjudicator, with the tools and run manifest re-verified first:
+        - D1-D7 MET;
+        - D8 (the NOT_EXERCISED shape) and D9 (the listed FAIL cases) NOT_MET;
+        - D_OUTCOME PASS → **PASS_PROVEN**, recorded in ADJUDICATION_DB_READ.json in the run directory.
     - Operational PASS only, not directional or model evidence.
   - **TC-V1-STAMP RELEASE EXECUTED (2026-09-30; the owner's standing authorization of the prepared chain).**
     Raw evidence: .work/w26_release/exec/ (one directory per consequential step), deploy/precheck_20260930T122340Z
@@ -1634,12 +1660,13 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=TC-V1-STAMP RELEASED (2026-09-30):
-  - the W26 CONTROLLED_SMOKE ran once and is PASS_HTTP (run_af48fd1e…); the one-row DB read is NOT_RUN (owner);
+CURRENT_MILESTONE=W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
+  - the W26 CONTROLLED_SMOKE ran once: PASS_HTTP. The one-row DB proof: PASS_PROVEN (run_af48fd1e…);
+  - the H2 hold is unchanged; there is no directional, skill or model PASS;
   - production is D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A;
   - re-pinned (#142 → 6becb100); guard 36715108033 HEALTHY;
-  - smoke tools SEALED; the real smoke and the DB read are NOT_RUN.
-  This record is local (chore/state-tc-v1-release).
+  - the smoke tools are SEALED and CONSUMED (marker .work/w26_smoke/EXECUTED).
+  This record: chore/state-tc-v1-release, published and merged under the owner's standing authorization.
   Before it: RELEASE IDENTITY PREPARED (2026-09-30):
   - UCPE-PROD-TC-V1-STAMP-20260930-A at e7309c31, local and NOT_PUBLISHED;
   - main 86c9496f (#140 merged; #139 closed unmerged);
@@ -1702,8 +1729,9 @@ CURRENT_MILESTONE=TC-V1-STAMP RELEASED (2026-09-30):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-tc-v1-release (LOCAL, no upstream), from main 6becb100: this STATE record. Its worktree is
-  lanes11/state in the session scratchpad.
+CURRENT_BRANCH=chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
+  release STATE records a80c54e5 and c61adbb, plus this W26-closure record. Its worktree is lanes11/state in the session
+  scratchpad.
   - Merged by Claude under the standing authorization: prep/release-identity-tc-v1-stamp (#141 → D 2096af6d) and
     release/prod-tc-v1-stamp (#142 → 6becb100).
   Before it: prep/release-identity-tc-v1-stamp (then LOCAL), from main 86c9496f: the identity commit e7309c31 and its
@@ -1888,7 +1916,7 @@ LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
-  - On P 24c66816, in a clean worktree: PASS 3999. This record: PASS 3999.
+  - On P 24c66816, in a clean worktree: PASS 3999. The release record: PASS 3999. This W26-closure record: PASS 3999.
   - On the identity commit e7309c31, in a clean worktree; this record: PASS 3999.
   - Run on W26 be4b9939 (RC1 + W26 + the regenerated pin), in a clean worktree.
   - This STATE-only record: PASS 3673, in a clean worktree.
@@ -2071,11 +2099,11 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE ONE-ROW DB READ (pack §6) waits for the owner.
-  - The owner pastes .work/w26_smoke/run_20260930T124617Z/DB_READ_FILLED.sql unchanged into the Supabase SQL editor
-    and runs it once.
-  - They export the result as CSV to .work/w26_release/W26_DB_READ.csv.
+OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION. The next work
+  needs a new owner instruction.
   Consumed on 2026-09-30:
+  - the one-row DB read (pack §6): run once by the owner; PASS → PASS_PROVEN;
+  - the publication and merge of this STATE record, under the standing authorization;
   - the real CONTROLLED_SMOKE (T4): run once by the owner, PASS_HTTP. It is never run again;
   - the standing authorization of the TC-v1 release chain: identity #141, the deploy T4 of D (PASS), re-pin #142, two
     guard dispatches, and the smoke-tools seal;
@@ -2412,9 +2440,10 @@ OWNER_BOUNDARY=THE ONE-ROW DB READ (pack §6) waits for the owner.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner runs the one-row DB read (DB_READ_FILLED.sql, above) and saves the CSV. Claude then runs
-  `adjudicate_w26_stamp_smoke.py .work/w26_smoke/run_20260930T124617Z --db-read .work/w26_release/W26_DB_READ.csv`,
-  giving PASS_PROVEN, PASS_HTTP (NOT_EXERCISED) or FAIL, and records it here.
+NEXT_ACTION=WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).
+  - Nothing is pending in the W26 chain. The smoke and its DB read are consumed and never rerun.
+  - DONE before it: the one-row DB read → PASS_PROVEN, adjudicated with
+    `adjudicate_w26_stamp_smoke.py .work/w26_smoke/run_20260930T124617Z --db-read .work/w26_release/W26_DB_READ.csv`.
   DONE before it: the owner ran, once, `bash /Users/kha/Documents/Kha-app/UCPE/.work/w26_smoke/run_w26_stamp_smoke.sh`
   - They type the CONTROLLED_SMOKE code at the hidden prompt, and nothing else, then tell Claude.
   - Claude adjudicates the sealed run directory.
@@ -2428,7 +2457,7 @@ NEXT_ACTION=The owner runs the one-row DB read (DB_READ_FILLED.sql, above) and s
       - the deploy T4 of D (PASS) and the settle checks (PASS);
       - the re-pin T3 (#142 → 6becb100) and its guard run (36715108033, HEALTHY);
       - the smoke-tools seal.
-      REMAINING: the smoke T4 (the owner runs the sealed executor once and types the code), then the one-row DB read.
+      DONE later: the smoke T4 (PASS_HTTP) and the one-row DB read (PASS_PROVEN).
       Superseded plan text follows;
     - then a HEALTHY guard run on D (precondition 6: a scheduled run, or one authorized dispatch), the deploy T4 of
       the exact D (W26_RELEASE_PACK.md §3), the settle checks, the re-pin T3 and one guard run, the new smoke executor
