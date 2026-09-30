@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "QUOTA_EXCEEDED",
+    "message": "The credential's quota is exhausted.",
+    "retry_after_seconds": 120
+  },
+  "schema_version": "radar_evidence_error.v1"
+}

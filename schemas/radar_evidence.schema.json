@@ -55,12 +55,21 @@
     "build_info": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["release_id", "release_label", "fingerprint", "environment"],
+      "required": [
+        "schema_version",
+        "release_id",
+        "release_label",
+        "environment",
+        "source_milestone",
+        "fingerprint"
+      ],
       "properties": {
+        "schema_version": {"type": "string", "pattern": "^build-info\\.v[1-9][0-9]*$"},
         "release_id": {"type": "string", "pattern": "^UCPE-[A-Z0-9-]{3,}$"},
         "release_label": {"type": "string", "minLength": 1, "maxLength": 128},
-        "fingerprint": {"type": "string", "minLength": 1, "maxLength": 128},
-        "environment": {"type": "string", "minLength": 1, "maxLength": 64}
+        "environment": {"type": "string", "minLength": 1, "maxLength": 64},
+        "source_milestone": {"type": "string", "minLength": 1, "maxLength": 64},
+        "fingerprint": {"type": "string", "minLength": 1, "maxLength": 128}
       }
     },
     "probability_state": {

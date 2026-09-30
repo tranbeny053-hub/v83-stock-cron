@@ -42,6 +42,14 @@ RADAR_EVIDENCE_SCHEMA_VERSION = "radar_evidence.v1"
 ERROR_SCHEMA_VERSION = "radar_evidence_error.v1"
 SUPPORTED_TIMEFRAMES = ("15m", "1H", "4H", "1D")
 HORIZON_KEYS = ("H_primary", "H_extended")
+BUILD_INFO_KEYS = (
+    "schema_version",
+    "release_id",
+    "release_label",
+    "environment",
+    "source_milestone",
+    "fingerprint",
+)
 SAMPLE_COUNT_BASIS = "NONE_UNCALIBRATED_HEURISTIC"
 DETERMINISM_BASIS = "CANONICAL_INPUTS_AND_RELEASE"
 PROBABILITY_SUM_TOLERANCE = 1e-9
@@ -237,12 +245,8 @@ def build_radar_evidence(
             "normalized_symbol": analysis["normalized_symbol"],
             "primary_timeframe": timeframes["primary"],
             "horizon": {"bars": timeframes["horizon_bars"], "label": timeframes["horizon_label"]},
-            "build_info": {
-                "release_id": build_info["release_id"],
-                "release_label": build_info["release_label"],
-                "fingerprint": build_info["fingerprint"],
-                "environment": build_info["environment"],
-            },
+            # Exactly the serving release's public build-info payload (GET /v1/build-info).
+            "build_info": {key: build_info[key] for key in BUILD_INFO_KEYS},
             "probability_state": {
                 "probability_type": brief["probability_type"],
                 "calibration_status": probability_state["calibration_status"],
