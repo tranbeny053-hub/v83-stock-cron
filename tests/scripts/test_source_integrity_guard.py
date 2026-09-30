@@ -22,9 +22,14 @@ DRIFT_SHA = "d" * 40
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-H2-HOLD
 # (UCPE-PROD-H2-HOLD-20260927-A) deployed main's own tree, so nothing stood in it:
 # analysis_service.py (the H2 fail-closed hold) and config/build_info.py (the release
-# identity) cleared with that release. W26 (the tc-v1 writer stamp) changes
-# analysis_service.py again; it stands here until a release deploys it.
-CURRENT_DELTA_PATHS: list[str] = ["src/crypto_probability_engine/api/analysis_service.py"]
+# identity) cleared with that release. What stands in it now is analysis_service.py, the W26
+# tc-v1 writer stamp (merged by PR #138 but not yet deployed), and config/build_info.py, the
+# UCPE-PROD-TC-V1-STAMP-20260930-A release identity that names the next deploy. Both clear
+# when that deploy lands and the baseline is re-pinned.
+CURRENT_DELTA_PATHS: list[str] = [
+    "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/config/build_info.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
