@@ -1,6 +1,13 @@
 # STATE
 
-Updated: 2026-09-30 (STATE repair after #138). **W26 is MERGED: the owner merged PR #138 at 09:56:11Z, giving main
+Updated: 2026-09-30 (identity prepared). **The owner MERGED #140 (the STATE repair, 10:39:37Z → main 86c9496f) and
+CLOSED #139 unmerged (10:39:50Z).**
+**The release identity UCPE-PROD-TC-V1-STAMP-20260930-A is PREPARED LOCALLY: e7309c31 on
+prep/release-identity-tc-v1-stamp. It is NOT PUBLISHED.**
+- The deploy, re-pin, smoke and DB read are NOT_RUN. Production stays 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.
+- The only rollback target is 080f20a95241504bd7cf96088bf075d1ebaf4f55.
+- This record is local (prep/release-identity-tc-v1-stamp).
+Previously (STATE repair after #138): **W26 is MERGED: the owner merged PR #138 at 09:56:11Z, giving main
 d790e0ff. Its tree is 9de0f067, exactly the W26-first tree recorded before the push; CI success (run 36699280110).**
 **The release identity, the deploy, the re-pin, the new smoke and the DB read are NOT_RUN.**
 - Production stays 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.
@@ -146,6 +153,70 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **RELEASE IDENTITY PREPARED LOCALLY (2026-09-30; the owner's pasted prompt authorized local-only identity prep).**
+    - The owner merged #140 (the STATE repair) at 10:39:37Z, giving main 86c9496f, whose tree equals the recomputed
+      merge. CI succeeded (run 36703760641). The owner closed #139 UNMERGED at 10:39:50Z. #138 (W26) had merged
+      earlier (d790e0ff).
+    - IDENTITY: prep/release-identity-tc-v1-stamp = main 86c9496f + e7309c31878626096af8aa68d2b776418671f7b6.
+      It changes exactly three non-STATE files, mirroring precedent 2b575abb:
+      - config/build_info.py: RELEASE_ID UCPE-PROD-TC-V1-STAMP-20260930-A; RELEASE_LABEL "PROD-TC-V1-STAMP release of
+        main"; SOURCE_MILESTONE prod-tc-v1-stamp. The fingerprint is derived: UCPE LIVE BUILD ·
+        PROD-TC-V1-STAMP-20260930-A.
+      - tests/api/test_build_info.py: the three asserts.
+      - tests/scripts/test_source_integrity_guard.py: CURRENT_DELTA_PATHS = [src/crypto_probability_engine/api/
+        analysis_service.py, src/crypto_probability_engine/config/build_info.py]. PIN_SHA (080f20a9), the
+        pinned-identity asserts and ops/hf_runtime_baseline.json are unchanged.
+      - scripts/check_build_info.py: PASS. VERIFY=PASS 3999 on e7309c31.
+      - Codex review: DONE (read-only, high effort, base a20a46c9): (1)-(5) PROVEN; findings NONE. The reviewer did
+        not independently verify PR closure timestamps, CI or live deploy status.
+      - Blob sha256 at e7309c31, for the re-pin: build_info.py 96625788be27ef127d42ecbd7bbbcf3c7bf1f0ff5265c35103600f9487ec1412;
+        analysis_service.py cff4c98e7210777dd47eba3c96e30d43e85a1476d651976725dc652ba7ea0306.
+    - STATUS:
+      - identity PREPARED, NOT_PUBLISHED: its T3 (push, PR, merge) is owner-gated;
+      - deploy NOT_RUN;
+      - re-pin NOT_RUN;
+      - new smoke NOT_RUN;
+      - DB read NOT_RUN.
+    - Sealed documents (unchanged):
+      - .work/w26_release/W26_RELEASE_PACK.md, sha256 a37fc49003d3b377362bd4866d252ad23c74f413518fbc5463af3792d9ce47bb;
+      - .work/w26_release/W26_STAMP_SMOKE_CONTRACT.md, sha256 063975a7045f90cff35a3b70826e8c33055661b85f957c3d6b3287f5a3b16570.
+    - ROLLBACK: only to 080f20a95241504bd7cf96088bf075d1ebaf4f55 (UCPE-PROD-H2-HOLD-20260927-A, which carries the H2
+      hold). 00705c55 is retired.
+    - READ-ONLY RELEASE PREP (local, untracked, under .work/; nothing pushed, dispatched or deployed):
+      - Deploy tools, hashed in .work/w26_release/PREP_TOOLS.sha256
+        (sha256 1a8be7e91e4c40939c971f0aaba0dcac2d33e51fc5f3794eb4bf86aadb7f775a). The operational order is in
+        deploy/RUNBOOK.md.
+        - deploy/precheck.sh runs pack §3 preconditions 1-7. Check 7, the dry-run push, runs only with RUN_DRY_PUSH=1.
+        - deploy/settle.sh polls for RUNNING at D, then runs the five settle checks. It makes no analysis call.
+        - repin/make_repin_commit.py builds P from D deterministically (pack §4).
+      - Rehearsals, read-only, 2026-09-30:
+        - precheck against stand-in Ds: every check passed or stopped exactly as predicted. The check-7 regex matches
+          a fast-forward and rejects non-fast-forward and forced pushes; it was proven on a local bare repo only.
+        - settle against the live 080f20a9: it stopped only on build-info, as expected before the deploy.
+        - re-pin on stand-in D 5094f408 (this branch's pre-amend head): P' 815e3a53, identical on two runs;
+          VERIFY=PASS 3999; four negative cases stopped.
+      - Smoke tools, drafts under .work/w26_smoke/, hashed in DRAFT_TOOLS.sha256
+        (sha256 8e64f3bbc6d946eccf17d14500faadcf2f6918432a9a5fe4fcdbcb2f02848418):
+        - drafted by one subagent lane, then reviewed by Claude: the credential path, the marker, the pre-checks and
+          the pack §6 rules. Claude made three fail-closed edits: NOT_EXERCISED only on a CONTROLLED_SMOKE row; an
+          explicit note when FAIL rules fire under an ERROR verdict; a pre-filled DB_READ_FILLED.sql.
+        - Claude re-ran the dry run, 127.0.0.1 only: every expectation met (9 scenarios, 6 DB-read variants, the
+          second-run refusal). No non-loopback connection; the real marker is absent.
+        - NOT sealed. EXPECT_SHA (D) and EXPECT_GUARD_RUN (G, the post-re-pin guard dispatch) are set after the deploy
+          and re-pin. Then the dry run is repeated and W26_SMOKE_TOOLS.sha256 seals the tools.
+      - Production snapshot (read-only GETs, 10:59:50Z):
+        - the Space is RUNNING at 080f20a9, with build-info H2-HOLD and health 200;
+        - GET / 70928eb4…, app.js c683d20a… and styles.css c7be1c9d… equal the pack's settle values;
+        - hf/main is 080f20a9 and origin/main is 86c9496f (CI run 36703760641 success). No PR is open.
+      - Guard facts:
+        - a run concluding success does NOT prove HEALTHY: the guard also exits 0 on TRANSITIONING or
+          PROBE_UNAVAILABLE. The tools read the summary JSON in the run log;
+        - the latest run is 36674987970 (05:46Z, on b11a8e53): HEALTHY in all 3 rounds, deployment_delta_paths [];
+        - precondition 6 needs a HEALTHY run on D with delta [AS, BI]: a scheduled run, or one owner-authorized
+          dispatch.
+      - zsh hazard, proven: `$D:refs/heads/main` expands wrongly in zsh (the :r modifier). Hand-typed refspecs use
+        "${D}:…" or literal SHAs.
+    - This record: VERIFY=PASS 3999.
   - **STATE REPAIR AFTER #138 (2026-09-30).**
     - The owner merged PR #138 (W26, 79d43d38) at 09:56:11Z. main is d790e0ff (parents e09dee01 + 79d43d38), with tree
       9de0f067 = the recorded W26-first tree. CI succeeded on d790e0ff (run 36699280110).
@@ -1489,7 +1560,12 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=W26 MERGED (2026-09-30):
+CURRENT_MILESTONE=RELEASE IDENTITY PREPARED (2026-09-30):
+  - UCPE-PROD-TC-V1-STAMP-20260930-A at e7309c31, local and NOT_PUBLISHED;
+  - main 86c9496f (#140 merged; #139 closed unmerged);
+  - deploy, re-pin, smoke and DB read are NOT_RUN.
+  This record is local (prep/release-identity-tc-v1-stamp).
+  Before it: W26 MERGED (2026-09-30):
   - #138 → main d790e0ff, with the §2.6 pin closure 3ffc21e9…;
   - identity, deploy, re-pin, smoke and DB read are NOT_RUN;
   - production is unchanged.
@@ -1546,10 +1622,10 @@ CURRENT_MILESTONE=W26 MERGED (2026-09-30):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-w26-repair (this record), from main d790e0ff. Its worktree is lanes9/state-repair in the
-  session scratchpad.
-  - It supersedes chore/state-w26 at 03e99fb0 (#139), which stays open and unmodified.
-  - Merged: feat/writer-tc-v1-stamp-w26 at 79d43d38 (#138 → d790e0ff).
+CURRENT_BRANCH=prep/release-identity-tc-v1-stamp (LOCAL, no upstream), from main 86c9496f: the identity commit
+  e7309c31 and this STATE record. Its worktree is lanes10/identity in the session scratchpad.
+  - Merged: chore/state-w26-repair (#140 → 86c9496f) and feat/writer-tc-v1-stamp-w26 at 79d43d38 (#138 → d790e0ff).
+  - Closed unmerged: chore/state-w26 at 03e99fb0 (#139), superseded by #140.
   - Merged, and staying on origin: feat/resolver-route-c-rq-v1 (#136) and chore/state-post-0011-0012-apply (#137).
   - Superseded and never published: be4b9939 (W26 on RC1) and 0e830b4a (this record before reconciliation), both on
     local branches.
@@ -1584,7 +1660,9 @@ CURRENT_BRANCH=chore/state-w26-repair (this record), from main d790e0ff. Its wor
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=d790e0ff (main, PR #138: W26). CI success (run 36699280110); its tree is the recorded 9de0f067.
+LAST_GREEN_SHA=86c9496f (main, PR #140: the STATE repair). CI success (run 36703760641); its tree equals the
+  recomputed merge.
+  Before it: d790e0ff (main, PR #138: W26). CI success (run 36699280110); its tree is the recorded 9de0f067.
   Before it: e09dee01 (main, PR #137: the migration-apply STATE record), after 200e6ad6 (PR #136: RC1). CI succeeded
   on both (runs 36685544014 and 36685512304). The trees equal the recorded 098bddfa and 51b7f9a6.
   Before them: b11a8e53 (main, PR #135: the 0012 route), after b207a1a6 (PR #134: the 0011 route) and f844452b (PR #133:
@@ -1724,6 +1802,7 @@ LAST_GREEN_SHA=d790e0ff (main, PR #138: W26). CI success (run 36699280110); its 
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
+  - On the identity commit e7309c31, in a clean worktree; this record: PASS 3999.
   - Run on W26 be4b9939 (RC1 + W26 + the regenerated pin), in a clean worktree.
   - This STATE-only record: PASS 3673, in a clean worktree.
   - Earlier: PASS ruff ok | 3673 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-29 (local).
@@ -1832,6 +1911,8 @@ LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanner
     (verify_batch.output).
 CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
   is kept for bounded mechanical or adversarial verification.
+  - Identity prep (2026-09-30): the bounded read-only review of e7309c31 plus this record: DONE (base a20a46c9):
+    (1)-(5) PROVEN; findings NONE.
   - Post-W26 (2026-09-30): the bounded read-only review of be4b9939 PROVED (1)-(6), NONE. The release preparation was
     a read-only Plan lane.
   - Post-132 (2026-09-29): Codex did bounded read-only reviews only:
@@ -1904,6 +1985,8 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
+  - the owner's merge of #140 (86c9496f) and closure of #139 (unmerged);
+  - the local-only release identity prep: e7309c31 plus this record, NOT_PUBLISHED;
   - the owner's merge of #138 (W26): main d790e0ff. It is not deployed;
   - the STATE repair direction: this record, superseding #139;
   - the owner's merges of #136 (RC1) and #137 (the STATE record): main e09dee01;
@@ -1961,12 +2044,13 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
      - d's 0011 half is CONSUMED (PASS);
      - the 0012 half of d is CONSUMED too (PASS, run 36586262979);
      - Status 2026-09-30:
-       - f, the resolver: RC1 is PUBLISHED as PR #136. The owner merges it; it takes effect at the next scheduled
-         resolver run, with no deploy.
+       - f, the resolver: RC1 is MERGED (#136 → 200e6ad6). It takes effect at the next scheduled resolver run, with no
+         deploy.
        - e, the writer: W26 is MERGED (#138 → d790e0ff; its §2.6 execution was be4b9939). It is not deployed; main's
          guarded delta is [analysis_service.py]. Next:
          - DONE: the merge of #138. It did not deploy;
-         - then the release identity commit (local, T2 config/), with its STATE record and T3;
+         - the release identity commit: PREPARED LOCALLY (e7309c31, T2 config/, with this STATE record). Its T3
+           (push, PR, merge) is NOT_PUBLISHED;
          - then the deploy T4 of the exact merged SHA D (push to hf, once, never --force);
          - then the settle checks, the re-pin P, whose T3 is followed by one guard dispatch proving HEALTHY;
          - then a NEW sealed smoke, run once (T4), and the owner-authorized DB read of the smoke row.
@@ -2236,9 +2320,12 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
   - item 1, remaining:
-    - the owner merges this record's PR, the STATE repair superseding #139. #138 is MERGED;
-    - then the release chain in item 1 e: the identity commit (authorization), the deploy T4 of the exact D, the
-      settle checks, the re-pin T3 and one guard run, a NEW sealed smoke (T4, once), and the one-row DB read;
+    - the T3 for the identity (prep/release-identity-tc-v1-stamp: e7309c31 plus this record): push, PR, merge.
+      Main then becomes D;
+    - then a HEALTHY guard run on D (precondition 6: a scheduled run, or one authorized dispatch), the deploy T4 of
+      the exact D (W26_RELEASE_PACK.md §3), the settle checks, the re-pin T3 and one guard run, the new smoke executor
+      (to be sealed), the smoke T4 (once), and the one-row DB read. The commands are in .work/w26_release/deploy/
+      RUNBOOK.md. #138 and #140 are merged, and #139 is closed;
     - the T4 APPLY-MIGRATION-0012-ONCE: CONSUMED, PASS (run 36586262979);
     - the writer route decision (§2.6, Route B recommended), now unblocked by 0011 being live, followed by its guarded
       change, deploy T4, smoke and re-pin;
