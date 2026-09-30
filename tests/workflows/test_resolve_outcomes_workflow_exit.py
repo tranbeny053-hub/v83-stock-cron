@@ -38,8 +38,17 @@ DETAIL_DEFERRED = resolve_outcomes.format_detail_line(
     budget_s=600,
 )
 DETAIL_EVERY_COUNT = resolve_outcomes.format_detail_line(
-    dict.fromkeys((*resolve_outcomes.DETAIL_COUNT_KEYS, *resolve_outcomes.REASON_KEYS), 3),
+    dict.fromkeys(
+        (
+            *resolve_outcomes.DETAIL_COUNT_KEYS,
+            *resolve_outcomes.REASON_KEYS,
+            *resolve_outcomes.STATUS_COUNT_KEYS,
+        ),
+        3,
+    ),
     budget_s=600,
+    route=resolve_outcomes.ROUTE_C,
+    store=resolve_outcomes.STORE_ACTIVE,
 )
 
 

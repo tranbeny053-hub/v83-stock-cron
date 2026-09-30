@@ -1,7 +1,8 @@
 # Target contract v1 (`tc-v1`)
 
-Written 2026-09-29 under owner decision D1: dedicated provenance columns, added later. **Nothing is
-wired.**
+Written 2026-09-29 under owner decision D1: dedicated provenance columns. Migration 0011 added
+them (applied 2026-09-29). **The resolver reads the contract (Route C); the writer does not stamp
+yet.**
 
 ## Status
 
@@ -9,10 +10,11 @@ wired.**
   - It is pure. It imports only the standard library and `config/defaults.py`
     (`TIMEFRAME_SECONDS`).
   - Tests: `tests/targets/test_target_contract_v1.py`.
-- **Nothing imports it.** The writer, the resolver, the API and the §5A evaluator are unchanged.
-  The module is outside the evaluator pin closure. A test checks both facts.
-- **No stored row carries a stamp.** Migration 0011 adds the stamp columns, but it is authored and
-  not applied, and nothing writes them. Every row today is v0.
+- **Only the resolver imports it**, through `scripts/resolve_outcomes.py` and
+  `resolution/status_store.py`. The writer, the API and the §5A evaluator do not. The module is
+  outside the evaluator pin closure. A test checks both facts.
+- **No stored row carries a stamp.** Migration 0011's columns are live (2026-09-29, run
+  36583531813), but nothing writes them yet. Every row today is v0.
 
 ## Purpose
 
@@ -92,7 +94,7 @@ one of them and is never compared.
 - **New names.** quant_v2's `computed_at_utc` actually means as_of. tc-v1 therefore introduces
   `core_computed_at_utc` and `issued_at_utc` rather than reusing that name.
 
-### Columns: migration 0011 (authored, not applied)
+### Columns: migration 0011 (applied 2026-09-29)
 
 - **Columns.** `target_version`, `reference_venue`, `core_computed_at_utc` and `issued_at_utc`
   (`STAMP_FIELDS`, in that order). Types: text for the first two, and `TIMESTAMPTZ`, like the
@@ -104,7 +106,8 @@ one of them and is never compared.
   - `reference_venue` is NULL or a venue label.
   - A row carries either none of the four or all four, and when it carries them,
     `core_computed_at_utc <= issued_at_utc`.
-- **Authored, not applied.** The file is `migrations/0011_prediction_target_provenance.sql`.
+- **Applied once** (2026-09-29, run 36583531813). The file is
+  `migrations/0011_prediction_target_provenance.sql`.
   - Its only route is `scripts/apply_migration_0011.py`.
   - The route is dispatched once, by `.github/workflows/apply-migration-0011.yml`, as a T4 action.
 
@@ -188,12 +191,17 @@ is exact.
 
 1. **Author migration 0011.** Done: the migration and its one-shot apply route. Four nullable
    columns; NULL = v0; no backfill.
-2. **Apply 0011 live.** This is a T4 action.
+2. **Apply 0011 live.** Done: the owner's one-shot T4 (2026-09-29, run 36583531813, PASS).
 3. **Stamp in the writer.** The writer calls `stamp_v1` with `snapshot.provider`, the core-finished
    instant and the response instant.
    - The REST writer posts the whole row, so stamping before 0011 is live would break its
      prediction writes.
    - The Postgres writer names its columns in the pinned `persistence/repository.py`. That
-     column list changes only under §2.6, and only if actually required.
-4. **Resolver.** It reads `reference_venue` through an unpinned route and resolves on
-   `resolution_venue(row)`.
+     column list changes only under §2.6, and only if actually required. It is required: the
+     fixed 25-column INSERT drops the stamp. The prepared §2.6 package (W26) awaits
+     authorization.
+4. **Resolver.** Implemented locally (RC1, branch `feat/resolver-route-c-rq-v1`; not merged or
+   deployed). `scripts/resolve_outcomes.py` resolves every row on `resolution_venue(row)`. Route C
+   (`crypto_probability_engine/resolution/`, unpinned) reads `reference_venue` and the other stamp
+   columns on its own connection, so stamped `CROSS_PROVIDER` rows become due there; unstamped
+   ones never are.

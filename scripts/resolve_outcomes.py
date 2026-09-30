@@ -2,6 +2,13 @@
 Require an exact terminal bar, exclude lookahead, and count only successful outcome saves.
 Each run attempts a deterministic fresh/stuck selection within a time budget; rows the budget
 does not reach are deferred to a later run, never counted as failed.
+
+A row resolves on its resolution venue (target contract tc-v1): a valid tc-v1 row on its
+reference_venue, an unstamped (v0) row on its data_source when that is exactly a venue label.
+Route C (owner decision D3) runs only with the direct-Postgres repository and a passing preflight:
+its own due scan also reads stamped CROSS_PROVIDER rows and the resolution-status table, a saved
+outcome is read back, and retry/quarantine policy rq-v1 (D4) writes the statuses (D5) after the
+run, in one batch. Otherwise the legacy path runs the pinned due query and writes no status.
 """
 
 from __future__ import annotations
@@ -39,8 +46,19 @@ from crypto_probability_engine.persistence.repository import (
     SupabasePersistenceRepository,
     SupabaseRestRepository,
 )
+from crypto_probability_engine.resolution import rq_v1
+from crypto_probability_engine.resolution.status_store import (
+    PgStatusStore,
+    StatusStore,
+    StoredOutcome,
+)
+from crypto_probability_engine.targets.contract_v1 import (
+    CLASS_TC_V1_INVALID,
+    classify_row,
+    resolution_venue,
+)
 
-RESOLVER_VERSION = "resolver-v2a-exact-eligibility"
+RESOLVER_VERSION = "resolver-v2b-tc-v1-rq-v1"
 EXACT_SOURCE_PROVIDERS = MappingProxyType({"BINANCE_PUBLIC": "binance", "OKX_PUBLIC": "okx"})
 # Fixed-duration bars only. 1M uses an approximate 30-day duration, so it has no exact terminal bar.
 EXACT_TIMEFRAMES = frozenset({"15m", "1H", "4H", "1D", "1W"})
@@ -78,12 +96,26 @@ ERROR_REASONS = (
     "error_candle_invalid",
     "error_save_not_ok",
     "error_save_exception",
+    "error_outcome_conflict",  # Route C: the stored outcome is missing or is not the one built
     "error_other",
 )
 REASON_KEYS = SKIP_REASONS + ERROR_REASONS
 DETAIL_COUNT_KEYS = ("scanned", "selected", "fresh", "stuck", "deferred")
+# The detail line's last keys: route=, status_store=, then these counts of the status writes.
+STATUS_COUNT_KEYS = (
+    "status_written",
+    "status_quarantined",
+    "status_resolved",
+    "status_outage_suppressed",
+    "status_error",
+)
+ROUTE_C = "c"
+ROUTE_LEGACY = "legacy"
+STORE_ACTIVE = "active"
+STORE_ABSENT = "absent"
+STORE_ERROR = "error"
 
-_RESOLVED = "resolved"
+_RESOLVED = rq_v1.OUTCOME_RESOLVED  # "resolved"
 # How far one row's attempt got. When the attempt raises, the stage names the failure's reason.
 _STAGE_READ = "read"  # reading the row: every check before the provider is called
 _STAGE_FETCH = "fetch"
@@ -91,6 +123,7 @@ _STAGE_CANDLES = "candles"
 _STAGE_BUILD = "build"
 _STAGE_SAVE = "save"
 _STAGE_STATUS = "status"
+_STAGE_VERIFY = "verify"  # Route C: reading the saved outcome back
 
 
 @dataclass(slots=True)
@@ -134,6 +167,29 @@ def build_resolver_repository(settings: Settings) -> PersistenceRepository:
     return InMemoryPersistenceRepository()
 
 
+def build_status_store(
+    settings: Settings,
+    repository: PersistenceRepository,
+    *,
+    connect: Callable[..., Any] | None = None,
+) -> tuple[StatusStore | None, str]:
+    """Route C's status store, or None for the legacy path, with the detail line's status_store.
+
+    Route C needs the direct-Postgres repository AND a passing preflight on the store's own
+    connection. REST and in-memory repositories are always legacy. A preflight that raises is
+    reported as status_store=error and is not fatal: the run takes the legacy path.
+    """
+
+    if not isinstance(repository, SupabasePersistenceRepository) or not settings.supabase_db_url:
+        return None, STORE_ABSENT
+    store = PgStatusStore(settings.supabase_db_url, connect=connect)
+    try:
+        ready = store.preflight()
+    except Exception:
+        return None, STORE_ERROR
+    return (store, STORE_ACTIVE) if ready is True else (None, STORE_ABSENT)
+
+
 def resolve_due_predictions(
     repository: PersistenceRepository,
     *,
@@ -143,11 +199,15 @@ def resolve_due_predictions(
     fetch_candles: FetchCandles | None = None,
     time_budget_seconds: float = DEFAULT_TIME_BUDGET_SECONDS,
     monotonic: Callable[[], float] | None = None,
+    status_store: StatusStore | None = None,
 ) -> dict[str, int]:
     """Resolve a fair, time-bounded selection of due predictions without failing the batch.
 
     ``due`` counts the SELECTED rows (at most ``limit``): due = resolved + skipped + failed +
     deferred. Deferred rows were never started: no provider call, no write, not failed.
+    With ``status_store`` the run takes Route C: the store's due scan, the outcome readback, and
+    one batch of rq-v1 status writes after the loop. The status_* counts report that batch; a
+    batch that raises writes nothing and sets status_error=1. ``failed`` stays row-based.
     """
 
     if not time_budget_seconds > 0:
@@ -156,15 +216,27 @@ def resolve_due_predictions(
     started = clock()
     settings = settings or Settings.from_env()
     now = _coerce_utc(now_utc or datetime.now(tz=UTC))
-    scanned = list(
-        repository.fetch_due_unresolved_predictions(
+    existing: Mapping[str, rq_v1.ExistingStatus] = {}
+    if status_store is None:
+        scanned = list(
+            repository.fetch_due_unresolved_predictions(
+                now,
+                _scan_limit(limit),
+                data_sources=tuple(EXACT_SOURCE_PROVIDERS),
+                timeframes=tuple(sorted(EXACT_TIMEFRAMES)),
+                prediction_origins=(PredictionOrigin.USER_REQUESTED.value,),
+            )
+        )
+    else:
+        scan = status_store.fetch_due(
             now,
             _scan_limit(limit),
-            data_sources=tuple(EXACT_SOURCE_PROVIDERS),
+            venues=tuple(EXACT_SOURCE_PROVIDERS),
             timeframes=tuple(sorted(EXACT_TIMEFRAMES)),
             prediction_origins=(PredictionOrigin.USER_REQUESTED.value,),
         )
-    )
+        scanned = list(scan.rows)
+        existing = scan.statuses
     selection = _select_rows(scanned, now=now, limit=limit)
     selected = len(selection.rows)
     stats = {
@@ -178,21 +250,77 @@ def resolve_due_predictions(
         "fresh": selection.fresh,
         "stuck": selection.stuck,
         **dict.fromkeys(REASON_KEYS, 0),
+        **dict.fromkeys(STATUS_COUNT_KEYS, 0),
     }
     candle_fetcher = fetch_candles or fetch_public_candles
+    attempts: list[rq_v1.Attempt] = []
     for index, prediction in enumerate(selection.rows):
         if clock() - started >= time_budget_seconds:
             stats["deferred"] = selected - index
             break
         reason = _attempt_row(
-            repository, prediction, now=now, settings=settings, fetch_candles=candle_fetcher
+            repository,
+            prediction,
+            now=now,
+            settings=settings,
+            fetch_candles=candle_fetcher,
+            status_store=status_store,
         )
+        if status_store is not None:
+            attempts.append(_attempt_record(prediction, reason))
         if reason == _RESOLVED:
             stats["resolved"] += 1
             continue
         stats[reason] += 1
         stats["skipped" if reason in SKIP_REASONS else "failed"] += 1
+    if status_store is not None:
+        _write_statuses(status_store, attempts, existing, now=now, stats=stats)
     return stats
+
+
+def _attempt_record(prediction: Any, outcome: str) -> rq_v1.Attempt:
+    """What rq-v1 needs to know about one attempted row. Never raises."""
+
+    prediction_id = prediction.get("prediction_id") if isinstance(prediction, Mapping) else None
+    return rq_v1.Attempt(
+        prediction_id=prediction_id if isinstance(prediction_id, str) else None,
+        outcome=outcome,
+        venue=resolution_venue(prediction),
+        horizon_end_utc=_horizon_or_none(prediction),
+    )
+
+
+def _write_statuses(
+    status_store: StatusStore,
+    attempts: Sequence[rq_v1.Attempt],
+    existing: Mapping[str, rq_v1.ExistingStatus],
+    *,
+    now: datetime,
+    stats: dict[str, int],
+) -> None:
+    """Plan this run's rq-v1 writes and upsert them in ONE batch. Never raises."""
+
+    try:
+        plan = rq_v1.plan_status_writes(
+            attempts, existing, now=now, resolver_version=RESOLVER_VERSION
+        )
+    except Exception:
+        stats["status_error"] = 1
+        return
+    stats["status_outage_suppressed"] = plan.suppressed
+    if not plan.writes:
+        return
+    try:
+        # Only the writes the database applied: a compare-and-set rejection changed nothing.
+        applied = tuple(status_store.write_batch(plan.writes))
+    except Exception:
+        stats["status_error"] = 1  # the batch is one transaction: nothing was written
+        return
+    stats["status_written"] = len(applied)
+    stats["status_quarantined"] = sum(
+        write.resolution_status == rq_v1.QUARANTINED for write in applied
+    )
+    stats["status_resolved"] = sum(write.resolution_status == rq_v1.RESOLVED for write in applied)
 
 
 def _scan_limit(limit: int) -> int:
@@ -245,8 +373,14 @@ def _attempt_row(
     now: datetime,
     settings: Settings,
     fetch_candles: FetchCandles,
+    status_store: StatusStore | None = None,
 ) -> str:
-    """Attempt one row. Return "resolved" or the one reason it stayed unresolved; never raise."""
+    """Attempt one row. Return "resolved" or the one reason it stayed unresolved; never raise.
+
+    On Route C (``status_store``) a saved outcome counts as resolved only when reading it back
+    finds the very row just built: same outcome_close_utc instant, realized_label and
+    resolver_version. A missing or different row, or a failed read, is error_outcome_conflict.
+    """
 
     progress = _Progress()
     try:
@@ -262,9 +396,28 @@ def _attempt_row(
         progress.stage = _STAGE_SAVE
         status = repository.save_prediction_outcome(outcome)
         progress.stage = _STAGE_STATUS
-        return _RESOLVED if status == "OK" else "error_save_not_ok"
+        saved = status == "OK"
+        if not saved:
+            return "error_save_not_ok"
+        if status_store is None:
+            return _RESOLVED
+        progress.stage = _STAGE_VERIFY
+        stored = status_store.read_outcome(outcome["prediction_id"])
+        return _RESOLVED if _is_outcome(stored, outcome) else "error_outcome_conflict"
     except Exception as exc:
         return _error_reason(exc, progress.stage)
+
+
+def _is_outcome(stored: StoredOutcome | None, outcome: Mapping[str, Any]) -> bool:
+    """Whether the stored outcome is the one just built; timestamps compare as UTC instants."""
+
+    if stored is None:
+        return False
+    return (
+        _parse_utc(stored.outcome_close_utc) == _parse_utc(outcome["outcome_close_utc"])
+        and stored.realized_label == outcome["realized_label"]
+        and stored.resolver_version == outcome["resolver_version"]
+    )
 
 
 def _error_reason(exc: Exception, stage: str) -> str:
@@ -274,6 +427,8 @@ def _error_reason(exc: Exception, stage: str) -> str:
         return "error_save_exception"
     if stage == _STAGE_STATUS:
         return "error_save_not_ok"
+    if stage == _STAGE_VERIFY:
+        return "error_outcome_conflict"
     if isinstance(exc, ProviderError):
         if exc.code == "INVALID_SYMBOL":
             return "error_provider_rejected"
@@ -313,10 +468,20 @@ def _evaluate_outcome_row(
     fetch_candles: FetchCandles,
     progress: _Progress,
 ) -> tuple[dict | None, str | None]:
-    """(outcome row, None) or (None, skip reason); on raising, ``progress`` holds the stage."""
+    """(outcome row, None) or (None, skip reason); on raising, ``progress`` holds the stage.
 
-    source = prediction.get("data_source")
-    if not isinstance(source, str) or source not in EXACT_SOURCE_PROVIDERS:
+    The venue is the row's resolution venue: a stamped row that is not valid tc-v1 is an invalid
+    target, and a row with no venue (e.g. an unstamped CROSS_PROVIDER row) is ineligible. For an
+    unstamped row the venue is exactly its data_source, so its outcome is the one the resolver
+    built before tc-v1 (resolver-v2a), but for resolver_version.
+    """
+
+    if not isinstance(prediction, Mapping):
+        raise TypeError("the prediction row is not a mapping")  # unreadable, as before tc-v1
+    if classify_row(prediction) == CLASS_TC_V1_INVALID:
+        return None, "skip_invalid_target"
+    venue = resolution_venue(prediction)
+    if venue is None or venue not in EXACT_SOURCE_PROVIDERS:
         return None, "skip_ineligible"
     timeframe = prediction.get("timeframe")
     if not isinstance(timeframe, str) or timeframe not in EXACT_TIMEFRAMES:
@@ -343,8 +508,8 @@ def _evaluate_outcome_row(
     if now <= horizon_end_utc:
         return None, "skip_not_due"
     window = CandleWindow(
-        provider=EXACT_SOURCE_PROVIDERS[source],
-        data_source=source,
+        provider=EXACT_SOURCE_PROVIDERS[venue],
+        data_source=venue,
         normalized_symbol=str(prediction["normalized_symbol"]),
         timeframe=timeframe,
         first_open_utc=reference_close_utc,
@@ -481,15 +646,33 @@ def _iso_utc(value: datetime) -> str:
     return _coerce_utc(value).isoformat().replace("+00:00", "Z")
 
 
-def format_detail_line(stats: Mapping[str, int], *, budget_s: float) -> str:
+def format_detail_line(
+    stats: Mapping[str, int],
+    *,
+    budget_s: float,
+    route: str = ROUTE_LEGACY,
+    store: str = STORE_ABSENT,
+) -> str:
     """The second summary line: every key, zeros included, in a fixed order.
 
-    It can never contain "failed=": the workflow fails a run on failed=[1-9] in ANY line.
+    After the reason counts come route=c|legacy, status_store=active|absent|error and the
+    status_* counts. It can never contain "failed=": the workflow fails a run on failed=[1-9] in
+    ANY line, so ``route`` and ``store`` accept only their fixed values.
     """
 
+    if route not in (ROUTE_C, ROUTE_LEGACY) or store not in (
+        STORE_ACTIVE,
+        STORE_ABSENT,
+        STORE_ERROR,
+    ):
+        raise ValueError("unknown route or status store state")
     counts = " ".join(f"{key}={stats.get(key, 0)}" for key in DETAIL_COUNT_KEYS)
     reasons = " ".join(f"{key}={stats.get(key, 0)}" for key in REASON_KEYS)
-    return f"resolver_detail {counts} budget_s={budget_s} {reasons}"
+    status = " ".join(f"{key}={stats.get(key, 0)}" for key in STATUS_COUNT_KEYS)
+    return (
+        f"resolver_detail {counts} budget_s={budget_s} {reasons} "
+        f"route={route} status_store={store} {status}"
+    )
 
 
 def _positive_seconds(value: str) -> int:
@@ -515,12 +698,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = Settings.from_env()
     repository = build_resolver_repository(settings)
     repository_type = repository.repository_type()
+    status_store, store_state = build_status_store(settings, repository)
+    route = ROUTE_LEGACY if status_store is None else ROUTE_C
     try:
         stats = resolve_due_predictions(
             repository,
             settings=settings,
             limit=args.limit,
             time_budget_seconds=args.time_budget_seconds,
+            status_store=status_store,
         )
     except Exception as exc:
         print(
@@ -539,11 +725,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"due={stats['due']} resolved={stats['resolved']} "
         f"skipped={stats['skipped']} failed={stats['failed']}"
     )
-    print(format_detail_line(stats, budget_s=args.time_budget_seconds))
+    print(
+        format_detail_line(
+            stats, budget_s=args.time_budget_seconds, route=route, store=store_state
+        )
+    )
     close = getattr(repository, "close", None)
     if callable(close):
         close()
-    return 1 if stats["failed"] > 0 else 0
+    # A status batch that failed wrote nothing; the run fails without touching failed=.
+    return 1 if stats["failed"] > 0 or stats.get("status_error", 0) else 0
 
 
 if __name__ == "__main__":

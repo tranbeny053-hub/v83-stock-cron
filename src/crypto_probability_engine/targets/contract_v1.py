@@ -1,8 +1,9 @@
 """Target contract v1 (``tc-v1``): today's prediction target, made explicit and checkable per row.
 
-Pure and unwired. It imports only the standard library and ``config.defaults``. No product module
-imports it, and nothing is stamped or persisted yet (owner decision D1: dedicated provenance
-columns, later). See ``docs/TARGET_CONTRACT_V1.md``.
+Pure. It imports only the standard library and ``config.defaults``. Migration 0011 added its
+dedicated provenance columns (owner decision D1). The resolver reads rows through it
+(``scripts/resolve_outcomes.py`` and ``resolution/status_store.py``, Route C). The writer does not
+stamp yet, so no stored row carries a stamp. See ``docs/TARGET_CONTRACT_V1.md``.
 
 The estimand is unchanged. For a live row built by ``api/analysis_service.py::_prediction_row``:
 - the reference is the last closed candle: ``reference_close_utc`` and ``reference_price``;
