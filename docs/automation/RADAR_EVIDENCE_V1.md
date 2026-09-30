@@ -60,8 +60,12 @@ two differ, and the differences are listed in `F1_NODE_CLASSIFICATION.md`.
   restart:
   - a rotation overlaps: the new row works at once and the old one until it is revoked;
   - a revocation refuses the next request presenting that credential, including a replay.
-  Each read is bounded (2 s), and at most two are in flight at once. A registry that cannot be read,
-  or holds a malformed row, authenticates nothing: 503 `LEDGER_UNAVAILABLE`, with no row written.
+  Each read is bounded (2 s), and at most two are in flight at once.
+  - A well-formed token reaches the database before it is authenticated. A flood of such tokens can
+    make legitimate calls fail closed (503), but it can never take more than two database
+    connections from the rest of the product.
+  - A registry that cannot be read, or holds a malformed row, authenticates nothing: 503
+    `LEDGER_UNAVAILABLE`, with no row written.
 - **Issuance, rotation and revocation** are owner-performed T4 actions on the production database,
   following `CREDENTIAL_ROTATION.md`. UCPE never issues a credential, never sees a value outside a
   request, and never writes to the registry. UOR keeps the full `ucpea.<id>.<value>` token in its

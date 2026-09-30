@@ -188,6 +188,7 @@ def test_an_unavailable_registry_authenticates_nothing():
         (CREDENTIAL_ID, secret_digest(SYNTHETIC_SECRET), "ACTIVE", datetime(2026, 1, 1)),
         (CREDENTIAL_ID, secret_digest(SYNTHETIC_SECRET), "ACTIVE", "2026-01-01T00:00:00Z"),
         (None, secret_digest(SYNTHETIC_SECRET), "ACTIVE", None),
+        (CREDENTIAL_ID, secret_digest(SYNTHETIC_SECRET), ["ACTIVE"], None),
     ],
 )
 def test_a_malformed_registry_row_fails_closed(row):

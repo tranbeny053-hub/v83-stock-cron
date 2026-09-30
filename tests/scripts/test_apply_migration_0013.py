@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -883,3 +886,67 @@ def test_the_rehearsal_never_runs_beside_the_production_secret(
     )
     assert code == 2 and database.connects == []
     assert "production database secret" in _report(tmp_path)["detail"]
+
+
+def test_the_rehearsal_is_isolated_when_given_the_wheelhouse(
+    calls: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = FakeDatabase(_rehearsal_results())
+    _install_driver(monkeypatch, database, calls)
+    code = route.main(
+        _argv("rehearse", tmp_path, confirm=""),
+        environ={route.REHEARSAL_URL_VARIABLE: REHEARSAL_URL},
+    )
+    assert code == 0
+    assert calls == ["enter:/synthetic/runner-temp/section-5a-wheels", "driver", "modules"]
+
+
+def test_the_loaded_module_check_covers_the_pin_and_this_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from crypto_probability_engine import runtime_isolation
+    from crypto_probability_engine.oos.evaluation.evaluator_pin import pinned_files
+
+    seen: dict[str, Any] = {}
+
+    def _attest(report, *, pinned, root):
+        seen.update(pinned=tuple(pinned), root=root)
+        return 1
+
+    monkeypatch.setattr(runtime_isolation, "attest_loaded_modules", _attest)
+    route.attest_loaded_modules("isolation")
+    assert seen["pinned"] == (*pinned_files(ROOT), route.SCRIPT)
+    assert Path(seen["root"]).resolve() == ROOT
+
+
+# ------------------------------------------------------------------------ the process
+
+
+def _scrubbed_environment(extra: dict[str, str]) -> dict[str, str]:
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("GITHUB_", "RUNNER_", "SUPABASE_", "PYTHON", "MIGRATION_"))
+        and key != "ImageOS"
+    }
+    environment.update(extra)
+    return environment
+
+
+def test_an_unisolated_process_refuses_before_any_database_access(tmp_path: Path) -> None:
+    report = tmp_path / "report.json"
+    completed = subprocess.run(
+        [sys.executable, "-B", route.SCRIPT, *_argv("apply", tmp_path, report=str(report))],
+        cwd=ROOT,
+        env=_scrubbed_environment({"SUPABASE_DB_URL": DATABASE_URL}),
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert completed.returncode == 2, completed.stderr
+    assert "python -I -S -B" in completed.stderr
+    recorded = report.read_text(encoding="utf-8")
+    assert json.loads(recorded)["outcome"] == "REFUSED"
+    for text in (recorded, completed.stdout, completed.stderr):
+        assert "NEVER-SHOWN-SECRET" not in text and "never-contacted" not in text

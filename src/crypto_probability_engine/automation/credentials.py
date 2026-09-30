@@ -99,6 +99,7 @@ def validated_record(
         or not CREDENTIAL_ID_PATTERN.fullmatch(credential_id)
         or not isinstance(digest, str)
         or not SECRET_DIGEST_PATTERN.fullmatch(digest)
+        or not isinstance(status, str)
         or status not in CREDENTIAL_STATUSES
         or not (
             not_after_utc is None

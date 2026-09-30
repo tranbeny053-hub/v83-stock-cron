@@ -71,6 +71,9 @@ consumer.
    new analysis. One cycle plus 60 seconds is enough for UOR, which never retries inside a cycle.
 4. Revoke the old credential (next section).
 
+The quota is counted per credential. The new credential starts with a fresh quota, and during the
+overlap both quotas apply, so keep the overlap short.
+
 ## Revoke (takes effect on the next request)
 
 ```sql
