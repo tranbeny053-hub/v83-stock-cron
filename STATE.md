@@ -1,6 +1,13 @@
 # STATE
 
-Updated: 2026-09-30 (post-W26). **RC1 and the migration-apply STATE record are PUSHED, and Claude opened
+Updated: 2026-09-30 (post-merge). **The owner MERGED PR #136 (RC1, 07:45:03Z → 200e6ad6) and PR #137 (the STATE
+record, 07:45:22Z → e09dee01). Main e09dee01 has tree 098bddfa, exactly the final tree recorded before the push.**
+**W26 is reconciled onto e09dee01 as 79d43d38.**
+- Its diff is byte-identical to the reviewed be4b9939, and the pin is unchanged (closure 3ffc21e9…, 69 files).
+- VERIFY=PASS 3999.
+- It is PUSHED as PR #138, open and not merged. This record is PUSHED alongside it.
+- No deploy: production stays 080f20a9 / UCPE-PROD-H2-HOLD-20260927-A.
+Previously (post-W26, before the merges): **RC1 and the migration-apply STATE record are PUSHED, and Claude opened
 PRs #136 (RC1) and #137 (STATE); neither is merged. The owner-authorized §2.6 package W26 (the writer stamps tc-v1;
 a conditional stamp INSERT in the pinned repository.py) is EXECUTED AND COMMITTED LOCALLY: be4b9939 on RC1 f1924495.**
 - Only the evaluator pin's closure_digest changed, 212ea637… → 3ffc21e9…; the 69-file membership is unchanged.
@@ -132,6 +139,24 @@ file governs.
 ## Recovery block — read this first on resume
 ```
 LOOP_STATE=WAITING FOR THE OWNER.
+  - **POST-MERGE RECONCILIATION AND THE W26 T3 (2026-09-30).**
+    - The owner merged #136 (RC1 → 200e6ad6, tree 51b7f9a6, the recorded RC1-first tree) and #137 (the STATE record →
+      e09dee01, tree 098bddfa, the recorded final tree). CI succeeded on both merge commits (runs 36685512304 and
+      36685544014).
+    - W26 RECONCILED onto e09dee01 (the owner's pasted prompt: "reconcile … without changing their reviewed semantics"):
+      - be4b9939 → 79d43d3838cc345373b4e6d5f7967ca0cab72038;
+      - git diff e09dee01..79d43d38 equals git diff f1924495..be4b9939 byte for byte (ignoring index lines);
+      - repository.py is still sha256 03ddb511…;
+      - no pin drift: the recomputed closure_digest equals the manifest, 3ffc21e93b9f…; assert_evaluator_pin passes;
+        membership is identical to main's 69; only closure_digest differs from main; repository.py is the only pinned
+        file changed;
+      - 959 targeted tests and VERIFY=PASS 3999, both unchanged.
+    - T3 CONSUMED: main e09dee01 was verified at 07:48:45Z, and again before the push at 07:54:25Z.
+      feat/writer-tc-v1-stamp-w26 was pushed at exactly 79d43d38, with no force.
+      - Claude opened PR #138 (PR creation permitted) and did not merge it.
+      - This STATE record, chore/state-w26 = e09dee01 + b4baad10 (the reconciled 0e830b4a, a byte-identical diff) +
+        this addendum, is pushed alongside it.
+    - This addendum: VERIFY=PASS 3917.
   - **W26 EXECUTED LOCALLY UNDER §2.6; RC1 AND THE STATE RECORD PUBLISHED FOR REVIEW (2026-09-30).**
     - T3 CONSUMED (the owner's pasted prompt): origin/main was b11a8e53 (fetch and ls-remote) at 06:10:17Z and again at
       06:10:43Z. feat/resolver-route-c-rq-v1 was pushed at exactly f1924495, and chore/state-post-0011-0012-apply at
@@ -1413,7 +1438,11 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=W26 EXECUTED LOCALLY (2026-09-30):
+CURRENT_MILESTONE=W26 PUBLISHED FOR REVIEW (2026-09-30):
+  - PR #138 (79d43d38 on main e09dee01), with the §2.6 pin closure 3ffc21e9…;
+  - RC1 and the migration-apply record are merged (#136, #137);
+  - no deploy.
+  Before it: W26 EXECUTED LOCALLY (2026-09-30):
   - be4b9939 on RC1, §2.6; pin closure 212ea637… → 3ffc21e9…; VERIFY 3999; Codex NONE;
   - RC1 (#136) and the STATE record (#137) are published for review, not merged;
   - the release preparation is complete.
@@ -1461,12 +1490,12 @@ CURRENT_MILESTONE=W26 EXECUTED LOCALLY (2026-09-30):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-w26-local (LOCAL, no upstream), on chore/state-post-0011-0012-apply (db8f229a, pushed,
-  PR #137): this post-W26 record, unpublished. Its worktree is lanes9/state-w26 in the session scratchpad.
-  - Pushed, PRs open, not merged:
-    - feat/resolver-route-c-rq-v1 at f1924495 (#136, worktree lanes8/resolver-rq1);
-    - chore/state-post-0011-0012-apply at db8f229a (#137, worktree lanes7/state-t4-0011).
-  - Local, not pushed: feat/writer-tc-v1-stamp-w26 at be4b9939 (worktree lanes9/w26), stacked on RC1.
+CURRENT_BRANCH=chore/state-w26 (PUSHED with this record), from main e09dee01. Its worktree is lanes9/state-w26-pub in
+  the session scratchpad.
+  - Pushed, PR open, not merged: feat/writer-tc-v1-stamp-w26 at 79d43d38 (#138, worktree lanes9/w26).
+  - Merged, and staying on origin: feat/resolver-route-c-rq-v1 (#136) and chore/state-post-0011-0012-apply (#137).
+  - Superseded and never published: be4b9939 (W26 on RC1) and 0e830b4a (this record before reconciliation), both on
+    local branches.
   - Merged, and staying on origin:
     - chore/state-post-132 (#133, 853f1eb2);
     - feat/migration-0011-provenance (#134, 500e5b83);
@@ -1498,7 +1527,9 @@ CURRENT_BRANCH=chore/state-w26-local (LOCAL, no upstream), on chore/state-post-0
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=b11a8e53 (main, PR #135: the 0012 route), after b207a1a6 (PR #134: the 0011 route) and f844452b (PR #133:
+LAST_GREEN_SHA=e09dee01 (main, PR #137: the migration-apply STATE record), after 200e6ad6 (PR #136: RC1). CI succeeded
+  on both (runs 36685544014 and 36685512304). The trees equal the recorded 098bddfa and 51b7f9a6.
+  Before them: b11a8e53 (main, PR #135: the 0012 route), after b207a1a6 (PR #134: the 0011 route) and f844452b (PR #133:
   the post-132 record).
   - CI success on b11a8e53 (run 36580184092), b207a1a6 and f844452b.
   - Each merge tree equals the tree recorded before the push: c95d4431, d47aa6e9 and e6971e2b.
@@ -1815,6 +1846,9 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
+  - the owner's merges of #136 (RC1) and #137 (the STATE record): main e09dee01;
+  - the W26 T3: reconciled to 79d43d38 with no semantic or pin drift, pushed with no force, PR #138 open (not
+    merged), and this record pushed;
   - the T3 for RC1 (f1924495) and the STATE record (db8f229a): pushed with no force, and PRs #136 and #137 opened.
     Not merged;
   - the §2.6 authorization for W26: executed locally (be4b9939) and recorded here;
@@ -1869,8 +1903,8 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
      - Status 2026-09-30:
        - f, the resolver: RC1 is PUBLISHED as PR #136. The owner merges it; it takes effect at the next scheduled
          resolver run, with no deploy.
-       - e, the writer: W26 is EXECUTED LOCALLY under §2.6 (be4b9939). Next:
-         - its T3 (push, PR, merge) after #136;
+       - e, the writer: W26 is PUBLISHED as PR #138 (79d43d38; its §2.6 execution was be4b9939). Next:
+         - the owner merges #138. Merging does not deploy; guarded delta [analysis_service.py];
          - then the release identity commit (local, T2 config/), with its STATE record and T3;
          - then the deploy T4 of the exact merged SHA D (push to hf, once, never --force);
          - then the settle checks, the re-pin P, whose T3 is followed by one guard dispatch proving HEALTHY;
@@ -2141,9 +2175,9 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. Consumed on 2026-09-30:
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=WAIT for the owner. OWNER_BOUNDARY 1-2, in order:
   - item 1, remaining:
-    - the owner merges #137 (STATE) and #136 (RC1), either order. The final tree is 098bddfa if nothing else lands;
-    - the T3 for W26 (be4b9939) after #136, then the release chain in item 1 e;
-    - this record's T3 (STATE.md only);
+    - the owner merges #138 (W26) and this record's PR;
+    - then the release chain in item 1 e: the identity commit (authorization), the deploy T4 of the exact D, the
+      settle checks, the re-pin T3 and one guard run, a NEW sealed smoke (T4, once), and the one-row DB read;
     - the T4 APPLY-MIGRATION-0012-ONCE: CONSUMED, PASS (run 36586262979);
     - the writer route decision (§2.6, Route B recommended), now unblocked by 0011 being live, followed by its guarded
       change, deploy T4, smoke and re-pin;
