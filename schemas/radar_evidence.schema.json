@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ultimate-crypto-probability-engine.local/schemas/radar_evidence.schema.json",
   "title": "radar_evidence.v1",
-  "description": "The success body of POST /v1/automation/radar-evidence. Strict: unknown fields are refused at every level. Values are read from UCPE's governed analysis, never recomputed. Shadow blocks are omitted. Any breaking or semantic change is a new version.",
+  "description": "The success body of POST /v1/automation/radar-evidence, sent as its RFC 8785 JCS bytes. Strict: unknown fields are refused at every level. Values are read from UCPE's governed analysis, never recomputed; the projection carries codes, numbers, identities and release metadata only, never free prose. Shadow blocks and skill evidence are withheld. Any breaking or semantic change is a new version.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,21 +36,18 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     },
     "run_id": {"type": "string", "pattern": "^run_[0-9a-f]{32}$"},
-    "analysis_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "analysis_schema_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "analysis_hash": {"$ref": "#/$defs/sha256"},
+    "analysis_schema_version": {"type": "string", "pattern": "^[0-9A-Za-z._-]{1,64}$"},
     "as_of_utc": {"$ref": "#/$defs/utc_instant"},
     "issued_at_utc": {"$ref": "#/$defs/utc_instant"},
-    "symbol": {"type": "string", "minLength": 1, "maxLength": 32},
-    "normalized_symbol": {"type": "string", "minLength": 1, "maxLength": 32},
+    "symbol": {"type": "string", "pattern": "^[A-Za-z0-9/_:.-]{1,32}$"},
+    "normalized_symbol": {"type": "string", "pattern": "^[A-Z0-9]{1,16}/[A-Z0-9]{1,16}$"},
     "primary_timeframe": {"enum": ["15m", "1H", "4H", "1D"]},
     "horizon": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bars", "label"],
-      "properties": {
-        "bars": {"type": "integer", "minimum": 1},
-        "label": {"type": "string", "minLength": 1, "maxLength": 64}
-      }
+      "required": ["bars"],
+      "properties": {"bars": {"type": "integer", "minimum": 1, "maximum": 1000}}
     },
     "build_info": {
       "type": "object",
@@ -66,10 +63,10 @@
       "properties": {
         "schema_version": {"type": "string", "pattern": "^build-info\\.v[1-9][0-9]*$"},
         "release_id": {"type": "string", "pattern": "^UCPE-[A-Z0-9-]{3,}$"},
-        "release_label": {"type": "string", "minLength": 1, "maxLength": 128},
-        "environment": {"type": "string", "minLength": 1, "maxLength": 64},
-        "source_milestone": {"type": "string", "minLength": 1, "maxLength": 64},
-        "fingerprint": {"type": "string", "minLength": 1, "maxLength": 128}
+        "release_label": {"type": "string", "pattern": "^[A-Za-z0-9 ._:()-]{1,128}$"},
+        "environment": {"$ref": "#/$defs/code"},
+        "source_milestone": {"type": "string", "pattern": "^[a-z0-9-]{1,64}$"},
+        "fingerprint": {"type": "string", "pattern": "^UCPE [A-Z ]{1,40} · [A-Z0-9 -]{1,80}$"}
       }
     },
     "probability_state": {
@@ -77,8 +74,8 @@
       "additionalProperties": false,
       "required": ["probability_type", "calibration_status", "horizons"],
       "properties": {
-        "probability_type": {"type": "string", "minLength": 1, "maxLength": 128},
-        "calibration_status": {"type": "string", "minLength": 1, "maxLength": 64},
+        "probability_type": {"$ref": "#/$defs/code"},
+        "calibration_status": {"$ref": "#/$defs/code"},
         "horizons": {
           "type": "object",
           "additionalProperties": false,
@@ -93,12 +90,11 @@
     "calibration_state": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["calibration_status", "reliability_status", "profitability_claim", "reason"],
+      "required": ["calibration_status", "reliability_status", "profitability_claim"],
       "properties": {
-        "calibration_status": {"type": "string", "minLength": 1, "maxLength": 64},
-        "reliability_status": {"type": "string", "minLength": 1, "maxLength": 64},
-        "profitability_claim": {"const": false},
-        "reason": {"type": "string", "maxLength": 512}
+        "calibration_status": {"$ref": "#/$defs/code"},
+        "reliability_status": {"$ref": "#/$defs/code"},
+        "profitability_claim": {"const": false}
       }
     },
     "gate_result": {
@@ -117,7 +113,7 @@
               "required": ["active", "hold_reason"],
               "properties": {
                 "active": {"const": true},
-                "hold_reason": {"type": "string", "minLength": 1, "maxLength": 64}
+                "hold_reason": {"$ref": "#/$defs/code"}
               }
             }
           ]
@@ -129,10 +125,10 @@
       "additionalProperties": false,
       "required": ["action", "hard_blockers", "model_readiness", "reliability_status", "profitability_claim"],
       "properties": {
-        "action": {"type": "string", "minLength": 1, "maxLength": 64},
+        "action": {"$ref": "#/$defs/code"},
         "hard_blockers": {"$ref": "#/$defs/codes"},
-        "model_readiness": {"type": "string", "minLength": 1, "maxLength": 64},
-        "reliability_status": {"type": "string", "minLength": 1, "maxLength": 64},
+        "model_readiness": {"$ref": "#/$defs/code"},
+        "reliability_status": {"$ref": "#/$defs/code"},
         "profitability_claim": {"const": false}
       }
     },
@@ -141,8 +137,8 @@
       "additionalProperties": false,
       "required": ["is_live_data", "disposition"],
       "properties": {
-        "is_live_data": {"type": "boolean"},
-        "disposition": {"type": "string", "minLength": 1, "maxLength": 64}
+        "is_live_data": {"const": true},
+        "disposition": {"$ref": "#/$defs/code"}
       }
     },
     "data_quality": {
@@ -150,10 +146,10 @@
       "additionalProperties": false,
       "required": ["status", "is_live_data", "data_source", "cross_provider_state"],
       "properties": {
-        "status": {"type": "string", "minLength": 1, "maxLength": 64},
-        "is_live_data": {"type": "boolean"},
-        "data_source": {"type": ["string", "null"], "maxLength": 64},
-        "cross_provider_state": {"type": ["string", "null"], "maxLength": 64}
+        "status": {"$ref": "#/$defs/code"},
+        "is_live_data": {"const": true},
+        "data_source": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/code"}]},
+        "cross_provider_state": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/code"}]}
       }
     },
     "determinism": {
@@ -165,25 +161,22 @@
         "live_repeat_reproducible": {"const": false}
       }
     },
-    "evidence_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    "evidence_hash": {"$ref": "#/$defs/sha256"}
   },
   "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "code": {"type": "string", "pattern": "^[A-Z0-9_]{1,64}$"},
+    "codes": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/code"}},
     "utc_instant": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"
     },
-    "codes": {
-      "type": "array",
-      "maxItems": 32,
-      "items": {"type": "string", "pattern": "^[A-Z0-9_]{1,64}$"}
-    },
-    "probability": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "fraction": {"type": "number", "minimum": 0, "maximum": 1},
     "horizon_probabilities": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "status",
-        "null_reason",
         "p_up_frac",
         "p_down_frac",
         "p_timeout_frac",
@@ -192,14 +185,30 @@
         "sample_count_basis"
       ],
       "properties": {
-        "status": {"type": "string", "minLength": 1, "maxLength": 64},
-        "null_reason": {"type": ["string", "null"], "maxLength": 256},
-        "p_up_frac": {"$ref": "#/$defs/probability"},
-        "p_down_frac": {"$ref": "#/$defs/probability"},
-        "p_timeout_frac": {"$ref": "#/$defs/probability"},
-        "confidence_frac": {"$ref": "#/$defs/probability"},
+        "status": {"$ref": "#/$defs/code"},
+        "p_up_frac": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/fraction"}]},
+        "p_down_frac": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/fraction"}]},
+        "p_timeout_frac": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/fraction"}]},
+        "confidence_frac": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/fraction"}]},
         "sample_count": {"type": "null"},
         "sample_count_basis": {"const": "NONE_UNCALIBRATED_HEURISTIC"}
+      },
+      "if": {"properties": {"status": {"const": "OK"}}},
+      "then": {
+        "properties": {
+          "p_up_frac": {"$ref": "#/$defs/fraction"},
+          "p_down_frac": {"$ref": "#/$defs/fraction"},
+          "p_timeout_frac": {"$ref": "#/$defs/fraction"},
+          "confidence_frac": {"$ref": "#/$defs/fraction"}
+        }
+      },
+      "else": {
+        "properties": {
+          "p_up_frac": {"type": "null"},
+          "p_down_frac": {"type": "null"},
+          "p_timeout_frac": {"type": "null"},
+          "confidence_frac": {"type": "null"}
+        }
       }
     }
   }

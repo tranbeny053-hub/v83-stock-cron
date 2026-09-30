@@ -13,7 +13,6 @@
   "calibration_state": {
     "calibration_status": "DEFAULT_PHASE1A",
     "profitability_claim": false,
-    "reason": "Sprint 1 deterministic baseline is not calibrated.",
     "reliability_status": "INSUFFICIENT_SAMPLE"
   },
   "client_request_id": "0b6f2a1c-3d4e-4f5a-8b6c-7d8e9f0a1b2c",
@@ -36,7 +35,7 @@
     "basis": "CANONICAL_INPUTS_AND_RELEASE",
     "live_repeat_reproducible": false
   },
-  "evidence_hash": "sha256:997ffd1970277bbe52e677b5f260c562efead50abdaf09b7551791bad971af27",
+  "evidence_hash": "sha256:7f70c398805f9616931274fc7a237ee049cd446ad62511c14f801dcc0bc1a456",
   "evidence_origin": "AUTOMATED_RADAR",
   "frontend_display": {
     "disposition": "NO_TRADE",
@@ -50,8 +49,7 @@
     "hard_gate_passed": false
   },
   "horizon": {
-    "bars": 6,
-    "label": "~24H horizon"
+    "bars": 6
   },
   "issued_at_utc": "2026-06-06T12:00:03Z",
   "normalized_symbol": "BTC/USDT",
@@ -61,7 +59,6 @@
     "horizons": {
       "H_extended": {
         "confidence_frac": 0.45,
-        "null_reason": null,
         "p_down_frac": 0.3850677408906662,
         "p_timeout_frac": 0.2210387094975143,
         "p_up_frac": 0.39389354961181944,
@@ -71,7 +68,6 @@
       },
       "H_primary": {
         "confidence_frac": 0.5,
-        "null_reason": null,
         "p_down_frac": 0.3850677408906662,
         "p_timeout_frac": 0.2210387094975143,
         "p_up_frac": 0.39389354961181944,

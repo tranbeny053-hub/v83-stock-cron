@@ -28,10 +28,15 @@ class QuotaDecision:
 def evaluate_quota(
     reservation: Reservation, *, per_5min: int, per_day: int, now: datetime
 ) -> QuotaDecision:
+    """Refuse when any window is full; Retry-After covers EVERY exhausted window."""
+
+    waits = []
     if reservation.counted_5min >= per_5min:
-        return QuotaDecision(False, _retry_after(reservation.oldest_5min, WINDOW_5MIN, now))
+        waits.append(_retry_after(reservation.oldest_5min, WINDOW_5MIN, now))
     if reservation.counted_day >= per_day:
-        return QuotaDecision(False, _retry_after(reservation.oldest_day, WINDOW_DAY, now))
+        waits.append(_retry_after(reservation.oldest_day, WINDOW_DAY, now))
+    if waits:
+        return QuotaDecision(False, max(waits))
     return QuotaDecision(True)
 
 

@@ -204,13 +204,15 @@ def test_postgres_reserves_atomically_in_one_committed_transaction():
     assert (result.counted_5min, result.counted_day) == (2, 8)
     assert (result.oldest_5min, result.oldest_day) == (oldest_five, oldest_day)
     assert len(db.connect_calls) == 1
-    assert db.connect_calls[0][1] == {"connect_timeout": 5, "autocommit": False}
-    assert db.events == ["enter", "enter", *["execute"] * 4, "commit", "exit", "exit"]
+    assert db.connect_calls[0][1] == {"connect_timeout": 3, "autocommit": False}
+    assert db.events == ["enter", "enter", *["execute"] * 5, "commit", "exit", "exit"]
     sql = [" ".join(statement.split()) for statement, _ in db.statements]
-    assert "pg_advisory_xact_lock" in sql[0]
-    assert sql[1].startswith("SELECT credential_id,") and sql[1].endswith("FOR UPDATE")
-    assert sql[2].startswith("SELECT count(*) FILTER")
-    assert sql[3].startswith("INSERT INTO public.automation_radar_ledger")
+    assert "set_config('statement_timeout'" in sql[0] and "set_config('lock_timeout'" in sql[0]
+    assert db.statements[0][1]["timeout"] == "3000ms"
+    assert "pg_advisory_xact_lock" in sql[1]
+    assert sql[2].startswith("SELECT credential_id,") and sql[2].endswith("FOR UPDATE")
+    assert sql[3].startswith("SELECT count(*) FILTER")
+    assert sql[4].startswith("INSERT INTO public.automation_radar_ledger")
     for _, params in db.statements:
         assert params["credential_id"] == CREDENTIAL_ID
         assert params["client_request_id"] == ARGS["client_request_id"]
@@ -219,7 +221,7 @@ def test_postgres_reserves_atomically_in_one_committed_transaction():
         assert params["since_day"] == NOW - timedelta(days=1)
         assert set(params["non_counting"]) == {"QUOTA_EXCEEDED", "CONCURRENCY_LIMIT"}
         assert params["evidence_origin"] == "AUTOMATED_RADAR"
-    assert "outcome_code <> ALL(%(non_counting)s)" in sql[2]
+    assert "outcome_code <> ALL(%(non_counting)s)" in sql[3]
 
 
 @pytest.mark.parametrize(
@@ -245,12 +247,12 @@ def test_postgres_existing_row_classification(changes, expected):
     db = FakeDatabase([tuple(values.values())], description=[(name,) for name in values])
     result = reserve(db.ledger())
     assert result.kind is expected
-    assert len(db.statements) == 2 and db.events.count("commit") == 1
+    assert len(db.statements) == 3 and db.events.count("commit") == 1
     if expected is ReservationKind.REPLAY:
         assert result.entry.response_body == {"synthetic": "recorded"}
 
 
-@pytest.mark.parametrize("failure", ["connect", 1, 2, 3, 4, "fetch", "commit"])
+@pytest.mark.parametrize("failure", ["connect", 1, 2, 3, 4, 5, "fetch", "commit"])
 def test_postgres_reserve_db_errors_fail_closed(failure):
     db = FakeDatabase([None, (0, 0, None, None)], fail=failure)
     with pytest.raises(LedgerUnavailable):
@@ -270,9 +272,11 @@ def test_postgres_missing_database_fails_closed(operation):
 def test_postgres_complete_updates_in_progress_row_and_commits():
     db = FakeDatabase([(ARGS["client_request_id"],)])
     complete(db.ledger())
-    [(sql, params)] = db.statements
+    [(timeout_sql, timeout_params), (sql, params)] = db.statements
+    assert "set_config('statement_timeout'" in timeout_sql and timeout_params["timeout"] == "3000ms"
     assert sql.lstrip().startswith("UPDATE public.automation_radar_ledger")
     assert "AND state = 'IN_PROGRESS'" in sql
+    assert "GREATEST(%(completed_at_utc)s, received_at_utc)" in sql
     assert "RETURNING client_request_id" in sql
     assert json.loads(params["response_body"]) == OUTCOME.response_body
     assert params["http_status"] == 503 and params["outcome_code"] == "ANALYSIS_FAILED"
@@ -287,7 +291,7 @@ def test_postgres_complete_requires_returned_row():
     assert "commit" not in db.events
 
 
-@pytest.mark.parametrize("failure", ["connect", 1, "fetch", "commit"])
+@pytest.mark.parametrize("failure", ["connect", 1, 2, "fetch", "commit"])
 def test_postgres_complete_db_errors_fail_closed(failure):
     db = FakeDatabase([("synthetic",)], fail=failure)
     with pytest.raises(LedgerUnavailable):
@@ -301,10 +305,17 @@ def test_every_sql_column_exists_in_migration():
         re.findall(r"^\s+(\w+)\s+(?:TEXT|UUID|INTEGER|JSONB|TIMESTAMPTZ)\b", create, re.M)
     )
     assert columns == set(LedgerEntry.__dataclass_fields__)
-    statements = [module._SELECT_SQL, module._COUNT_SQL, module._INSERT_SQL, module._COMPLETE_SQL]
+    statements = [
+        module._SELECT_SQL,
+        module._COUNT_SQL,
+        module._INSERT_SQL,
+        module._COMPLETE_SQL,
+        module._COMPLETE_ON_TIME_SQL,
+    ]
     keywords = set(
         """select from where and or is null not all for update insert into values set
-        returning filter count min as text uuid jsonb public automation_radar_ledger""".split()
+        returning filter count min as text uuid jsonb public automation_radar_ledger
+        greatest clock_timestamp""".split()
     )
     aliases = {"counted_5min", "counted_day", "oldest_5min", "oldest_day"}
     for sql in statements:

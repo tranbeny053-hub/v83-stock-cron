@@ -7,7 +7,11 @@ One row per authenticated, well-formed call, keyed by ``(credential_id, client_r
   same refusal); with a different fingerprint it is a CONFLICT; while the first is still running
   it is IN_PROGRESS; an IN_PROGRESS row past its deadline plus a grace period is ABANDONED and
   closed as DEADLINE_EXCEEDED, never re-run;
-- quota counts come from the same rows, computed atomically with the reservation.
+- quota counts come from the same rows, computed atomically with the reservation;
+- a success is recorded only while its deadline has not passed (checked inside the recording
+  transaction); a late success is recorded as DEADLINE_EXCEEDED instead, so the ledger always
+  says what the caller was told;
+- every database operation is bounded by a transaction-scoped statement and lock timeout.
 
 The ledger records the credential id, never its value. It is the ONLY place an automated run is
 stored: nothing here reads or writes ``predictions`` or any other cohort table, and no
@@ -18,6 +22,7 @@ calibration or control reader reads this ledger (table ``automation_radar_ledger
 from __future__ import annotations
 
 import json
+import math
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -33,6 +38,9 @@ ABANDON_GRACE = timedelta(seconds=60)
 # Outcomes refused before any analysis started: they never count against the quota.
 NON_COUNTING_OUTCOMES = frozenset({"QUOTA_EXCEEDED", "CONCURRENCY_LIMIT"})
 MAX_MEMORY_ENTRIES = 10_000
+RESERVE_TIMEOUT_SECONDS = 3.0
+REFUSAL_RECORD_TIMEOUT_SECONDS = 3.0
+MIN_TIMEOUT_SECONDS = 0.1
 
 
 class LedgerUnavailable(Exception):
@@ -106,6 +114,18 @@ class AutomationLedger(Protocol):
         outcome: Outcome,
         now: datetime,
     ) -> None: ...
+
+    def complete_success(
+        self,
+        *,
+        credential_id: str,
+        client_request_id: str,
+        outcome: Outcome,
+        late_outcome: Outcome,
+        deadline_at_utc: datetime,
+        now: datetime,
+        timeout_seconds: float,
+    ) -> bool: ...
 
 
 def classify_existing(
@@ -186,17 +206,28 @@ class InMemoryAutomationLedger:
             entry = self._entries.get(key)
             if entry is None or entry.state != "IN_PROGRESS":
                 raise LedgerUnavailable("no in-progress ledger entry to complete")
-            self._entries[key] = replace(
-                entry,
-                state="COMPLETED",
-                outcome_code=outcome.outcome_code,
-                http_status=outcome.http_status,
-                response_body=json.loads(json.dumps(outcome.response_body)),
-                run_id=outcome.run_id,
-                analysis_hash=outcome.analysis_hash,
-                evidence_hash=outcome.evidence_hash,
-                completed_at_utc=now,
-            )
+            self._entries[key] = _completed(entry, outcome, now)
+
+    def complete_success(
+        self,
+        *,
+        credential_id: str,
+        client_request_id: str,
+        outcome: Outcome,
+        late_outcome: Outcome,
+        deadline_at_utc: datetime,
+        now: datetime,
+        timeout_seconds: float,
+    ) -> bool:
+        del timeout_seconds  # in memory, the write itself cannot block
+        key = (credential_id, client_request_id)
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None or entry.state != "IN_PROGRESS":
+                raise LedgerUnavailable("no in-progress ledger entry to complete")
+            on_time = now <= deadline_at_utc
+            self._entries[key] = _completed(entry, outcome if on_time else late_outcome, now)
+            return on_time
 
     def entries(self) -> list[LedgerEntry]:
         with self._lock:
@@ -213,6 +244,25 @@ class InMemoryAutomationLedger:
             del self._entries[key]
 
 
+def _completed(entry: LedgerEntry, outcome: Outcome, now: datetime) -> LedgerEntry:
+    return replace(
+        entry,
+        state="COMPLETED",
+        outcome_code=outcome.outcome_code,
+        http_status=outcome.http_status,
+        response_body=json.loads(json.dumps(outcome.response_body)),
+        run_id=outcome.run_id,
+        analysis_hash=outcome.analysis_hash,
+        evidence_hash=outcome.evidence_hash,
+        # Never before reception, even if the wall clock stepped back.
+        completed_at_utc=max(now, entry.received_at_utc),
+    )
+
+
+_TIMEOUT_SQL = (
+    "SELECT set_config('statement_timeout', %(timeout)s, true), "
+    "set_config('lock_timeout', %(timeout)s, true)"
+)
 _LOCK_SQL = "SELECT pg_advisory_xact_lock(hashtextextended(%(lock_key)s, 0))"
 _SELECT_SQL = """
 SELECT credential_id, client_request_id::text AS client_request_id, request_fingerprint,
@@ -244,11 +294,16 @@ UPDATE public.automation_radar_ledger
    SET state = 'COMPLETED', outcome_code = %(outcome_code)s, http_status = %(http_status)s,
        response_body = %(response_body)s::jsonb, run_id = %(run_id)s,
        analysis_hash = %(analysis_hash)s, evidence_hash = %(evidence_hash)s,
-       completed_at_utc = %(completed_at_utc)s
+       completed_at_utc = GREATEST(%(completed_at_utc)s, received_at_utc)
  WHERE credential_id = %(credential_id)s AND client_request_id = %(client_request_id)s::uuid
    AND state = 'IN_PROGRESS'
 RETURNING client_request_id
 """
+# The same UPDATE, applied only while the database clock is still within the deadline.
+_COMPLETE_ON_TIME_SQL = _COMPLETE_SQL.replace(
+    "   AND state = 'IN_PROGRESS'\n",
+    "   AND state = 'IN_PROGRESS' AND clock_timestamp() <= %(deadline_at_utc)s\n",
+)
 
 
 class PostgresAutomationLedger:
@@ -263,7 +318,7 @@ class PostgresAutomationLedger:
         self._database_url = database_url
         self._connect = connect
 
-    def _connection(self):
+    def _connection(self, timeout_seconds: float):
         if not self._database_url:
             raise LedgerUnavailable("no database is configured")
         connect = self._connect
@@ -271,7 +326,11 @@ class PostgresAutomationLedger:
             import psycopg
 
             connect = psycopg.connect
-        return connect(self._database_url, connect_timeout=5, autocommit=False)
+        return connect(
+            self._database_url,
+            connect_timeout=max(1, math.ceil(timeout_seconds)),
+            autocommit=False,
+        )
 
     def reserve(
         self,
@@ -296,8 +355,10 @@ class PostgresAutomationLedger:
             "since_day": now - WINDOW_DAY,
             "non_counting": sorted(NON_COUNTING_OUTCOMES),
         }
+        params["timeout"] = _timeout_text(RESERVE_TIMEOUT_SECONDS)
         try:
-            with self._connection() as conn, conn.cursor() as cur:
+            with self._connection(RESERVE_TIMEOUT_SECONDS) as conn, conn.cursor() as cur:
+                cur.execute(_TIMEOUT_SQL, params)
                 cur.execute(_LOCK_SQL, params)
                 cur.execute(_SELECT_SQL, params)
                 row = cur.fetchone()
@@ -349,9 +410,11 @@ class PostgresAutomationLedger:
             "analysis_hash": outcome.analysis_hash,
             "evidence_hash": outcome.evidence_hash,
             "completed_at_utc": now,
+            "timeout": _timeout_text(REFUSAL_RECORD_TIMEOUT_SECONDS),
         }
         try:
-            with self._connection() as conn, conn.cursor() as cur:
+            with self._connection(REFUSAL_RECORD_TIMEOUT_SECONDS) as conn, conn.cursor() as cur:
+                cur.execute(_TIMEOUT_SQL, params)
                 cur.execute(_COMPLETE_SQL, params)
                 if cur.fetchone() is None:
                     raise LedgerUnavailable("no in-progress ledger entry to complete")
@@ -360,6 +423,59 @@ class PostgresAutomationLedger:
             raise
         except Exception as exc:
             raise LedgerUnavailable("the automation ledger could not complete") from exc
+
+    def complete_success(
+        self,
+        *,
+        credential_id: str,
+        client_request_id: str,
+        outcome: Outcome,
+        late_outcome: Outcome,
+        deadline_at_utc: datetime,
+        now: datetime,
+        timeout_seconds: float,
+    ) -> bool:
+        """Record the success if the deadline holds, else DEADLINE_EXCEEDED; ONE transaction."""
+
+        timeout = max(MIN_TIMEOUT_SECONDS, timeout_seconds)
+        base = {
+            "credential_id": credential_id,
+            "client_request_id": client_request_id,
+            "completed_at_utc": now,
+            "deadline_at_utc": deadline_at_utc,
+            "timeout": _timeout_text(timeout),
+        }
+        try:
+            with self._connection(timeout) as conn, conn.cursor() as cur:
+                cur.execute(_TIMEOUT_SQL, base)
+                cur.execute(_COMPLETE_ON_TIME_SQL, {**base, **_outcome_params(outcome)})
+                if cur.fetchone() is not None:
+                    conn.commit()
+                    return True
+                cur.execute(_COMPLETE_SQL, {**base, **_outcome_params(late_outcome)})
+                if cur.fetchone() is None:
+                    raise LedgerUnavailable("no in-progress ledger entry to complete")
+                conn.commit()
+                return False
+        except LedgerUnavailable:
+            raise
+        except Exception as exc:
+            raise LedgerUnavailable("the automation ledger could not complete") from exc
+
+
+def _outcome_params(outcome: Outcome) -> dict[str, Any]:
+    return {
+        "outcome_code": outcome.outcome_code,
+        "http_status": outcome.http_status,
+        "response_body": json.dumps(outcome.response_body, sort_keys=True),
+        "run_id": outcome.run_id,
+        "analysis_hash": outcome.analysis_hash,
+        "evidence_hash": outcome.evidence_hash,
+    }
+
+
+def _timeout_text(seconds: float) -> str:
+    return f"{max(1, int(seconds * 1000))}ms"
 
 
 def _entry_from_row(row: Any, description: Any) -> LedgerEntry:

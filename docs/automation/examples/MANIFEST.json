@@ -3,13 +3,13 @@
     {
       "file": "radar_evidence.v1.synthetic-btc-4h-gate-blocked.json",
       "note": "Hard gate blocked (SKILL_NOT_DEMONSTRATED), no H2 hold: the ordinary branch.",
-      "sha256": "e9baa295026cf8afb48adcdec0d676e54e5c0ebb38c032704e470516d0b7ddf0",
+      "sha256": "c47e0e5ef6f30725d488c56e6b3b73849b445ef19f7079aac1bc98cbd872620f",
       "validates_against": "radar_evidence.v1"
     },
     {
       "file": "radar_evidence.v1.synthetic-eth-1h-h2-hold.json",
       "note": "A legacy verdict under the H2 hold: the hold is carried as {active, hold_reason} only; the legacy verdict, n and the observed rate are withheld.",
-      "sha256": "b2492539c70264f49f937f6345b472aedc8678ae662d16c727e4fbed67333814",
+      "sha256": "2c33037891d5d44f9f625f47681bba1f281e0de7c37bb025aea11f84048b5c65",
       "validates_against": "radar_evidence.v1"
     },
     {

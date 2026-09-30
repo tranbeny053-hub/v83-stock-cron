@@ -7,10 +7,14 @@
   before it leaves; a body that fails is never sent (503 ``CONTRACT_VIOLATION``).
 - **Errors**: ``radar_evidence_error.v1`` with a fixed catalogue and fixed messages. No body ever
   echoes a credential, a request field or user data.
-- **Hashes** (published so a consumer can re-verify offline):
-  ``canonical_json(x) = json.dumps(x, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
-  allow_nan=False)``, encoded as ASCII; ``evidence_hash = "sha256:" + sha256(canonical_json(body
-  without "evidence_hash"))``. ``analysis_hash`` is UCPE's own analysis identity, carried as read.
+- **Canonical form**: RFC 8785 JCS (``automation.canonical``). Every response is sent as the JCS
+  bytes of its body, so a replay is byte-identical to the first answer. The published
+  ``evidence_hash = "sha256:" + sha256(JCS(body without "evidence_hash"))`` can be re-verified in
+  any language with a JCS implementation. ``analysis_hash`` is UCPE's own analysis identity,
+  carried as read.
+- **Projection**: codes, numbers, identities and release metadata only; no free prose. A horizon
+  whose status is not ``OK`` carries null probabilities (its numbers are placeholders, never
+  evidence), and an analysis without live data yields no evidence at all.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import uuid
 from dataclasses import dataclass
 from enum import StrEnum
@@ -27,6 +32,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from crypto_probability_engine.automation.canonical import CanonicalError, jcs_bytes
 from crypto_probability_engine.automation.config import (
     DEADLINE_MS_MAX,
     DEADLINE_MS_MIN,
@@ -58,6 +64,7 @@ RADAR_EVIDENCE_SCHEMA_FILE = SCHEMA_DIR / "radar_evidence.schema.json"
 ERROR_SCHEMA_FILE = SCHEMA_DIR / "radar_evidence_error.schema.json"
 _REQUEST_KEYS = frozenset({"symbol", "primary_timeframe", "client_request_id", "deadline_ms"})
 _PROBABILITY_KEYS = ("p_up_frac", "p_down_frac", "p_timeout_frac")
+_SYMBOL = re.compile(r"^[A-Za-z0-9/_:.-]{1,32}$")
 
 
 class ErrorCode(StrEnum):
@@ -134,18 +141,14 @@ class RadarEvidenceRequest:
         )
 
 
-def canonical_json(value: Any) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ).encode("ascii")
+def render(body: dict[str, Any]) -> bytes:
+    """The wire bytes of every automation response: the RFC 8785 JCS form of its body."""
+
+    return jcs_bytes(body)
 
 
 def content_hash(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
+    return "sha256:" + hashlib.sha256(jcs_bytes(value)).hexdigest()
 
 
 def evidence_hash(body: dict[str, Any]) -> str:
@@ -189,7 +192,7 @@ def parse_request(body: bytes) -> RadarEvidenceRequest:
     timeframe = payload["primary_timeframe"]
     client_request_id = payload["client_request_id"]
     deadline_ms = payload["deadline_ms"]
-    if not isinstance(symbol, str) or not 1 <= len(symbol) <= 32:
+    if not isinstance(symbol, str) or not _SYMBOL.fullmatch(symbol):
         raise ContractError(ErrorCode.MALFORMED_REQUEST)
     if not isinstance(timeframe, str) or not 1 <= len(timeframe) <= 8:
         raise ContractError(ErrorCode.MALFORMED_REQUEST)
@@ -219,17 +222,20 @@ def build_radar_evidence(
 ) -> dict[str, Any]:
     """Map a validated UCPE analysis to radar_evidence.v1, reading values and never recomputing.
 
-    Raises ``ContractError(CONTRACT_VIOLATION)`` when the analysis lacks a governed field, when a
-    horizon's probabilities do not sum to 1, or when the body fails the pinned schema.
+    Raises ``ContractError(UPSTREAM_UNAVAILABLE)`` when the analysis did not use live data, and
+    ``ContractError(CONTRACT_VIOLATION)`` when it lacks a governed field, when a horizon's
+    probabilities do not sum to 1, or when the body fails the pinned schema.
     """
 
     try:
+        quality = analysis["data_quality"]
+        display = analysis["frontend_display"]
+        if quality["is_live_data"] is not True or display["is_live_data"] is not True:
+            raise ContractError(ErrorCode.UPSTREAM_UNAVAILABLE)
         probability_state = analysis["probability_state"]
         calibration_state = analysis["calibration_state"]
         gate = analysis["gate_result"]
         brief = analysis["decision_brief"]
-        display = analysis["frontend_display"]
-        quality = analysis["data_quality"]
         timeframes = analysis["timeframes"]
         hold = gate.get("directional_evidence_hold")
         body: dict[str, Any] = {
@@ -244,7 +250,7 @@ def build_radar_evidence(
             "symbol": request.symbol,
             "normalized_symbol": analysis["normalized_symbol"],
             "primary_timeframe": timeframes["primary"],
-            "horizon": {"bars": timeframes["horizon_bars"], "label": timeframes["horizon_label"]},
+            "horizon": {"bars": timeframes["horizon_bars"]},
             # Exactly the serving release's public build-info payload (GET /v1/build-info).
             "build_info": {key: build_info[key] for key in BUILD_INFO_KEYS},
             "probability_state": {
@@ -258,7 +264,6 @@ def build_radar_evidence(
                 "calibration_status": calibration_state["calibration_status"],
                 "reliability_status": calibration_state["reliability_status"],
                 "profitability_claim": calibration_state["profitability_claim"],
-                "reason": calibration_state["reason"],
             },
             "gate_result": {
                 "hard_gate_passed": gate["hard_gate_passed"],
@@ -289,9 +294,14 @@ def build_radar_evidence(
             },
             "determinism": {"basis": DETERMINISM_BASIS, "live_repeat_reproducible": False},
         }
+    except ContractError:
+        raise
     except (KeyError, TypeError, AttributeError):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION) from None
-    body["evidence_hash"] = evidence_hash(body)
+    try:
+        body["evidence_hash"] = evidence_hash(body)
+    except CanonicalError:
+        raise ContractError(ErrorCode.CONTRACT_VIOLATION) from None
     if not radar_evidence_valid(body):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION)
     return body
@@ -306,13 +316,14 @@ def error_body_valid(body: Any) -> bool:
 
 
 def _horizon(horizon: dict[str, Any]) -> dict[str, Any]:
+    usable = horizon["status"] == "OK"
     return {
         "status": horizon["status"],
-        "null_reason": horizon.get("null_reason"),
-        "p_up_frac": horizon["p_up_frac"],
-        "p_down_frac": horizon["p_down_frac"],
-        "p_timeout_frac": horizon["p_timeout_frac"],
-        "confidence_frac": horizon["confidence_frac"],
+        # A horizon that is not OK carries placeholder numbers, never evidence: withheld.
+        "p_up_frac": horizon["p_up_frac"] if usable else None,
+        "p_down_frac": horizon["p_down_frac"] if usable else None,
+        "p_timeout_frac": horizon["p_timeout_frac"] if usable else None,
+        "confidence_frac": horizon["confidence_frac"] if usable else None,
         # UCPE's probabilities are uncalibrated heuristic estimates: no sample count stands
         # behind them, so none is ever reported (never fabricated).
         "sample_count": None,

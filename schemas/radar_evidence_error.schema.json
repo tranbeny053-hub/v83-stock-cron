@@ -2,16 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ultimate-crypto-probability-engine.local/schemas/radar_evidence_error.schema.json",
   "title": "radar_evidence_error.v1",
-  "description": "Every non-200 body of POST /v1/automation/radar-evidence. It never carries a credential, a request body, user data or partial evidence.",
+  "description": "Every non-200 body of POST /v1/automation/radar-evidence, sent as its RFC 8785 JCS bytes. It never carries a credential, a request field, user data or partial evidence: the code is from a fixed catalogue and the message is that code's fixed text.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "error"],
+  "required": [
+    "schema_version",
+    "error"
+  ],
   "properties": {
-    "schema_version": {"const": "radar_evidence_error.v1"},
+    "schema_version": {
+      "const": "radar_evidence_error.v1"
+    },
     "error": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message", "retry_after_seconds"],
+      "required": [
+        "code",
+        "message",
+        "retry_after_seconds"
+      ],
       "properties": {
         "code": {
           "enum": [
@@ -34,8 +43,34 @@
             "CONTRACT_VIOLATION"
           ]
         },
-        "message": {"type": "string", "minLength": 1, "maxLength": 200},
-        "retry_after_seconds": {"type": ["integer", "null"], "minimum": 1}
+        "message": {
+          "enum": [
+            "A machine credential is required.",
+            "An automated analysis is already running.",
+            "Human sessions are not accepted on this route.",
+            "Market data is unavailable.",
+            "The analysis could not be completed.",
+            "The automation ledger is unavailable.",
+            "The automation route is disabled.",
+            "The automation route is not configured.",
+            "The credential's quota is exhausted.",
+            "The deadline passed before evidence was ready.",
+            "The evidence failed its contract and was withheld.",
+            "The machine credential was refused.",
+            "The primary_timeframe is not supported.",
+            "The request body is not a valid radar-evidence request.",
+            "The symbol is not supported.",
+            "This client_request_id is still being processed.",
+            "This client_request_id was already used for a different request."
+          ]
+        },
+        "retry_after_seconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
       }
     }
   }

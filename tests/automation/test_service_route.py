@@ -134,7 +134,8 @@ def test_invalid_credential_writes_no_row(harness_factory, presented):
     ("body", "code", "status"),
     [
         ({}, "MALFORMED_REQUEST", 400),
-        (request_body(symbol="???"), "UNSUPPORTED_SYMBOL", 422),
+        (request_body(symbol="???"), "MALFORMED_REQUEST", 400),
+        (request_body(symbol="BTC/XYZ"), "UNSUPPORTED_SYMBOL", 422),
         (request_body(primary_timeframe="1W"), "UNSUPPORTED_TIMEFRAME", 422),
     ],
 )
@@ -257,8 +258,12 @@ def test_concurrency_refusal_is_recorded_but_not_counted(harness_factory):
 
 def test_spent_deadline_does_not_run_analyzer_and_releases_slot(harness_factory):
     calls = []
-    times = iter([NOW, NOW + timedelta(seconds=31), NOW + timedelta(seconds=31)])
-    harness = harness_factory(clock=lambda: next(times), analyzer=lambda req: calls.append(req))
+    ticks = iter([0.0, 0.0])  # arrival, then the deadline stamp; every later read is past it
+
+    def monotonic():
+        return next(ticks, 31.0)
+
+    harness = harness_factory(monotonic=monotonic, analyzer=lambda req: calls.append(req))
     assert_error(harness.post(), "DEADLINE_EXCEEDED", 503)
     assert calls == []
     gate = harness.app.state.automation_service._concurrency
@@ -270,19 +275,17 @@ def test_spent_deadline_does_not_run_analyzer_and_releases_slot(harness_factory)
 def test_future_timeout_keeps_slot_until_worker_finishes(harness_factory):
     release = Event()
     entered = Event()
-    clock_calls = 0
+    ticks = iter([0.0, 0.0])  # arrival and the deadline stamp; then 3.9 s of a 5 s budget spent
 
-    def clock():
-        nonlocal clock_calls
-        clock_calls += 1
-        return NOW if clock_calls == 1 else NOW + timedelta(seconds=4.45)
+    def monotonic():
+        return next(ticks, 3.9)
 
     def blocked(_request):
         entered.set()
         release.wait()
         return {}
 
-    harness = harness_factory(analyzer=blocked, clock=clock)
+    harness = harness_factory(analyzer=blocked, monotonic=monotonic)
     service = harness.app.state.automation_service
     try:
         response = harness.post(request_body(deadline_ms=5000))
@@ -343,7 +346,9 @@ def test_ledger_failure_withholds_all_evidence(harness_factory, monkeypatch, ope
     def unavailable(**_kwargs):
         raise LedgerUnavailable("synthetic " + token())
 
-    monkeypatch.setattr(harness.ledger, operation, unavailable)
+    # "complete" is the success record: complete_success.
+    name = "reserve" if operation == "reserve" else "complete_success"
+    monkeypatch.setattr(harness.ledger, name, unavailable)
     response = harness.post()
     assert_error(response, "LEDGER_UNAVAILABLE", 503)
     assert "evidence_hash" not in response.text and "run_id" not in response.text

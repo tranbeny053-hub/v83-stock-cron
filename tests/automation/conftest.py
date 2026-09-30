@@ -128,6 +128,7 @@ def harness_factory(fixture_market) -> Callable[..., AutomationHarness]:
         env: dict[str, str] | None = None,
         analyzer=None,
         clock=None,
+        monotonic=None,
         ledger: InMemoryAutomationLedger | None = None,
     ) -> AutomationHarness:
         settings = Settings(data_mode="fixture")
@@ -139,6 +140,8 @@ def harness_factory(fixture_market) -> Callable[..., AutomationHarness]:
             kwargs["analyzer"] = analyzer
         if clock is not None:
             kwargs["clock"] = clock
+        if monotonic is not None:
+            kwargs["monotonic"] = monotonic
         app.state.automation_service = RadarEvidenceService(
             settings=settings,
             ledger=chosen_ledger,

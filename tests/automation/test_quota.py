@@ -40,13 +40,28 @@ def test_retry_uses_oldest_counted_instant_and_rounds_up(window, age, expected):
         ReservationKind.NEW,
         None,
         counted_5min=6 if window == "five" else 0,
-        counted_day=120,
+        counted_day=0 if window == "five" else 120,
         oldest_5min=oldest if window == "five" else None,
         oldest_day=oldest,
     )
     result = evaluate_quota(reservation, per_5min=6, per_day=120, now=NOW)
     assert not result.allowed and result.retry_after_seconds == expected
     assert result.retry_after_seconds >= 1
+
+
+def test_retry_after_covers_every_exhausted_window():
+    """Both windows full: the wait is the longer one, never just the 5-minute one (F2)."""
+
+    reservation = Reservation(
+        ReservationKind.NEW,
+        None,
+        counted_5min=1,
+        counted_day=1,
+        oldest_5min=NOW - timedelta(seconds=1),
+        oldest_day=NOW - timedelta(seconds=1),
+    )
+    result = evaluate_quota(reservation, per_5min=1, per_day=1, now=NOW)
+    assert not result.allowed and result.retry_after_seconds == 86399
 
 
 def test_concurrency_gate_refuses_and_releases_slots():

@@ -74,8 +74,15 @@ def test_unsupported_timeframe(timeframe):
 
 def test_unnormalizable_symbol():
     with pytest.raises(ContractError) as caught:
-        parse_request(encode(symbol="???"))
+        parse_request(encode(symbol="BTC/XYZ"))  # well-formed, but not a UCPE spot symbol
     assert caught.value.code is ErrorCode.UNSUPPORTED_SYMBOL
+
+
+@pytest.mark.parametrize("symbol", ["???", "BTC USDT", "BTC\n", "BT$", "x" * 33])
+def test_symbol_outside_the_character_class_is_malformed(symbol):
+    with pytest.raises(ContractError) as caught:
+        parse_request(encode(symbol=symbol))
+    assert caught.value.code is ErrorCode.MALFORMED_REQUEST
 
 
 @pytest.mark.parametrize("deadline", [5000, 60000])
@@ -139,16 +146,33 @@ def build(analysis):
 
 
 def independent_hash(body):
+    """JCS without the JCS module: valid only for ASCII keys and no integral or tiny floats."""
+
     unsigned = {key: value for key, value in body.items() if key != "evidence_hash"}
     serialized = json.dumps(
-        unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
-    ).encode("ascii")
+        unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
     return "sha256:" + hashlib.sha256(serialized).hexdigest()
+
+
+def assert_jcs_premise(value):
+    """Where Python's json.dumps and RFC 8785 JCS provably agree."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            assert key.isascii()
+            assert_jcs_premise(child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_jcs_premise(child)
+    elif isinstance(value, float):
+        assert not value.is_integer() and 1e-6 <= abs(value) < 1e21
 
 
 def test_real_isolated_analysis_builds_schema_valid_evidence(real_analysis):
     body = build(real_analysis)
     Draft202012Validator(json.loads(RADAR_EVIDENCE_SCHEMA_FILE.read_text())).validate(body)
+    assert_jcs_premise(body)
     assert body["evidence_hash"] == independent_hash(body) == evidence_hash(body)
     assert body["analysis_hash"] == real_analysis["analysis_hash"]
     for key, horizon in body["probability_state"]["horizons"].items():
@@ -237,9 +261,9 @@ def test_hold_is_projected_without_legacy_verdict(real_analysis):
     [
         (
             RADAR_EVIDENCE_SCHEMA_FILE,
-            "37c2d12488b71c2409ca48188d67aa981ad47e4d2b398a9668bbcfdc0c687b8f",
+            "460458ade4f65e6850e024d3d3a6cc042c40219b802b8ddd89c93ae35a4be5c7",
         ),
-        (ERROR_SCHEMA_FILE, "1d3b402ee5c014ad2129dd87e3fd12de15cd69d9b07042d3f1c8bbac62d9b15f"),
+        (ERROR_SCHEMA_FILE, "983001a75249ed5b5b0f5df5fae1910ab4a511418eaac81172a6362cfb1d6315"),
     ],
 )
 def test_published_schema_bytes_are_pinned(path, expected):
