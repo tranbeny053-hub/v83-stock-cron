@@ -28,6 +28,7 @@ from crypto_probability_engine.api.auth import (
     set_session_cookie,
     verify_session_token,
 )
+from crypto_probability_engine.api.automation_endpoint import register_automation_endpoint
 from crypto_probability_engine.api.calibration_endpoint import (
     register_calibration_endpoint,
     schedule_skill_evidence_refresh,
@@ -171,6 +172,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         require_app_session=require_app_session,
         settings=app_settings,
     )
+    # F1: the machine-only automation route. It never reads a human session, and the human routes
+    # never read its credential. Off unless UCPE_AUTOMATION_ENABLED is set (503 otherwise).
+    register_automation_endpoint(app, settings=app_settings)
 
     @app.post("/v1/analyze")
     def analyze(

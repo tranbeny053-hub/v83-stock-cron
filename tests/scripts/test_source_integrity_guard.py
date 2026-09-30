@@ -20,10 +20,16 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-TC-V1-STAMP
-# (UCPE-PROD-TC-V1-STAMP-20260930-A) deployed main's own tree, so nothing stands in it:
+# (UCPE-PROD-TC-V1-STAMP-20260930-A) deployed main's own tree, so nothing stood in it:
 # analysis_service.py (the W26 tc-v1 writer stamp) and config/build_info.py (the release
-# identity) cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+# identity) cleared with that release. What stands in it now is F1, the governed automation
+# route, which is not deployed: analysis_service.py gains the isolated-analysis entry point and
+# api/app.py registers the machine-only route. Both clear when a release carrying F1 lands and
+# the baseline is re-pinned.
+CURRENT_DELTA_PATHS: list[str] = [
+    "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.

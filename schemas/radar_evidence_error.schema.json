@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultimate-crypto-probability-engine.local/schemas/radar_evidence_error.schema.json",
+  "title": "radar_evidence_error.v1",
+  "description": "Every non-200 body of POST /v1/automation/radar-evidence. It never carries a credential, a request body, user data or partial evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "error"],
+  "properties": {
+    "schema_version": {"const": "radar_evidence_error.v1"},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retry_after_seconds"],
+      "properties": {
+        "code": {
+          "enum": [
+            "MALFORMED_REQUEST",
+            "CREDENTIAL_REQUIRED",
+            "CREDENTIAL_INVALID",
+            "HUMAN_SESSION_REFUSED",
+            "IDEMPOTENCY_CONFLICT",
+            "REQUEST_IN_PROGRESS",
+            "UNSUPPORTED_SYMBOL",
+            "UNSUPPORTED_TIMEFRAME",
+            "QUOTA_EXCEEDED",
+            "CONCURRENCY_LIMIT",
+            "AUTOMATION_DISABLED",
+            "NOT_CONFIGURED",
+            "LEDGER_UNAVAILABLE",
+            "DEADLINE_EXCEEDED",
+            "UPSTREAM_UNAVAILABLE",
+            "ANALYSIS_FAILED",
+            "CONTRACT_VIOLATION"
+          ]
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 200},
+        "retry_after_seconds": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  }
+}
