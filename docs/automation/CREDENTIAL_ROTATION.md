@@ -1,7 +1,7 @@
 # Machine credentials: issue, rotate, revoke (F1)
 
-Status: **procedure only. Nothing here has been done.** Migration 0013 is not applied, no credential
-exists, and the route is off. Every step below is an owner action on the production database, which
+Status (2026-10-01): **in use.** Migration 0013 is applied, the route is enabled, and the owner issued
+the first credential, `uor-radar-2026-10` (ACTIVE; named here by id only). Every step below is an owner action on the production database, which
 makes it a **T4, authorized by the owner for that specific step**. UCPE never issues a credential,
 never stores, logs or returns a credential value (a presented value is only hashed in memory,
 during its own request), and never writes to this table.

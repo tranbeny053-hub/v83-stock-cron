@@ -1,8 +1,11 @@
 # F1 release plan: merge, apply, release, credential, enable, canary, handoff
 
-Status: **prepared; nothing here is executed.** Every numbered step is an owner boundary (T3 or T4)
-and runs only under the owner's authorization of that step. Until step 6 the route is OFF (the
-default), no credential exists, and the route fails closed at every layer.
+Status (2026-10-01): **steps 1-4, 6 and 7 are DONE; step 5 stays at the defaults (G6, provisional);
+step 8 (UOR) is not started.** Every numbered step is an owner boundary (T3 or T4) and ran only under
+the owner's authorization of that step. Section 0's independent Codex review did not run: the owner
+ruled CODEX_PAUSED_BY_OWNER and replaced that gate with a CLAUDE_ADVERSARIAL_REVIEW (not independent)
+plus bounded mutation evidence. The canary passed (F1_CANARY=PASS, LIVE_ISOLATION=PASS). The exact
+states are in `UOR_HANDOFF.md` section 1.
 
 ## 0. Merge readiness (before step 1)
 
