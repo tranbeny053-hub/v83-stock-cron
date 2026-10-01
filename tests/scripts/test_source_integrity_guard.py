@@ -23,12 +23,14 @@ DRIFT_SHA = "d" * 40
 # (UCPE-PROD-TC-V1-STAMP-20260930-A) deployed main's own tree, so nothing stood in it:
 # analysis_service.py (the W26 tc-v1 writer stamp) and config/build_info.py (the release
 # identity) cleared with that release. What stands in it now is F1, the governed automation
-# route, which is not deployed: analysis_service.py gains the isolated-analysis entry point and
-# api/app.py registers the machine-only route. Both clear when a release carrying F1 lands and
-# the baseline is re-pinned.
+# route (merged by PR #144 but not yet deployed): analysis_service.py gains the isolated-analysis
+# entry point and api/app.py registers the machine-only route. With them stands
+# config/build_info.py, the UCPE-PROD-F1-AUTOMATION-20261001-A release identity that names the
+# next deploy. All three clear when that deploy lands and the baseline is re-pinned.
 CURRENT_DELTA_PATHS: list[str] = [
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
