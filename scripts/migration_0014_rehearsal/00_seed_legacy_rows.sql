@@ -1,6 +1,8 @@
--- Migration 0014 rehearsal, step 0: BEFORE 0014, seed rows its checks would refuse.
--- They prove NOT VALID: the apply must succeed without scanning them, and they must survive unchanged.
--- Scratch database only (a CI runner's local PostgreSQL); synthetic values.
+-- Migration 0014 rehearsal, step 0: BEFORE 0014, seed one row in each core table, including rows
+-- its checks would refuse. They prove NOT VALID: the apply must succeed without scanning them, and
+-- they must survive unchanged; they also give every append-only trigger a row to refuse.
+-- Runs ONLY in a scratch local PostgreSQL on a CI runner. Never run it against a real database.
+-- Synthetic values only.
 INSERT INTO public.predictions (
     prediction_id, run_id, symbol, normalized_symbol, timeframe, horizon_bars,
     predicted_at_utc, reference_close_utc, reference_price, horizon_end_utc,
@@ -17,4 +19,14 @@ INSERT INTO public.prediction_outcomes (
 ) VALUES (
     'legacy:invalid', '2026-01-02T00:00:00Z', '2026-01-01T08:00:00Z', 0,
     0, 'TIMEOUT', 'legacy-resolver'
+);
+INSERT INTO public.prediction_feature_snapshots (
+    prediction_id, run_id, symbol, normalized_symbol, timeframe, prediction_as_of_utc,
+    reference_close_utc, quant_v2_schema_version, feature_methodology_version, influence_mode,
+    no_lookahead_assertion, block_status, feature_count, degraded_count, provider_signature,
+    snapshot_payload, snapshot_hash
+) VALUES (
+    'legacy:invalid', 'legacy', 'BTC', 'BTC/USDT', '4H', '2026-01-01T00:00:00Z',
+    '2026-01-01T04:00:00Z', 'legacy-schema', 'legacy-method', 'SHADOW_ONLY',
+    true, 'ACTIVE', 0, 0, 'legacy', '{}'::jsonb, 'legacy-hash'
 );

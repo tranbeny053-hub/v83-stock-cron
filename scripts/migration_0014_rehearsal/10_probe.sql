@@ -1,5 +1,6 @@
--- Migration 0014 rehearsal, step 2 (after 0014 was applied twice): the catalog and every refusal.
--- Scratch database only. Each probe raises REHEARSAL_FAIL unless the expected refusal happens.
+-- Migration 0014 rehearsal, after the apply: the catalog, the surviving legacy rows and every refusal.
+-- Runs ONLY in a scratch local PostgreSQL on a CI runner. Never run it against a real database.
+-- Each probe raises REHEARSAL_FAIL unless the expected outcome happens.
 DO $$
 DECLARE
     found INTEGER;
@@ -11,6 +12,9 @@ BEGIN
     SELECT count(*) INTO found FROM public.prediction_outcomes
     WHERE prediction_id = 'legacy:invalid' AND outcome_reference_price = 0;
     IF found <> 1 THEN RAISE EXCEPTION 'REHEARSAL_FAIL: the legacy outcome changed'; END IF;
+    SELECT count(*) INTO found FROM public.prediction_feature_snapshots
+    WHERE prediction_id = 'legacy:invalid' AND snapshot_hash = 'legacy-hash';
+    IF found <> 1 THEN RAISE EXCEPTION 'REHEARSAL_FAIL: the legacy feature snapshot changed'; END IF;
     SELECT count(*) INTO found FROM pg_catalog.pg_constraint
     WHERE conname IN ('predictions_probability_simplex_chk', 'predictions_reference_price_chk',
                       'predictions_horizon_chronology_chk', 'prediction_outcomes_reference_price_chk')
