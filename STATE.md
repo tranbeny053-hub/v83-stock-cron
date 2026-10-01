@@ -1,6 +1,40 @@
 # STATE
 
-Updated: 2026-10-01 (F1 canary PASS; live isolation PASS; the UOR handoff package). **F1_CANARY=PASS,
+Updated: 2026-10-01 (B2 and B4 merged; roadmap resumed). **ROADMAP_RESUMED: F1 is CLOSED (owner routing,
+2026-10-01). All UOR implementation and activation belong to the separate UOR owner-facing thread; UCPE reopens F1
+only for a concrete upstream contract defect returned from there. B2 and B4 are MERGED. These merges deployed
+nothing: no runtime or guarded file changed, and production stays D2 5a3ef022. CODEX_PAUSED_BY_OWNER stands.**
+- The governing plan is UCPE_FINAL_UPGRADE_MASTER_PLAN_v1.0 (sha256 2873c8e7…). The owner's rulings on
+  OD-FINAL-1…7 apply, recorded verbatim in OD_FINAL below. The H2 rulings and the live hold are unchanged.
+  - An earlier local draft (041c57e) said these ODs were never ruled. It was never published, and it is superseded
+    here.
+- **B2** (governing plan §11.1): PR #150 merged at 12:27:29Z as fc441c52 with --match-head-commit (head 52cb9a2).
+  - Every workflow action is pinned to a reviewed Node-24 SHA, with timeouts and least-privilege permissions.
+  - VERIFY=PASS 4571, including a fresh re-verify of the exact commit. Mutation 4/4.
+- **B4** (plan §11.2-§11.3): PR #151 merged at 12:27:35Z as fdfefd2c with --match-head-commit (head 9ac70a2).
+  - scripts/release.py covers identity, preflight, deploy, settle, repin, guard-verify, rollback-check and
+    rollback. Data: ops/release/config.json and releases.json. Docs: docs/runbooks/RELEASE.md and ROLLBACK.md.
+  - The rollback check is H2-safe by both code marker and registry. The pre-hold 00705c55 is never a target.
+  - VERIFY=PASS 4586, including a fresh re-verify of the exact commit. Mutation 13/13.
+  - Live read-only validation against production: guard-verify PASS, settle PASS, rollback-check TC-V1-STAMP
+    PASS, PROD-SAFE-3 STOP.
+- The gate for both: a CLAUDE_ADVERSARIAL_REVIEW (NOT independent), in fresh detached worktrees.
+  - Verdict CLEAN: no HIGH or MEDIUM.
+  - LOW-1 (operator POST probes, bounded) is accepted.
+  - LOW-2 (DISASTER_RECOVERY_RUNBOOK called OD6 "undecided") is fixed in this record.
+  - The review: .work/roadmap/CLAUDE_ADVERSARIAL_REVIEW_B2_B4.md.
+- Main fdfefd2c: push CI success (run 36861888464).
+- Writer transport (plan §8.3): **UNKNOWN**.
+  - The one read-only request the owner allowed (GET /v1/system_status, no session) returned 401 "Valid session
+    is required." and nothing about transport. No mutation.
+  - Proven: the reader, the automation route and the resolver use Postgres. The analysis writer is NOT inferred.
+  - The owner-run measurement contract: .work/roadmap/writer_transport/MEASUREMENT_CONTRACT.md.
+- B3 (reproducible build) started on fresh main; its acceptance needs two independent clean CI builds of the same
+  commit with identical image digests.
+- B5 stays deferred by the owner: radar_evidence.v1 and its data-quality semantics are frozen while the UOR handoff
+  is active.
+- The dependency map and evidence: .work/roadmap/ (sealed).
+Previously (F1 canary PASS; live isolation PASS; the UOR handoff package). **F1_CANARY=PASS,
 LIVE_ISOLATION=PASS: the owner issued the credential uor-radar-2026-10 (T4; named here by id only, its value never
 requested, printed or stored) and ran the one canary. The governed UCPE→UOR handoff package is finalized
 (docs/automation/UOR_HANDOFF.md). UOR is untouched, UOR Cron is not re-enabled, and CODEX_PAUSED_BY_OWNER stands.**
@@ -377,7 +411,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED AT THE UOR-SIDE BOUNDARY. F1 is live and proven on the UCPE side (F1_CANARY=PASS,
+LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phase 2. B2 and B4 are merged; B3 (reproducible build) is next. F1 is
+  CLOSED and delegated to the UOR thread.
+  - **ROADMAP-RESUME-A (2026-10-01; the owner's routing update and OD rulings; Codex paused; Claude implemented and
+    reviewed; deterministic gates).**
+    - B2: #150 → fc441c52. B4: #151 → fdfefd2c. No deploy.
+    - Writer transport: UNKNOWN (session-gated; an owner-run M1 is prepared).
+  Before it: PAUSED AT THE UOR-SIDE BOUNDARY. F1 is live and proven on the UCPE side (F1_CANARY=PASS,
   LIVE_ISOLATION=PASS), and the governed handoff package is finalized. UOR's activation happens in its own
   sessions.
   - **F1-CANARY-A (2026-10-01; the owner issued uor-radar-2026-10 and ran the canary; Claude adjudicated read-only
@@ -1979,7 +2019,9 @@ LOOP_STATE=PAUSED AT THE UOR-SIDE BOUNDARY. F1 is live and proven on the UCPE si
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1 CANARY PASS, LIVE ISOLATION PASS (2026-10-01): the owner issued the credential
+CURRENT_MILESTONE=PHASE 2 IN PROGRESS (2026-10-01): B2 (workflow pinning) and B4 (release and H2-safe rollback
+  tooling) are MERGED; B3 is next. F1 is CLOSED and delegated to the UOR thread.
+  Before it: F1 CANARY PASS, LIVE ISOLATION PASS (2026-10-01): the owner issued the credential
   uor-radar-2026-10 (ACTIVE); the UCPE→UOR handoff package is finalized; next is the UOR-side boundary.
   Before it: F1 ENABLED, NO CREDENTIAL (2026-10-01): the owner enabled the route; the post-enable check
   PASSED; every call is refused until a credential exists.
@@ -2061,7 +2103,10 @@ CURRENT_MILESTONE=F1 CANARY PASS, LIVE ISOLATION PASS (2026-10-01): the owner is
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-f1-canary-pass (this record), from main 2992842f. Its worktree is lanes13/state3 in
+CURRENT_BRANCH=chore/state-b2-b4-merged (this record), from main fdfefd2c. Worktree lanes15/state.
+  - Merged: feat/b2-workflow-pinning (#150) and feat/b4-release-tooling (#151).
+  - Local and superseded, never published: chore/state-roadmap-resume (041c57e).
+  Before it: chore/state-f1-canary-pass (PR #149, merged as 0ce9694f). Its worktree was lanes13/state3 in
   the session scratchpad.
   Before it: chore/state-f1-route-enabled (PR #148, merged as 2992842f), from main c2bd1247.
   Before it: chore/state-f1-release (PR #147, merged as c2bd1247), from main 3ad53b87.
@@ -2118,7 +2163,9 @@ CURRENT_BRANCH=chore/state-f1-canary-pass (this record), from main 2992842f. Its
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=2992842f (main, PR #148: the enable record and the CORS correction). Push CI success (run
+LAST_GREEN_SHA=fdfefd2c (main, PR #151: B4; over fc441c52, PR #150: B2). push CI success (run 36861888464).
+  Before it: 0ce9694f (main, PR #149: the canary record and the handoff package). Push CI success (run 36842825376).
+  Before it: 2992842f (main, PR #148: the enable record and the CORS correction). Push CI success (run
   36842825376).
   Before it: c2bd1247 (main, PR #147: the F1 release record). Push CI success (run 36831002541).
   Before it: 3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI success (run 36828550280); the guard HEALTHY
@@ -2269,7 +2316,9 @@ LAST_GREEN_SHA=2992842f (main, PR #148: the enable record and the CORS correctio
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
+LAST_VERIFY=PASS ruff ok | 4586 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (a fresh detached
+  verify of B4 at 9ac70a2; B2 at 52cb9a2: PASS 4571). This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
   enable record, PR #148). This record is verified before its push (the PR body).
   Before it: PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the F1
   release record, PR #147).
@@ -2489,7 +2538,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The UOR-side handoff and activation, in UOR's own governed sessions. UCPE never writes to UOR.
+OWNER_BOUNDARY=Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL) and the H2 rulings apply.
+  1. B3: its acceptance proof runs in CI on its PR. Pushing B3 is a T3 for the owner.
+  2. M1 (owner-run): the writer transport from the signed-in /v1/system_status.
+     See .work/roadmap/writer_transport/MEASUREMENT_CONTRACT.md.
+  3. H2: the items stay open (the cutoff (e), §13.3, waiting versus architecture, the open points (b), (d) and
+     (f)), and the hold stays live.
+  4. B5 is deferred by the owner while the UOR handoff is active.
+  Never authorized to Claude: UOR work, credential rotation or revocation, F3/§5A or protected access, H2
+  execution, paid resources, a deploy, any order capability.
+  Before it: The UOR-side handoff and activation, in UOR's own governed sessions. UCPE never writes to UOR.
   - The owner hands docs/automation/UOR_HANDOFF.md (the governed package) to UOR. The token goes by NAME into
     UOR's secret store only.
   - Owner decisions in UOR's sessions: UOR's contract fixtures, its release allowlist (ACCEPTED_UPSTREAM_RELEASES),
@@ -2890,7 +2948,10 @@ OWNER_BOUNDARY=The UOR-side handoff and activation, in UOR's own governed sessio
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=OWNER: the UOR-side handoff (OWNER_BOUNDARY). Claude stops here.
+NEXT_ACTION=Claude: B3 (reproducible build) on fresh main.
+  - The hashed lock, the base-image digest, deterministic timestamps, and a two-runner build proof.
+  - It stops at its T3: the push that runs the proof.
+  Before it: OWNER: the UOR-side handoff (OWNER_BOUNDARY). Claude stops here.
   - The package: docs/automation/UOR_HANDOFF.md at main, and the local bundle .work/f1_release/uor_handoff_package/
     (every pinned file's exact bytes at main, with a manifest).
   - The credential stays ACTIVE. To stop at any time: revoke it (no restart), or clear UCPE_AUTOMATION_ENABLED.
@@ -3652,6 +3713,19 @@ SECTION_5A_RESULT=Consumed once, 2026-09-15, and recomputed offline with identic
     T_freeze, T0 and holdout.
   - distributional-v1 is not promoted.
   Evidence: .work/815/t4-consume/.
+OD_FINAL=The owner's rulings on the governing plan's decision pack (§21), recorded verbatim (restated by the
+  owner on 2026-10-01; previously ruled):
+  - OD1: BTC/ETH + 1H setup + close-anchored ~6h terminal risk/range as next-gen primary design center only,
+    existing timeframes retained.
+  - OD2: YES.
+  - OD3: YES with strict E2/E3/USER_REQUESTED separation, collector OFF, no F3/protected access.
+  - OD4: Option B preferred only when an actual pinned diff requires the minimum named-file §2.6 crossing,
+    extraction fallback if repeated crossings become too broad.
+  - OD5: hide unaccepted challenger claim numbers in normal UI, descriptive/reference context allowed,
+    authenticated debug may show EXPERIMENTAL.
+  - OD6: DEFER pending measurements.
+  - OD7: YES, max 2 proven-independent implementation lanes, shared/live surfaces serial.
+  The H2 rulings and the live hold are preserved unchanged.
 V2_STATUS=distributional-v2 is on main as an unwired module (#102). It is NOT frozen and NOT a methodology version.
   - Recipe: R2 arm CB, HAR log-variance plus a calendar profile, with empirical shape tables. BTC/USDT and
     ETH/USDT on 15m, 1H and 4H; TABLES_SHA256 f0689f29….
@@ -3860,6 +3934,8 @@ STANDING_RULES=
   - Never request or expose a secret or a database URL.
   - DEPLOY_PROHIBITED was lifted on 2026-09-15, but every push to hf is still a deploy that needs its own
     authorization.
+  - Releases run through scripts/release.py and docs/runbooks/RELEASE.md (since #151). A rollback goes only to a
+    registered, H2-safe release (rollback-check; docs/runbooks/ROLLBACK.md), never to the pre-hold 00705c55.
   - Run provenance fails closed, and any successor must keep it that way:
     - put() needs an explicit prediction_origin;
     - UNCLASSIFIED is never persisted;
@@ -3910,8 +3986,12 @@ Update this block on every pause, every milestone change and every GPT consultat
   NOT_PASS on every timeframe, and nothing was promoted.
 - **R2 frontier research** is closed. It recommends distributional-v2 as the next candidate; the candidate is not
   frozen.
-- **In production (PROD-H2-HOLD, since 2026-09-26):** the H2 fail-closed hold, its release identity and the unwired
-  v2 prep, on top of PROD-SAFE-3's content:
+- **In production (PROD-F1-AUTOMATION, since 2026-10-01; corrected here, it read PROD-H2-HOLD):** D2 5a3ef022.
+  The H2 hold stays live. It also carries the W26 tc-v1 writer stamp and F1, the governed automation route
+  (enabled, one credential; F1 is CLOSED and delegated to the UOR thread). The H2-HOLD content listed next is all
+  still in it:
+- **In PROD-H2-HOLD (from 2026-09-26, and in every release since):** the H2 fail-closed hold, its release identity
+  and the unwired v2 prep, on top of PROD-SAFE-3's content:
   - Recent Analysis History and durable Detail;
   - session and auth hardening;
   - provider byte caps and deadlines;
