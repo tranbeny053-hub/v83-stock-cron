@@ -84,6 +84,19 @@ The pin-test attestation: the reviewer's sandbox could not run the pin tests, so
 | R2-08: `analyze_request` is not literally unchanged | LOW | BY DESIGN, already disclosed (F8): its signature is exact and every supported call behaves as before; an out-of-contract `run_store=None` is now refused up front. |
 | R2-09: documentation absolutes | LOW | REPAIRED: credential handling, the rehearsal's path filter, which 422s are recorded, and transport failures are stated exactly. |
 
+## Claude adversarial review (CLAUDE_ADVERSARIAL_REVIEW, NOT independent), round 1 at 3a37e49
+
+Codex is paused by the owner, so the gate is a Claude adversarial review at Opus 5 MAX plus
+deterministic evidence: verify on the exact head, green CI and real-PostgreSQL rehearsal on the
+exact head, and 45 bounded mutation tests (44 killed).
+
+| Finding | Severity | Disposition |
+|---|---|---|
+| M1: the 0013 apply connections allowed psycopg's automatic named prepared statements while the probes repeat their savepoint statements 42 times (a risk behind Supabase's transaction pooler for the one-shot T4) | MEDIUM | REPAIRED: every connection of the route passes `prepare_threshold=None` (`CONNECT_OPTIONS`). |
+| L1: Content-Length parsed with `str.isdigit()` (Unicode digits, overlong values) | LOW | REPAIRED: ASCII digits, at most 10 characters. |
+| L2: the deadline instant was earlier than arrival + budget by the body-read time (conservative) | LOW | REPAIRED: it is now computed from the current wall clock plus the remaining budget. |
+| T1: the body read's copy cap had no test (a surviving mutant) | test gap | REPAIRED: a test bounds the largest buffer. |
+
 **Owner decisions this surfaces:**
 - **G2:** ACCEPTED by the owner as the local contract candidate.
 - **G6:** provisional at 6 per 5 minutes and 120 per day. This is not an activation or spend

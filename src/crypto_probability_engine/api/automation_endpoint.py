@@ -79,7 +79,9 @@ async def read_bounded_body(
     """The body, or None when declared or found larger than ``limit``, or when too slow."""
 
     declared = request.headers.get("content-length")
-    if declared is not None and (not declared.isdigit() or int(declared) > limit):
+    if declared is not None and not (
+        declared.isascii() and declared.isdigit() and len(declared) <= 10 and int(declared) <= limit
+    ):
         return None
     timeout = BODY_READ_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
     try:

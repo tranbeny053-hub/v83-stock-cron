@@ -172,3 +172,47 @@ def test_a_success_inside_the_commit_reserve_is_recorded_late(harness_factory):
     assert response.status_code == 503 and response.json()["error"]["code"] == "DEADLINE_EXCEEDED"
     [entry] = harness.ledger.entries()
     assert entry.outcome_code == "DEADLINE_EXCEEDED" and entry.run_id is None
+
+
+class TrackingBytearray(bytearray):
+    largest = 0
+
+    def __iadd__(self, other):
+        result = super().__iadd__(other)
+        TrackingBytearray.largest = max(TrackingBytearray.largest, len(self))
+        return result
+
+
+def test_the_copy_never_grows_past_the_limit_whatever_the_chunk(monkeypatch):
+    monkeypatch.setattr(automation_endpoint, "bytearray", TrackingBytearray, raising=False)
+    TrackingBytearray.largest = 0
+    huge = b"x" * (2 * 1024 * 1024)
+    assert asyncio.run(read_bounded_body(FakeRequest([b"{", huge, huge]))) is None
+    assert 0 < TrackingBytearray.largest <= REQUEST_BODY_MAX_BYTES + 1
+
+
+@pytest.mark.parametrize("declared", ["\u00b2", "\u0661\u0662", "1" * 11, "1" * 5000, " 12", "+12"])
+def test_a_non_ascii_or_overlong_content_length_is_refused_without_error(declared):
+    request = FakeRequest([b"{}"], headers={"content-length": declared})
+    assert asyncio.run(read_bounded_body(request)) is None
+
+
+def test_the_deadline_instant_counts_from_arrival_not_from_admission(harness_factory):
+    seen = {}
+
+    class SpyLedger(InMemoryAutomationLedger):
+        def complete_success(self, **kwargs):
+            seen.update(kwargs)
+            return super().complete_success(**kwargs)
+
+    instants = iter([NOW, NOW + timedelta(seconds=1)])
+    ticks = iter([100.0, 101.0])
+    harness = harness_factory(
+        ledger=SpyLedger(),
+        clock=lambda: next(instants, NOW + timedelta(seconds=1)),
+        monotonic=lambda: next(ticks, 101.0),
+    )
+    assert harness.post().status_code == 200
+    # Arrival at NOW (monotonic 100), a 30 s budget: the deadline is NOW + 30 s, whatever the body
+    # read cost; the success must be recorded the commit reserve before it.
+    assert seen["deadline_at_utc"] == NOW + timedelta(seconds=30 - COMMIT_RESERVE_SECONDS)

@@ -10,7 +10,7 @@
 | `schemas/radar_evidence.schema.json` | pinned success schema | `460458ade4f65e6850e024d3d3a6cc042c40219b802b8ddd89c93ae35a4be5c7` |
 | `schemas/radar_evidence_error.schema.json` | pinned error schema | `983001a75249ed5b5b0f5df5fae1910ab4a511418eaac81172a6362cfb1d6315` |
 | `docs/automation/RADAR_EVIDENCE_V1.md` | the UCPE canon contract | `af9a76172f3125eb336c8b91b66af6bbf403e3fdb9951d9f133d31bc50b23874` |
-| `docs/automation/F1_NODE_CLASSIFICATION.md` | proposal nodes under UCPE canon | `24ee7e1720af674f3f47bf603e3d65783a3b0f970b6802853e0b53ff39db9e23` |
+| `docs/automation/F1_NODE_CLASSIFICATION.md` | proposal nodes under UCPE canon | `70fb0bad6431830498f06699d57eca5cf4f56ce4de7eb2863ac4772163d27178` |
 | `docs/automation/COHORT_READER_AUDIT.md` | why the origin is isolated | `ad8b0b9c770a82063106c24f5db6f071657efdfada2913d9e84d7a505fd1b19f` |
 | `docs/automation/CREDENTIAL_ROTATION.md` | credential issue, rotation and revocation | `4cb6de4d7adc4d7b208d3e738cbbcc2f25b115ca48615c363d65e1c9282c5cce` |
 | `docs/automation/RETENTION_AND_IDEMPOTENCY.md` | retention and idempotency audit | `e97d93670a3dfb1c2e489e0bbfd59f87947da89be6e5274d430f1875d5b0787f` |

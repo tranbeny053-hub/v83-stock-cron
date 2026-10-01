@@ -955,7 +955,7 @@ def test_a_full_apply_reports_raw_results_without_the_url(
     database = FakeDatabase(healthy_results())
     _install_driver(monkeypatch, database, calls)
     assert route.main(_argv("apply", tmp_path), environ={"SUPABASE_DB_URL": DATABASE_URL}) == 0
-    assert database.connects == [(DATABASE_URL, {"connect_timeout": 8})]
+    assert database.connects == [(DATABASE_URL, {"connect_timeout": 8, "prepare_threshold": None})]
     assert database.commits == 1
     report = _report(tmp_path)
     assert report["outcome"] == "APPLIED" and report["mode"] == "apply"
@@ -1024,7 +1024,13 @@ def test_a_rehearsal_applies_once_and_proves_a_second_apply_refuses(
     assert report["outcome"] == "REHEARSED"
     assert route.NOT_A_FIRST_APPLY in report["second_apply_refusal"]
     assert database.commits == 1 and database.rollbacks == 1
-    assert {url for url, _ in database.connects} == {REHEARSAL_URL}
+    assert (
+        database.connects
+        == [
+            (REHEARSAL_URL, {"connect_timeout": 8, "prepare_threshold": None}),
+        ]
+        * 2
+    )
 
 
 def test_a_rehearsal_whose_second_apply_succeeds_refuses(
@@ -1139,3 +1145,16 @@ def test_an_unisolated_process_refuses_before_any_database_access(tmp_path: Path
     assert json.loads(recorded)["outcome"] == "REFUSED"
     for text in (recorded, completed.stdout, completed.stderr):
         assert "NEVER-SHOWN-SECRET" not in text and "never-contacted" not in text
+
+
+def test_no_connection_of_the_route_uses_server_side_prepared_statements() -> None:
+    """The probes repeat their savepoint statements 42 times: never prepared behind a pooler."""
+
+    assert dict(route.CONNECT_OPTIONS) == {"connect_timeout": 8, "prepare_threshold": None}
+    repeated = {route.PROBE_SAVEPOINT_SQL, route.PROBE_ROLLBACK_SQL, route.PROBE_RELEASE_SQL}
+    database, _outcome = apply(healthy_results())
+    for statement in repeated:
+        assert database.statements.count(statement) == len(route.CONSTRAINT_PROBES) > 5
+    source = (ROOT / route.SCRIPT).read_text(encoding="utf-8")
+    assert source.count("driver.connect(") == 2
+    assert source.count("**CONNECT_OPTIONS)") == 2

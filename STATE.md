@@ -1,6 +1,25 @@
 # STATE
 
-Updated: 2026-10-01 (F1 merge gate). **F1-MERGE-GATE-A: PR #144 now carries the frozen ledger
+Updated: 2026-10-01 (F1 merge gate, round 2). **ROUTING OVERRIDE: CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01)
+until the owner explicitly resumes it.**
+- Every pending Codex retry was cancelled. Codex is not invoked.
+- The merge gate is now a CLAUDE_ADVERSARIAL_REVIEW (Opus 5 MAX; explicitly NOT an independent
+  review) plus deterministic evidence: verify on the exact head, green CI and real-PG rehearsal, and
+  bounded mutation tests. CLAUDE.md is unchanged for this temporary override.
+**Round 1 on the frozen head 3a37e49f (fresh detached clean worktree):**
+- VERIFY=PASS 4559, scanners 3/3; the CI and the 0013 real-PG rehearsal on the exact head are green.
+- Mutation tests: 45 mutants, 44 KILLED (one by the full suite), 1 survived: the body copy cap was
+  untested (T1).
+- Findings: **M1 MEDIUM.** The 0013 apply connections allowed psycopg's automatic named prepared
+  statements; the probes repeat 3 savepoint statements 42 times, a risk behind Supabase's
+  transaction pooler for the one-shot T4. Also L1 LOW (Content-Length parse) and L2 LOW (the
+  deadline instant was early by the body-read time, conservative).
+- One consolidated repair (this commit): CONNECT_OPTIONS with prepare_threshold=None, the
+  Content-Length bound, the deadline instant from the current wall clock, and the copy-cap test.
+  The report is .work/f1-claude-review/CLAUDE_ADVERSARIAL_REVIEW.md in the worktree.
+- Next: full verify, the PG rehearsal and CI on this head; freeze it; Claude adversarial review
+  round 2; merge only if no HIGH/MEDIUM remains.
+Previously (F1 merge gate): **F1-MERGE-GATE-A: PR #144 now carries the frozen ledger
 capacity contract (8b22efe) and the consolidated repair of independent Codex review 2 (8f7923c). The
 final independent Codex review (review 3) runs on the head that carries this record. The PR is merged
 only if review 3 leaves no unresolved HIGH/MEDIUM and every gate passes; main then becomes M, the merge
@@ -2202,7 +2221,12 @@ LAST_VERIFY=PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanner
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=F1 review3, the FINAL independent security and adversarial review on this head (a merge gate).
+CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed.
+  - Codex is not invoked; every pending retry was cancelled.
+  - The merge gate is a CLAUDE_ADVERSARIAL_REVIEW (not independent) plus deterministic mutation evidence.
+  - Review 3: never ran. Its first attempt failed on the usage limit (03:42Z, no report), and the
+    retry was cancelled by the owner's ruling.
+  Before it: F1 review3, the FINAL independent security and adversarial review on this head (a merge gate).
   - Task: .work/task-f1-review3.md in the worktree.
   - Review 2: DONE (NEEDS_DECISION; repaired in 8f7923c).
   Before it: F1 review2, the MANDATORY independent post-repair security and adversarial review, a merge gate.
@@ -2292,7 +2316,17 @@ CODEX_PENDING=F1 review3, the FINAL independent security and adversarial review 
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The 0013 PRODUCTION APPLY (T4) after the merge: the owner authorizes the one dispatch, with
+OWNER_BOUNDARY=The owner's standing authorization (2026-10-01) carries the deterministic T3/T4 continuation once
+  each step's exact SHA, scope and preconditions are frozen:
+  - the merge of PR #144 (exact head);
+  - the 0013 one-shot apply (expected_sha = M);
+  - the release identity, the deploy and the re-pin.
+  STOP on any mismatch or failure, any secret entry, spend or product choice, protected evidence or F3, or
+  any genuinely new risk.
+  Never authorized: enabling automation, issuing credentials, mutating UOR or Cron, or allowing UOR calls
+  before the governed activation chain proves them. The credential issuance (owner secret entry) is the
+  standing boundary after the re-pin.
+  Before it: The 0013 PRODUCTION APPLY (T4) after the merge: the owner authorizes the one dispatch, with
   expected_sha = M.
   - Authorized 2026-10-01 (standing): mark PR #144 ready and merge it with an exact-head merge commit, only if
     every gate passes.
@@ -2658,7 +2692,14 @@ OWNER_BOUNDARY=The 0013 PRODUCTION APPLY (T4) after the merge: the owner authori
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Run review 3 on this head: `./delegate.sh .work/task-f1-review3.md workspace-write xhigh`.
+NEXT_ACTION=Verify this head, run the 0013 real-PG rehearsal and CI, then freeze it. Then Claude adversarial review
+  round 2.
+  - If clean: update the PR body, mark it ready, merge with --match-head-commit, and record M.
+  - Then rebuild and reverify the 0013 package against M, precheck, and apply under the standing
+    authorization.
+  - Then the release identity, the deploy and the re-pin.
+  - Stop at the credential issuance (owner).
+  Before it: Run review 3 on this head: `./delegate.sh .work/task-f1-review3.md workspace-write xhigh`.
   - If clean, and every gate passes:
     - update the PR body, mark it ready, and merge with --match-head-commit;
     - record M;

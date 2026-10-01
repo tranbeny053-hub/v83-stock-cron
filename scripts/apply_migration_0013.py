@@ -600,6 +600,13 @@ def row_count_sql(table: str) -> str:
 
 NOT_A_FIRST_APPLY = "this is not a first apply"
 COMMIT_UNKNOWN = "UNKNOWN"
+# How every connection of this route is opened. No server-side prepared statements: the constraint
+# probes repeat their savepoint statements 42 times, which psycopg would otherwise turn into named
+# prepared statements after five executions, and those break, or linger on pooled backends, behind
+# Supabase's transaction pooler (the application's own connections disable them for that reason).
+CONNECT_OPTIONS: Mapping[str, Any] = MappingProxyType(
+    {"connect_timeout": 8, "prepare_threshold": None}
+)
 
 
 def _sha256_sql(expression: str) -> str:
@@ -1315,7 +1322,7 @@ def _run(
     driver = load_driver()
     attest_loaded_modules(isolation)  # the driver's origin, verified before it reaches the network
     applied = apply_in_one_transaction(
-        lambda: driver.connect(database_url, connect_timeout=8), data.decode("utf-8"), captured
+        lambda: driver.connect(database_url, **CONNECT_OPTIONS), data.decode("utf-8"), captured
     )
     return {**base, "mode": MODE_APPLY, **applied}
 
@@ -1346,7 +1353,7 @@ def rehearse(
         attest_loaded_modules(isolation)
 
     def open_connection():
-        return driver.connect(url, connect_timeout=8)
+        return driver.connect(url, **CONNECT_OPTIONS)
 
     first_captured: dict[str, Any] = {}
     captured["first_apply"] = first_captured

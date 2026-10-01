@@ -245,7 +245,9 @@ class RadarEvidenceService:
             request=request,
             received_utc=received,
             budget_end=budget_end,
-            deadline_at_utc=received + timedelta(seconds=budget_end - self._monotonic()),
+            # The deadline as a wall-clock instant: now plus what is left of the budget, so the
+            # time spent reading the body is not counted twice.
+            deadline_at_utc=self._clock() + timedelta(seconds=budget_end - self._monotonic()),
         )
         build_info = self._build_info()
         try:
