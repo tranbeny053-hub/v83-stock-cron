@@ -141,7 +141,9 @@ def test_the_config_names_no_local_path_secret_or_release_id() -> None:
     text = _real(rel.CONFIG_PATH)
     config = json.loads(text)
     assert set(config) == {"schema_version", "github_repo", "hf_remote", "base_url", "space_api",
-                           "ci_workflow", "guard_workflow"}
+                           "ci_workflow", "guard_workflow", "post_probe_paths"}
+    # The only POST a settle may send is the automation route, which refuses without a credential.
+    assert config["post_probe_paths"] == ["/v1/automation/radar-evidence"]
     assert "/Users/" not in text and "UCPE-PROD" not in text
 
 
@@ -265,6 +267,7 @@ CONFIG = {
     "space_api": "http://hf.test/api/spaces/x",
     "ci_workflow": "CI",
     "guard_workflow": "guard.yml",
+    "post_probe_paths": ["/v1/automation/radar-evidence"],
 }
 
 
@@ -593,3 +596,41 @@ def test_repin_refuses_when_the_release_id_did_not_change(world: World) -> None:
     tree = world.worktree("wt_noid", d)
     assert rel.main(["repin", d, "--worktree", str(tree)], world.env()) == 1
     assert _git(tree, "rev-parse", "HEAD") == d, "nothing was committed"
+
+
+@pytest.mark.parametrize(
+    ("probe", "reason"),
+    [
+        ("POST /v1/auth/logout 401", "is not in post_probe_paths"),
+        ("POST /v1/automation/radar-evidence/ 503", "is not in post_probe_paths"),
+        ("GET @evil.example/x 200", "only a plain absolute path on base_url"),
+        ("GET //evil.example/x 200", "only a plain absolute path on base_url"),
+        ("GET https://evil.example/ 200", "only a plain absolute path on base_url"),
+        ("GET /healthcheck#x 200", "only a plain absolute path on base_url"),
+        ("DELETE /healthcheck 200", "use 'GET|POST /path STATUS"),
+    ],
+)
+def test_settle_refuses_an_unsafe_probe_before_any_request_or_evidence(
+    world: World, tmp_path: Path, capsys: pytest.CaptureFixture[str], probe: str, reason: str
+) -> None:
+    requests: list[tuple[str, str]] = []
+    env = world.env()
+    env.http = lambda method, url, body: requests.append((method, url)) or (404, b"")
+    evidence = tmp_path / "settle"
+    argv = ["settle", "a" * 40, "--probe", probe, "--evidence-dir", str(evidence)]
+    assert rel.main(argv, env) == 1
+    assert reason in capsys.readouterr().err
+    assert requests == [] and not evidence.exists()
+
+
+def test_a_listed_post_probe_and_a_plain_get_probe_parse() -> None:
+    env = rel.Env(root=ROOT, config=dict(CONFIG), run=rel._run, http=lambda *a: (0, b""),
+                  now=lambda: datetime.now(UTC), sleep=lambda _s: None)
+    post = rel.parse_probe(env, "POST /v1/automation/radar-evidence 503 error.code=X")
+    assert (post.method, post.path, post.expected, post.assertions) == (
+        "POST", "/v1/automation/radar-evidence", 503, ("error.code=X",))
+    assert rel.parse_probe(env, "GET /v1/build-info?x=1 200").path == "/v1/build-info?x=1"
+    # Fail closed: a config without the list allows no POST probe at all.
+    del env.config["post_probe_paths"]
+    with pytest.raises(rel.Stop, match="is not in post_probe_paths"):
+        rel.parse_probe(env, "POST /v1/automation/radar-evidence 503")
