@@ -14,24 +14,16 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "2096af6d1b3d54461b40c47fd96c265882e5af40"
+PIN_SHA = "5a3ef022db10462675361e8d15aa8f4f572dc1aa"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
-# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-TC-V1-STAMP
-# (UCPE-PROD-TC-V1-STAMP-20260930-A) deployed main's own tree, so nothing stood in it:
-# analysis_service.py (the W26 tc-v1 writer stamp) and config/build_info.py (the release
-# identity) cleared with that release. What stands in it now is F1, the governed automation
-# route (merged by PR #144 but not yet deployed): analysis_service.py gains the isolated-analysis
-# entry point and api/app.py registers the machine-only route. With them stands
-# config/build_info.py, the UCPE-PROD-F1-AUTOMATION-20261001-A release identity that names the
-# next deploy. All three clear when that deploy lands and the baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = [
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/api/app.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-F1-AUTOMATION
+# (UCPE-PROD-F1-AUTOMATION-20261001-A) deployed main's own tree, so nothing stands in it:
+# analysis_service.py and api/app.py (F1, the governed automation route) and
+# config/build_info.py (the release identity) cleared with that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -269,11 +261,11 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-PROD-TC-V1-STAMP-20260930-A"
-    assert intended.release_label == "PROD-TC-V1-STAMP release of main"
+    assert intended.release_id == "UCPE-PROD-F1-AUTOMATION-20261001-A"
+    assert intended.release_label == "PROD-F1-AUTOMATION release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "prod-tc-v1-stamp"
-    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-TC-V1-STAMP-20260930-A"
+    assert intended.source_milestone == "prod-f1-automation"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-F1-AUTOMATION-20261001-A"
     assert intended.asset_tokens == {
         "app_js": "w4c1-ka1-20260828-a",
         "styles_css": "w4c1-ka1-20260828-a",
