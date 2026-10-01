@@ -104,6 +104,16 @@ def test_an_unhandled_error_is_recorded_and_still_answers_500(tmp_path: Path) ->
                                                                        "RuntimeError")
 
 
+def test_an_unhandled_error_still_reaches_the_server_layer(tmp_path: Path) -> None:
+    # The lenient client above synthesizes a 500 even when no response was sent; a strict one shows
+    # the middleware re-raised, so the server still sees, logs and answers the error itself.
+    client, sink = _small_app(tmp_path)
+    strict = TestClient(client.app, raise_server_exceptions=True)
+    with pytest.raises(RuntimeError, match="boom"):
+        strict.get("/v1/boom")
+    assert sink.events[-1]["error_class"] == "RuntimeError"
+
+
 def test_a_failing_sink_never_changes_the_response(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
