@@ -93,3 +93,37 @@ Names used below:
 - An identity step in a dirty worktree, or one that keeps the release id unchanged.
 - A re-pin whose release id did not change, or whose digests would not equal D's bytes.
 - An evidence directory that already exists: evidence is never overwritten.
+
+## Build inputs and the reproducibility proof (B3)
+
+What makes the build reproducible:
+- **The base image** is pinned by its index digest in the `Dockerfile`, never by a floating tag alone.
+- **The dependencies:** `requirements.txt` is a generated lock. It holds exact versions and every
+  distribution's sha256, and `pip install --require-hashes` enforces them. CI installs the same file.
+- **Timestamps and bytecode:** `SOURCE_DATE_EPOCH` (the commit time) makes pip's bytecode hash-based, and
+  `PYTHONHASHSEED=0` on the install step alone fixes pip's hash seed. The running app keeps Python's default
+  hash randomization.
+- **The runtime user** is written directly, with no date stamp.
+
+**The proof** is `.github/workflows/reproducible-build.yml`, on every PR and on main.
+- Two clean builds of the same commit run on independent runners. On a PR, that commit is the PR's head itself,
+  not GitHub's merge commit. Each build uses a digest-pinned BuildKit, no cache, rewritten layer timestamps,
+  and no provenance or SBOM attestation.
+- The two must produce the same image manifest digest (`REPRODUCIBLE=PASS`).
+- Build A's image is then smoke-tested in fixture mode: health 200, and the commit's own release id.
+
+**To change a dependency:**
+1. Edit `requirements.in`.
+2. Regenerate with the command in `requirements.txt`'s header, using a new `--exclude-newer` UTC cutoff.
+3. Review the lock's diff, and let the proof run on the PR.
+
+**To move the base image:**
+1. Resolve the new `python:3.11-slim` index digest from the registry. It is read-only, and needs no
+   credential.
+2. Replace the digest in the `Dockerfile`.
+3. The Dockerfile is a guarded file: the guard test's `CURRENT_DELTA_PATHS` carries it until the next release
+   is deployed and re-pinned.
+
+**Limit of the claim:** the Hugging Face Space builds the same `Dockerfile` with its own builder. It installs
+the identical pinned bytes, but its image metadata is not bit-for-bit the proof's image. The proof governs
+the inputs, not HF's builder.

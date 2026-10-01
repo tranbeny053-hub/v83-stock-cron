@@ -1,0 +1,14 @@
+# The human-edited dependency set. requirements.txt is GENERATED from it (B3, governing plan §11.1):
+# exact versions and every distribution's sha256, so CI and the image install identical bytes.
+# To change a dependency: edit this file, regenerate with a new --exclude-newer cutoff (the command is
+# in requirements.txt's header), and review the lock's diff. Never hand-edit requirements.txt.
+fastapi
+uvicorn
+httpx
+pydantic>=2,<3
+orjson
+numpy
+jsonschema
+psycopg[binary,pool]>=3,<4
+pytest
+ruff

@@ -119,7 +119,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # A changed count means a workflow step was added or removed and must be reviewed here.
     # 41 -> 47 (F1): the migration-0013 apply and rehearsal workflows add checkout, setup-python
     # and upload-artifact each, all three at the reviewed Node-24 SHA pins.
-    assert len(refs) == 47
+    # 47 -> 50 (B3): the reproducible-build workflow adds checkout to build-a, build-b and
+    # compare, at the reviewed Node-24 SHA pin.
+    assert len(refs) == 50
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
