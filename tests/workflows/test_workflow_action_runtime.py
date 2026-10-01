@@ -171,3 +171,79 @@ def test_no_workflow_references_a_node20_era_major() -> None:
         f"{file_name}:{line_number} {ref}" for file_name, line_number, ref in violations
     )
     assert not violations, message
+
+
+def test_every_action_ref_is_a_full_sha_pin() -> None:
+    """B2: every action is pinned to a reviewed full commit SHA, with its major as the comment."""
+
+    refs, malformed = workflow_refs()
+    assert not malformed
+    unpinned = [
+        f"{file_name}:{line_number} {action}@{version}"
+        for file_name, line_number, action, version, comment in refs
+        if not re.fullmatch(r"[0-9a-f]{40}", version)
+        or REVIEWED_NODE24.get(action, {}).get(comment) != version
+    ]
+    assert not unpinned, "\n".join(unpinned)
+
+
+def _jobs_without_timeout(text: str) -> list[str]:
+    """Job names under `jobs:` whose own block has no `timeout-minutes:` line."""
+
+    missing: list[str] = []
+    in_jobs = False
+    current: str | None = None
+    has_timeout = False
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            if current is not None and not has_timeout:
+                missing.append(current)
+            current = None
+            in_jobs = line.rstrip() == "jobs:"
+            continue
+        if not in_jobs:
+            continue
+        if indent == 2 and line.rstrip().endswith(":"):
+            if current is not None and not has_timeout:
+                missing.append(current)
+            current, has_timeout = line.strip().rstrip(":"), False
+        elif indent == 4 and line.strip().startswith("timeout-minutes:"):
+            has_timeout = True
+    if current is not None and not has_timeout:
+        missing.append(current)
+    return missing
+
+
+def test_the_timeout_scanner_is_itself_correct() -> None:
+    """Guard the guard: one job with a timeout, one without, and a later top-level key."""
+
+    fixture = """jobs:
+  good:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+  bad:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo
+concurrency:
+  group: x
+"""
+    assert _jobs_without_timeout(fixture) == ["bad"]
+
+
+def test_every_workflow_declares_token_permissions_and_job_timeouts() -> None:
+    """B2: every workflow sets top-level token permissions, and every job a timeout."""
+
+    problems: list[str] = []
+    for workflow in WORKFLOWS:
+        text = workflow.read_text(encoding="utf-8")
+        if not re.search(r"^permissions:", text, flags=re.MULTILINE):
+            problems.append(f"{workflow.name}: no top-level permissions")
+        problems.extend(
+            f"{workflow.name}: job {job} has no timeout-minutes"
+            for job in _jobs_without_timeout(text)
+        )
+    assert not problems, "\n".join(problems)

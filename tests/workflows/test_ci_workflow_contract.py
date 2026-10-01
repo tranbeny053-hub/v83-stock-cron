@@ -137,12 +137,15 @@ def test_verification_steps_are_unchanged() -> None:
         "python scripts/check_no_full_article_body.py",
         "python scripts/check_no_secrets.py",
     ], "the ordered CI verification commands changed"
-    # Current stable Node-24-native majors, measured from each action.yml runs.using field.
-    # This stays strict so future bumps are reviewed rather than drifting in.
+    # Current stable Node-24-native majors, measured from each action.yml runs.using field,
+    # pinned to the reviewed full commit SHAs (B2, supply-chain hardening; the `# v7`
+    # comment is stripped by the reader). This stays strict so future bumps are reviewed
+    # rather than drifting in.
+    assert job["timeout-minutes"] == "30", "the CI job must keep its timeout"
     assert [step for step in steps if "uses" in step] == [
-        {"uses": "actions/checkout@v7"},
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
         {
-            "uses": "actions/setup-python@v7",
+            "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
             "with": {"python-version": "3.11"},
         },
     ], "checkout or Python setup steps changed"
