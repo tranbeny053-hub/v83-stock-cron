@@ -1079,8 +1079,8 @@ def test_manual_workflow_contract_and_existing_integrity_workflow_unchanged() ->
     assert "workflow_dispatch:" in text
     assert "schedule:" not in text
     assert "cron:" not in text
-    assert "actions/checkout@v7" in text
-    assert "actions/setup-python@v7" in text
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in text
+    assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in text
     assert 'python-version: "3.11"' in text
     assert "group: derivatives-evidence-cadence" in text
     assert "cancel-in-progress: false" in text
@@ -1133,5 +1133,5 @@ def test_manual_workflow_contract_and_existing_integrity_workflow_unchanged() ->
 
     integrity = (ROOT / ".github/workflows/source-integrity-guard.yml").read_text()
     assert 'cron: "27 */2 * * *"' in integrity
-    assert "actions/checkout@v7" in integrity
-    assert "actions/setup-python@v7" in integrity
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in integrity
+    assert "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97" in integrity

@@ -25,15 +25,16 @@ def test_actions_use_node_24_native_majors() -> None:
     _, _, document = _workflow()
     steps = document["jobs"]["verify"]["steps"]
 
-    # Current stable Node-24-native majors, measured from each action.yml runs.using.
-    # Strict so a future bump is reviewed rather than drifting in.
+    # Current stable Node-24-native majors, measured from each action.yml runs.using, pinned
+    # to the reviewed full commit SHAs (B2). Strict so a future bump is reviewed rather than
+    # drifting in.
     assert [step for step in steps if "uses" in step] == [
-        {"uses": "actions/checkout@v7"},
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
         {
-            "uses": "actions/setup-python@v7",
+            "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
             "with": {"python-version": "3.11"},
         },
-    ], "checkout and setup-python must remain on the reviewed Node-24-native v7 majors"
+    ], "checkout and setup-python must remain on the reviewed Node-24-native v7 SHA pins"
 
 
 def test_guard_cadence_is_unchanged() -> None:
@@ -79,9 +80,9 @@ def test_verify_job_is_unchanged() -> None:
     steps = job["steps"]
     assert len(steps) == 3, "verify must contain exactly three ordered steps"
     assert steps == [
-        {"uses": "actions/checkout@v7"},
+        {"uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"},
         {
-            "uses": "actions/setup-python@v7",
+            "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
             "with": {"python-version": "3.11"},
         },
         {
