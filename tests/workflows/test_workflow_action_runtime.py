@@ -123,7 +123,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # compare, at the reviewed Node-24 SHA pin.
     # 50 -> 52 (DBI-1): the migration-0014 rehearsal adds checkout and setup-python, both at the
     # reviewed pins.
-    assert len(refs) == 52
+    # 52 -> 56 (the 0014 apply route): the dispatch workflow adds checkout, setup-python and
+    # upload-artifact, and the rehearsal uploads its report, all at the reviewed pins.
+    assert len(refs) == 56
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
