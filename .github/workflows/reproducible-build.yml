@@ -1,0 +1,69 @@
+name: Reproducible build
+
+# B3 (governing plan §11.1): the governed reproducibility proof. Two independent clean builds of the same
+# commit, on separate runners, must produce the same image manifest digest; build A's image is then
+# smoke-tested in fixture mode. On a pull request the commit built is the PR's head itself, not GitHub's
+# synthetic merge commit. No secret is used, nothing is pushed, and nothing deploys.
+# The logic lives in scripts/reproducible_build.sh.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push supersedes a PR's run; a main commit's proof always completes (a release candidate).
+  group: reproducible-build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-a:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: build
+        name: Clean build A (pinned BuildKit, SOURCE_DATE_EPOCH, rewritten timestamps)
+        run: bash scripts/reproducible_build.sh build "$RUNNER_TEMP/build-a"
+      - name: Smoke build A's image in fixture mode
+        run: bash scripts/reproducible_build.sh smoke "$RUNNER_TEMP/build-a"
+
+  build-b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: build
+        name: Clean build B (an independent runner, the same commit)
+        run: bash scripts/reproducible_build.sh build "$RUNNER_TEMP/build-b"
+
+  compare:
+    needs:
+      - build-a
+      - build-b
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: The two independent builds must be identical
+        env:
+          DIGEST_A: ${{ needs.build-a.outputs.digest }}
+          DIGEST_B: ${{ needs.build-b.outputs.digest }}
+        run: bash scripts/reproducible_build.sh compare "$DIGEST_A" "$DIGEST_B"

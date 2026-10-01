@@ -19,11 +19,13 @@ SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
-# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned. PROD-F1-AUTOMATION
-# (UCPE-PROD-F1-AUTOMATION-20261001-A) deployed main's own tree, so nothing stands in it:
-# analysis_service.py and api/app.py (F1, the governed automation route) and
-# config/build_info.py (the release identity) cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+# again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
+# Now standing in it: Dockerfile (B3, the reproducible build: a digest-pinned base image,
+# hash-locked installs, a deterministic runtime user), merged but not yet deployed. It
+# clears when a release carrying it lands and the baseline is re-pinned.
+CURRENT_DELTA_PATHS: list[str] = [
+    "Dockerfile",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
