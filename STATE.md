@@ -1,6 +1,32 @@
 # STATE
 
-Updated: 2026-10-01 (F1 released; re-pinned). **F1_RELEASED_ROUTE_OFF: production is D2 5a3ef022 /
+Updated: 2026-10-01 (F1 enabled by the owner; post-enable PASS). **F1_ENABLED_NO_CREDENTIAL: the owner set
+UCPE_AUTOMATION_ENABLED=1 on the Space (T3; the restart landed about 09:04Z). The post-enable check PASSED. No
+credential is issued, so every call is refused. UOR and Cron are untouched. CODEX_PAUSED_BY_OWNER stands.**
+- post_enable_check_f1.sh (the prepared kit, KIT_MANIFEST 3/3 before the run): ENABLE_CHECK=PASS 7/7 at 09:05Z.
+  - RUNNING at D2 5a3ef022 (1 replica, no error); build-info UCPE-PROD-F1-AUTOMATION-20261001-A; healthcheck
+    200 with uptime 79 s (the restart landed); the frontend digests unchanged.
+  - No credential: 401 CREDENTIAL_REQUIRED, so the kill switch is open.
+  - A well-formed token under the reserved, never-issued id `probe-never-issued`: 401 CREDENTIAL_INVALID.
+    - In code, that answer follows only a successful registry read: any database failure answers 503
+      LEDGER_UNAVAILABLE.
+    - So the route's own production connection is proven for the registry path, with no credential.
+- The extra read-only checks (readonly_extra_checks_f1.sh): PASS 6/6 at 09:16Z.
+  - A human session cookie: 403 HUMAN_SESSION_REFUSED. A malformed token: 401 CREDENTIAL_INVALID.
+  - Cache-Control: no-store; absent from /openapi.json; GET not served (404).
+  - CORS as documented (below).
+- F1-ACT-1 (LOW), adjudicated: .work/f1_release/activation/POST_ENABLE_ADJUDICATION.md.
+  - What: the Hugging Face edge answers CORS preflights itself, reflects any origin, and grants the credential
+    header. UCPE's own CORS policy refuses it (tested in process).
+  - Not exploitable: the token is never ambient; human cookies are refused (403), are SameSite=Lax, and
+    hf.space is a public suffix.
+  - The owner chose option A (this record): RADAR_EVIDENCE_V1.md section 2 now states the edge behaviour and
+    that the route never relies on CORS, with a consumer rule (the token is never used from a browser).
+    UOR_HANDOFF.md carries the new digest and status. No runtime change.
+- Evidence (the main checkout, read-only): .work/f1_release/activation/post_enable_20261001T090517Z/ and
+  readonly_extra_20261001T09*/.
+- Next: the owner issues the credential (a T4 secret entry), then runs the canary. Claude stops here.
+Previously (F1 released; re-pinned): **F1_RELEASED_ROUTE_OFF: production is D2 5a3ef022 /
 UCPE-PROD-F1-AUTOMATION-20261001-A, RUNNING and guard-HEALTHY. The automation route is present and OFF
 (503 AUTOMATION_DISABLED). No credential is issued; UOR and Cron are untouched. CODEX_PAUSED_BY_OWNER stands.**
 - F1 is MERGED: M = 5da10ef3 (PR #144, an exact-head merge commit). Its gate was a CLAUDE_ADVERSARIAL_REVIEW
@@ -320,9 +346,14 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: F1 released and re-pinned (production D2 5a3ef022, guard HEALTHY).
-  The route is OFF and no credential is issued. Next is the owner's activation chain, which starts with the
-  credential issuance (an owner secret entry, T4).
+LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: the credential issuance (an owner secret entry, T4). F1 is released,
+  re-pinned and ENABLED by the owner. The post-enable check PASSED. No credential exists, so every call is
+  refused.
+  - **F1-ENABLE-A (2026-10-01; the owner set UCPE_AUTOMATION_ENABLED=1, a T3; Claude ran read-only checks only).**
+    - post_enable_check_f1.sh: ENABLE_CHECK=PASS 7/7. readonly_extra_checks_f1.sh: 5 PASS and 1 STOP (CORS).
+    - F1-ACT-1 (LOW) adjudicated. The owner chose option A: the contract was corrected (this record), and the
+      corrected check now passes 6/6.
+  Before it: F1 released and re-pinned (production D2 5a3ef022, guard HEALTHY), the route OFF, no credential.
   - **F1-RELEASE-A (2026-10-01; the owner's prompts: CODEX_PAUSED_BY_OWNER; a Claude adversarial merge gate;
     the standing authorization for the deterministic T3/T4 chain; Manual permissions for the re-pin).**
     - The chain:
@@ -1909,7 +1940,9 @@ LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: F1 released and re-pinned (production D
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1 RELEASED, ROUTE OFF (2026-10-01): production D2 5a3ef022 / UCPE-PROD-F1-AUTOMATION-20261001-A,
+CURRENT_MILESTONE=F1 ENABLED, NO CREDENTIAL (2026-10-01): the owner enabled the route; the post-enable check
+  PASSED; every call is refused until a credential exists.
+  Before it: F1 RELEASED, ROUTE OFF (2026-10-01): production D2 5a3ef022 / UCPE-PROD-F1-AUTOMATION-20261001-A,
   re-pinned (R 3ad53b87), guard HEALTHY; no credential; UOR and Cron untouched.
   Before it: F1 MERGED (M 5da10ef3) and 0013 APPLIED (production, PASS); the release identity
   UCPE-PROD-F1-AUTOMATION-20261001-A is prepared. Before it: F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
@@ -1987,8 +2020,9 @@ CURRENT_MILESTONE=F1 RELEASED, ROUTE OFF (2026-10-01): production D2 5a3ef022 / 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-f1-release (this record), from main 3ad53b87. Its worktree is lanes13/state in the
-  session scratchpad.
+CURRENT_BRANCH=chore/state-f1-route-enabled (this record), from main c2bd1247. Its worktree is lanes13/state2 in
+  the session scratchpad.
+  Before it: chore/state-f1-release (PR #147, merged as c2bd1247), from main 3ad53b87.
   Before it: release/prod-f1-automation (PR #146, merged as R 3ad53b87) and prep/release-identity-f1-automation
   (PR #145, merged as D2 5a3ef022).
   Before it: feat/f1-governed-automation (PR #144, merged as M 5da10ef3), from main f19d7575:
@@ -2042,7 +2076,8 @@ CURRENT_BRANCH=chore/state-f1-release (this record), from main 3ad53b87. Its wor
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI success (run 36828550280); the guard HEALTHY
+LAST_GREEN_SHA=c2bd1247 (main, PR #147: the F1 release record). Push CI success (run 36831002541).
+  Before it: 3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI success (run 36828550280); the guard HEALTHY
   on it (run 36828594390), delta [].
   Before it: 5a3ef022 (D2, main, PR #145: the identity). Push CI success (run 36825516122); tree 18883f47.
   Before it: 5da10ef3 (main, PR #144: F1). Push CI success (run 36820447090); tree d798502b.
@@ -2190,7 +2225,9 @@ LAST_GREEN_SHA=3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
+LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the F1
+  release record, PR #147). This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
   re-pin P 4ef8f14; the same count on the identity head and at M). This record is verified before its push
   (the PR body).
   Before it: PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, F1 at
@@ -2406,7 +2443,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The F1 activation chain (docs/automation/F1_RELEASE_PLAN.md steps 4-8). Every step is the owner's:
+OWNER_BOUNDARY=The F1 credential issuance: a T4 and the owner's secret entry.
+  - The procedure: CREDENTIAL_ROTATION.md, "Issue a credential"; ACTIVATION_CHAIN.md step 1, with its read-only
+    pre- and post-check SQL.
+  - The value never enters a chat, a file in the repository or a log.
+  - Then the canary: one live request from the owner's own terminal (canary_f1.py), under its own authorization.
+  - Then UOR: its own sessions build the registry and the transport. UCPE never writes to UOR.
+  - Done by the owner: the enable (T3, 2026-10-01). G6 stays at the defaults (6 per 5 minutes, 120 per day).
+  Not authorized to Claude: issuing a credential, running the canary with a token, mutating UOR or Cron, allowing
+  UOR calls, F3/§5A, any order capability. Codex stays paused (CODEX_PAUSED_BY_OWNER).
+  Before it: The F1 activation chain (docs/automation/F1_RELEASE_PLAN.md steps 4-8). Every step is the owner's:
   1. T4, a secret entry: issue the credential (CREDENTIAL_ROTATION.md, "Issue a credential"). The value never
      enters a chat, a file in the repository or a log; only its digest goes into the registry.
   2. G6 (T3, optional): the quota stays 6 per 5 minutes and 120 per day unless the owner lowers it.
@@ -2791,7 +2837,11 @@ OWNER_BOUNDARY=The F1 activation chain (docs/automation/F1_RELEASE_PLAN.md steps
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=OWNER: the activation chain (OWNER_BOUNDARY), which starts with the credential issuance. Claude stops here.
+NEXT_ACTION=OWNER: issue the credential (OWNER_BOUNDARY), then run the canary. Claude stops here.
+  - To stop the route at any time: revoke the credential (no restart), or clear UCPE_AUTOMATION_ENABLED (a
+    restart).
+  - Read-only re-checks Claude may run on request: post_enable_check_f1.sh and readonly_extra_checks_f1.sh.
+  Before it: OWNER: the activation chain (OWNER_BOUNDARY), which starts with the credential issuance. Claude stops here.
   - The kit (local; nothing runs until the owner runs it): .work/f1_release/activation/ACTIVATION_CHAIN.md,
     the read-only post-enable check (post_enable_check_f1.sh), and the owner-run canary (canary_f1.py, with
     the token typed at a hidden prompt).
@@ -3416,7 +3466,14 @@ R3=Research in .work/research3 (gitignored).
       (NEXT_ACTION; OWNER_BOUNDARY 4).
     - Network: public Binance GETs only (5,108 requests). F1 is stored only; F2 was used only for the
       candidate-blind B3Dev null.
-PRODUCTION=PROD-F1-AUTOMATION, live since 2026-10-01T06:40Z (RUNNING at D2 at 06:40:54Z).
+PRODUCTION=PROD-F1-AUTOMATION (D2 5a3ef022), with the route ENABLED by the owner (restarted about 09:04Z on
+  2026-10-01; RUNNING at D2).
+  - No credential exists, so every call is refused: 401 CREDENTIAL_REQUIRED or CREDENTIAL_INVALID, and 403 for
+    a human session cookie.
+  - The post-enable check PASSED (ENABLE_CHECK 7/7, 09:05Z), and the extra read-only checks PASS 6/6 (09:16Z).
+  - The Hugging Face edge answers CORS preflights and reflects origins (F1-ACT-1, LOW; RADAR_EVIDENCE_V1.md
+    section 2). UCPE's own CORS policy is unchanged.
+  Before the enable: PROD-F1-AUTOMATION, live since 2026-10-01T06:40Z (RUNNING at D2 at 06:40:54Z).
   - hf/main and the running commit are 5a3ef022 (D2), a fast-forward from 2096af6d. Build
     UCPE-PROD-F1-AUTOMATION-20261001-A; /healthcheck 200.
   - In it: F1, the governed automation route (#144), OFF (503 AUTOMATION_DISABLED); migration 0013 is applied;

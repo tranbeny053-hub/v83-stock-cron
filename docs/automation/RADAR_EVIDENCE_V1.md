@@ -49,7 +49,16 @@ two differ, and the differences are listed in `F1_NODE_CLASSIFICATION.md`.
     method-path pairs).
   - A request that carries a human session cookie (`ucpe_session` or `ucpe_dev_session`) is refused
     here with 403 `HUMAN_SESSION_REFUSED`, even alongside a valid machine credential.
-  - CORS does not allow the credential header, so a browser cannot send it cross-origin.
+  - **CORS is not a control here.** UCPE's own CORS policy does not grant the credential header
+    (tested in process). In production, though, the Hugging Face edge answers CORS preflights
+    itself and reflects any origin, so a page on another site can send the header and read the
+    answer (observed on 2026-10-01). The route's security never relies on CORS:
+    - the credential is a bearer token in a custom header, never a cookie. A browser never holds it
+      unless a person puts it into a page, and anyone who holds it can call the route from anywhere;
+    - a human session cookie is refused here (above). Those cookies are `SameSite=Lax`, and
+      `hf.space` is a public suffix, so no other site's request carries them.
+  - **Consumer rule:** the token is used only by a server-side caller, never from a browser or a web
+    page.
 - **Registry.** The database table `public.automation_credential` (migration 0013) holds one row per
   credential:
   - `credential_id`, `secret_sha256`, `status` (`ACTIVE` or `REVOKED`), and the optional
