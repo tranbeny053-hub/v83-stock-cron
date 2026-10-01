@@ -1,6 +1,42 @@
 # STATE
 
-Updated: 2026-10-01 (F1 merged; 0013 applied; release identity). **F1 is MERGED, and migration 0013 is APPLIED
+Updated: 2026-10-01 (F1 released; re-pinned). **F1_RELEASED_ROUTE_OFF: production is D2 5a3ef022 /
+UCPE-PROD-F1-AUTOMATION-20261001-A, RUNNING and guard-HEALTHY. The automation route is present and OFF
+(503 AUTOMATION_DISABLED). No credential is issued; UOR and Cron are untouched. CODEX_PAUSED_BY_OWNER stands.**
+- F1 is MERGED: M = 5da10ef3 (PR #144, an exact-head merge commit). Its gate was a CLAUDE_ADVERSARIAL_REVIEW
+  (not independent: Codex is paused) with 48 bounded mutants, all killed.
+- Migration 0013 is APPLIED (T4, CONSUMED, PASS; run 36820986264). Both tables are locked (RLS on, no policy,
+  no API-role privilege) and were empty when applied.
+- The release (T4, CONSUMED, PASS; never rerun):
+  - D2 = 5a3ef022db10462675361e8d15aa8f4f572dc1aa, the merge of PR #145 (the identity). Push CI success
+    (36825516122). The guard on D2 (run 36825556001): HEALTHY x3, delta [analysis_service, app, build_info],
+    pin = live = 2096af6d.
+  - The deploy precheck: PASS 7/7 at 06:39:36Z, including the dry run.
+  - One push at 06:40Z: `2096af6..5a3ef02 -> main`, exit 0, no force.
+  - Settle PASS at 06:40:54Z: RUNNING at D2 on the first poll; healthcheck 200; build-info
+    UCPE-PROD-F1-AUTOMATION-20261001-A with its fingerprint; the /, app.js and styles.css digests unchanged;
+    POST /v1/automation/radar-evidence answered 503 AUTOMATION_DISABLED (present and OFF).
+  - Raw evidence: .work/f1_release/deploy/ in the main checkout (push/ and settle_20261001T064053Z/,
+    read-only, with manifests).
+- The re-pin (T3): P = 4ef8f14578b2702b8095524583d6ffe034a63320, built by make_repin_f1.py. A fresh rebuild
+  from D2 gave the identical SHA, and VERIFY=PASS 4568 on P.
+  - PR #146 merged at 07:07:42Z with --match-head-commit: R = 3ad53b87614341043399d7ed11674fd62b149393
+    (parents D2 and P; tree 884ea627, P's). PR CI success on P; push CI success (run 36828550280) on R.
+  - Its first push was refused by the Claude Code auto-mode classifier. Nothing was retried or worked
+    around; the owner switched the session to Manual permissions and the chain resumed.
+- The guard after the re-pin (run 36828594390, dispatched once at 07:08:10Z on R), verified from its log:
+  HEALTHY in all 3 rounds, exit 0, delta [], hf_main_sha = pinned = D2, live = intended = F1.
+  - Its advisory SCHEDULER_DIVERGENT_FROM_PIN is the guard's shallow checkout: it cannot prove ancestry,
+    and the same advisory appears on every earlier run. R's first parent is D2.
+  - Raw evidence: .work/f1_release/guard_repin/ (read-only, EVIDENCE.sha256).
+- This record also clarifies RADAR_EVIDENCE_V1.md section 9 ("Refusals that write no row"). A later edit had
+  broken a referent: the text read as if the capacity refusals and the pre-reservation 503s were recorded
+  against the key. They write no row, as the code and the ledger's outcome catalogue have always done. The
+  contract's behaviour is unchanged; UOR_HANDOFF.md carries the new digest and the current status.
+- Next: the owner's activation chain (OWNER_BOUNDARY). Claude stops here: issuing the credential is an owner
+  secret entry (T4), and enabling is a T3 the owner performs. The prepared kit (local, nothing executed) is
+  .work/f1_release/activation/.
+Previously (F1 merged; 0013 applied; release identity): **F1 is MERGED, and migration 0013 is APPLIED
 in production. The F1 release identity UCPE-PROD-F1-AUTOMATION-20261001-A is prepared (this PR). The route is
 NOT deployed, NOT enabled, and no credential exists. Production is still D 2096af6d / UCPE-PROD-TC-V1-STAMP.**
 - PR #144 merged at 05:34:45Z with an exact-head merge commit: M = 5da10ef38a2480000b5ae359519d7a3022a1e2c2.
@@ -284,7 +320,21 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS: F1 merge gate. Final independent Codex review (review 3) on this head, then merge if
+LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: F1 released and re-pinned (production D2 5a3ef022, guard HEALTHY).
+  The route is OFF and no credential is issued. Next is the owner's activation chain, which starts with the
+  credential issuance (an owner secret entry, T4).
+  - **F1-RELEASE-A (2026-10-01; the owner's prompts: CODEX_PAUSED_BY_OWNER; a Claude adversarial merge gate;
+    the standing authorization for the deterministic T3/T4 chain; Manual permissions for the re-pin).**
+    - The chain:
+      1. M 5da10ef3 (PR #144);
+      2. the 0013 apply PASS (run 36820986264);
+      3. D2 5a3ef022 (PR #145), with the guard HEALTHY on D2 (36825556001);
+      4. the precheck 7/7, one push to hf, and the settle checks PASS;
+      5. the re-pin: P 4ef8f145, merged as R 3ad53b87 (PR #146);
+      6. the guard HEALTHY on R (36828594390), delta [].
+    - Evidence: .work/f1_release/ in the main checkout (apply_0013/, deploy/, guard_repin/; read-only).
+    - The activation kit (local; nothing executed): .work/f1_release/activation/.
+  Before it: IN PROGRESS: F1 merge gate. Final independent Codex review (review 3) on this head, then merge if
   clean, then 0013 T4 preparation from M. Stop at the 0013 production apply boundary.
   - **F1-MERGE-GATE-A (2026-10-01; the owner's prompt: finish the review, repair, capacity contract,
     merge under standing authorization, prepare the 0013 T4, return at the apply boundary).**
@@ -1859,7 +1909,9 @@ LOOP_STATE=IN PROGRESS: F1 merge gate. Final independent Codex review (review 3)
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1 MERGED (M 5da10ef3) and 0013 APPLIED (production, PASS); the release identity
+CURRENT_MILESTONE=F1 RELEASED, ROUTE OFF (2026-10-01): production D2 5a3ef022 / UCPE-PROD-F1-AUTOMATION-20261001-A,
+  re-pinned (R 3ad53b87), guard HEALTHY; no credential; UOR and Cron untouched.
+  Before it: F1 MERGED (M 5da10ef3) and 0013 APPLIED (production, PASS); the release identity
   UCPE-PROD-F1-AUTOMATION-20261001-A is prepared. Before it: F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
   preparation. Before it: F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
   closed, and the real-PG rehearsal passed. The Codex review gate is OPEN (quota). Nothing is applied, deployed,
@@ -1935,7 +1987,11 @@ CURRENT_MILESTONE=F1 MERGED (M 5da10ef3) and 0013 APPLIED (production, PASS); th
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged), from main f19d7575:
+CURRENT_BRANCH=chore/state-f1-release (this record), from main 3ad53b87. Its worktree is lanes13/state in the
+  session scratchpad.
+  Before it: release/prod-f1-automation (PR #146, merged as R 3ad53b87) and prep/release-identity-f1-automation
+  (PR #145, merged as D2 5a3ef022).
+  Before it: feat/f1-governed-automation (PR #144, merged as M 5da10ef3), from main f19d7575:
   - 028ded8, 4f9ae93, 0bc11ff and 446260c (the earlier record);
   - d9df2371 (merge readiness);
   - bf50005 (the readiness record), eb6976d (pre-review hardening);
@@ -1986,7 +2042,10 @@ CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=5da10ef3 (main, PR #144: F1). Push CI success (run 36820447090); tree d798502b.
+LAST_GREEN_SHA=3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI success (run 36828550280); the guard HEALTHY
+  on it (run 36828594390), delta [].
+  Before it: 5a3ef022 (D2, main, PR #145: the identity). Push CI success (run 36825516122); tree 18883f47.
+  Before it: 5da10ef3 (main, PR #144: F1). Push CI success (run 36820447090); tree d798502b.
   Before it: f19d7575 (main, PR #143: the W26 closure record). CI success (run 36722645234).
   Before it: 6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
   Before it: 2096af6d (D, main, PR #141: the identity). CI success (run 36714014523); tree 68917d99 as recorded.
@@ -2131,7 +2190,10 @@ LAST_GREEN_SHA=5da10ef3 (main, PR #144: F1). Push CI success (run 36820447090); 
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, F1 at
+LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
+  re-pin P 4ef8f14; the same count on the identity head and at M). This record is verified before its push
+  (the PR body).
+  Before it: PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, F1 at
   8f7923c, the review-2 repair).
   Before it: PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1
   merge readiness at d9df2371; the scanners are unmodified).
@@ -2248,7 +2310,8 @@ LAST_VERIFY=PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanner
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed.
+CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed; still in force
+  after the F1 release (the owner, 2026-10-01).
   - Codex is not invoked; every pending retry was cancelled.
   - The merge gate is a CLAUDE_ADVERSARIAL_REVIEW (not independent) plus deterministic mutation evidence.
   - Review 3: never ran. Its first attempt failed on the usage limit (03:42Z, no report), and the
@@ -2343,7 +2406,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The owner's standing authorization (2026-10-01) carries the deterministic T3/T4 continuation once
+OWNER_BOUNDARY=The F1 activation chain (docs/automation/F1_RELEASE_PLAN.md steps 4-8). Every step is the owner's:
+  1. T4, a secret entry: issue the credential (CREDENTIAL_ROTATION.md, "Issue a credential"). The value never
+     enters a chat, a file in the repository or a log; only its digest goes into the registry.
+  2. G6 (T3, optional): the quota stays 6 per 5 minutes and 120 per day unless the owner lowers it.
+  3. T3: set UCPE_AUTOMATION_ENABLED=1 on the Space (a restart), then the read-only post-enable check.
+  4. The canary: one live request from the owner's machine, under its own authorization.
+  5. UOR: its own sessions build the registry and the transport. UCPE never writes to UOR.
+  Not authorized to Claude: issuing a credential, enabling the route, mutating UOR or Cron, allowing UOR
+  calls, F3/§5A, any order capability. Codex stays paused (CODEX_PAUSED_BY_OWNER).
+  Before it: The owner's standing authorization (2026-10-01) carries the deterministic T3/T4 continuation once
   each step's exact SHA, scope and preconditions are frozen:
   - the merge of PR #144 (exact head);
   - the 0013 one-shot apply (expected_sha = M);
@@ -2719,7 +2791,12 @@ OWNER_BOUNDARY=The owner's standing authorization (2026-10-01) carries the deter
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Merge this identity PR with exact-head checks (D2).
+NEXT_ACTION=OWNER: the activation chain (OWNER_BOUNDARY), which starts with the credential issuance. Claude stops here.
+  - The kit (local; nothing runs until the owner runs it): .work/f1_release/activation/ACTIVATION_CHAIN.md,
+    the read-only post-enable check (post_enable_check_f1.sh), and the owner-run canary (canary_f1.py, with
+    the token typed at a hidden prompt).
+  - Any later guard dispatch: expect HEALTHY, delta [], pin = live = D2.
+  Before it: Merge this identity PR with exact-head checks (D2).
   - Then one guard dispatch on D2: HEALTHY, delta [analysis_service, app, build_info], pin = live = 2096af6d.
   - Then the deploy precheck (.work/f1_release/deploy/) and one fast-forward push of D2 to hf/main.
   - Then the settle checks: RUNNING at D2; health; build-info F1; the static digests unchanged; the
@@ -3339,7 +3416,17 @@ R3=Research in .work/research3 (gitignored).
       (NEXT_ACTION; OWNER_BOUNDARY 4).
     - Network: public Binance GETs only (5,108 requests). F1 is stored only; F2 was used only for the
       candidate-blind B3Dev null.
-PRODUCTION=PROD-H2-HOLD, live since 2026-09-26T19:47:36Z (RUNNING at 19:48:20Z).
+PRODUCTION=PROD-F1-AUTOMATION, live since 2026-10-01T06:40Z (RUNNING at D2 at 06:40:54Z).
+  - hf/main and the running commit are 5a3ef022 (D2), a fast-forward from 2096af6d. Build
+    UCPE-PROD-F1-AUTOMATION-20261001-A; /healthcheck 200.
+  - In it: F1, the governed automation route (#144), OFF (503 AUTOMATION_DISABLED); migration 0013 is applied;
+    no credential exists. The human routes are unchanged (the non-regression suite).
+  - Guard: HEALTHY on main 3ad53b87 after the re-pin merged (run 36828594390), delta [].
+  - A rollback is a new owner T4. Its target is 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A, never 00705c55
+    or 080f20a9.
+  Before it: PROD-TC-V1-STAMP (2096af6d, W26), pushed at 2026-09-30T12:24:01Z; guard HEALTHY after its re-pin
+  (PR #142).
+  Before it: PROD-H2-HOLD, live since 2026-09-26T19:47:36Z (RUNNING at 19:48:20Z).
   - hf/main and the running commit are 080f20a9, main's own commit (a fast-forward from 00705c55). Build
     UCPE-PROD-H2-HOLD-20260927-A; /healthcheck 200 (LOOP_STATE).
   - In it: the H2 fail-closed hold (#125), the release identity (#126), and the unwired v2 prep (#108, #109; nothing
@@ -3403,6 +3490,16 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
   - The H2 hold CONTROLLED_SMOKE, run 2026-09-27T10:21:23Z (PASS_PROVEN). The executor refuses a second run
     (.work/h2_smoke/EXECUTED). Never delete or edit the run directory, the seals or the adjudication.
   - The canonical guard dispatch 36310977790.
+  - W26:
+    - the 0011 apply 36583531813 and the 0012 apply 36586262979;
+    - the deploy of D 2096af6d, its single push at 2026-09-30T12:24:01Z;
+    - the W26 CONTROLLED_SMOKE (PASS_HTTP) and its one-row DB proof (PASS_PROVEN).
+  - F1:
+    - the 0013 apply 36820986264 (APPLIED; the route refuses a second apply);
+    - the deploy of D2, its single push at 2026-10-01T06:40Z (2096af6d → 5a3ef022), and its dry run at
+      06:39:36Z;
+    - the guard dispatches 36825556001 (D2) and 36828594390 (R).
+    A rollback or any later deploy needs a new T4.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
   - Every T3 batch through PR #106, and the post-release batch T3 (PRs #107-#110).

@@ -242,11 +242,20 @@ degraded guess.
   - While the first call is running: 409 `REQUEST_IN_PROGRESS`.
   - Past the deadline plus 60 s, the key is closed and answered 503 `DEADLINE_EXCEEDED`, never re-run.
 - **A different request under the same key:** 409 `IDEMPOTENCY_CONFLICT`.
-- **Refusals that write no row.** 400, 401 and 403, and the 422s of the request's own form (an
-  unsupported timeframe or symbol syntax), happen before the reservation, so the key stays usable. An
-  `UNSUPPORTED_SYMBOL` that only the analysis discovers is recorded against its key. So does a 503 answered before it (disabled, misconfigured, or the registry or the
-  ledger unreachable). So do the capacity refusals of section 12: a full ledger (503
-  `LEDGER_UNAVAILABLE`) and a credential past its rolling-day row ceiling (429 `QUOTA_EXCEEDED`).
+- **Refusals that write no row, so the key stays usable.** They come before the reservation, or are
+  refused by it:
+  - 400, 401 and 403;
+  - the 422s of the request's own form (an unsupported timeframe or symbol syntax);
+  - a 503 answered before the reservation (disabled, misconfigured, or the registry or the ledger
+    unreachable);
+  - the capacity refusals of section 12: a full ledger (503 `LEDGER_UNAVAILABLE`) and a credential
+    past its rolling-day row ceiling (429 `QUOTA_EXCEEDED`).
+- **Refusals recorded against the key.** Once the reservation succeeds, the outcome is recorded and
+  replayed, refusals included:
+  - an `UNSUPPORTED_SYMBOL` that only the analysis discovers;
+  - the rate quota (429 `QUOTA_EXCEEDED`) and `CONCURRENCY_LIMIT`;
+  - the 503s of the deadline and the analysis: `DEADLINE_EXCEEDED`, `UPSTREAM_UNAVAILABLE`,
+    `ANALYSIS_FAILED` and `CONTRACT_VIOLATION`.
 - **Scope and lifetime.** Idempotency is per credential and lasts as long as the row: at least the
   90-day retention (`RETENTION_AND_IDEMPOTENCY.md`). After a rotation, a retry uses the credential it
   began under.
