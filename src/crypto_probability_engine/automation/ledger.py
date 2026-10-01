@@ -8,6 +8,11 @@ One row per authenticated, well-formed call, keyed by ``(credential_id, client_r
   it is IN_PROGRESS; an IN_PROGRESS row past its deadline plus a grace period is ABANDONED and
   closed as DEADLINE_EXCEEDED, never re-run;
 - quota counts come from the same rows, computed atomically with the reservation;
+- THE CAPACITY CONTRACT (``automation.config``): a NEW key is refused, and nothing is written,
+  when the ledger holds ``row_cap`` rows (FULL) or the credential has recorded
+  ``max_rows_per_day`` rows in the last day, refusals included (THROTTLED). Replays of recorded
+  keys are always served. One advisory lock covers the whole ledger, so the cap holds under
+  concurrency;
 - a success is recorded only while its deadline has not passed (checked inside the recording
   transaction); a late success is recorded as DEADLINE_EXCEEDED instead, so the ledger always
   says what the caller was told;
@@ -16,7 +21,8 @@ One row per authenticated, well-formed call, keyed by ``(credential_id, client_r
 The ledger records the credential id, never its value. It is the ONLY place an automated run is
 stored: nothing here reads or writes ``predictions`` or any other cohort table, and no
 calibration or control reader reads this ledger (table ``automation_radar_ledger``, migration
-0013). Retention: ``LEDGER_RETENTION_DAYS`` (stated; a purge is a separate owner-authorized step).
+0013). Retention: at least ``LEDGER_RETENTION_DAYS``. Nothing here deletes a row; a purge of
+older rows is a separate owner-run step.
 """
 
 from __future__ import annotations
@@ -30,6 +36,11 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any, Protocol
 
+from crypto_probability_engine.automation.config import (
+    LEDGER_ROW_CAP,
+    LEDGER_ROWS_PER_QUOTA_UNIT,
+    MAX_QUOTA_PER_DAY,
+)
 from crypto_probability_engine.automation.origin import AUTOMATED_RADAR
 
 WINDOW_5MIN = timedelta(minutes=5)
@@ -41,6 +52,10 @@ MAX_MEMORY_ENTRIES = 10_000
 RESERVE_TIMEOUT_SECONDS = 3.0
 REFUSAL_RECORD_TIMEOUT_SECONDS = 3.0
 MIN_TIMEOUT_SECONDS = 0.1
+DEFAULT_MAX_ROWS_PER_DAY = LEDGER_ROWS_PER_QUOTA_UNIT * MAX_QUOTA_PER_DAY
+# One advisory lock for the whole ledger: the row cap and every per-credential count are decided
+# under it, atomically with the insert, even across processes.
+LEDGER_LOCK_KEY = "ucpe.automation.ledger"
 
 
 class LedgerUnavailable(Exception):
@@ -53,6 +68,8 @@ class ReservationKind(StrEnum):
     CONFLICT = "CONFLICT"
     IN_PROGRESS = "IN_PROGRESS"
     ABANDONED = "ABANDONED"
+    FULL = "FULL"  # the ledger holds its row cap: refused, nothing written
+    THROTTLED = "THROTTLED"  # the credential's rolling-day row ceiling: refused, nothing written
 
 
 @dataclass(frozen=True)
@@ -82,6 +99,8 @@ class Reservation:
     counted_day: int = 0
     oldest_5min: datetime | None = None
     oldest_day: datetime | None = None
+    rows_day: int = 0  # every row of the credential in the last day, refusals included
+    oldest_row_day: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +123,8 @@ class AutomationLedger(Protocol):
         release_id: str,
         deadline_ms: int,
         now: datetime,
+        max_rows_per_day: int = DEFAULT_MAX_ROWS_PER_DAY,
+        row_cap: int = LEDGER_ROW_CAP,
     ) -> Reservation: ...
 
     def complete(
@@ -158,6 +179,8 @@ class InMemoryAutomationLedger:
         release_id: str,
         deadline_ms: int,
         now: datetime,
+        max_rows_per_day: int = DEFAULT_MAX_ROWS_PER_DAY,
+        row_cap: int = LEDGER_ROW_CAP,
     ) -> Reservation:
         key = (credential_id, client_request_id)
         with self._lock:
@@ -167,14 +190,25 @@ class InMemoryAutomationLedger:
             self._prune(now)
             if len(self._entries) >= self._max_entries:
                 raise LedgerUnavailable("the in-memory ledger is full")
-            counted = [
+            if len(self._entries) >= row_cap:
+                return Reservation(ReservationKind.FULL, None)
+            own_day = [
                 entry
                 for entry in self._entries.values()
-                if entry.credential_id == credential_id
-                and entry.outcome_code not in NON_COUNTING_OUTCOMES
+                if entry.credential_id == credential_id and entry.received_at_utc > now - WINDOW_DAY
             ]
+            rows_day = len(own_day)
+            oldest_row_day = min((e.received_at_utc for e in own_day), default=None)
+            if rows_day >= max_rows_per_day:
+                return Reservation(
+                    ReservationKind.THROTTLED,
+                    None,
+                    rows_day=rows_day,
+                    oldest_row_day=oldest_row_day,
+                )
+            counted = [e for e in own_day if e.outcome_code not in NON_COUNTING_OUTCOMES]
             in_5min = [e.received_at_utc for e in counted if e.received_at_utc > now - WINDOW_5MIN]
-            in_day = [e.received_at_utc for e in counted if e.received_at_utc > now - WINDOW_DAY]
+            in_day = [e.received_at_utc for e in counted]
             entry = LedgerEntry(
                 credential_id=credential_id,
                 client_request_id=client_request_id,
@@ -191,6 +225,8 @@ class InMemoryAutomationLedger:
                 counted_day=len(in_day),
                 oldest_5min=min(in_5min, default=None),
                 oldest_day=min(in_day, default=None),
+                rows_day=rows_day,
+                oldest_row_day=oldest_row_day,
             )
 
     def complete(
@@ -273,15 +309,20 @@ SELECT credential_id, client_request_id::text AS client_request_id, request_fing
    FOR UPDATE
 """
 _COUNT_SQL = """
-SELECT count(*) FILTER (WHERE received_at_utc > %(since_5min)s) AS counted_5min,
-       count(*) AS counted_day,
-       min(received_at_utc) FILTER (WHERE received_at_utc > %(since_5min)s) AS oldest_5min,
-       min(received_at_utc) AS oldest_day
-  FROM public.automation_radar_ledger
- WHERE credential_id = %(credential_id)s
-   AND received_at_utc > %(since_day)s
-   AND (outcome_code IS NULL OR outcome_code <> ALL(%(non_counting)s))
+SELECT count(*) FILTER (WHERE counting AND received_at_utc > %(since_5min)s) AS counted_5min,
+       count(*) FILTER (WHERE counting) AS counted_day,
+       min(received_at_utc) FILTER (WHERE counting AND received_at_utc > %(since_5min)s)
+           AS oldest_5min,
+       min(received_at_utc) FILTER (WHERE counting) AS oldest_day,
+       count(*) AS rows_day,
+       min(received_at_utc) AS oldest_row_day
+  FROM (SELECT received_at_utc,
+               (outcome_code IS NULL OR outcome_code <> ALL(%(non_counting)s)) AS counting
+          FROM public.automation_radar_ledger
+         WHERE credential_id = %(credential_id)s
+           AND received_at_utc > %(since_day)s) AS own_day
 """
+_TOTAL_SQL = "SELECT count(*) FROM public.automation_radar_ledger"
 _INSERT_SQL = """
 INSERT INTO public.automation_radar_ledger
        (credential_id, client_request_id, request_fingerprint, evidence_origin, state,
@@ -344,9 +385,11 @@ class PostgresAutomationLedger:
         release_id: str,
         deadline_ms: int,
         now: datetime,
+        max_rows_per_day: int = DEFAULT_MAX_ROWS_PER_DAY,
+        row_cap: int = LEDGER_ROW_CAP,
     ) -> Reservation:
         params = {
-            "lock_key": f"ucpe.automation.ledger:{credential_id}",
+            "lock_key": LEDGER_LOCK_KEY,
             "credential_id": credential_id,
             "client_request_id": client_request_id,
             "request_fingerprint": request_fingerprint,
@@ -371,7 +414,27 @@ class PostgresAutomationLedger:
                     kind = classify_existing(existing, request_fingerprint, now)
                     return Reservation(kind, existing)
                 cur.execute(_COUNT_SQL, params)
-                counted_5min, counted_day, oldest_5min, oldest_day = cur.fetchone()
+                (
+                    counted_5min,
+                    counted_day,
+                    oldest_5min,
+                    oldest_day,
+                    rows_day,
+                    oldest_row_day,
+                ) = cur.fetchone()
+                cur.execute(_TOTAL_SQL)
+                (total_rows,) = cur.fetchone()
+                if int(total_rows) >= row_cap:
+                    conn.commit()  # nothing was written
+                    return Reservation(ReservationKind.FULL, None)
+                if int(rows_day or 0) >= max_rows_per_day:
+                    conn.commit()  # nothing was written
+                    return Reservation(
+                        ReservationKind.THROTTLED,
+                        None,
+                        rows_day=int(rows_day),
+                        oldest_row_day=oldest_row_day,
+                    )
                 cur.execute(_INSERT_SQL, params)
                 conn.commit()
         except LedgerUnavailable:
@@ -393,6 +456,8 @@ class PostgresAutomationLedger:
             counted_day=int(counted_day or 0),
             oldest_5min=oldest_5min,
             oldest_day=oldest_day,
+            rows_day=int(rows_day or 0),
+            oldest_row_day=oldest_row_day,
         )
 
     def complete(

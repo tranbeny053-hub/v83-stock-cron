@@ -53,7 +53,7 @@ def test_no_credential_or_digest_is_read_from_the_environment():
     assert load_config(retired) == load_config(credential_env())
 
 
-@pytest.mark.parametrize(("five", "day"), [(1, 1), (60, 2000), (6, 120)])
+@pytest.mark.parametrize(("five", "day"), [(1, 1), (60, 120), (6, 120)])
 def test_quota_inclusive_bounds(five, day):
     config = load_config(
         credential_env(**{ENV_QUOTA_PER_5MIN: str(five), ENV_QUOTA_PER_DAY: str(day)})
@@ -68,7 +68,8 @@ def test_quota_inclusive_bounds(five, day):
         (ENV_QUOTA_PER_5MIN, "0"),
         (ENV_QUOTA_PER_5MIN, "61"),
         (ENV_QUOTA_PER_DAY, "0"),
-        (ENV_QUOTA_PER_DAY, "2001"),
+        (ENV_QUOTA_PER_DAY, "121"),
+        (ENV_QUOTA_PER_DAY, "2000"),
         (ENV_QUOTA_PER_5MIN, "1.5"),
         (ENV_QUOTA_PER_DAY, "1.0"),
         (ENV_QUOTA_PER_5MIN, "true"),

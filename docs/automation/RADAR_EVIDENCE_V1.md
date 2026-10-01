@@ -235,7 +235,8 @@ degraded guess.
 - **A different request under the same key:** 409 `IDEMPOTENCY_CONFLICT`.
 - **Refusals that write no row.** 400, 401, 403 and 422 happen before the reservation, so the key
   stays usable. So does a 503 answered before it (disabled, misconfigured, or the registry or the
-  ledger unreachable).
+  ledger unreachable). So do the capacity refusals of section 12: a full ledger (503
+  `LEDGER_UNAVAILABLE`) and a credential past its rolling-day row ceiling (429 `QUOTA_EXCEEDED`).
 - **Scope and lifetime.** Idempotency is per credential and lasts as long as the row: at least the
   90-day retention (`RETENTION_AND_IDEMPOTENCY.md`). After a rotation, a retry uses the credential it
   began under.
@@ -247,9 +248,13 @@ degraded guess.
 
 - **Per credential, counted from the ledger.** A restart never resets it.
   - `UCPE_AUTOMATION_QUOTA_PER_5MIN`: default 6, allowed 1–60.
-  - `UCPE_AUTOMATION_QUOTA_PER_DAY`: default 120, allowed 1–2000.
+  - `UCPE_AUTOMATION_QUOTA_PER_DAY`: default 120, allowed 1–120. The capacity contract (section 12)
+    bounds it; raising it needs measured production resource evidence and a reviewed change.
   - `Retry-After` covers every exhausted window.
-  - Refusals made before an analysis (`QUOTA_EXCEEDED`, `CONCURRENCY_LIMIT`) do not count.
+  - Refusals made before an analysis (`QUOTA_EXCEEDED`, `CONCURRENCY_LIMIT`) do not count against
+    the quota. They do count against the credential's row ceiling: at most 2 x the daily quota rows
+    in any rolling day. Beyond the ceiling, a new request gets 429 `QUOTA_EXCEEDED` and is recorded
+    nowhere.
 - **Concurrency.** One automated analysis runs at a time per service instance, which is one per app
   process; a busy slot gets 429 at once and never queues.
 - **Cost.** Each counted call is one METRICS_ONLY analysis: public exchange market-data requests
@@ -276,9 +281,16 @@ degraded guess.
   - `state`, `outcome_code`, `http_status` and the exact `response_body`;
   - `run_id`, `analysis_hash`, `evidence_hash`, `release_id`;
   - `deadline_ms`, `received_at_utc` and `completed_at_utc` (never before reception).
-- **Retention** is at least 90 days. Nothing purges automatically; a purge is a separate,
-  not-yet-built, owner-authorized route. Unauthenticated and malformed calls are never recorded. The
-  full audit, with its capacity arithmetic, is `RETENTION_AND_IDEMPOTENCY.md`.
+- **Retention** is at least 90 days. The route itself never deletes a row; only an owner-run,
+  on-demand purge removes ledger rows older than 90 days. Unauthenticated and malformed calls are
+  never recorded.
+- **The capacity contract** (frozen; `RETENTION_AND_IDEMPOTENCY.md` section 2) bounds storage:
+  - the ledger never takes a new row past 25,000 rows: 503 `LEDGER_UNAVAILABLE`, nothing written,
+    and replays are still served;
+  - a credential records at most 2 x its daily quota rows in any rolling day;
+  - no stored body exceeds 8,192 bytes;
+  - at the maximum quota of 120 per day, 90 days of one credential fit under the cap.
+  The route fails closed at its bound. There is no recurring job.
 
 ## 13. Enablement prerequisites (all owner-gated; none is done)
 

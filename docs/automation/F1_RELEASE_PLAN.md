@@ -60,7 +60,9 @@ default), no credential exists, and the route fails closed at every layer.
 ## 5. The quota (G6, T3)
 
 - G6 is provisional: 6 per 5 minutes and 120 per day, which are also the code defaults.
-- Set `UCPE_AUTOMATION_QUOTA_PER_5MIN` and `UCPE_AUTOMATION_QUOTA_PER_DAY` only to depart from them.
+- 120 per day is also the maximum the capacity contract allows. Raising it needs measured
+  production resource evidence and a reviewed change of the contract.
+- Set `UCPE_AUTOMATION_QUOTA_PER_5MIN` and `UCPE_AUTOMATION_QUOTA_PER_DAY` only to lower them.
 
 ## 6. Enable (T3)
 
@@ -90,6 +92,14 @@ default), no credential exists, and the route fails closed at every layer.
 - **FAIL:** anything else. Revoke the credential at once (no restart) and adjudicate.
 - Operational success is not directional or model evidence. The H2 hold and every skill gate are
   unchanged.
+
+## After the canary: capacity (owner, on demand)
+
+- The ledger fails closed at 25,000 rows (`RETENTION_AND_IDEMPOTENCY.md` section 2).
+- Check the headroom with the read-only query there. Measure the real daily row rate before
+  revisiting G6.
+- When the ledger nears the cap, the owner runs the on-demand purge of rows older than 90 days
+  (a T4). Nothing runs it on a schedule.
 
 ## 8. Handoff to UOR (UOR's own sessions)
 

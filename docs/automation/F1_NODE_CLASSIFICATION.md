@@ -37,12 +37,12 @@ Both are proposals, not canon. UCPE canon wins. The contract that results is `RA
 | 6.4 | UOR persists the identities | SERIAL | UOR side (F3). |
 | 7.1–7.2 | Server deadline; fixed status codes | INTEGRATED | A monotonic budget runs from arrival to the ledger commit. A success is recorded only if the database clock is within the deadline; otherwise it is recorded and answered DEADLINE_EXCEEDED. No partial evidence. A fixed catalogue, with fixed messages (schema enum), inside the proposed status classes. |
 | 7.3 | UOR's no-evidence rule | SERIAL | UOR side. |
-| 8.1 | Per-credential quota, 5 minutes and daily | INTEGRATED + OWNER | Enforced from the ledger, defaults 6 and 120. The final level is **G6**. |
+| 8.1 | Per-credential quota, 5 minutes and daily | INTEGRATED + OWNER | Enforced from the ledger, defaults 6 and 120. The daily quota is bounded at 120 by the capacity contract. **G6** stays provisional until measured production resource evidence exists. |
 | 8.2 | UOR caps deep calls | SERIAL | UOR side. |
 | 8.3 | The cost model is stated | INTEGRATED | Public market data plus Space CPU; no paid API. |
 | 9.2 | Section 5A never used or inferable | SATISFIED | The route reads live data and the published gate only. The automation package imports no oos, calibration or resolution module (tested). |
 | 9.3 | Isolation provable | INTEGRATED + OWNER | Regression tests, plus the audit SQL in the contract. Running it needs an enabled route and an owner database read. |
-| 10.1–10.2 | Per-call audit; retention stated | INTEGRATED | One ledger row per (credential, client_request_id). Its repeats are answered from that row and not recorded separately. Unauthenticated and malformed calls are never recorded. Retention is at least 90 days, with no automated purge; the audit and its capacity arithmetic are in `RETENTION_AND_IDEMPOTENCY.md`. |
+| 10.1–10.2 | Per-call audit; retention stated | INTEGRATED | One ledger row per (credential, client_request_id). Its repeats are answered from that row and not recorded separately. Unauthenticated and malformed calls are never recorded. Retention is at least 90 days. Storage is bounded by the frozen capacity contract: a 25,000-row cap, a rolling-day row ceiling per credential, and an 8 KB body bound. It fails closed, with no recurring job and no automatic deletion (`RETENTION_AND_IDEMPOTENCY.md`). |
 | 11.1 | `build_info.release_id` and fingerprint in every response | INTEGRATED (success bodies) | Every 200 carries the full six-field `GET /v1/build-info` payload. Error bodies carry only the catalogued error. |
 | 11.2 | UOR release allowlist | SERIAL + OWNER | UOR side; **G2**. |
 | 12.1 | Kill switch | INTEGRATED | `UCPE_AUTOMATION_ENABLED`, default OFF (503). |

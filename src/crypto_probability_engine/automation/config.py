@@ -20,12 +20,29 @@ ENV_QUOTA_PER_DAY = "UCPE_AUTOMATION_QUOTA_PER_DAY"
 DEFAULT_QUOTA_PER_5MIN = 6
 MAX_QUOTA_PER_5MIN = 60
 DEFAULT_QUOTA_PER_DAY = 120
-MAX_QUOTA_PER_DAY = 2000
+# The daily quota is bounded by the ledger capacity contract below. G6 stays provisional; raising
+# this needs measured production resource evidence and a reviewed change of the contract.
+MAX_QUOTA_PER_DAY = 120
 MAX_CONCURRENT_ANALYSES = 1
 DEADLINE_MS_MIN = 5_000
 DEADLINE_MS_MAX = 60_000
 REQUEST_BODY_MAX_BYTES = 1_024
+
+# THE LEDGER CAPACITY CONTRACT (docs/automation/RETENTION_AND_IDEMPOTENCY.md). Storage is bounded,
+# and the route itself never deletes a row:
+# - every row is kept at least LEDGER_RETENTION_DAYS; only an owner-run purge, of rows older than
+#   that, ever removes one;
+# - the ledger never takes a new row once it holds LEDGER_ROW_CAP rows: a new request is refused
+#   (503) and recorded nowhere, while replays of recorded requests are still served;
+# - a credential never records more than LEDGER_ROWS_PER_QUOTA_UNIT x its daily quota rows in any
+#   rolling day, refusals included: beyond that, a new request is refused (429) and recorded
+#   nowhere, so no client can fill the ledger;
+# - no stored response body exceeds LEDGER_MAX_BODY_BYTES (its RFC 8785 JCS bytes).
+# At the maximum quota, LEDGER_RETENTION_DAYS of one credential's rows always fit under the cap.
 LEDGER_RETENTION_DAYS = 90
+LEDGER_ROW_CAP = 25_000
+LEDGER_ROWS_PER_QUOTA_UNIT = 2
+LEDGER_MAX_BODY_BYTES = 8_192
 
 _TRUE = frozenset({"1", "true"})
 _FALSE = frozenset({"", "0", "false"})

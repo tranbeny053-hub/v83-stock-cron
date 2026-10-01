@@ -11,6 +11,8 @@ drives the production classes themselves (``PostgresCredentialRegistry`` and
 - LEDGER: reserve NEW, IN_PROGRESS, CONFLICT; an on-time success replayed byte for byte through
   JSONB (RFC 8785 JCS of the stored body); a late success recorded as DEADLINE_EXCEEDED; a refusal
   that does not count against the quota; an abandoned reservation;
+- CAPACITY: the rolling-day row ceiling and the row cap each refuse a NEW key and write nothing,
+  while a recorded key is still answered;
 - HAZARDS: every row the constraints must refuse is refused, by the named constraint.
 Every hazard runs in its own transaction and is rolled back. The probe names no secret: its
 credential values are synthetic and generated here.
@@ -104,6 +106,7 @@ def main() -> int:
 
     probe_registry(url, sql)
     probe_ledger(url, sql)
+    probe_capacity(url, sql)
     probe_hazards(url, psycopg)
     probe_fail_closed()
     print(f"PROBE PASS: {len(checks_passed)} checks")
@@ -282,6 +285,50 @@ def probe_ledger(url: str, sql) -> None:
         " FROM public.automation_radar_ledger"
     )
     check(rows[0][0] == rows[0][1] > 0, "ledger: every row is stamped AUTOMATED_RADAR")
+
+
+def probe_capacity(url: str, sql) -> None:
+    ledger = PostgresAutomationLedger(url)
+    now = datetime.now(UTC)
+
+    def reserve(request_id: str, **limits):
+        return ledger.reserve(
+            credential_id="capacity-probe",
+            client_request_id=request_id,
+            request_fingerprint=FINGERPRINT_1,
+            release_id=RELEASE_ID,
+            deadline_ms=30000,
+            now=now,
+            **limits,
+        )
+
+    def own_rows() -> int:
+        return sql(
+            "SELECT count(*) FROM public.automation_radar_ledger"
+            " WHERE credential_id = 'capacity-probe'"
+        )[0][0]
+
+    first = str(uuid.uuid4())
+    kinds = [reserve(key, max_rows_per_day=2).kind for key in (first, str(uuid.uuid4()))]
+    throttled = reserve(str(uuid.uuid4()), max_rows_per_day=2)
+    check(
+        kinds == [ReservationKind.NEW, ReservationKind.NEW]
+        and throttled.kind is ReservationKind.THROTTLED
+        and throttled.rows_day == 2
+        and own_rows() == 2,
+        "capacity: the rolling-day row ceiling refuses a new key and writes nothing",
+    )
+    total = sql("SELECT count(*) FROM public.automation_radar_ledger")[0][0]
+    full = reserve(str(uuid.uuid4()), row_cap=total)
+    check(
+        full.kind is ReservationKind.FULL
+        and sql("SELECT count(*) FROM public.automation_radar_ledger")[0][0] == total,
+        "capacity: a full ledger refuses a new key and writes nothing",
+    )
+    check(
+        reserve(first, row_cap=total).kind is ReservationKind.IN_PROGRESS,
+        "capacity: a recorded key is still answered when the ledger is full",
+    )
 
 
 def probe_hazards(url: str, psycopg) -> None:

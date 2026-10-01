@@ -44,8 +44,9 @@ def test_the_denial_probe_only_expects_refusals():
 def test_the_stated_retention_is_ninety_days_and_the_doc_says_so():
     assert automation_config.LEDGER_RETENTION_DAYS == 90
     text = DOC.read_text(encoding="utf-8")
-    assert "Stated minimum: 90 days" in text
-    assert "Nothing purges automatically." in text
+    assert "**Retention: at least 90 days**" in text
+    assert "the route itself never deletes a row" in text
+    assert "There is no recurring job" in text
 
 
 def test_the_idempotency_key_is_per_credential_in_the_ledger_and_the_migration():

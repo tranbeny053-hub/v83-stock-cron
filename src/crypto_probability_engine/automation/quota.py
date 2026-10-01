@@ -2,7 +2,9 @@
 
 Two windows, counted from the ledger (so a restart never resets them): a rolling 5 minutes and a
 rolling day. Refusals before any analysis (``QUOTA_EXCEEDED``, ``CONCURRENCY_LIMIT``) do not
-count. At most ``MAX_CONCURRENT_ANALYSES`` automated analyses run at once in a process; the slot
+count. Beyond the quota, the ledger's row ceiling (the capacity contract) refuses a new request
+without recording it: ``throttle_retry_after`` says when the oldest row of the day leaves the
+window. At most ``MAX_CONCURRENT_ANALYSES`` automated analyses run at once in a process; the slot
 is held until the analysis thread actually ends, even past a deadline, so an overrun can never
 pile up work behind it.
 """
@@ -38,6 +40,12 @@ def evaluate_quota(
     if waits:
         return QuotaDecision(False, max(waits))
     return QuotaDecision(True)
+
+
+def throttle_retry_after(reservation: Reservation, now: datetime) -> int:
+    """Seconds until the credential's oldest row of the last day leaves the rolling day."""
+
+    return _retry_after(reservation.oldest_row_day, WINDOW_DAY, now)
 
 
 def _retry_after(oldest: datetime | None, window: timedelta, now: datetime) -> int:

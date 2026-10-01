@@ -21,25 +21,59 @@ names the code or test that holds it.
   `CONCURRENCY_LIMIT`, `DEADLINE_EXCEEDED`, the analysis and contract failures). A repeat of that
   key therefore replays the same refusal. `QUOTA_EXCEEDED` and `CONCURRENCY_LIMIT` never count
   against the quota.
+- **Capacity refusals are never recorded** (section 2): a full ledger (503 `LEDGER_UNAVAILABLE`),
+  or a credential past its rolling-day row ceiling (429 `QUOTA_EXCEEDED`).
 - **The registry** records a digest per credential, never a value (`CREDENTIAL_ROTATION.md`).
 
-## 2. Retention
+## 2. Retention and the capacity contract (frozen; `automation/config.py`)
 
-- **Stated minimum: 90 days** (`LEDGER_RETENTION_DAYS = 90` in `automation/config.py`).
-- **Nothing purges automatically.** No code path, script, workflow or migration deletes or
-  truncates a ledger or registry row (`tests/automation/test_retention_semantics.py`). Rows are kept
-  until the owner authorizes a purge. That purge is **not built**: it would be its own reviewed,
-  dedicated route (T4), deleting only `COMPLETED` ledger rows older than the retention, and never a
-  registry row.
-- **Capacity (owner item, not a merge blocker).** A success row holds a body of about 2.7 KB, about
-  3.5 KB with overhead. At the provisional maximum quota (G6: 120 per day):
-  - 90 days need about 40 MB;
-  - a year without a purge needs about 150 MB.
-  Supabase's free tier allows 500 MB for the whole database, so a purge route, or a lower quota, is
-  needed before about a year of sustained maximum use.
-- **Refusal rows.** An authenticated caller that ignores `Retry-After` adds one small refusal row
-  (about 0.4 KB) per new `client_request_id`. The credential holder is the owner's own consumer; if
-  it misbehaves, revoke its credential (`CREDENTIAL_ROTATION.md`), which stops it at once.
+Storage is bounded, and the route itself never deletes a row. There is no recurring job and no
+automatic production mutation. The route fails closed at its bound.
+
+- **Retention: at least 90 days** (`LEDGER_RETENTION_DAYS`).
+  - No code path, script, workflow or migration deletes or truncates a ledger or registry row
+    (`tests/automation/test_retention_semantics.py`).
+  - Only an owner-run purge, of ledger rows older than 90 days, ever removes one. A registry row is
+    never removed.
+- **The row cap: the ledger never takes a new row once it holds 25,000 rows** (`LEDGER_ROW_CAP`).
+  - A new request is then refused with 503 `LEDGER_UNAVAILABLE`, and nothing is written.
+  - A repeat of an already recorded request is still answered.
+  - One advisory lock covers the whole ledger, so the cap holds under concurrency.
+- **The row ceiling: a credential records at most 2 x its daily quota rows in any rolling day,
+  refusals included** (`LEDGER_ROWS_PER_QUOTA_UNIT`).
+  - Beyond that, a new request is refused with 429 `QUOTA_EXCEEDED`, nothing is written, and
+    `Retry-After` says when the oldest row of the day leaves the window.
+  - So no client, however it misbehaves, can fill the ledger. At the maximum it adds 240 rows a day.
+- **The body bound: no stored response body exceeds 8,192 bytes** of RFC 8785 JCS
+  (`LEDGER_MAX_BODY_BYTES`).
+  - A success body that would exceed it is withheld as `CONTRACT_VIOLATION`.
+  - A real evidence body is about 2.2 KB, and a schema-maximal one about 2.9 KB.
+- **The quota is bounded by the contract: at most 120 per day** (`MAX_QUOTA_PER_DAY`).
+  - At that maximum, 90 days of one credential (21,600 rows) always fit under the cap.
+  - A higher quota is refused as a misconfiguration (503 `NOT_CONFIGURED`).
+  - G6 stays provisional at 6 per 5 minutes and 120 per day. Raising it needs measured production
+    resource evidence and a reviewed change of this contract.
+- **Storage bound.**
+  - Hard: at most 25,000 rows, each with a body of at most 8 KB, which is about 220 MB worst case.
+  - Expected at the maximum quota with the full refusal allowance: about 21,600 rows of mostly
+    2-3 KB bodies after 90 days, about 40 MB.
+  - Several credentials active at once share the one cap.
+- **When the cap is reached.** At sustained maximum use, that is after about 104 days. The route
+  then refuses new requests (fail closed) until the owner purges rows older than 90 days.
+  - At the maximum, purges are then needed about every two weeks.
+  - At realistic use, measure the rate in production first. The purge is on demand, never
+    scheduled.
+- **The owner's purge (a T4, on demand, in the Supabase SQL editor).** It removes only completed
+  rows older than 90 days:
+  ```sql
+  DELETE FROM public.automation_radar_ledger
+   WHERE state = 'COMPLETED' AND received_at_utc < now() - interval '90 days';
+  ```
+- **The owner's headroom check (read-only):**
+  ```sql
+  SELECT count(*) AS rows, 25000 - count(*) AS headroom, min(received_at_utc) AS oldest
+    FROM public.automation_radar_ledger;
+  ```
 
 ## 3. Idempotency: what the key guarantees, and for how long
 
@@ -76,5 +110,8 @@ one more reason it must never be wired in production.
 ## 5. Verdict
 
 - Retention and idempotency semantics are consistent with the contract.
-- The only open items are the owner's: a future purge route (capacity), and G6.
+- Storage is bounded by the frozen capacity contract (section 2). The route fails closed at its
+  bound, and never deletes a row itself.
+- The only open items are the owner's: G6 stays provisional until measured production resource
+  evidence exists, and the purge stays on demand.
 - Neither blocks the merge. Neither is needed before a canary.

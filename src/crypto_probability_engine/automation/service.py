@@ -2,8 +2,10 @@
 
 Order: kill switch; human session refused; machine credential (read from the database registry on
 every call, so a rotation or revocation applies to the next request); strict request; ledger
-reservation (idempotency: replay, conflict, in progress); quota; concurrency; the isolated
-analysis; the pinned radar_evidence.v1 body; the ledger record. The service never raises and never
+reservation (idempotency: replay, conflict, in progress; the capacity contract: a full ledger or a
+credential past its rolling-day row ceiling refuses a NEW key without recording it); quota;
+concurrency; the isolated analysis; the pinned radar_evidence.v1 body, never stored above
+``LEDGER_MAX_BODY_BYTES``; the ledger record. The service never raises and never
 echoes a credential or a request field.
 
 The deadline is a MONOTONIC budget of ``deadline_ms`` from the moment the request arrived at the
@@ -29,6 +31,8 @@ from crypto_probability_engine.api.analysis_service import analyze_request_isola
 from crypto_probability_engine.api.auth import DEV_SESSION_COOKIE, SESSION_COOKIE
 from crypto_probability_engine.api.schemas import AnalysisMode, AnalysisRequest, AssetClass
 from crypto_probability_engine.automation.config import (
+    LEDGER_MAX_BODY_BYTES,
+    LEDGER_ROWS_PER_QUOTA_UNIT,
     MAX_CONCURRENT_ANALYSES,
     AutomationConfig,
     load_config,
@@ -43,6 +47,7 @@ from crypto_probability_engine.automation.contract import (
     error_status,
     parse_request,
     radar_evidence_valid,
+    render,
 )
 from crypto_probability_engine.automation.credentials import (
     CredentialRefusal,
@@ -62,6 +67,7 @@ from crypto_probability_engine.automation.quota import (
     CONCURRENCY_RETRY_AFTER_SECONDS,
     ConcurrencyGate,
     evaluate_quota,
+    throttle_retry_after,
 )
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings
@@ -199,9 +205,14 @@ class RadarEvidenceService:
                 release_id=str(build_info["release_id"]),
                 deadline_ms=request.deadline_ms,
                 now=received,
+                max_rows_per_day=LEDGER_ROWS_PER_QUOTA_UNIT * config.quota_per_day,
             )
         except LedgerUnavailable:
             return _error(ErrorCode.LEDGER_UNAVAILABLE)
+        if reservation.kind is ReservationKind.FULL:  # the capacity contract: nothing was written
+            return _error(ErrorCode.LEDGER_UNAVAILABLE)
+        if reservation.kind is ReservationKind.THROTTLED:  # nothing was written
+            return _error(ErrorCode.QUOTA_EXCEEDED, throttle_retry_after(reservation, received))
         if reservation.kind is ReservationKind.CONFLICT:
             return _error(ErrorCode.IDEMPOTENCY_CONFLICT)
         if reservation.kind is ReservationKind.IN_PROGRESS:
@@ -246,6 +257,8 @@ class RadarEvidenceService:
             )
         except ContractError as refusal:
             return self._finish(call, refusal.code)
+        if len(render(evidence)) > LEDGER_MAX_BODY_BYTES:  # the capacity contract: never stored
+            return self._finish(call, ErrorCode.CONTRACT_VIOLATION)
         record_budget = call.budget_end - self._monotonic()
         if record_budget < MIN_RECORD_SECONDS:
             return self._finish(call, ErrorCode.DEADLINE_EXCEEDED)

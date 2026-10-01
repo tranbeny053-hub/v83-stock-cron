@@ -174,8 +174,8 @@ class FakeDatabase:
     def cursor(self):
         return self
 
-    def execute(self, sql, params):
-        self.statements.append((sql, dict(params)))
+    def execute(self, sql, params=None):
+        self.statements.append((sql, dict(params or {})))
         self.events.append("execute")
         if self.fail == len(self.statements):
             raise RuntimeError("synthetic statement failure")
@@ -198,26 +198,33 @@ class FakeDatabase:
 def test_postgres_reserves_atomically_in_one_committed_transaction():
     oldest_five = NOW - timedelta(seconds=20)
     oldest_day = NOW - timedelta(hours=2)
-    db = FakeDatabase([None, (2, 8, oldest_five, oldest_day)])
+    oldest_row = NOW - timedelta(hours=3)
+    db = FakeDatabase([None, (2, 8, oldest_five, oldest_day, 11, oldest_row), (40,)])
     result = reserve(db.ledger())
     assert result.kind is ReservationKind.NEW
     assert (result.counted_5min, result.counted_day) == (2, 8)
     assert (result.oldest_5min, result.oldest_day) == (oldest_five, oldest_day)
+    assert (result.rows_day, result.oldest_row_day) == (11, oldest_row)
     assert len(db.connect_calls) == 1
     assert db.connect_calls[0][1] == {
         "connect_timeout": 3,
         "autocommit": False,
         "prepare_threshold": None,  # safe behind a transaction pooler
     }
-    assert db.events == ["enter", "enter", *["execute"] * 5, "commit", "exit", "exit"]
+    assert db.events == ["enter", "enter", *["execute"] * 6, "commit", "exit", "exit"]
     sql = [" ".join(statement.split()) for statement, _ in db.statements]
     assert "set_config('statement_timeout'" in sql[0] and "set_config('lock_timeout'" in sql[0]
     assert db.statements[0][1]["timeout"] == "3000ms"
     assert "pg_advisory_xact_lock" in sql[1]
+    assert db.statements[1][1]["lock_key"] == "ucpe.automation.ledger", (
+        "one lock: the cap is global"
+    )
     assert sql[2].startswith("SELECT credential_id,") and sql[2].endswith("FOR UPDATE")
     assert sql[3].startswith("SELECT count(*) FILTER")
-    assert sql[4].startswith("INSERT INTO public.automation_radar_ledger")
-    for _, params in db.statements:
+    assert sql[4] == "SELECT count(*) FROM public.automation_radar_ledger"
+    assert db.statements[4][1] == {}, "the total count takes no parameter"
+    assert sql[5].startswith("INSERT INTO public.automation_radar_ledger")
+    for _, params in [*db.statements[:4], db.statements[5]]:
         assert params["credential_id"] == CREDENTIAL_ID
         assert params["client_request_id"] == ARGS["client_request_id"]
         assert params["request_fingerprint"] == ARGS["request_fingerprint"]
@@ -312,6 +319,7 @@ def test_every_sql_column_exists_in_migration():
     statements = [
         module._SELECT_SQL,
         module._COUNT_SQL,
+        module._TOTAL_SQL,
         module._INSERT_SQL,
         module._COMPLETE_SQL,
         module._COMPLETE_ON_TIME_SQL,
@@ -321,7 +329,16 @@ def test_every_sql_column_exists_in_migration():
         returning filter count min as text uuid jsonb public automation_radar_ledger
         greatest clock_timestamp""".split()
     )
-    aliases = {"counted_5min", "counted_day", "oldest_5min", "oldest_day"}
+    aliases = {
+        "counted_5min",
+        "counted_day",
+        "oldest_5min",
+        "oldest_day",
+        "rows_day",
+        "oldest_row_day",
+        "counting",
+        "own_day",
+    }
     for sql in statements:
         stripped = re.sub(r"%\(\w+\)s|'[^']*'", "", sql.lower())
         identifiers = set(re.findall(r"\b[a-z_][a-z_0-9]*\b", stripped)) - keywords - aliases
