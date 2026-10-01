@@ -1,6 +1,31 @@
 # STATE
 
-Updated: 2026-10-01 (F1 merge gate, round 2). **ROUTING OVERRIDE: CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01)
+Updated: 2026-10-01 (F1 merged; 0013 applied; release identity). **F1 is MERGED, and migration 0013 is APPLIED
+in production. The F1 release identity UCPE-PROD-F1-AUTOMATION-20261001-A is prepared (this PR). The route is
+NOT deployed, NOT enabled, and no credential exists. Production is still D 2096af6d / UCPE-PROD-TC-V1-STAMP.**
+- PR #144 merged at 05:34:45Z with an exact-head merge commit: M = 5da10ef38a2480000b5ae359519d7a3022a1e2c2.
+  - Parents f19d7575 and b3bde2ec; tree d798502b = merge-tree.
+  - Push CI on M succeeded (36820447090); VERIFY at M PASS 4568.
+- The merge gate (CODEX_PAUSED_BY_OWNER): a CLAUDE_ADVERSARIAL_REVIEW, NOT independent.
+  - Round 1 at 3a37e49: M1 MEDIUM (prepared statements on the 0013 apply connections behind the
+    pooler), L1, L2 and T1, repaired in b3bde2e.
+  - Round 2 at b3bde2e: CLEAN.
+  - 48 bounded mutants, all killed in round 2.
+  - The report: .work/f1-claude-review/ in the lanes12/f1 worktree.
+- The 0013 production apply (T4, CONSUMED, PASS; never rerun):
+  - run 36820986264 at M, dispatched once at 05:41:26Z after PRECHECK=PASS;
+  - APPLIED, committed true, digest = pin c1a60c04…, PostgreSQL 17.6;
+  - 42 constraint probes as reviewed;
+  - both tables locked (RLS on, no policy, no API-role privilege) and empty;
+  - the existing tables' security and schema fingerprints, and the event triggers, unchanged.
+  Raw evidence: .work/f1_release/apply_0013/ (EVIDENCE.sha256, ADJUDICATION.md, files 0444).
+- The release identity (this PR): 30ce73e changes config/build_info.py, its test, and the guard delta
+  mirror [analysis_service, app, build_info]. That is the W26 three-file pattern.
+- Next, under the standing authorization (deterministic T3/T4, stop on any mismatch or failure):
+  merge this PR (D2); a guard run on D2; the deploy precheck; one fast-forward push of D2 to hf; the
+  settle checks; the re-pin; a guard run HEALTHY. Then STOP at the credential issuance (owner secret
+  entry).
+Previously (F1 merge gate, round 2): **ROUTING OVERRIDE: CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01)
 until the owner explicitly resumes it.**
 - Every pending Codex retry was cancelled. Codex is not invoked.
 - The merge gate is now a CLAUDE_ADVERSARIAL_REVIEW (Opus 5 MAX; explicitly NOT an independent
@@ -1834,7 +1859,8 @@ LOOP_STATE=IN PROGRESS: F1 merge gate. Final independent Codex review (review 3)
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
+CURRENT_MILESTONE=F1 MERGED (M 5da10ef3) and 0013 APPLIED (production, PASS); the release identity
+  UCPE-PROD-F1-AUTOMATION-20261001-A is prepared. Before it: F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
   preparation. Before it: F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
   closed, and the real-PG rehearsal passed. The Codex review gate is OPEN (quota). Nothing is applied, deployed,
   enabled or issued.
@@ -1960,7 +1986,8 @@ CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=f19d7575 (main, PR #143: the W26 closure record). CI success (run 36722645234).
+LAST_GREEN_SHA=5da10ef3 (main, PR #144: F1). Push CI success (run 36820447090); tree d798502b.
+  Before it: f19d7575 (main, PR #143: the W26 closure record). CI success (run 36722645234).
   Before it: 6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
   Before it: 2096af6d (D, main, PR #141: the identity). CI success (run 36714014523); tree 68917d99 as recorded.
   Before it: 86c9496f (main, PR #140: the STATE repair). CI success (run 36703760641); its tree equals the
@@ -2692,7 +2719,14 @@ OWNER_BOUNDARY=The owner's standing authorization (2026-10-01) carries the deter
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Verify this head, run the 0013 real-PG rehearsal and CI, then freeze it. Then Claude adversarial review
+NEXT_ACTION=Merge this identity PR with exact-head checks (D2).
+  - Then one guard dispatch on D2: HEALTHY, delta [analysis_service, app, build_info], pin = live = 2096af6d.
+  - Then the deploy precheck (.work/f1_release/deploy/) and one fast-forward push of D2 to hf/main.
+  - Then the settle checks: RUNNING at D2; health; build-info F1; the static digests unchanged; the
+    automation route answering 503 AUTOMATION_DISABLED.
+  - Then the re-pin PR, merged, and one guard dispatch: HEALTHY, delta [].
+  - STOP at the credential issuance.
+  Before it: Verify this head, run the 0013 real-PG rehearsal and CI, then freeze it. Then Claude adversarial review
   round 2.
   - If clean: update the PR body, mark it ready, merge with --match-head-commit, and record M.
   - Then rebuild and reverify the 0013 package against M, precheck, and apply under the standing
