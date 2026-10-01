@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "file": "radar_evidence.v1.synthetic-btc-4h-gate-blocked.json",
+      "note": "Hard gate blocked (SKILL_NOT_DEMONSTRATED), no H2 hold: the ordinary branch.",
+      "sha256": "c47e0e5ef6f30725d488c56e6b3b73849b445ef19f7079aac1bc98cbd872620f",
+      "validates_against": "radar_evidence.v1"
+    },
+    {
+      "file": "radar_evidence.v1.synthetic-eth-1h-h2-hold.json",
+      "note": "A legacy verdict under the H2 hold: the hold is carried as {active, hold_reason} only; the legacy verdict, n and the observed rate are withheld.",
+      "sha256": "2c33037891d5d44f9f625f47681bba1f281e0de7c37bb025aea11f84048b5c65",
+      "validates_against": "radar_evidence.v1"
+    },
+    {
+      "file": "radar_evidence_error.v1.synthetic-quota-exceeded.json",
+      "note": "A 429 refusal body (with Retry-After: 120 in the headers).",
+      "sha256": "55907162860e60316fd39bb4fdf07cc627fba452074123779158ff23a3a56c60",
+      "validates_against": "radar_evidence_error.v1"
+    }
+  ],
+  "generator": "tests/automation/examples_builder.py",
+  "provenance": "SYNTHETIC_FIXTURE: the real UCPE analysis pipeline on deterministic fixture candles (tests/fixtures/market_data.make_snapshot at FIXED_NOW); no live data, no holdout, no section 5A evidence; synthetic release identity served by no UCPE release."
+}

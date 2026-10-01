@@ -1,0 +1,151 @@
+-- The automation ledger and the machine-credential registry of the governed machine route
+-- POST /v1/automation/radar-evidence (F1).
+--
+-- AUTHORED, NOT APPLIED. Applying this is a T4 action requiring owner authorization, through its
+-- dedicated one-shot route only: .github/workflows/apply-migration-0013.yml running
+-- scripts/apply_migration_0013.py. The default scripts/apply_migrations.py applies EVERY migration
+-- and must never be used for it. Until it is applied the route has no registry and no ledger and
+-- answers every well-formed credential with 503 LEDGER_UNAVAILABLE: it fails closed.
+--
+-- WHY. Automated runs must never enter the human cohorts that calibration and control count. The
+-- route therefore writes nothing to the shared prediction tables: it computes an isolated analysis
+-- and records each call here, and only here. The ledger gives strict idempotency (one row per
+-- credential and client request id, reserved before any analysis starts, so a repeat can never
+-- start a second run), the per-credential quota counts, and the audit trail.
+--
+-- THE TABLE, one row per authenticated, well-formed call:
+-- - evidence_origin is always AUTOMATED_RADAR, stamped by the server.
+-- - credential_id is the machine credential's id, never its value.
+-- - state is IN_PROGRESS until the outcome is known, then COMPLETED with an outcome code, the HTTP
+--   status and the exact response body, so a repeat replays it byte for byte.
+-- - A SUCCEEDED row carries the run id, the analysis hash, the evidence hash and a 200 body.
+-- - arl_credential_received serves the quota counts.
+-- - Retention is at least 90 days (docs/automation/RETENTION_AND_IDEMPOTENCY.md). Nothing purges
+--   it automatically; a purge is a separate owner-authorized step.
+--
+-- THE REGISTRY, public.automation_credential, one row per machine credential ever issued:
+-- - credential_id and the lowercase hex SHA-256 of the credential's value. The value itself is
+--   never stored anywhere in UCPE, and no two credentials may share a digest.
+-- - status ACTIVE or REVOKED; a REVOKED row carries its revocation time, an ACTIVE one none.
+-- - not_after_utc, optional, is when the credential stops working; it must follow its creation.
+-- The route reads this table on every call, with no cache, so a change applies to the next request
+-- with no restart: a rotation inserts the new ACTIVE row before the old one is revoked (both work
+-- in between), and a revocation refuses the next request presenting it. The owner writes it through
+-- the procedure in docs/automation/CREDENTIAL_ROTATION.md; the application only reads it. Rows are
+-- never deleted: a revoked row stays as the audit record of its credential.
+--
+-- NO FOREIGN KEY and no reference to any other table: no calibration, control or resolution reader
+-- reads these tables, and applying them takes no lock on any existing table.
+--
+-- NULL-SAFE CHECKS. A CHECK whose expression is NULL passes, so every comparison of a nullable
+-- column is guarded (IS NOT NULL, IS NOT DISTINCT FROM): a SUCCEEDED row without its run id or
+-- hashes is refused.
+--
+-- THE DATABASE/APPLICATION BOUNDARY. The CHECKs enforce every row-level invariant of what the
+-- route can write: a pending row carries no outcome and no success identity; a completed row's
+-- outcome is one the route can record, with its own HTTP status; its body is a JSON object of the
+-- matching schema version whose identity fields (or error code) equal the row's columns; and no
+-- body exceeds 16,384 bytes of text. The full radar_evidence.v1 and radar_evidence_error.v1
+-- schemas are the application's: every body is validated before it is written and again before it
+-- is replayed.
+--
+-- ACCESS, the 0009 pattern, for both tables: row-level security on, no policy, and no privilege for
+-- PUBLIC, anon, authenticated or service_role. Supabase's default privileges grant every new table
+-- to the API roles, so they are revoked explicitly. Only the owning role reads or writes them,
+-- through SUPABASE_DB_URL. Row-level security that is not forced does not restrict an owner. The
+-- REST repository never touches them.
+CREATE TABLE IF NOT EXISTS public.automation_radar_ledger (
+    credential_id       TEXT        NOT NULL,
+    client_request_id   UUID        NOT NULL,
+    request_fingerprint TEXT        NOT NULL,
+    evidence_origin     TEXT        NOT NULL DEFAULT 'AUTOMATED_RADAR',
+    state               TEXT        NOT NULL,
+    outcome_code        TEXT,
+    http_status         INTEGER,
+    response_body       JSONB,
+    run_id              TEXT,
+    analysis_hash       TEXT,
+    evidence_hash       TEXT,
+    release_id          TEXT        NOT NULL,
+    deadline_ms         INTEGER     NOT NULL,
+    received_at_utc     TIMESTAMPTZ NOT NULL,
+    completed_at_utc    TIMESTAMPTZ,
+    CONSTRAINT automation_radar_ledger_pkey PRIMARY KEY (credential_id, client_request_id),
+    CONSTRAINT arl_credential_id_format CHECK (credential_id ~ '^[a-z0-9][a-z0-9-]{2,31}$'),
+    CONSTRAINT arl_fingerprint_format CHECK (request_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT arl_origin_automated CHECK (evidence_origin = 'AUTOMATED_RADAR'),
+    CONSTRAINT arl_state_valid CHECK (state IN ('IN_PROGRESS', 'COMPLETED')),
+    CONSTRAINT arl_release_id_format CHECK (release_id ~ '^UCPE-[A-Z0-9-]{3,}$'),
+    CONSTRAINT arl_deadline_bounds CHECK (deadline_ms BETWEEN 5000 AND 60000),
+    CONSTRAINT arl_state_shape CHECK (
+        (state = 'IN_PROGRESS' AND outcome_code IS NULL AND http_status IS NULL
+            AND response_body IS NULL AND completed_at_utc IS NULL
+            AND run_id IS NULL AND analysis_hash IS NULL AND evidence_hash IS NULL)
+        OR (state = 'COMPLETED' AND outcome_code IS NOT NULL AND http_status IS NOT NULL
+            AND response_body IS NOT NULL AND completed_at_utc IS NOT NULL
+            AND completed_at_utc >= received_at_utc)),
+    CONSTRAINT arl_outcome_catalogue CHECK (
+        outcome_code IS NULL
+        OR (outcome_code = 'SUCCEEDED' AND http_status IS NOT DISTINCT FROM 200)
+        OR (outcome_code IN ('QUOTA_EXCEEDED', 'CONCURRENCY_LIMIT')
+            AND http_status IS NOT DISTINCT FROM 429)
+        OR (outcome_code = 'UNSUPPORTED_SYMBOL' AND http_status IS NOT DISTINCT FROM 422)
+        OR (outcome_code IN ('DEADLINE_EXCEEDED', 'UPSTREAM_UNAVAILABLE', 'ANALYSIS_FAILED',
+                'CONTRACT_VIOLATION')
+            AND http_status IS NOT DISTINCT FROM 503)),
+    CONSTRAINT arl_body_shape CHECK (
+        response_body IS NULL
+        OR (jsonb_typeof(response_body) = 'object'
+            AND ((outcome_code IS NOT DISTINCT FROM 'SUCCEEDED'
+                    AND (response_body ->> 'schema_version')
+                        IS NOT DISTINCT FROM 'radar_evidence.v1'
+                    AND (response_body ->> 'run_id') IS NOT DISTINCT FROM run_id
+                    AND (response_body ->> 'analysis_hash') IS NOT DISTINCT FROM analysis_hash
+                    AND (response_body ->> 'evidence_hash') IS NOT DISTINCT FROM evidence_hash)
+                OR (outcome_code IS NOT NULL AND outcome_code <> 'SUCCEEDED'
+                    AND (response_body ->> 'schema_version')
+                        IS NOT DISTINCT FROM 'radar_evidence_error.v1'
+                    AND (response_body -> 'error' ->> 'code')
+                        IS NOT DISTINCT FROM outcome_code)))),
+    CONSTRAINT arl_body_bound CHECK (
+        response_body IS NULL OR octet_length(response_body::text) <= 16384),
+    CONSTRAINT arl_success_shape CHECK (
+        outcome_code IS DISTINCT FROM 'SUCCEEDED'
+        OR (http_status IS NOT NULL AND http_status = 200
+            AND run_id IS NOT NULL AND run_id ~ '^run_[0-9a-f]{32}$'
+            AND analysis_hash IS NOT NULL AND analysis_hash ~ '^sha256:[0-9a-f]{64}$'
+            AND evidence_hash IS NOT NULL AND evidence_hash ~ '^sha256:[0-9a-f]{64}$')),
+    CONSTRAINT arl_refusal_shape CHECK (
+        outcome_code IS NULL OR outcome_code = 'SUCCEEDED'
+        OR (http_status IS NOT NULL AND http_status BETWEEN 400 AND 599
+            AND run_id IS NULL AND analysis_hash IS NULL AND evidence_hash IS NULL))
+);
+CREATE INDEX IF NOT EXISTS arl_credential_received
+    ON public.automation_radar_ledger (credential_id, received_at_utc);
+ALTER TABLE public.automation_radar_ledger ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.automation_radar_ledger FROM PUBLIC;
+REVOKE ALL ON TABLE public.automation_radar_ledger FROM anon, authenticated, service_role;
+-- No policy, no GRANT (0009 pattern): only the owning SUPABASE_DB_URL role reads/writes it.
+CREATE TABLE IF NOT EXISTS public.automation_credential (
+    credential_id   TEXT        NOT NULL,
+    secret_sha256   TEXT        NOT NULL,
+    status          TEXT        NOT NULL,
+    not_after_utc   TIMESTAMPTZ,
+    created_at_utc  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at_utc  TIMESTAMPTZ,
+    CONSTRAINT automation_credential_pkey PRIMARY KEY (credential_id),
+    CONSTRAINT ac_secret_sha256_unique UNIQUE (secret_sha256),
+    CONSTRAINT ac_credential_id_format CHECK (credential_id ~ '^[a-z0-9][a-z0-9-]{2,31}$'),
+    CONSTRAINT ac_secret_sha256_format CHECK (secret_sha256 ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ac_status_valid CHECK (status IN ('ACTIVE', 'REVOKED')),
+    CONSTRAINT ac_revocation_shape CHECK (
+        (status = 'ACTIVE' AND revoked_at_utc IS NULL)
+        OR (status = 'REVOKED' AND revoked_at_utc IS NOT NULL
+            AND revoked_at_utc >= created_at_utc)),
+    CONSTRAINT ac_expiry_after_creation CHECK (
+        not_after_utc IS NULL OR not_after_utc > created_at_utc)
+);
+ALTER TABLE public.automation_credential ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.automation_credential FROM PUBLIC;
+REVOKE ALL ON TABLE public.automation_credential FROM anon, authenticated, service_role;
+-- No policy, no GRANT (0009 pattern): only the owning SUPABASE_DB_URL role reads/writes it.

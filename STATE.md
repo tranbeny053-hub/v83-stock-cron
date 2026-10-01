@@ -1,6 +1,87 @@
 # STATE
 
-Updated: 2026-09-30 (W26 RELEASE CLOSED). **W26_RELEASE_CLOSED: the tc-v1 writer stamp is deployed and PROVEN stored in
+Updated: 2026-10-01 (F1 merge gate, round 2). **ROUTING OVERRIDE: CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01)
+until the owner explicitly resumes it.**
+- Every pending Codex retry was cancelled. Codex is not invoked.
+- The merge gate is now a CLAUDE_ADVERSARIAL_REVIEW (Opus 5 MAX; explicitly NOT an independent
+  review) plus deterministic evidence: verify on the exact head, green CI and real-PG rehearsal, and
+  bounded mutation tests. CLAUDE.md is unchanged for this temporary override.
+**Round 1 on the frozen head 3a37e49f (fresh detached clean worktree):**
+- VERIFY=PASS 4559, scanners 3/3; the CI and the 0013 real-PG rehearsal on the exact head are green.
+- Mutation tests: 45 mutants, 44 KILLED (one by the full suite), 1 survived: the body copy cap was
+  untested (T1).
+- Findings: **M1 MEDIUM.** The 0013 apply connections allowed psycopg's automatic named prepared
+  statements; the probes repeat 3 savepoint statements 42 times, a risk behind Supabase's
+  transaction pooler for the one-shot T4. Also L1 LOW (Content-Length parse) and L2 LOW (the
+  deadline instant was early by the body-read time, conservative).
+- One consolidated repair (this commit): CONNECT_OPTIONS with prepare_threshold=None, the
+  Content-Length bound, the deadline instant from the current wall clock, and the copy-cap test.
+  The report is .work/f1-claude-review/CLAUDE_ADVERSARIAL_REVIEW.md in the worktree.
+- Next: full verify, the PG rehearsal and CI on this head; freeze it; Claude adversarial review
+  round 2; merge only if no HIGH/MEDIUM remains.
+Previously (F1 merge gate): **F1-MERGE-GATE-A: PR #144 now carries the frozen ledger
+capacity contract (8b22efe) and the consolidated repair of independent Codex review 2 (8f7923c). The
+final independent Codex review (review 3) runs on the head that carries this record. The PR is merged
+only if review 3 leaves no unresolved HIGH/MEDIUM and every gate passes; main then becomes M, the merge
+commit whose parents are f19d7575 and that head (the owner's standing authorization of 2026-10-01).**
+- Codex review 2 at eb6976d: 4 MEDIUM, 5 LOW (.work/f1-review2/REVIEW.md in the worktree). All were
+  adjudicated against code, and each is repaired or is a disclosed design point
+  (docs/automation/F1_NODE_CLASSIFICATION.md, "Independent review 2"):
+  - R2-01: 42 in-transaction constraint probes, full index structure, existing-schema and
+    event-trigger fingerprints;
+  - R2-02: an explicit deadline contract with a 0.25 s commit reserve;
+  - R2-03: admission before any body byte, a bounded body read, tcp_user_timeout;
+  - R2-04: ledger invariants (pending identities NULL, the outcome catalogue with its statuses, the
+    body tied to its columns, a 16 KB text bound);
+  - R2-05/06/09: fixed. R2-07/08: by design.
+- The capacity contract (owner, 2026-10-01): at least 90 days kept; a 25,000-row cap (503, nothing
+  written); a per-credential 2 x quota rolling-day row ceiling (429, nothing written); an 8 KB stored
+  body; the quota bounded at 120/day. It fails closed, never deletes, and runs no recurring job. G6
+  stays provisional.
+- CI at 8f7923c:
+  - the 0013 real-PG rehearsal passed (run 36811117675): APPLIED with all 42 probes, the second
+    apply refused, 33/33 role probes refused, PROBE PASS 27, the rebuild APPLIED;
+  - the 0010 rehearsal passed;
+  - the full suite: success (run 36811117609).
+  VERIFY=PASS 4559, scanners 3/3; no pinned file.
+- After the merge: nothing is applied, deployed, enabled or issued. The next boundary is the 0013
+  production apply T4 (the owner), whose contract is prepared from M.
+- MODEL SUBSTITUTION: none in this step. Codex ran review 2 and runs review 3.
+Previously (F1 merge readiness): **F1-MERGE-READINESS-A: draft PR #144 (feat/f1-governed-automation),
+published without force and NOT merged. The code gaps the owner named are closed. The mandatory independent Codex
+security review is OPEN: the Codex quota is exhausted until about 19:35Z. No PASS is substituted.**
+- Credentials: a DB registry (public.automation_credential, migration 0013), read on every request with no cache.
+  Rotation has zero downtime and revocation applies at the next request, with no Space restart. Proven on real
+  PostgreSQL.
+- Migration 0013 now holds the registry and the ledger. Its CHECKs are now NULL-safe: a CHECK that evaluates to NULL
+  passes, so a SUCCEEDED row without its run id or hashes used to be accepted. Found while writing the probe.
+- The dedicated one-shot 0013 apply route is BUILT, in the 0012 pattern: scripts/apply_migration_0013.py and the
+  dispatch-only apply-migration-0013.yml, which rehearses on scratch PostgreSQL before its one secret step.
+- The PR rehearsal apply-migration-0013-rehearsal.yml (no secret) passed on real PostgreSQL at d9df2371, run
+  36747080987:
+  - APPLIED, then the second apply refused;
+  - all 33 API-role probes refused;
+  - PROBE PASS 49 checks (rotation, revocation, JCS replay through JSONB, the DB-clock deadline, quota, every
+    constraint hazard, fail-closed transport);
+  - the rebuild from 0001-0010 APPLIED.
+- Retention and idempotency are audited (at least 90 days; no automated purge; an owner capacity item). The
+  transport is reconfirmed fail-closed; the Space's connectivity is not assumed.
+- The bulk apply_migrations.py stays forbidden for 0013, and no workflow runs it (tested).
+- VERIFY=PASS 4496; scanners 3/3; no evaluator-pinned file touched.
+- Nothing is applied, deployed, enabled or issued. Production is unchanged: D 2096af6d.
+- MODEL SUBSTITUTION: Codex was unavailable (usage limit), so Claude implemented this change. It is recorded here.
+Previously (F1 LOCAL): **F1-GOVERNED-AUTOMATION-LOCAL-A is committed and verified
+LOCALLY on feat/f1-governed-automation (028ded8, 4f9ae93, 0bc11ff plus this record), VERIFY=PASS 4324. It is NOT
+pushed, NOT deployed and NOT enabled. No credential was issued, and migration 0013 is authored, NOT applied.**
+- The machine route POST /v1/automation/radar-evidence (radar_evidence.v1) ships OFF (503 AUTOMATION_DISABLED). Even
+  enabled, it fails closed (503 LEDGER_UNAVAILABLE) until 0013 is applied.
+- Cohort isolation is structural. AUTOMATED_RADAR is not a PredictionOrigin. analyze_request_isolated writes no
+  cohort row, and its analysis is proven byte-identical. The isolated ledger is the only store.
+- No evaluator-pinned file changed. The guarded delta on this branch is analysis_service.py and api/app.py.
+- Production is unchanged: D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A. The rollback target is 080f20a9.
+- The Codex quota was exhausted mid-milestone (it resets 2026-10-01 02:35 +07). The repair's test updates and its
+  delta review were done by Claude instead, and that substitution is recorded here.
+Previously (W26 RELEASE CLOSED): **W26_RELEASE_CLOSED: the tc-v1 writer stamp is deployed and PROVEN stored in
 production. SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.**
 - Production: D = 2096af6d1b3d54461b40c47fd96c265882e5af40 / UCPE-PROD-TC-V1-STAMP-20260930-A.
   - Deploy PASS, with settle PASS.
@@ -178,7 +259,100 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=WAITING FOR THE OWNER.
+LOOP_STATE=IN PROGRESS: F1 merge gate. Final independent Codex review (review 3) on this head, then merge if
+  clean, then 0013 T4 preparation from M. Stop at the 0013 production apply boundary.
+  - **F1-MERGE-GATE-A (2026-10-01; the owner's prompt: finish the review, repair, capacity contract,
+    merge under standing authorization, prepare the 0013 T4, return at the apply boundary).**
+    - Review 2 (Codex, eb6976d): run once fully. A first attempt was killed and left no report; its
+      log is kept in scratchpad p1/f1-delegations. Verdict NEEDS_DECISION: R2-01..04 MEDIUM, R2-05..09
+      LOW.
+    - The capacity contract 8b22efe (built in worktree lanes12/f1cap while review 2 ran, then
+      fast-forwarded).
+    - The consolidated repair 8f7923c: one commit for R2-01..09 (see the header).
+    - Then this record. Review 3: .work/task-f1-review3.md, report .work/f1-review3/REVIEW.md.
+    - The merge rule: exact-head merge commit, only with review 3 clean, VERIFY and the scanners
+      PASS, the 0013 real-PG rehearsal PASS, the human-route and non-cohort suites PASS, and main
+      still f19d7575.
+  - **F1-MERGE-READINESS-A (2026-09-30; the owner's prompt: G2 accepted; G6 provisional at 6 per 5 minutes and 120 per
+    day, not an activation or spend approval; do not merge, release or enable).**
+    - PR: verified 446260c16cd21fb972082d6e94b702f55803e6d7 = main f19d7575 + 4 commits.
+      - Pushed without force → draft PR #144 (base main, not merged). CI on 446260c: success.
+      - d9df2371: the merge-readiness commit, pushed as a fast-forward.
+    - (a) Rotation and revocation: DB registry public.automation_credential (0013).
+      - It is read per request with no cache; bounded (2 s timeouts; at most 2 reads in flight, refused not queued);
+        fail closed (503 LEDGER_UNAVAILABLE, no row).
+      - The env credential path is removed. Owner procedure: docs/automation/CREDENTIAL_ROTATION.md (issue, rotate
+        and revoke are owner T4 SQL).
+    - (b) The retention and idempotency audit: docs/automation/RETENTION_AND_IDEMPOTENCY.md.
+      - At least 90 days; no automated purge (a test scans for one); idempotency per credential for the row's
+        lifetime.
+      - Capacity: about 150 MB/year at the G6 maximum, so a future purge route is an owner item (not a merge
+        blocker).
+    - (c) The 0013 apply route: scripts/apply_migration_0013.py.
+      - attest / rehearse / apply; the pinned digest; advisory lock 5000013; pre-checks make a second apply refuse.
+      - Post-checks cover both tables: columns, constraints with literal and integer sets, indexes, RLS, privileges,
+        no row, no FK or trigger, and every existing table's security unchanged.
+      - .github/workflows/apply-migration-0013.yml is dispatch-only; the rehearsal runs before the one secret step.
+      - .github/workflows/apply-migration-0013-rehearsal.yml runs on PRs with no secret.
+    - (d) Tests: hazards, reapply, refusals, RLS and privileges.
+      - Unit: tests/scripts/test_apply_migration_0013.py (97), tests/workflows/test_apply_migration_0013_workflow.py,
+        tests/migrations/test_automation_radar_ledger_migration.py.
+      - Real PG: scripts/migration_0013_rehearsal/probe_app_sql.py and 20_assert_api_roles_refused.sql.
+    - (e) Transport fail-closed: tests/automation/test_transport_fail_closed.py.
+      - Nothing connects at startup; refused callers never reach the database; prepare_threshold=None (the
+        transaction pooler); 503 when the database is missing or unreachable.
+      - The Space's connectivity is NOT assumed. The human persistence reaches the database (W26 PASS_PROVEN); the
+        route's own connections stay unproven until the canary.
+    - Release, apply, canary and handoff prep: docs/automation/F1_RELEASE_PLAN.md (owner-gated, nothing executed).
+      UOR_HANDOFF.md pins the new docs.
+    - Real-PG proof: PR rehearsal run 36747080987 at d9df2371: success (see the header).
+    - Found and fixed: the 0013 ledger CHECKs passed on NULL (arl_success_shape accepted a SUCCEEDED row without its
+      run id or hashes). They are now guarded by IS NOT NULL and proven on real PG.
+    - OPEN: the mandatory independent Codex security and adversarial review. Task:
+      scratchpad/lanes12/f1/.work/task-f1-review2.md. BLOCKED by the Codex usage limit until about 19:35Z.
+      **Never substituted.**
+  - **F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30; the owner's pasted prompt; local T0/T1/T2 only).**
+    - Source: UOR's proposal files 04 and 05 in UCPE-Radar/.work/HANDOFF_FINAL_PHASE, read only. The owner-only
+      grading key and the trap prompt were NOT opened. UCPE canon wins.
+    - Commits on feat/f1-governed-automation (from main f19d7575; local):
+      - 028ded8: the implementation;
+      - 4f9ae93: the test suites, examples and docs;
+      - 0bc11ff: the review repair;
+      - this STATE record.
+    - Design: see docs/automation/RADAR_EVIDENCE_V1.md.
+      - The route is POST /v1/automation/radar-evidence, off by default.
+      - Route-only machine auth: the header X-UCPE-Automation-Credential, SHA-256 digests only, compared in constant
+        time. Human session cookies are refused (403), and machine credentials get 401 on all 14 human
+        method-paths.
+      - The origin is server-stamped AUTOMATED_RADAR, in the isolated automation domain.
+      - The contract is strict radar_evidence.v1 plus radar_evidence_error.v1 (schema sha256 pins), with RFC 8785
+        JCS for the evidence_hash and the wire bytes.
+      - Deadlines run to the ledger commit. Quota is 6 per 5 minutes and 120 per day by default (owner G6). One
+        analysis slot.
+      - Strict idempotency and audit live in the isolated ledger (migration 0013).
+      - The kill switch is UCPE_AUTOMATION_ENABLED.
+      - The handoff is docs/automation/UOR_HANDOFF.md: every file with its digest, plus two synthetic examples and
+        one error example.
+    - analysis_service: analyze_request keeps its exact signature. Its body moved into _analyze, and the new
+      analyze_request_isolated takes no origin, run store, pair or cadence. It never builds a prediction row or
+      parks persistence.
+    - Tests: 325 automation and migration tests (Codex D1 plus Claude). They cover isolation, security, refusals,
+      idempotency, quota, deadlines, the hashes, JCS vectors, human-route non-regression and the examples.
+    - Codex delegations:
+      - D1, the tests: DONE; one spec clarification (the full build-info payload).
+      - D2, the adversarial review plus the cohort-reader audit: 10 findings (F1 HIGH; F2-F6 MEDIUM; F7-F10 LOW),
+        all repaired in 0bc11ff. The audit verdict is that sharing AUTOMATED_RADAR would leak through generic
+        readers; it is kept as docs/automation/COHORT_READER_AUDIT.md.
+      - D3, the test updates: FAILED on the Codex quota and changed nothing. Claude did the work.
+      - The delta review is NOT_RUN (quota), replaced by Claude's diff review plus the regression tests.
+    - Residual, honest:
+      - the Postgres ledger path is fake-connection tested only: NOT_RUN on real PostgreSQL;
+      - SUPABASE_DB_URL on the Space is unverified;
+      - the deadline compares the app clock with the database clock;
+      - there is one analysis slot per app process.
+    - Pin boundary: NONE required. Evaluator-pinned files touched: 0.
+    - NOT_RUN / not done: push, PR, deploy, enablement, credential issuance, the 0013 apply route and its apply, any
+      UOR mutation.
   - **W26 RELEASE CLOSED (2026-09-30): the CONTROLLED_SMOKE is PASS_HTTP and the DB proof is PASS_PROVEN. Both are
     CONSUMED and never rerun.**
     - Run directory: .work/w26_smoke/run_20260930T124617Z. The marker .work/w26_smoke/EXECUTED names it, so the
@@ -1660,7 +1834,13 @@ LOOP_STATE=WAITING FOR THE OWNER.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
+CURRENT_MILESTONE=F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
+  preparation. Before it: F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
+  closed, and the real-PG rehearsal passed. The Codex review gate is OPEN (quota). Nothing is applied, deployed,
+  enabled or issued.
+  Before it: F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and verified LOCALLY
+  (feat/f1-governed-automation). Not pushed, deployed or enabled; 0013 is not applied.
+  Before it: W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION.
   - the W26 CONTROLLED_SMOKE ran once: PASS_HTTP. The one-row DB proof: PASS_PROVEN (run_af48fd1e…);
   - the H2 hold is unchanged; there is no directional, skill or model PASS;
   - production is D 2096af6d / UCPE-PROD-TC-V1-STAMP-20260930-A;
@@ -1729,7 +1909,15 @@ CURRENT_MILESTONE=W26 RELEASE CLOSED (2026-09-30): W26_RELEASE_CLOSED; SAFE_MILE
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
+CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged), from main f19d7575:
+  - 028ded8, 4f9ae93, 0bc11ff and 446260c (the earlier record);
+  - d9df2371 (merge readiness);
+  - bf50005 (the readiness record), eb6976d (pre-review hardening);
+  - 8b22efe (the capacity contract), 8f7923c (the review-2 repair);
+  - this STATE record.
+  Its worktree is lanes12/f1 in the session scratchpad.
+  Before it: feat/f1-governed-automation (then LOCAL): 028ded8, 4f9ae93, 0bc11ff and its STATE record.
+  Before it: chore/state-tc-v1-release (PUBLISHED; merged under the standing authorization), from main 6becb100: the
   release STATE records a80c54e5 and c61adbb, plus this W26-closure record. Its worktree is lanes11/state in the session
   scratchpad.
   - Merged by Claude under the standing authorization: prep/release-identity-tc-v1-stamp (#141 → D 2096af6d) and
@@ -1772,7 +1960,8 @@ CURRENT_BRANCH=chore/state-tc-v1-release (PUBLISHED; merged under the standing a
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
+LAST_GREEN_SHA=f19d7575 (main, PR #143: the W26 closure record). CI success (run 36722645234).
+  Before it: 6becb100 (main, PR #142: the re-pin). CI success (run 36715048291).
   Before it: 2096af6d (D, main, PR #141: the identity). CI success (run 36714014523); tree 68917d99 as recorded.
   Before it: 86c9496f (main, PR #140: the STATE repair). CI success (run 36703760641); its tree equals the
   recomputed merge.
@@ -1915,7 +2104,15 @@ LAST_GREEN_SHA=6becb100 (main, PR #142: the re-pin). CI success (run 36715048291
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
+LAST_VERIFY=PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, F1 at
+  8f7923c, the review-2 repair).
+  Before it: PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1
+  merge readiness at d9df2371; the scanners are unmodified).
+  - PR CI at d9df2371: the 0013 real-PG rehearsal succeeded (run 36747080987); the 0010 rehearsal succeeded.
+  - This record (with the row-width guard and doc fixes): PASS 4498.
+  Before it: PASS ruff ok | 4324 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1 at
+  0bc11ff; the three scanners are unmodified).
+  Before it: PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local).
   - On P 24c66816, in a clean worktree: PASS 3999. The release record: PASS 3999. This W26-closure record: PASS 3999.
   - On the identity commit e7309c31, in a clean worktree; this record: PASS 3999.
   - Run on W26 be4b9939 (RC1 + W26 + the regenerated pin), in a clean worktree.
@@ -2024,8 +2221,28 @@ LAST_VERIFY=PASS ruff ok | 3999 passed, 23 warnings | schemas+smoke ok | scanner
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and implementation, and that Codex
-  is kept for bounded mechanical or adversarial verification.
+CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed.
+  - Codex is not invoked; every pending retry was cancelled.
+  - The merge gate is a CLAUDE_ADVERSARIAL_REVIEW (not independent) plus deterministic mutation evidence.
+  - Review 3: never ran. Its first attempt failed on the usage limit (03:42Z, no report), and the
+    retry was cancelled by the owner's ruling.
+  Before it: F1 review3, the FINAL independent security and adversarial review on this head (a merge gate).
+  - Task: .work/task-f1-review3.md in the worktree.
+  - Review 2: DONE (NEEDS_DECISION; repaired in 8f7923c).
+  Before it: F1 review2, the MANDATORY independent post-repair security and adversarial review, a merge gate.
+  - Task: scratchpad/lanes12/f1/.work/task-f1-review2.md; the report goes to .work/f1-review2/REVIEW.md.
+  - BLOCKED on the Codex usage limit until about 2026-09-30 19:35Z. The gate stays OPEN, and no PASS is substituted.
+  - MODEL SUBSTITUTION (2026-09-30): Codex was unavailable, so Claude implemented F1 merge readiness: the registry,
+    the apply route, the workflows, the tests and the docs.
+  The owner directed that Claude owns critical reasoning and implementation, and that Codex is kept for bounded
+  mechanical or adversarial verification.
+  - F1 (2026-09-30):
+    - D1 tests: DONE.
+    - D2 review and audit: DONE (10 findings, all repaired).
+    - D3 test updates: FAILED on the Codex usage limit, with no change made.
+    - The delta review: NOT_RUN (quota).
+    - MODEL SUBSTITUTION: Claude did D3's work and the delta review. The quota resets 2026-10-01 02:35 +07. An
+      optional Codex delta review of 0bc11ff may run after that; it is not required.
   - Identity prep (2026-09-30): the bounded read-only review of e7309c31 plus this record: DONE (base a20a46c9):
     (1)-(5) PROVEN; findings NONE.
   - Post-W26 (2026-09-30): the bounded read-only review of be4b9939 PROVED (1)-(6), NONE. The release preparation was
@@ -2099,8 +2316,43 @@ CODEX_PENDING=NONE. The owner directed that Claude owns critical reasoning and i
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION. The next work
-  needs a new owner instruction.
+OWNER_BOUNDARY=The owner's standing authorization (2026-10-01) carries the deterministic T3/T4 continuation once
+  each step's exact SHA, scope and preconditions are frozen:
+  - the merge of PR #144 (exact head);
+  - the 0013 one-shot apply (expected_sha = M);
+  - the release identity, the deploy and the re-pin.
+  STOP on any mismatch or failure, any secret entry, spend or product choice, protected evidence or F3, or
+  any genuinely new risk.
+  Never authorized: enabling automation, issuing credentials, mutating UOR or Cron, or allowing UOR calls
+  before the governed activation chain proves them. The credential issuance (owner secret entry) is the
+  standing boundary after the re-pin.
+  Before it: The 0013 PRODUCTION APPLY (T4) after the merge: the owner authorizes the one dispatch, with
+  expected_sha = M.
+  - Authorized 2026-10-01 (standing): mark PR #144 ready and merge it with an exact-head merge commit, only if
+    every gate passes.
+  - Not authorized: the 0013 apply, a deploy, the enable, credentials, UOR mutation or Cron, F3/§5A, any order
+    capability.
+  Before it (2026-09-30): Do not merge, release or enable F1 (the owner).
+  - Authorized and done: publishing PR #144 (draft) and using its CI.
+  - Next owner boundary, after the Codex gate passes: the T3 merge of PR #144.
+  - Then, in the order of docs/automation/F1_RELEASE_PLAN.md:
+    - the 0013 apply (T4);
+    - a release (T4) and the re-pin (T3);
+    - credential issuance (T4);
+    - the enable (T3);
+    - the canary.
+  - G2 is ACCEPTED as the local contract candidate. G6 is provisional (6/5min, 120/day).
+  Before it (F1 local): NO ACTION IS AUTHORIZED. F1 is local and complete for its safe scope. Owner decisions (none
+  taken):
+  - G2: accept or modify the interface;
+  - T3: publish feat/f1-governed-automation;
+  - G6: the quota level;
+  - T3: confirm SUPABASE_DB_URL on the Space;
+  - build the 0013 apply route, then its T4 apply;
+  - T4: the release, then the T3 re-pin;
+  - credential issuance, the enable T3 and a controlled canary.
+  Before it: W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION. The next work needs a new owner
+  instruction.
   Consumed on 2026-09-30:
   - the one-row DB read (pack §6): run once by the owner; PASS → PASS_PROVEN;
   - the publication and merge of this STATE record, under the standing authorization;
@@ -2440,7 +2692,30 @@ OWNER_BOUNDARY=NO ACTION IS AUTHORIZED. W26_RELEASE_CLOSED; SAFE_MILESTONE_REACH
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).
+NEXT_ACTION=Verify this head, run the 0013 real-PG rehearsal and CI, then freeze it. Then Claude adversarial review
+  round 2.
+  - If clean: update the PR body, mark it ready, merge with --match-head-commit, and record M.
+  - Then rebuild and reverify the 0013 package against M, precheck, and apply under the standing
+    authorization.
+  - Then the release identity, the deploy and the re-pin.
+  - Stop at the credential issuance (owner).
+  Before it: Run review 3 on this head: `./delegate.sh .work/task-f1-review3.md workspace-write xhigh`.
+  - If clean, and every gate passes:
+    - update the PR body, mark it ready, and merge with --match-head-commit;
+    - record M;
+    - rebuild and reverify the 0013 apply package against M;
+    - prepare the T4 contract (.work/f1_release/ in the main checkout);
+    - stop at the apply boundary.
+  - If it finds a HIGH or MEDIUM: one consolidated repair, verify, CI, then the review again.
+  Before it: After the Codex quota resets (about 19:35Z), run the mandatory review in the worktree:
+  `./delegate.sh .work/task-f1-review2.md workspace-write xhigh`
+  - If it finds a HIGH or MEDIUM: one consolidated repair, then ./verify.sh, a push without force, and CI.
+  - If clean: record it, and report F1 MERGE_READY to the owner, whose T3 merge comes next.
+  - If Codex stays unavailable: the gate stays OPEN, and the owner is told so.
+  Before it (F1 local): WAIT for the owner's F1 decisions (OWNER_BOUNDARY): G2 on docs/automation/RADAR_EVIDENCE_V1.md and
+  F1_NODE_CLASSIFICATION.md, and the T3 to publish feat/f1-governed-automation. Nothing F1 enables anything in
+  production.
+  Before it: WAIT for the owner (W26_RELEASE_CLOSED; SAFE_MILESTONE_REACHED_FOR_AD_HOC_INTEGRATION).
   - Nothing is pending in the W26 chain. The smoke and its DB read are consumed and never rerun.
   - DONE before it: the one-row DB read → PASS_PROVEN, adjudicated with
     `adjudicate_w26_stamp_smoke.py .work/w26_smoke/run_20260930T124617Z --db-read .work/w26_release/W26_DB_READ.csv`.

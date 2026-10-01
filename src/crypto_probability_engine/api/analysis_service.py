@@ -147,7 +147,81 @@ def analyze_request(
     pair_context: OOSPairContext | None = None,
     arm: OOSArm | str | None = None,
 ) -> dict:
-    prediction_origin = validate_prediction_origin(prediction_origin)
+    return _analyze(
+        request,
+        settings=settings,
+        run_store=run_store,
+        persistence_status=persistence_status,
+        prediction_origin=validate_prediction_origin(prediction_origin),
+        deterministic_identity=deterministic_identity,
+        derivatives_methodology_version=derivatives_methodology_version,
+        methodology_version=methodology_version,
+        pair_context=pair_context,
+        arm=arm,
+        record_prediction=True,
+    )
+
+
+def analyze_request_isolated(
+    request: AnalysisRequest,
+    *,
+    settings: Settings,
+    persistence_status: str = "STATELESS",
+    derivatives_methodology_version: str = METHODOLOGY_VERSION_V0,
+    methodology_version: str = METHODOLOGY_VERSION,
+) -> dict:
+    """The isolated analysis of the automation domain (F1).
+
+    The same computation and the same response as ``analyze_request``, but with no prediction
+    origin at all: no shared-cohort prediction row, no feature or derivatives snapshot, nothing
+    handed to persistence and no run-store entry. It takes no origin, run store, OOS pair or
+    cadence identity by construction, so an automated run can never be labelled with a cohort
+    origin (USER_REQUESTED, CONTROLLED_SMOKE or SCHEDULED_SHADOW_EVIDENCE).
+    """
+
+    return _analyze(
+        request,
+        settings=settings,
+        run_store=None,
+        persistence_status=persistence_status,
+        prediction_origin=None,
+        deterministic_identity=False,
+        derivatives_methodology_version=derivatives_methodology_version,
+        methodology_version=methodology_version,
+        pair_context=None,
+        arm=None,
+        record_prediction=False,
+    )
+
+
+def _analyze(
+    request: AnalysisRequest,
+    *,
+    settings: Settings,
+    run_store: InMemoryRunStore | None,
+    persistence_status: str,
+    prediction_origin: str | None,
+    deterministic_identity: bool,
+    derivatives_methodology_version: str,
+    methodology_version: str,
+    pair_context: OOSPairContext | None,
+    arm: OOSArm | str | None,
+    record_prediction: bool,
+) -> dict:
+    if record_prediction:
+        if prediction_origin is None or run_store is None:
+            raise ValueError("A recorded analysis needs a prediction origin and a run store.")
+    elif (
+        prediction_origin is not None
+        or run_store is not None
+        or pair_context is not None
+        or arm is not None
+        or deterministic_identity
+    ):
+        raise ValueError(
+            "An isolated analysis takes no prediction origin, run store, OOS pair or "
+            "cadence identity."
+        )
     if not isinstance(methodology_version, str) or not methodology_version:
         raise api_error(
             400,
@@ -360,19 +434,23 @@ def analyze_request(
         "analysis_hash": "",
     }
     response["analysis_hash"] = stable_hash(response)
-    prediction_row = _prediction_row(
-        run_id=run_id,
-        request_symbol=request.symbol,
-        normalized_symbol=symbol.display,
-        timeframe=request.timeframe,
-        snapshot=snapshot,
-        quant_result=quant_result,
-        data_quality=data_quality,
-        provider_state=provider_state,
-        prediction_origin=prediction_origin,
-        arm=arm_context.arm if arm_context is not None else None,
-        target=arm_context.target if arm_context is not None else None,
-        methodology_version=methodology_version,
+    prediction_row = (
+        _prediction_row(
+            run_id=run_id,
+            request_symbol=request.symbol,
+            normalized_symbol=symbol.display,
+            timeframe=request.timeframe,
+            snapshot=snapshot,
+            quant_result=quant_result,
+            data_quality=data_quality,
+            provider_state=provider_state,
+            prediction_origin=prediction_origin,
+            arm=arm_context.arm if arm_context is not None else None,
+            target=arm_context.target if arm_context is not None else None,
+            methodology_version=methodology_version,
+        )
+        if record_prediction
+        else None
     )
     response["quant_v2"] = build_quant_v2_shadow(
         quant_result=quant_result,
@@ -390,7 +468,9 @@ def analyze_request(
         rate_limit_per_min=settings.provider_rate_limit_per_min,
         methodology_version=derivatives_methodology_version,
     )
-    feature_snapshot_row = build_feature_snapshot(prediction_row, response["quant_v2"])
+    feature_snapshot_row = (
+        build_feature_snapshot(prediction_row, response["quant_v2"]) if record_prediction else None
+    )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     derivatives_block = validated["derivatives_intelligence"]
     derivatives_snapshot_required = derivatives_block["block_status"] in {
@@ -399,9 +479,13 @@ def analyze_request(
         "UNAVAILABLE",
     }
     try:
-        derivatives_snapshot_row = build_derivatives_snapshot(
-            prediction_row,
-            derivatives_block,
+        derivatives_snapshot_row = (
+            build_derivatives_snapshot(
+                prediction_row,
+                derivatives_block,
+            )
+            if record_prediction
+            else None
         )
     except Exception:
         derivatives_snapshot_row = None
@@ -428,7 +512,8 @@ def analyze_request(
             derivatives_snapshot_required=derivatives_snapshot_required,
         )
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
-    run_store.put(run_id, validated, prediction_origin=prediction_origin)
+    if run_store is not None:
+        run_store.put(run_id, validated, prediction_origin=prediction_origin)
     return validated
 
 
