@@ -1,6 +1,47 @@
 # STATE
 
-Updated: 2026-10-01 (B3 and LOW-1 merged; B3 reproducibility PASS). **PHASE 2 FOUNDATION: B3 (reproducible build)
+Updated: 2026-10-01 (OBS-1 and DBI-1 merged; 0014 rehearsal PASS; 0014 UNAPPLIED). **OBS-1 (plan §10 structured
+events) and DBI-1 (§8.2 core-evidence invariants) are MERGED. Nothing deployed: production stays D2 5a3ef022 /
+UCPE-PROD-F1-AUTOMATION-20261001-A (the guard HEALTHY x3 at main 05a5d1ad). Migration 0014 is merged and
+UNAPPLIED. The resolver's candle-price check is LIVE from main. F1 stays CLOSED and delegated to the UOR thread.
+CODEX_PAUSED_BY_OWNER stands.**
+- The STATE closure #155 merged at 17:55:08Z as b0bf17ca with --match-head-commit (head 1ab8b9d3; STATE.md only;
+  CI and the reproducibility proof green). The owner merged it in Manual mode after the auto-mode classifier had
+  refused it.
+- **OBS-1** (plan §10; the logging half of B5): PR #156 merged at 18:01:13Z as c44da688 with --match-head-commit
+  (head b9ca157).
+  - Bounded, sanitized structured events: one per request (the F1 route passes through untouched), per analysis,
+    and per persistence result.
+  - The unbounded telemetry list is replaced; persistence failures are no longer silent.
+  - VERIFY=PASS 4631; mutation 20/20.
+  - It is guarded: CURRENT_DELTA_PATHS adds api/app.py and api/analysis_service.py until a release carries them.
+- **DBI-1** (§8.2): PR #157 merged at 18:01:30Z as 05a5d1ad with --match-head-commit (head 4a1c557).
+  - Migration 0014, AUTHORED and **UNAPPLIED**: NOT VALID checks (the probability simplex at the pipeline's own
+    1e-6; positive, finite prices; horizon and chronology) and append-only triggers on predictions,
+    prediction_outcomes and prediction_feature_snapshots. It is registered additive (applied_run null).
+  - **The real-PG rehearsal PASSED on the exact head** (run 36903166874): WRITER_PROBE=PASS (18 production-writer
+    rows, a feature snapshot and an outcome accepted; refused rows not persisted); MIGRATION_0014_REHEARSAL=PASS.
+    The tested merge tree 36407ec differs from the head only by STATE.md.
+  - **The resolver (LIVE at merge; it runs from main):**
+    - an in-window candle with a non-finite price or a non-positive close fails as error_candle_invalid (the
+      existing rq-v1 policy);
+    - valid data resolves unchanged;
+    - RESOLVER_VERSION is unchanged.
+  - VERIFY=PASS 4650; mutation 7/7 + 15/15.
+- **Independence (OD7):** 0 shared files. The OBS-1 + DBI-1 combination gave VERIFY=PASS 4671. Main 05a5d1ad
+  differs from that verified combination only by STATE.md.
+- **Push CI success:** c44da688 (run 36903708584) and 05a5d1ad (run 36903744546). The reproducibility proofs on
+  main PASS: runs 36903708859 and 36903744369.
+- **The guard,** dispatched once on 05a5d1ad (run 36903795271): GUARD_VERIFY=PASS 8/8.
+  - HEALTHY x3; live = pinned = D2 5a3ef022.
+  - The delta is [Dockerfile, api/analysis_service.py, api/app.py].
+- **Next (owner standing authorization, conditional):**
+  - the dedicated one-shot apply route for 0014, its gates, then the single production apply;
+  - then the OBS-1 release package with the B4 tooling and the B3 gate.
+- **Unchanged:** OD-DB-1 = D; writer transport UNKNOWN; B5's DEGRADED half deferred; the H2 hold LIVE; F3
+  KEEP_UNSPENT.
+- Evidence (sealed): .work/roadmap/post_merge_obs1_dbi1/ and lanes17.
+Previously (B3 and LOW-1 merged; B3 reproducibility PASS). **PHASE 2 FOUNDATION: B3 (reproducible build)
 and LOW-1 (the release-probe allowlist) are MERGED. These merges deployed nothing: production stays D2 5a3ef022 /
 UCPE-PROD-F1-AUTOMATION-20261001-A (the guard HEALTHY x3 at main 52965cc2, delta [Dockerfile]). F1 stays CLOSED and
 delegated to the UOR thread. CODEX_PAUSED_BY_OWNER stands.**
@@ -454,8 +495,15 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phase 2. B2, B4, B3 and LOW-1 are merged (no deploy); the next lane starts
-  from fresh main 52965cc2. F1 is CLOSED and delegated to the UOR thread.
+LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phases 2-3. B2, B4, B3, LOW-1, OBS-1 and DBI-1 are merged (no deploy).
+  Next: the 0014 one-shot apply route, then its single production apply (owner standing authorization,
+  conditional), then the OBS-1 release package. F1 is CLOSED and delegated to the UOR thread.
+  - **PHASE2-OBS1-DBI1-A (2026-10-01; owner T3 authorization in Manual mode; Codex paused; Claude implemented and
+    reviewed; deterministic gates).**
+    - OBS-1: #156 → c44da688. DBI-1: #157 → 05a5d1ad (0014 rehearsal PASS; 0014 UNAPPLIED).
+    - The resolver's candle check is live; production is unchanged.
+  Before it: IN PROGRESS: the UCPE roadmap, Phase 2. B2, B4, B3 and LOW-1 are merged (no deploy); the next lane
+  starts from fresh main 52965cc2. F1 is CLOSED and delegated to the UOR thread.
   - **PHASE2-B3-LOW1-A (2026-10-01; owner T3 authorization; Codex paused; Claude implemented and reviewed;
     deterministic gates).**
     - B3: #153 → d9e42a60 (REPRODUCIBLE=PASS on the exact head and on main). LOW-1: #154 → 52965cc2.
@@ -2068,7 +2116,10 @@ LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phase 2. B2, B4, B3 and LOW-1 are merg
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 2 IN PROGRESS (2026-10-01): B2, B4, B3 (reproducible build, REPRODUCIBLE=PASS) and LOW-1
+CURRENT_MILESTONE=PHASES 2-3 IN PROGRESS (2026-10-01): OBS-1 (structured events) and DBI-1 (migration 0014,
+  UNAPPLIED; its rehearsal PASS) are MERGED on top of B2, B4, B3 and LOW-1. No deploy. F1 is CLOSED and delegated
+  to the UOR thread.
+  Before it: PHASE 2 IN PROGRESS (2026-10-01): B2, B4, B3 (reproducible build, REPRODUCIBLE=PASS) and LOW-1
   are MERGED; B5 is deferred by the owner; no deploy. F1 is CLOSED and delegated to the UOR thread.
   Before it: PHASE 2 IN PROGRESS (2026-10-01): B2 (workflow pinning) and B4 (release and H2-safe rollback
   tooling) are MERGED; B3 is next. F1 is CLOSED and delegated to the UOR thread.
@@ -2154,7 +2205,11 @@ CURRENT_MILESTONE=PHASE 2 IN PROGRESS (2026-10-01): B2, B4, B3 (reproducible bui
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-b3-low1-closure (this record), from main 52965cc2. Worktree lanes16/state.
+CURRENT_BRANCH=chore/state-obs1-dbi1-closure (this record), from main 05a5d1ad. Worktree lanes17/state.
+  - Merged: feat/obs1-structured-events (#156 → c44da688) and feat/dbi1-core-evidence-invariants (#157 →
+    05a5d1ad); chore/state-b3-low1-closure (#155 → b0bf17ca).
+  Before it: chore/state-b3-low1-closure (PR #155, merged as b0bf17ca), from main 52965cc2. Worktree
+  lanes16/state.
   - Merged: feat/b3-reproducible-build (#153 → d9e42a60) and fix/release-probe-allowlist (#154 → 52965cc2).
   Before it: chore/state-b2-b4-merged (PR #152, merged as a490ff2b), from main fdfefd2c. Worktree lanes15/state.
   - Merged: feat/b2-workflow-pinning (#150) and feat/b4-release-tooling (#151).
@@ -2216,7 +2271,11 @@ CURRENT_BRANCH=chore/state-b3-low1-closure (this record), from main 52965cc2. Wo
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=52965cc2 (main, PR #154: LOW-1; over d9e42a60, PR #153: B3). push CI success (run 36894534715). The
+LAST_GREEN_SHA=05a5d1ad (main, PR #157: DBI-1; over c44da688, PR #156: OBS-1; over b0bf17ca, PR #155). push CI
+  success (run 36903744546). The reproducibility proof on main: PASS (run 36903744369). The guard: HEALTHY on it
+  (run 36903795271), delta [Dockerfile, api/analysis_service.py, api/app.py].
+  Before it: b0bf17ca (main, PR #155: the STATE closure; STATE.md only).
+  Before it: 52965cc2 (main, PR #154: LOW-1; over d9e42a60, PR #153: B3). push CI success (run 36894534715). The
   reproducibility proof on main: PASS (run 36894534728). The guard: HEALTHY on it (run 36894604710), delta
   [Dockerfile].
   Before it: a490ff2b (main, PR #152: the corrected STATE record). push CI success (run 36868480424).
@@ -2373,7 +2432,10 @@ LAST_GREEN_SHA=52965cc2 (main, PR #154: LOW-1; over d9e42a60, PR #153: B3). push
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4610 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, B3 + LOW-1
+LAST_VERIFY=PASS ruff ok | 4671 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, OBS-1 +
+  DBI-1 combined; main 05a5d1ad differs from it only by STATE.md). OBS-1 alone: PASS 4631 at b9ca157. DBI-1 alone:
+  PASS 4650 at 4a1c557. This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4610 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, B3 + LOW-1
   combined, on tree 1ad97975, which equals main 52965cc2's tree). B3 alone: PASS 4602 at 2af26f0c. LOW-1 alone:
   PASS 4597 at 9afa2dbd. This record is verified before its push (the PR body).
   Before it: PASS ruff ok | 4586 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (a fresh detached
@@ -2599,6 +2661,14 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = D and the H2 rulings apply.
+  1. Migration 0014's one-shot production apply and the OBS-1 release (T4s) are under the owner's standing
+     authorization, conditional on: the exact package frozen on main; all deterministic and real-PG gates passing;
+     H2 preserved. Any SHA mismatch or gate failure is a STOP, with no blind rerun.
+  2. M1 (owner-run): the writer transport from the signed-in /v1/system_status.
+  3. H2: the items stay open, and the hold stays live. B5's DEGRADED half stays deferred.
+  Never authorized to Claude: UOR work, credential rotation or revocation, F3/§5A or protected access, H2
+  execution, paid resources, any order capability, the OD-DB-1 data-row precheck.
+  Before it: Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = D and the H2 rulings apply.
   1. M1 (owner-run): the writer transport from the signed-in /v1/system_status.
      See .work/roadmap/writer_transport/MEASUREMENT_CONTRACT.md.
   2. Optional: the catalog-only DB precheck, .work/roadmap/db_precheck/01_catalog.sql, run in the Supabase SQL
@@ -3019,7 +3089,13 @@ OWNER_BOUNDARY=Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: the next dependency-safe lanes from fresh main 52965cc2 (governing plan Phases 2-3; OD7 allows
+NEXT_ACTION=Claude:
+  1. The dedicated one-shot apply route for migration 0014, built from the merged bytes: the digest pin; a
+     rehearsal with refusal of the second apply; security, RLS, trigger and schema fingerprints; refusal
+     evidence; no bulk route.
+  2. Then the single production apply (owner standing authorization, conditional).
+  3. Then the OBS-1 release package (B4 tooling, the B3 gate).
+  Before it: Claude: the next dependency-safe lanes from fresh main 52965cc2 (governing plan Phases 2-3; OD7 allows
   at most two proven-independent lanes). Each stops at its T3.
   - Observability (plan §10): bounded, sanitized structured events and the persistence receipt. The files are
     unpinned, and the guarded ones ride the deploy train.
