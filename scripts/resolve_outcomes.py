@@ -529,6 +529,11 @@ def _evaluate_outcome_row(
         open_time = _coerce_utc(candle.open_time_utc)
         if close - open_time != interval:
             raise ValueError("resolver candle does not span exactly one bar")
+        # The outcome evidence needs real prices: migration 0014's CHECK on outcome_reference_price
+        # would refuse anything else, so refuse it here, with its own reason.
+        prices = (candle.open, candle.high, candle.low, candle.close)
+        if not all(isfinite(price) for price in prices) or candle.close <= 0.0:
+            raise ValueError("resolver candle price is not finite and positive")
         if close in by_close and by_close[close] != candle:
             raise ValueError("conflicting duplicate candles in resolver window")
         by_close[close] = candle

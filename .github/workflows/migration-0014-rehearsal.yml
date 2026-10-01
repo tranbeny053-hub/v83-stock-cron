@@ -1,0 +1,57 @@
+name: Migration 0014 rehearsal (scratch PostgreSQL, no secrets)
+
+# Proves, BEFORE migration 0014 can merge, that it applies to a real PostgreSQL built from migrations
+# 0001-0013 (production's expected state), twice (idempotent), without scanning or repairing rows its
+# checks would refuse (NOT VALID); that the production Postgres writer's own SQL stores the rows the
+# real pipeline builds; and that every check violation and every UPDATE, DELETE and TRUNCATE of core
+# evidence is refused. It references no secret and touches no real database. 0014 is AUTHORED, NOT
+# APPLIED: applying it to production is a separate owner-authorized T4.
+
+"on":
+  pull_request:
+    paths:
+      - migrations/**
+      - scripts/migration_0014_rehearsal/**
+      - src/crypto_probability_engine/persistence/**
+      - src/crypto_probability_engine/api/analysis_service.py
+      - .github/workflows/migration-0014-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse migration 0014 on scratch local PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres createdb -h /var/run/postgresql -O "$(id -un)" migration_0014_rehearsal
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0014_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          scratch() { psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0014_rehearsal "$@"; }
+          for migration in migrations/00{01..13}_*.sql; do scratch -f "$migration"; done
+          scratch -f scripts/migration_0014_rehearsal/00_seed_legacy_rows.sql
+          scratch -f migrations/0014_core_evidence_invariants.sql
+          scratch -f migrations/0014_core_evidence_invariants.sql
+          MIGRATION_0014_REHEARSAL_URL="postgresql:///migration_0014_rehearsal?host=/var/run/postgresql" python scripts/migration_0014_rehearsal/probe_writer_rows.py
+          scratch -f scripts/migration_0014_rehearsal/10_probe.sql
+          echo "MIGRATION_0014_REHEARSAL=PASS"
