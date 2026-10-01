@@ -2,8 +2,8 @@
 
 Status (corrected 2026-10-01): written for a non-coder operator. The earlier status, "Phase 0 docs-only",
 is obsolete. For a bad deploy, use `docs/runbooks/ROLLBACK.md` (H2-safe rollback) and
-`docs/runbooks/RELEASE.md`. Database backup and restore remain unmeasured and undecided (governing plan
-§12, owner decision OD-FINAL-6): no RPO or RTO is claimed here.
+`docs/runbooks/RELEASE.md`. Database backup and restore remain unmeasured; the owner deferred the custody
+decision pending those measurements (governing plan §12, OD-FINAL-6 = DEFER): no RPO or RTO is claimed here.
 
 ## When To Use This
 
