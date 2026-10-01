@@ -20,16 +20,14 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# Now standing in it, merged but not yet deployed:
-# - Dockerfile (B3, the reproducible build: a digest-pinned base image, hash-locked
-#   installs, a deterministic runtime user);
-# - api/app.py and api/analysis_service.py (OBS-1, plan §10: bounded structured events
-#   and the persistence receipt; no response or probability changes).
-# They clear when a release carrying them lands and the baseline is re-pinned.
+# Now standing in it: Dockerfile, analysis_service.py, app.py, build_info.py, merged but not yet
+# deployed. UCPE-PROD-OBS1-20261001-A names the next deploy; all of them clear
+# when it lands and the baseline is re-pinned.
 CURRENT_DELTA_PATHS: list[str] = [
     "Dockerfile",
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
