@@ -1,0 +1,102 @@
+{
+  "migrations_applied": [
+    {
+      "additive": null,
+      "id": "0001",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0002",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0003",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0004",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0005",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0006",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "id": "0007",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "applied_run": 35164080476,
+      "id": "0008",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "applied_run": 34861816985,
+      "id": "0009",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": null,
+      "applied_run": 35190794876,
+      "id": "0010",
+      "note": "present in the tree of every H2-safe release, so no rollback target lacks it"
+    },
+    {
+      "additive": true,
+      "applied_run": 36583531813,
+      "id": "0011",
+      "note": "four nullable predictions columns with tc-v1-guarded CHECKs; older writers omit them"
+    },
+    {
+      "additive": true,
+      "applied_run": 36586262979,
+      "id": "0012",
+      "note": "a new table (prediction_resolution_status); older code never reads it"
+    },
+    {
+      "additive": true,
+      "applied_run": 36820986264,
+      "id": "0013",
+      "note": "two new automation tables; inert without the F1 route"
+    }
+  ],
+  "releases": [
+    {
+      "commit": "00705c55e7eb291d01b4e02d4cca859122083f28",
+      "deployed_over": null,
+      "h2_hold": false,
+      "release_id": "UCPE-PROD-SAFE-3-20260915-A"
+    },
+    {
+      "commit": "080f20a95241504bd7cf96088bf075d1ebaf4f55",
+      "deployed_over": "00705c55e7eb291d01b4e02d4cca859122083f28",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-H2-HOLD-20260927-A"
+    },
+    {
+      "commit": "2096af6d1b3d54461b40c47fd96c265882e5af40",
+      "deployed_over": "080f20a95241504bd7cf96088bf075d1ebaf4f55",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-TC-V1-STAMP-20260930-A"
+    },
+    {
+      "commit": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
+      "deployed_over": "2096af6d1b3d54461b40c47fd96c265882e5af40",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-F1-AUTOMATION-20261001-A"
+    }
+  ],
+  "schema_version": "ucpe-release-registry.v1"
+}
