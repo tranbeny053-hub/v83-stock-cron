@@ -825,6 +825,41 @@ def test_conflicting_duplicates_fail_without_save(field, value) -> None:
     assert repo.saved == []
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("close", 0.0),
+        ("close", -1.0),
+        ("close", float("nan")),
+        ("open", float("inf")),
+        ("high", float("nan")),
+        ("low", float("-inf")),
+    ],
+)
+def test_a_non_finite_or_non_positive_price_in_the_window_fails_without_save(field, value) -> None:
+    terminal = _candle(_dt("2026-06-08T00:00:00Z"), close=101.0)
+    def fetch(window, settings):
+        return (replace(terminal, **{field: value}),)
+
+    with pytest.raises(ValueError, match="^resolver candle price is not finite and positive$"):
+        _build(_prediction(), fetch)
+    repo = RecordingRepository([_prediction()])
+    assert _resolve(repo, fetch_candles=fetch) == _stats(
+        due=1, failed=1, error_candle_invalid=1
+    )
+    assert repo.saved == []
+
+
+def test_a_bad_price_outside_the_window_is_ignored() -> None:
+    terminal = _candle(_dt("2026-06-08T00:00:00Z"), close=101.0)
+    anchor = _candle(_dt("2026-06-07T00:00:00Z"), close=float("nan"))
+    repo = RecordingRepository([_prediction()])
+    assert _resolve(repo, fetch_candles=lambda window, settings: (anchor, terminal)) == _stats(
+        due=1, resolved=1
+    )
+    assert repo.saved[0]["outcome_reference_price"] == 101.0
+
+
 def test_identical_duplicates_collapse_and_outside_window_is_ignored() -> None:
     terminal = _candle(_dt("2026-06-08T00:00:00Z"), close=101.0)
     earlier = _candle(_dt("2026-06-07T04:00:00Z"), close=100.0, high=102.0, low=99.0)

@@ -121,7 +121,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # and upload-artifact each, all three at the reviewed Node-24 SHA pins.
     # 47 -> 50 (B3): the reproducible-build workflow adds checkout to build-a, build-b and
     # compare, at the reviewed Node-24 SHA pin.
-    assert len(refs) == 50
+    # 50 -> 52 (DBI-1): the migration-0014 rehearsal adds checkout and setup-python, both at the
+    # reviewed pins.
+    assert len(refs) == 52
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
