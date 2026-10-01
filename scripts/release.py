@@ -57,6 +57,9 @@ FRONTEND_FILES = {
 ERROR_STAGES = frozenset({"BUILD_ERROR", "RUNTIME_ERROR", "CONFIG_ERROR", "NO_APP_FILE"})
 REPIN_AUTHOR = ("UCPE release", "release@ucpe.invalid")
 SHA_RE = re.compile(r"[0-9a-f]{40}")
+# A probe stays on base_url: plain path characters and an optional query, never a scheme, an
+# authority ("//host" or "user@host") or a fragment.
+PROBE_PATH_RE = re.compile(r"/(?!/)[A-Za-z0-9._~/-]*(?:\?[A-Za-z0-9._~=&-]*)?")
 RELEASE_ID_RE = re.compile(
     r"UCPE-(?P<name>PROD-[A-Z0-9]+(?:-[A-Z0-9]+)*)-(?P<date>\d{8})-(?P<suffix>[A-Z])"
 )
@@ -673,6 +676,7 @@ def cmd_deploy(env: Env, args: argparse.Namespace) -> int:
 
 def cmd_settle(env: Env, args: argparse.Namespace) -> int:
     d = require_sha(args.d, "D")
+    probes = [parse_probe(env, spec) for spec in args.probe or []]
     ev = Evidence(evidence_dir(env, "settle", d, args.evidence_dir))
     identity = identity_at(env, d)
     deadline = time.monotonic() + args.timeout_minutes * 60
@@ -708,22 +712,41 @@ def cmd_settle(env: Env, args: argparse.Namespace) -> int:
         status, data = fetch(env, ev, key, url)
         ok &= ev.check(status == 200 and sha256(data) == sha256(blob(env, d, path)),
                        f"GET {url.removeprefix(base)} serves D's {path} bytes")
-    for index, probe in enumerate(args.probe or [], start=1):
+    for index, probe in enumerate(probes, start=1):
         ok &= run_probe(env, ev, index, probe)
     return 0 if ev.finish("SETTLE", ok) else 1
 
 
-def run_probe(env: Env, ev: Evidence, index: int, spec: str) -> bool:
-    """METHOD PATH STATUS [dotted.key=value ...]: one extra read-only check of the release."""
+@dataclass(frozen=True)
+class Probe:
+    spec: str
+    method: str
+    path: str
+    expected: int
+    assertions: tuple[str, ...]
+
+
+def parse_probe(env: Env, spec: str) -> Probe:
+    """METHOD PATH STATUS [dotted.key=value ...], refused before anything is fetched or recorded."""
 
     parts = spec.split()
     if len(parts) < 3 or parts[0] not in {"GET", "POST"} or not parts[2].isdigit():
         raise Stop(f"bad --probe {spec!r}: use 'GET|POST /path STATUS [key.path=value ...]'")
-    method, path, expected = parts[0], parts[1], int(parts[2])
-    status, data = fetch(env, ev, f"probe_{index}", env.config["base_url"] + path, method,
-                         b"{}" if method == "POST" else None)
-    ok = status == expected
-    for assertion in parts[3:]:
+    method, path = parts[0], parts[1]
+    if not PROBE_PATH_RE.fullmatch(path):
+        raise Stop(f"bad --probe path {path!r}: only a plain absolute path on base_url")
+    if method == "POST" and path not in env.config.get("post_probe_paths", []):
+        raise Stop(f"POST --probe {path!r} is not in post_probe_paths ({CONFIG_PATH})")
+    return Probe(spec, method, path, int(parts[2]), tuple(parts[3:]))
+
+
+def run_probe(env: Env, ev: Evidence, index: int, probe: Probe) -> bool:
+    """One extra read-only check of the release."""
+
+    status, data = fetch(env, ev, f"probe_{index}", env.config["base_url"] + probe.path,
+                         probe.method, b"{}" if probe.method == "POST" else None)
+    ok = status == probe.expected
+    for assertion in probe.assertions:
         key, _, value = assertion.partition("=")
         current: Any
         try:
@@ -733,7 +756,7 @@ def run_probe(env: Env, ev: Evidence, index: int, spec: str) -> bool:
         for part in key.split("."):
             current = current.get(part) if isinstance(current, dict) else None
         ok &= str(current) == value
-    return ev.check(ok, f"probe {spec}")
+    return ev.check(ok, f"probe {probe.spec}")
 
 
 # ---------------------------------------------------------------------------------------- repin
