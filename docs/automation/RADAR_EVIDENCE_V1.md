@@ -1,10 +1,11 @@
 # Governed automation interface — `POST /v1/automation/radar-evidence` (`radar_evidence.v1`)
 
-**Status.** This is UCPE canon, AUTHORED LOCALLY. It is not deployed, not enabled, and no credential
-has been issued.
-- The route ships OFF: until the owner enables it, every call gets 503 `AUTOMATION_DISABLED`.
-- Its ledger (migration 0013) is authored but not applied. An enabled route therefore still fails
-  closed, with 503 `LEDGER_UNAVAILABLE`.
+**Status (2026-10-01).** This is UCPE canon, LIVE in release `UCPE-PROD-F1-AUTOMATION-20261001-A`.
+- The owner enabled the route and issued one credential (`uor-radar-2026-10`); the canary passed.
+- Its ledger (migration 0013) is applied in production.
+- The exact states are in `UOR_HANDOFF.md` section 1. The route still fails closed at every layer:
+  a cleared kill switch answers 503 `AUTOMATION_DISABLED`, an unreachable ledger 503
+  `LEDGER_UNAVAILABLE`.
 
 This document is UCPE's answer to UOR's proposal (UOR handoff file 05). UCPE canon wins wherever the
 two differ, and the differences are listed in `F1_NODE_CLASSIFICATION.md`.
@@ -320,7 +321,7 @@ degraded guess.
   - at the maximum quota of 120 per day, 90 days of one credential fit under the cap.
   The route fails closed at its bound. There is no recurring job.
 
-## 13. Enablement prerequisites (all owner-gated; none is done)
+## 13. Enablement prerequisites (all owner-gated; the exact states are in `UOR_HANDOFF.md` section 1)
 
 1. **G2:** the owner accepts or modifies this interface.
 2. **Registry and ledger:** the dedicated one-shot apply route for migration 0013 is BUILT
@@ -328,8 +329,9 @@ degraded guess.
    pattern). It is rehearsed on a real PostgreSQL on every pull request that touches it, and again
    inside the dispatch before the secret is handed out. The apply itself is a T4.
 3. **Database access:** the route uses the Space's `SUPABASE_DB_URL`. The human persistence already
-   reaches the database through it (W26 PASS_PROVEN). The route's own connections stay unproven
-   until the canary, and they fail closed until then.
+   reaches the database through it (W26 PASS_PROVEN). The route's own connections are proven: the
+   post-enable check read the registry, and the canary recorded and replayed its ledger row
+   (2026-10-01).
 4. **Release:** a release carrying F1 is deployed (T4), and the source guard is re-pinned (T3).
 5. **Credential and quota:** the owner issues the credential by inserting its digest into the
    registry (T4, `CREDENTIAL_ROTATION.md`) and decides the quota (G6, a T3 Space variable).

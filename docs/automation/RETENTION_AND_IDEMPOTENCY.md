@@ -1,7 +1,7 @@
 # Retention and idempotency: the F1 audit
 
 Scope: the automation ledger `public.automation_radar_ledger` and the credential registry
-`public.automation_credential` (migration 0013, authored, **not applied**). Each statement below
+`public.automation_credential` (migration 0013, **applied** in production on 2026-10-01, run 36820986264). Each statement below
 names the code or test that holds it.
 
 ## 1. What is recorded, and what never is

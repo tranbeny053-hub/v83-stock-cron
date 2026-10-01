@@ -1,6 +1,37 @@
 # STATE
 
-Updated: 2026-10-01 (F1 enabled by the owner; post-enable PASS). **F1_ENABLED_NO_CREDENTIAL: the owner set
+Updated: 2026-10-01 (F1 canary PASS; live isolation PASS; the UOR handoff package). **F1_CANARY=PASS,
+LIVE_ISOLATION=PASS: the owner issued the credential uor-radar-2026-10 (T4; named here by id only, its value never
+requested, printed or stored) and ran the one canary. The governed UCPE→UOR handoff package is finalized
+(docs/automation/UOR_HANDOFF.md). UOR is untouched, UOR Cron is not re-enabled, and CODEX_PAUSED_BY_OWNER stands.**
+- The canary (the owner ran canary_f1.py, attempt_01, at 2026-10-01T10:25:15Z): HTTP_PASS 13/13.
+  - BTC 4H, client_request_id 3e8ca8f0-5016-4e45-9ea1-0aedbe815260 → 200; run_id
+    run_d33406cea53648829428b829198577d3; evidence_hash sha256:58191ef5…a846; release
+    UCPE-PROD-F1-AUTOMATION-20261001-A. The replay was byte-identical, with Idempotent-Replay: true.
+  - Claude's independent re-check of the raw bytes: 12/12. That includes the evidence_hash recomputed with no JCS
+    code (the member cut from the canonical bytes) and with the pinned canonical.py.
+- The owner's read-only SQL (owner-attested):
+  - one ledger row for that key: COMPLETED / SUCCEEDED / 200, with the same run_id, evidence_hash and release;
+  - predictions for that run_id: 0;
+  - the global isolation query (contract §3): 0.
+- Verdicts: F1_CANARY=PASS (all 7 release-plan criteria) and LIVE_ISOLATION=PASS.
+  - Evidence (the main checkout, read-only): .work/f1_release/activation/canary/attempt_01_20261001T102515Z/ and
+    CANARY_ADJUDICATION.md.
+- The handoff package (this record): UOR_HANDOFF.md now carries:
+  - the exact states, the endpoint and the governed origin;
+  - the pinned schemas and files, with their sha256;
+  - the release identity, and the JCS and hash contract;
+  - the examples, and the G6 quota and capacity facts;
+  - the errors and timeouts;
+  - the credential, by name and role only;
+  - the isolation and audit proof, the kill switch and rollback, and the UOR-side boundary.
+  Also:
+  - New pinned files: the canary's exact answer (docs/automation/examples_live/, LIVE_SAVED, with PROVENANCE.json).
+    It is a non-holdout example carrying the real release identity, as UOR file 05 §13 asks.
+  - The pinned docs' status lines now state the current facts: CREDENTIAL_ROTATION, F1_RELEASE_PLAN,
+    RETENTION_AND_IDEMPOTENCY, and RADAR_EVIDENCE_V1 (its status and §13). No runtime change.
+- Next: the UOR-side handoff and activation (OWNER_BOUNDARY). Claude stops here.
+Previously (F1 enabled by the owner; post-enable PASS): **F1_ENABLED_NO_CREDENTIAL: the owner set
 UCPE_AUTOMATION_ENABLED=1 on the Space (T3; the restart landed about 09:04Z). The post-enable check PASSED. No
 credential is issued, so every call is refused. UOR and Cron are untouched. CODEX_PAUSED_BY_OWNER stands.**
 - post_enable_check_f1.sh (the prepared kit, KIT_MANIFEST 3/3 before the run): ENABLE_CHECK=PASS 7/7 at 09:05Z.
@@ -346,9 +377,17 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: the credential issuance (an owner secret entry, T4). F1 is released,
-  re-pinned and ENABLED by the owner. The post-enable check PASSED. No credential exists, so every call is
-  refused.
+LOOP_STATE=PAUSED AT THE UOR-SIDE BOUNDARY. F1 is live and proven on the UCPE side (F1_CANARY=PASS,
+  LIVE_ISOLATION=PASS), and the governed handoff package is finalized. UOR's activation happens in its own
+  sessions.
+  - **F1-CANARY-A (2026-10-01; the owner issued uor-radar-2026-10 and ran the canary; Claude adjudicated read-only
+    and finalized the package).**
+    - The canary: HTTP_PASS 13/13; Claude's independent re-check: 12/12.
+    - The owner's SQL: the ledger row exact, predictions 0, global isolation 0.
+    - The package: UOR_HANDOFF.md plus the LIVE_SAVED example. The local bundle
+      (.work/f1_release/uor_handoff_package/) is built from main after this record merges.
+  Before it: PAUSED AT THE OWNER BOUNDARY: the credential issuance (F1 released, re-pinned and enabled; no
+  credential).
   - **F1-ENABLE-A (2026-10-01; the owner set UCPE_AUTOMATION_ENABLED=1, a T3; Claude ran read-only checks only).**
     - post_enable_check_f1.sh: ENABLE_CHECK=PASS 7/7. readonly_extra_checks_f1.sh: 5 PASS and 1 STOP (CORS).
     - F1-ACT-1 (LOW) adjudicated. The owner chose option A: the contract was corrected (this record), and the
@@ -1940,7 +1979,9 @@ LOOP_STATE=PAUSED AT THE OWNER BOUNDARY: the credential issuance (an owner secre
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1 ENABLED, NO CREDENTIAL (2026-10-01): the owner enabled the route; the post-enable check
+CURRENT_MILESTONE=F1 CANARY PASS, LIVE ISOLATION PASS (2026-10-01): the owner issued the credential
+  uor-radar-2026-10 (ACTIVE); the UCPE→UOR handoff package is finalized; next is the UOR-side boundary.
+  Before it: F1 ENABLED, NO CREDENTIAL (2026-10-01): the owner enabled the route; the post-enable check
   PASSED; every call is refused until a credential exists.
   Before it: F1 RELEASED, ROUTE OFF (2026-10-01): production D2 5a3ef022 / UCPE-PROD-F1-AUTOMATION-20261001-A,
   re-pinned (R 3ad53b87), guard HEALTHY; no credential; UOR and Cron untouched.
@@ -2020,8 +2061,9 @@ CURRENT_MILESTONE=F1 ENABLED, NO CREDENTIAL (2026-10-01): the owner enabled the 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-f1-route-enabled (this record), from main c2bd1247. Its worktree is lanes13/state2 in
+CURRENT_BRANCH=chore/state-f1-canary-pass (this record), from main 2992842f. Its worktree is lanes13/state3 in
   the session scratchpad.
+  Before it: chore/state-f1-route-enabled (PR #148, merged as 2992842f), from main c2bd1247.
   Before it: chore/state-f1-release (PR #147, merged as c2bd1247), from main 3ad53b87.
   Before it: release/prod-f1-automation (PR #146, merged as R 3ad53b87) and prep/release-identity-f1-automation
   (PR #145, merged as D2 5a3ef022).
@@ -2076,7 +2118,9 @@ CURRENT_BRANCH=chore/state-f1-route-enabled (this record), from main c2bd1247. I
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c2bd1247 (main, PR #147: the F1 release record). Push CI success (run 36831002541).
+LAST_GREEN_SHA=2992842f (main, PR #148: the enable record and the CORS correction). Push CI success (run
+  36842825376).
+  Before it: c2bd1247 (main, PR #147: the F1 release record). Push CI success (run 36831002541).
   Before it: 3ad53b87 (main, PR #146: the re-pin). PR CI success on P; push CI success (run 36828550280); the guard HEALTHY
   on it (run 36828594390), delta [].
   Before it: 5a3ef022 (D2, main, PR #145: the identity). Push CI success (run 36825516122); tree 18883f47.
@@ -2225,8 +2269,10 @@ LAST_GREEN_SHA=c2bd1247 (main, PR #147: the F1 release record). Push CI success 
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the F1
-  release record, PR #147). This record is verified before its push (the PR body).
+LAST_VERIFY=PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
+  enable record, PR #148). This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the F1
+  release record, PR #147).
   Before it: PASS ruff ok | 4568 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, the
   re-pin P 4ef8f14; the same count on the identity head and at M). This record is verified before its push
   (the PR body).
@@ -2443,7 +2489,14 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The F1 credential issuance: a T4 and the owner's secret entry.
+OWNER_BOUNDARY=The UOR-side handoff and activation, in UOR's own governed sessions. UCPE never writes to UOR.
+  - The owner hands docs/automation/UOR_HANDOFF.md (the governed package) to UOR. The token goes by NAME into
+    UOR's secret store only.
+  - Owner decisions in UOR's sessions: UOR's contract fixtures, its release allowlist (ACCEPTED_UPSTREAM_RELEASES),
+    its registries and transport, and any UOR Cron re-enable.
+  Not authorized to Claude: any UOR mutation, re-enabling UOR Cron, exposing the token, F3/§5A, any order
+  capability. Codex stays paused (CODEX_PAUSED_BY_OWNER).
+  Before it: The F1 credential issuance: a T4 and the owner's secret entry.
   - The procedure: CREDENTIAL_ROTATION.md, "Issue a credential"; ACTIVATION_CHAIN.md step 1, with its read-only
     pre- and post-check SQL.
   - The value never enters a chat, a file in the repository or a log.
@@ -2837,7 +2890,11 @@ OWNER_BOUNDARY=The F1 credential issuance: a T4 and the owner's secret entry.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=OWNER: issue the credential (OWNER_BOUNDARY), then run the canary. Claude stops here.
+NEXT_ACTION=OWNER: the UOR-side handoff (OWNER_BOUNDARY). Claude stops here.
+  - The package: docs/automation/UOR_HANDOFF.md at main, and the local bundle .work/f1_release/uor_handoff_package/
+    (every pinned file's exact bytes at main, with a manifest).
+  - The credential stays ACTIVE. To stop at any time: revoke it (no restart), or clear UCPE_AUTOMATION_ENABLED.
+  Before it: OWNER: issue the credential (OWNER_BOUNDARY), then run the canary. Claude stops here.
   - To stop the route at any time: revoke the credential (no restart), or clear UCPE_AUTOMATION_ENABLED (a
     restart).
   - Read-only re-checks Claude may run on request: post_enable_check_f1.sh and readonly_extra_checks_f1.sh.
@@ -3466,7 +3523,11 @@ R3=Research in .work/research3 (gitignored).
       (NEXT_ACTION; OWNER_BOUNDARY 4).
     - Network: public Binance GETs only (5,108 requests). F1 is stored only; F2 was used only for the
       candidate-blind B3Dev null.
-PRODUCTION=PROD-F1-AUTOMATION (D2 5a3ef022), with the route ENABLED by the owner (restarted about 09:04Z on
+PRODUCTION=PROD-F1-AUTOMATION (D2 5a3ef022): the route ENABLED and serving one credential, uor-radar-2026-10
+  (issued by the owner, ACTIVE; named by id only). F1_CANARY=PASS and LIVE_ISOLATION=PASS (2026-10-01).
+  - Every other caller is refused: 401, and 403 for a human session cookie. G6: 6 per 5 minutes, 120 per day.
+  - UOR's consumption waits for its own governed activation; UCPE has not touched UOR.
+  Before the credential: PROD-F1-AUTOMATION (D2 5a3ef022), with the route ENABLED by the owner (restarted about 09:04Z on
   2026-10-01; RUNNING at D2).
   - No credential exists, so every call is refused: 401 CREDENTIAL_REQUIRED or CREDENTIAL_INVALID, and 403 for
     a human session cookie.
@@ -3555,7 +3616,9 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
     - the 0013 apply 36820986264 (APPLIED; the route refuses a second apply);
     - the deploy of D2, its single push at 2026-10-01T06:40Z (2096af6d → 5a3ef022), and its dry run at
       06:39:36Z;
-    - the guard dispatches 36825556001 (D2) and 36828594390 (R).
+    - the guard dispatches 36825556001 (D2) and 36828594390 (R);
+    - the F1 canary, attempt_01 at 2026-10-01T10:25:15Z (HTTP_PASS, F1_CANARY=PASS). canary_f1.py refuses another
+      attempt; never delete or edit its directory.
     A rollback or any later deploy needs a new T4.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.

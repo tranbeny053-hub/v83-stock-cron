@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "file": "radar_evidence.v1.live-canary-btc-4h-20261001.json",
+      "note": "The governed release's live 200 answer to the owner's one canary request (BTC, 4H). The exact wire bytes: the JCS form of the body, with no trailing newline.",
+      "sha256": "527b81220b3ecf459d0d5a7da584f9c965225c06d20f24cffd4b88c4de47ae39",
+      "validates_against": "radar_evidence.v1"
+    }
+  ],
+  "identity": {
+    "client_request_id": "3e8ca8f0-5016-4e45-9ea1-0aedbe815260",
+    "credential_id": "uor-radar-2026-10",
+    "evidence_hash": "sha256:58191ef5c11e12eaadbddc6b5289eecbf0d56fd18999074c6576dd0d8a9ba846",
+    "release_id": "UCPE-PROD-F1-AUTOMATION-20261001-A",
+    "run_id": "run_d33406cea53648829428b829198577d3",
+    "sent_utc": "2026-10-01T10:25:15Z"
+  },
+  "provenance": "LIVE_SAVED: the exact response bytes of the governed release UCPE-PROD-F1-AUTOMATION-20261001-A to the owner's single canary request, under the credential uor-radar-2026-10 (named by id only; its value is never stored). Live public market data; no holdout, no section 5A evidence. The evidence_hash recomputes; the replay was byte-identical with Idempotent-Replay: true; the owner confirmed the ledger row (COMPLETED / SUCCEEDED / 200, same run_id, evidence_hash and release) and that no predictions row carries the run_id or joins any ledger run (F1_CANARY=PASS, LIVE_ISOLATION=PASS, 2026-10-01). Operational evidence only: not directional or model evidence."
+}
