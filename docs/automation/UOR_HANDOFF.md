@@ -2,14 +2,14 @@
 
 **What this is.** UCPE hands UOR these files, per UOR handoff file 05 §13.
 - UOR pins the schemas by the sha256 values below. Any change to a pinned schema means a new version.
-- **Status:** authored locally on UCPE branch `feat/f1-governed-automation`. Nothing is deployed, enabled or issued.
+- **Status:** merged into UCPE main (M `5da10ef3`) and deployed OFF in release `UCPE-PROD-F1-AUTOMATION-20261001-A` (`5a3ef022`). Nothing is enabled or issued.
 - **Owner-gated steps:** the handoff itself (T3/G2) and every enablement step (see the contract, section 13).
 
 | File | Role | sha256 |
 |---|---|---|
 | `schemas/radar_evidence.schema.json` | pinned success schema | `460458ade4f65e6850e024d3d3a6cc042c40219b802b8ddd89c93ae35a4be5c7` |
 | `schemas/radar_evidence_error.schema.json` | pinned error schema | `983001a75249ed5b5b0f5df5fae1910ab4a511418eaac81172a6362cfb1d6315` |
-| `docs/automation/RADAR_EVIDENCE_V1.md` | the UCPE canon contract | `af9a76172f3125eb336c8b91b66af6bbf403e3fdb9951d9f133d31bc50b23874` |
+| `docs/automation/RADAR_EVIDENCE_V1.md` | the UCPE canon contract | `37d3857e64eb29cd26b6f4bf744c542e1a18c2e1049c44f6bafafae6643e27c3` |
 | `docs/automation/F1_NODE_CLASSIFICATION.md` | proposal nodes under UCPE canon | `70fb0bad6431830498f06699d57eca5cf4f56ce4de7eb2863ac4772163d27178` |
 | `docs/automation/COHORT_READER_AUDIT.md` | why the origin is isolated | `ad8b0b9c770a82063106c24f5db6f071657efdfada2913d9e84d7a505fd1b19f` |
 | `docs/automation/CREDENTIAL_ROTATION.md` | credential issue, rotation and revocation | `4cb6de4d7adc4d7b208d3e738cbbcc2f25b115ca48615c363d65e1c9282c5cce` |
