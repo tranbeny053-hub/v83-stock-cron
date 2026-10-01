@@ -15,6 +15,7 @@ from crypto_probability_engine.adapters.symbol_universe import resolve_symbol_av
 from crypto_probability_engine.api.analysis_service import (
     analyze_request,
     current_persistence_status,
+    record_analysis_event,
     schedule_best_effort_persist,
 )
 from crypto_probability_engine.api.auth import (
@@ -35,6 +36,7 @@ from crypto_probability_engine.api.calibration_endpoint import (
 )
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.health import runtime_health, system_status
+from crypto_probability_engine.api.request_events import RequestEventMiddleware
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
     BatchAnalysisRequest,
@@ -51,7 +53,7 @@ from crypto_probability_engine.persistence.repository import (
     build_persistence_repository,
 )
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
-from crypto_probability_engine.telemetry.events import TelemetrySink
+from crypto_probability_engine.telemetry.events import EVENTS_SINK
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
 WATCHLIST_LIMIT = 20
@@ -66,7 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         skill_evidence_repository = build_operator_repository(app_settings)
     except Exception:
         skill_evidence_repository = None
-    telemetry = TelemetrySink()
+    telemetry = EVENTS_SINK
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -97,6 +99,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
+    # Plan §10: one sanitized event per request; the F1 automation route passes through untouched.
+    app.add_middleware(RequestEventMiddleware, sink=telemetry)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -201,7 +205,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             background_tasks,
             app.state.skill_evidence_repository,
         )
-        telemetry.record("analysis_completed", {"run_id": result["run_id"]})
+        record_analysis_event(result, prediction_origin=prediction_origin)
         return result
 
     @app.post("/v1/analyze_batch")
@@ -230,6 +234,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     result,
                     prediction_origin=prediction_origin,
                 )
+                record_analysis_event(result, prediction_origin=prediction_origin)
                 results.append(result)
                 items.append(
                     {
