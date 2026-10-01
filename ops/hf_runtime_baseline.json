@@ -6,21 +6,21 @@
     "frontend/styles.css": "c7be1c9db153391f1712530a34d28e3732ebb596208cf09e8d50bdad74a31247",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "cff4c98e7210777dd47eba3c96e30d43e85a1476d651976725dc652ba7ea0306",
-    "src/crypto_probability_engine/api/app.py": "63db9e18fa9ca076f40f3303da3db48356a0e57798f5b48c1bc7102af1d7ca14",
-    "src/crypto_probability_engine/config/build_info.py": "96625788be27ef127d42ecbd7bbbcf3c7bf1f0ff5265c35103600f9487ec1412",
+    "src/crypto_probability_engine/api/analysis_service.py": "ab5320f00b9b4b4ba01ec9f1228ad4507813634978aac91f6f9eb63586c8b842",
+    "src/crypto_probability_engine/api/app.py": "a199fe08e7f391f45a0553fae907a25badd51eeb3a0a5a6eaf2ded69a02ca829",
+    "src/crypto_probability_engine/config/build_info.py": "0683d108cf0df3874dad9e01c5c123f002ae7744b3906df6be24e904c872d569",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · PROD-TC-V1-STAMP-20260930-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-F1-AUTOMATION-20261001-A",
   "frontend_asset_tokens": {
     "app_js": "w4c1-ka1-20260828-a",
     "styles_css": "w4c1-ka1-20260828-a"
   },
-  "hf_main_sha": "2096af6d1b3d54461b40c47fd96c265882e5af40",
-  "release_id": "UCPE-PROD-TC-V1-STAMP-20260930-A",
-  "release_label": "PROD-TC-V1-STAMP release of main",
+  "hf_main_sha": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
+  "release_id": "UCPE-PROD-F1-AUTOMATION-20261001-A",
+  "release_label": "PROD-F1-AUTOMATION release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "prod-tc-v1-stamp"
+  "source_milestone": "prod-f1-automation"
 }
