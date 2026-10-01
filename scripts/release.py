@@ -83,6 +83,13 @@ DELTA_BLOCK_RE = re.compile(
     re.M,
 )
 PIN_LINE_RE = re.compile(r'^PIN_SHA = "(?P<sha>[0-9a-f]{40})"$', re.M)
+URL_USERINFO_RE = re.compile(rb"(https?://)[^/\s@]+@")
+
+
+def redact(data: bytes) -> bytes:
+    """Strip any userinfo from URLs: evidence keeps everything except credentials."""
+
+    return URL_USERINFO_RE.sub(rb"\1***@", data)
 
 
 class Stop(Exception):
@@ -143,8 +150,8 @@ class Evidence:
         self.lines: list[str] = []
 
     def raw(self, name: str, rc: int, out: bytes, err: bytes) -> None:
-        (self.directory / f"{name}.out").write_bytes(out)
-        (self.directory / f"{name}.err").write_bytes(err)
+        (self.directory / f"{name}.out").write_bytes(redact(out))
+        (self.directory / f"{name}.err").write_bytes(redact(err))
         (self.directory / f"{name}.rc").write_text(f"{rc}\n", encoding="utf-8")
 
     def http(self, name: str, status: int, body: bytes) -> None:

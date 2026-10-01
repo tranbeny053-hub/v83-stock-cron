@@ -131,7 +131,10 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
     on_main = sorted(
         path.name[:4] for path in (ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")
     )
-    assert ids == on_main, "every migration on main is applied and registered (else add it)"
+    assert ids == on_main, (
+        "every migration on main is registered; the rollback check conservatively treats each as "
+        "applied, so a new migration must say whether it is additive"
+    )
 
 
 def test_the_config_names_no_local_path_secret_or_release_id() -> None:
@@ -148,8 +151,22 @@ def test_push_output_parsing_accepts_only_a_plain_fast_forward() -> None:
     assert rel.push_is_fast_forward(good, older, newer)
     forced = good.replace("main\n", "main (forced update)\n")
     assert not rel.push_is_fast_forward(forced, older, newer)
+    # A plain fast-forward line next to a forced update elsewhere is still refused.
+    mixed = good + " + ccccccc...ddddddd  other -> other (forced update)\n"
+    assert not rel.push_is_fast_forward(mixed, older, newer)
     assert not rel.push_is_fast_forward(good.replace("aaaaaaa", "ccccccc"), older, newer)
     assert not rel.push_is_fast_forward("Everything up-to-date\n", older, newer)
+
+
+def test_evidence_never_keeps_url_credentials(tmp_path: Path) -> None:
+    ev = rel.Evidence(tmp_path / "ev")
+    ev.raw("push", 0, b"", b"To https://user:abc123@huggingface.co/spaces/x\n"
+                          b"To https://tok@example.invalid/y\n")
+    kept = (tmp_path / "ev" / "push.err").read_bytes()
+    assert b"abc123" not in kept and b"tok@" not in kept
+    assert b"https://***@huggingface.co/spaces/x" in kept
+    with pytest.raises(rel.Stop):
+        rel.Evidence(tmp_path / "ev")
 
 
 def test_guard_checks_require_explicit_healthy_in_every_round() -> None:
@@ -428,7 +445,9 @@ def test_identity_refuses_a_dirty_worktree_or_an_unchanged_release(world: World)
     assert rel.main(["identity", "--worktree", str(clean), "--release-id", ALPHA], world.env()) == 1
 
 
-def test_the_full_release_chain_then_an_h2_safe_rollback(world: World, tmp_path: Path) -> None:
+def test_the_full_release_chain_then_an_h2_safe_rollback(
+    world: World, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     d = _prepare_beta(world)
     _arm_preflight(world, d)
 
@@ -444,8 +463,14 @@ def test_the_full_release_chain_then_an_h2_safe_rollback(world: World, tmp_path:
     # Deploy: a dry run by default; wrong authorization refuses; the exact one pushes once.
     assert rel.main(["deploy", d], world.env()) == 0
     assert world.hf_main() == world.c0
-    assert rel.main(["deploy", d, "--authorize", world.c0, "--release-id", BETA], world.env()) == 1
-    assert rel.main(["deploy", d, "--authorize", d, "--release-id", ALPHA], world.env()) == 1
+    capsys.readouterr()
+    assert rel.main(["deploy", d, "--authorize", world.c0, "--release-id", BETA, "--preflight-dir",
+                     str(pf)], world.env()) == 1
+    assert "--authorize must repeat D exactly" in capsys.readouterr().err
+    assert rel.main(["deploy", d, "--authorize", d, "--release-id", ALPHA, "--preflight-dir",
+                     str(pf)], world.env()) == 1
+    assert "--release-id is not the release identity at D" in capsys.readouterr().err
+    assert world.hf_main() == world.c0, "a refused deploy pushes nothing"
     world.clock += timedelta(minutes=31)
     assert rel.main(["deploy", d, "--authorize", d, "--release-id", BETA, "--preflight-dir",
                      str(pf)], world.env()) == 1, "a stale preflight refuses"
@@ -453,8 +478,10 @@ def test_the_full_release_chain_then_an_h2_safe_rollback(world: World, tmp_path:
     assert rel.main(["deploy", d, "--authorize", d, "--release-id", BETA, "--preflight-dir",
                      str(pf), "--evidence-dir", str(tmp_path / "dep")], world.env()) == 0
     assert world.hf_main() == d
+    capsys.readouterr()
     assert rel.main(["deploy", d, "--authorize", d, "--release-id", BETA, "--preflight-dir",
                      str(pf)], world.env()) == 1, "a consumed deploy never reruns"
+    assert "already consumed" in capsys.readouterr().err
 
     # Settle: identity, bytes and the probe pass; the old identity or an error stage stops.
     _arm_settle(world, d)
@@ -541,6 +568,22 @@ def test_rollback_check_refuses_unsafe_targets(world: World, tmp_path: Path) -> 
     # The target must be older than production.
     results = rel.rollback_findings(env, world.c0, world.c0, registry)
     assert results[3][0] is False
+
+
+def test_repin_refuses_a_relabel_that_keeps_the_release_id(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = (world.work / rel.BUILD_INFO_PATH).read_text()
+    _write(world.work, rel.BUILD_INFO_PATH,
+           text.replace('RELEASE_LABEL = "PROD-ALPHA release of main"',
+                        'RELEASE_LABEL = "PROD-ALPHA relabelled"'))
+    _git(world.work, "commit", "-qam", "relabel without a new release id")
+    d = _git(world.work, "rev-parse", "HEAD")
+    tree = world.worktree("wt_relabel", d)
+    capsys.readouterr()
+    assert rel.main(["repin", d, "--worktree", str(tree)], world.env()) == 1
+    assert "same release id" in capsys.readouterr().err
+    assert _git(tree, "rev-parse", "HEAD") == d, "nothing was committed"
 
 
 def test_repin_refuses_when_the_release_id_did_not_change(world: World) -> None:
