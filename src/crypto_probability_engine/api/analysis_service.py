@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
@@ -78,6 +79,7 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 from crypto_probability_engine.targets.contract_v1 import stamp_v1
+from crypto_probability_engine.telemetry.events import CURRENT_REQUEST_ID, emit
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
     validate_market_snapshot,
@@ -690,6 +692,7 @@ def _submit_persistence_work(repository: PersistenceRepository, work: Persistenc
     admission = _PERSISTENCE_ADMISSION
     if not admission.acquire(blocking=False):
         _mark_repository_unavailable(repository)
+        _emit_persistence_event("persistence_admission_refused", work, repository)
         return
     try:
         _PERSISTENCE_EXECUTOR.submit(
@@ -698,9 +701,12 @@ def _submit_persistence_work(repository: PersistenceRepository, work: Persistenc
             repository,
             admission,
         )
-    except Exception:
+    except Exception as exc:
         admission.release()
         _mark_repository_unavailable(repository)
+        _emit_persistence_event(
+            "persistence_submit_failed", work, repository, error_class=type(exc).__name__
+        )
 
 
 def _run_persistence_work_with_permit(
@@ -718,7 +724,80 @@ def _best_effort_persist(
     work: PersistenceWork,
     repository: PersistenceRepository | None,
 ) -> str:
-    return _persist_work_confirmed(work, repository).background_status
+    started = time.perf_counter()
+    try:
+        confirmation = _persist_work_confirmed(work, repository)
+    except Exception as exc:
+        _emit_persistence_receipt(work, repository, started, None, type(exc).__name__)
+        raise
+    _emit_persistence_receipt(work, repository, started, confirmation, None)
+    return confirmation.background_status
+
+
+def _emit_persistence_event(
+    event: str,
+    work: PersistenceWork,
+    repository: PersistenceRepository | None,
+    **fields: object,
+) -> None:
+    """One persistence event (plan §10). Never raises; changes no status."""
+
+    try:
+        emit(
+            event,
+            run_id=work.run_summary.get("run_id"),
+            repository=type(repository).__name__ if repository is not None else None,
+            **fields,
+        )
+    except Exception:
+        return
+
+
+def _emit_persistence_receipt(
+    work: PersistenceWork,
+    repository: PersistenceRepository | None,
+    started: float,
+    confirmation: _PersistenceConfirmation | None,
+    error_class: str | None,
+) -> None:
+    """Plan §10's persistence receipt for one background save. Never raises; changes no status."""
+
+    try:
+        _emit_persistence_event(
+            "persistence_receipt",
+            work,
+            repository,
+            prediction_rows=len(work.prediction_rows),
+            overall=confirmation.overall if confirmation else None,
+            background_status=confirmation.background_status if confirmation else None,
+            prediction=confirmation.prediction if confirmation else None,
+            feature_snapshot=confirmation.feature_snapshot if confirmation else None,
+            derivatives_snapshot=confirmation.derivatives_snapshot if confirmation else None,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            error_class=error_class,
+        )
+    except Exception:
+        return
+
+
+def record_analysis_event(payload: dict, *, prediction_origin: str) -> None:
+    """Plan §10's `analysis_completed` event for one served analysis. Never raises; reads only."""
+
+    try:
+        summary = _run_summary(payload)
+        emit(
+            "analysis_completed",
+            request_id=CURRENT_REQUEST_ID.get(),
+            run_id=summary["run_id"],
+            symbol=summary["normalized_symbol"],
+            timeframe=summary["primary_timeframe"],
+            prediction_origin=prediction_origin,
+            data_source=summary["data_source"],
+            is_live_data=summary["is_live_data"],
+            persistence_status=summary["persistence_status"],
+        )
+    except Exception:
+        return
 
 
 def persist_analysis_now(
