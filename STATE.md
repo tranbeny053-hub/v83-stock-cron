@@ -1,6 +1,34 @@
 # STATE
 
-Updated: 2026-09-30 (F1 merge readiness). **F1-MERGE-READINESS-A: draft PR #144 (feat/f1-governed-automation),
+Updated: 2026-10-01 (F1 merge gate). **F1-MERGE-GATE-A: PR #144 now carries the frozen ledger
+capacity contract (8b22efe) and the consolidated repair of independent Codex review 2 (8f7923c). The
+final independent Codex review (review 3) runs on the head that carries this record. The PR is merged
+only if review 3 leaves no unresolved HIGH/MEDIUM and every gate passes; main then becomes M, the merge
+commit whose parents are f19d7575 and that head (the owner's standing authorization of 2026-10-01).**
+- Codex review 2 at eb6976d: 4 MEDIUM, 5 LOW (.work/f1-review2/REVIEW.md in the worktree). All were
+  adjudicated against code, and each is repaired or is a disclosed design point
+  (docs/automation/F1_NODE_CLASSIFICATION.md, "Independent review 2"):
+  - R2-01: 42 in-transaction constraint probes, full index structure, existing-schema and
+    event-trigger fingerprints;
+  - R2-02: an explicit deadline contract with a 0.25 s commit reserve;
+  - R2-03: admission before any body byte, a bounded body read, tcp_user_timeout;
+  - R2-04: ledger invariants (pending identities NULL, the outcome catalogue with its statuses, the
+    body tied to its columns, a 16 KB text bound);
+  - R2-05/06/09: fixed. R2-07/08: by design.
+- The capacity contract (owner, 2026-10-01): at least 90 days kept; a 25,000-row cap (503, nothing
+  written); a per-credential 2 x quota rolling-day row ceiling (429, nothing written); an 8 KB stored
+  body; the quota bounded at 120/day. It fails closed, never deletes, and runs no recurring job. G6
+  stays provisional.
+- CI at 8f7923c:
+  - the 0013 real-PG rehearsal passed (run 36811117675): APPLIED with all 42 probes, the second
+    apply refused, 33/33 role probes refused, PROBE PASS 27, the rebuild APPLIED;
+  - the 0010 rehearsal passed;
+  - the full suite: success (run 36811117609).
+  VERIFY=PASS 4559, scanners 3/3; no pinned file.
+- After the merge: nothing is applied, deployed, enabled or issued. The next boundary is the 0013
+  production apply T4 (the owner), whose contract is prepared from M.
+- MODEL SUBSTITUTION: none in this step. Codex ran review 2 and runs review 3.
+Previously (F1 merge readiness): **F1-MERGE-READINESS-A: draft PR #144 (feat/f1-governed-automation),
 published without force and NOT merged. The code gaps the owner named are closed. The mandatory independent Codex
 security review is OPEN: the Codex quota is exhausted until about 19:35Z. No PASS is substituted.**
 - Credentials: a DB registry (public.automation_credential, migration 0013), read on every request with no cache.
@@ -212,7 +240,20 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS: F1 merge readiness. The Codex review gate is OPEN until the quota resets.
+LOOP_STATE=IN PROGRESS: F1 merge gate. Final independent Codex review (review 3) on this head, then merge if
+  clean, then 0013 T4 preparation from M. Stop at the 0013 production apply boundary.
+  - **F1-MERGE-GATE-A (2026-10-01; the owner's prompt: finish the review, repair, capacity contract,
+    merge under standing authorization, prepare the 0013 T4, return at the apply boundary).**
+    - Review 2 (Codex, eb6976d): run once fully. A first attempt was killed and left no report; its
+      log is kept in scratchpad p1/f1-delegations. Verdict NEEDS_DECISION: R2-01..04 MEDIUM, R2-05..09
+      LOW.
+    - The capacity contract 8b22efe (built in worktree lanes12/f1cap while review 2 ran, then
+      fast-forwarded).
+    - The consolidated repair 8f7923c: one commit for R2-01..09 (see the header).
+    - Then this record. Review 3: .work/task-f1-review3.md, report .work/f1-review3/REVIEW.md.
+    - The merge rule: exact-head merge commit, only with review 3 clean, VERIFY and the scanners
+      PASS, the 0013 real-PG rehearsal PASS, the human-route and non-cohort suites PASS, and main
+      still f19d7575.
   - **F1-MERGE-READINESS-A (2026-09-30; the owner's prompt: G2 accepted; G6 provisional at 6 per 5 minutes and 120 per
     day, not an activation or spend approval; do not merge, release or enable).**
     - PR: verified 446260c16cd21fb972082d6e94b702f55803e6d7 = main f19d7575 + 4 commits.
@@ -1774,7 +1815,8 @@ LOOP_STATE=IN PROGRESS: F1 merge readiness. The Codex review gate is OPEN until 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
+CURRENT_MILESTONE=F1-MERGE-GATE-A (2026-10-01). The final review on this head, then the merge, then the 0013 T4
+  preparation. Before it: F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published, not merged. The code gaps are
   closed, and the real-PG rehearsal passed. The Codex review gate is OPEN (quota). Nothing is applied, deployed,
   enabled or issued.
   Before it: F1-GOVERNED-AUTOMATION-LOCAL-A (2026-09-30), committed and verified LOCALLY
@@ -1851,6 +1893,8 @@ CURRENT_MILESTONE=F1-MERGE-READINESS-A (2026-09-30). Draft PR #144 is published,
 CURRENT_BRANCH=feat/f1-governed-automation (PUBLISHED: draft PR #144, not merged), from main f19d7575:
   - 028ded8, 4f9ae93, 0bc11ff and 446260c (the earlier record);
   - d9df2371 (merge readiness);
+  - bf50005 (the readiness record), eb6976d (pre-review hardening);
+  - 8b22efe (the capacity contract), 8f7923c (the review-2 repair);
   - this STATE record.
   Its worktree is lanes12/f1 in the session scratchpad.
   Before it: feat/f1-governed-automation (then LOCAL): 028ded8, 4f9ae93, 0bc11ff and its STATE record.
@@ -2041,7 +2085,9 @@ LAST_GREEN_SHA=f19d7575 (main, PR #143: the W26 closure record). CI success (run
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1
+LAST_VERIFY=PASS ruff ok | 4559 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, F1 at
+  8f7923c, the review-2 repair).
+  Before it: PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-09-30 (local, F1
   merge readiness at d9df2371; the scanners are unmodified).
   - PR CI at d9df2371: the 0013 real-PG rehearsal succeeded (run 36747080987); the 0010 rehearsal succeeded.
   - This record (with the row-width guard and doc fixes): PASS 4498.
@@ -2156,7 +2202,10 @@ LAST_VERIFY=PASS ruff ok | 4496 passed, 23 warnings | schemas+smoke ok | scanner
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=F1 review2, the MANDATORY independent post-repair security and adversarial review, a merge gate.
+CODEX_PENDING=F1 review3, the FINAL independent security and adversarial review on this head (a merge gate).
+  - Task: .work/task-f1-review3.md in the worktree.
+  - Review 2: DONE (NEEDS_DECISION; repaired in 8f7923c).
+  Before it: F1 review2, the MANDATORY independent post-repair security and adversarial review, a merge gate.
   - Task: scratchpad/lanes12/f1/.work/task-f1-review2.md; the report goes to .work/f1-review2/REVIEW.md.
   - BLOCKED on the Codex usage limit until about 2026-09-30 19:35Z. The gate stays OPEN, and no PASS is substituted.
   - MODEL SUBSTITUTION (2026-09-30): Codex was unavailable, so Claude implemented F1 merge readiness: the registry,
@@ -2243,7 +2292,13 @@ CODEX_PENDING=F1 review2, the MANDATORY independent post-repair security and adv
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Do not merge, release or enable F1 (the owner, 2026-09-30).
+OWNER_BOUNDARY=The 0013 PRODUCTION APPLY (T4) after the merge: the owner authorizes the one dispatch, with
+  expected_sha = M.
+  - Authorized 2026-10-01 (standing): mark PR #144 ready and merge it with an exact-head merge commit, only if
+    every gate passes.
+  - Not authorized: the 0013 apply, a deploy, the enable, credentials, UOR mutation or Cron, F3/§5A, any order
+    capability.
+  Before it (2026-09-30): Do not merge, release or enable F1 (the owner).
   - Authorized and done: publishing PR #144 (draft) and using its CI.
   - Next owner boundary, after the Codex gate passes: the T3 merge of PR #144.
   - Then, in the order of docs/automation/F1_RELEASE_PLAN.md:
@@ -2603,7 +2658,15 @@ OWNER_BOUNDARY=Do not merge, release or enable F1 (the owner, 2026-09-30).
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=After the Codex quota resets (about 19:35Z), run the mandatory review in the worktree:
+NEXT_ACTION=Run review 3 on this head: `./delegate.sh .work/task-f1-review3.md workspace-write xhigh`.
+  - If clean, and every gate passes:
+    - update the PR body, mark it ready, and merge with --match-head-commit;
+    - record M;
+    - rebuild and reverify the 0013 apply package against M;
+    - prepare the T4 contract (.work/f1_release/ in the main checkout);
+    - stop at the apply boundary.
+  - If it finds a HIGH or MEDIUM: one consolidated repair, verify, CI, then the review again.
+  Before it: After the Codex quota resets (about 19:35Z), run the mandatory review in the worktree:
   `./delegate.sh .work/task-f1-review2.md workspace-write xhigh`
   - If it finds a HIGH or MEDIUM: one consolidated repair, then ./verify.sh, a push without force, and CI.
   - If clean: record it, and report F1 MERGE_READY to the owner, whose T3 merge comes next.
