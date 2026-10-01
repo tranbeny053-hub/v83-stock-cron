@@ -326,7 +326,7 @@ CONSTRAINTS_SQL = (
     ' ORDER BY a.attname::text COLLATE "C")'
     f" FROM {_TARGETS}"
     " JOIN pg_catalog.pg_constraint AS c ON c.conrelid = t.oid"
-    ' ORDER BY 1 COLLATE "C"'
+    ' ORDER BY t.name COLLATE "C", c.conname::text COLLATE "C"'
 )
 CONSTRAINT_FIELDS = ("item", "type", "validated", "deferrable", "definition", "columns")
 INDEXES_SQL = (
@@ -334,7 +334,7 @@ INDEXES_SQL = (
     f" FROM {_TARGETS}"
     " JOIN pg_catalog.pg_index AS x ON x.indrelid = t.oid"
     " JOIN pg_catalog.pg_class AS i ON i.oid = x.indexrelid"
-    ' ORDER BY 1 COLLATE "C"'
+    ' ORDER BY t.name COLLATE "C", i.relname::text COLLATE "C"'
 )
 INDEX_FIELDS = ("item", "definition")
 # Triggers the server creates for a constraint are internal: the constraints check covers those.
@@ -347,7 +347,7 @@ TRIGGERS_SQL = (
     " JOIN pg_catalog.pg_proc AS p ON p.oid = g.tgfoid"
     " JOIN pg_catalog.pg_namespace AS n ON n.oid = p.pronamespace"
     " WHERE NOT g.tgisinternal"
-    ' ORDER BY 1 COLLATE "C"'
+    ' ORDER BY t.name COLLATE "C", g.tgname::text COLLATE "C"'
 )
 TRIGGER_FIELDS = (
     "item", "enabled", "type", "function", "arguments", "has_when", "constraint_trigger",
@@ -365,7 +365,7 @@ FUNCTIONS_SQL = (
     " FROM pg_catalog.pg_proc AS p"
     " JOIN pg_catalog.pg_language AS l ON l.oid = p.prolang"
     f" WHERE p.pronamespace = 'public'::regnamespace AND p.proname = '{FUNCTION}'"
-    ' ORDER BY 2 COLLATE "C"'
+    ' ORDER BY pg_catalog.pg_get_function_identity_arguments(p.oid) COLLATE "C"'
 )
 FUNCTION_FIELDS = (
     "function", "arguments", "returns", "language", "security_definer", "kind", "config",

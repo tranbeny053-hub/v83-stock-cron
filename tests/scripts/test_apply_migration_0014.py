@@ -420,6 +420,15 @@ def test_every_check_is_a_read_only_catalog_query(version: int) -> None:
         assert "public." not in bare.replace("'public.' || t.name", ""), query[:80]
 
 
+@pytest.mark.parametrize("version", [PRODUCTION_SERVER, REHEARSAL_SERVER])
+def test_no_check_orders_by_a_column_position(version: int) -> None:
+    # "ORDER BY 1 COLLATE ..." is not a position: it collates the integer 1 and PostgreSQL refuses
+    # it (42804, datatype_mismatch). Found by the real rehearsal; every ordering names its column.
+    for _name, query, _fields in apply_0014.read_only_checks(version):
+        assert not re.search(r"ORDER BY \s*\d", query), query[-80:]
+        assert not re.search(r",\s*\d+\s+COLLATE", query), query[-80:]
+
+
 def test_the_checks_cover_the_three_tables_the_function_and_every_other_table() -> None:
     names = [name for name, _query, _fields in apply_0014.read_only_checks(PRODUCTION_SERVER)]
     assert tuple(names) == CHECK_NAMES
