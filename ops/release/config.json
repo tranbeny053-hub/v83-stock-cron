@@ -1,0 +1,9 @@
+{
+  "base_url": "https://beny053-ultimate-crypto-probability-engine.hf.space",
+  "ci_workflow": "CI",
+  "github_repo": "tranbeny053-hub/v83-stock-cron",
+  "guard_workflow": "source-integrity-guard.yml",
+  "hf_remote": "hf",
+  "schema_version": "ucpe-release-config.v1",
+  "space_api": "https://huggingface.co/api/spaces/beny053/ultimate-crypto-probability-engine"
+}

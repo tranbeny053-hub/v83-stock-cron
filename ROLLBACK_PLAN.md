@@ -1,6 +1,11 @@
 # Rollback Plan
 
-Status: Phase 0 docs-only. No deployable app exists yet.
+Status (corrected 2026-10-01): **superseded for production rollback by `docs/runbooks/ROLLBACK.md`.**
+The earlier status line ("Phase 0 docs-only. No deployable app exists yet.") is obsolete: production
+runs a governed release, and `ops/release/releases.json` lists every deployed build. The "last-known-good"
+step below is unsafe as written: a rollback target must be a registered release that keeps the H2
+fail-closed hold (`python scripts/release.py rollback-check <target>`), never the pre-hold `00705c55`.
+The triggers below still apply.
 
 ## Triggers
 
@@ -19,7 +24,7 @@ Rollback is required or considered when any of these occur:
 ## Safe Procedure
 
 1. Stop feature work.
-2. Identify last-known-good commit/build/tag.
+2. Identify last-known-good commit/build/tag: an H2-safe registered release only (`docs/runbooks/ROLLBACK.md`).
 3. Revert deployment to last-known-good.
 4. Verify `/healthcheck`.
 5. Run `BTC` smoke in `METRICS_ONLY`.
