@@ -55,7 +55,8 @@ default), no credential exists, and the route fails closed at every layer.
 ## 4. Issue the credential (T4, owner)
 
 - `CREDENTIAL_ROTATION.md`, "Issue a credential".
-- The value never enters UCPE, a chat, a file in the repository, or a log.
+- The value never goes into a chat, a file in the repository or a log. UCPE never stores it: only its
+  digest goes into the registry.
 
 ## 5. The quota (G6, T3)
 
@@ -112,11 +113,15 @@ default), no credential exists, and the route fails closed at every layer.
 
 - The route's connections to the database are:
   - made per call (nothing connects at startup);
-  - bounded (connect and statement timeouts; at most two registry reads in flight);
+  - bounded, per operation, not end to end: connect, statement and lock timeouts, a TCP user
+    timeout for a network that stalls after connecting, and at most two registry reads in flight;
   - safe behind Supabase's transaction pooler (no server-side prepared statements).
-- A missing, unreachable or failing database answers 503 `LEDGER_UNAVAILABLE` and writes nothing
-  (`tests/automation/test_transport_fail_closed.py`; the real-PostgreSQL probe proves the same
-  against a missing database).
+- A database that is missing or unreachable when a request is admitted answers 503
+  `LEDGER_UNAVAILABLE`, and nothing is written (`tests/automation/test_transport_fail_closed.py`; the
+  real-PostgreSQL probe proves the same against a missing database).
+- A failure later, while recording, can leave the reservation `IN_PROGRESS` (closed later as
+  `DEADLINE_EXCEEDED`, never re-run), or an outcome whose commit is unknown
+  (`RETENTION_AND_IDEMPOTENCY.md` section 3).
 - The Space's reach to the database is **not assumed**. The human persistence reaches it through
   the same `SUPABASE_DB_URL` (W26 PASS_PROVEN). The route's own connections are unproven until
   step 7, and they fail closed until then.

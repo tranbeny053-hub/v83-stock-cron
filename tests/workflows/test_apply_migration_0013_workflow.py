@@ -49,6 +49,7 @@ REPORTS = (
     "migration-0013-rebuild-report.json",
 )
 FIXTURES = "scripts/migration_0013_rehearsal"
+SOCKET = "-h /var/run/postgresql"
 FIXTURE_NAMES = (
     "00_supabase_like_roles.sql",
     "01_supabase_like_grants.sql",
@@ -252,20 +253,20 @@ def test_every_python_process_is_isolated_or_bytecode_free() -> None:
 
 def test_the_rehearsal_builds_both_scratch_databases_then_applies_refuses_and_probes() -> None:
     lines = _lines(REHEARSE)
-    psql = "psql -X -q -v ON_ERROR_STOP=1 -d"
+    superuser = f"sudo -u postgres psql {SOCKET} -X -q -v ON_ERROR_STOP=1"
+    psql = f"psql {SOCKET} -X -q -v ON_ERROR_STOP=1 -d"
     bundle = '"$RUNNER_TEMP/migrations_0001_0010.sql"'
     url = 'MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_{}?host=/var/run/postgresql"'
-    as_postgres = "sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d"
+    as_postgres = "sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d"
     assert lines == [
         "sudo systemctl start postgresql.service",
-        'sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \\"$(id -un)\\" LOGIN"',
-        "sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < "
-        f"{FIXTURES}/00_supabase_like_roles.sql",
-        'sudo -u postgres createdb -O "$(id -un)" migration_0013_rehearsal',
-        'sudo -u postgres createdb -O "$(id -un)" migration_0013_rebuild',
-        'sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" '
+        f'{superuser} -c "CREATE ROLE \\"$(id -un)\\" LOGIN"',
+        f"{superuser} -f - < {FIXTURES}/00_supabase_like_roles.sql",
+        f'sudo -u postgres createdb {SOCKET} -O "$(id -un)" migration_0013_rehearsal',
+        f'sudo -u postgres createdb {SOCKET} -O "$(id -un)" migration_0013_rebuild',
+        f'{superuser} -v owner="$(id -un)" '
         f"-d migration_0013_rehearsal -f - < {FIXTURES}/01_supabase_like_grants.sql",
-        'sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" '
+        f'{superuser} -v owner="$(id -un)" '
         f"-d migration_0013_rebuild -f - < {FIXTURES}/01_supabase_like_grants.sql",
         f"cat {' '.join(MIGRATIONS_0001_0010)} > {bundle}",
         f"{psql} migration_0013_rehearsal -f - < {bundle}",
@@ -338,6 +339,22 @@ def test_the_rehearse_step_runs_every_command_in_order_and_fails_closed(tmp_path
     assert [call["argv"] for call in stub_calls(log)] == [
         ["systemctl", "start", "postgresql.service"]
     ], "and nothing after it runs"
+
+
+@pytest.mark.parametrize("text", [TEXT, REHEARSAL_TEXT], ids=["dispatch", "pull-request"])
+def test_every_scratch_postgresql_command_names_the_local_socket(text: str) -> None:
+    commands = re.findall(r"\b(psql|createdb)\b([^\n]*)", text)
+    assert len(commands) == 12
+    for command, rest in commands:
+        assert rest.startswith(" -h /var/run/postgresql "), (command, rest)
+
+
+def test_its_concurrency_note_names_exactly_what_it_serializes_with() -> None:
+    header = _comment_header(TEXT)
+    assert "no two production-database dispatch workflows" not in header
+    assert "The outcome resolver and the OOS pair evidence workflows use groups of their own" in (
+        header
+    )
 
 
 def test_the_in_job_tests_cover_the_script_the_migration_and_this_boundary() -> None:
@@ -417,6 +434,15 @@ def test_the_api_role_assertion_probes_every_role_on_both_tables() -> None:
     assert "ARRAY['anon', 'authenticated', 'service_role']" in text
     assert "WHEN insufficient_privilege THEN" in text
     assert "IF probes_run <> 33 THEN" in text
+    # Non-vacuous: superuser over a local socket, SET ROLE outside the refusal handler and checked.
+    assert "pg_catalog.inet_server_addr() IS NOT NULL" in text
+    assert "r.rolsuper" in text
+    set_role = text.index("SET LOCAL ROLE")
+    handler = text.index("WHEN insufficient_privilege THEN")
+    inner = text.index("EXECUTE probe;")
+    assert set_role < inner < handler
+    assert "IF current_user <> asked_role THEN" in text
+    assert "WHEN SQLSTATE 'UC013' THEN" in text
     probes = re.findall(r"^      '(SELECT|INSERT|UPDATE|DELETE|TRUNCATE)", text, re.M)
     assert len(probes) * 3 == 33
     for table in route.TABLES:

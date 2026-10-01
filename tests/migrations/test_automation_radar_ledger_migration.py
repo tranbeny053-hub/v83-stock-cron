@@ -142,10 +142,33 @@ def test_nullable_comparisons_are_guarded_so_no_check_passes_on_null():
     )
 
 
+def test_every_row_level_invariant_of_the_route_is_a_check():
+    ledger = constraints_of(LEDGER)
+    pending = ledger["arl_state_shape"].split(" OR ", 1)[0]
+    for column in ("run_id", "analysis_hash", "evidence_hash"):
+        assert f"{column} IS NULL" in pending, "a pending row carries no success identity"
+    catalogue = ledger["arl_outcome_catalogue"]
+    for code, status in route.RECORDABLE_OUTCOME_STATUS.items():
+        assert f"'{code}'" in catalogue
+        assert f"http_status IS NOT DISTINCT FROM {status}" in catalogue
+    body = ledger["arl_body_shape"]
+    for column in ("run_id", "analysis_hash", "evidence_hash"):
+        assert f"(response_body ->> '{column}') IS NOT DISTINCT FROM {column}" in body
+    assert "(response_body -> 'error' ->> 'code') IS NOT DISTINCT FROM outcome_code" in body
+    assert "jsonb_typeof(response_body) = 'object'" in body
+    assert ledger["arl_body_bound"] == (
+        "CHECK ( response_body IS NULL OR octet_length(response_body::text) <= 16384)"
+    )
+
+
 def test_the_indexes_are_the_route_s_expected_indexes():
     assert route.EXPECTED_INDEXES[route.LEDGER] == {
-        "arl_credential_received": (False, ("credential_id", "received_at_utc")),
-        "automation_radar_ledger_pkey": (True, ("credential_id", "client_request_id")),
+        "arl_credential_received": (False, False, ("credential_id", "received_at_utc")),
+        "automation_radar_ledger_pkey": (True, True, ("credential_id", "client_request_id")),
+    }
+    assert route.EXPECTED_INDEXES[route.REGISTRY] == {
+        "ac_secret_sha256_unique": (True, False, ("secret_sha256",)),
+        "automation_credential_pkey": (True, True, ("credential_id",)),
     }
     ledger_constraints = constraints_of(LEDGER)
     assert ledger_constraints["automation_radar_ledger_pkey"] == (

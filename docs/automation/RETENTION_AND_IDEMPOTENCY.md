@@ -10,9 +10,10 @@ names the code or test that holds it.
   client_request_id)`. The row is reserved `IN_PROGRESS` before any analysis starts, then completed
   with the outcome, the HTTP status and the exact response body (`automation/ledger.py`).
 - **Never recorded (no row, no log line):** a missing, malformed, unknown, mismatched, revoked or
-  expired credential (401); a human session cookie (403); a malformed body (400); an unsupported
-  symbol or timeframe (422); the route disabled or misconfigured (503); the registry or ledger
-  unreachable before the reservation (503). Unauthenticated traffic can therefore never grow the
+  expired credential (401); a human session cookie (403); a malformed, oversized or too slow body
+  (400); a request whose own form is unsupported (422: the timeframe, or the symbol's syntax); the
+  route disabled or misconfigured (503); the registry or ledger unreachable before the reservation
+  (503). An `UNSUPPORTED_SYMBOL` found only by the analysis is recorded. Unauthenticated traffic can therefore never grow the
   table (`test_invalid_credential_writes_no_row`, `test_request_refusals_write_no_row`,
   `test_an_unavailable_registry_fails_closed_and_writes_no_row`).
 - **Repeats are answered from the row** and never recorded again: a replay, a conflict, or a repeat

@@ -188,16 +188,25 @@ two differ, and the differences are listed in `F1_NODE_CLASSIFICATION.md`.
 
 ## 8. Deadline, errors and replay
 
-- **The deadline.** `deadline_ms` is a monotonic budget that starts when the request arrives at the
-  route, before its body is read, and covers everything up to the commit of the ledger record.
+- **The deadline contract.** `deadline_ms` is a monotonic budget that starts when the request
+  arrives at the route, before its credential is checked and its body is read.
   - The analysis may use the budget up to 1 s before its end.
-  - A success is recorded only if the database clock is still within the deadline. The check runs
-    inside the recording transaction, which has statement and lock timeouts bounded by the
-    remaining budget.
-  - A late result is recorded and answered as 503 `DEADLINE_EXCEEDED`, so the ledger always says
-    what the caller was told.
-  - Network transit after the commit is outside the budget. The deadline is compared across the
+  - A success is recorded only if the recording statement runs at least 0.25 s before the deadline
+    by the database clock; the 0.25 s is the commit's margin. The deadline is compared across the
     app's and the database's clocks, so it is only as exact as the gap between them.
+  - Otherwise the result is recorded and answered as 503 `DEADLINE_EXCEEDED`, so the ledger always
+    says what the caller was told. Evidence is returned only after its record commits.
+  - NOT bounded by the deadline:
+    - the commit's own completion: it follows the check and is bounded by the recording timeouts; a
+      check after the commit could not undo the record;
+    - the response's network transit;
+    - an analysis that outlives its deadline: it is not cancelled, and its result is never recorded
+      or returned.
+- **The body.** The route reads a body only after admitting the request (kill switch, human session,
+  credential):
+  - never more than 1,024 bytes; a larger declared Content-Length is refused unread;
+  - never for longer than 2 s.
+  A body refused for size or time is 400 `MALFORMED_REQUEST`.
 - **Overruns.** An analysis that overruns keeps its concurrency slot until its thread ends, so
   overruns never pile up.
 - **Error bodies.** `{"schema_version": "radar_evidence_error.v1", "error": {"code", "message",
@@ -233,8 +242,9 @@ degraded guess.
   - While the first call is running: 409 `REQUEST_IN_PROGRESS`.
   - Past the deadline plus 60 s, the key is closed and answered 503 `DEADLINE_EXCEEDED`, never re-run.
 - **A different request under the same key:** 409 `IDEMPOTENCY_CONFLICT`.
-- **Refusals that write no row.** 400, 401, 403 and 422 happen before the reservation, so the key
-  stays usable. So does a 503 answered before it (disabled, misconfigured, or the registry or the
+- **Refusals that write no row.** 400, 401 and 403, and the 422s of the request's own form (an
+  unsupported timeframe or symbol syntax), happen before the reservation, so the key stays usable. An
+  `UNSUPPORTED_SYMBOL` that only the analysis discovers is recorded against its key. So does a 503 answered before it (disabled, misconfigured, or the registry or the
   ledger unreachable). So do the capacity refusals of section 12: a full ledger (503
   `LEDGER_UNAVAILABLE`) and a credential past its rolling-day row ceiling (429 `QUOTA_EXCEEDED`).
 - **Scope and lifetime.** Idempotency is per credential and lasts as long as the row: at least the

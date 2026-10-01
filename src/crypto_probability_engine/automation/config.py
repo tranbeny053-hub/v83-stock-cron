@@ -27,6 +27,9 @@ MAX_CONCURRENT_ANALYSES = 1
 DEADLINE_MS_MIN = 5_000
 DEADLINE_MS_MAX = 60_000
 REQUEST_BODY_MAX_BYTES = 1_024
+# The route reads a body for at most this long after admitting the request (and the shortest
+# deadline is 5 s): a slower body is refused as malformed.
+BODY_READ_TIMEOUT_SECONDS = 2.0
 
 # THE LEDGER CAPACITY CONTRACT (docs/automation/RETENTION_AND_IDEMPOTENCY.md). Storage is bounded,
 # and the route itself never deletes a row:

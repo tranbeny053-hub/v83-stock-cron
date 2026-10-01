@@ -368,12 +368,14 @@ class PostgresAutomationLedger:
 
             connect = psycopg.connect
         # No server-side prepared statements, like the repository's connections: they break
-        # behind Supabase's transaction pooler.
+        # behind Supabase's transaction pooler. A stalled network after connecting is bounded by
+        # tcp_user_timeout, not left to the operating system's TCP timeouts.
         return connect(
             self._database_url,
             connect_timeout=max(1, math.ceil(timeout_seconds)),
             autocommit=False,
             prepare_threshold=None,
+            tcp_user_timeout=max(1000, int(timeout_seconds * 1000)),
         )
 
     def reserve(

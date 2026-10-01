@@ -12,8 +12,11 @@ name: Migration 0013 automation registry and ledger (MANUAL DISPATCH ONLY, ONE S
 # - then read-only post-checks: both new tables and their indexes exist once; each table is owned by
 #   the applying role, with row-level security on and not forced, no policy, and no privilege for
 #   PUBLIC, anon, authenticated or service_role; exactly its reviewed columns, validated constraints
-#   and indexes; no foreign key in or out, no trigger and no row; the security of every table of
-#   migrations 0001-0009 and 0012 unchanged.
+#   and btree indexes; no foreign key in or out, no trigger and no row;
+# - then 42 constraint probes, each in a savepoint that is always rolled back, prove every
+#   constraint's behaviour: what the route writes is accepted, every other shape is refused by its
+#   named constraint;
+# - and every existing table's security and schema fingerprint, and the event triggers, unchanged.
 # Any refusal rolls everything back. No existing application row is read: the only counts taken are
 # of the two tables the transaction has just created, which must hold no row.
 #
@@ -33,8 +36,11 @@ name: Migration 0013 automation registry and ledger (MANUAL DISPATCH ONLY, ONE S
 # Inputs reach the shell ONLY through `env:`, expanded in double quotes. Every step declares
 # `shell: bash`. Only the apply step receives the database secret.
 #
-# CONCURRENCY. It shares the section 5A group, so no two production-database dispatch workflows of
-# this repository can ever run at the same time.
+# CONCURRENCY. It shares the section 5A group with the other migration routes (0008, 0010, 0011,
+# 0012), the seal and evaluation routes and the privilege audit, so none of those can run at the
+# same time as it. The outcome resolver and the OOS pair evidence workflows use groups of their own;
+# 0013 creates two new tables that neither of them reads or writes. Every scratch PostgreSQL
+# command names the local unix socket explicitly (-h /var/run/postgresql).
 
 "on":
   workflow_dispatch:
@@ -101,22 +107,22 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: |
           sudo systemctl start postgresql.service
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
-          sudo -u postgres createdb -O "$(id -un)" migration_0013_rehearsal
-          sudo -u postgres createdb -O "$(id -un)" migration_0013_rebuild
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres createdb -h /var/run/postgresql -O "$(id -un)" migration_0013_rehearsal
+          sudo -u postgres createdb -h /var/run/postgresql -O "$(id -un)" migration_0013_rebuild
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
           cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql > "$RUNNER_TEMP/migrations_0001_0010.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0011_prediction_target_provenance.sql
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0012_prediction_resolution_status.sql
+          psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
+          psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0011_prediction_target_provenance.sql
+          psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < migrations/0012_prediction_resolution_status.sql
           MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rehearsal?host=/var/run/postgresql" python -I -S -B scripts/apply_migration_0013.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0013-rehearsal-report.json
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rehearsal -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
           MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rehearsal?host=/var/run/postgresql" python -s -B scripts/migration_0013_rehearsal/probe_app_sql.py
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
+          psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < "$RUNNER_TEMP/migrations_0001_0010.sql"
           MIGRATION_0013_REHEARSAL_URL="postgresql:///migration_0013_rebuild?host=/var/run/postgresql" python -I -S -B scripts/apply_migration_0013.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0013-rebuild-report.json
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
+          sudo -u postgres psql -h /var/run/postgresql -X -q -v ON_ERROR_STOP=1 -d migration_0013_rebuild -f - < scripts/migration_0013_rehearsal/20_assert_api_roles_refused.sql
 
       - name: Run migration 0013's tests under this exact runtime (no secret)
         shell: bash

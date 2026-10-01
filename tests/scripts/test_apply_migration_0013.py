@@ -44,10 +44,37 @@ class Each(list):
     """Rows for the first call, the second call, and so on; the last repeats."""
 
 
+class FakeDiag:
+    def __init__(self, constraint: str | None):
+        self.constraint_name = constraint
+
+
+class FakeIntegrityError(Exception):
+    """Shaped like psycopg 3's IntegrityError where the probes read it."""
+
+    def __init__(self, sqlstate: str, constraint: str | None):
+        super().__init__(f"synthetic {sqlstate} on {constraint}")
+        self.sqlstate = sqlstate
+        self.diag = FakeDiag(constraint)
+
+
+PROBES_BY_NAME = {
+    name: (statements, expected) for name, statements, expected in route.CONSTRAINT_PROBES
+}
+
+
 class FakeDatabase:
-    def __init__(self, results: dict[str, Any], fail_on: dict[str, Exception] | None = None):
+    """Plays each constraint probe as the reviewed migration would, unless told otherwise."""
+
+    def __init__(
+        self,
+        results: dict[str, Any],
+        fail_on: dict[str, Exception] | None = None,
+        probe_outcomes: dict[str, tuple[Any, ...]] | None = None,
+    ):
         self.results = results
         self.fail_on = fail_on or {}
+        self.probe_outcomes = probe_outcomes or {}
         self.statements: list[str] = []
         self.connects: list[tuple[str, dict[str, Any]]] = []
         self.commits = 0
@@ -55,10 +82,21 @@ class FakeDatabase:
         self.in_transaction = False
         self.calls: dict[str, int] = {}
         self.fail_commit: Exception | None = None
+        self.probe_index = -1
+        self.probe_step = 0
+        self.in_probe = False
 
     def connect(self, url: str, **options: Any) -> FakeConnection:
         self.connects.append((url, options))
+        self.probe_index = -1
         return FakeConnection(self)
+
+    def play_probe_statement(self) -> None:
+        name, statements, expected = route.CONSTRAINT_PROBES[self.probe_index]
+        self.probe_step += 1
+        outcome = self.probe_outcomes.get(name, expected)
+        if self.probe_step == len(statements) and outcome[0] == "refused":
+            raise FakeIntegrityError(outcome[1], outcome[2])
 
 
 class FakeConnection:
@@ -109,6 +147,23 @@ class FakeCursor:
         database.in_transaction = True
         if query in database.fail_on:
             raise database.fail_on[query]
+        if query == route.PROBE_SAVEPOINT_SQL:
+            database.probe_index += 1
+            database.probe_step = 0
+            database.in_probe = True
+            self.rows = []
+            return
+        if query == route.PROBE_ROLLBACK_SQL:
+            database.in_probe = False
+            self.rows = []
+            return
+        if query == route.PROBE_RELEASE_SQL:
+            self.rows = []
+            return
+        if database.in_probe:
+            database.play_probe_statement()
+            self.rows = []
+            return
         result = database.results.get(query, [])
         if isinstance(result, Each):
             call = database.calls.get(query, 0)
@@ -165,7 +220,7 @@ def synthetic_definition(kind: str, literals: frozenset[str], integers: frozense
 
 def constraint_rows(table: str) -> list[tuple]:
     return [
-        (name, kind, True, synthetic_definition(kind, literals, integers), list(columns))
+        (name, kind, True, False, synthetic_definition(kind, literals, integers), list(columns))
         for name, (kind, columns, literals, integers) in sorted(
             route.EXPECTED_CONSTRAINTS[table].items()
         )
@@ -173,10 +228,36 @@ def constraint_rows(table: str) -> list[tuple]:
 
 
 def index_rows(table: str) -> list[tuple]:
+    structure = route.INDEX_STRUCTURE
     return [
-        (name, unique, list(columns), None, f"CREATE INDEX {name} ...")
-        for name, (unique, columns) in sorted(route.EXPECTED_INDEXES[table].items())
+        (
+            name,
+            unique,
+            primary,
+            list(columns),
+            structure["predicate"],
+            structure["access_method"],
+            structure["valid"],
+            structure["ready"],
+            structure["immediate"],
+            structure["exclusion"],
+            structure["included_columns"],
+            structure["expressions"],
+            structure["default_order"],
+            f"CREATE UNIQUE INDEX {name} ON public.{table} USING btree (...)",
+        )
+        for name, (unique, primary, columns) in sorted(route.EXPECTED_INDEXES[table].items())
     ]
+
+
+def schema_rows(changed: str | None = None) -> list[tuple]:
+    return [
+        (name, *(("f" if name == changed else "e") * 64 for _ in range(5)))
+        for name in route.EXISTING_TABLES
+    ]
+
+
+EVENT_TRIGGERS = [("pgrst_ddl_watch", "ddl_command_end", "O", "extensions.pgrst_ddl_watch")]
 
 
 def healthy_results(server: int = PRODUCTION_SERVER, *, first_apply: bool = True) -> dict:
@@ -185,6 +266,8 @@ def healthy_results(server: int = PRODUCTION_SERVER, *, first_apply: bool = True
         route.SERVER_VERSION_SQL: [(server,)],
         route.RELATIONS_SQL: Each([relation_rows(0 if first_apply else 1), relation_rows(1)]),
         route.existing_security_sql(server): Each([existing_rows()]),
+        route.EXISTING_SCHEMA_SQL: Each([schema_rows()]),
+        route.EVENT_TRIGGERS_SQL: Each([EVENT_TRIGGERS]),
         route.tables_security_sql(server): [security_row(table) for table in route.TABLES],
     }
     for table in route.TABLES:
@@ -351,12 +434,23 @@ def test_a_first_apply_runs_every_check_in_one_committed_transaction() -> None:
     migration_at = statements.index(MIGRATION_SQL)
     assert statements.count(MIGRATION_SQL) == 1
     pre = [query for _n, query, _f in route.pre_checks(PRODUCTION_SERVER)]
-    post = [query for _n, query, _f in route.post_checks(PRODUCTION_SERVER)]
+    catalog = [query for _n, query, _f in route.post_catalog_checks(PRODUCTION_SERVER)]
+    final = [query for _n, query, _f in route.post_final_checks(PRODUCTION_SERVER)]
+    probes = []
+    for _name, probe_statements, _expected in route.CONSTRAINT_PROBES:
+        probes += [
+            route.PROBE_SAVEPOINT_SQL,
+            *probe_statements,
+            route.PROBE_ROLLBACK_SQL,
+            route.PROBE_RELEASE_SQL,
+        ]
     assert statements[5:migration_at] == pre
-    assert statements[migration_at + 1 :] == post
+    assert statements[migration_at + 1 :] == catalog + probes + final
     assert captured["committed"] is True
     assert outcome["post_row_count:automation_credential"] == 0
     assert outcome["table_privileges_asked"] == ALL
+    assert [row["probe"] for row in outcome["constraint_probes"]] == list(PROBES_BY_NAME)
+    assert route.probe_failures(outcome["constraint_probes"]) == []
 
 
 def test_the_rehearsal_server_is_asked_about_exactly_its_privileges() -> None:
@@ -462,26 +556,58 @@ def _defect(results: dict, difference: str) -> None:
         results[route.constraints_sql(LEDGER)] = constraint_rows(LEDGER)[1:]
     elif difference == "constraint-not-validated":
         replace_row(route.constraints_sql(REGISTRY), 0, 2, False)
+    elif difference == "constraint-deferrable":
+        replace_row(route.constraints_sql(REGISTRY), 0, 3, True)
     elif difference == "constraint-literals":
-        replace_row(route.constraints_sql(REGISTRY), 0, 3, "CHECK ((c = 'other'::text))")
+        replace_row(route.constraints_sql(REGISTRY), 0, 4, "CHECK ((c = 'other'::text))")
     elif difference == "constraint-integers":
         index = sorted(route.EXPECTED_CONSTRAINTS[LEDGER]).index("arl_deadline_bounds")
-        replace_row(route.constraints_sql(LEDGER), index, 3, "CHECK ((n >= 1))")
+        replace_row(route.constraints_sql(LEDGER), index, 4, "CHECK ((n >= 1))")
     elif difference == "constraint-columns":
-        replace_row(route.constraints_sql(LEDGER), 0, 4, ["other"])
+        replace_row(route.constraints_sql(LEDGER), 0, 5, ["other"])
     elif difference == "a-foreign-key":
         results[route.constraints_sql(REGISTRY)] = [
             *constraint_rows(REGISTRY),
-            ("zz_fk", "f", True, "FOREIGN KEY (credential_id) REFERENCES x", ["credential_id"]),
+            (
+                "zz_fk",
+                "f",
+                True,
+                False,
+                "FOREIGN KEY (credential_id) REFERENCES x",
+                ["credential_id"],
+            ),
         ]
     elif difference == "referenced":
         results[route.referencing_sql(REGISTRY)] = [(1,)]
     elif difference == "index-not-unique":
         replace_row(route.indexes_sql(REGISTRY), 0, 1, False)
+    elif difference == "index-primary":
+        replace_row(route.indexes_sql(LEDGER), 0, 2, True)
     elif difference == "index-columns":
-        replace_row(route.indexes_sql(LEDGER), 0, 2, ["received_at_utc", "credential_id"])
+        replace_row(route.indexes_sql(LEDGER), 0, 3, ["received_at_utc", "credential_id"])
     elif difference == "index-partial":
-        replace_row(route.indexes_sql(LEDGER), 0, 3, "(state = 'IN_PROGRESS'::text)")
+        replace_row(route.indexes_sql(LEDGER), 0, 4, "(state = 'IN_PROGRESS'::text)")
+    elif difference == "index-brin":
+        replace_row(route.indexes_sql(LEDGER), 0, 5, "brin")
+    elif difference == "index-invalid":
+        replace_row(route.indexes_sql(REGISTRY), 1, 6, False)
+    elif difference == "index-not-ready":
+        replace_row(route.indexes_sql(REGISTRY), 1, 7, False)
+    elif difference == "index-deferred":
+        replace_row(route.indexes_sql(REGISTRY), 1, 8, False)
+    elif difference == "index-exclusion":
+        replace_row(route.indexes_sql(REGISTRY), 1, 9, True)
+    elif difference == "index-include":
+        replace_row(route.indexes_sql(LEDGER), 0, 10, 1)
+    elif difference == "index-expression":
+        replace_row(route.indexes_sql(LEDGER), 0, 11, True)
+    elif difference == "index-descending":
+        replace_row(route.indexes_sql(LEDGER), 0, 12, False)
+    elif difference == "schema-changed":
+        results[route.EXISTING_SCHEMA_SQL] = Each([schema_rows(), schema_rows("predictions")])
+    elif difference == "event-trigger-added":
+        added = [*EVENT_TRIGGERS, ("synthetic_watch", "ddl_command_end", "O", "public.f")]
+        results[route.EVENT_TRIGGERS_SQL] = Each([EVENT_TRIGGERS, added])
     elif difference == "a-trigger":
         results[route.triggers_sql(LEDGER)] = [("synthetic_trigger", "O")]
     elif difference == "a-row":
@@ -513,14 +639,26 @@ DIFFERENCES = [
     "column-grant",
     "constraint-missing",
     "constraint-not-validated",
+    "constraint-deferrable",
     "constraint-literals",
     "constraint-integers",
     "constraint-columns",
     "a-foreign-key",
     "referenced",
     "index-not-unique",
+    "index-primary",
     "index-columns",
     "index-partial",
+    "index-brin",
+    "index-invalid",
+    "index-not-ready",
+    "index-deferred",
+    "index-exclusion",
+    "index-include",
+    "index-expression",
+    "index-descending",
+    "schema-changed",
+    "event-trigger-added",
     "a-trigger",
     "a-row",
     "existing-changed",
@@ -535,6 +673,57 @@ def test_any_difference_from_the_reviewed_result_rolls_the_apply_back(difference
     assert "the applied result is not the reviewed one" in message
     assert database.statements.count(MIGRATION_SQL) == 1
     assert database.commits == 0 and database.rollbacks == 1
+
+
+PROBE_DEFECTS = {
+    "a-weakened-bound-accepts-4999": {"ledger.deadline_4999": ("accepted",)},
+    "a-reversed-expiry-accepts-the-past": {"registry.expiry_not_after_creation": ("accepted",)},
+    "a-missing-pending-invariant": {"ledger.pending_with_identity": ("accepted",)},
+    "another-constraint-refuses": {
+        "ledger.cohort_origin": ("refused", route.CHECK_VIOLATION, "arl_state_shape")
+    },
+    "another-sqlstate": {
+        "ledger.duplicate_key": (
+            "refused",
+            route.CHECK_VIOLATION,
+            "automation_radar_ledger_pkey",
+        )
+    },
+    "a-legitimate-row-refused": {
+        "ledger.succeeded": ("refused", route.CHECK_VIOLATION, "arl_body_shape")
+    },
+    "an-owner-row-refused": {
+        "registry.revoked": ("refused", route.CHECK_VIOLATION, "ac_revocation_shape")
+    },
+}
+
+
+@pytest.mark.parametrize("defect", sorted(PROBE_DEFECTS))
+def test_a_constraint_whose_behaviour_differs_rolls_the_apply_back(defect: str) -> None:
+    database, message = refusal(healthy_results(), probe_outcomes=PROBE_DEFECTS[defect])
+    assert "constraint probe" in message
+    assert database.commits == 0 and database.rollbacks == 1
+
+
+def test_every_probe_is_an_insert_into_a_new_table_inside_a_rolled_back_savepoint() -> None:
+    names = [name for name, _statements, _expected in route.CONSTRAINT_PROBES]
+    assert len(names) == len(set(names)) == 42
+    for name, statements, expected in route.CONSTRAINT_PROBES:
+        for statement in statements:
+            assert statement.startswith(
+                (f"INSERT INTO public.{route.LEDGER} (", f"INSERT INTO public.{route.REGISTRY} (")
+            ), name
+            assert "%" not in statement and ";" not in statement, name
+        assert expected[0] in {"accepted", "refused"}, name
+    refused = {
+        expected[2] for _n, _s, expected in route.CONSTRAINT_PROBES if expected[0] != "accepted"
+    }
+    constraints = {name for table in route.TABLES for name in route.EXPECTED_CONSTRAINTS[table]}
+    # Every constraint is probed, except the two *_valid CHECKs the *_shape CHECKs imply.
+    assert constraints - refused == {"ac_status_valid", "arl_state_valid"}
+    accepted = {n for n, _s, e in route.CONSTRAINT_PROBES if e[0] == "accepted"}
+    for code in route.RECORDABLE_OUTCOMES - {"SUCCEEDED"}:
+        assert f"ledger.refusal.{code}" in accepted
 
 
 def test_the_judges_name_every_difference_not_only_the_first() -> None:

@@ -38,7 +38,16 @@
 -- reads these tables, and applying them takes no lock on any existing table.
 --
 -- NULL-SAFE CHECKS. A CHECK whose expression is NULL passes, so every comparison of a nullable
--- column is guarded by IS NOT NULL: a SUCCEEDED row without its run id or hashes is refused.
+-- column is guarded (IS NOT NULL, IS NOT DISTINCT FROM): a SUCCEEDED row without its run id or
+-- hashes is refused.
+--
+-- THE DATABASE/APPLICATION BOUNDARY. The CHECKs enforce every row-level invariant of what the
+-- route can write: a pending row carries no outcome and no success identity; a completed row's
+-- outcome is one the route can record, with its own HTTP status; its body is a JSON object of the
+-- matching schema version whose identity fields (or error code) equal the row's columns; and no
+-- body exceeds 16,384 bytes of text. The full radar_evidence.v1 and radar_evidence_error.v1
+-- schemas are the application's: every body is validated before it is written and again before it
+-- is replayed.
 --
 -- ACCESS, the 0009 pattern, for both tables: row-level security on, no policy, and no privilege for
 -- PUBLIC, anon, authenticated or service_role. Supabase's default privileges grant every new table
@@ -70,10 +79,36 @@ CREATE TABLE IF NOT EXISTS public.automation_radar_ledger (
     CONSTRAINT arl_deadline_bounds CHECK (deadline_ms BETWEEN 5000 AND 60000),
     CONSTRAINT arl_state_shape CHECK (
         (state = 'IN_PROGRESS' AND outcome_code IS NULL AND http_status IS NULL
-            AND response_body IS NULL AND completed_at_utc IS NULL)
+            AND response_body IS NULL AND completed_at_utc IS NULL
+            AND run_id IS NULL AND analysis_hash IS NULL AND evidence_hash IS NULL)
         OR (state = 'COMPLETED' AND outcome_code IS NOT NULL AND http_status IS NOT NULL
             AND response_body IS NOT NULL AND completed_at_utc IS NOT NULL
             AND completed_at_utc >= received_at_utc)),
+    CONSTRAINT arl_outcome_catalogue CHECK (
+        outcome_code IS NULL
+        OR (outcome_code = 'SUCCEEDED' AND http_status IS NOT DISTINCT FROM 200)
+        OR (outcome_code IN ('QUOTA_EXCEEDED', 'CONCURRENCY_LIMIT')
+            AND http_status IS NOT DISTINCT FROM 429)
+        OR (outcome_code = 'UNSUPPORTED_SYMBOL' AND http_status IS NOT DISTINCT FROM 422)
+        OR (outcome_code IN ('DEADLINE_EXCEEDED', 'UPSTREAM_UNAVAILABLE', 'ANALYSIS_FAILED',
+                'CONTRACT_VIOLATION')
+            AND http_status IS NOT DISTINCT FROM 503)),
+    CONSTRAINT arl_body_shape CHECK (
+        response_body IS NULL
+        OR (jsonb_typeof(response_body) = 'object'
+            AND ((outcome_code IS NOT DISTINCT FROM 'SUCCEEDED'
+                    AND (response_body ->> 'schema_version')
+                        IS NOT DISTINCT FROM 'radar_evidence.v1'
+                    AND (response_body ->> 'run_id') IS NOT DISTINCT FROM run_id
+                    AND (response_body ->> 'analysis_hash') IS NOT DISTINCT FROM analysis_hash
+                    AND (response_body ->> 'evidence_hash') IS NOT DISTINCT FROM evidence_hash)
+                OR (outcome_code IS NOT NULL AND outcome_code <> 'SUCCEEDED'
+                    AND (response_body ->> 'schema_version')
+                        IS NOT DISTINCT FROM 'radar_evidence_error.v1'
+                    AND (response_body -> 'error' ->> 'code')
+                        IS NOT DISTINCT FROM outcome_code)))),
+    CONSTRAINT arl_body_bound CHECK (
+        response_body IS NULL OR octet_length(response_body::text) <= 16384),
     CONSTRAINT arl_success_shape CHECK (
         outcome_code IS DISTINCT FROM 'SUCCEEDED'
         OR (http_status IS NOT NULL AND http_status = 200

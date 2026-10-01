@@ -1,15 +1,29 @@
 -- Rehearsal assertion for migration 0013: every Supabase API role is refused every read and write
--- of both new tables. Each probe runs in its own sub-block as that role (SET LOCAL ROLE, which the
--- sub-block's end reverts) and must fail with insufficient_privilege. A probe that is not refused
--- raises out of the block, so the step fails and nothing persists.
--- Runs ONLY in a scratch local PostgreSQL on a CI runner, as that server's superuser, which alone
--- may SET ROLE to the NOLOGIN API roles. Never run it against a real database.
+-- of both new tables.
+-- NON-VACUOUS BY CONSTRUCTION:
+-- - it refuses to run unless the session is a superuser connected over a local unix socket, the
+--   only context in which SET ROLE to the NOLOGIN API roles is possible;
+-- - SET LOCAL ROLE runs OUTSIDE the refusal handler, so a SET ROLE that fails aborts the script
+--   instead of counting as a refusal, and the role is checked to have taken effect;
+-- - only the table probe itself may raise insufficient_privilege. A probe that is not refused
+--   raises out of the block, so the step fails and nothing persists;
+-- - each probe ends by raising a private sentinel that unwinds its sub-block, which reverts the
+--   role before the next probe.
+-- Runs ONLY in a scratch local PostgreSQL on a CI runner, as that server's superuser.
+-- Never run it against a real database.
 DO $$
 DECLARE
   asked_role text;
   probe text;
   probes_run integer := 0;
+  refused boolean;
 BEGIN
+  IF pg_catalog.inet_server_addr() IS NOT NULL THEN
+    RAISE EXCEPTION 'the role probes run only over a local unix socket';
+  END IF;
+  IF NOT (SELECT r.rolsuper FROM pg_catalog.pg_roles AS r WHERE r.rolname = session_user) THEN
+    RAISE EXCEPTION 'the role probes run only as the scratch server''s superuser';
+  END IF;
   FOREACH asked_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
     FOREACH probe IN ARRAY ARRAY[
       'SELECT count(*) FROM public.automation_credential',
@@ -29,12 +43,24 @@ BEGIN
       'TRUNCATE public.automation_credential',
       'TRUNCATE public.automation_radar_ledger'
     ] LOOP
+      refused := false;
       BEGIN
         EXECUTE pg_catalog.format('SET LOCAL ROLE %I', asked_role);
-        EXECUTE probe;
-        RAISE EXCEPTION 'the API role % was not refused: %', asked_role, probe;
+        IF current_user <> asked_role THEN
+          RAISE EXCEPTION 'SET ROLE % did not take effect (current_user %)', asked_role, current_user;
+        END IF;
+        BEGIN
+          EXECUTE probe;
+        EXCEPTION
+          WHEN insufficient_privilege THEN
+            refused := true;
+        END;
+        IF NOT refused THEN
+          RAISE EXCEPTION 'the API role % was not refused: %', asked_role, probe;
+        END IF;
+        RAISE EXCEPTION 'probe done' USING ERRCODE = 'UC013';
       EXCEPTION
-        WHEN insufficient_privilege THEN
+        WHEN SQLSTATE 'UC013' THEN
           probes_run := probes_run + 1;
       END;
     END LOOP;

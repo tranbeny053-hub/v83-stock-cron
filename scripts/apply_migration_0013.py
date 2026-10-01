@@ -17,7 +17,7 @@ governed machine route POST /v1/automation/radar-evidence (F1):
 - ``public.automation_credential``, the machine-credential registry: a SHA-256 digest per
   credential, never a value, with its primary key, a unique digest and five CHECK constraints;
 - ``public.automation_radar_ledger``, the isolated idempotency and audit ledger of AUTOMATED_RADAR
-  calls, with its primary key, nine CHECK constraints and one index.
+  calls, with its primary key, twelve CHECK constraints and one index.
 It turns each table's row-level security on and revokes every privilege of PUBLIC and the three API
 roles, which Supabase's default privileges grant to every new table. Neither table has a foreign
 key, so the apply takes no lock on any existing table. This route refuses unless production is
@@ -27,27 +27,37 @@ ready for exactly that:
   one-shot property is enforced by the database itself).
 
 ONE TRANSACTION, FAIL CLOSED. Under bounded timeouts and an advisory lock:
-  1. read-only PRE-CHECKS, as above. The security of every table of migrations 0001-0009 and 0012
-     is recorded, not required. The server's version decides which table privileges are asked
-     about, so no check is blind to one the server can grant;
+  1. read-only PRE-CHECKS, as above. Recorded, not required: the security and the whole schema
+     fingerprint (columns, constraints, indexes, policies, triggers) of every table of migrations
+     0001-0009 and 0012, and the database's event triggers. The server's version decides which
+     table privileges are asked about, so no check is blind to one the server can grant;
   2. exactly the pinned bytes of migration 0013, with no parameters;
-  3. read-only POST-CHECKS refuse unless, for each of the two tables:
+  3. read-only catalog POST-CHECKS refuse unless, for each of the two tables:
      - the table and each of its indexes is the only relation of its name in ``public``;
      - the table is an ordinary table owned by the applying role, with row-level security on and
        not forced, no policy, and no privilege, on the table or a column, for PUBLIC, anon,
        authenticated or service_role;
      - its columns are exactly the reviewed ones, in order, with their types, nullability and
        defaults, and no identity, generation or column grant;
-     - its constraints are exactly the reviewed ones, validated, over exactly their columns, quoted
-       literals and numbers, none a foreign key, and no constraint anywhere references it;
-     - its indexes are exactly the reviewed ones, with their uniqueness and key column order, none
-       partial; it has no trigger and holds no row;
-     and every other table's security is exactly as it was.
+     - its constraints are exactly the reviewed ones, validated and not deferrable, over exactly
+       their columns, quoted literals and numbers, none a foreign key, and no constraint anywhere
+       references it;
+     - its indexes are exactly the reviewed ones: valid, ready, immediate btrees with their
+       uniqueness, primary flag and key column order, plain columns in default order, no INCLUDE
+       column, no expression and no predicate; it has no trigger;
+  4. the CONSTRAINT PROBES prove each constraint's semantics by behaviour: 42 synthetic inserts
+     into the two new tables, each in a savepoint that is always rolled back, that must be accepted
+     (every row shape the route and the owner write) or refused with the one SQLSTATE of the one
+     named constraint (every shape they must never take). A weakened, reversed or missing
+     constraint fails them;
+  5. final POST-CHECKS: neither new table holds a row, and every existing table's security and
+     schema fingerprint, and the event triggers, are exactly as they were.
 Any refusal or error rolls the transaction back, so nothing is applied; only then is it committed.
 If the connection fails while the COMMIT is in flight, the report says ``committed`` is UNKNOWN.
 Had it committed, a second dispatch would refuse as not a first apply.
 The only application data ever read is the row counts of the two tables this transaction has just
-created.
+created; the only rows ever written are the probes' synthetic rows in those two tables, each rolled
+back to its savepoint, never committed.
 
 Every query result is captured raw before it is judged, and written to ``--report`` on success
 and on refusal alike. The database URL is never printed, logged or written. An unexpected failure
@@ -77,7 +87,7 @@ SCRIPT = "scripts/apply_migration_0013.py"
 WORKFLOW = ".github/workflows/apply-migration-0013.yml"
 MIGRATION = "migrations/0013_automation_radar_ledger.sql"
 # The reviewed bytes. A different file on the dispatched commit refuses before any connection.
-MIGRATION_SHA256 = "c1e7d7fd3aeb3328981d0fd2f3c0a94bc83cd6944d47637856d0b06c5f735c79"
+MIGRATION_SHA256 = "c1a60c04fc03c13c9771662dd9bcf5e5a0c6386bdeffc8de7b175ecf688f2081"
 CONFIRMATION = "APPLY-MIGRATION-0013-ONCE"
 REPORT_SCHEMA = "migration-0013-apply-report.v1"
 DISPATCH_SCHEMA = "migration-0013-dispatch.v1"
@@ -152,6 +162,20 @@ _PREFIXED_SHA256_PATTERN = "^sha256:[0-9a-f]{64}$"
 _LEDGER_STATES = frozenset({"IN_PROGRESS", "COMPLETED"})
 _REGISTRY_STATUSES = frozenset({"ACTIVE", "REVOKED"})
 _OUTCOME_COLUMNS = ("analysis_hash", "evidence_hash", "http_status", "outcome_code", "run_id")
+# Every outcome the route can record, and its HTTP status (arl_outcome_catalogue).
+RECORDABLE_OUTCOME_STATUS: Mapping[str, int] = MappingProxyType(
+    {
+        "SUCCEEDED": 200,
+        "QUOTA_EXCEEDED": 429,
+        "CONCURRENCY_LIMIT": 429,
+        "UNSUPPORTED_SYMBOL": 422,
+        "DEADLINE_EXCEEDED": 503,
+        "UPSTREAM_UNAVAILABLE": 503,
+        "ANALYSIS_FAILED": 503,
+        "CONTRACT_VIOLATION": 503,
+    }
+)
+RECORDABLE_OUTCOMES = frozenset(RECORDABLE_OUTCOME_STATUS)
 _NONE: frozenset[Any] = frozenset()
 # table -> name -> (contype, the columns it references, sorted; the exact set of quoted literals in
 # its definition; the exact set of unquoted integers in it). Literals and integers are compared as
@@ -194,6 +218,26 @@ EXPECTED_CONSTRAINTS: Mapping[
         ),
         LEDGER: MappingProxyType(
             {
+                "arl_body_bound": ("c", ("response_body",), _NONE, frozenset({16384})),
+                "arl_body_shape": (
+                    "c",
+                    ("analysis_hash", "evidence_hash", "outcome_code", "response_body", "run_id"),
+                    frozenset(
+                        {
+                            "object",
+                            "SUCCEEDED",
+                            "schema_version",
+                            "radar_evidence.v1",
+                            "radar_evidence_error.v1",
+                            "run_id",
+                            "analysis_hash",
+                            "evidence_hash",
+                            "error",
+                            "code",
+                        }
+                    ),
+                    _NONE,
+                ),
                 "arl_credential_id_format": (
                     "c",
                     ("credential_id",),
@@ -213,6 +257,12 @@ EXPECTED_CONSTRAINTS: Mapping[
                     frozenset({"AUTOMATED_RADAR"}),
                     _NONE,
                 ),
+                "arl_outcome_catalogue": (
+                    "c",
+                    ("http_status", "outcome_code"),
+                    RECORDABLE_OUTCOMES,
+                    frozenset({200, 422, 429, 503}),
+                ),
                 "arl_refusal_shape": (
                     "c",
                     _OUTCOME_COLUMNS,
@@ -228,11 +278,14 @@ EXPECTED_CONSTRAINTS: Mapping[
                 "arl_state_shape": (
                     "c",
                     (
+                        "analysis_hash",
                         "completed_at_utc",
+                        "evidence_hash",
                         "http_status",
                         "outcome_code",
                         "received_at_utc",
                         "response_body",
+                        "run_id",
                         "state",
                     ),
                     _LEDGER_STATES,
@@ -255,21 +308,40 @@ EXPECTED_CONSTRAINTS: Mapping[
         ),
     }
 )
-# table -> name -> (unique, the key columns in index order). No index of 0013 is partial.
-EXPECTED_INDEXES: Mapping[str, Mapping[str, tuple[bool, tuple[str, ...]]]] = MappingProxyType(
+# table -> name -> (unique, primary, the key columns in index order). Every index of 0013 is also a
+# valid, ready, immediate, non-exclusion btree over plain columns in default order, with no INCLUDE
+# column and no predicate (INDEX_STRUCTURE).
+EXPECTED_INDEXES: Mapping[str, Mapping[str, tuple[bool, bool, tuple[str, ...]]]] = MappingProxyType(
     {
         REGISTRY: MappingProxyType(
             {
-                "ac_secret_sha256_unique": (True, ("secret_sha256",)),
-                "automation_credential_pkey": (True, ("credential_id",)),
+                "ac_secret_sha256_unique": (True, False, ("secret_sha256",)),
+                "automation_credential_pkey": (True, True, ("credential_id",)),
             }
         ),
         LEDGER: MappingProxyType(
             {
-                "arl_credential_received": (False, ("credential_id", "received_at_utc")),
-                "automation_radar_ledger_pkey": (True, ("credential_id", "client_request_id")),
+                "arl_credential_received": (False, False, ("credential_id", "received_at_utc")),
+                "automation_radar_ledger_pkey": (
+                    True,
+                    True,
+                    ("credential_id", "client_request_id"),
+                ),
             }
         ),
+    }
+)
+INDEX_STRUCTURE: Mapping[str, Any] = MappingProxyType(
+    {
+        "access_method": "btree",
+        "valid": True,
+        "ready": True,
+        "immediate": True,
+        "exclusion": False,
+        "included_columns": 0,
+        "expressions": False,
+        "default_order": True,
+        "predicate": None,
     }
 )
 # Every table migrations 0001-0009 and 0012 create: the ten legacy tables and those of 0005, 0006,
@@ -441,7 +513,7 @@ def constraints_sql(table: str) -> str:
     """Its constraints but NOT NULL, with the server's deparse and their columns, sorted."""
 
     return (
-        "SELECT c.conname::text, c.contype::text, c.convalidated,"
+        "SELECT c.conname::text, c.contype::text, c.convalidated, c.condeferrable,"
         " pg_catalog.pg_get_constraintdef(c.oid),"
         " ARRAY(SELECT a.attname::text FROM pg_catalog.pg_attribute AS a"
         " WHERE a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)"
@@ -452,7 +524,7 @@ def constraints_sql(table: str) -> str:
     )
 
 
-CONSTRAINT_FIELDS = ("constraint", "type", "validated", "definition", "columns")
+CONSTRAINT_FIELDS = ("constraint", "type", "validated", "deferrable", "definition", "columns")
 
 
 def referencing_sql(table: str) -> str:
@@ -468,13 +540,17 @@ def indexes_sql(table: str) -> str:
     """Its indexes: uniqueness, key columns in index order, predicate and raw definition."""
 
     return (
-        "SELECT i.relname::text, x.indisunique,"
+        "SELECT i.relname::text, x.indisunique, x.indisprimary,"
         " ARRAY(SELECT a.attname::text"
         " FROM pg_catalog.unnest(x.indkey) WITH ORDINALITY AS k(attnum, n)"
         " LEFT JOIN pg_catalog.pg_attribute AS a"
         " ON a.attrelid = x.indrelid AND a.attnum = k.attnum"
         " WHERE k.n <= x.indnkeyatts ORDER BY k.n),"
         " pg_catalog.pg_get_expr(x.indpred, x.indrelid),"
+        " (SELECT m.amname::text FROM pg_catalog.pg_am AS m WHERE m.oid = i.relam),"
+        " x.indisvalid, x.indisready, x.indimmediate, x.indisexclusion,"
+        " x.indnatts - x.indnkeyatts, x.indexprs IS NOT NULL,"
+        " NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(x.indoption) AS o(v) WHERE o.v <> 0),"
         " pg_catalog.pg_get_indexdef(x.indexrelid)"
         " FROM pg_catalog.pg_index AS x"
         " JOIN pg_catalog.pg_class AS i ON i.oid = x.indexrelid"
@@ -483,7 +559,22 @@ def indexes_sql(table: str) -> str:
     )
 
 
-INDEX_FIELDS = ("index", "unique", "columns", "predicate", "definition")
+INDEX_FIELDS = (
+    "index",
+    "unique",
+    "primary",
+    "columns",
+    "predicate",
+    "access_method",
+    "valid",
+    "ready",
+    "immediate",
+    "exclusion",
+    "included_columns",
+    "expressions",
+    "default_order",
+    "definition",
+)
 
 
 def triggers_sql(table: str) -> str:
@@ -509,6 +600,378 @@ def row_count_sql(table: str) -> str:
 
 NOT_A_FIRST_APPLY = "this is not a first apply"
 COMMIT_UNKNOWN = "UNKNOWN"
+
+
+def _sha256_sql(expression: str) -> str:
+    return (
+        "pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to("
+        f"COALESCE({expression}, ''), 'UTF8')), 'hex')"
+    )
+
+
+# Every existing table's whole schema, fingerprinted before and after: its columns (type,
+# nullability, default, identity, generation, column ACL), constraints (deparsed, validated),
+# indexes (deparsed, valid), policies (command, roles, expressions) and triggers (deparsed,
+# enabled). The apply must leave every fingerprint exactly as it was.
+_EXISTING_REL = "pg_catalog.to_regclass('public.' || t.name)"
+_SCHEMA_PARTS = (
+    "(SELECT pg_catalog.string_agg(a.attname::text"
+    " || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod) || ':' || a.attnotnull::text"
+    " || ':' || COALESCE(pg_catalog.pg_get_expr(d.adbin, d.adrelid), '')"
+    " || ':' || a.attidentity::text || ':' || a.attgenerated::text"
+    " || ':' || COALESCE(a.attacl::text, ''), ',' ORDER BY a.attnum)"
+    " FROM pg_catalog.pg_attribute AS a"
+    " LEFT JOIN pg_catalog.pg_attrdef AS d ON d.adrelid = a.attrelid AND d.adnum = a.attnum"
+    f" WHERE a.attrelid = {_EXISTING_REL} AND a.attnum > 0 AND NOT a.attisdropped)",
+    "(SELECT pg_catalog.string_agg(c.conname::text"
+    " || ':' || pg_catalog.pg_get_constraintdef(c.oid) || ':' || c.convalidated::text,"
+    " ',' ORDER BY c.conname::text COLLATE \"C\")"
+    f" FROM pg_catalog.pg_constraint AS c WHERE c.conrelid = {_EXISTING_REL})",
+    "(SELECT pg_catalog.string_agg(pg_catalog.pg_get_indexdef(x.indexrelid)"
+    " || ':' || x.indisvalid::text,"
+    " ',' ORDER BY pg_catalog.pg_get_indexdef(x.indexrelid) COLLATE \"C\")"
+    f" FROM pg_catalog.pg_index AS x WHERE x.indrelid = {_EXISTING_REL})",
+    "(SELECT pg_catalog.string_agg(p.polname::text || ':' || p.polcmd::text"
+    " || ':' || p.polpermissive::text || ':' || p.polroles::text"
+    " || ':' || COALESCE(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '')"
+    " || ':' || COALESCE(pg_catalog.pg_get_expr(p.polwithcheck, p.polrelid), ''),"
+    " ',' ORDER BY p.polname::text COLLATE \"C\")"
+    f" FROM pg_catalog.pg_policy AS p WHERE p.polrelid = {_EXISTING_REL})",
+    "(SELECT pg_catalog.string_agg(g.tgname::text"
+    " || ':' || pg_catalog.pg_get_triggerdef(g.oid) || ':' || g.tgenabled::text,"
+    " ',' ORDER BY g.tgname::text COLLATE \"C\")"
+    f" FROM pg_catalog.pg_trigger AS g WHERE g.tgrelid = {_EXISTING_REL})",
+)
+_EXISTING_LISTED = ", ".join(f"('{name}')" for name in EXISTING_TABLES)
+EXISTING_SCHEMA_SQL = (
+    "SELECT t.name, "
+    + ", ".join(_sha256_sql(part) for part in _SCHEMA_PARTS)
+    + f" FROM (VALUES {_EXISTING_LISTED}) AS t(name)"
+    + ' ORDER BY t.name COLLATE "C"'
+)
+SCHEMA_FIELDS = (
+    "table",
+    "columns_sha256",
+    "constraints_sha256",
+    "indexes_sha256",
+    "policies_sha256",
+    "triggers_sha256",
+)
+# The database's event triggers: recorded before and after, and required unchanged. Supabase
+# installs some of its own; they are not judged otherwise.
+EVENT_TRIGGERS_SQL = (
+    "SELECT e.evtname::text, e.evtevent::text, e.evtenabled::text, e.evtfoid::regproc::text"
+    ' FROM pg_catalog.pg_event_trigger AS e ORDER BY e.evtname::text COLLATE "C"'
+)
+EVENT_TRIGGER_FIELDS = ("event_trigger", "event", "enabled", "function")
+
+# THE CONSTRAINT PROBES: the semantics of every CHECK, key and unique constraint, proven by
+# behaviour on this very transaction's new tables. Each probe runs in a savepoint that is always
+# rolled back, so nothing it writes is ever committed, and no existing table is touched. A probe
+# expects either acceptance or refusal with one SQLSTATE by one named constraint. PostgreSQL tests
+# CHECK constraints in name order, so each refused probe breaks only its target and every
+# constraint named before it holds; ac_status_valid and arl_state_valid are implied by the
+# *_shape constraints named before them, which refuse any unknown status or state first.
+PROBE_SAVEPOINT_SQL = "SAVEPOINT ucpe_0013_probe"
+PROBE_ROLLBACK_SQL = "ROLLBACK TO SAVEPOINT ucpe_0013_probe"
+PROBE_RELEASE_SQL = "RELEASE SAVEPOINT ucpe_0013_probe"
+CHECK_VIOLATION = "23514"
+UNIQUE_VIOLATION = "23505"
+_PROBE_RUN = "run_" + "a" * 32
+_PROBE_ANALYSIS = "sha256:" + "b" * 64
+_PROBE_EVIDENCE = "sha256:" + "c" * 64
+_LEDGER_ORDER = (
+    "credential_id",
+    "client_request_id",
+    "request_fingerprint",
+    "evidence_origin",
+    "state",
+    "outcome_code",
+    "http_status",
+    "response_body",
+    "run_id",
+    "analysis_hash",
+    "evidence_hash",
+    "release_id",
+    "deadline_ms",
+    "received_at_utc",
+    "completed_at_utc",
+)
+_PENDING: Mapping[str, str] = MappingProxyType(
+    {
+        "credential_id": "'apply-probe'",
+        "client_request_id": "'00000000-0000-4000-8000-000000000013'",
+        "request_fingerprint": "'sha256:" + "1" * 64 + "'",
+        "evidence_origin": "'AUTOMATED_RADAR'",
+        "state": "'IN_PROGRESS'",
+        "outcome_code": "NULL",
+        "http_status": "NULL",
+        "response_body": "NULL",
+        "run_id": "NULL",
+        "analysis_hash": "NULL",
+        "evidence_hash": "NULL",
+        "release_id": "'UCPE-APPLY-PROBE'",
+        "deadline_ms": "30000",
+        "received_at_utc": "pg_catalog.now()",
+        "completed_at_utc": "NULL",
+    }
+)
+
+
+def _json(text: str) -> str:
+    return f"'{text}'::jsonb"
+
+
+def _success_body(run_id: str = _PROBE_RUN, schema: str = "radar_evidence.v1") -> str:
+    return _json(
+        f'{{"schema_version": "{schema}", "run_id": "{run_id}",'
+        f' "analysis_hash": "{_PROBE_ANALYSIS}", "evidence_hash": "{_PROBE_EVIDENCE}"}}'
+    )
+
+
+def _error_body(code: str) -> str:
+    return _json(f'{{"schema_version": "radar_evidence_error.v1", "error": {{"code": "{code}"}}}}')
+
+
+_SUCCEEDED: Mapping[str, str] = MappingProxyType(
+    {
+        **_PENDING,
+        "state": "'COMPLETED'",
+        "outcome_code": "'SUCCEEDED'",
+        "http_status": "200",
+        "response_body": _success_body(),
+        "run_id": f"'{_PROBE_RUN}'",
+        "analysis_hash": f"'{_PROBE_ANALYSIS}'",
+        "evidence_hash": f"'{_PROBE_EVIDENCE}'",
+        "completed_at_utc": "pg_catalog.now()",
+    }
+)
+
+
+def _refused_row(code: str, status: int, **changes: str) -> dict[str, str]:
+    return {
+        **_PENDING,
+        "state": "'COMPLETED'",
+        "outcome_code": f"'{code}'",
+        "http_status": str(status),
+        "response_body": _error_body(code),
+        "completed_at_utc": "pg_catalog.now()",
+        **changes,
+    }
+
+
+def _ledger_insert(row: Mapping[str, str]) -> str:
+    return (
+        f"INSERT INTO public.{LEDGER} ({', '.join(_LEDGER_ORDER)})"
+        f" VALUES ({', '.join(row[column] for column in _LEDGER_ORDER)})"
+    )
+
+
+def _registry_insert(
+    credential_id: str = "apply-probe-a",
+    digest: str = "a" * 64,
+    status: str = "ACTIVE",
+    not_after: str = "NULL",
+    revoked: str = "NULL",
+) -> str:
+    return (
+        f"INSERT INTO public.{REGISTRY} (credential_id, secret_sha256, status, not_after_utc,"
+        f" revoked_at_utc) VALUES ('{credential_id}', '{digest}', '{status}', {not_after},"
+        f" {revoked})"
+    )
+
+
+def _accept(name: str, *statements: str) -> tuple[str, tuple[str, ...], tuple[Any, ...]]:
+    return (name, statements, ("accepted",))
+
+
+def _refuse(
+    name: str, constraint: str, *statements: str, sqlstate: str = CHECK_VIOLATION
+) -> tuple[str, tuple[str, ...], tuple[Any, ...]]:
+    return (name, statements, ("refused", sqlstate, constraint))
+
+
+# A refusal body that is otherwise valid but longer than arl_body_bound allows.
+_OVERSIZED_ERROR_BODY = (
+    '(\'{"schema_version": "radar_evidence_error.v1",'
+    ' "error": {"code": "QUOTA_EXCEEDED"}, "pad": "'
+    "' || pg_catalog.repeat('x', 17000) || '\"}')::jsonb"
+)
+CONSTRAINT_PROBES: tuple[tuple[str, tuple[str, ...], tuple[Any, ...]], ...] = (
+    # What the route writes, and the owner's registry rows, are accepted.
+    _accept("ledger.pending", _ledger_insert(_PENDING)),
+    _accept("ledger.succeeded", _ledger_insert(_SUCCEEDED)),
+    *(
+        _accept(f"ledger.refusal.{code}", _ledger_insert(_refused_row(code, status)))
+        for code, status in RECORDABLE_OUTCOME_STATUS.items()
+        if code != "SUCCEEDED"
+    ),
+    _accept("ledger.deadline_5000", _ledger_insert({**_PENDING, "deadline_ms": "5000"})),
+    _accept("ledger.deadline_60000", _ledger_insert({**_PENDING, "deadline_ms": "60000"})),
+    _accept("registry.active", _registry_insert()),
+    _accept("registry.revoked", _registry_insert(status="REVOKED", revoked="pg_catalog.now()")),
+    _accept("registry.expiring", _registry_insert(not_after="pg_catalog.now() + interval '1 day'")),
+    # Everything else is refused, each by its own constraint.
+    _refuse(
+        "ledger.body_too_large",
+        "arl_body_bound",
+        _ledger_insert(
+            _refused_row(
+                "QUOTA_EXCEEDED",
+                429,
+                response_body=_OVERSIZED_ERROR_BODY,
+            )
+        ),
+    ),
+    _refuse(
+        "ledger.success_identity_mismatch",
+        "arl_body_shape",
+        _ledger_insert({**_SUCCEEDED, "response_body": _success_body("run_" + "d" * 32)}),
+    ),
+    _refuse(
+        "ledger.success_with_error_schema",
+        "arl_body_shape",
+        _ledger_insert(
+            {**_SUCCEEDED, "response_body": _success_body(schema="radar_evidence_error.v1")}
+        ),
+    ),
+    _refuse(
+        "ledger.refusal_code_mismatch",
+        "arl_body_shape",
+        _ledger_insert(
+            _refused_row("QUOTA_EXCEEDED", 429, response_body=_error_body("CONCURRENCY_LIMIT"))
+        ),
+    ),
+    _refuse(
+        "ledger.body_not_object",
+        "arl_body_shape",
+        _ledger_insert(_refused_row("QUOTA_EXCEEDED", 429, response_body=_json('"x"'))),
+    ),
+    _refuse(
+        "ledger.bad_credential_id",
+        "arl_credential_id_format",
+        _ledger_insert({**_PENDING, "credential_id": "'BAD ID'"}),
+    ),
+    _refuse(
+        "ledger.deadline_4999",
+        "arl_deadline_bounds",
+        _ledger_insert({**_PENDING, "deadline_ms": "4999"}),
+    ),
+    _refuse(
+        "ledger.deadline_60001",
+        "arl_deadline_bounds",
+        _ledger_insert({**_PENDING, "deadline_ms": "60001"}),
+    ),
+    _refuse(
+        "ledger.bad_fingerprint",
+        "arl_fingerprint_format",
+        _ledger_insert({**_PENDING, "request_fingerprint": "'sha256:xyz'"}),
+    ),
+    _refuse(
+        "ledger.cohort_origin",
+        "arl_origin_automated",
+        _ledger_insert({**_PENDING, "evidence_origin": "'USER_REQUESTED'"}),
+    ),
+    _refuse(
+        "ledger.unknown_outcome",
+        "arl_outcome_catalogue",
+        _ledger_insert(_refused_row("NOT_A_CATALOGUE_CODE", 503)),
+    ),
+    _refuse(
+        "ledger.wrong_status",
+        "arl_outcome_catalogue",
+        _ledger_insert(_refused_row("QUOTA_EXCEEDED", 503)),
+    ),
+    _refuse(
+        "ledger.refusal_with_identity",
+        "arl_refusal_shape",
+        _ledger_insert(_refused_row("QUOTA_EXCEEDED", 429, run_id=f"'{_PROBE_RUN}'")),
+    ),
+    _refuse(
+        "ledger.bad_release",
+        "arl_release_id_format",
+        _ledger_insert({**_PENDING, "release_id": "'release-1'"}),
+    ),
+    _refuse(
+        "ledger.pending_with_identity",
+        "arl_state_shape",
+        _ledger_insert({**_PENDING, "run_id": f"'{_PROBE_RUN}'"}),
+    ),
+    _refuse(
+        "ledger.pending_with_completion",
+        "arl_state_shape",
+        _ledger_insert({**_PENDING, "completed_at_utc": "pg_catalog.now()"}),
+    ),
+    _refuse(
+        "ledger.completed_before_received",
+        "arl_state_shape",
+        _ledger_insert(
+            _refused_row(
+                "QUOTA_EXCEEDED", 429, completed_at_utc="pg_catalog.now() - interval '1 second'"
+            )
+        ),
+    ),
+    _refuse(
+        "ledger.success_without_identity",
+        "arl_success_shape",
+        _ledger_insert(
+            {
+                **_SUCCEEDED,
+                "response_body": _json('{"schema_version": "radar_evidence.v1"}'),
+                "run_id": "NULL",
+                "analysis_hash": "NULL",
+                "evidence_hash": "NULL",
+            }
+        ),
+    ),
+    _refuse(
+        "ledger.success_bad_run_id",
+        "arl_success_shape",
+        _ledger_insert(
+            {**_SUCCEEDED, "response_body": _success_body("garbage"), "run_id": "'garbage'"}
+        ),
+    ),
+    _refuse(
+        "ledger.duplicate_key",
+        "automation_radar_ledger_pkey",
+        _ledger_insert(_PENDING),
+        _ledger_insert(_PENDING),
+        sqlstate=UNIQUE_VIOLATION,
+    ),
+    _refuse("registry.bad_id", "ac_credential_id_format", _registry_insert("BAD ID")),
+    _refuse(
+        "registry.expiry_not_after_creation",
+        "ac_expiry_after_creation",
+        _registry_insert(not_after="pg_catalog.now() - interval '1 second'"),
+    ),
+    _refuse(
+        "registry.revoked_without_time", "ac_revocation_shape", _registry_insert(status="REVOKED")
+    ),
+    _refuse(
+        "registry.active_with_revocation",
+        "ac_revocation_shape",
+        _registry_insert(revoked="pg_catalog.now()"),
+    ),
+    _refuse("registry.unknown_status", "ac_revocation_shape", _registry_insert(status="DISABLED")),
+    _refuse(
+        "registry.uppercase_digest", "ac_secret_sha256_format", _registry_insert(digest="A" * 64)
+    ),
+    _refuse(
+        "registry.duplicate_digest",
+        "ac_secret_sha256_unique",
+        _registry_insert(),
+        _registry_insert(credential_id="apply-probe-b"),
+        sqlstate=UNIQUE_VIOLATION,
+    ),
+    _refuse(
+        "registry.duplicate_id",
+        "automation_credential_pkey",
+        _registry_insert(),
+        _registry_insert(digest="b" * 64),
+        sqlstate=UNIQUE_VIOLATION,
+    ),
+)
+PROBE_FIELDS = ("probe", "outcome", "sqlstate", "constraint")
 
 # The rehearsal reaches only a local server through its unix socket: never a network host.
 _LOCAL_SOCKET_URL = re.compile(r"postgresql:///[a-z_][a-z0-9_]*\?host=/var/run/postgresql")
@@ -539,11 +1002,15 @@ def pre_checks(server_version: int) -> tuple[tuple[str, str, tuple[str, ...] | N
     return (
         ("relations", RELATIONS_SQL, RELATION_FIELDS),
         ("existing", existing_security_sql(server_version), SECURITY_FIELDS),
+        ("existing_schema", EXISTING_SCHEMA_SQL, SCHEMA_FIELDS),
+        ("event_triggers", EVENT_TRIGGERS_SQL, EVENT_TRIGGER_FIELDS),
     )
 
 
-def post_checks(server_version: int) -> tuple[tuple[str, str, tuple[str, ...] | None], ...]:
-    """(name, query, fields) of every read after the migration, in this order.
+def post_catalog_checks(
+    server_version: int,
+) -> tuple[tuple[str, str, tuple[str, ...] | None], ...]:
+    """The catalog reads after the migration and before the constraint probes, in this order.
 
     A per-table read is named ``<check>:<table>``.
     """
@@ -556,14 +1023,31 @@ def post_checks(server_version: int) -> tuple[tuple[str, str, tuple[str, ...] | 
             (f"referencing_constraints:{table}", referencing_sql(table), None),
             (f"indexes:{table}", indexes_sql(table), INDEX_FIELDS),
             (f"triggers:{table}", triggers_sql(table), TRIGGER_FIELDS),
-            (f"row_count:{table}", row_count_sql(table), None),
         ]
     return (
         ("relations", RELATIONS_SQL, RELATION_FIELDS),
         ("tables", tables_security_sql(server_version), SECURITY_FIELDS),
         *per_table,
-        ("existing", existing_security_sql(server_version), SECURITY_FIELDS),
     )
+
+
+def post_final_checks(
+    server_version: int,
+) -> tuple[tuple[str, str, tuple[str, ...] | None], ...]:
+    """The reads after the constraint probes: no row is left, nothing else changed."""
+
+    return (
+        *((f"row_count:{table}", row_count_sql(table), None) for table in TABLES),
+        ("existing", existing_security_sql(server_version), SECURITY_FIELDS),
+        ("existing_schema", EXISTING_SCHEMA_SQL, SCHEMA_FIELDS),
+        ("event_triggers", EVENT_TRIGGERS_SQL, EVENT_TRIGGER_FIELDS),
+    )
+
+
+def post_checks(server_version: int) -> tuple[tuple[str, str, tuple[str, ...] | None], ...]:
+    """Every read after the migration, in execution order; the probes run between the parts."""
+
+    return (*post_catalog_checks(server_version), *post_final_checks(server_version))
 
 
 def constraint_literals(definition: str) -> frozenset[str]:
@@ -939,8 +1423,10 @@ def apply_in_one_transaction(
                 migration_sql.encode("utf-8")
             ).hexdigest()
 
-            post = _read_checks(cursor, post_checks(server_version), captured, "post")
-            failures = post_check_failures(pre, post)
+            post = _read_checks(cursor, post_catalog_checks(server_version), captured, "post")
+            probes = run_constraint_probes(cursor, captured)
+            post.update(_read_checks(cursor, post_final_checks(server_version), captured, "post"))
+            failures = post_check_failures(pre, post) + probe_failures(probes)
             if failures:
                 raise _refusal(
                     "the applied result is not the reviewed one, so the transaction is rolled "
@@ -957,8 +1443,54 @@ def apply_in_one_transaction(
         **{f"pre_{name}": value for name, value in pre.items()},
         "executed_migration_sha256": captured["executed_migration_sha256"],
         **{f"post_{name}": value for name, value in post.items()},
+        "constraint_probes": probes,
         "committed": True,
     }
+
+
+def run_constraint_probes(cursor: Any, captured: dict[str, Any]) -> list[dict[str, Any]]:
+    """Run every constraint probe in a savepoint that is always rolled back; record each outcome.
+
+    A refusal is read from the driver's error (its SQLSTATE and constraint name); anything else
+    that goes wrong is recorded the same way and judged a mismatch. Nothing is ever committed.
+    """
+
+    observed: list[dict[str, Any]] = []
+    captured["constraint_probes"] = observed
+    for name, statements, _expected in CONSTRAINT_PROBES:
+        cursor.execute(PROBE_SAVEPOINT_SQL)
+        outcome: dict[str, Any] = dict.fromkeys(PROBE_FIELDS)
+        outcome.update(probe=name, outcome="accepted")
+        try:
+            for statement in statements:
+                cursor.execute(statement)
+        except Exception as exc:  # noqa: BLE001 - a refusal is most probes' expected outcome
+            diag = getattr(exc, "diag", None)
+            outcome.update(
+                outcome="refused",
+                sqlstate=getattr(exc, "sqlstate", None),
+                constraint=getattr(diag, "constraint_name", None),
+            )
+        cursor.execute(PROBE_ROLLBACK_SQL)
+        cursor.execute(PROBE_RELEASE_SQL)
+        observed.append(outcome)
+    return observed
+
+
+def probe_failures(observed: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Pure: every probe whose outcome is not exactly the reviewed one."""
+
+    names = [row.get("probe") for row in observed]
+    expected_names = [name for name, _statements, _expected in CONSTRAINT_PROBES]
+    if names != expected_names:
+        return [f"the constraint probes run were {names}, not {expected_names}"]
+    failures: list[str] = []
+    for row, (name, _statements, expected) in zip(observed, CONSTRAINT_PROBES, strict=True):
+        found = (row.get("outcome"), row.get("sqlstate"), row.get("constraint"))
+        wanted = (expected[0], None, None) if expected[0] == "accepted" else tuple(expected)
+        if found != wanted:
+            failures.append(f"constraint probe {name}: {found!r}, not {wanted!r}")
+    return failures
 
 
 def pre_check_failures(pre: Mapping[str, Any]) -> list[str]:
@@ -968,9 +1500,13 @@ def pre_check_failures(pre: Mapping[str, Any]) -> list[str]:
     require it unchanged, whatever it is.
     """
 
-    return relation_pre_check_failures(pre["relations"]) + existing_pre_check_failures(
+    failures = relation_pre_check_failures(pre["relations"]) + existing_pre_check_failures(
         pre["existing"]
     )
+    schema_tables = [row.get("table") for row in pre["existing_schema"]]
+    if schema_tables != list(EXISTING_TABLES):
+        failures.append(f"the existing tables' schema read was {schema_tables}")
+    return failures
 
 
 def relation_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
@@ -1021,8 +1557,15 @@ def post_check_failures(pre: Mapping[str, Any], post: Mapping[str, Any]) -> list
             + trigger_post_check_failures(table, post[f"triggers:{table}"])
             + _none_failures(post[f"row_count:{table}"], f"rows are in {table}")
         )
-    return failures + _unchanged_failures(
-        "security of table", "table", pre["existing"], post["existing"]
+    return (
+        failures
+        + _unchanged_failures("security of table", "table", pre["existing"], post["existing"])
+        + _unchanged_failures(
+            "schema of table", "table", pre["existing_schema"], post["existing_schema"]
+        )
+        + _unchanged_failures(
+            "event trigger", "event_trigger", pre["event_triggers"], post["event_triggers"]
+        )
     )
 
 
@@ -1104,6 +1647,8 @@ def constraint_post_check_failures(table: str, rows: Sequence[Mapping[str, Any]]
             failures.append(f"{table}.{name}: is of type {row.get('type')!r}, not {kind!r}")
         if row.get("validated") is not True:
             failures.append(f"{table}.{name}: is not validated")
+        if row.get("deferrable") is not False:
+            failures.append(f"{table}.{name}: deferrable is {row.get('deferrable')!r}, not False")
         if row.get("columns") != list(columns):
             failures.append(
                 f"{table}.{name}: references {row.get('columns')!r}, not {list(columns)}"
@@ -1133,7 +1678,7 @@ def index_post_check_failures(table: str, rows: Sequence[Mapping[str, Any]]) -> 
     names = [row.get("index") for row in rows]
     if names != sorted(expected_indexes):
         failures.append(f"{table}: the indexes are {names}, not {sorted(expected_indexes)}")
-    for name, (unique, columns) in expected_indexes.items():
+    for name, (unique, primary, columns) in expected_indexes.items():
         found = [row for row in rows if row.get("index") == name]
         if len(found) != 1:
             failures.append(f"{table}.{name}: {_count_after(found)}")
@@ -1141,14 +1686,17 @@ def index_post_check_failures(table: str, rows: Sequence[Mapping[str, Any]]) -> 
         row = found[0]
         if row.get("unique") is not unique:
             failures.append(f"{table}.{name}: unique is {row.get('unique')!r}, not {unique}")
+        if row.get("primary") is not primary:
+            failures.append(f"{table}.{name}: primary is {row.get('primary')!r}, not {primary}")
         if row.get("columns") != list(columns):
             failures.append(
                 f"{table}.{name}: its key columns are {row.get('columns')!r}, not {list(columns)}"
             )
-        if row.get("predicate") is not None:
-            failures.append(
-                f"{table}.{name}: is partial ({row.get('predicate')!r}), not over every row"
-            )
+        failures += [
+            f"{table}.{name}: {field} is {row.get(field)!r}, not {expected!r}"
+            for field, expected in INDEX_STRUCTURE.items()
+            if not _same(row.get(field), expected)
+        ]
     return failures
 
 

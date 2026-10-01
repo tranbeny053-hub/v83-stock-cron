@@ -275,6 +275,7 @@ def test_postgres_success_on_time_commits_once():  # F1
         "connect_timeout": 3,
         "autocommit": False,
         "prepare_threshold": None,
+        "tcp_user_timeout": 2500,  # the recording budget, as the statement timeout
     }
     (timeout_sql, timeout_params), (update_sql, params) = db.statements
     assert "set_config('statement_timeout'" in timeout_sql and timeout_params["timeout"] == "2500ms"

@@ -8,14 +8,16 @@ drives the production classes themselves (``PostgresCredentialRegistry`` and
   valid, then the first revoked) and a REVOCATION taking effect on the very next lookup through the
   same registry object, with no restart; expiry; fail-closed when the database is missing or
   unreachable;
-- LEDGER: reserve NEW, IN_PROGRESS, CONFLICT; an on-time success replayed byte for byte through
-  JSONB (RFC 8785 JCS of the stored body); a late success recorded as DEADLINE_EXCEEDED; a refusal
-  that does not count against the quota; an abandoned reservation;
+- LEDGER: reserve NEW, IN_PROGRESS, CONFLICT; an on-time success, whose body is a full
+  schema-valid radar_evidence.v1 body (the pinned synthetic example), replayed byte for byte
+  through JSONB (RFC 8785 JCS of the stored body); a late success recorded as DEADLINE_EXCEEDED; a
+  refusal that does not count against the quota; an abandoned reservation;
 - CAPACITY: the rolling-day row ceiling and the row cap each refuse a NEW key and write nothing,
   while a recorded key is still answered;
-- HAZARDS: every row the constraints must refuse is refused, by the named constraint.
-Every hazard runs in its own transaction and is rolled back. The probe names no secret: its
-credential values are synthetic and generated here.
+- CONSTRAINTS: the apply route's own 42 constraint probes, re-run against tables that now hold the
+  application's rows, each in a savepoint that is rolled back: every row shape the route and the
+  owner write is accepted, and every other shape is refused by its named constraint.
+The probe names no secret: its credential values are synthetic and generated here.
 
 Runs ONLY in a scratch local PostgreSQL on a CI runner, reached through its unix socket, never
 where the production database secret is present. Never run it against a real database.
@@ -24,6 +26,7 @@ where the production database secret is present. Never run it against a real dat
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import sys
@@ -32,8 +35,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT / "src") not in sys.path:
-    sys.path.append(str(ROOT / "src"))
+for _path in (ROOT / "src", ROOT):
+    if str(_path) not in sys.path:
+        sys.path.append(str(_path))
 
 from crypto_probability_engine.automation.canonical import jcs_bytes  # noqa: E402
 from crypto_probability_engine.automation.credentials import (  # noqa: E402
@@ -50,6 +54,7 @@ from crypto_probability_engine.automation.ledger import (  # noqa: E402
     PostgresAutomationLedger,
     ReservationKind,
 )
+from scripts import apply_migration_0013 as apply_route  # noqa: E402
 
 URL_VARIABLE = "MIGRATION_0013_REHEARSAL_URL"
 _LOCAL_SOCKET_URL = re.compile(r"postgresql:///[a-z_][a-z0-9_]*\?host=/var/run/postgresql")
@@ -57,16 +62,13 @@ UNREACHABLE_URL = "postgresql:///migration_0013_no_such_database?host=/var/run/p
 RELEASE_ID = "UCPE-REHEARSAL-PROBE"
 FINGERPRINT_1 = "sha256:" + "1" * 64
 FINGERPRINT_2 = "sha256:" + "2" * 64
-RUN_ID = "run_" + "a" * 32
-HASH = "sha256:" + "b" * 64
-# Numbers that JSONB stores as numeric: the replay must still render to the same JCS bytes.
-EVIDENCE_BODY = {
-    "schema_version": "radar_evidence.v1",
-    "probe": True,
-    "numbers": [0.1, 1e-07, 123456.789, 1.0, -2.5, 0, 9007199254740991],
-    "text": "synthetic",
-    "nested": {"b": None, "a": [False, {"z": 1, "y": 2}]},
-}
+# A full, schema-valid radar_evidence.v1 body: the pinned synthetic example (UOR_HANDOFF.md). Its
+# numbers are stored by JSONB as numeric; the replay must still render to the same JCS bytes.
+EXAMPLE = ROOT / "docs/automation/examples/radar_evidence.v1.synthetic-btc-4h-gate-blocked.json"
+EVIDENCE_BODY = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+RUN_ID = EVIDENCE_BODY["run_id"]
+ANALYSIS_HASH = EVIDENCE_BODY["analysis_hash"]
+EVIDENCE_HASH = EVIDENCE_BODY["evidence_hash"]
 LATE_BODY = {"schema_version": "radar_evidence_error.v1", "error": {"code": "DEADLINE_EXCEEDED"}}
 QUOTA_BODY = {"schema_version": "radar_evidence_error.v1", "error": {"code": "QUOTA_EXCEEDED"}}
 
@@ -107,7 +109,7 @@ def main() -> int:
     probe_registry(url, sql)
     probe_ledger(url, sql)
     probe_capacity(url, sql)
-    probe_hazards(url, psycopg)
+    probe_constraints(url, psycopg)
     probe_fail_closed()
     print(f"PROBE PASS: {len(checks_passed)} checks")
     for what in checks_passed:
@@ -215,8 +217,8 @@ def probe_ledger(url: str, sql) -> None:
         http_status=200,
         response_body=EVIDENCE_BODY,
         run_id=RUN_ID,
-        analysis_hash=HASH,
-        evidence_hash=HASH,
+        analysis_hash=ANALYSIS_HASH,
+        evidence_hash=EVIDENCE_HASH,
     )
     late = Outcome(outcome_code="DEADLINE_EXCEEDED", http_status=503, response_body=LATE_BODY)
     on_time = ledger.complete_success(
@@ -331,127 +333,18 @@ def probe_capacity(url: str, sql) -> None:
     )
 
 
-def probe_hazards(url: str, psycopg) -> None:
-    digest = "c" * 64
-    uuid_text = "3f9d2c1e-8a4b-4c2d-9e6f-1a2b3c4d5e6f"
-    base_ledger = (
-        "INSERT INTO public.automation_radar_ledger (credential_id, client_request_id,"
-        " request_fingerprint, evidence_origin, state, outcome_code, http_status, response_body,"
-        " run_id, analysis_hash, evidence_hash, release_id, deadline_ms, received_at_utc,"
-        " completed_at_utc) VALUES ({credential_id}, '" + uuid_text + "', {fingerprint},"
-        " {origin}, {state}, {outcome}, {status}, {body}, {run_id}, {analysis}, {evidence},"
-        " {release}, {deadline}, pg_catalog.now(), {completed})"
-    )
-    good_ledger = {
-        "credential_id": "'hazard-probe'",
-        "fingerprint": f"'{FINGERPRINT_1}'",
-        "origin": "'AUTOMATED_RADAR'",
-        "state": "'IN_PROGRESS'",
-        "outcome": "NULL",
-        "status": "NULL",
-        "body": "NULL",
-        "run_id": "NULL",
-        "analysis": "NULL",
-        "evidence": "NULL",
-        "release": f"'{RELEASE_ID}'",
-        "deadline": "30000",
-        "completed": "NULL",
-    }
-    completed = {
-        "state": "'COMPLETED'",
-        "body": "'{}'::jsonb",
-        "completed": "pg_catalog.now()",
-    }
+def probe_constraints(url: str, psycopg) -> None:
+    """The apply route's constraint probes, against tables that hold the application's rows."""
 
-    def ledger_row(**change: str) -> str:
-        return base_ledger.format(**{**good_ledger, **change})
-
-    base_registry = (
-        "INSERT INTO public.automation_credential (credential_id, secret_sha256, status,"
-        " not_after_utc, revoked_at_utc) VALUES ({credential_id}, {digest}, {status},"
-        " {not_after}, {revoked})"
-    )
-    good_registry = {
-        "credential_id": "'hazard-probe'",
-        "digest": f"'{digest}'",
-        "status": "'ACTIVE'",
-        "not_after": "NULL",
-        "revoked": "NULL",
-    }
-
-    def registry_row(**change: str) -> str:
-        return base_registry.format(**{**good_registry, **change})
-
-    registry_b = f"'{secret_digest(synthetic_value('b'))}'"
-    hazards = [
-        (registry_row(credential_id="'rehearsal-b'"), "automation_credential_pkey"),
-        (registry_row(digest=registry_b), "ac_secret_sha256_unique"),
-        (registry_row(credential_id="'BAD ID'"), "ac_credential_id_format"),
-        (registry_row(credential_id="'ab'"), "ac_credential_id_format"),
-        (registry_row(digest=f"'{'C' * 64}'"), "ac_secret_sha256_format"),
-        (registry_row(digest=f"'{'c' * 63}'"), "ac_secret_sha256_format"),
-        # PostgreSQL tests CHECK constraints in name order, so an unknown status is refused by
-        # ac_revocation_shape, which implies ac_status_valid (likewise arl_state_shape below).
-        (registry_row(status="'DISABLED'"), "ac_revocation_shape"),
-        (registry_row(status="'REVOKED'"), "ac_revocation_shape"),
-        (registry_row(revoked="pg_catalog.now()"), "ac_revocation_shape"),
-        (
-            registry_row(not_after="pg_catalog.now() - interval '1 second'"),
-            "ac_expiry_after_creation",
-        ),
-        (ledger_row(credential_id="'BAD ID'"), "arl_credential_id_format"),
-        (ledger_row(fingerprint="'sha256:xyz'"), "arl_fingerprint_format"),
-        (ledger_row(origin="'USER_REQUESTED'"), "arl_origin_automated"),
-        (ledger_row(origin="'CONTROLLED_SMOKE'"), "arl_origin_automated"),
-        (ledger_row(state="'DONE'"), "arl_state_shape"),
-        (ledger_row(release="'release-1'"), "arl_release_id_format"),
-        (ledger_row(deadline="4999"), "arl_deadline_bounds"),
-        (ledger_row(deadline="60001"), "arl_deadline_bounds"),
-        (ledger_row(state="'COMPLETED'"), "arl_state_shape"),
-        (ledger_row(outcome="'SUCCEEDED'", status="200"), "arl_state_shape"),
-        (
-            # The NULL-safety of the check: a success without its run id or hashes is refused.
-            ledger_row(**completed, outcome="'SUCCEEDED'", status="200"),
-            "arl_success_shape",
-        ),
-        (
-            ledger_row(**completed, outcome="'SUCCEEDED'", status="200", run_id=f"'{RUN_ID}'"),
-            "arl_success_shape",
-        ),
-        (
-            ledger_row(
-                **completed,
-                outcome="'SUCCEEDED'",
-                status="503",
-                run_id=f"'{RUN_ID}'",
-                analysis=f"'{HASH}'",
-                evidence=f"'{HASH}'",
-            ),
-            "arl_success_shape",
-        ),
-        (
-            ledger_row(**completed, outcome="'QUOTA_EXCEEDED'", status="200"),
-            "arl_refusal_shape",
-        ),
-        (
-            ledger_row(**completed, outcome="'QUOTA_EXCEEDED'", status="429", run_id=f"'{RUN_ID}'"),
-            "arl_refusal_shape",
-        ),
-    ]
-    for statement, constraint in hazards:
-        refused_by = None
-        with psycopg.connect(url, autocommit=False) as conn, conn.cursor() as cur:
-            try:
-                cur.execute(statement)
-            except psycopg.errors.IntegrityError as exc:
-                refused_by = exc.diag.constraint_name
-            conn.rollback()
-        check(refused_by == constraint, f"hazard refused by {constraint}: {statement[-90:]}")
-    acceptable = ledger_row()
     with psycopg.connect(url, autocommit=False) as conn, conn.cursor() as cur:
-        cur.execute(acceptable)
+        captured: dict = {}
+        observed = apply_route.run_constraint_probes(cur, captured)
         conn.rollback()
-    check(True, "hazard control: the reviewed shape of a row is accepted (then rolled back)")
+    failures = apply_route.probe_failures(observed)
+    check(
+        failures == [] and len(observed) == len(apply_route.CONSTRAINT_PROBES),
+        f"constraints: all {len(observed)} apply-route probes behave as reviewed {failures}",
+    )
 
 
 def probe_fail_closed() -> None:

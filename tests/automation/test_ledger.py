@@ -210,6 +210,7 @@ def test_postgres_reserves_atomically_in_one_committed_transaction():
         "connect_timeout": 3,
         "autocommit": False,
         "prepare_threshold": None,  # safe behind a transaction pooler
+        "tcp_user_timeout": 3000,  # a stalled network is bounded too
     }
     assert db.events == ["enter", "enter", *["execute"] * 6, "commit", "exit", "exit"]
     sql = [" ".join(statement.split()) for statement, _ in db.statements]

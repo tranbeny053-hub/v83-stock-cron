@@ -212,6 +212,8 @@ class PostgresCredentialRegistry:
                     connect_timeout=max(1, math.ceil(REGISTRY_TIMEOUT_SECONDS)),
                     autocommit=False,
                     prepare_threshold=None,  # as the ledger: safe behind a transaction pooler
+                    # A stalled network after connecting is bounded too, not left to the OS.
+                    tcp_user_timeout=int(REGISTRY_TIMEOUT_SECONDS * 1000),
                 ) as conn,
                 conn.cursor() as cur,
             ):

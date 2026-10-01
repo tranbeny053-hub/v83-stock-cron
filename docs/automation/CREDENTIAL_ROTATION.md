@@ -3,22 +3,26 @@
 Status: **procedure only. Nothing here has been done.** Migration 0013 is not applied, no credential
 exists, and the route is off. Every step below is an owner action on the production database, which
 makes it a **T4, authorized by the owner for that specific step**. UCPE never issues a credential,
-never sees a credential value, and never writes to this table.
+never stores, logs or returns a credential value (a presented value is only hashed in memory,
+during its own request), and never writes to this table.
 
 ## What the design guarantees
 
-- **Zero-downtime rotation.** Credentials live in the database table
+- **Rotation without a restart.** Credentials live in the database table
   `public.automation_credential` (migration 0013), not in the Space's environment. The route reads
   the table on **every request, with no cache**. A new credential therefore works from the very next
-  request, and the old one keeps working until it is revoked. The Space is never restarted, so the
-  human product never goes down for a rotation.
+  request, and the old one keeps working until it is revoked, so the two overlap. The Space is never
+  restarted for a rotation. Availability still depends on the database: a registry that cannot be
+  read refuses every request (below).
 - **Immediate revocation.** Revoking a row refuses the very next request that presents that
   credential, including a replay of an earlier request. A call that had already passed
-  authentication when the revocation landed finishes normally; its deadline caps it at 60 seconds.
+  authentication when the revocation landed finishes normally, under its own deadline contract
+  (`RADAR_EVIDENCE_V1.md` section 8): revocation is not retroactive.
 - **Fail closed.** If the table cannot be read (database unreachable, migration not applied, a
   malformed row), the route authenticates nothing and answers 503 `LEDGER_UNAVAILABLE`.
 - **Proof.** Unit tests cover these properties (`tests/automation/test_credentials.py`,
-  `tests/automation/test_service_route.py`). On every pull request that touches the route, the real
+  `tests/automation/test_service_route.py`). On every pull request that touches the automation
+  package, the migrations or the apply route (the rehearsal workflow's path filter), the real
   PostgreSQL rehearsal (`scripts/migration_0013_rehearsal/probe_app_sql.py`) drives the production
   registry class through rotation and revocation, with no restart.
 
@@ -61,14 +65,15 @@ consumer.
    `not_after_utc` is optional; it must be later than the insertion time.
 4. Give the consumer the token `ucpea.uor-radar-2026-10.<value>`, through its secret store only.
 
-## Rotate (no downtime)
+## Rotate (no restart; the credentials overlap)
 
 1. Issue the new credential exactly as above, under a **new** id. Both credentials now work.
 2. Move the consumer to the new token.
 3. Wait until the consumer has finished every request it began under the old credential. Its
    retries of those requests must still use the old token. Idempotency is per credential
    (`RETENTION_AND_IDEMPOTENCY.md`): a retry under the new token would be a new request and start a
-   new analysis. One cycle plus 60 seconds is enough for UOR, which never retries inside a cycle.
+   new analysis. For UOR, which never retries inside a cycle, one full cycle plus a few minutes is
+   enough: a request is answered within its deadline (at most 60 s) plus the recording timeouts.
 4. Revoke the old credential (next section).
 
 The quota is counted per credential. The new credential starts with a fresh quota, and during the

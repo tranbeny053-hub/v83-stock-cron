@@ -284,6 +284,7 @@ def test_the_postgres_registry_reads_one_bounded_row_per_lookup_and_keeps_nothin
         "connect_timeout": max(1, int(REGISTRY_TIMEOUT_SECONDS)),
         "autocommit": False,
         "prepare_threshold": None,
+        "tcp_user_timeout": int(REGISTRY_TIMEOUT_SECONDS * 1000),
     }
     connection = driver.connections[0]
     (timeout_sql, timeout_params), (lookup_sql, lookup_params) = connection.statements

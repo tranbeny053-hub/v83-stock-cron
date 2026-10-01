@@ -8,12 +8,21 @@ concurrency; the isolated analysis; the pinned radar_evidence.v1 body, never sto
 ``LEDGER_MAX_BODY_BYTES``; the ledger record. The service never raises and never
 echoes a credential or a request field.
 
-The deadline is a MONOTONIC budget of ``deadline_ms`` from the moment the request arrived at the
-route (before its body was read). The analysis may use it up to ``RECORD_RESERVE_SECONDS`` before
-its end; the success is then recorded only if the database clock is still within the deadline
-(the ledger checks it inside the recording transaction), and otherwise recorded and answered as
-DEADLINE_EXCEEDED. Evidence is returned only after its on-time record commits, so the ledger always
-says what the caller was told; network transit after the commit is outside the budget.
+Two phases. ``admit`` decides everything that needs no body: the kill switch, the configuration,
+the human session refusal and the machine credential. The route reads the body only after it.
+``handle_admitted`` then parses the body and runs the rest.
+
+THE DEADLINE CONTRACT. The deadline is a MONOTONIC budget of ``deadline_ms`` from the moment the
+request arrived at the route, before its body was read. The analysis may use it up to
+``RECORD_RESERVE_SECONDS`` before its end. A success is recorded only if the recording statement
+runs at least ``COMMIT_RESERVE_SECONDS`` before the deadline by the database clock (within the two
+clocks' skew); otherwise the call is recorded and answered as DEADLINE_EXCEEDED. Evidence is
+returned only after its record commits, so the ledger always says what the caller was told.
+What the contract does NOT bound:
+- the commit's own completion: it follows the deadline check, bounded by the recording timeouts
+  and given the commit reserve; checking after the commit could not undo a stored success;
+- the network transit of the response;
+- an analysis that outlives its deadline: it is not cancelled, and it keeps its slot until it ends.
 """
 
 from __future__ import annotations
@@ -77,6 +86,9 @@ HUMAN_SESSION_COOKIES = (SESSION_COOKIE, DEV_SESSION_COOKIE)
 RECORD_RESERVE_SECONDS = 1.0
 # Below this much budget left, a success is not even attempted: it is recorded as late.
 MIN_RECORD_SECONDS = 0.1
+# The recording statement must run at least this long before the deadline (by the database clock),
+# so that the commit which follows it has this margin inside the deadline.
+COMMIT_RESERVE_SECONDS = 0.25
 _UPSTREAM_CODES = frozenset(
     {
         "PROVIDER_DEGRADED",
@@ -94,6 +106,15 @@ class AutomationResult:
     status: int
     body: dict[str, Any]
     headers: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Admission:
+    """A request admitted without its body: the principal, the configuration and when it came."""
+
+    principal: MachinePrincipal
+    config: AutomationConfig
+    received_utc: datetime
 
 
 @dataclass(frozen=True)
@@ -156,18 +177,40 @@ class RadarEvidenceService:
         *,
         credential: str | None,
         cookies: Mapping[str, str],
-        body: bytes,
+        body: bytes | None,
         arrived_monotonic: float | None = None,
     ) -> AutomationResult:
+        """Both phases in one call, for callers that already hold the body."""
+
+        arrived = self._monotonic() if arrived_monotonic is None else arrived_monotonic
+        admitted = self.admit(credential=credential, cookies=cookies)
+        if isinstance(admitted, AutomationResult):
+            return admitted
+        return self.handle_admitted(admitted, body=body, arrived_monotonic=arrived)
+
+    def admit(
+        self, *, credential: str | None, cookies: Mapping[str, str]
+    ) -> Admission | AutomationResult:
+        """Everything that needs no body; a refusal is an answer, never an exception."""
+
         try:
-            arrived = self._monotonic() if arrived_monotonic is None else arrived_monotonic
-            return self._handle(credential=credential, cookies=cookies, body=body, arrived=arrived)
+            return self._admit(credential=credential, cookies=cookies)
         except Exception:
             return _error(ErrorCode.ANALYSIS_FAILED)
 
-    def _handle(
-        self, *, credential: str | None, cookies: Mapping[str, str], body: bytes, arrived: float
+    def handle_admitted(
+        self, admission: Admission, *, body: bytes | None, arrived_monotonic: float
     ) -> AutomationResult:
+        """The rest of the call; ``body`` None means it was too large or too slow to arrive."""
+
+        try:
+            return self._handle(admission, body=body, arrived=arrived_monotonic)
+        except Exception:
+            return _error(ErrorCode.ANALYSIS_FAILED)
+
+    def _admit(
+        self, *, credential: str | None, cookies: Mapping[str, str]
+    ) -> Admission | AutomationResult:
         config = self._config_loader()
         if not config.enabled:
             return _error(ErrorCode.AUTOMATION_DISABLED)
@@ -184,6 +227,14 @@ class RadarEvidenceService:
             return _error(ErrorCode.CREDENTIAL_REQUIRED)
         if not isinstance(principal, MachinePrincipal):
             return _error(ErrorCode.CREDENTIAL_INVALID)
+        return Admission(principal=principal, config=config, received_utc=received)
+
+    def _handle(
+        self, admission: Admission, *, body: bytes | None, arrived: float
+    ) -> AutomationResult:
+        principal, config, received = admission.principal, admission.config, admission.received_utc
+        if body is None:
+            return _error(ErrorCode.MALFORMED_REQUEST)
         try:
             request = parse_request(body)
         except ContractError as refusal:
@@ -280,7 +331,7 @@ class RadarEvidenceService:
                     http_status=error_status(ErrorCode.DEADLINE_EXCEEDED),
                     response_body=late,
                 ),
-                deadline_at_utc=call.deadline_at_utc,
+                deadline_at_utc=call.deadline_at_utc - timedelta(seconds=COMMIT_RESERVE_SECONDS),
                 now=self._clock(),
                 timeout_seconds=record_budget,
             )
