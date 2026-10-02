@@ -1,6 +1,76 @@
 # STATE
 
-Updated: 2026-10-02 (0014 APPLIED; OBS-1 RELEASED; the envelope is complete). **Both T4s ran exactly once, with the
+Updated: 2026-10-02 (SEC-1 RELEASED; UX-1 held for an owner ruling; REL-1 next). **SEC-1 IS LIVE. The owner ran
+the one Run action: PREFLIGHT=PASS 7/7, then DEPLOY=PASS, 46a1de6..51a15fd with no force, consumed. Production is
+D 51a15fd0 / UCPE-PROD-SEC1-20261002-A, and the guard is HEALTHY at that pin. The H2-safe rollback target is
+46a1de68.**
+- **SETTLE=PASS** at 04:38:44Z:
+  - RUNNING at D, healthcheck 200;
+  - build-info UCPE-PROD-SEC1-20261002-A with its fingerprint; the frontend bytes are D's;
+  - F1 answers 401 CREDENTIAL_REQUIRED.
+- **Live, read-only checks:**
+  - CSP, nosniff, no-referrer and no-store are on / and /v1/build-info;
+  - a cross-site login is refused with 403 CROSS_SITE_REFUSED;
+  - in a real browser, the live UI loads with every asset at 200, and the only console entry is the expected
+    pre-login 401;
+  - the huggingface.co Space page renders the embedded app: no frame-ancestors or CSP error.
+- **ROLLBACK_CHECK=PASS 7/7** against live production D: 46a1de68 keeps the H2 hold, and no migration follows it.
+- **The re-pin** #167 = 258b969c, exactly as precomputed, → **R 504ddd5d**.
+  - GUARD_VERIFY=PASS 8/8 (run 36966123856): HEALTHY x3, hf = pin = D, live = intended = SEC1, delta [].
+- **Main R:** push CI success (run 36966111025); reproducibility PASS (run 36966111011).
+- **UX-1 HELD, for an owner ruling on F1/UOR artifacts.**
+  - Its backend explanation copy changes the analysis payload. That changes the analysis_hash goldens and the
+    committed F1 radar_evidence.v1 example files, which are UOR handoff artifacts. Schema and semantics are
+    unchanged; the example digests change.
+  - The frontend-only half alone would contradict the Detail view's backend text.
+  - The branch is kept: feat/ux1-in-band-label @ f92ff055, rebased onto the re-pin. Its first verify failure is
+    preserved.
+- **Found in passing:** test_release's asset-token equality refuses any pending frontend release; REL-1 fixes it.
+  The release tools (settle, re-pin) already handle new tokens.
+Previously (SEC-1 merged; its release frozen and handed to the owner as one Run action; FEAS-1 sealed).
+**SEC-1 (plan §13) is MERGED, and its release package is frozen with every gate passed. Auto refused the exact
+deploy command, so it waits on the owner's single Run action. Production stays D 46a1de68 /
+UCPE-PROD-OBS1-20261001-A. MAIN STAYS AT THE RELEASE COMMIT 51a15fd0 UNTIL THAT DEPLOY AND ITS RE-PIN. FEAS-1
+(plan §22 item 8) is sealed. F1 stays CLOSED and delegated. CODEX_PAUSED_BY_OWNER stands.**
+- **Owner ruling (2026-10-02):**
+  - AUTO is the permanent default for UCPE.
+  - For a T4, stay in Auto through preparation, waiting, CI and verification.
+  - Only if Auto blocks the exact frozen production command, give the owner one Run/approval action for it, then
+    continue automatically.
+- **#161** (the T4-results record) merged as 39c6d518: exact head 25068d8e, STATE.md only, CI and B3 green.
+- **SEC-1:** #164 → 04074527, exact head 318431b5.
+  - api/request_guard.py, a pure ASGI middleware. It sits inside the request events; F1 is untouched.
+    - Cross-site unsafe-method requests get 403 CROSS_SITE_REFUSED (CORS allowlist excepted).
+    - Bodies over 16 KiB get 413 REQUEST_TOO_LARGE, before any route runs.
+    - Every response gets nosniff, no-referrer and a self-only CSP (frame-ancestors 'self' https://huggingface.co).
+    - /v1/ responses that set no Cache-Control get no-store.
+  - api/auth.py (T2): new sessions carry iat and jti, plus the operator auth epoch UCPE_AUTH_EPOCH ("Session
+    revoked."). It is read in auth.py, because config/settings.py is evaluator-PINNED.
+  - The first verify failed with 94 EvaluatorPinMismatch (settings.py touched). The failure is preserved;
+    settings.py was reverted and the read rerouted.
+  - VERIFY=PASS 4824 on the exact commit. Mutation 23/23.
+  - A real browser (local, fixture mode): no CSP violation. curl probes: 403/403/413/401.
+  - CLAUDE_ADVERSARIAL_REVIEW, not independent: no HIGH or MEDIUM. Record: .work/roadmap/sec1/.
+- **The SEC-1 release:** identity #165 → **D 51a15fd0**, UCPE-PROD-SEC1-20261002-A (exact head 0a69e7b3).
+  - Push CI success (run 36963641188).
+  - B3 (run 36963641128): REPRODUCIBLE=PASS sha256:f28ac93d…, SMOKE=PASS.
+  - The guard on D (run 36963992290): GUARD_VERIFY=PASS 8/8, delta [api/app.py, config/build_info.py].
+  - The rollback target 46a1de68 (h2_hold): ROLLBACK_FINDINGS=PASS 5/5, local only.
+  - The re-pin precomputed twice, deterministic: 258b969c8ed9… (parent D).
+  - The runtime delta reviewed: 5 files, digest 999610da…. Preflight PASS 7/7 at 04:20:49Z.
+  - **The deploy was refused by Auto before execution ([Production Deploy]).** Nothing was consumed.
+- **FEAS-1** (plan §22 item 8; synthetic only; sealed, .work/roadmap/feas1/, manifest d995d3be):
+  - An absolute ±3 pp calibration claim for the 6h central range is precision-feasible within 52 weeks. Hits are
+    short-memory, H ≈ 0.45.
+  - It still needs a conservative variance rule (the naive HAC is anti-conservative) and a calibration recipe
+    (HAR raw +1.4 to +2.8 pp).
+  - A comparative claim (HAR vs EWMA) is NOT feasible: per-week SNR 0.15-0.38 against the 0.99-1.55 required.
+- **UX-1** (plan §14.3), local branch feat/ux1-in-band-label @ d60ecaa:
+  - "In band" replaces "Timeout" in the UI and in the backend explanation;
+  - it joins the next release after the SEC-1 re-pin.
+- **Unchanged:** OD-DB-1 = D; the H2 hold LIVE; F3 KEEP_UNSPENT; M1 (writer transport) UNKNOWN; B5's DEGRADED half
+  deferred.
+Previously (0014 APPLIED; OBS-1 RELEASED; the envelope is complete). **Both T4s ran exactly once, with the
 owner approving each in Manual mode, and both were adjudicated from raw evidence. Production is D 46a1de68 /
 UCPE-PROD-OBS1-20261001-A, and the guard is HEALTHY at that pin. Migration 0014 is APPLIED. The H2-safe rollback
 target stays D2 5a3ef022. F1 stays CLOSED and delegated to the UOR thread. CODEX_PAUSED_BY_OWNER stands.**
@@ -576,7 +646,16 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=ENVELOPE COMPLETE (2026-10-02): OBS-1 is released, migration 0014 is applied, and both are adjudicated.
+LOOP_STATE=IN PROGRESS (2026-10-02): SEC-1 is released.
+  - Next: REL-1, the release tooling's cache-bust rule.
+  - UX-1 waits on the owner's F1-artifact ruling.
+  Before it: AT THE OWNER'S RUN ACTION (2026-10-02): the SEC-1 deploy.
+  - The package is frozen and gated. Auto refused the exact command.
+  - Main stays at 51a15fd0 until the deploy and its re-pin.
+  - Continuing after it: settle, rollback-check, re-pin (258b969c), guard; then UX-1; then this record.
+  - **ROADMAP-SEC1-FEAS1-A (2026-10-02; owner AUTO standing authorization; Codex paused; Claude implemented and
+    reviewed; deterministic gates).**
+  Before it: ENVELOPE COMPLETE (2026-10-02): OBS-1 is released, migration 0014 is applied, and both are adjudicated.
   Main is 93c55f97. Nothing is in flight. F1 is CLOSED and delegated to the UOR thread.
   - **PHASE3-T4-0014-OBS1-A (2026-10-02; owner standing authorization; T4s approved by the owner in Manual mode).**
     - 0014: run 36952902214, APPLIED (44/44). OBS-1: DEPLOY, SETTLE, ROLLBACK_CHECK and GUARD all PASS.
@@ -2212,7 +2291,13 @@ LOOP_STATE=ENVELOPE COMPLETE (2026-10-02): OBS-1 is released, migration 0014 is 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3: OBS-1 RELEASED, 0014 APPLIED (2026-10-02).
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02):
+  - SEC-1 RELEASED: production 51a15fd0 / UCPE-PROD-SEC1-20261002-A;
+  - FEAS-1 sealed;
+  - UX-1 held.
+  Before it: PHASES 2-3 and 7: SEC-1 (§13) MERGED and its release at the owner's Run action; FEAS-1 (§22 item
+  8) sealed (2026-10-02). Production is unchanged: 46a1de68 / UCPE-PROD-OBS1-20261001-A.
+  Before it: PHASES 2-3: OBS-1 RELEASED, 0014 APPLIED (2026-10-02).
   - Production: D 46a1de68 / UCPE-PROD-OBS1-20261001-A; the guard HEALTHY; rollback target D2 (H2-safe).
   - Core-evidence invariants (§8.2) are live in the database. F1 is CLOSED and delegated to the UOR thread.
   Before it: PHASES 2-3, AT OWNER T4 (2026-10-01).
@@ -2308,7 +2393,16 @@ CURRENT_MILESTONE=PHASES 2-3: OBS-1 RELEASED, 0014 APPLIED (2026-10-02).
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-0014-route-obs1-release (PR #161, this record), extended after both T4s, with main
+CURRENT_BRANCH=chore/state-sec1-release-feas1 (PR #166, this record), extended after the SEC-1 release, with main R
+  merged in. Worktree lanes18/state.
+  - Merged: release/prod-sec1 (#167 → 504ddd5d).
+  - Local, held: feat/ux1-in-band-label @ f92ff055.
+  Before it: chore/state-sec1-release-feas1 (this record; a draft PR, merged after the SEC-1 re-pin), from main
+  51a15fd0. Worktree lanes18/state.
+  - Merged: feat/sec1-app-security-controls (#164 → 04074527); prep/release-identity-sec1 (#165 → 51a15fd0);
+    chore/state-0014-route-obs1-release (#161 → 39c6d518).
+  - Local: feat/ux1-in-band-label @ d60ecaa.
+  Before it: chore/state-0014-route-obs1-release (PR #161, this record), extended after both T4s, with main
   93c55f97 merged into it. Worktree lanes17/state2.
   - Merged: release/prod-obs1 (#162 → 00b6fa94); chore/registry-0014-applied (#163 → 93c55f97).
   Before it: chore/state-0014-route-obs1-release (this record), from main 46a1de68. Worktree lanes17/state2.
@@ -2382,7 +2476,15 @@ CURRENT_BRANCH=chore/state-0014-route-obs1-release (PR #161, this record), exten
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=93c55f97 (main, PR #163: the 0014 registry; over 00b6fa94, PR #162: the re-pin; over 46a1de68 = D).
+LAST_GREEN_SHA=504ddd5d (main = R, PR #167: the SEC-1 re-pin; over 51a15fd0 = D, deployed).
+  - Push CI success (run 36966111025); reproducibility PASS (run 36966111011).
+  - The guard on R: PASS 8/8 (run 36966123856), delta [].
+  Before it: 51a15fd0 (main = the SEC-1 release commit D, PR #165; over 04074527, PR #164: SEC-1; over 39c6d518, PR
+  #161).
+  - Push CI success (run 36963641188).
+  - B3 REPRODUCIBLE=PASS + SMOKE=PASS (run 36963641128).
+  - The guard on D: PASS (run 36963992290).
+  Before it: 93c55f97 (main, PR #163: the 0014 registry; over 00b6fa94, PR #162: the re-pin; over 46a1de68 = D).
   - Push CI success (run 36956596549); reproducibility PASS (run 36956596656).
   - The guard on 00b6fa94: GUARD_VERIFY=PASS 8/8 (run 36955866384), delta [].
   Before it: 46a1de68 (main = D, PR #160: the OBS-1 release identity; over 3e69430e, PR #159: the 0014 route;
@@ -2552,7 +2654,12 @@ LAST_GREEN_SHA=93c55f97 (main, PR #163: the 0014 registry; over 00b6fa94, PR #16
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4785 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
+LAST_VERIFY=PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
+  - This record at R, verified before its push (the PR body).
+  Before it: PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
+  - SEC-1 at its exact commit 318431b5, and #165's identity change.
+  - This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4785 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
   - #163's registry change, at c82822e0 plus the change.
   - This record is verified before its push (the PR body).
   Before it: PASS ruff ok | 4785 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01.
@@ -2786,7 +2893,23 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Roadmap (2026-10-02). Both T4s are consumed and must never be rerun: the 0014 dispatch, run
+OWNER_BOUNDARY=Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never rerun.
+  - One batched question: may a change to the analysis payload regenerate the committed F1 radar_evidence.v1
+    examples and the analysis_hash goldens? Schema and semantics are unchanged; only the example digests change.
+    UX-1 needs this, and so will any payload change, such as a DecisionView.
+  - Still open: M1; the H2 items (the hold stays live); B5's DEGRADED half deferred; a rollback is the owner's T4.
+  Never authorized to Claude: UOR work, credential rotation or revocation, F3/§5A or protected access, H2
+  execution, paid resources, any order capability, the OD-DB-1 data-row precheck.
+  Before it: One Run action (2026-10-02): the SEC-1 deploy.
+  - A single chained command: a fresh preflight of D 51a15fd0 with the reviewed delta digest, then `release.py
+    deploy` (consumed once; never rerun).
+  - Rule: AUTO is the default. A T4 that Auto blocks becomes one Run action; the owner is never asked to stay in
+    Manual.
+  - Still open: M1 (owner-run); the H2 items (the hold stays live); B5's DEGRADED half deferred; a rollback is the
+    owner's T4.
+  Never authorized to Claude: UOR work, credential rotation or revocation, F3/§5A or protected access, H2
+  execution, paid resources, any order capability, the OD-DB-1 data-row precheck.
+  Before it: Roadmap (2026-10-02). Both T4s are consumed and must never be rerun: the 0014 dispatch, run
   36952902214; the OBS-1 deploy, .work/release/CONSUMED_deploy_46a1de68….
   Still open:
   - M1 (owner-run): the writer transport, from the signed-in /v1/system_status.
@@ -3234,7 +3357,20 @@ OWNER_BOUNDARY=Roadmap (2026-10-02). Both T4s are consumed and must never be rer
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner's next roadmap instruction. This envelope (OBS-1, DBI-1, the 0014 route and apply, the OBS-1
+NEXT_ACTION=Claude:
+  1. REL-1 (release tooling):
+     - a changed frontend/app.js or styles.css must ship a new cache token, checked in preflight;
+     - the asset-token test becomes conditional on a pending frontend delta.
+  2. Then the next decision-free lane.
+  - UX-1 waits on the owner's F1-artifact ruling.
+  Before it: The owner runs the SEC-1 deploy (one Run action). Then Claude, automatically:
+  1. settle D with the F1 probe; the full rollback-check of 46a1de68 against production D;
+  2. publish the re-pin, which must equal 258b969c; the guard on it;
+  3. rebase UX-1 onto it, set its guarded delta, verify, PR, merge; it then joins the next release train;
+  4. merge this record, extended with the results.
+  - FEAS-1 follow-ups need authorization: real DEV-admissible H for hit sequences and score differences (§22 item 5
+    and item 8 with real data).
+  Before it: The owner's next roadmap instruction. This envelope (OBS-1, DBI-1, the 0014 route and apply, the OBS-1
   release) is complete.
   - Claude, read-only, when next active: confirm that the resolver's next scheduled runs show error_save_* = 0 on
     the 0014-applied database, and that the scheduled guard stays HEALTHY at pin D.
