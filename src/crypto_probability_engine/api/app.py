@@ -37,6 +37,7 @@ from crypto_probability_engine.api.calibration_endpoint import (
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.health import runtime_health, system_status
 from crypto_probability_engine.api.request_events import RequestEventMiddleware
+from crypto_probability_engine.api.request_guard import RequestGuardMiddleware
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
     BatchAnalysisRequest,
@@ -91,14 +92,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.skill_evidence_repository = skill_evidence_repository
     app.state.telemetry = telemetry
 
-    origins = list(app_settings.strict_cors_origins)
+    origins = list(app_settings.strict_cors_origins) or ["http://localhost:7860", "http://127.0.0.1:7860"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins or ["http://localhost:7860", "http://127.0.0.1:7860"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["Content-Type"],
     )
+    # Plan §13: cross-site writes and oversized bodies are refused before any route runs, and every
+    # response gets the browser security headers. The CORS allowlist is the only cross-site write
+    # policy. The F1 automation route passes through untouched.
+    app.add_middleware(RequestGuardMiddleware, allowed_origins=origins)
     # Plan §10: one sanitized event per request; the F1 automation route passes through untouched.
     app.add_middleware(RequestEventMiddleware, sink=telemetry)
 

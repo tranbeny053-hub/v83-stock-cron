@@ -6,6 +6,8 @@ import base64
 import hashlib
 import hmac
 import json
+import os
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -31,6 +33,10 @@ DEV_SESSION_COOKIE = "ucpe_dev_session"
 
 
 MAX_ACCESS_CODE_LENGTH = 128
+# The operator's emergency switch (plan §13): sessions carry the epoch they were issued under, and
+# once this variable is set, a session whose epoch differs is refused. Empty (the default) refuses
+# none. Read here, not in the pinned Settings, so the evaluator pin is untouched.
+AUTH_EPOCH_ENV = "UCPE_AUTH_EPOCH"
 
 
 class LoginRequest(BaseModel):
@@ -198,11 +204,16 @@ def create_session_token(
     if not settings.session_signing_key:
         raise api_error(503, ErrorCode.UNAUTHORIZED, "Session signing key is not configured.")
     prediction_origin = validate_prediction_origin(prediction_origin)
-    expires = datetime.now(UTC) + timedelta(seconds=settings.session_ttl_seconds)
+    issued = datetime.now(UTC)
+    expires = issued + timedelta(seconds=settings.session_ttl_seconds)
+    # iat and jti identify the session for audit; epoch is the operator's revocation switch.
     payload = {
         "sub": subject,
         "dev": dev,
+        "iat": int(issued.timestamp()),
         "exp": int(expires.timestamp()),
+        "jti": secrets.token_urlsafe(12),
+        "epoch": current_auth_epoch(),
         "prediction_origin": prediction_origin,
     }
     body = _b64_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
@@ -228,10 +239,20 @@ def verify_session_token(
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Valid session is required.") from exc
     if int(payload.get("exp", 0)) < int(time.time()):
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Session expired.")
+    # Once the operator sets an epoch, every session issued under another one (or none) is refused.
+    epoch = current_auth_epoch()
+    if epoch and payload.get("epoch") != epoch:
+        raise api_error(401, ErrorCode.UNAUTHORIZED, "Session revoked.")
     if require_dev and not payload.get("dev"):
         raise api_error(401, ErrorCode.UNAUTHORIZED, "Dev Mode re-auth is required.")
     session_prediction_origin(payload)
     return payload
+
+
+def current_auth_epoch() -> str:
+    """The operator's auth epoch (AUTH_EPOCH_ENV), or "" when unset."""
+
+    return os.environ.get(AUTH_EPOCH_ENV, "").strip()
 
 
 def session_prediction_origin(payload: dict) -> str:

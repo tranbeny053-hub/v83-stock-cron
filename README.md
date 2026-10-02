@@ -75,6 +75,7 @@ Apply `migrations/0002_news.sql` in Supabase SQL Editor before expecting durable
 | Variable | `UCPE_COOKIE_SECURE` | `true` | Secure production cookies | yes | Use `false` only for local HTTP smoke. |
 | Variable | `UCPE_DEV_MODE_ENABLED` | `false` | Disable Dev Mode by default | yes | Enable only if Dev Mode secret is configured. |
 | Variable | `UCPE_ACCESS_CODE_PBKDF2_ITERATIONS` | `210000` | Access-code KDF work factor | yes | Must match hash generation. |
+| Variable | `UCPE_AUTH_EPOCH` | empty | Emergency sign-out of every session | no | Leave empty. See "Emergency session invalidation" below. |
 | Secret | `APP_ACCESS_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Operator login code hash | yes | Generate salt first, export `UCPE_ACCESS_CODE_SALT`, then run `PYTHONPATH=src python3 scripts/make_access_hash.py --name APP_ACCESS_CODE_HASH`; enter the code at the hidden prompt. |
 | Secret | `DEV_MODE_CODE_HASH` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Dev Mode re-auth code hash | later | Required only if `UCPE_DEV_MODE_ENABLED=true`; use `PYTHONPATH=src python3 scripts/make_access_hash.py --name DEV_MODE_CODE_HASH`. |
 | Secret | `SESSION_SIGNING_KEY` | `<GENERATE_LOCALLY_DO_NOT_COMMIT>` | Sign session cookies | yes | Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
@@ -95,3 +96,14 @@ Apply `migrations/0002_news.sql` in Supabase SQL Editor before expecting durable
 - A Hugging Face token, if used for repository upload outside this app, is not the app login code.
 - No Binance/OKX API keys or exchange secrets are required for the current public market-data build.
 - GDELT requires no key; FRED and NewsAPI keys are optional backend-only secrets.
+
+## Emergency session invalidation
+
+- **To sign every session out at once,** set the Variable `UCPE_AUTH_EPOCH` to any new value (for example the
+  date, `2026-10-02-a`) and restart the Space.
+  - Every session issued under another value, or before the variable existed, is refused with "Session revoked."
+  - The operator then logs in again.
+  - Change the value again for the next emergency.
+- **If the signing key itself may be exposed,** rotate the Secret `SESSION_SIGNING_KEY` instead. That also
+  invalidates every session.
+- Each new session records when it was issued (`iat`) and a random session id (`jti`) for audit.
