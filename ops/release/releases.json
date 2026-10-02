@@ -73,9 +73,9 @@
     },
     {
       "additive": true,
-      "applied_run": null,
+      "applied_run": 36952902214,
       "id": "0014",
-      "note": "AUTHORED, NOT APPLIED: NOT VALID checks and append-only triggers; every H2-safe target writes only rows they accept and only inserts core evidence"
+      "note": "NOT VALID checks and append-only triggers; every H2-safe target writes only rows they accept and only inserts core evidence"
     }
   ],
   "releases": [
