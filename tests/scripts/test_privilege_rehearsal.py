@@ -1,0 +1,358 @@
+"""P3-PRIV-R: the draft least-privilege roles, their rollback, the rehearsal and its workflow.
+
+What a database is not needed for, checked here:
+- the draft and its rollback are parsed and held to the rehearsal's own expected matrix, so the
+  SQL, the harness and the design cannot drift apart;
+- the harness's verdict logic, its JWT and its refusal to run anywhere but a scratch runner;
+- the workflow's contract.
+The database half runs in .github/workflows/privilege-rehearsal.yml, on scratch PostgreSQL behind a
+real PostgREST.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import hmac
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+from scripts.privilege_rehearsal import rehearse
+
+ROOT = Path(__file__).resolve().parents[2]
+DRAFT = (ROOT / "scripts/privilege_rehearsal/draft_0016_least_privilege_roles.sql").read_text()
+ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0016.sql").read_text()
+FIXTURE = (ROOT / "scripts/privilege_rehearsal/00_supabase_like_authenticator.sql").read_text()
+WORKFLOW = (ROOT / ".github/workflows/privilege-rehearsal.yml").read_text(encoding="utf-8")
+
+
+def statements(sql: str) -> list[str]:
+    """The SQL's statements, comments dropped and whitespace collapsed (no DO body has a ';')."""
+
+    body = "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
+    parts = re.split(r";\s*(?=\n|$)", re.sub(r"\$\$.*?\$\$", "$$ $$", body, flags=re.S))
+    return [" ".join(part.split()) for part in parts if part.strip()]
+
+
+def table_grants(sql: str) -> dict[str, dict[str, set[str]]]:
+    grants: dict[str, dict[str, set[str]]] = {}
+    for statement in statements(sql):
+        match = re.fullmatch(r"GRANT ([A-Z, ]+) ON TABLE (.+) TO (\w+)", statement)
+        if match:
+            privileges = {p.strip() for p in match.group(1).split(",")}
+            for table in match.group(2).split(","):
+                name = table.strip().removeprefix("public.")
+                grants.setdefault(match.group(3), {}).setdefault(name, set()).update(privileges)
+    return grants
+
+
+def policies(sql: str, verb: str = "CREATE") -> set[tuple[str, str, str]]:
+    found = set()
+    for statement in statements(sql):
+        if verb == "CREATE":
+            match = re.fullmatch(
+                r"CREATE POLICY (\w+) ON public\.(\w+) FOR (\w+) TO (\w+) (.+)", statement
+            )
+            if match:
+                name, table, command, role, _ = match.groups()
+                assert name == f"{role}_{command.lower()}", statement
+                found.add((table, role, command))
+        else:
+            match = re.fullmatch(
+                r"DROP POLICY (\w+)_(select|insert|update|delete) ON public\.(\w+)", statement
+            )
+            if match:
+                found.add((match.group(3), match.group(1), match.group(2).upper()))
+    return found
+
+
+# ------------------------------------------------------------------------ the draft
+
+
+def test_the_draft_is_not_a_migration() -> None:
+    """Nothing applies it to a real database, and release check 5c never sees it."""
+
+    for migration in (ROOT / "migrations").glob("*.sql"):
+        assert migration.read_text() != DRAFT, migration
+    assert "NOT A MIGRATION" in DRAFT
+
+
+def test_a_second_application_is_refused_before_any_change() -> None:
+    every = statements(DRAFT)
+    assert every[0].startswith("DO $$"), "the refusal must come first"
+    refusal = re.compile(
+        r"IF EXISTS \(\s*SELECT 1 FROM pg_catalog\.pg_roles\s+WHERE rolname IN \("
+        r"'ucpe_api_writer', 'ucpe_bundle_owner', 'ucpe_space_db', 'ucpe_resolver'\)\s*\) THEN\s+"
+        r"RAISE EXCEPTION '[^']*a second application is refused'\s+USING ERRCODE = 'UP016';"
+    )
+    head = DRAFT.split("CREATE ROLE ucpe_api_writer", 1)[0]
+    assert refusal.search(head), "the role-exists refusal must raise UP016, which P7 expects"
+    for needed in ("authenticator", "CREATEROLE", "prosecdef"):
+        assert needed in head, needed
+
+
+def test_exactly_four_roles_none_with_any_power() -> None:
+    created = re.findall(r"^CREATE ROLE (\w+) (.+);$", DRAFT, flags=re.M)
+    assert [name for name, _ in created] == list(rehearse.NEW_ROLES)
+    for _, attributes in created:
+        assert attributes.split() == [
+            "NOLOGIN",
+            "NOINHERIT",
+            "NOSUPERUSER",
+            "NOCREATEDB",
+            "NOCREATEROLE",
+            "NOREPLICATION",
+            "NOBYPASSRLS",
+        ]
+
+
+def test_every_table_grant_is_the_rehearsals_expected_matrix() -> None:
+    expected = {
+        role: {t: set(p) for t, p in tables.items()}
+        for role, tables in rehearse.EXPECTED_TABLES.items()
+    }
+    assert table_grants(DRAFT) == expected
+
+
+def test_every_grant_has_exactly_its_policies() -> None:
+    assert policies(DRAFT) == rehearse.expected_policies()
+    assert len(rehearse.expected_policies()) == 40
+
+
+def test_nothing_existing_is_revoked_and_no_api_role_gains_anything() -> None:
+    revokes = [s for s in statements(DRAFT) if s.startswith("REVOKE")]
+    assert revokes == [
+        "REVOKE CREATE ON SCHEMA public FROM ucpe_bundle_owner",
+        "REVOKE ucpe_bundle_owner FROM CURRENT_USER",
+    ]
+    for statement in statements(DRAFT):
+        if statement.startswith("GRANT"):
+            assert not re.search(r"\bTO (PUBLIC|anon|authenticated|service_role)\b", statement), (
+                statement
+            )
+
+
+def test_the_only_powers_beyond_rows_are_the_writers_watchlist_delete() -> None:
+    for role, tables in table_grants(DRAFT).items():
+        for table, privileges in tables.items():
+            assert not privileges & {"TRUNCATE", "TRIGGER", "REFERENCES", "MAINTAIN", "ALL"}
+            if "DELETE" in privileges:
+                assert (role, table) == ("ucpe_api_writer", "watchlist")
+
+
+def test_the_writer_has_no_direct_write_to_core_evidence() -> None:
+    writer = table_grants(DRAFT)["ucpe_api_writer"]
+    for core in (
+        "predictions",
+        "prediction_feature_snapshots",
+        "prediction_derivatives_snapshots",
+        "prediction_outcomes",
+    ):
+        assert writer.get(core, set()) <= {"SELECT"}, core
+
+
+def test_the_bundle_rpc_becomes_definer_owned_by_its_narrow_owner_with_temporary_powers() -> None:
+    every = statements(DRAFT)
+    function = "public.save_prediction_bundle(jsonb, jsonb, jsonb)"
+    order = [
+        f"GRANT EXECUTE ON FUNCTION {function} TO ucpe_api_writer",
+        f"ALTER FUNCTION {function} SECURITY DEFINER",
+        "GRANT ucpe_bundle_owner TO CURRENT_USER WITH INHERIT FALSE, SET TRUE",
+        "GRANT CREATE ON SCHEMA public TO ucpe_bundle_owner",
+        f"ALTER FUNCTION {function} OWNER TO ucpe_bundle_owner",
+        "REVOKE CREATE ON SCHEMA public FROM ucpe_bundle_owner",
+        "REVOKE ucpe_bundle_owner FROM CURRENT_USER",
+    ]
+    positions = [every.index(statement) for statement in order]
+    assert positions == sorted(positions) and positions[-1] - positions[0] == len(order) - 1
+    assert [s for s in every if "SECURITY DEFINER" in s] == [order[1]]
+    assert "CREATE OR REPLACE FUNCTION" not in DRAFT, "the body is unchanged"
+
+
+def test_authenticator_may_switch_to_the_writer_only() -> None:
+    memberships = [s for s in statements(DRAFT) if re.fullmatch(r"GRANT ucpe_\w+ TO \w+.*", s)]
+    assert memberships == [
+        "GRANT ucpe_api_writer TO authenticator WITH INHERIT FALSE, SET TRUE",
+        "GRANT ucpe_bundle_owner TO CURRENT_USER WITH INHERIT FALSE, SET TRUE",
+    ]
+
+
+def test_every_table_is_schema_qualified() -> None:
+    for statement in statements(DRAFT) + statements(ROLLBACK):
+        for match in re.finditer(r"\bON (?:TABLE |SEQUENCE )?(\w+(?:\.\w+)?)", statement):
+            if match.group(1) not in ("SCHEMA", "FUNCTION"):
+                assert match.group(1).startswith("public."), statement
+
+
+# ------------------------------------------------------------------------ the rollback
+
+
+def test_the_rollback_drops_exactly_the_drafts_policies_and_roles() -> None:
+    assert policies(ROLLBACK, "DROP") == policies(DRAFT)
+    assert "DROP ROLE ucpe_api_writer, ucpe_bundle_owner, ucpe_space_db, ucpe_resolver;" in ROLLBACK
+    assert "REVOKE ucpe_api_writer FROM authenticator;" in ROLLBACK
+
+
+def test_the_rollback_returns_the_rpc_before_revoking_the_writers_execute() -> None:
+    every = statements(ROLLBACK)
+    function = "public.save_prediction_bundle(jsonb, jsonb, jsonb)"
+    owner = every.index(f"ALTER FUNCTION {function} OWNER TO CURRENT_USER")
+    invoker = every.index(f"ALTER FUNCTION {function} SECURITY INVOKER")
+    execute = every.index(f"REVOKE EXECUTE ON FUNCTION {function} FROM ucpe_api_writer")
+    assert owner < invoker < execute
+    assert "DELETE FROM" not in ROLLBACK and "TRUNCATE" not in ROLLBACK, "evidence is never deleted"
+
+
+# ------------------------------------------------------------------------ the fixture
+
+
+def test_the_fixture_mirrors_supabases_authenticator_with_no_password_on_a_command_line() -> None:
+    assert "\\getenv authenticator_password PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD" in FIXTURE
+    assert "CREATE ROLE authenticator LOGIN NOINHERIT;" in FIXTURE
+    assert (
+        "GRANT anon, authenticated, service_role TO authenticator WITH INHERIT FALSE, SET TRUE;"
+        in FIXTURE
+    )
+    assert 'ALTER ROLE :"owner" CREATEROLE;' in FIXTURE and "SUPERUSER" not in FIXTURE
+
+
+# ------------------------------------------------------------------------ the harness
+
+
+def test_matrix_differences_name_missing_and_extra_privileges() -> None:
+    observed = {"r": {"a": {"SELECT", "DELETE"}}}
+    expected = {"r": {"a": frozenset({"SELECT", "INSERT"})}}
+    assert rehearse.matrix_differences(observed, expected, ("r",), ("a", "b")) == [
+        "r on a: missing ['INSERT'], extra ['DELETE']"
+    ]
+    assert rehearse.matrix_differences(expected, expected, ("r",), ("a",)) == []
+
+
+def test_only_an_insufficient_privilege_counts_as_a_refusal() -> None:
+    assert rehearse.refused({"refused": "42501", "served": None, "typo": "42601"}) == [
+        "served",
+        "typo",
+    ]
+
+
+def test_maintain_is_checked_from_postgresql_17() -> None:
+    assert "MAINTAIN" not in rehearse.table_privileges(160015)
+    assert rehearse.table_privileges(170006)[-1] == "MAINTAIN"
+
+
+def test_the_jwt_is_hs256_names_its_role_and_expires() -> None:
+    key = "k" * 40
+    header, claims, signature = rehearse.mint_jwt("ucpe_api_writer", key, now=1000).split(".")
+
+    def decode(part: str) -> dict:
+        return json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+
+    assert decode(header) == {"alg": "HS256", "typ": "JWT"}
+    assert decode(claims) == {"role": "ucpe_api_writer", "iat": 1000, "exp": 1900}
+    digest = hmac.new(key.encode(), f"{header}.{claims}".encode(), hashlib.sha256).digest()
+    assert base64.urlsafe_b64encode(digest).rstrip(b"=").decode() == signature
+
+
+def test_every_criterion_must_pass() -> None:
+    passing = {name: {"verdict": "PASS"} for name in rehearse.CRITERIA}
+    assert rehearse.unmet(passing) == []
+    assert rehearse.unmet({**passing, "P4": {"verdict": "FAIL"}}) == ["P4"]
+    assert rehearse.unmet({}) == list(rehearse.CRITERIA)
+
+
+@pytest.mark.parametrize(
+    ("variable", "owner_url", "postgrest_url"),
+    [
+        (
+            "SUPABASE_DB_URL",
+            "postgresql:///privilege_rehearsal?host=/var/run/postgresql",
+            "http://127.0.0.1:3000",
+        ),
+        (None, "postgresql://user@db.example.invalid:5432/postgres", "http://127.0.0.1:3000"),
+        (
+            None,
+            "postgresql:///privilege_rehearsal?host=/var/run/postgresql",
+            "https://project.example.invalid",
+        ),
+    ],
+)
+def test_it_refuses_anything_but_a_scratch_runner(
+    monkeypatch, variable, owner_url, postgrest_url
+) -> None:
+    for name in rehearse.FORBIDDEN_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+    if variable:
+        monkeypatch.setenv(variable, "present")
+    with pytest.raises(SystemExit, match="REFUSED"):
+        rehearse._require_scratch(owner_url, postgrest_url)
+
+
+def test_it_accepts_the_scratch_runner(monkeypatch) -> None:
+    for name in rehearse.FORBIDDEN_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+    rehearse._require_scratch(
+        "postgresql:///privilege_rehearsal?host=/var/run/postgresql", "http://127.0.0.1:3000"
+    )
+
+
+# ------------------------------------------------------------------------ the workflow
+
+
+def test_the_workflow_runs_on_pull_requests_only_with_a_read_only_token_and_no_secret() -> None:
+    assert '"on":\n  pull_request:\n' in WORKFLOW
+    for forbidden in (
+        "push:",
+        "schedule",
+        "workflow_dispatch",
+        "secrets.",
+        "SUPABASE",
+        "environment:",
+        "set -x",
+    ):
+        assert forbidden not in WORKFLOW, forbidden
+    assert "permissions:\n  contents: read\n" in WORKFLOW
+    for path in (
+        "scripts/privilege_rehearsal/**",
+        "migrations/**",
+        "src/crypto_probability_engine/persistence/**",
+        "src/crypto_probability_engine/automation/**",
+        "src/crypto_probability_engine/resolution/**",
+        "src/crypto_probability_engine/api/analysis_service.py",
+        ".github/workflows/privilege-rehearsal.yml",
+    ):
+        assert f"      - {path}\n" in WORKFLOW, path
+
+
+def test_postgrest_is_two_pinned_release_binaries_checked_by_sha256() -> None:
+    pins = re.findall(r"- postgrest: (v[0-9.]+)\n\s+sha256: ([0-9a-f]{64})\n", WORKFLOW)
+    assert [version for version, _ in pins] == ["v14.18", "v16.4"]
+    assert 'echo "${POSTGREST_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -' in WORKFLOW
+    assert (
+        "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/" in WORKFLOW
+    )
+
+
+def test_the_database_is_every_migration_and_the_scratch_values_are_never_on_a_command_line() -> (
+    None
+):
+    every = sorted(
+        path.relative_to(ROOT).as_posix() for path in (ROOT / "migrations").glob("*.sql")
+    )
+    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0015.sql"' in WORKFLOW
+    assert 'PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD="$(openssl rand -hex 24)"' in WORKFLOW
+    assert 'PGRST_JWT_SECRET="$(openssl rand -hex 32)"' in WORKFLOW
+    assert "--preserve-env=PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD -u postgres psql" in WORKFLOW
+    assert "-v authenticator_password" not in WORKFLOW
+
+
+def test_every_criterion_is_a_gate_and_the_report_is_uploaded_always() -> None:
+    assert (
+        "PYTHONPATH=src python scripts/privilege_rehearsal/rehearse.py "
+        '--report="privilege-rehearsal-report-${POSTGREST_VERSION}.json" --require-all'
+    ) in WORKFLOW
+    upload = WORKFLOW.split("      - name: Upload the rehearsal report\n", 1)[1]
+    assert "        if: always()\n" in upload
+    assert "          path: privilege-rehearsal-report-${{ matrix.postgrest }}.json\n" in upload

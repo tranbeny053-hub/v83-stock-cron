@@ -1,0 +1,126 @@
+name: Privilege rehearsal (scratch PostgreSQL and PostgREST, no secrets)
+
+# P3-PRIV-R (Phase 3; governing plan §8.2, "separate migration/runtime/jobs authority").
+#
+# On every pull request that touches the draft roles, a writer, the F1 ledger, the resolver or the
+# migrations, this workflow builds a scratch PostgreSQL from every migration (0001-0015) and applies
+# the DRAFT of migration 0016 to it. It then runs production's own code under each narrow role:
+# - the REST runtime, through a real PostgREST, as ucpe_api_writer. PostgREST is the pinned release
+#   binary, checked against its sha256;
+# - the Space's direct Postgres (calibration, and the F1 registry and ledger), as ucpe_space_db;
+# - the resolver, as ucpe_resolver.
+#
+# What it proves (scripts/privilege_rehearsal/rehearse.py, criteria P1-P8, every one a gate):
+# - each role can do exactly what its list allows, and nothing else;
+# - nothing that existed before changes;
+# - a second application of the draft is refused;
+# - the rollback restores the catalog exactly.
+#
+# It rehearses two PostgREST versions. It references no secret and touches no real database: its
+# passwords and its JWT key are random scratch values that live for one run and are never printed.
+
+"on":
+  pull_request:
+    paths:
+      - scripts/privilege_rehearsal/**
+      - scripts/migration_0013_rehearsal/**
+      - scripts/resolve_outcomes.py
+      - migrations/**
+      - src/crypto_probability_engine/persistence/**
+      - src/crypto_probability_engine/automation/**
+      - src/crypto_probability_engine/resolution/**
+      - src/crypto_probability_engine/calibration/**
+      - src/crypto_probability_engine/api/analysis_service.py
+      - .github/workflows/privilege-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - postgrest: v14.18
+            sha256: 98de1c0be7787aea5f5e11a25f303ea0077634d6fc1000b687bfa825fd27d299
+          - postgrest: v16.4
+            sha256: b47ecc82fce1dcebbbc4183d839e52f07f7630c9d7ad0f54db753d1939299354
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Install PostgREST, the release binary checked against its sha256
+        shell: bash
+        env:
+          POSTGREST_VERSION: ${{ matrix.postgrest }}
+          POSTGREST_SHA256: ${{ matrix.sha256 }}
+        run: |
+          set -euo pipefail
+          archive="postgrest-${POSTGREST_VERSION}-linux-static-x86-64.tar.xz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/${archive}"
+          echo "${POSTGREST_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" postgrest
+          "$RUNNER_TEMP/postgrest" --version
+
+      - name: Rehearse the draft roles on scratch PostgreSQL behind PostgREST
+        shell: bash
+        env:
+          POSTGREST_VERSION: ${{ matrix.postgrest }}
+        run: |
+          set -euo pipefail
+          # Scratch values for this run only: never a real credential, never printed.
+          PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD="$(openssl rand -hex 24)"
+          PGRST_JWT_SECRET="$(openssl rand -hex 32)"
+          export PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD PGRST_JWT_SECRET
+          show_postgrest_log() {
+            sed -e "s/${PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD}/***/g" -e "s/${PGRST_JWT_SECRET}/***/g" \
+              "$RUNNER_TEMP/postgrest.log" 2>/dev/null | tail -n 40 || true
+          }
+          trap show_postgrest_log EXIT
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo --preserve-env=PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -f - < scripts/privilege_rehearsal/00_supabase_like_authenticator.sql
+          sudo -u postgres createdb -O "$(id -un)" privilege_rehearsal
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d privilege_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d privilege_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql > "$RUNNER_TEMP/migrations_0001_0015.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d privilege_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0015.sql"
+          PGRST_DB_URI="postgres://authenticator:${PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD}@127.0.0.1:5432/privilege_rehearsal" \
+          PGRST_DB_SCHEMAS=public PGRST_DB_ANON_ROLE=anon PGRST_SERVER_HOST=127.0.0.1 PGRST_SERVER_PORT=3000 \
+          PGRST_ADMIN_SERVER_PORT=3001 PGRST_LOG_LEVEL=error \
+            "$RUNNER_TEMP/postgrest" > "$RUNNER_TEMP/postgrest.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:3001/ready > /dev/null 2>&1 && break
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:3001/ready > /dev/null
+          PRIVILEGE_REHEARSAL_OWNER_URL="postgresql:///privilege_rehearsal?host=/var/run/postgresql" \
+          PRIVILEGE_REHEARSAL_POSTGREST_URL="http://127.0.0.1:3000" \
+          PRIVILEGE_REHEARSAL_POSTGREST_ADMIN_URL="http://127.0.0.1:3001" \
+          PRIVILEGE_REHEARSAL_POSTGREST_VERSION="$POSTGREST_VERSION" \
+          PYTHONPATH=src python scripts/privilege_rehearsal/rehearse.py --report="privilege-rehearsal-report-${POSTGREST_VERSION}.json" --require-all
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: privilege-rehearsal-report-${{ matrix.postgrest }}
+          path: privilege-rehearsal-report-${{ matrix.postgrest }}.json
+          if-no-files-found: warn
