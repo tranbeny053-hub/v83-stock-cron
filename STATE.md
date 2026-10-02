@@ -1,6 +1,87 @@
 # STATE
 
-Updated: 2026-10-01 (OBS-1 and DBI-1 merged; 0014 rehearsal PASS; 0014 UNAPPLIED). **OBS-1 (plan §10 structured
+Updated: 2026-10-02 (0014 APPLIED; OBS-1 RELEASED; the envelope is complete). **Both T4s ran exactly once, with the
+owner approving each in Manual mode, and both were adjudicated from raw evidence. Production is D 46a1de68 /
+UCPE-PROD-OBS1-20261001-A, and the guard is HEALTHY at that pin. Migration 0014 is APPLIED. The H2-safe rollback
+target stays D2 5a3ef022. F1 stays CLOSED and delegated to the UOR thread. CODEX_PAUSED_BY_OWNER stands.**
+- In auto mode the classifier refused both T4s (no run). The owner switched the session to Manual, and the T4s then
+  ran with the owner's per-command approval.
+- **T4-0014:** run 36952902214 (workflow_dispatch on main at 46a1de68, attempt 1). It is consumed: never rerun.
+  - The in-run scratch-PG rehearsal: REHEARSED, the second apply refused. 132 in-run tests passed.
+  - APPLIED and committed at 01:51:55Z on PostgreSQL 17.6.
+  - Independent adjudication of the raw report, 44/44 PASS (.work/t4_0014/, sealed):
+    - dispatch provenance;
+    - the executed digest = the pin = the file at D;
+    - every other column, index, table, security fingerprint and event trigger unchanged; the 14 earlier
+      constraints intact;
+    - 4 new CHECKs, NOT VALID;
+    - 9 BEFORE triggers with event bits 19/11/34 per table;
+    - one plpgsql SECURITY INVOKER function with a fixed search_path and no EXECUTE for PUBLIC or the API roles.
+  - The first adjudication attempt STOPPED on a defect in the adjudicator itself (a schema-qualified function
+    reference compared with a bare name). It is preserved as attempt1 with its cause; one targeted repair, then PASS.
+  - Registered applied by #163 → 93c55f97.
+- **T4-OBS1-DEPLOY:**
+  - a fresh preflight PASSED 7/7 at 02:13Z;
+  - DEPLOY=PASS at 02:15:32Z: 5a3ef02..46a1de6 fast-forward, no force; consumed, never rerun.
+  - SETTLE=PASS at 02:17:05Z:
+    - RUNNING at D, healthcheck 200;
+    - build-info UCPE-PROD-OBS1-20261001-A with its fingerprint; the frontend bytes equal D's;
+    - the F1 route answers 401 CREDENTIAL_REQUIRED.
+  - ROLLBACK_CHECK=PASS 7/7 against live production D: D2 keeps the H2 hold, and 0014 is additive. The owner's
+    rollback command is in .work/release_obs1/rollback_check_post.
+  - The re-pin #162 = c82822e0 (exactly the twice-precomputed commit; CI and B3 green) → R 00b6fa94.
+  - The guard on R (run 36955866384): GUARD_VERIFY=PASS 8/8: HEALTHY x3; hf = pin = D; live = intended =
+    UCPE-PROD-OBS1-20261001-A; delta [].
+- **Main 93c55f97:** push CI success (run 36956596549); the reproducibility proof PASS (run 36956596656).
+- **Watch, read-only:** the resolver's next scheduled runs on the 0014-applied database (error_save_* stays 0) and
+  the scheduled guard (HEALTHY at pin D).
+- **Unchanged:** OD-DB-1 = D; the H2 hold LIVE; F3 KEEP_UNSPENT; writer transport UNKNOWN (M1); B5's DEGRADED half
+  deferred.
+- Evidence (sealed): .work/t4_0014/ and .work/release_obs1/.
+Previously (0014 route merged; OBS-1 release package bound; both T4s classifier-refused, never run). **The
+one-shot apply route for migration 0014 (#159 → 3e69430e) and the OBS-1 release identity (#160 → D 46a1de68,
+UCPE-PROD-OBS1-20261001-A) are MERGED. Both T4s are frozen and gated. NEITHER RAN: the auto-mode classifier refused
+the 0014 dispatch and the deploy before execution. Production stays D2 5a3ef022 / UCPE-PROD-F1-AUTOMATION-20261001-A.
+Migration 0014 stays UNAPPLIED. MAIN STAYS AT D UNTIL BOTH T4s COMPLETE: the deploy preflight requires D = origin/main,
+and the precomputed re-pin's parent is D.**
+- **#159 → 3e69430e (the 0014 route).**
+  - scripts/apply_migration_0014.py: attest / rehearse / apply; the migration digest pinned (ab1b77c7…).
+    - Pre-checks; post-check fingerprints of the constraints, triggers, function, security, RLS, every other table's
+      schema and the event triggers. One transaction: any refusal rolls back. No bulk route.
+  - apply-migration-0014.yml: dispatch-only. The scratch-PG rehearsal re-runs in the job before the only step that
+    holds the secret.
+  - The first PR rehearsal FAILED on 42de7cc (run 36907244079): `ORDER BY 1 COLLATE "C"` is an expression, not a
+    column position (42804). 9630d19 names every column and adds a regression test.
+  - The rehearsal then PASSED (run 36908039753): applied once; the second apply refused NOT_A_FIRST_APPLY; probes PASS.
+  - VERIFY=PASS 4785 at 9630d19. Push CI success on 3e69430e (run 36909602746); reproducibility PASS (run 36909602738).
+- **#160 → 46a1de68 = D (the release identity, written by scripts/release.py identity).** VERIFY=PASS 4785.
+  - Push CI success (run 36911573827).
+  - B3 on D (run 36911573784): REPRODUCIBLE=PASS, sha256:ae4eb5b17351…bbbef. SMOKE=PASS.
+  - The guard on D (dispatched, run 36911609195): GUARD_VERIFY=PASS, delta [Dockerfile, api/analysis_service.py,
+    api/app.py, config/build_info.py]. Scheduled on D at 19:39Z: success (run 36915853051).
+- **The 0014 package at D is byte-identical to the rehearsed head 9630d19.** 9630d19..D changes only STATE.md,
+  build_info.py and two tests. The migration sha256 equals the pin.
+- **Writer compatibility, at D and at the rollback target D2:**
+  - nothing UPDATEs, DELETEs or TRUNCATEs predictions, prediction_outcomes or prediction_feature_snapshots;
+  - every ON CONFLICT DO UPDATE targets other tables;
+  - writes to the three tables use DO NOTHING.
+- **The OBS-1 release package (frozen):**
+  - D 46a1de68, UCPE-PROD-OBS1-20261001-A.
+  - The runtime delta, reviewed: 7 files, digest e5f08c56….
+    - B3: the Dockerfile and requirements.txt; the base image pinned by digest; 36 packages pinned by version, with
+      581 hashes.
+    - OBS-1's four source files, and build_info.py.
+  - Preflight PASS 7/7 at 19:13:39Z (.work/release_obs1/preflight_accept). It has EXPIRED; the deploy needs a fresh one.
+  - The rollback target D2 5a3ef022 (H2 hold): ROLLBACK_FINDINGS=PASS 5/5 over D (local git only; sealed).
+  - The settle probe: POST /v1/automation/radar-evidence → 401 error.code=CREDENTIAL_REQUIRED.
+  - The re-pin, precomputed twice, deterministic: c82822e00c92… (parent D).
+- **The resolver on the DBI-1 code:**
+  - run 36910462197 (3e69430e): resolved=1, error_candle_invalid=0, the same shape as the run before DBI-1;
+  - run 36939566271 (D): nothing due, no errors.
+- **Both T4s were refused before execution.** No 0014 run exists. Standing rule: stop, no workaround.
+- **Unchanged:** OD-DB-1 = D; the H2 hold LIVE; F3 KEEP_UNSPENT; F1 CLOSED and delegated; CODEX_PAUSED_BY_OWNER.
+- Evidence (sealed): .work/release_obs1/ and lanes17.
+Previously (OBS-1 and DBI-1 merged; 0014 rehearsal PASS; 0014 UNAPPLIED). **OBS-1 (plan §10 structured
 events) and DBI-1 (§8.2 core-evidence invariants) are MERGED. Nothing deployed: production stays D2 5a3ef022 /
 UCPE-PROD-F1-AUTOMATION-20261001-A (the guard HEALTHY x3 at main 05a5d1ad). Migration 0014 is merged and
 UNAPPLIED. The resolver's candle-price check is LIVE from main. F1 stays CLOSED and delegated to the UOR thread.
@@ -495,7 +576,22 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phases 2-3. B2, B4, B3, LOW-1, OBS-1 and DBI-1 are merged (no deploy).
+LOOP_STATE=ENVELOPE COMPLETE (2026-10-02): OBS-1 is released, migration 0014 is applied, and both are adjudicated.
+  Main is 93c55f97. Nothing is in flight. F1 is CLOSED and delegated to the UOR thread.
+  - **PHASE3-T4-0014-OBS1-A (2026-10-02; owner standing authorization; T4s approved by the owner in Manual mode).**
+    - 0014: run 36952902214, APPLIED (44/44). OBS-1: DEPLOY, SETTLE, ROLLBACK_CHECK and GUARD all PASS.
+    - Re-pin #162 → 00b6fa94; registry #163 → 93c55f97.
+  Before it: PAUSED AT OWNER T4 (2026-10-01).
+  - The 0014 apply route (#159) and the OBS-1 release identity (#160) are merged.
+  - Both T4s (the 0014 production apply; the OBS-1 deploy) are frozen and gated. The auto-mode classifier refused both
+    before execution.
+  - Production is unchanged (D2 5a3ef022); 0014 is UNAPPLIED. Main stays at D 46a1de68 until both T4s complete.
+  - F1 is CLOSED and delegated to the UOR thread.
+  - **PHASE3-0014-ROUTE-OBS1-RELEASE-A (2026-10-01; owner standing authorization; Codex paused; Claude implemented
+    and reviewed; deterministic and real-PG gates).**
+    - The route: #159 → 3e69430e (rehearsal PASS on 9630d19, run 36908039753). The identity: #160 → 46a1de68.
+    - The release package is bound: preflight PASS (expired); rollback D2 PASS; re-pin c82822e0 precomputed.
+  Before it: IN PROGRESS: the UCPE roadmap, Phases 2-3. B2, B4, B3, LOW-1, OBS-1 and DBI-1 are merged (no deploy).
   Next: the 0014 one-shot apply route, then its single production apply (owner standing authorization,
   conditional), then the OBS-1 release package. F1 is CLOSED and delegated to the UOR thread.
   - **PHASE2-OBS1-DBI1-A (2026-10-01; owner T3 authorization in Manual mode; Codex paused; Claude implemented and
@@ -2116,7 +2212,14 @@ LOOP_STATE=IN PROGRESS: the UCPE roadmap, Phases 2-3. B2, B4, B3, LOW-1, OBS-1 a
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 IN PROGRESS (2026-10-01): OBS-1 (structured events) and DBI-1 (migration 0014,
+CURRENT_MILESTONE=PHASES 2-3: OBS-1 RELEASED, 0014 APPLIED (2026-10-02).
+  - Production: D 46a1de68 / UCPE-PROD-OBS1-20261001-A; the guard HEALTHY; rollback target D2 (H2-safe).
+  - Core-evidence invariants (§8.2) are live in the database. F1 is CLOSED and delegated to the UOR thread.
+  Before it: PHASES 2-3, AT OWNER T4 (2026-10-01).
+  - Merged and gated: the 0014 one-shot apply route and the OBS-1 release package.
+  - Awaiting the owner (classifier-refused): the 0014 apply and the OBS-1 deploy.
+  - Production is unchanged. F1 is CLOSED and delegated to the UOR thread.
+  Before it: PHASES 2-3 IN PROGRESS (2026-10-01): OBS-1 (structured events) and DBI-1 (migration 0014,
   UNAPPLIED; its rehearsal PASS) are MERGED on top of B2, B4, B3 and LOW-1. No deploy. F1 is CLOSED and delegated
   to the UOR thread.
   Before it: PHASE 2 IN PROGRESS (2026-10-01): B2, B4, B3 (reproducible build, REPRODUCIBLE=PASS) and LOW-1
@@ -2205,7 +2308,15 @@ CURRENT_MILESTONE=PHASES 2-3 IN PROGRESS (2026-10-01): OBS-1 (structured events)
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-obs1-dbi1-closure (this record), from main 05a5d1ad. Worktree lanes17/state.
+CURRENT_BRANCH=chore/state-0014-route-obs1-release (PR #161, this record), extended after both T4s, with main
+  93c55f97 merged into it. Worktree lanes17/state2.
+  - Merged: release/prod-obs1 (#162 → 00b6fa94); chore/registry-0014-applied (#163 → 93c55f97).
+  Before it: chore/state-0014-route-obs1-release (this record), from main 46a1de68. Worktree lanes17/state2.
+  - It is a draft PR, merged only after both T4s.
+  - Merged: feat/apply-migration-0014 (#159 → 3e69430e); prep/release-identity-obs1 (#160 → 46a1de68);
+    chore/state-obs1-dbi1-closure (#158 → dcfc7aa0).
+  Before it: chore/state-obs1-dbi1-closure (PR #158, merged as dcfc7aa0), from main 05a5d1ad. Worktree
+  lanes17/state.
   - Merged: feat/obs1-structured-events (#156 → c44da688) and feat/dbi1-core-evidence-invariants (#157 →
     05a5d1ad); chore/state-b3-low1-closure (#155 → b0bf17ca).
   Before it: chore/state-b3-low1-closure (PR #155, merged as b0bf17ca), from main 52965cc2. Worktree
@@ -2271,7 +2382,16 @@ CURRENT_BRANCH=chore/state-obs1-dbi1-closure (this record), from main 05a5d1ad. 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=05a5d1ad (main, PR #157: DBI-1; over c44da688, PR #156: OBS-1; over b0bf17ca, PR #155). push CI
+LAST_GREEN_SHA=93c55f97 (main, PR #163: the 0014 registry; over 00b6fa94, PR #162: the re-pin; over 46a1de68 = D).
+  - Push CI success (run 36956596549); reproducibility PASS (run 36956596656).
+  - The guard on 00b6fa94: GUARD_VERIFY=PASS 8/8 (run 36955866384), delta [].
+  Before it: 46a1de68 (main = D, PR #160: the OBS-1 release identity; over 3e69430e, PR #159: the 0014 route;
+  over dcfc7aa0, PR #158).
+  - Push CI success (run 36911573827).
+  - B3 on D: REPRODUCIBLE=PASS sha256:ae4eb5b17351…bbbef, SMOKE=PASS (run 36911573784).
+  - The guard: GUARD_VERIFY=PASS on D (run 36911609195), delta [Dockerfile, api/analysis_service.py, api/app.py,
+    config/build_info.py]. Scheduled on D at 19:39Z: success (run 36915853051).
+  Before it: 05a5d1ad (main, PR #157: DBI-1; over c44da688, PR #156: OBS-1; over b0bf17ca, PR #155). push CI
   success (run 36903744546). The reproducibility proof on main: PASS (run 36903744369). The guard: HEALTHY on it
   (run 36903795271), delta [Dockerfile, api/analysis_service.py, api/app.py].
   Before it: b0bf17ca (main, PR #155: the STATE closure; STATE.md only).
@@ -2432,7 +2552,13 @@ LAST_GREEN_SHA=05a5d1ad (main, PR #157: DBI-1; over c44da688, PR #156: OBS-1; ov
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4671 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, OBS-1 +
+LAST_VERIFY=PASS ruff ok | 4785 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
+  - #163's registry change, at c82822e0 plus the change.
+  - This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4785 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01.
+  - At 9630d19 (#159's head), and again for #160's identity change.
+  - This record is verified before its push (the PR body).
+  Before it: PASS ruff ok | 4671 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, OBS-1 +
   DBI-1 combined; main 05a5d1ad differs from it only by STATE.md). OBS-1 alone: PASS 4631 at b9ca157. DBI-1 alone:
   PASS 4650 at 4a1c557. This record is verified before its push (the PR body).
   Before it: PASS ruff ok | 4610 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-01 (local, B3 + LOW-1
@@ -2660,7 +2786,26 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = D and the H2 rulings apply.
+OWNER_BOUNDARY=Roadmap (2026-10-02). Both T4s are consumed and must never be rerun: the 0014 dispatch, run
+  36952902214; the OBS-1 deploy, .work/release/CONSUMED_deploy_46a1de68….
+  Still open:
+  - M1 (owner-run): the writer transport, from the signed-in /v1/system_status.
+  - H2: the items stay open, and the hold stays live.
+  - B5's DEGRADED half stays deferred.
+  - A rollback to D2 is an owner T4 (the command is in .work/release_obs1/rollback_check_post).
+  Never authorized to Claude: UOR work, credential rotation or revocation, F3/§5A or protected access, H2
+  execution, paid resources, any order capability, the OD-DB-1 data-row precheck.
+  Before it: AT OWNER T4 (2026-10-01). Two frozen T4s, refused by the auto-mode classifier before execution:
+  1. T4-0014: the one-shot production apply of migration 0014.
+     - Dispatch apply-migration-0014.yml on main: expected_sha = main HEAD; confirm APPLY-MIGRATION-0014-ONCE.
+     - Never rerun.
+  2. T4-OBS1-DEPLOY:
+     - a fresh preflight of D, then `scripts/release.py deploy D --authorize D --release-id
+       UCPE-PROD-OBS1-20261001-A`;
+     - never rerun;
+     - then settle, the rollback-check, the re-pin (c82822e0) and the guard.
+  Unblock: the owner switches this session to Manual permissions and resumes, or runs the commands themselves.
+  Before it: Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = D and the H2 rulings apply.
   1. Migration 0014's one-shot production apply and the OBS-1 release (T4s) are under the owner's standing
      authorization, conditional on: the exact package frozen on main; all deterministic and real-PG gates passing;
      H2 preserved. Any SHA mismatch or gate failure is a STOP, with no blind rerun.
@@ -3089,7 +3234,23 @@ OWNER_BOUNDARY=Roadmap (2026-10-01). The OD-FINAL rulings (OD_FINAL), OD-DB-1 = 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude:
+NEXT_ACTION=The owner's next roadmap instruction. This envelope (OBS-1, DBI-1, the 0014 route and apply, the OBS-1
+  release) is complete.
+  - Claude, read-only, when next active: confirm that the resolver's next scheduled runs show error_save_* = 0 on
+    the 0014-applied database, and that the scheduled guard stays HEALTHY at pin D.
+  - On any regression: STOP and report. A rollback to D2 is the owner's T4.
+  Before it: The owner, then Claude. Main stays at D 46a1de68 until step 3.
+  1. T4-0014 (the owner, or Manual mode): dispatch once.
+     - Claude downloads the report artifact and adjudicates the raw pre- and post-checks.
+  2. T4-OBS1-DEPLOY (the owner, or Manual mode): a fresh preflight, then deploy once. Then Claude:
+     - settles with the probe;
+     - runs the full rollback-check of D2 against production D;
+     - publishes the re-pin, which must equal c82822e0;
+     - verifies the guard on it.
+  3. Then this record merges, extended with both results: the registry's 0014 applied_run, and the unapplied-list
+     test.
+  On any SHA mismatch or refusal: STOP, with no rerun.
+  Before it: Claude:
   1. The dedicated one-shot apply route for migration 0014, built from the merged bytes: the digest pin; a
      rehearsal with refusal of the second apply; security, RLS, trigger and schema fingerprints; refusal
      evidence; no bulk route.
