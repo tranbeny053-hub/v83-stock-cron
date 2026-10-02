@@ -129,7 +129,10 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # upload-artifact, all at the reviewed pins.
     # 59 -> 65 (B9): the migration-0015 dispatch and pull-request rehearsal workflows add
     # checkout, setup-python and upload-artifact each, all at the reviewed pins.
-    assert len(refs) == 65
+    # 65 -> 68 (P3-PRIV-R): the privilege rehearsal adds checkout, setup-python and
+    # upload-artifact, all at the reviewed pins. PostgREST is a release binary checked by sha256,
+    # not an action.
+    assert len(refs) == 68
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
