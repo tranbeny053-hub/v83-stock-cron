@@ -569,17 +569,20 @@ def test_detail_lookup_returns_detail_view() -> None:
 
 
 @pytest.mark.parametrize(
-    ("prediction_origin", "expected_detail_tasks"),
+    ("prediction_origin", "expects_detail"),
     [
-        ("USER_REQUESTED", 1),
-        ("CONTROLLED_SMOKE", 0),
-        ("SCHEDULED_SHADOW_EVIDENCE", 0),
+        ("USER_REQUESTED", True),
+        ("CONTROLLED_SMOKE", False),
+        ("SCHEDULED_SHADOW_EVIDENCE", False),
     ],
 )
-def test_detail_write_is_scheduled_only_for_user_requested(
+def test_the_detail_joins_the_persistence_work_only_for_user_requested(
     prediction_origin: str,
-    expected_detail_tasks: int,
+    expects_detail: bool,
 ) -> None:
+    """Plan §8.1: the required detail payload is part of the core bundle. It is written inside the
+    confirmed persistence (and its receipt), never as a separate task, and stays sanitized."""
+
     class DetailRepository:
         def persistence_status(self) -> str:
             return "OK"
@@ -605,18 +608,32 @@ def test_detail_write_is_scheduled_only_for_user_requested(
         prediction_origin=prediction_origin,
     )
 
-    detail_tasks = [
-        task for task in background_tasks.tasks if task.func.__name__ == "save_run_detail"
-    ]
-    assert len(detail_tasks) == expected_detail_tasks
-    if detail_tasks:
-        stored = detail_tasks[0].args[0]
+    names = [task.func.__name__ for task in background_tasks.tasks]
+    assert names == ["_submit_persistence_work"]
+    stored = background_tasks.tasks[0].args[1].run_detail_row
+    assert (stored is not None) == expects_detail
+    if stored is not None:
         assert stored["run_id"] == "run-detail"
         assert stored["analysis_hash"] == "analysis-hash"
         assert stored["detail_payload"]["article_body"] == "[removed]"
         assert stored["detail_payload"]["api_secret_key"] == "set (****)"
         assert "full article body" not in json.dumps(stored)
         assert "highly-sensitive" not in json.dumps(stored)
+
+
+def test_no_detail_without_a_repository_that_stores_details() -> None:
+    class NoDetailRepository:
+        def persistence_status(self) -> str:
+            return "OK"
+
+    background_tasks = BackgroundTasks()
+    analysis_service.schedule_best_effort_persist(
+        background_tasks,
+        NoDetailRepository(),
+        {"run_id": "run-x", "detail_view": {"run_id": "run-x"}},
+        prediction_origin="USER_REQUESTED",
+    )
+    assert background_tasks.tasks[0].args[1].run_detail_row is None
 
 
 def test_schedule_best_effort_persist_requires_prediction_origin() -> None:

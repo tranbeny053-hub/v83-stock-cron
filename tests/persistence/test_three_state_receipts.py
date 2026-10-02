@@ -20,10 +20,12 @@ import httpx
 import pytest
 
 from crypto_probability_engine.api.analysis_service import (
+    _DETAIL_NOT_SENT,
     RECEIPT_COMMIT_UNKNOWN,
     RECEIPT_NOT_SAVED,
     RECEIPT_SAVED,
     PersistenceWork,
+    _core_receipt,
     _emit_persistence_receipt,
     _persist_work_confirmed,
 )
@@ -37,15 +39,22 @@ RPC_URL = f"{BASE}/rest/v1/rpc/save_prediction_bundle"
 
 
 class Endpoint:
-    """A PostgREST stand-in: auxiliary writes succeed; the RPC answers from a queue."""
+    """A PostgREST stand-in: the RPC answers from a queue; every other write succeeds, unless a
+    table's answer is overridden. Every request's table is recorded, in order."""
 
-    def __init__(self, *answers: object) -> None:
+    def __init__(self, *answers: object, tables: dict[str, object] | None = None) -> None:
         self.answers = list(answers)
         self.rpc_calls = 0
+        self.tables = dict(tables or {})
+        self.paths: list[str] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.paths.append(request.url.path.removeprefix("/rest/v1/"))
         if str(request.url) != RPC_URL:
-            return httpx.Response(201)
+            override = self.tables.get(request.url.path.removeprefix("/rest/v1/"))
+            if isinstance(override, Exception):
+                raise override
+            return override if isinstance(override, httpx.Response) else httpx.Response(201)
         self.rpc_calls += 1
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
@@ -73,6 +82,10 @@ def prediction(prediction_id: str = "run_r:4H:6") -> dict:
 
 def snapshot(prediction_id: str = "run_r:4H:6") -> dict:
     return {"prediction_id": prediction_id, "snapshot_payload": {"k": 1}, "snapshot_hash": "a" * 64}
+
+
+def detail(run_id: str = "run_r") -> dict:
+    return {"run_id": run_id, "analysis_hash": "h" * 64, "detail_payload": {"run_id": run_id}}
 
 
 def work(*rows: dict, snapshots: tuple[dict, ...] | None = None, build_failed: bool = False,
@@ -243,3 +256,94 @@ def test_the_receipt_fields_are_on_the_telemetry_allowlist() -> None:
     assert {"receipt", "receipt_reason"} <= FIELDS
     assert json.dumps(sorted({RECEIPT_SAVED, RECEIPT_NOT_SAVED, RECEIPT_COMMIT_UNKNOWN})) == (
         '["COMMIT_UNKNOWN", "NOT_SAVED", "SAVED"]')
+
+
+# ------------------------------------------------------------------------ §8.1's wider core (W-B)
+
+
+def test_a_confirmed_detail_keeps_a_saved_bundle_saved() -> None:
+    endpoint = Endpoint(answer("INSERTED", "INSERTED"))
+    confirmation = _persist_work_confirmed(work(run_detail_row=detail()), rest(endpoint))
+    assert receipt(confirmation) == (RECEIPT_SAVED, None)
+    assert "analysis_run_details" in endpoint.paths
+
+
+def test_the_detail_is_written_before_the_bundle() -> None:
+    endpoint = Endpoint(answer("INSERTED", "INSERTED"))
+    _persist_work_confirmed(work(run_detail_row=detail()), rest(endpoint))
+    assert endpoint.paths.index("analysis_run_details") < endpoint.paths.index(
+        "rpc/save_prediction_bundle"
+    )
+
+
+@pytest.mark.parametrize(
+    "failure", [httpx.Response(500), httpx.Response(400), httpx.ReadError("lost")],
+    ids=["500", "answered-400", "lost-response"],
+)
+def test_an_unconfirmed_detail_makes_a_saved_bundle_commit_unknown(failure: object) -> None:
+    endpoint = Endpoint(answer("INSERTED", "INSERTED"), tables={"analysis_run_details": failure})
+    confirmation = _persist_work_confirmed(work(run_detail_row=detail()), rest(endpoint))
+    assert receipt(confirmation) == (RECEIPT_COMMIT_UNKNOWN, "DETAIL_UNCONFIRMED")
+    assert endpoint.rpc_calls == 1, "the forecast bundle itself was still stored"
+
+
+def test_an_unconfirmed_run_identity_is_never_saved() -> None:
+    endpoint = Endpoint(
+        answer("INSERTED", "INSERTED"), tables={"analysis_runs": httpx.Response(500)}
+    )
+    confirmation = _persist_work_confirmed(work(run_detail_row=detail()), rest(endpoint))
+    assert confirmation.receipt != RECEIPT_SAVED
+    # The failed run write opened the circuit, so neither the detail nor the bundle was sent.
+    assert receipt(confirmation) == (RECEIPT_NOT_SAVED, "CIRCUIT_OPEN")
+    assert endpoint.rpc_calls == 0 and "analysis_run_details" not in endpoint.paths
+
+
+def test_an_open_circuit_sends_no_detail() -> None:
+    endpoint = Endpoint(httpx.Response(500))
+    repository = rest(endpoint)
+    _persist_work_confirmed(work(), repository)
+    assert repository.circuit_state() == "OPEN"
+    sent = len(endpoint.paths)
+    confirmation = _persist_work_confirmed(
+        work(prediction("run_r:4H:7"), run_detail_row=detail()), repository
+    )
+    assert receipt(confirmation) == (RECEIPT_NOT_SAVED, "CIRCUIT_OPEN")
+    assert "analysis_run_details" not in endpoint.paths[sent:]
+
+
+def test_without_a_required_detail_the_receipt_is_the_bundles() -> None:
+    endpoint = Endpoint(
+        answer("INSERTED", "INSERTED"), tables={"analysis_run_details": httpx.Response(500)}
+    )
+    assert receipt(_persist_work_confirmed(work(), rest(endpoint))) == (RECEIPT_SAVED, None)
+    assert "analysis_run_details" not in endpoint.paths
+
+
+SAVED = (RECEIPT_SAVED, None)
+UNKNOWN_RUN = (RECEIPT_COMMIT_UNKNOWN, "RUN_UNCONFIRMED")
+UNKNOWN_DETAIL = (RECEIPT_COMMIT_UNKNOWN, "DETAIL_UNCONFIRMED")
+INCOMPLETE = (RECEIPT_NOT_SAVED, "INCOMPLETE_BUNDLE")
+REFUSED = (RECEIPT_NOT_SAVED, "CONFLICT")
+NO_CONFIRMATION = (RECEIPT_COMMIT_UNKNOWN, "NO_CONFIRMATION")
+
+
+@pytest.mark.parametrize(
+    ("given", "run", "detail_status", "required", "expected"),
+    [
+        (SAVED, "OK", "OK", True, SAVED),
+        (SAVED, "UNAVAILABLE", "OK", True, UNKNOWN_RUN),
+        (SAVED, None, None, False, UNKNOWN_RUN),
+        (SAVED, "OK", _DETAIL_NOT_SENT, True, INCOMPLETE),
+        (SAVED, "OK", "UNAVAILABLE", True, UNKNOWN_DETAIL),
+        (SAVED, "OK", None, True, UNKNOWN_DETAIL),
+        (SAVED, "OK", "UNAVAILABLE", False, SAVED),
+        (REFUSED, "UNAVAILABLE", "UNAVAILABLE", True, REFUSED),
+        (NO_CONFIRMATION, "OK", _DETAIL_NOT_SENT, True, NO_CONFIRMATION),
+        ((None, None), "UNAVAILABLE", "UNAVAILABLE", True, (None, None)),
+    ],
+)
+def test_the_core_receipt_never_upgrades_and_saved_needs_every_core_part(
+    given, run, detail_status, required, expected
+) -> None:
+    found = _core_receipt(*given, run=run, detail=detail_status, detail_required=required)
+    assert found == expected

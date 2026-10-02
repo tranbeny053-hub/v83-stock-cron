@@ -547,8 +547,12 @@ def analysis_work() -> tuple[Any, dict]:
         timeframe="4H",
     )
     work = _persistence_work(payload, "OK", consume_pending=False)
+    # As the live service schedules a USER_REQUESTED analysis: the detail inside the core bundle.
     work = dataclasses.replace(
-        work, prediction_rows=(row,), feature_snapshot_rows=(build_feature_snapshot(row, block),)
+        work,
+        prediction_rows=(row,),
+        feature_snapshot_rows=(build_feature_snapshot(row, block),),
+        run_detail_row=detail_row(payload),
     )
     return work, payload
 
@@ -699,10 +703,9 @@ def criterion_writer(db: Database, rest: Callable[[str], Any]) -> tuple[dict[str
     ]
     if (confirmation.receipt, confirmation.overall, circuit) != (RECEIPT_SAVED, "OK", "CLOSED"):
         failures.append(f"the analysis was not SAVED: {steps['first']}")
-    detail = writer.save_run_detail(detail_row(payload))
-    steps["detail"] = detail
-    if detail != "OK":
-        failures.append(f"the run detail was not saved: {detail}")
+    steps["detail_in_the_core_bundle"] = work.run_detail_row is not None
+    if work.run_detail_row is None:
+        failures.append("the analysis carries no detail row")
     run_tables = (
         "analysis_runs",
         "analysis_run_details",
