@@ -1,6 +1,53 @@
 # STATE
 
-Updated: 2026-10-02 (B9 RELEASED). **B9 IS LIVE. Production is D f046140b / UCPE-PROD-B9-20261002-A. The REST writer
+Updated: 2026-10-03 (Phase 3 resumed: three-state receipts MERGED; the privilege audit and design SEALED; the
+privilege rehearsal next). **Production is unchanged: D f046140b / UCPE-PROD-B9-20261002-A, guard HEALTHY. Main is
+43d5b543.**
+- **The owner's instruction** (2026-10-02, verbatim excerpt): "Resume Phase 3. Priority: (1) privilege/role design,
+  (2) three-state receipts, then wider §8.1 bundle; S8 stays later." Also: "Do not treat replacing legacy
+  service_role with a new Supabase secret key as least privilege by itself."
+- **Item 1, the privilege audit and role design: SEALED, read-only**
+  (.work/roadmap/phase3/PRIVILEGE_AUDIT_AND_DESIGN.md, sha 2d6a80f0937a8f0c…). No secret was read, no database was
+  contacted, nothing changed.
+  - **The gaps:**
+    - G1, critical: the hourly resolver and the collectors run as the table owner (migration authority);
+    - G2, high: the role behind the Space's SUPABASE_DB_URL. Correction 01 infers it is owner-level: no migration
+      grants the automation tables to any role, yet the live F1 ledger works. Only the owner can confirm it;
+    - G3, high: the REST runtime is service_role (BYPASSRLS plus ALL) and can write labels and core rows outside
+      the bundle RPC;
+    - G4: a new sb_secret_ key still maps to service_role. It improves rotation, not privilege.
+  - **The design:**
+    - C1: ucpe_api_writer, reached through authenticator by a writer JWT. Option W2: the bundle RPC becomes SECURITY
+      DEFINER, owned by a NOLOGIN ucpe_bundle_owner, so the runtime has no direct INSERT path to core evidence;
+    - C2, corrected: ucpe_space_db. The Space's DB URL also serves the live F1/UOR registry and ledger, so C2 must
+      keep SELECT on automation_credential and SELECT, INSERT and UPDATE on automation_radar_ledger;
+    - C3: ucpe_resolver;
+    - C4: the owner URL is kept only in a protected GitHub Environment.
+  - **The order** D1-D6: 0016 (additive) → credentials → the resolver cutover → the reader cutover → the writer
+    cutover (§2.6 plus a release) → revoke the excess.
+  - **Owner decisions E1-E4:** 0016's scope (W2 or INVOKER); the Space DB_URL role; the credential plan; the §2.6
+    crossing of repository.py and settings.py for the two-header writer.
+  - **Correction 01** (.work/roadmap/phase3/PRIVILEGE_DESIGN_CORRECTION_01.md, sha d036173f…, sealed): the sealed
+    design called the F1 route OFF. It has been ON since F1-ENABLE-A (2026-10-01): the settle probe got 401, not
+    503. Its C2 role would have broken F1/UOR. Corrected before any rehearsal or apply.
+- **Item 2, three-state receipts: MERGED** (#182, head 59244b9a, 9/9 green → main 43d5b543). Two free files,
+  api/analysis_service.py and telemetry/events.py. No pinned file and no migration.
+  - **The receipt values:**
+    - SAVED only for a complete bundle confirmed stored;
+    - NOT_SAVED when it is known not stored: CIRCUIT_OPEN, CONFLICT, INCOMPLETE_BUNDLE, NO_DURABLE_STORE,
+      NOT_ATTEMPTED;
+    - COMMIT_UNKNOWN whenever an attempted write is unconfirmed: NO_CONFIRMATION, UNCONFIRMED_EXCEPTION;
+    - several bundles report the least certain one. The receipt is added to the persistence_receipt event.
+  - **The evidence** (.work/roadmap/phase3/pr182, sealed):
+    - PERS-0 run 37049183159 adds criterion C5, "no false receipt". **rest_rpc: C1a-C5 all PASS.** Re-derived from
+      the raw observations: 0 false receipts, the receipts exactly as expected (report 1bacc208…);
+    - the postgres route (not production's) fails C5 on S5 only: data, the same defect as its C1b and C3;
+    - locally: VERIFY 5030; mutation 10/10.
+  - **Not live:** production f046140b does not carry it. A release (T4) ships it.
+  - **Recorded, not claimed:** plan §8.1's "COMMIT_UNKNOWN is reconciled by idempotent read/retry logic". The RPC is
+    idempotent (S7b: an identical replay is SAVED), but no automatic reconciliation runs. It meets the circuit
+    breaker and S8 (later).
+Previously (B9 RELEASED). **B9 IS LIVE. Production is D f046140b / UCPE-PROD-B9-20261002-A. The REST writer
 now persists each forecast bundle through migration 0015's RPC, in one transaction. The guard is HEALTHY at that pin
 (R 7f2b26e1). The H2-safe rollback target is bc90e69b.**
 - **The chain** (evidence .work/release_b9, sealed: 153 files, manifest ded617aa…):
@@ -849,7 +896,12 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-02): B9 is RELEASED and the chain is complete. The remaining Phase 3 items
+LOOP_STATE=IN PROGRESS (2026-10-03): Phase 3, in the owner's priority order. Receipts are merged. Next:
+  - the privilege rehearsal (P3-PRIV-R) on scratch PostgreSQL. The draft roles stay outside migrations/, so release
+    check 5c is untouched;
+  - then the wider §8.1 bundle design (T0);
+  - then the batched owner boundary.
+  Before it: AT THE OWNER (2026-10-02): B9 is RELEASED and the chain is complete. The remaining Phase 3 items
   (three-state receipts, the privilege and role design, the wider §8.1 bundle, S8 recovery) each need an owner
   decision or design ruling.
   Before it: IN PROGRESS (2026-10-02): T4-2, the B9 app release, is being prepared through the B4 chain: identity → D →
@@ -2510,7 +2562,9 @@ LOOP_STATE=AT THE OWNER (2026-10-02): B9 is RELEASED and the chain is complete. 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9 RELEASED (production f046140b / UCPE-PROD-B9-20261002-A; R
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): three-state receipts merged (#182 → 43d5b543). The privilege audit and design
+  are sealed; the rehearsal is next.
+  Before it: PHASES 2-3 and 7 (2026-10-02): B9 RELEASED (production f046140b / UCPE-PROD-B9-20261002-A; R
   7f2b26e1).
   Before it: PHASES 2-3 and 7 (2026-10-02): B9-REST merged (#177 → c9637469). Migration 0015 is APPLIED (run
   37033014490, 37/37). The B9 release (T4-2) is next.
@@ -2623,7 +2677,9 @@ CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9 RELEASED (production f046140
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-b9-released (this record; worktree lanes19/state_rel).
+CURRENT_BRANCH=chore/state-phase3-resume (this record; worktree lanes21/state_p3).
+  - Merged: feat/phase3-three-state-receipts (#182 → 43d5b543).
+  Before it: chore/state-b9-released (#181 → 9f4f3f27; worktree lanes19/state_rel).
   - Merged: release/prod-b9 (#179 → D f046140b) and release/prod-b9-repin (#180 → R 7f2b26e1).
   Before it: chore/registry-0015-applied (this record and the registry; worktree lanes19/registry).
   - Merged: feat/b9-rest-atomic-bundle (#177 → c9637469).
@@ -2713,7 +2769,9 @@ CURRENT_BRANCH=chore/state-b9-released (this record; worktree lanes19/state_rel)
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=7f2b26e1 (main = R, the B9 re-pin; over D f046140b, deployed). Guard PASS on R (run 37043734896).
+LAST_GREEN_SHA=43d5b543 (main, PR #182: three-state receipts). Push CI success (run 37049878403); reproducibility
+  success (run 37049878335).
+  Before it: 7f2b26e1 (main = R, the B9 re-pin; over D f046140b, deployed). Guard PASS on R (run 37043734896).
   Before it: c9637469 (main, PR #177: B9-REST). Push CI success (run 37017429357); reproducibility PASS (run
   37017429630).
   Before it: 9e997f0a (main, PR #175: the D1-D4 guidance record). Push CI success (run 36982811888);
@@ -2900,7 +2958,9 @@ LAST_GREEN_SHA=7f2b26e1 (main = R, the B9 re-pin; over D f046140b, deployed). Gu
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
+LAST_VERIFY=PASS ruff ok | 5030 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+  - This record at main 43d5b543, verified before its push.
+  Before it: PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
   - This record at R, verified before its push (the PR body).
   Before it: PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
   - SEC-1 at its exact commit 318431b5, and #165's identity change.
@@ -3139,7 +3199,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=B9 is complete (2026-10-02). Both T4s are consumed: the 0015 apply (run 37033014490) and the deploy (D
+OWNER_BOUNDARY=Not reached yet (2026-10-03). Expected, batched:
+  - E1-E4 (the privilege design);
+  - the receipts release (a T4);
+  - the wider bundle's migration and §2.6 decisions;
+  - the standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD).
+  Before it: B9 is complete (2026-10-02). Both T4s are consumed: the 0015 apply (run 37033014490) and the deploy (D
   f046140b), each the owner's one Run action after Auto refused it.
   - Open for the owner, batched: the Phase 3 items above; the H2 items (the hold stays live); B5's DEGRADED half;
     D3 (NO FOR NOW); D4 (HOLD).
@@ -3643,7 +3708,18 @@ OWNER_BOUNDARY=B9 is complete (2026-10-02). Both T4s are consumed: the 0015 appl
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: choose the next Phase 3 item (three-state receipts; the privilege and role design; the wider
+NEXT_ACTION=Claude, in this order:
+  1. P3-PRIV-R: rehearse design C1-C3 (W2) on scratch PostgreSQL with Supabase-like roles and an authenticator.
+     - Prove each role can do exactly its list and is refused everything else, including through PostgREST-style
+       role switching; and that anon and authenticated stay denied.
+     - Run production's own F1 registry and ledger code, and the calibration query, under ucpe_space_db
+       (Correction 01).
+     - The draft SQL stays outside migrations/. Its PR is evidence for E1; it is not applied.
+  2. The wider §8.1 bundle design (T0, sealed): run identity and the detail payload in the bundle, and the
+     reconciliation of COMMIT_UNKNOWN.
+  3. A STATE record, then the batched owner boundary.
+  - Throughout: watch passively for natural persistence_receipt events; never create verification traffic.
+  Before it: The owner: choose the next Phase 3 item (three-state receipts; the privilege and role design; the wider
   bundle; S8 recovery) or another roadmap lane.
   - Claude: watch, passively, for the first natural persistence_receipt after the release, without creating traffic.
   Before it: Claude: the B9 release (T4-2) through the B4 chain from the main that carries this registry record
