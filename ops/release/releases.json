@@ -108,6 +108,12 @@
       "deployed_over": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
       "h2_hold": true,
       "release_id": "UCPE-PROD-OBS1-20261001-A"
+    },
+    {
+      "commit": "51a15fd057d68c5d4fda793d42b7114e931d07e5",
+      "deployed_over": "46a1de68448477c56bce209729ef93b9e9e26ad8",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-SEC1-20261002-A"
     }
   ],
   "schema_version": "ucpe-release-registry.v1"
