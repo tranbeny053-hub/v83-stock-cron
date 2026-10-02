@@ -1,6 +1,28 @@
 # STATE
 
-Updated: 2026-10-02 (REL-1 and OBS-2 merged; the OBS-2 release; UX-1 still held). **OBS-2 IS LIVE. Production is D
+Updated: 2026-10-02 (PERS-0 measured; the owner decision pack D1-D4). **PERS-0 (plan §22 item 7) is MERGED (#173 →
+c386acd5) and adjudicated. The current Postgres writer under injected faults, on scratch PG built from 0001-0014:
+C1a PASS, C1b FAIL, C2 PASS, C3 FAIL, C4 PASS. The critical path (B9, Phase 3) now waits only on owner decisions.
+Production is unchanged: bc90e69b / UCPE-PROD-OBS2-20261002-A.**
+- **PERS-0:** run 36973936528, REPORT_CONSISTENT (the criteria re-derived from the raw observations). Record:
+  .work/roadmap/pers0/PERS0_RECORD.md (sealed).
+  - C1b FAIL: a crash or a lost response between the prediction and snapshot writes leaves a prediction without
+    its snapshot (S2, S7a). It is reported UNAVAILABLE, never OK.
+  - C3 FAIL: a conflicting prediction retry is acknowledged OK (ON CONFLICT DO NOTHING, no comparison; S5), and the
+    stored row stays the original. A conflicting snapshot is refused (S6).
+  - C1a, C2 and C4 PASS. S8: after one failure, the open circuit drops the next bundle entirely.
+  - Scope: the Postgres transport only; production's transport is UNKNOWN (M1).
+- **The B9 proposal** (design only; NOT implemented, because pinned files need prior authorization):
+  - persistence/repository.py gains save_prediction_bundle(prediction, feature snapshot, derivatives snapshot):
+    ONE transaction (all or nothing);
+  - the prediction's conflict is detected by comparing stored and incoming content: IDENTICAL_DUPLICATE or
+    CONFLICT, as the snapshot path already does. No migration;
+  - _persist_work_confirmed uses it when present;
+  - the evaluator pin is regenerated, red tests are untouched, and the §2.6 RECORD is written (as for 35545f4d);
+  - durable reconciliation of circuit-open drops (S8) is a later step and needs a table.
+- **M1 is now one log line:** OBS-1 is live, so every persistence_receipt event in the Space logs carries
+  repository=<class>: SupabasePersistenceRepository (Postgres) or SupabaseRestPersistenceRepository (REST).
+Previously (REL-1 and OBS-2 merged; the OBS-2 release; UX-1 still held). **OBS-2 IS LIVE. Production is D
 bc90e69b / UCPE-PROD-OBS2-20261002-A, and the guard is HEALTHY at that pin. The H2-safe rollback target is 51a15fd0.**
 - **REL-1** #168 → 5cfd60d4 (release tooling): preflight check 5b refuses a changed app.js or styles.css under its
   old ?v= token. The asset-token test is conditional on a pending frontend delta. Mutation 4/4.
@@ -664,7 +686,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-02): OBS-2 is released. Next: PERS-0, the §22 item 7 persistence fault-injection
+LOOP_STATE=AT THE OWNER DECISION PACK (2026-10-02): D1 M1 (one log line), D2 the B9 §2.6 crossing, D3 the F1-artifact
+  ruling (UX-1), D4 FEAS-1 real-data authorization. The decision-free work is exhausted for the critical path.
+  Before it: IN PROGRESS (2026-10-02): OBS-2 is released. Next: PERS-0, the §22 item 7 persistence
+  fault-injection
   measurement on scratch PG.
   Before it: IN PROGRESS (2026-10-02): SEC-1 is released.
   - Next: REL-1, the release tooling's cache-bust rule.
@@ -2311,7 +2336,9 @@ LOOP_STATE=IN PROGRESS (2026-10-02): OBS-2 is released. Next: PERS-0, the §22 i
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): OBS-2 RELEASED (production bc90e69b / UCPE-PROD-OBS2-20261002-A);
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAIL: B9 is needed). OBS-2 RELEASED
+  (production bc90e69b). The owner decision pack D1-D4.
+  Before it: PHASES 2-3 and 7 (2026-10-02): OBS-2 RELEASED (production bc90e69b / UCPE-PROD-OBS2-20261002-A);
   REL-1 merged; UX-1 held.
   Before it: PHASES 2-3 and 7 (2026-10-02):
   - SEC-1 RELEASED: production 51a15fd0 / UCPE-PROD-SEC1-20261002-A;
@@ -3381,7 +3408,12 @@ OWNER_BOUNDARY=Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never r
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: PERS-0, the plan §22 item 7 persistence crash/idempotency rehearsal of the current PG writer
+NEXT_ACTION=The owner: D1-D4. Then Claude:
+  - after D1 (M1 = Postgres) and D2: implement B9 exactly as authorized, with the pin regenerated and PERS-0 rerun
+    (C1b and C3 must flip to PASS); a release (T4);
+  - after D3: UX-1, with the F1 examples and the analysis_hash goldens regenerated;
+  - after D4: FEAS-1 on real DEV-admissible data.
+  Before it: Claude: PERS-0, the plan §22 item 7 persistence crash/idempotency rehearsal of the current PG writer
   on scratch PostgreSQL in CI, against the §23 Persistence criteria. It measures and fixes nothing: B9 needs
   M1 and a §2.6 crossing. UX-1 waits on Q1.
   Before it: Claude:
