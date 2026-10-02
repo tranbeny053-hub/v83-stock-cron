@@ -33,7 +33,10 @@ The §23 criteria are derived from what is observed:
 - C1b no partial bundle is ever persisted (atomicity);
 - C2 a same-content retry is idempotent and leaves exactly one complete bundle;
 - C3 a conflicting retry is refused (not reported OK) and leaves the stored row unchanged;
-- C4 a response lost after commit is reconciled by a same-content retry, with no duplicate.
+- C4 a response lost after commit is reconciled by a same-content retry, with no duplicate;
+- C5 the receipt (plan §8.1) never lies: SAVED only when the complete bundle is stored (and never
+  for a conflicting submission); NOT_SAVED only when the submission stored no complete bundle;
+  COMMIT_UNKNOWN is always truthful.
 
 The script exits 0 when every scenario ran and the report was written, 1 if the harness itself
 failed, and 3 when a route named by --require-route has a criterion that is not PASS.
@@ -66,7 +69,7 @@ ROUTES = ("postgres", "rest_rpc")
 REST_BASE = "https://rehearsal.invalid"
 REST_KEY = "rehearsal-service-role-key"
 BUNDLE_FUNCTION = "public.save_prediction_bundle(jsonb,jsonb,jsonb)"
-CRITERIA = ("C1a", "C1b", "C2", "C3", "C4")
+CRITERIA = ("C1a", "C1b", "C2", "C3", "C4", "C5")
 
 
 class InjectedFault(RuntimeError):
@@ -108,6 +111,17 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
     ]
     s7b = observations.get("S7b")
     c4_ok = bool(s7b) and complete(s7b) and s7b["result"].get("overall") == "OK"
+    c5_bad = []
+    for name, obs in observations.items():
+        receipt = obs.get("receipt")
+        before = obs.get("db_before") or {"predictions": 0, "snapshots": 0}
+        was_complete = before["predictions"] == 1 and before["snapshots"] == 1
+        if receipt not in {"SAVED", "NOT_SAVED", "COMMIT_UNKNOWN"}:
+            c5_bad.append(name)
+        elif receipt == "SAVED" and (not complete(obs) or name in conflicts):
+            c5_bad.append(name)
+        elif receipt == "NOT_SAVED" and complete(obs) and not was_complete:
+            c5_bad.append(name)
     return {
         "C1a": {
             "verdict": "PASS" if not c1a_bad else "FAIL",
@@ -126,6 +140,11 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
             "not_refused": c3_bad,
         },
         "C4": {"verdict": "PASS" if c4_ok else "FAIL", "scenario": "S7b"},
+        "C5": {
+            "verdict": "PASS" if observations and not c5_bad else "FAIL",
+            "receipts": {name: obs.get("receipt") for name, obs in observations.items()},
+            "false_receipts": c5_bad,
+        },
     }
 
 
@@ -265,12 +284,12 @@ def main(argv: list[str] | None = None) -> int:
             "snapshot_hash": snapshot_hash[0] if snapshot_hash else None,
         }
 
-    def run(work: Any, repository: Any) -> dict[str, Any]:
+    def run(work: Any, repository: Any) -> tuple[dict[str, Any], tuple[Any, Any]]:
         try:
-            result = _persist_work_confirmed(work, repository).public_result()
-        except Exception as exc:  # recorded, never hidden
-            result = {"raised": type(exc).__name__}
-        return result
+            confirmation = _persist_work_confirmed(work, repository)
+        except Exception as exc:  # recorded, never hidden; the telemetry calls it unknown
+            return {"raised": type(exc).__name__}, ("COMMIT_UNKNOWN", "UNCONFIRMED_EXCEPTION")
+        return confirmation.public_result(), (confirmation.receipt, confirmation.receipt_reason)
 
     def scenarios(fresh: Callable[..., Any], faulted: Callable[[str, Any], Any],
                   reuse: Callable[[Any], Any]) -> dict[str, dict[str, Any]]:
@@ -284,10 +303,14 @@ def main(argv: list[str] | None = None) -> int:
 
         def observe(name: str, fault: str, work: Any, repository: Any,
                     **extra: Any) -> dict[str, Any]:
-            result = run(work, repository)
+            before = db(work.prediction_rows[0]["prediction_id"])
+            result, (receipt, reason) = run(work, repository)
             obs = {
                 "fault": fault,
                 "result": result,
+                "receipt": receipt,
+                "receipt_reason": reason,
+                "db_before": before,
                 "db": db(work.prediction_rows[0]["prediction_id"]),
                 **extra,
             }

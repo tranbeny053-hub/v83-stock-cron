@@ -74,6 +74,8 @@ from crypto_probability_engine.persistence.prediction_origin import (
 from crypto_probability_engine.persistence.repository import (
     OOSArmIdentityConflict,
     PersistenceRepository,
+    PredictionBundleWrite,
+    PredictionWriteStatus,
 )
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
@@ -131,6 +133,10 @@ class _PersistenceConfirmation:
     derivatives_snapshot: str | None
     overall: str
     background_status: str
+    # Plan §8.1's receipt for the analysis's forecast bundles: SAVED, NOT_SAVED or COMMIT_UNKNOWN
+    # (None when it has no bundle), with the reason when it is not SAVED.
+    receipt: str | None = None
+    receipt_reason: str | None = None
 
     def public_result(self) -> dict[str, object]:
         return {
@@ -793,6 +799,10 @@ def _emit_persistence_receipt(
 ) -> None:
     """Plan §10's persistence receipt for one background save. Never raises; changes no status."""
 
+    # A save that raised was attempted and never confirmed: its bundles can only be unknown.
+    unconfirmed = (
+        (RECEIPT_COMMIT_UNKNOWN, "UNCONFIRMED_EXCEPTION") if work.prediction_rows else (None, None)
+    )
     try:
         _emit_persistence_event(
             "persistence_receipt",
@@ -804,6 +814,8 @@ def _emit_persistence_receipt(
             prediction=confirmation.prediction if confirmation else None,
             feature_snapshot=confirmation.feature_snapshot if confirmation else None,
             derivatives_snapshot=confirmation.derivatives_snapshot if confirmation else None,
+            receipt=confirmation.receipt if confirmation else unconfirmed[0],
+            receipt_reason=confirmation.receipt_reason if confirmation else unconfirmed[1],
             duration_ms=(time.perf_counter() - started) * 1000,
             error_class=error_class,
         )
@@ -867,13 +879,21 @@ def _persist_work_confirmed(
     repository: PersistenceRepository | None,
 ) -> _PersistenceConfirmation:
     if repository is None:
-        return _PersistenceConfirmation(None, None, None, "UNAVAILABLE", "STATELESS")
+        absent = [(RECEIPT_NOT_SAVED, "NO_DURABLE_STORE")] * len(work.prediction_rows)
+        return _PersistenceConfirmation(
+            None, None, None, "UNAVAILABLE", "STATELESS",
+            *_aggregate_receipt(absent, len(work.prediction_rows)),
+        )
     prediction_confirmation: str | None = None
     feature_confirmation: str | None = None
     derivatives_confirmation: str | None = None
     auxiliary_unavailable = False
     unexpected_failure = False
     terminal_repository_unavailable = False
+    # One receipt per forecast bundle, in order. `unsettled` is True while a bundle's write has
+    # started and its receipt is not yet known, so a failure there can only be COMMIT_UNKNOWN.
+    receipts: list[tuple[str, str | None]] = []
+    unsettled = False
     try:
         statuses = [
             _status_text(repository.save_run(work.run_summary)),
@@ -907,7 +927,21 @@ def _persist_work_confirmed(
                 # B9 (plan §8.1): the prediction and its snapshots in one transaction, or none.
                 snapshot_row = snapshot_rows.pop(bundle_id, None)
                 derivatives_snapshot_row = derivatives_snapshot_rows.pop(bundle_id, None)
-                written = save_bundle(prediction_row, snapshot_row, derivatives_snapshot_row)
+                if _circuit_open(repository):
+                    # The repository would refuse it without sending it: skipping the call makes
+                    # this receipt exact.
+                    written = PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE)
+                    receipts.append((RECEIPT_NOT_SAVED, "CIRCUIT_OPEN"))
+                else:
+                    unsettled = True
+                    written = save_bundle(prediction_row, snapshot_row, derivatives_snapshot_row)
+                    receipts.append(_bundle_receipt(
+                        written,
+                        incomplete=snapshot_row is None
+                        or work.feature_snapshot_build_failed
+                        or work.derivatives_snapshot_build_failed,
+                    ))
+                    unsettled = False
                 prediction_status = _bundle_prediction_status(written.prediction)
                 prediction_confirmation = _merge_artifact_status(
                     prediction_confirmation,
@@ -937,6 +971,7 @@ def _persist_work_confirmed(
                 }:
                     derivatives_snapshot_issue = True
                 continue
+            unsettled = True
             prediction_status = _status_text(repository.save_prediction(prediction_row))
             prediction_confirmation = _merge_artifact_status(
                 prediction_confirmation,
@@ -944,14 +979,23 @@ def _persist_work_confirmed(
             )
             statuses.append(prediction_status)
             if prediction_status not in {"OK", "STATELESS"}:
+                receipts.append(_row_receipt(prediction_status, None, None, incomplete=False))
+                unsettled = False
                 continue
             prediction_id = str(prediction_row.get("prediction_id", ""))
             snapshot_row = snapshot_rows.pop(prediction_id, None)
             save_snapshot = getattr(repository, "save_feature_snapshot", None)
+            row_snapshot_status: str | None = None
+            row_derivatives_status: str | None = None
+            row_incomplete = (
+                work.feature_snapshot_build_failed or work.derivatives_snapshot_build_failed
+            )
             if snapshot_row is None or not callable(save_snapshot):
                 snapshot_issue = True
+                row_incomplete = True
             else:
                 snapshot_status = _status_text(save_snapshot(snapshot_row))
+                row_snapshot_status = snapshot_status
                 feature_confirmation = _merge_artifact_status(
                     feature_confirmation,
                     snapshot_status,
@@ -967,10 +1011,12 @@ def _persist_work_confirmed(
                 )
                 if not callable(save_derivatives_snapshot):
                     derivatives_snapshot_issue = True
+                    row_incomplete = True
                 else:
                     derivatives_snapshot_status = _status_text(
                         save_derivatives_snapshot(derivatives_snapshot_row)
                     )
+                    row_derivatives_status = derivatives_snapshot_status
                     derivatives_confirmation = _merge_artifact_status(
                         derivatives_confirmation,
                         derivatives_snapshot_status,
@@ -980,6 +1026,11 @@ def _persist_work_confirmed(
                         "IDENTICAL_DUPLICATE",
                     }:
                         derivatives_snapshot_issue = True
+            receipts.append(_row_receipt(
+                prediction_status, row_snapshot_status, row_derivatives_status,
+                incomplete=row_incomplete,
+            ))
+            unsettled = False
         if snapshot_rows:
             snapshot_issue = True
         if derivatives_snapshot_rows:
@@ -991,6 +1042,8 @@ def _persist_work_confirmed(
         snapshot_issue = True
         derivatives_snapshot_issue = True
         statuses = []
+        if unsettled:
+            receipts.append((RECEIPT_COMMIT_UNKNOWN, "UNCONFIRMED_EXCEPTION"))
     auxiliary_unavailable = any(status == "UNAVAILABLE" for status in statuses)
     persistence_unavailable = (
         unexpected_failure
@@ -1032,6 +1085,7 @@ def _persist_work_confirmed(
         derivatives_confirmation,
         overall,
         background_status,
+        *_aggregate_receipt(receipts, len(work.prediction_rows)),
     )
 
 
@@ -1056,6 +1110,77 @@ def _bundle_prediction_status(status: object) -> str:
     if text in {"INSERTED", "IDENTICAL_DUPLICATE"}:
         return "OK"
     return text if text == "CONFLICT" else "UNAVAILABLE"
+
+
+# Plan §8.1's receipt states. A receipt speaks for the COMPLETE forecast bundle (the prediction and
+# every snapshot it requires): SAVED only when all of it is confirmed stored; NOT_SAVED only when
+# it is known not to be stored complete; COMMIT_UNKNOWN whenever a write was attempted and its
+# outcome is not confirmed. It never claims more than was observed.
+RECEIPT_SAVED = "SAVED"
+RECEIPT_NOT_SAVED = "NOT_SAVED"
+RECEIPT_COMMIT_UNKNOWN = "COMMIT_UNKNOWN"
+_CONFIRMED_WRITES = frozenset({"INSERTED", "IDENTICAL_DUPLICATE"})
+
+
+def _circuit_open(repository: object) -> bool:
+    """True when the repository's circuit is OPEN, so it would refuse a write without sending it."""
+
+    state = getattr(repository, "circuit_state", None)
+    if not callable(state):
+        return False
+    try:
+        return state() == "OPEN"
+    except Exception:
+        return False
+
+
+def _bundle_receipt(written: PredictionBundleWrite, *, incomplete: bool) -> tuple[str, str | None]:
+    """One bundle's receipt from the bundle function's answer (B9)."""
+
+    if written.refused:
+        return RECEIPT_NOT_SAVED, "CONFLICT"
+    parts = [written.prediction, written.feature_snapshot, written.derivatives_snapshot]
+    if all(_status_text(part) in _CONFIRMED_WRITES for part in parts if part is not None):
+        return (RECEIPT_NOT_SAVED, "INCOMPLETE_BUNDLE") if incomplete else (RECEIPT_SAVED, None)
+    return RECEIPT_COMMIT_UNKNOWN, "NO_CONFIRMATION"
+
+
+def _row_receipt(
+    prediction: str | None, snapshot: str | None, derivatives: str | None, *, incomplete: bool
+) -> tuple[str, str | None]:
+    """One bundle's receipt on the per-row path (OOS identities, the direct-Postgres writer).
+
+    That path inherits its writers' semantics: their prediction insert does not compare content,
+    so a silently ignored conflicting prediction can read as SAVED there (PERS-0 measures it).
+    """
+
+    if prediction == "STATELESS":
+        return RECEIPT_NOT_SAVED, "NO_DURABLE_STORE"
+    if prediction != "OK":
+        return RECEIPT_COMMIT_UNKNOWN, "NO_CONFIRMATION"
+    parts = [part for part in (snapshot, derivatives) if part is not None]
+    if "CONFLICT" in parts:
+        return RECEIPT_NOT_SAVED, "CONFLICT"
+    if any(part not in _CONFIRMED_WRITES for part in parts):
+        return RECEIPT_COMMIT_UNKNOWN, "NO_CONFIRMATION"
+    return (RECEIPT_NOT_SAVED, "INCOMPLETE_BUNDLE") if incomplete else (RECEIPT_SAVED, None)
+
+
+def _aggregate_receipt(
+    receipts: list[tuple[str, str | None]], bundles: int
+) -> tuple[str | None, str | None]:
+    """The analysis's receipt: COMMIT_UNKNOWN if any bundle is unknown, else NOT_SAVED if any is
+    not saved (a bundle never reached was NOT_ATTEMPTED), else SAVED. None without a bundle."""
+
+    if bundles == 0:
+        return None, None
+    missing = max(0, bundles - len(receipts))
+    padded = list(receipts) + [(RECEIPT_NOT_SAVED, "NOT_ATTEMPTED")] * missing
+    for state in (RECEIPT_COMMIT_UNKNOWN, RECEIPT_NOT_SAVED):
+        reasons = [reason for receipt, reason in padded if receipt == state]
+        if reasons:
+            return state, reasons[0]
+    return RECEIPT_SAVED, None
 
 
 def _mark_repository_unavailable(repository) -> None:

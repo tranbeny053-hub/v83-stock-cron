@@ -10,8 +10,8 @@ name: Persistence fault rehearsal (scratch PostgreSQL, no secrets)
 # Route "rest_rpc" is production's REST writer and its B9 bundle, migration 0015's RPC, called
 # exactly as PostgREST calls it (scripts/persistence_rehearsal/postgrest_emulator.py), plus the
 # function's privileges and refusals. --require-route rest_rpc makes every one of those a gate:
-# the job fails unless C1a, C1b, C2, C3 and C4 all PASS on it. It references no secret and touches
-# no real database.
+# the job fails unless C1a, C1b, C2, C3, C4 and C5 (the receipt never lies) all PASS on it. It
+# references no secret and touches no real database.
 
 "on":
   pull_request:

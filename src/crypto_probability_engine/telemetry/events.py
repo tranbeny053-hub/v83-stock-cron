@@ -65,6 +65,9 @@ FIELDS = frozenset(
         "feature_snapshot",
         "derivatives_snapshot",
         "prediction_rows",
+        # plan §8.1's receipt for the forecast bundles (SAVED, NOT_SAVED, COMMIT_UNKNOWN) and why
+        "receipt",
+        "receipt_reason",
     }
 )
 _CONTAINERS = (Mapping, list, tuple, set, frozenset, bytes, bytearray)
