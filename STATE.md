@@ -1,6 +1,38 @@
 # STATE
 
-Updated: 2026-10-02 (B9-REST merged; migration 0015 APPLIED; the B9 release is next). **B9 (plan §8.1) is built as
+Updated: 2026-10-02 (B9 RELEASED). **B9 IS LIVE. Production is D f046140b / UCPE-PROD-B9-20261002-A. The REST writer
+now persists each forecast bundle through migration 0015's RPC, in one transaction. The guard is HEALTHY at that pin
+(R 7f2b26e1). The H2-safe rollback target is bc90e69b.**
+- **The chain** (evidence .work/release_b9, sealed: 153 files, manifest ded617aa…):
+  - registry #178 → main 157daf3d (0015 applied_run);
+  - identity #179 → D f046140b, then push CI, the reproducible build and the guard on D all PASS;
+  - the rollback binding bc90e69b over D: 5/5;
+  - the re-pin precomputed twice: c8560980;
+  - preflight PASS 9/9: the delta is 3 files (analysis_service.py, repository.py, build_info.py), digest 433a36d5…;
+    check 5c PASS.
+- **T4-2, the deploy, is CONSUMED.**
+  - The auto-mode classifier refused Claude's deploy ([Production Deploy]).
+  - The owner ran the one chained Run action: a fresh preflight (PASS 9/9), then DEPLOY=PASS, fast-forward
+    bc90e69..f046140, no force. Never rerun.
+- **After the deploy:**
+  - SETTLE=PASS: RUNNING at D, health 200, build-info B9, D's index/app.js/styles.css bytes, the radar probe 401
+    CREDENTIAL_REQUIRED;
+  - ROLLBACK_CHECK=PASS 7/7 against the live build: target bc90e69b; 0015 is additive;
+  - re-pin #180 → R 7f2b26e1, equal to the precomputed c8560980;
+  - GUARD_VERIFY=PASS on R: run 37043734896, HEALTHY ×3, pin == live == f046140b, delta [].
+- **The owner's rollback command** (a T4, never automatic):
+  `git push --force-with-lease=refs/heads/main:f046140b121d4e4ed8969e58d3c137538b661725 hf
+  bc90e69be9b948e5dc6c1e8b78e6ea0d345c6b42:refs/heads/main`. It needs no database change: bc90e69b never calls the
+  RPC.
+- **Confirmation in production, observed only:** the first natural USER_REQUESTED analysis will log a
+  persistence_receipt from SupabaseRestRepository with the bundle's outcome. No verification traffic is created.
+- **Phase 3 residuals (not closed by B9):**
+  - three-state receipts;
+  - the privilege rehearsal and role design (the Space keeps the full-privilege service-role key);
+  - the wider §8.1 core bundle;
+  - S8 durable recovery (an owner item);
+  - the direct-Postgres writer unchanged (not production's).
+Previously (B9-REST merged; migration 0015 APPLIED; the B9 release is next). **B9 (plan §8.1) is built as
 the owner ruled (RD-1 = R1), MERGED (#177 → main c9637469), and its database half is APPLIED to production. The
 production app is unchanged (bc90e69b) until the release (T4-2).**
 - **The owner's ruling RD-1 = R1** (2026-10-02, verbatim excerpt): "preserve the production REST writer; do not cut HF
@@ -817,7 +849,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-02): T4-2, the B9 app release, is being prepared through the B4 chain: identity → D →
+LOOP_STATE=AT THE OWNER (2026-10-02): B9 is RELEASED and the chain is complete. The remaining Phase 3 items
+  (three-state receipts, the privilege and role design, the wider §8.1 bundle, S8 recovery) each need an owner
+  decision or design ruling.
+  Before it: IN PROGRESS (2026-10-02): T4-2, the B9 app release, is being prepared through the B4 chain: identity → D →
   CI/B3 → guard → rollback binding → re-pin precompute → preflight → deploy (T4) → settle → rollback-check → re-pin →
   guard. Migration 0015 is applied (T4-1 consumed).
   Before it: AT ONE OWNER DECISION (2026-10-02): RD-1, how B9 reaches the REST writer (R2a recommended, or R1).
@@ -2475,7 +2510,9 @@ LOOP_STATE=IN PROGRESS (2026-10-02): T4-2, the B9 app release, is being prepared
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9-REST merged (#177 → c9637469). Migration 0015 is APPLIED (run
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9 RELEASED (production f046140b / UCPE-PROD-B9-20261002-A; R
+  7f2b26e1).
+  Before it: PHASES 2-3 and 7 (2026-10-02): B9-REST merged (#177 → c9637469). Migration 0015 is APPLIED (run
   37033014490, 37/37). The B9 release (T4-2) is next.
   Before it: PHASES 2-3 and 7 (2026-10-02): M1 CONFIG_PROVEN (REST). B9 waits on RD-1.
   Before it: PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is applied. M1 is pending (no receipt in
@@ -2586,7 +2623,9 @@ CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9-REST merged (#177 → c96374
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/registry-0015-applied (this record and the registry; worktree lanes19/registry).
+CURRENT_BRANCH=chore/state-b9-released (this record; worktree lanes19/state_rel).
+  - Merged: release/prod-b9 (#179 → D f046140b) and release/prod-b9-repin (#180 → R 7f2b26e1).
+  Before it: chore/registry-0015-applied (this record and the registry; worktree lanes19/registry).
   - Merged: feat/b9-rest-atomic-bundle (#177 → c9637469).
   Before it: chore/state-m1-config-proven (#176 → bf86f4c0; worktree lanes18/state_m1).
   Before it: chore/state-d1-guidance-s8-d4 (#175 → 9e997f0a; worktree lanes18/state_d1).
@@ -2674,7 +2713,8 @@ CURRENT_BRANCH=chore/registry-0015-applied (this record and the registry; worktr
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c9637469 (main, PR #177: B9-REST). Push CI success (run 37017429357); reproducibility PASS (run
+LAST_GREEN_SHA=7f2b26e1 (main = R, the B9 re-pin; over D f046140b, deployed). Guard PASS on R (run 37043734896).
+  Before it: c9637469 (main, PR #177: B9-REST). Push CI success (run 37017429357); reproducibility PASS (run
   37017429630).
   Before it: 9e997f0a (main, PR #175: the D1-D4 guidance record). Push CI success (run 36982811888);
   reproducibility PASS (run 36982811701).
@@ -3099,7 +3139,11 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The B9 release deploy (T4-2), when its frozen package is ready.
+OWNER_BOUNDARY=B9 is complete (2026-10-02). Both T4s are consumed: the 0015 apply (run 37033014490) and the deploy (D
+  f046140b), each the owner's one Run action after Auto refused it.
+  - Open for the owner, batched: the Phase 3 items above; the H2 items (the hold stays live); B5's DEGRADED half;
+    D3 (NO FOR NOW); D4 (HOLD).
+  Before it: The B9 release deploy (T4-2), when its frozen package is ready.
   - Auto stays the default. If the classifier blocks the exact frozen deploy, the owner gets one Run action.
   - Ruled 2026-10-02: RD-1 = R1 (verbatim excerpt in the header).
   - T4-1 (the 0015 apply) is consumed: the owner's Run action, run 37033014490.
@@ -3599,7 +3643,10 @@ OWNER_BOUNDARY=The B9 release deploy (T4-2), when its frozen package is ready.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: the B9 release (T4-2) through the B4 chain from the main that carries this registry record
+NEXT_ACTION=The owner: choose the next Phase 3 item (three-state receipts; the privilege and role design; the wider
+  bundle; S8 recovery) or another roadmap lane.
+  - Claude: watch, passively, for the first natural persistence_receipt after the release, without creating traffic.
+  Before it: Claude: the B9 release (T4-2) through the B4 chain from the main that carries this registry record
   (check 5c requires it).
   - Release id UCPE-PROD-B9-<date>-A; rollback binding to the current production bc90e69b.
   - The deploy is a T4: one Run action if Auto refuses it.
