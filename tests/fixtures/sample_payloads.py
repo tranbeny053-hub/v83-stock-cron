@@ -26,9 +26,11 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
             "horizon_label": "~24H horizon",
             "horizon_approx_label": "4H setup / ~24H horizon",
             "probability_explanation": (
-                "Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars "
-                "of this timeframe. Timeout means no decisive directional resolution. Not a "
-                "forecast, not expected return, and not a trade recommendation."
+                "Up/Down/In band are uncalibrated heuristic estimates for the terminal "
+                "close ~6 bars ahead on this timeframe: Up ends above the decision band, "
+                "Down below it, In band inside it (a terminal outcome, not a clock "
+                "timeout). Not a forecast, not expected return, and not a trade "
+                "recommendation."
             ),
             "uncalibrated_banner": (
                 "⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates "
@@ -188,9 +190,11 @@ def sample_analysis_payload(analysis_mode: str = "METRICS_ONLY") -> dict:
             "horizon_bars": 6,
             "horizon_approx_label": "4H setup / ~24H horizon",
             "probability_explanation": (
-                "Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars "
-                "of this timeframe. Timeout means no decisive directional resolution. Not a "
-                "forecast, not expected return, and not a trade recommendation."
+                "Up/Down/In band are uncalibrated heuristic estimates for the terminal "
+                "close ~6 bars ahead on this timeframe: Up ends above the decision band, "
+                "Down below it, In band inside it (a terminal outcome, not a clock "
+                "timeout). Not a forecast, not expected return, and not a trade "
+                "recommendation."
             ),
             "uncalibrated_banner": (
                 "⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates "

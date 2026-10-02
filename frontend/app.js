@@ -432,7 +432,7 @@ function overviewCard(payload) {
     ["Horizon", display.horizon_label || "multi-bar horizon"],
     ["Up", formatPct(display.prob_up_pct)],
     ["Down", formatPct(display.prob_down_pct)],
-    ["Timeout", formatPct(display.prob_timeout_pct)],
+    ["In band", formatPct(display.prob_timeout_pct)],
     ["Model readiness", display.model_readiness_label || modelReadinessCopy],
     ["Data", display.is_live_data ? "LIVE" : display.data_source],
     ["Source", display.data_source],
@@ -532,7 +532,7 @@ function matrixRawProbability(probability = {}) {
   return keyValueTable([
     ["Up", formatFractionPct(probability.p_up)],
     ["Down", formatFractionPct(probability.p_down)],
-    ["Timeout", formatFractionPct(probability.p_timeout)],
+    ["In band", formatFractionPct(probability.p_timeout)],
   ]);
 }
 
@@ -1396,7 +1396,7 @@ function probabilityValues(probability = {}) {
   return [
     ["Up", formatFractionPct(probability.p_up)],
     ["Down", formatFractionPct(probability.p_down)],
-    ["Timeout", formatFractionPct(probability.p_timeout)],
+    ["In band", formatFractionPct(probability.p_timeout)],
     ["Directional edge", formatFractionPct(probability.directional_edge)],
     ["Resolution probability", formatFractionPct(probability.resolution_probability)],
     ["Directional balance", formatFractionPct(probability.directional_balance)],
@@ -1590,7 +1590,7 @@ function formatOutcomeDistribution(distribution) {
   }
   return `UP ${formatCalibrationCount(distribution.UP)} / DOWN ${formatCalibrationCount(
     distribution.DOWN,
-  )} / TIMEOUT ${formatCalibrationCount(distribution.TIMEOUT)}`;
+  )} / IN BAND ${formatCalibrationCount(distribution.TIMEOUT)}`;
 }
 
 function renderCalibrationVersions(item = {}) {
@@ -2129,7 +2129,7 @@ function renderStructuredDetail(payload, detailView) {
         ["Type", decisionBrief.probability_type],
         ["Up", formatPct(display.prob_up_pct)],
         ["Down", formatPct(display.prob_down_pct)],
-        ["Timeout", formatPct(display.prob_timeout_pct)],
+        ["In band", formatPct(display.prob_timeout_pct)],
         ["Model readiness", display.model_readiness_label || modelReadinessCopy],
         ["Explanation", display.probability_explanation],
       ]),

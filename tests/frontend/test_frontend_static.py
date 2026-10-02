@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=w4c1-ka1-20260828-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260828-a"' in html
+    assert 'href="/styles.css?v=ux1-20261002-a"' in html
+    assert 'src="/app.js?v=ux1-20261002-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -840,7 +840,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
     css = read_frontend("styles.css")
     assert "Uncalibrated heuristic" in html
     assert "not validated forecasts" in html
-    assert "Up/Down/Timeout are momentum-based estimates" in html
+    assert "Up/Down/In band are momentum-based estimates" in html
     assert "Open Detail for the full breakdown." in html
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
@@ -855,7 +855,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
 def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert html.count("Up/Down/Timeout are momentum-based estimates") == 1
+    assert html.count("Up/Down/In band are momentum-based estimates") == 1
     assert "probability-explainer compact" not in js
     assert "qualitativeCardLean" not in js
     assert "uncalibrated" + " — see Detail" not in js
@@ -868,7 +868,7 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     assert "prob_timeout_pct" in js
     assert "[\"Up\", formatPct(display.prob_up_pct)]" in overview_chunk
     assert "[\"Down\", formatPct(display.prob_down_pct)]" in overview_chunk
-    assert "[\"Timeout\", formatPct(display.prob_timeout_pct)]" in overview_chunk
+    assert "[\"In band\", formatPct(display.prob_timeout_pct)]" in overview_chunk
     assert "Probability" not in overview_chunk
     assert "Breakdown" not in overview_chunk
     assert "section(\"Probability\"" in js
@@ -1311,3 +1311,20 @@ def test_live_smoke_script_is_flag_gated() -> None:
     assert "UCPE_LIVE_SMOKE_ENABLED" in script
     assert "SKIP:" in script
     assert "data_mode=\"live\"" in script
+
+
+def test_ux1_in_band_is_the_terminal_band_outcome_never_a_timeout() -> None:
+    """Plan §14.3: the third outcome is the terminal return inside the decision band (the resolver's
+    _realized_label), so no label may imply a clock timeout or an unresolved direction."""
+
+    from crypto_probability_engine.detail.decision_brief import PROBABILITY_EXPLANATION
+
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert '"Timeout"' not in js and "/ TIMEOUT " not in js
+    assert js.count('["In band", ') == 4
+    assert "/ IN BAND ${formatCalibrationCount(distribution.TIMEOUT)}" in js
+    assert "inside the decision band" in html and "Timeout" not in html
+    assert "decision band" in PROBABILITY_EXPLANATION
+    assert "not a clock timeout" in PROBABILITY_EXPLANATION
+    assert "no decisive directional resolution" not in PROBABILITY_EXPLANATION
