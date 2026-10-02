@@ -20,9 +20,21 @@ fi = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(fi)
 
 
-def _obs(overall: str, predictions: int, snapshots: int, **extra: object) -> dict:
+def _obs(
+    overall: str,
+    predictions: int,
+    snapshots: int,
+    *,
+    receipt: str | None = None,
+    before: tuple[int, int] = (0, 0),
+    **extra: object,
+) -> dict:
+    # Unless a test says otherwise, the receipt is the always-truthful one for the outcome.
+    receipt = receipt or ("SAVED" if overall == "OK" else "COMMIT_UNKNOWN")
     return {
         "result": {"overall": overall},
+        "receipt": receipt,
+        "db_before": {"predictions": before[0], "snapshots": before[1]},
         "db": {"predictions": predictions, "snapshots": snapshots},
         **extra,
     }
@@ -33,12 +45,14 @@ def _ideal() -> dict:
         "S1": _obs("OK", 1, 1),
         "S2": _obs("UNAVAILABLE", 0, 0),
         "S3": _obs("OK", 1, 1),
-        "S4": _obs("OK", 1, 1),
-        "S5": _obs("UNAVAILABLE", 1, 1, conflict_reported_ok=False, stored_unchanged=True),
-        "S6": _obs("PARTIAL", 1, 1, conflict_reported_ok=False, stored_unchanged=True),
+        "S4": _obs("OK", 1, 1, before=(1, 1)),
+        "S5": _obs("UNAVAILABLE", 1, 1, receipt="NOT_SAVED", before=(1, 1),
+                   conflict_reported_ok=False, stored_unchanged=True),
+        "S6": _obs("PARTIAL", 1, 1, receipt="NOT_SAVED", before=(1, 1),
+                   conflict_reported_ok=False, stored_unchanged=True),
         "S7a": _obs("UNAVAILABLE", 0, 0),
         "S7b": _obs("OK", 1, 1),
-        "S8": _obs("UNAVAILABLE", 0, 0),
+        "S8": _obs("UNAVAILABLE", 0, 0, receipt="NOT_SAVED"),
     }
 
 
@@ -77,6 +91,24 @@ def test_a_conflict_reported_ok_or_overwriting_fails_c3() -> None:
 def test_retries_must_leave_one_complete_acknowledged_bundle() -> None:
     assert fi.verdicts(_ideal() | {"S3": _obs("PARTIAL", 1, 0)})["C2"]["not_idempotent"] == ["S3"]
     assert fi.verdicts(_ideal() | {"S7b": _obs("UNAVAILABLE", 1, 0)})["C4"]["verdict"] == "FAIL"
+
+
+def test_a_receipt_never_claims_more_than_the_database_shows() -> None:
+    # SAVED without a complete bundle, or for a conflicting submission, is false.
+    assert fi.verdicts(_ideal() | {"S1": _obs("UNAVAILABLE", 1, 0, receipt="SAVED")})[
+        "C5"]["false_receipts"] == ["S1"]
+    conflict_saved = _ideal() | {"S5": _obs("OK", 1, 1, receipt="SAVED", before=(1, 1),
+                                            conflict_reported_ok=True, stored_unchanged=True)}
+    assert fi.verdicts(conflict_saved)["C5"]["false_receipts"] == ["S5"]
+    # NOT_SAVED while the submission made a complete bundle appear is false...
+    lost = _ideal() | {"S7a": _obs("UNAVAILABLE", 1, 1, receipt="NOT_SAVED")}
+    assert fi.verdicts(lost)["C5"]["false_receipts"] == ["S7a"]
+    # ...but a refusal over an already complete bundle is truly NOT_SAVED, and COMMIT_UNKNOWN is
+    # never false.
+    unknown = _ideal() | {"S7a": _obs("UNAVAILABLE", 1, 1, receipt="COMMIT_UNKNOWN")}
+    assert fi.verdicts(unknown)["C5"]["verdict"] == "PASS"
+    assert fi.verdicts(_ideal() | {"S2": _obs("UNAVAILABLE", 0, 0, receipt="MAYBE")})[
+        "C5"]["false_receipts"] == ["S2"]
 
 
 def test_missing_scenarios_never_pass() -> None:
@@ -188,8 +220,9 @@ def test_a_required_route_must_pass_every_criterion_privilege_and_refusal() -> N
     assert fi.unmet_requirements({"rest_rpc": _route()}, ["rest_rpc"]) == []
     failing = fi.verdicts(_ideal() | {"S5": _obs("OK", 1, 1, conflict_reported_ok=True,
                                                  stored_unchanged=True)})
+    # A conflict acknowledged OK is refused by C3, and its SAVED receipt is false (C5).
     assert fi.unmet_requirements({"rest_rpc": _route(criteria=failing)}, ["rest_rpc"]) == [
-        "rest_rpc.C3"]
+        "rest_rpc.C3", "rest_rpc.C5"]
     weak = _route(privileges={"expected": {"security_invoker": False}})
     assert fi.unmet_requirements({"rest_rpc": weak}, ["rest_rpc"]) == [
         "rest_rpc.privileges.security_invoker"]
