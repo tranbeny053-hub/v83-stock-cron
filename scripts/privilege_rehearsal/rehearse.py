@@ -392,6 +392,12 @@ def _plain(value: Any) -> Any:
     return value if value is None or isinstance(value, (bool, int, str)) else str(value)
 
 
+def sizes(state: dict[str, list]) -> dict[str, int]:
+    """How many catalog rows each comparison holds: an empty comparison would prove nothing."""
+
+    return {name: len(rows) for name, rows in state.items()}
+
+
 def snapshot(db: Database) -> dict[str, list]:
     return {name: _plain(db.owner(statement) or []) for name, statement in SNAPSHOT_SQL.items()}
 
@@ -1156,6 +1162,7 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
             else ["the refused second application changed the catalog"]
         ),
         second_application_sqlstate=second,
+        snapshot_sizes=sizes(applied_state),
     )
     criteria["P1"] = _guarded(lambda: criterion_matrix(db, version, owner))
     prediction: dict | None = None
@@ -1193,7 +1200,9 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
                 )
         except Exception as exc:  # noqa: BLE001
             p8_failures.append(f"{type(exc).__name__}: {exc}")
-    criteria["P8"] = verdict(p8_failures, catalog_differences=differences)
+    criteria["P8"] = verdict(
+        p8_failures, catalog_differences=differences, snapshot_sizes=sizes(pre), after=sizes(post)
+    )
     return {
         "criteria": {name: criteria[name] for name in CRITERIA},
         "server_version_num": version,

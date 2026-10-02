@@ -83,9 +83,15 @@ def test_the_draft_is_not_a_migration() -> None:
 def test_a_second_application_is_refused_before_any_change() -> None:
     every = statements(DRAFT)
     assert every[0].startswith("DO $$"), "the refusal must come first"
-    assert "UP016" in DRAFT.split("CREATE ROLE", 1)[0]
-    for needed in ("already exists", "authenticator", "CREATEROLE", "prosecdef"):
-        assert needed in DRAFT.split("CREATE ROLE ucpe_api_writer", 1)[0], needed
+    refusal = re.compile(
+        r"IF EXISTS \(\s*SELECT 1 FROM pg_catalog\.pg_roles\s+WHERE rolname IN \("
+        r"'ucpe_api_writer', 'ucpe_bundle_owner', 'ucpe_space_db', 'ucpe_resolver'\)\s*\) THEN\s+"
+        r"RAISE EXCEPTION '[^']*a second application is refused'\s+USING ERRCODE = 'UP016';"
+    )
+    head = DRAFT.split("CREATE ROLE ucpe_api_writer", 1)[0]
+    assert refusal.search(head), "the role-exists refusal must raise UP016, which P7 expects"
+    for needed in ("authenticator", "CREATEROLE", "prosecdef"):
+        assert needed in head, needed
 
 
 def test_exactly_four_roles_none_with_any_power() -> None:
