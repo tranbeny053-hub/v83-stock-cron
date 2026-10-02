@@ -1,6 +1,42 @@
 # STATE
 
-Updated: 2026-10-03 (Phase 3 resumed: three-state receipts MERGED; the privilege audit and design SEALED; the
+Updated: 2026-10-03 (Phase 3: the privilege rehearsal MERGED and PASSING; W-B MERGED; the wider-bundle design
+SEALED; the receipts + W-B release package next, up to the owner's T4). **Production is unchanged: D f046140b /
+UCPE-PROD-B9-20261002-A, guard HEALTHY. Main is 99908969.**
+- **Item 1, the privilege rehearsal (P3-PRIV-R): MERGED** (#184 → 84280b6c; evidence .work/roadmap/phase3/pr184,
+  sealed).
+  - **What is rehearsed:**
+    - the DRAFT of migration 0016 (scripts/privilege_rehearsal/, outside migrations/, so release check 5c ignores
+      it): design C1-C3 with W2 and Correction 01;
+    - its rollback;
+    - a harness that runs production's own code under each role, on scratch PostgreSQL 16.15 behind a real
+      PostgREST (v14.18 and v16.4, each a release binary checked against its sha256).
+  - **The criteria, all PASS on both versions:**
+    - P1, the exact matrix (40 policies);
+    - P2, the REST runtime as ucpe_api_writer: SAVED, read back, replay SAVED, conflict NOT_SAVED;
+    - P3, 18 out-of-list requests and 5 foreign-role JWTs refused (403/42501), anon 401;
+    - P4, calibration and F1 24/24 as ucpe_space_db;
+    - P5, the resolver;
+    - P6, the API roles unchanged and service_role still SAVED;
+    - P7, the second application refused (UP016);
+    - P8, the rollback restores the catalog exactly.
+  - **Non-vacuity:** relation ACL entries 219 → 261 → 219. The 42 added equal the design's grant count.
+  - **Static mutation:** 14/14.
+  - **Production runs PostgreSQL 17.6.** MAINTAIN is checked only from 17, so the 0016 apply route will check the
+    live catalog itself.
+- **Item 3, the wider §8.1 bundle: design SEALED** (.work/roadmap/phase3/WIDER_BUNDLE_DESIGN.md, sha f6c62371…).
+  - W-A, the atomic RPC with the run identity and the detail in one transaction (migration 0017 plus §2.6): the
+    recommended end state, for the owner (WB1).
+  - W-B, the interim honest receipt: MERGED.
+  - R-1, the COMMIT_UNKNOWN reconciliation: deferred with S8 (WB3).
+- **W-B: MERGED** (#185 → 99908969). The required detail joins the persistence work and is written before the
+  bundle. SAVED now needs the run identity and that detail confirmed:
+  - unconfirmed gives COMMIT_UNKNOWN (RUN_UNCONFIRMED / DETAIL_UNCONFIRMED);
+  - a detail never sent gives NOT_SAVED (INCOMPLETE_BUNDLE).
+  - Its evidence: PERS-0 rest_rpc C1a-C5 PASS, and the privilege rehearsal P1-P8 PASS ×2, with the detail now
+    inside P2. Mutation 10/10.
+- **Not live yet:** the receipts (#182) and W-B ship together as release UCPE-PROD-RCPT-20261003-A.
+Previously (Phase 3 resumed: three-state receipts MERGED; the privilege audit and design SEALED; the
 privilege rehearsal next). **Production is unchanged: D f046140b / UCPE-PROD-B9-20261002-A, guard HEALTHY. Main is
 43d5b543.**
 - **The owner's instruction** (2026-10-02, verbatim excerpt): "Resume Phase 3. Priority: (1) privilege/role design,
@@ -896,7 +932,11 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): Phase 3, in the owner's priority order. Receipts are merged. Next:
+LOOP_STATE=IN PROGRESS (2026-10-03): the release package UCPE-PROD-RCPT-20261003-A (the receipts #182 + W-B #185) goes
+  through the B4 chain: identity → D → push CI and B3 → the guard on D → the rollback findings (target f046140b over
+  D) → the re-pin precomputed twice → preflight PASS. Then AT THE OWNER, for the T4 deploy and the batched decisions.
+  Main is frozen at D until the deploy, or until the owner abandons the package.
+  Before it: IN PROGRESS (2026-10-03): Phase 3, in the owner's priority order. Receipts are merged. Next:
   - the privilege rehearsal (P3-PRIV-R) on scratch PostgreSQL. The draft roles stay outside migrations/, so release
     check 5c is untouched;
   - then the wider §8.1 bundle design (T0);
@@ -2562,7 +2602,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): Phase 3, in the owner's priority order. Rec
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): three-state receipts merged (#182 → 43d5b543). The privilege audit and design
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): the privilege rehearsal merged (#184 → 84280b6c, P1-P8 PASS ×2); W-B merged
+  (#185 → 99908969); the release package UCPE-PROD-RCPT-20261003-A next.
+  Before it: PHASE 3 (2026-10-03): three-state receipts merged (#182 → 43d5b543). The privilege audit and design
   are sealed; the rehearsal is next.
   Before it: PHASES 2-3 and 7 (2026-10-02): B9 RELEASED (production f046140b / UCPE-PROD-B9-20261002-A; R
   7f2b26e1).
@@ -2677,7 +2719,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): three-state receipts merged (#182 → 43
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-phase3-resume (this record; worktree lanes21/state_p3).
+CURRENT_BRANCH=chore/state-phase3-rehearsed (this record; worktree lanes21/state_p3b).
+  - Merged: feat/phase3-privilege-rehearsal (#184 → 84280b6c) and feat/phase3-wider-core-receipt (#185).
+  Before it: chore/state-phase3-resume (#183 → 6ef98f89; worktree lanes21/state_p3).
   - Merged: feat/phase3-three-state-receipts (#182 → 43d5b543).
   Before it: chore/state-b9-released (#181 → 9f4f3f27; worktree lanes19/state_rel).
   - Merged: release/prod-b9 (#179 → D f046140b) and release/prod-b9-repin (#180 → R 7f2b26e1).
@@ -2769,7 +2813,10 @@ CURRENT_BRANCH=chore/state-phase3-resume (this record; worktree lanes21/state_p3
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=43d5b543 (main, PR #182: three-state receipts). Push CI success (run 37049878403); reproducibility
+LAST_GREEN_SHA=99908969 (main, PR #185: W-B). Push CI success (run 37059683889); reproducibility success (run
+  37059683937).
+  Before it: 84280b6c (main, PR #184: the privilege rehearsal). Push CI 37057967928; reproducibility 37057967930.
+  Before it: 43d5b543 (main, PR #182: three-state receipts). Push CI success (run 37049878403); reproducibility
   success (run 37049878335).
   Before it: 7f2b26e1 (main = R, the B9 re-pin; over D f046140b, deployed). Guard PASS on R (run 37043734896).
   Before it: c9637469 (main, PR #177: B9-REST). Push CI success (run 37017429357); reproducibility PASS (run
@@ -2958,7 +3005,9 @@ LAST_GREEN_SHA=43d5b543 (main, PR #182: three-state receipts). Push CI success (
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5030 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+LAST_VERIFY=PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+  - This record at main 99908969, verified before its push.
+  Before it: PASS ruff ok | 5030 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at main 43d5b543, verified before its push.
   Before it: PASS ruff ok | 4824 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-02.
   - This record at R, verified before its push (the PR body).
@@ -3199,7 +3248,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Not reached yet (2026-10-03). Expected, batched:
+OWNER_BOUNDARY=Reached once the release package passes preflight (2026-10-03). Batched:
+  1. the T4 deploy of UCPE-PROD-RCPT-20261003-A: one Run action (a fresh preflight, then the deploy);
+  2. E1-E4: the privilege design, now rehearsed (E1: promote the draft to migration 0016, W2 or INVOKER);
+  3. WB1-WB3: the wider bundle (W-A as the end state, migration 0017 plus §2.6; R-1 with S8);
+  4. the standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD).
+  Before it: Not reached yet (2026-10-03). Expected, batched:
   - E1-E4 (the privilege design);
   - the receipts release (a T4);
   - the wider bundle's migration and §2.6 decisions;
@@ -3708,7 +3762,15 @@ OWNER_BOUNDARY=Not reached yet (2026-10-03). Expected, batched:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude, in this order:
+NEXT_ACTION=Claude: the release package UCPE-PROD-RCPT-20261003-A from the main that carries this record.
+  - The identity PR is the next merge (D). Then push CI and B3, the guard on D, the rollback findings over D, the
+    re-pin precomputed twice, and preflight review and accept.
+  - Stop at the owner: one Run action (a fresh preflight, then the deploy) and the batched decisions.
+  - After the owner's deploy: settle, rollback-check, the re-pin PR, the guard on R, and a STATE record.
+  - If the owner defers the release instead, the package goes stale harmlessly. The next release supersedes its
+    identity.
+  - Throughout: watch passively for natural persistence_receipt events; never create verification traffic.
+  Before it: Claude, in this order:
   1. P3-PRIV-R: rehearse design C1-C3 (W2) on scratch PostgreSQL with Supabase-like roles and an authenticator.
      - Prove each role can do exactly its list and is refused everything else, including through PostgREST-style
        role switching; and that anon and authenticated stay denied.
