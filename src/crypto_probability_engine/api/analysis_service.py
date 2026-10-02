@@ -7,7 +7,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -124,6 +124,9 @@ class PersistenceWork:
     feature_snapshot_build_failed: bool = False
     derivatives_snapshot_rows: tuple[dict, ...] = ()
     derivatives_snapshot_build_failed: bool = False
+    # Plan §8.1's required detail/history payload (a USER_REQUESTED analysis only). It is written
+    # inside the confirmed persistence, before the bundle, so the receipt can speak for it.
+    run_detail_row: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -710,18 +713,18 @@ def schedule_best_effort_persist(
     if repository is None:
         return status
     work = _persistence_work(payload, status)
+    if prediction_origin == PredictionOrigin.USER_REQUESTED.value and callable(
+        getattr(repository, "save_run_detail", None)
+    ):
+        work = replace(
+            work,
+            run_detail_row={
+                "run_id": payload["run_id"],
+                "analysis_hash": payload.get("analysis_hash"),
+                "detail_payload": sanitize_for_export(payload["detail_view"]),
+            },
+        )
     background_tasks.add_task(_submit_persistence_work, repository, work)
-    if prediction_origin == PredictionOrigin.USER_REQUESTED.value:
-        save_run_detail = getattr(repository, "save_run_detail", None)
-        if callable(save_run_detail):
-            background_tasks.add_task(
-                save_run_detail,
-                {
-                    "run_id": payload["run_id"],
-                    "analysis_hash": payload.get("analysis_hash"),
-                    "detail_payload": sanitize_for_export(payload["detail_view"]),
-                },
-            )
     return status
 
 
@@ -894,9 +897,12 @@ def _persist_work_confirmed(
     # started and its receipt is not yet known, so a failure there can only be COMMIT_UNKNOWN.
     receipts: list[tuple[str, str | None]] = []
     unsettled = False
+    run_confirmation: str | None = None
+    detail_confirmation: str | None = None
     try:
+        run_confirmation = _status_text(repository.save_run(work.run_summary))
         statuses = [
-            _status_text(repository.save_run(work.run_summary)),
+            run_confirmation,
             _status_text(repository.save_timeframe_result(work.timeframe_result)),
         ]
         statuses.extend(
@@ -911,6 +917,14 @@ def _persist_work_confirmed(
             _status_text(repository.save_news_evidence_link(row))
             for row in work.news_evidence_links
         )
+        if work.run_detail_row is not None:
+            # Before the bundle, so a stored forecast is never left without its detail by ordering.
+            # An open circuit means it would not be sent: it is known not stored.
+            save_detail = getattr(repository, "save_run_detail", None)
+            if _circuit_open(repository) or not callable(save_detail):
+                detail_confirmation = _DETAIL_NOT_SENT
+            else:
+                detail_confirmation = _status_text(save_detail(work.run_detail_row))
         snapshot_rows = {
             str(row.get("prediction_id", "")): row for row in work.feature_snapshot_rows
         }
@@ -1085,7 +1099,12 @@ def _persist_work_confirmed(
         derivatives_confirmation,
         overall,
         background_status,
-        *_aggregate_receipt(receipts, len(work.prediction_rows)),
+        *_core_receipt(
+            *_aggregate_receipt(receipts, len(work.prediction_rows)),
+            run=run_confirmation,
+            detail=detail_confirmation,
+            detail_required=work.run_detail_row is not None,
+        ),
     )
 
 
@@ -1112,10 +1131,13 @@ def _bundle_prediction_status(status: object) -> str:
     return text if text == "CONFLICT" else "UNAVAILABLE"
 
 
-# Plan §8.1's receipt states. A receipt speaks for the COMPLETE forecast bundle (the prediction and
-# every snapshot it requires): SAVED only when all of it is confirmed stored; NOT_SAVED only when
-# it is known not to be stored complete; COMMIT_UNKNOWN whenever a write was attempted and its
-# outcome is not confirmed. It never claims more than was observed.
+# Plan §8.1's receipt states. A receipt speaks for the COMPLETE core: the forecast bundle (the
+# prediction and every snapshot it requires) and, through _core_receipt, the run identity and the
+# required detail payload around it.
+# - SAVED only when all of it is confirmed stored.
+# - NOT_SAVED only when it is known not to be stored complete.
+# - COMMIT_UNKNOWN whenever a write was attempted and its outcome is not confirmed.
+# It never claims more than was observed.
 RECEIPT_SAVED = "SAVED"
 RECEIPT_NOT_SAVED = "NOT_SAVED"
 RECEIPT_COMMIT_UNKNOWN = "COMMIT_UNKNOWN"
@@ -1181,6 +1203,35 @@ def _aggregate_receipt(
         if reasons:
             return state, reasons[0]
     return RECEIPT_SAVED, None
+
+
+# A detail payload never sent (an open circuit): known not stored, unlike an unconfirmed write.
+_DETAIL_NOT_SENT = "NOT_SENT"
+
+
+def _core_receipt(
+    receipt: str | None,
+    reason: str | None,
+    *,
+    run: str | None,
+    detail: str | None,
+    detail_required: bool,
+) -> tuple[str | None, str | None]:
+    """Plan §8.1's core bundle: the run identity, the forecast bundle and, for a USER_REQUESTED
+    analysis, its required detail payload. A SAVED forecast bundle stays SAVED only when the run
+    identity and that detail are confirmed too. Both are written outside the bundle's transaction.
+    An unconfirmed one may or may not have committed (COMMIT_UNKNOWN). A detail never sent is known
+    missing (NOT_SAVED)."""
+
+    if receipt != RECEIPT_SAVED:
+        return receipt, reason
+    if run != "OK":
+        return RECEIPT_COMMIT_UNKNOWN, "RUN_UNCONFIRMED"
+    if detail_required and detail == _DETAIL_NOT_SENT:
+        return RECEIPT_NOT_SAVED, "INCOMPLETE_BUNDLE"
+    if detail_required and detail != "OK":
+        return RECEIPT_COMMIT_UNKNOWN, "DETAIL_UNCONFIRMED"
+    return receipt, reason
 
 
 def _mark_repository_unavailable(repository) -> None:
