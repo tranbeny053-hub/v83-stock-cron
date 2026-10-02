@@ -14,21 +14,15 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "5a3ef022db10462675361e8d15aa8f4f572dc1aa"
+PIN_SHA = "46a1de68448477c56bce209729ef93b9e9e26ad8"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# Now standing in it: Dockerfile, analysis_service.py, app.py, build_info.py, merged but not yet
-# deployed. UCPE-PROD-OBS1-20261001-A names the next deploy; all of them clear
-# when it lands and the baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = [
-    "Dockerfile",
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/api/app.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# UCPE-PROD-OBS1-20261001-A deployed main's own tree, so nothing stands in it:
+# Dockerfile, analysis_service.py, app.py, build_info.py cleared with that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -266,11 +260,11 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-PROD-F1-AUTOMATION-20261001-A"
-    assert intended.release_label == "PROD-F1-AUTOMATION release of main"
+    assert intended.release_id == "UCPE-PROD-OBS1-20261001-A"
+    assert intended.release_label == "PROD-OBS1 release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "prod-f1-automation"
-    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-F1-AUTOMATION-20261001-A"
+    assert intended.source_milestone == "prod-obs1"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-OBS1-20261001-A"
     assert intended.asset_tokens == {
         "app_js": "w4c1-ka1-20260828-a",
         "styles_css": "w4c1-ka1-20260828-a",
