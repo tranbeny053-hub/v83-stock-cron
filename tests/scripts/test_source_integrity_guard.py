@@ -20,10 +20,12 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# OBS-2 (plan §9.4: per-stage analysis timings) changed analysis_service.py. It clears when a
-# release carries it.
+# Now standing in it: analysis_service.py, build_info.py, merged but not yet
+# deployed. UCPE-PROD-OBS2-20261002-A names the next deploy; all of them clear
+# when it lands and the baseline is re-pinned.
 CURRENT_DELTA_PATHS: list[str] = [
     "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
