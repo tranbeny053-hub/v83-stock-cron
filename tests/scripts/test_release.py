@@ -144,11 +144,12 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
         "applied, so a new migration must say whether it is additive"
     )
     # An explicit "applied_run": null marks a migration authored on main but not yet applied
-    # (0001-0007 predate apply tracking and carry no applied_run key at all). Every authored
-    # migration is applied (0014 by run 36952902214); a new one must be vouched additive.
+    # (0001-0007 predate apply tracking and carry no applied_run key at all). 0015 (B9's bundle
+    # RPC) is authored and unapplied until its one-shot T4; every unapplied migration must be
+    # vouched additive.
     unapplied = [m for m in registry["migrations_applied"]
                  if "applied_run" in m and m["applied_run"] is None]
-    assert [m["id"] for m in unapplied] == []
+    assert [m["id"] for m in unapplied] == ["0015"]
     assert all(m["additive"] is True for m in unapplied), (
         "an authored, unapplied migration must be vouched additive, or merging it would block "
         "every H2-safe rollback"
@@ -710,3 +711,40 @@ def test_preflight_refuses_a_changed_app_js_under_its_old_cache_token(
         assert code == 1
         assert ("STOP  5b every changed frontend asset ships a new cache token; unchanged: "
                 "frontend/app.js") in verdicts
+
+
+def test_unapplied_migrations_are_those_with_an_explicit_null_run() -> None:
+    registry = {"migrations_applied": [
+        {"id": "0001", "additive": None},
+        {"id": "0014", "additive": True, "applied_run": 36952902214},
+        {"id": "0015", "additive": True, "applied_run": None},
+    ]}
+    assert rel.unapplied_migrations(registry) == ["0015"]
+    registry["migrations_applied"][2]["applied_run"] = 1
+    assert rel.unapplied_migrations(registry) == []
+
+
+@pytest.mark.parametrize("applied", [False, True])
+def test_preflight_refuses_while_a_migration_on_d_is_unapplied(
+    world: World, tmp_path: Path, applied: bool
+) -> None:
+    # B9: code calling 0015's RPC must never ship before 0015 is applied and recorded.
+    registry = json.loads((world.work / rel.REGISTRY_PATH).read_text())
+    registry["migrations_applied"].append(
+        {"id": "0015", "additive": True, "applied_run": 7 if applied else None}
+    )
+    _write(world.work, rel.REGISTRY_PATH, _canonical(registry))
+    d = _prepare_beta(world)
+    _arm_preflight(world, d)
+    pf = tmp_path / "pf"
+    code = rel.main(["preflight", d, "--dry-push", "--accept-runtime-delta",
+                     rel.delta_digest([APP, rel.BUILD_INFO_PATH]), "--evidence-dir", str(pf)],
+                    world.env())
+    verdicts = (pf / "VERDICTS").read_text()
+    if applied:
+        assert code == 0
+        assert "PASS  5c no migration on D is still unapplied (the registry at D)" in verdicts
+    else:
+        assert code == 1
+        assert ("STOP  5c no migration on D is still unapplied (the registry at D); unapplied: "
+                "0015") in verdicts

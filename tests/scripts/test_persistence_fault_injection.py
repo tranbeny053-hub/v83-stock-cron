@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -124,3 +125,76 @@ def test_the_injected_faults_happen_exactly_where_declared() -> None:
         crash.save_feature_snapshot({})
     assert crash._real.saved == ["p2"]
     assert crash.persistence_status() == "OK", "every other call goes straight through"
+
+
+# ------------------------------------------------------------------------ B9: the REST route
+
+
+def test_the_emulator_executes_only_the_bundle_rpc() -> None:
+    import httpx
+
+    from scripts.persistence_rehearsal import postgrest_emulator as pe
+
+    emulator = pe.PostgrestEmulator("postgresql:///never?host=/var/run/postgresql")
+    for path in ("/rest/v1/analysis_runs", "/rest/v1/provider_observations"):
+        answer = emulator(httpx.Request("POST", f"https://rehearsal.invalid{path}"))
+        assert answer.status_code == 201, "outside the bundle: acknowledged, not stored"
+    assert emulator(httpx.Request("GET", "https://rehearsal.invalid/rest/v1/x")).status_code == 404
+    assert emulator.rpc_requests == 0, "no database was touched"
+
+
+def test_the_rpc_is_called_as_postgrest_calls_it() -> None:
+    from scripts.persistence_rehearsal import postgrest_emulator as pe
+
+    assert pe.RPC_PATH == "/rest/v1/rpc/save_prediction_bundle"
+    # The raw body, read by jsonb_to_record with the function's own parameter types, as named
+    # arguments: PostgREST's own call, so JSON numbers keep their digits.
+    assert "FROM pg_catalog.jsonb_to_record(%s::jsonb)" in pe.RPC_SQL
+    assert ("AS b(p_prediction jsonb, p_feature_snapshot jsonb, p_derivatives_snapshot jsonb)"
+            in pe.RPC_SQL)
+    for name in ("p_prediction", "p_feature_snapshot", "p_derivatives_snapshot"):
+        assert f"{name} => b.{name}" in pe.RPC_SQL
+    with pytest.raises(ValueError):
+        pe.PostgrestEmulator("postgresql:///x?host=/var/run/postgresql", fault="anything")
+
+
+def test_the_injected_fault_lives_only_in_the_scratch_rehearsal() -> None:
+    from scripts.persistence_rehearsal import postgrest_emulator as pe
+
+    root = Path(__file__).resolve().parents[2]
+    setup = " ".join(pe.FAULT_SETUP_SQL)
+    assert "ON public.prediction_feature_snapshots" in setup and "pers0_fault." in setup
+    for migration in (root / "migrations").glob("*.sql"):
+        assert "pers0" not in migration.read_text(encoding="utf-8"), migration.name
+
+
+def test_only_known_routes_can_be_required() -> None:
+    with pytest.raises(SystemExit):
+        fi.main(["--report=x.json", "--require-route", "mystery"])
+    assert fi.ROUTES == ("postgres", "rest_rpc")
+
+
+def _route(**changes: Any) -> dict[str, Any]:
+    report = {
+        "criteria": fi.verdicts(_ideal()),
+        "privileges": {"expected": {"security_invoker": True, "execute_for_service_role": True}},
+        "refusals": {"expected": {"anon_refused_42501": True, "refusals_write_nothing": True}},
+    }
+    report.update(changes)
+    return report
+
+
+def test_a_required_route_must_pass_every_criterion_privilege_and_refusal() -> None:
+    assert fi.unmet_requirements({"rest_rpc": _route()}, ["rest_rpc"]) == []
+    failing = fi.verdicts(_ideal() | {"S5": _obs("OK", 1, 1, conflict_reported_ok=True,
+                                                 stored_unchanged=True)})
+    assert fi.unmet_requirements({"rest_rpc": _route(criteria=failing)}, ["rest_rpc"]) == [
+        "rest_rpc.C3"]
+    weak = _route(privileges={"expected": {"security_invoker": False}})
+    assert fi.unmet_requirements({"rest_rpc": weak}, ["rest_rpc"]) == [
+        "rest_rpc.privileges.security_invoker"]
+    leaky = _route(refusals={"expected": {"refusals_write_nothing": False}})
+    assert fi.unmet_requirements({"rest_rpc": leaky}, ["rest_rpc"]) == [
+        "rest_rpc.refusals.refusals_write_nothing"]
+    # A route that is not required is data, whatever it shows.
+    assert fi.unmet_requirements({"postgres": _route(criteria=failing)}, []) == []

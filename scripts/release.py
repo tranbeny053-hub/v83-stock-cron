@@ -327,6 +327,17 @@ def stale_cache_tokens(pin_index: str, d_index: str, delta: Iterable[str]) -> li
             if FRONTEND_FILES[key] in changed and after[key] == before[key]]
 
 
+def unapplied_migrations(registry: dict[str, Any]) -> list[str]:
+    """Migrations the registry marks authored on main but not yet applied (an explicit null run).
+
+    A release may carry code that calls such a migration's objects, so nothing ships before it is
+    applied and recorded (B9: the bundle RPC of 0015 must exist before its caller is deployed).
+    """
+
+    return [m["id"] for m in registry["migrations_applied"]
+            if "applied_run" in m and m["applied_run"] is None]
+
+
 def has_h2_hold(env: Env, rev: str) -> bool:
     rc, out, _ = env.run(["git", "-C", str(env.root), "cat-file", "blob", f"{rev}:{H2_HOLD_PATH}"])
     if rc != 0:
@@ -595,6 +606,9 @@ def cmd_preflight(env: Env, args: argparse.Namespace) -> int:
                                blob(env, d, FRONTEND_FILES["root"]).decode("utf-8"), delta)
     ok &= ev.check(not stale, "5b every changed frontend asset ships a new cache token"
                    + (f"; unchanged: {', '.join(stale)}" if stale else ""))
+    pending = unapplied_migrations(load_registry(blob(env, d, REGISTRY_PATH).decode("utf-8")))
+    ok &= ev.check(not pending, "5c no migration on D is still unapplied (the registry at D)"
+                   + (f"; unapplied: {', '.join(pending)}" if pending else ""))
 
     guard = env.config["guard_workflow"]
     latest = gh_json(env, ev, "guard_latest", "run", "list", "--workflow", guard, "--limit", "1",
