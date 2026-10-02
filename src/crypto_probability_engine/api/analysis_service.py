@@ -79,7 +79,12 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 from crypto_probability_engine.targets.contract_v1 import stamp_v1
-from crypto_probability_engine.telemetry.events import CURRENT_REQUEST_ID, emit
+from crypto_probability_engine.telemetry.events import (
+    CURRENT_REQUEST_ID,
+    CURRENT_STAGE_MS,
+    STAGE_FIELDS,
+    emit,
+)
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
     validate_market_snapshot,
@@ -210,6 +215,7 @@ def _analyze(
     arm: OOSArm | str | None,
     record_prediction: bool,
 ) -> dict:
+    CURRENT_STAGE_MS.set(None)
     if record_prediction:
         if prediction_origin is None or run_store is None:
             raise ValueError("A recorded analysis needs a prediction origin and a run store.")
@@ -276,6 +282,7 @@ def _analyze(
         symbol = normalize_symbol(request.symbol)
     except SymbolNormalizationError as exc:
         raise api_error(400, ErrorCode.INVALID_SYMBOL, "Invalid or unsupported symbol.") from exc
+    clock = _StageClock()
 
     if arm_context is not None:
         if (
@@ -307,6 +314,7 @@ def _analyze(
         snapshot = selection.snapshot
         provider_state = selection.provider_state
         data_quality = selection.data_quality
+    clock.lap("provider_ms")
     deterministic_run_id = (
         _deterministic_cadence_run_id(
             normalized_symbol=symbol.display,
@@ -321,6 +329,7 @@ def _analyze(
         provider_state,
         methodology_version=methodology_version,
     )
+    clock.lap("quant_ms")
     core_computed_at = _stamp_clock()
     skill_evidence = (
         arm_context.resolved_skill_evidence
@@ -333,11 +342,13 @@ def _analyze(
         gate_evidence,
         directional_evidence_hold,
     )
+    clock.lap("gate_ms")
     news_blocks = build_news_blocks(
         analysis_mode=request.analysis_mode,
         symbol=symbol.display,
         settings=settings,
     )
+    clock.lap("news_ms")
     if arm_context is not None:
         run_id = arm_context.run_id
     elif deterministic_identity:
@@ -381,6 +392,7 @@ def _analyze(
         data_quality=data_quality,
         decision_brief=decision_brief,
     )
+    clock.lap("present_ms")
     response = {
         "schema_version": settings.schema_version,
         "run_id": run_id,
@@ -516,7 +528,26 @@ def _analyze(
     validated["detail_view"]["debug_lite"]["persistence_status"] = persistence_status
     if run_store is not None:
         run_store.put(run_id, validated, prediction_origin=prediction_origin)
+    CURRENT_STAGE_MS.set(clock.finish())
     return validated
+
+
+class _StageClock:
+    """Wall-clock milliseconds per analysis stage (plan §9.4). It reads the clock only, so it can
+    never change an analysis; the timings travel in telemetry, never in the payload."""
+
+    def __init__(self) -> None:
+        self.started = self.mark = time.perf_counter()
+        self.ms: dict[str, float] = {}
+
+    def lap(self, stage: str) -> None:
+        now = time.perf_counter()
+        self.ms[stage] = (now - self.mark) * 1000
+        self.mark = now
+
+    def finish(self) -> dict[str, float]:
+        self.ms["total_ms"] = (time.perf_counter() - self.started) * 1000
+        return self.ms
 
 
 def _skill_evidence_for_analysis(timeframe: str) -> dict:
@@ -795,6 +826,8 @@ def record_analysis_event(payload: dict, *, prediction_origin: str) -> None:
             data_source=summary["data_source"],
             is_live_data=summary["is_live_data"],
             persistence_status=summary["persistence_status"],
+            **{key: value for key, value in (CURRENT_STAGE_MS.get() or {}).items()
+               if key in STAGE_FIELDS},
         )
     except Exception:
         return
