@@ -125,7 +125,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # reviewed pins.
     # 52 -> 56 (the 0014 apply route): the dispatch workflow adds checkout, setup-python and
     # upload-artifact, and the rehearsal uploads its report, all at the reviewed pins.
-    assert len(refs) == 56
+    # 56 -> 59 (PERS-0): the persistence fault rehearsal adds checkout, setup-python and
+    # upload-artifact, all at the reviewed pins.
+    assert len(refs) == 59
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
