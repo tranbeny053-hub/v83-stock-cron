@@ -35,12 +35,14 @@ Names used below:
    ```
    - The first run without `--accept-runtime-delta` prints the runtime delta and its sha256, and stops.
    - Review the delta, then rerun with that digest.
-   - It must end `PREFLIGHT=PASS`. Its seven checks:
+   - It must end `PREFLIGHT=PASS`. Its eight checks:
      1. D is `origin/main` with green push CI;
      2. hf main is `P0`;
      3. the Space is RUNNING at `P0`, serving the live identity, with health 200;
      4. the push is a fast-forward;
      5. the runtime delta is the reviewed one;
+     5b. every changed `app.js` or `styles.css` ships a new `?v=` token in `index.html`, so no
+        browser keeps the old file;
      6. the guard is explicitly HEALTHY on D, with nothing queued;
      7. the dry run authenticates.
 4. **Deploy (T4, owner card below).**

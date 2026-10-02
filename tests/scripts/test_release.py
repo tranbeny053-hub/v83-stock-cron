@@ -108,8 +108,16 @@ def test_the_delta_definition_equals_the_guard_tests_own_mirror() -> None:
 
 
 def test_asset_tokens_read_from_the_real_index_match_the_baseline() -> None:
+    from tests.scripts import test_source_integrity_guard as guard_test
+
     baseline = json.loads(_real(rel.BASELINE_PATH))
-    assert rel.asset_tokens(_real("frontend/index.html")) == baseline["frontend_asset_tokens"]
+    tokens = rel.asset_tokens(_real("frontend/index.html"))
+    if "frontend/index.html" in guard_test.CURRENT_DELTA_PATHS:
+        # A merged, not yet deployed frontend change may already carry its new tokens. Preflight
+        # check 5b requires a new token for every changed asset, and the re-pin records them.
+        assert set(tokens) == set(baseline["frontend_asset_tokens"])
+    else:
+        assert tokens == baseline["frontend_asset_tokens"]
     with pytest.raises(rel.Stop):
         rel.asset_tokens('<script src="/app.js?v=a"></script><script src="/app.js?v=b"></script>')
 
@@ -644,3 +652,61 @@ def test_a_listed_post_probe_and_a_plain_get_probe_parse() -> None:
     del env.config["post_probe_paths"]
     with pytest.raises(rel.Stop, match="is not in post_probe_paths"):
         rel.parse_probe(env, "POST /v1/automation/radar-evidence 503")
+
+
+
+INDEX_TOK1 = '<link href="/styles.css?v=tok1" />\n<script src="/app.js?v=tok1"></script>\n'
+INDEX_JS2 = '<link href="/styles.css?v=tok1" />\n<script src="/app.js?v=tok2"></script>\n'
+INDEX_BOTH2 = '<link href="/styles.css?v=tok2" />\n<script src="/app.js?v=tok2"></script>\n'
+
+
+@pytest.mark.parametrize(("d_index", "delta", "stale"), [
+    (INDEX_TOK1, ["frontend/app.js"], ["frontend/app.js"]),
+    (INDEX_TOK1, ["frontend/styles.css"], ["frontend/styles.css"]),
+    (INDEX_TOK1, ["frontend/app.js", "frontend/styles.css"],
+     ["frontend/app.js", "frontend/styles.css"]),
+    (INDEX_JS2, ["frontend/app.js", "frontend/index.html"], []),
+    (INDEX_JS2, ["frontend/app.js", "frontend/styles.css"], ["frontend/styles.css"]),
+    (INDEX_BOTH2, ["frontend/app.js", "frontend/styles.css", "frontend/index.html"], []),
+    (INDEX_TOK1, ["src/x.py", "frontend/index.html"], []),
+    (INDEX_TOK1, [], []),
+])
+def test_a_changed_frontend_asset_must_ship_a_new_cache_token(d_index, delta, stale) -> None:
+    assert rel.stale_cache_tokens(INDEX_TOK1, d_index, delta) == stale
+
+
+@pytest.mark.parametrize("bump", [False, True])
+def test_preflight_refuses_a_changed_app_js_under_its_old_cache_token(
+    world: World, tmp_path: Path, bump: bool
+) -> None:
+    _write(world.work, "frontend/app.js", "changed frontend\n")
+    if bump:
+        _write(world.work, "frontend/index.html",
+               '<link href="/styles.css?v=tok1" />\n<script src="/app.js?v=tok2"></script>\n')
+    _git(world.work, "add", "-A")
+    _git(world.work, "commit", "-q", "-m", "frontend change")
+    tree = world.worktree("wt_identity_frontend", "HEAD")
+    assert rel.main(["identity", "--worktree", str(tree), "--release-id", BETA], world.env()) == 0
+    _git(tree, "add", "-A")
+    _git(tree, "commit", "-q", "-m", "release identity beta")
+    d = _git(tree, "rev-parse", "HEAD")
+    _git(world.work, "merge", "-q", "--ff-only", d)
+    _git(world.work, "push", "-q", "origin", "main")
+    _arm_preflight(world, d)
+    changed = sorted([rel.BUILD_INFO_PATH, "frontend/app.js"]
+                     + (["frontend/index.html"] if bump else []))
+    world.gh_guard_log = _summary_line(
+        final_classification="HEALTHY", per_round_classifications=["HEALTHY"] * 3, exit_code=0,
+        hf_main_sha=world.c0, pinned_hf_main_sha=world.c0, live_release_id=ALPHA,
+        intended_release_id=ALPHA, deployment_delta_paths=changed)
+    pf = tmp_path / "pf"
+    code = rel.main(["preflight", d, "--dry-push", "--accept-runtime-delta",
+                     rel.delta_digest(changed), "--evidence-dir", str(pf)], world.env())
+    verdicts = (pf / "VERDICTS").read_text()
+    if bump:
+        assert code == 0
+        assert "PASS  5b every changed frontend asset ships a new cache token" in verdicts
+    else:
+        assert code == 1
+        assert ("STOP  5b every changed frontend asset ships a new cache token; unchanged: "
+                "frontend/app.js") in verdicts

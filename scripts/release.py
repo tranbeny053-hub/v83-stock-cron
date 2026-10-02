@@ -314,6 +314,19 @@ def asset_tokens(index_html: str) -> dict[str, str]:
     return tokens
 
 
+def stale_cache_tokens(pin_index: str, d_index: str, delta: Iterable[str]) -> list[str]:
+    """Changed frontend assets whose ?v= token in D's index.html did not move from the pin's.
+
+    Browsers may keep the old file under an unchanged token, so a release that changes app.js or
+    styles.css must also give it a new token.
+    """
+
+    before, after = asset_tokens(pin_index), asset_tokens(d_index)
+    changed = set(delta)
+    return [FRONTEND_FILES[key] for key in ("app_js", "styles_css")
+            if FRONTEND_FILES[key] in changed and after[key] == before[key]]
+
+
 def has_h2_hold(env: Env, rev: str) -> bool:
     rc, out, _ = env.run(["git", "-C", str(env.root), "cat-file", "blob", f"{rev}:{H2_HOLD_PATH}"])
     if rc != 0:
@@ -578,6 +591,10 @@ def cmd_preflight(env: Env, args: argparse.Namespace) -> int:
     )
     if not delta_ok:
         print(f"  review runtime_delta.txt, then rerun with --accept-runtime-delta {digest}")
+    stale = stale_cache_tokens(blob(env, pin, FRONTEND_FILES["root"]).decode("utf-8"),
+                               blob(env, d, FRONTEND_FILES["root"]).decode("utf-8"), delta)
+    ok &= ev.check(not stale, "5b every changed frontend asset ships a new cache token"
+                   + (f"; unchanged: {', '.join(stale)}" if stale else ""))
 
     guard = env.config["guard_workflow"]
     latest = gh_json(env, ev, "guard_latest", "run", "list", "--workflow", guard, "--limit", "1",
