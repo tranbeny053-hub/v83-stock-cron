@@ -20,6 +20,10 @@ from contextvars import ContextVar
 EVENT_LOGGER_NAME = "ucpe.events"
 # The current HTTP request's id, set by the request middleware; worker threads inherit it.
 CURRENT_REQUEST_ID: ContextVar[str | None] = ContextVar("ucpe_request_id", default=None)
+# The current analysis's stage timings (plan §9.4), set by the analysis itself and read by its
+# analysis_completed event. Reset at the start of every analysis, so none outlives a failure.
+CURRENT_STAGE_MS: ContextVar[dict[str, float] | None] = ContextVar("ucpe_stage_ms", default=None)
+STAGE_FIELDS = ("provider_ms", "quant_ms", "gate_ms", "news_ms", "present_ms", "total_ms")
 BUFFER_SIZE = 256
 MAX_TEXT = 160
 
@@ -51,6 +55,8 @@ FIELDS = frozenset(
         "data_source",
         "is_live_data",
         "persistence_status",
+        # the analysis stages (plan §9.4), in milliseconds
+        *STAGE_FIELDS,
         # the persistence receipt
         "repository",
         "overall",
