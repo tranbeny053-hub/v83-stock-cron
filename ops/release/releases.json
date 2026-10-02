@@ -102,6 +102,12 @@
       "deployed_over": "2096af6d1b3d54461b40c47fd96c265882e5af40",
       "h2_hold": true,
       "release_id": "UCPE-PROD-F1-AUTOMATION-20261001-A"
+    },
+    {
+      "commit": "46a1de68448477c56bce209729ef93b9e9e26ad8",
+      "deployed_over": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-OBS1-20261001-A"
     }
   ],
   "schema_version": "ucpe-release-registry.v1"

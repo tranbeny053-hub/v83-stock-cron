@@ -1,26 +1,26 @@
 {
   "critical_source_digests": {
-    "Dockerfile": "d6d90cbcce02014662f45f4b9f140017b751ec46ebdab770342ae8ba4cd11494",
+    "Dockerfile": "79343d238cf3a29c91bb1cef8cb70088a23c18e7cbc2f17f903c1133e85698cb",
     "frontend/app.js": "c683d20afe26bcd71ff3d1e4f18cf820c419eb04e31d8393310bb1280776a1c3",
     "frontend/index.html": "70928eb4b1363f75022e07fa30fc877071979e8165ed6061af338923becc0191",
     "frontend/styles.css": "c7be1c9db153391f1712530a34d28e3732ebb596208cf09e8d50bdad74a31247",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
     "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "ab5320f00b9b4b4ba01ec9f1228ad4507813634978aac91f6f9eb63586c8b842",
-    "src/crypto_probability_engine/api/app.py": "a199fe08e7f391f45a0553fae907a25badd51eeb3a0a5a6eaf2ded69a02ca829",
-    "src/crypto_probability_engine/config/build_info.py": "0683d108cf0df3874dad9e01c5c123f002ae7744b3906df6be24e904c872d569",
+    "src/crypto_probability_engine/api/analysis_service.py": "c4ff7c784f1d2312f13fc04a98a565d1d867537fd834eb004dc61b2a3584c66e",
+    "src/crypto_probability_engine/api/app.py": "41c1b1360c09f6ad5fa6bd7c064d95f8e2436ae691f6855b81f1920eea82fe37",
+    "src/crypto_probability_engine/config/build_info.py": "6dd6977b2dbf3e9b7185f0cf5cfaa1903db0977326652eea40e638ee2efa0d9f",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · PROD-F1-AUTOMATION-20261001-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-OBS1-20261001-A",
   "frontend_asset_tokens": {
     "app_js": "w4c1-ka1-20260828-a",
     "styles_css": "w4c1-ka1-20260828-a"
   },
-  "hf_main_sha": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
-  "release_id": "UCPE-PROD-F1-AUTOMATION-20261001-A",
-  "release_label": "PROD-F1-AUTOMATION release of main",
+  "hf_main_sha": "46a1de68448477c56bce209729ef93b9e9e26ad8",
+  "release_id": "UCPE-PROD-OBS1-20261001-A",
+  "release_label": "PROD-OBS1 release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "prod-f1-automation"
+  "source_milestone": "prod-obs1"
 }
