@@ -1,14 +1,17 @@
 name: Persistence fault rehearsal (scratch PostgreSQL, no secrets)
 
-# PERS-0 (plan §22 item 7; the §23 Persistence criteria). On every pull request that touches the writer
-# or this rehearsal, it measures the CURRENT Postgres writer under injected faults on a real
-# PostgreSQL built from migrations 0001-0014 (production's applied state):
-# - a crash after the prediction committed, a lost response after commit;
+# PERS-0 (plan §22 item 7; the §23 Persistence criteria) and B9 (plan §8.1). On every pull request
+# that touches a writer, migrations or this rehearsal, it measures both persistence writers under
+# injected faults on a real PostgreSQL built from every migration (0001-0015):
+# - a write that fails after the prediction row, a response lost after commit;
 # - same-content and conflicting retries;
 # - the circuit after a failure.
-# It measures and fixes nothing. The verdicts (C1a-C4) are data in the uploaded report, never a gate.
-# The job fails only if the rehearsal itself could not run. It references no secret and touches no
-# real database.
+# Route "postgres" is the direct-Postgres writer, not production's: its verdicts are data.
+# Route "rest_rpc" is production's REST writer and its B9 bundle, migration 0015's RPC, called
+# exactly as PostgREST calls it (scripts/persistence_rehearsal/postgrest_emulator.py), plus the
+# function's privileges and refusals. --require-route rest_rpc makes every one of those a gate:
+# the job fails unless C1a, C1b, C2, C3 and C4 all PASS on it. It references no secret and touches
+# no real database.
 
 "on":
   pull_request:
@@ -42,7 +45,7 @@ jobs:
         shell: bash
         run: python -m pip install -r requirements.txt
 
-      - name: Rehearse the writer under injected faults on scratch local PostgreSQL
+      - name: Rehearse both writers under injected faults on scratch local PostgreSQL
         shell: bash
         run: |
           set -euo pipefail
@@ -51,9 +54,10 @@ jobs:
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
           sudo -u postgres createdb -O "$(id -un)" persistence_rehearsal
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d persistence_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
-          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql > "$RUNNER_TEMP/migrations_0001_0014.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d persistence_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0014.sql"
-          PERSISTENCE_REHEARSAL_URL="postgresql:///persistence_rehearsal?host=/var/run/postgresql" PYTHONPATH=src python scripts/persistence_rehearsal/fault_injection.py --report=persistence-fault-rehearsal-report.json
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d persistence_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql > "$RUNNER_TEMP/migrations_0001_0015.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d persistence_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0015.sql"
+          PERSISTENCE_REHEARSAL_URL="postgresql:///persistence_rehearsal?host=/var/run/postgresql" PYTHONPATH=src python scripts/persistence_rehearsal/fault_injection.py --report=persistence-fault-rehearsal-report.json --require-route rest_rpc
 
       - name: Upload the rehearsal report
         if: always()

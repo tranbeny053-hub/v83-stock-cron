@@ -9,7 +9,9 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable, Collection, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal, Protocol
 
 import httpx
@@ -34,6 +36,28 @@ RUN_DETAIL_AVAILABILITY_LIMIT = 500
 
 class OOSArmIdentityConflict(RuntimeError):
     """An OOS arm identity was already occupied instead of being inserted."""
+
+
+class PredictionWriteStatus(StrEnum):
+    """B9: one prediction's write, compared by content as the snapshot writes already are."""
+
+    INSERTED = "INSERTED"
+    IDENTICAL_DUPLICATE = "IDENTICAL_DUPLICATE"
+    CONFLICT = "CONFLICT"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class PredictionBundleWrite:
+    """B9 (plan §8.1): one forecast bundle's outcome; a snapshot is None when not submitted.
+
+    ``refused`` is True when a CONFLICT refused the bundle and nothing of it was kept.
+    """
+
+    prediction: PredictionWriteStatus
+    feature_snapshot: FeatureSnapshotWriteStatus | None = None
+    derivatives_snapshot: DerivativesSnapshotWriteStatus | None = None
+    refused: bool = False
 
 
 class PersistenceRepository(Protocol):
@@ -1736,6 +1760,47 @@ class SupabaseRestRepository:
         self._mark_ok()
         return self.persistence_status()
 
+    def save_prediction_bundle(
+        self,
+        prediction: Mapping[str, Any],
+        feature_snapshot: Mapping[str, Any] | None,
+        derivatives_snapshot: Mapping[str, Any] | None = None,
+    ) -> PredictionBundleWrite:
+        """B9 (plan §8.1): a prediction and its snapshots in ONE request, all or nothing.
+
+        Calls only the database function public.save_prediction_bundle (migration 0015), which
+        PostgREST runs in one transaction: identical content confirms (IDENTICAL_DUPLICATE),
+        different content under a stored id refuses (CONFLICT) and keeps nothing. A refusal is an
+        answer; a failed or unreadable request is UNAVAILABLE. Section 5A OOS identities keep their
+        own write path and are refused here.
+        """
+
+        normalized_row = _prediction_row_with_origin(prediction)
+        if str(normalized_row.get("prediction_id", "")).startswith("oosb-"):
+            raise ValueError("Section 5A OOS identities keep their own write path.")
+        self._fallback.save_prediction(normalized_row)
+        body = {
+            "p_prediction": normalized_row,
+            "p_feature_snapshot": dict(feature_snapshot) if feature_snapshot is not None else None,
+            "p_derivatives_snapshot": (
+                dict(derivatives_snapshot) if derivatives_snapshot is not None else None
+            ),
+        }
+        status, answer = self._run_rest(
+            lambda: self._request("POST", "rpc/save_prediction_bundle", json=body)
+        )
+        if status == "UNAVAILABLE":
+            return PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE)
+        written = _bundle_write_from_rpc(
+            answer,
+            feature_submitted=feature_snapshot is not None,
+            derivatives_submitted=derivatives_snapshot is not None,
+        )
+        if written is None:
+            self.mark_unavailable()
+            return PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE)
+        return written
+
     def save_feature_snapshot(
         self, row: Mapping[str, Any]
     ) -> FeatureSnapshotWriteStatus:
@@ -3022,6 +3087,42 @@ def _rest_returned_inserted_snapshot(value: Any) -> bool:
         and value
         and isinstance(value[0], Mapping)
         and value[0].get("snapshot_hash")
+    )
+
+
+_BUNDLE_ANSWER_KEYS = frozenset(
+    {"prediction", "feature_snapshot", "derivatives_snapshot", "refused"}
+)
+_BUNDLE_WRITE_ANSWERS = frozenset({"INSERTED", "IDENTICAL_DUPLICATE", "CONFLICT"})
+
+
+def _bundle_write_from_rpc(
+    answer: Any, *, feature_submitted: bool, derivatives_submitted: bool
+) -> PredictionBundleWrite | None:
+    """B9: migration 0015's answer, or None when it is not an answer that function can give."""
+
+    if not isinstance(answer, Mapping) or set(answer) != _BUNDLE_ANSWER_KEYS:
+        return None
+    prediction = answer["prediction"]
+    feature = answer["feature_snapshot"]
+    derivatives = answer["derivatives_snapshot"]
+    refused = answer["refused"]
+    if not isinstance(refused, bool) or prediction not in _BUNDLE_WRITE_ANSWERS:
+        return None
+    for status, submitted in ((feature, feature_submitted), (derivatives, derivatives_submitted)):
+        if status is not None and (not submitted or status not in _BUNDLE_WRITE_ANSWERS):
+            return None
+    if refused != ("CONFLICT" in (prediction, feature, derivatives)):
+        return None
+    if not refused and (
+        (feature_submitted and feature is None) or (derivatives_submitted and derivatives is None)
+    ):
+        return None
+    return PredictionBundleWrite(
+        PredictionWriteStatus(prediction),
+        FeatureSnapshotWriteStatus(feature) if feature is not None else None,
+        DerivativesSnapshotWriteStatus(derivatives) if derivatives is not None else None,
+        refused,
     )
 
 

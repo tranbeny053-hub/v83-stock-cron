@@ -900,7 +900,43 @@ def _persist_work_confirmed(
         }
         snapshot_issue = work.feature_snapshot_build_failed
         derivatives_snapshot_issue = work.derivatives_snapshot_build_failed
+        save_bundle = getattr(repository, "save_prediction_bundle", None)
         for prediction_row in work.prediction_rows:
+            bundle_id = str(prediction_row.get("prediction_id", ""))
+            if callable(save_bundle) and not bundle_id.startswith("oosb-"):
+                # B9 (plan §8.1): the prediction and its snapshots in one transaction, or none.
+                snapshot_row = snapshot_rows.pop(bundle_id, None)
+                derivatives_snapshot_row = derivatives_snapshot_rows.pop(bundle_id, None)
+                written = save_bundle(prediction_row, snapshot_row, derivatives_snapshot_row)
+                prediction_status = _bundle_prediction_status(written.prediction)
+                prediction_confirmation = _merge_artifact_status(
+                    prediction_confirmation,
+                    prediction_status,
+                )
+                statuses.append(prediction_status)
+                snapshot_status = _status_text(written.feature_snapshot)
+                if snapshot_status is not None:
+                    feature_confirmation = _merge_artifact_status(
+                        feature_confirmation,
+                        snapshot_status,
+                    )
+                if snapshot_row is None or snapshot_status not in {
+                    "INSERTED",
+                    "IDENTICAL_DUPLICATE",
+                }:
+                    snapshot_issue = True
+                derivatives_snapshot_status = _status_text(written.derivatives_snapshot)
+                if derivatives_snapshot_status is not None:
+                    derivatives_confirmation = _merge_artifact_status(
+                        derivatives_confirmation,
+                        derivatives_snapshot_status,
+                    )
+                if derivatives_snapshot_row is not None and derivatives_snapshot_status not in {
+                    "INSERTED",
+                    "IDENTICAL_DUPLICATE",
+                }:
+                    derivatives_snapshot_issue = True
+                continue
             prediction_status = _status_text(repository.save_prediction(prediction_row))
             prediction_confirmation = _merge_artifact_status(
                 prediction_confirmation,
@@ -1010,6 +1046,16 @@ def _merge_artifact_status(current: str | None, new: str | None) -> str | None:
     if current is None:
         return new
     return current if current == new else "UNAVAILABLE"
+
+
+def _bundle_prediction_status(status: object) -> str:
+    """B9: a bundle's prediction outcome in the confirmation's vocabulary: OK, CONFLICT or
+    UNAVAILABLE. A refused CONFLICT is never acknowledged."""
+
+    text = _status_text(status)
+    if text in {"INSERTED", "IDENTICAL_DUPLICATE"}:
+        return "OK"
+    return text if text == "CONFLICT" else "UNAVAILABLE"
 
 
 def _mark_repository_unavailable(repository) -> None:

@@ -1,8 +1,8 @@
 """PERS-0: the persistence fault rehearsal workflow's contract.
 
 A scratch PostgreSQL on the runner only: pull requests only, a read-only token, no secret. It
-builds the database from every migration (production's applied state, 0014 included) and runs
-the rehearsal.
+builds the database from every migration (0015, B9's bundle RPC, included) and runs the
+rehearsal, with production's REST route required to pass every criterion.
 SHA pins and job timeouts are enforced for every workflow by test_workflow_action_runtime.py.
 """
 
@@ -40,15 +40,18 @@ def test_the_database_is_every_migration_production_has_applied() -> None:
     every = sorted(
         path.relative_to(ROOT).as_posix() for path in (ROOT / "migrations").glob("*.sql")
     )
-    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0014.sql"' in TEXT
-    assert every[-1] == "migrations/0014_core_evidence_invariants.sql", "update the bundle name"
+    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0015.sql"' in TEXT
+    assert every[-1] == "migrations/0015_prediction_bundle_rpc.sql", "update the bundle name"
+    # Supabase's default function grants and the API-role membership PostgREST's authenticator has.
+    assert ("-d persistence_rehearsal -f - < "
+            "scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql") in TEXT
 
 
 def test_the_rehearsal_targets_the_scratch_socket_and_its_report_is_uploaded_always() -> None:
     assert (
         'PERSISTENCE_REHEARSAL_URL="postgresql:///persistence_rehearsal?host=/var/run/postgresql" '
         "PYTHONPATH=src python scripts/persistence_rehearsal/fault_injection.py "
-        "--report=persistence-fault-rehearsal-report.json"
+        "--report=persistence-fault-rehearsal-report.json --require-route rest_rpc"
     ) in TEXT
     assert "set -euo pipefail" in TEXT and "ON_ERROR_STOP=1" in TEXT
     upload = TEXT.split("      - name: Upload the rehearsal report\n", 1)[1]

@@ -127,7 +127,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # upload-artifact, and the rehearsal uploads its report, all at the reviewed pins.
     # 56 -> 59 (PERS-0): the persistence fault rehearsal adds checkout, setup-python and
     # upload-artifact, all at the reviewed pins.
-    assert len(refs) == 59
+    # 59 -> 65 (B9): the migration-0015 dispatch and pull-request rehearsal workflows add
+    # checkout, setup-python and upload-artifact each, all at the reviewed pins.
+    assert len(refs) == 65
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
