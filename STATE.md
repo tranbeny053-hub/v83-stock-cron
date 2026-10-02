@@ -11,20 +11,25 @@ privilege rehearsal next). **Production is unchanged: D f046140b / UCPE-PROD-B9-
   contacted, nothing changed.
   - **The gaps:**
     - G1, critical: the hourly resolver and the collectors run as the table owner (migration authority);
-    - G2, high and unverified: the role behind the Space's SUPABASE_DB_URL is unknown (only the owner can see it);
+    - G2, high: the role behind the Space's SUPABASE_DB_URL. Correction 01 infers it is owner-level: no migration
+      grants the automation tables to any role, yet the live F1 ledger works. Only the owner can confirm it;
     - G3, high: the REST runtime is service_role (BYPASSRLS plus ALL) and can write labels and core rows outside
       the bundle RPC;
     - G4: a new sb_secret_ key still maps to service_role. It improves rotation, not privilege.
   - **The design:**
     - C1: ucpe_api_writer, reached through authenticator by a writer JWT. Option W2: the bundle RPC becomes SECURITY
       DEFINER, owned by a NOLOGIN ucpe_bundle_owner, so the runtime has no direct INSERT path to core evidence;
-    - C2: ucpe_space_reader;
+    - C2, corrected: ucpe_space_db. The Space's DB URL also serves the live F1/UOR registry and ledger, so C2 must
+      keep SELECT on automation_credential and SELECT, INSERT and UPDATE on automation_radar_ledger;
     - C3: ucpe_resolver;
     - C4: the owner URL is kept only in a protected GitHub Environment.
   - **The order** D1-D6: 0016 (additive) → credentials → the resolver cutover → the reader cutover → the writer
     cutover (§2.6 plus a release) → revoke the excess.
   - **Owner decisions E1-E4:** 0016's scope (W2 or INVOKER); the Space DB_URL role; the credential plan; the §2.6
     crossing of repository.py and settings.py for the two-header writer.
+  - **Correction 01** (.work/roadmap/phase3/PRIVILEGE_DESIGN_CORRECTION_01.md, sha d036173f…, sealed): the sealed
+    design called the F1 route OFF. It has been ON since F1-ENABLE-A (2026-10-01): the settle probe got 401, not
+    503. Its C2 role would have broken F1/UOR. Corrected before any rehearsal or apply.
 - **Item 2, three-state receipts: MERGED** (#182, head 59244b9a, 9/9 green → main 43d5b543). Two free files,
   api/analysis_service.py and telemetry/events.py. No pinned file and no migration.
   - **The receipt values:**
@@ -3707,6 +3712,8 @@ NEXT_ACTION=Claude, in this order:
   1. P3-PRIV-R: rehearse design C1-C3 (W2) on scratch PostgreSQL with Supabase-like roles and an authenticator.
      - Prove each role can do exactly its list and is refused everything else, including through PostgREST-style
        role switching; and that anon and authenticated stay denied.
+     - Run production's own F1 registry and ledger code, and the calibration query, under ucpe_space_db
+       (Correction 01).
      - The draft SQL stays outside migrations/. Its PR is evidence for E1; it is not applied.
   2. The wider §8.1 bundle design (T0, sealed): run identity and the detail payload in the bundle, and the
      reconciliation of COMMIT_UNKNOWN.
