@@ -14,19 +14,15 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "51a15fd057d68c5d4fda793d42b7114e931d07e5"
+PIN_SHA = "bc90e69be9b948e5dc6c1e8b78e6ea0d345c6b42"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# Now standing in it: analysis_service.py, build_info.py, merged but not yet
-# deployed. UCPE-PROD-OBS2-20261002-A names the next deploy; all of them clear
-# when it lands and the baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = [
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# UCPE-PROD-OBS2-20261002-A deployed main's own tree, so nothing stands in it:
+# analysis_service.py, build_info.py cleared with that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -264,11 +260,11 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-PROD-SEC1-20261002-A"
-    assert intended.release_label == "PROD-SEC1 release of main"
+    assert intended.release_id == "UCPE-PROD-OBS2-20261002-A"
+    assert intended.release_label == "PROD-OBS2 release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "prod-sec1"
-    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-SEC1-20261002-A"
+    assert intended.source_milestone == "prod-obs2"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-OBS2-20261002-A"
     assert intended.asset_tokens == {
         "app_js": "w4c1-ka1-20260828-a",
         "styles_css": "w4c1-ka1-20260828-a",
