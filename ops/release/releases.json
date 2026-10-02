@@ -79,7 +79,7 @@
     },
     {
       "additive": true,
-      "applied_run": null,
+      "applied_run": 37033014490,
       "id": "0015",
       "note": "one SECURITY INVOKER function (public.save_prediction_bundle), EXECUTE for service_role only; no table change; older code never calls it"
     }

@@ -1,6 +1,54 @@
 # STATE
 
-Updated: 2026-10-02 (M1 CONFIG_PROVEN: the writer is REST; the B9 routing decision RD-1). **M1 is resolved
+Updated: 2026-10-02 (B9-REST merged; migration 0015 APPLIED; the B9 release is next). **B9 (plan §8.1) is built as
+the owner ruled (RD-1 = R1), MERGED (#177 → main c9637469), and its database half is APPLIED to production. The
+production app is unchanged (bc90e69b) until the release (T4-2).**
+- **The owner's ruling RD-1 = R1** (2026-10-02, verbatim excerpt): "preserve the production REST writer; do not cut HF
+  runtime over to direct Postgres. Implement B9 as the minimum REST atomic-bundle route: migration 0015 exposes one
+  tightly scoped POST RPC that atomically persists prediction + required snapshots, distinguishes identical replay
+  from conflicting same-ID content, and rolls back the whole bundle on any failure."
+- **What #177 merged** (head de5699dc; merge c9637469; 9/9 checks green):
+  - **migrations/0015**: one function, public.save_prediction_bundle(jsonb, jsonb, jsonb):
+    - SECURITY INVOKER, search_path=pg_catalog, pg_temp, EXECUTE for service_role only;
+    - one transaction: insert, or compare column by column (IDENTICAL_DUPLICATE or CONFLICT); any CONFLICT rolls
+      back everything the call wrote ("refused": true);
+    - strict keys; OOS ids and snapshots of another prediction refused; no table change.
+  - **§2.6, the one pinned file persistence/repository.py**: SupabaseRestRepository.save_prediction_bundle makes ONE
+    RPC POST, with a strict answer reader.
+    - The pin closure 3ffc21e9… → af2f2641b3bcdc9b8269981cde174d3e4dfc817d52bc58ae00421bb8038ddc69, and only the
+      closure changed.
+    - The 69 files and the red tests are untouched.
+  - **api/analysis_service.py**: non-OOS bundles go through the RPC. A CONFLICT is never acknowledged; OOS rows and
+    the other writers keep their per-row path.
+  - **PERS-0 gains the rest_rpc route**: PostgREST-compatible, gated by --require-route rest_rpc.
+  - **The 0015 one-shot route**, its rehearsal, the registry entry, and release preflight check 5c (no release while
+    a migration is unapplied).
+  - F1/UOR artifacts unchanged.
+- **The evidence**, adjudicated from the raw reports (.work/roadmap/b9/pr177, sealed):
+  - PERS-0 run 37016859049: **rest_rpc C1a, C1b, C2, C3 and C4 all PASS**, re-derived CONSISTENT;
+    - privileges: invoker, service_role-only EXECUTE, the fixed search_path;
+    - refusals: anon and authenticated 42501; malformed bundles unavailable; 0 rows written;
+    - the postgres route (not production's writer, unchanged) still C1b and C3 FAIL: data.
+  - The 0015 rehearsal run 37016859295: PASS, with the second apply refused.
+  - Locally: VERIFY 5005; mutation 14/14.
+- **T4-1, the 0015 apply, is CONSUMED.**
+  - Auto refused Claude's dispatch ([Production Deploy]); nothing ran then.
+  - The owner ran the one frozen Run action: apply-migration-0015.yml, run 37033014490, attempt 1, at c9637469.
+  - APPLIED and committed on PostgreSQL 170006. The independent adjudication PASSED 37/37 (.work/t4_0015, sealed):
+    - one new function, exactly as reviewed, EXECUTE for service_role only;
+    - every other catalog item unchanged;
+    - the in-run rehearsal REHEARSED, with its second apply refused.
+  - Never rerun.
+  - This record also writes the registry: 0015 applied_run 37033014490.
+- **Phase 3 residuals, verified separately and not claimed closed:**
+  - B9 closes C1b and C3 for the production (REST) transport only once the release ships.
+  - Still open:
+    - three-state receipts (SAVED / NOT_SAVED / COMMIT_UNKNOWN);
+    - the privilege rehearsal and role design (the Space still holds the full-privilege service-role key);
+    - the wider §8.1 core bundle (run summary and detail sit outside the bundle);
+    - durable recovery of circuit-open drops (S8, an owner item);
+    - the direct-Postgres writer is unchanged (not production's).
+Previously (M1 CONFIG_PROVEN: the writer is REST; the B9 routing decision RD-1). **M1 is resolved
 read-only, by configuration: production's analysis writer is `SupabaseRestRepository` (CONFIG_PROVEN). No runtime
 receipt is claimed. D2's condition is not met, so the Postgres B9 is not implemented. One owner decision remains:
 RD-1. Production is unchanged (bc90e69b).**
@@ -769,7 +817,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT ONE OWNER DECISION (2026-10-02): RD-1, how B9 reaches the REST writer (R2a recommended, or R1).
+LOOP_STATE=IN PROGRESS (2026-10-02): T4-2, the B9 app release, is being prepared through the B4 chain: identity → D →
+  CI/B3 → guard → rollback binding → re-pin precompute → preflight → deploy (T4) → settle → rollback-check → re-pin →
+  guard. Migration 0015 is applied (T4-1 consumed).
+  Before it: AT ONE OWNER DECISION (2026-10-02): RD-1, how B9 reaches the REST writer (R2a recommended, or R1).
   M1 is CONFIG_PROVEN (REST). The Postgres B9 is not implemented, because D2's condition failed.
   Before it: AT ONE OWNER ACTION (2026-10-02): M1 needs one analysis in the app. Claude then resumes automatically:
   D1, then B9 per D2, or the REST design. S8 is verified, the D4 note is sealed (HOLD), and D3 is NO FOR NOW.
@@ -2424,7 +2475,9 @@ LOOP_STATE=AT ONE OWNER DECISION (2026-10-02): RD-1, how B9 reaches the REST wri
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): M1 CONFIG_PROVEN (REST). B9 waits on RD-1.
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): B9-REST merged (#177 → c9637469). Migration 0015 is APPLIED (run
+  37033014490, 37/37). The B9 release (T4-2) is next.
+  Before it: PHASES 2-3 and 7 (2026-10-02): M1 CONFIG_PROVEN (REST). B9 waits on RD-1.
   Before it: PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is applied. M1 is pending (no receipt in
   the logs yet), and B9 waits on it.
   Before it: PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAIL: B9 is needed). OBS-2 RELEASED
@@ -2533,7 +2586,9 @@ CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): M1 CONFIG_PROVEN (REST). B9 wai
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-m1-config-proven (this record; worktree lanes18/state_m1).
+CURRENT_BRANCH=chore/registry-0015-applied (this record and the registry; worktree lanes19/registry).
+  - Merged: feat/b9-rest-atomic-bundle (#177 → c9637469).
+  Before it: chore/state-m1-config-proven (#176 → bf86f4c0; worktree lanes18/state_m1).
   Before it: chore/state-d1-guidance-s8-d4 (#175 → 9e997f0a; worktree lanes18/state_d1).
   - Local, held: feat/ux1-in-band-label @ f92ff055.
   Before it: chore/state-sec1-release-feas1 (PR #166, this record), extended after the SEC-1 release, with main R
@@ -2619,7 +2674,9 @@ CURRENT_BRANCH=chore/state-m1-config-proven (this record; worktree lanes18/state
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=9e997f0a (main, PR #175: the D1-D4 guidance record). Push CI success (run 36982811888);
+LAST_GREEN_SHA=c9637469 (main, PR #177: B9-REST). Push CI success (run 37017429357); reproducibility PASS (run
+  37017429630).
+  Before it: 9e997f0a (main, PR #175: the D1-D4 guidance record). Push CI success (run 36982811888);
   reproducibility PASS (run 36982811701).
   Before it: fd24a873 (main, PR #174: the decision-pack STATE record). Push CI success (run 36975298295);
   reproducibility PASS (run 36975298258).
@@ -3042,7 +3099,11 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=One owner decision (2026-10-02): RD-1 (B9_REST_DECISION.md).
+OWNER_BOUNDARY=The B9 release deploy (T4-2), when its frozen package is ready.
+  - Auto stays the default. If the classifier blocks the exact frozen deploy, the owner gets one Run action.
+  - Ruled 2026-10-02: RD-1 = R1 (verbatim excerpt in the header).
+  - T4-1 (the 0015 apply) is consumed: the owner's Run action, run 37033014490.
+  Before it: One owner decision (2026-10-02): RD-1 (B9_REST_DECISION.md).
   - R2a (recommended):
     - the owner runs the catalog-only privilege check (OD-DB-1 = D permits it, owner-run only);
     - D2 is re-issued for the Postgres variant;
@@ -3538,7 +3599,14 @@ OWNER_BOUNDARY=One owner decision (2026-10-02): RD-1 (B9_REST_DECISION.md).
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: RD-1. Then Claude:
+NEXT_ACTION=Claude: the B9 release (T4-2) through the B4 chain from the main that carries this registry record
+  (check 5c requires it).
+  - Release id UCPE-PROD-B9-<date>-A; rollback binding to the current production bc90e69b.
+  - The deploy is a T4: one Run action if Auto refuses it.
+  - After it: settle, rollback-check, the re-pin PR, the guard, and a STATE record.
+  - The first natural USER_REQUESTED analysis after the release will log a persistence_receipt from
+    SupabaseRestRepository. No verification traffic is created.
+  Before it: The owner: RD-1. Then Claude:
   - R2a, after D2 is re-issued:
     - B9 per B9_DESIGN.md §A, with the pin and the §2.6 record;
     - its PR's PERS-0 rerun must show C1b and C3 PASS, and C1a, C2 and C4 still PASS;
