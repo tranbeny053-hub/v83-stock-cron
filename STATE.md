@@ -1,6 +1,36 @@
 # STATE
 
-Updated: 2026-10-02 (the owner's D1-D4 guidance; M1 pending; S8 verified; the D4 classification note). **The owner
+Updated: 2026-10-02 (M1 CONFIG_PROVEN: the writer is REST; the B9 routing decision RD-1). **M1 is resolved
+read-only, by configuration: production's analysis writer is `SupabaseRestRepository` (CONFIG_PROVEN). No runtime
+receipt is claimed. D2's condition is not met, so the Postgres B9 is not implemented. One owner decision remains:
+RD-1. Production is unchanged (bc90e69b).**
+- **M1's evidence.** The method used the HF API's Space secret and variable metadata, with the existing local
+  token used in place. It printed booleans only.
+  - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and SUPABASE_DB_URL are all present as Space secrets. No value field
+    was returned.
+  - All three are absent as variables, and all were configured before the running container started.
+  - The canonical selection at main 9e997f0a is byte-identical at the deployed bc90e69b: create_app →
+    build_persistence_repository → REST when both REST keys are set.
+  - **The residual:** secret values are write-only, so an empty REST secret would select Postgres. Nothing
+    indicates that.
+  - Record: .work/roadmap/b9/M1_CONFIG_PROOF.md (sha256 2a92fe30…).
+- **Plan §8.3's capability metadata is now:**
+  - writer: REST (config-proven);
+  - evidence reader: direct Postgres. Reads are runtime-proven (H2 smoke); writes through the Space's DB URL have
+    never been exercised;
+  - resolver: direct Postgres (the workflow requires secrets.SUPABASE_DB_URL).
+- **PERS-0 measured the Postgres transport, not production's.** By code reading, unmeasured, the REST writer has
+  the same C1b and C3 gaps: one POST per row, and predictions ignore-duplicates.
+- **RD-1** (.work/roadmap/b9/B9_REST_DECISION.md, sha256 c7ec1347…):
+  - **R2a, recommended:** route the writer to direct Postgres, in this order:
+    1. an owner-run, catalog-only privilege check of the Space DB URL's role, against the writer's exact
+       table/privilege list;
+    2. D2 re-issued for the Postgres variant, then its release;
+    3. the owner deletes SUPABASE_SERVICE_ROLE_KEY from the Space. No routing code changes.
+  - **R1:** keep REST and add an RPC function: migration 0015, a REST-variant §2.6 and two T4s.
+- **The log watcher** stopped at its 2-hour limit (10:07Z), 39 reads with 0 receipts. It is not restarted.
+  - The owner withdrew the "run one analysis" action: it would be verification traffic, never USER_REQUESTED.
+Previously (the owner's D1-D4 guidance; M1 pending; S8 verified; the D4 classification note). **The owner
 answered the decision pack (2026-10-02; verbatim in OWNER_BOUNDARY):
 - D1: resolve M1 read-only from the Space logs.
 - D2: B9 is approved ONLY IF D1 proves SupabasePersistenceRepository.
@@ -739,7 +769,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT ONE OWNER ACTION (2026-10-02): M1 needs one analysis in the app. Claude then resumes automatically:
+LOOP_STATE=AT ONE OWNER DECISION (2026-10-02): RD-1, how B9 reaches the REST writer (R2a recommended, or R1).
+  M1 is CONFIG_PROVEN (REST). The Postgres B9 is not implemented, because D2's condition failed.
+  Before it: AT ONE OWNER ACTION (2026-10-02): M1 needs one analysis in the app. Claude then resumes automatically:
   D1, then B9 per D2, or the REST design. S8 is verified, the D4 note is sealed (HOLD), and D3 is NO FOR NOW.
   Before it: AT THE OWNER DECISION PACK (2026-10-02): D1 M1 (one log line), D2 the B9 §2.6 crossing, D3 the
   F1-artifact
@@ -2392,7 +2424,8 @@ LOOP_STATE=AT ONE OWNER ACTION (2026-10-02): M1 needs one analysis in the app. C
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is applied. M1 is pending (no receipt in
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): M1 CONFIG_PROVEN (REST). B9 waits on RD-1.
+  Before it: PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is applied. M1 is pending (no receipt in
   the logs yet), and B9 waits on it.
   Before it: PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAIL: B9 is needed). OBS-2 RELEASED
   (production bc90e69b). The owner decision pack D1-D4.
@@ -2500,7 +2533,8 @@ CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is a
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-d1-guidance-s8-d4 (this record; worktree lanes18/state_d1).
+CURRENT_BRANCH=chore/state-m1-config-proven (this record; worktree lanes18/state_m1).
+  Before it: chore/state-d1-guidance-s8-d4 (#175 → 9e997f0a; worktree lanes18/state_d1).
   - Local, held: feat/ux1-in-band-label @ f92ff055.
   Before it: chore/state-sec1-release-feas1 (PR #166, this record), extended after the SEC-1 release, with main R
   merged in. Worktree lanes18/state.
@@ -2585,7 +2619,9 @@ CURRENT_BRANCH=chore/state-d1-guidance-s8-d4 (this record; worktree lanes18/stat
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=fd24a873 (main, PR #174: the decision-pack STATE record). Push CI success (run 36975298295);
+LAST_GREEN_SHA=9e997f0a (main, PR #175: the D1-D4 guidance record). Push CI success (run 36982811888);
+  reproducibility PASS (run 36982811701).
+  Before it: fd24a873 (main, PR #174: the decision-pack STATE record). Push CI success (run 36975298295);
   reproducibility PASS (run 36975298258).
   Before it: 904fb048 (main = R, the OBS-2 re-pin; over D bc90e69b). Push CI success (run 36971919795);
   reproducibility PASS (run 36971919733).
@@ -3006,7 +3042,18 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=One owner action (2026-10-02): run one analysis in the app (M1). Nothing else is asked.
+OWNER_BOUNDARY=One owner decision (2026-10-02): RD-1 (B9_REST_DECISION.md).
+  - R2a (recommended):
+    - the owner runs the catalog-only privilege check (OD-DB-1 = D permits it, owner-run only);
+    - D2 is re-issued for the Postgres variant;
+    - after B9's release, the owner deletes SUPABASE_SERVICE_ROLE_KEY from the Space.
+  - R1: §2.6 for the REST variant, plus migration 0015's T4 and a release T4.
+  - The owner's instruction (2026-10-02), verbatim excerpt: "Do NOT ask the owner to run a normal analysis for
+    M1 yet; that would be verification traffic and must not masquerade as USER_REQUESTED. Resolve M1 first by
+    read-only Space configuration inspection using the existing local HF authentication. … If M1=REST, do not
+    implement Postgres B9. Return the minimum REST-specific design/routing decision needed."
+  Before it: One owner action (2026-10-02): run one analysis in the app (M1). Nothing else is asked.
+  (WITHDRAWN by the owner.)
   - The owner's guidance on D1-D4 (2026-10-02), verbatim:
     "D1: first resolve M1 yourself read-only. Use existing local Hugging Face authentication only if already
     available; fetch bounded Space run logs and extract only the latest `persistence_receipt.repository` class.
@@ -3491,7 +3538,15 @@ OWNER_BOUNDARY=One owner action (2026-10-02): run one analysis in the app (M1). 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: one analysis in the app (M1). Then Claude continues automatically, by reading the logs:
+NEXT_ACTION=The owner: RD-1. Then Claude:
+  - R2a, after D2 is re-issued:
+    - B9 per B9_DESIGN.md §A, with the pin and the §2.6 record;
+    - its PR's PERS-0 rerun must show C1b and C3 PASS, and C1a, C2 and C4 still PASS;
+    - then the release (T4, returned).
+    - The owner's catalog check and the secret removal gate the switch, not the implementation.
+  - R1: the RPC variant under its own §2.6, with the 0015 apply (T4) and a release (T4).
+  - D4 stays HOLD, D3 stays NO, and UX-1 stays HOLD.
+  Before it: The owner: one analysis in the app (M1). Then Claude continues automatically, by reading the logs:
   - M1 = SupabasePersistenceRepository:
     - B9 per D2's exact scope (B9_DESIGN.md §A), with the pin regenerated and the §2.6 record;
     - its PR's PERS-0 rerun must show C1b and C3 PASS, and C1a, C2 and C4 still PASS, before publication;
