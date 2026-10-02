@@ -1,6 +1,58 @@
 # STATE
 
-Updated: 2026-10-02 (PERS-0 measured; the owner decision pack D1-D4). **PERS-0 (plan §22 item 7) is MERGED (#173 →
+Updated: 2026-10-02 (the owner's D1-D4 guidance; M1 pending; S8 verified; the D4 classification note). **The owner
+answered the decision pack (2026-10-02; verbatim in OWNER_BOUNDARY):
+- D1: resolve M1 read-only from the Space logs.
+- D2: B9 is approved ONLY IF D1 proves SupabasePersistenceRepository.
+- D3: NO FOR NOW.
+- D4: HOLD behind a classification note.
+M1 is NOT yet resolved: no analysis has run since the OBS-2 restart, so the logs hold no persistence_receipt.
+Nothing pinned has changed. Production is unchanged: bc90e69b / UCPE-PROD-OBS2-20261002-A.**
+- **CORRECTION (loud):** the decision pack named the REST class "SupabaseRestPersistenceRepository". No such class
+  exists.
+  - The REST writer is `SupabaseRestRepository` (repository_type SUPABASE_REST).
+  - The Postgres writer is `SupabasePersistenceRepository` (SUPABASE_POSTGRES).
+  - The old line below is annotated.
+- **M1 (D1), read-only.** The existing local Hugging Face login was used in place, never printed or inspected.
+  - The Space run logs (the container started 2026-10-02T05:59:32Z) answered HTTP 200 to 10 bounded reads
+    (07:29Z-08:07Z).
+  - persistence_receipt events: 0. Only http_request events appear, so no analysis was served.
+  - **The evidence on record does not settle M1:**
+    - the H2 smoke proved that the skill-evidence *reader* runs on direct Postgres;
+    - but the *writer* prefers REST (SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY), and RELEASE_GATE's secrets table
+      names REST.
+  - **The one owner action:** run one analysis in the app (any symbol; signing in is the owner's). A bounded
+    background reader then extracts only the receipt's repository class.
+- **S8 against §23 (verified, read-only):** the circuit-open drop violates no §23 criterion and no Phase 3 exit
+  criterion. It is an honestly reported NOT_SAVED:
+  - no commit is attempted, and nothing is acknowledged;
+  - when the circuit is open at request time, the badge reads "Storage unavailable — this analysis is not being
+    retained".
+  - **So durable reconciliation of drops is not a deferred acceptance criterion.** It would need an outbox (a
+    migration and a T4); it stays an open availability limitation for the owner.
+  - **B9 closes C1b and C3 only. Phase 3 is NOT complete after B9.** Still open: three-state receipts
+    (SAVED / NOT_SAVED / COMMIT_UNKNOWN), M1, the privilege rehearsal and the role design.
+  - Also stated: the run summary, timeframe, provider and news rows stay outside the bundle, as today. A failed
+    bundle can leave them without a prediction, never acknowledged. Plan §8.1's full core bundle would be a
+    further widening.
+  - Record: .work/roadmap/b9/S8_SECTION23_VERDICT.md.
+- **B9 is designed for both D1 outcomes** (.work/roadmap/b9/B9_DESIGN.md):
+  - A, Postgres: D2's exact scope;
+  - B, REST: R1, an RPC function plus migration 0015; or R2, route the writer to direct Postgres. R2(b) is
+    recommended; it widens D2 and needs a ruling.
+- **D4 (HOLD): the no-execution classification note is SEALED.** .work/roadmap/d4/D4_CLASSIFICATION_NOTE.md, sha256
+  9cde2f1e95af2450ad08d86073de2ecb8d508a8e5f32257724ecff2da2fcbc51.
+  - Verdict CLASSIFIED_OUTSIDE, provable from the governing records. The dataset is outside F3, §5A, every
+    protected or sealed span and every consumed lane:
+    - Binance Spot 1h klines, BTCUSDT and ETHUSDT;
+    - UTC days 2024-08-21 → 2025-04-13 (236 days), strictly inside the governing admissible calendar
+      [2024-08-20T09:30Z, 2025-04-14T00:00Z);
+    - exactly 62 data.binance.vision archive files plus 62 official checksums, listed in
+      .work/roadmap/d4/D4_FILE_LIST.txt (124 URLs, sha256 2df697de…).
+  - The span is seen/mined DEV, never fresh: a run may measure FEAS-1 item (d), never confirm.
+  - Nothing was fetched. The run needs the owner's own authorization. F3 stays KEEP_UNSPENT.
+- **D3:** NO FOR NOW. UX-1 stays held. The F1/UOR examples and the analysis_hash goldens are not regenerated.
+Previously (PERS-0 measured; the owner decision pack D1-D4). **PERS-0 (plan §22 item 7) is MERGED (#173 →
 c386acd5) and adjudicated. The current Postgres writer under injected faults, on scratch PG built from 0001-0014:
 C1a PASS, C1b FAIL, C2 PASS, C3 FAIL, C4 PASS. The critical path (B9, Phase 3) now waits only on owner decisions.
 Production is unchanged: bc90e69b / UCPE-PROD-OBS2-20261002-A.**
@@ -21,7 +73,8 @@ Production is unchanged: bc90e69b / UCPE-PROD-OBS2-20261002-A.**
   - the evaluator pin is regenerated, red tests are untouched, and the §2.6 RECORD is written (as for 35545f4d);
   - durable reconciliation of circuit-open drops (S8) is a later step and needs a table.
 - **M1 is now one log line:** OBS-1 is live, so every persistence_receipt event in the Space logs carries
-  repository=<class>: SupabasePersistenceRepository (Postgres) or SupabaseRestPersistenceRepository (REST).
+  repository=<class>: SupabasePersistenceRepository (Postgres) or SupabaseRestPersistenceRepository (REST)
+  [WRONG NAME, corrected 2026-10-02: the REST class is SupabaseRestRepository].
 Previously (REL-1 and OBS-2 merged; the OBS-2 release; UX-1 still held). **OBS-2 IS LIVE. Production is D
 bc90e69b / UCPE-PROD-OBS2-20261002-A, and the guard is HEALTHY at that pin. The H2-safe rollback target is 51a15fd0.**
 - **REL-1** #168 → 5cfd60d4 (release tooling): preflight check 5b refuses a changed app.js or styles.css under its
@@ -686,7 +739,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER DECISION PACK (2026-10-02): D1 M1 (one log line), D2 the B9 §2.6 crossing, D3 the F1-artifact
+LOOP_STATE=AT ONE OWNER ACTION (2026-10-02): M1 needs one analysis in the app. Claude then resumes automatically:
+  D1, then B9 per D2, or the REST design. S8 is verified, the D4 note is sealed (HOLD), and D3 is NO FOR NOW.
+  Before it: AT THE OWNER DECISION PACK (2026-10-02): D1 M1 (one log line), D2 the B9 §2.6 crossing, D3 the
+  F1-artifact
   ruling (UX-1), D4 FEAS-1 real-data authorization. The decision-free work is exhausted for the critical path.
   Before it: IN PROGRESS (2026-10-02): OBS-2 is released. Next: PERS-0, the §22 item 7 persistence
   fault-injection
@@ -2336,7 +2392,9 @@ LOOP_STATE=AT THE OWNER DECISION PACK (2026-10-02): D1 M1 (one log line), D2 the
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAIL: B9 is needed). OBS-2 RELEASED
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): the owner's D1-D4 guidance is applied. M1 is pending (no receipt in
+  the logs yet), and B9 waits on it.
+  Before it: PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAIL: B9 is needed). OBS-2 RELEASED
   (production bc90e69b). The owner decision pack D1-D4.
   Before it: PHASES 2-3 and 7 (2026-10-02): OBS-2 RELEASED (production bc90e69b / UCPE-PROD-OBS2-20261002-A);
   REL-1 merged; UX-1 held.
@@ -2442,7 +2500,9 @@ CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): PERS-0 measured (C1b and C3 FAI
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-sec1-release-feas1 (PR #166, this record), extended after the SEC-1 release, with main R
+CURRENT_BRANCH=chore/state-d1-guidance-s8-d4 (this record; worktree lanes18/state_d1).
+  - Local, held: feat/ux1-in-band-label @ f92ff055.
+  Before it: chore/state-sec1-release-feas1 (PR #166, this record), extended after the SEC-1 release, with main R
   merged in. Worktree lanes18/state.
   - Merged: release/prod-sec1 (#167 → 504ddd5d).
   - Local, held: feat/ux1-in-band-label @ f92ff055.
@@ -2525,7 +2585,9 @@ CURRENT_BRANCH=chore/state-sec1-release-feas1 (PR #166, this record), extended a
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=904fb048 (main = R, the OBS-2 re-pin; over D bc90e69b). Push CI success (run 36971919795);
+LAST_GREEN_SHA=fd24a873 (main, PR #174: the decision-pack STATE record). Push CI success (run 36975298295);
+  reproducibility PASS (run 36975298258).
+  Before it: 904fb048 (main = R, the OBS-2 re-pin; over D bc90e69b). Push CI success (run 36971919795);
   reproducibility PASS (run 36971919733).
   Before it: 504ddd5d (main = R, PR #167: the SEC-1 re-pin; over 51a15fd0 = D, deployed).
   - Push CI success (run 36966111025); reproducibility PASS (run 36966111011).
@@ -2944,7 +3006,28 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never rerun.
+OWNER_BOUNDARY=One owner action (2026-10-02): run one analysis in the app (M1). Nothing else is asked.
+  - The owner's guidance on D1-D4 (2026-10-02), verbatim:
+    "D1: first resolve M1 yourself read-only. Use existing local Hugging Face authentication only if already
+    available; fetch bounded Space run logs and extract only the latest `persistence_receipt.repository` class.
+    Never print/token-inspect credentials. If auth is unavailable or Auto blocks the read, stop with one minimal
+    owner log-read action. Do not ask the owner to browse HF unless necessary.
+    D2: owner approves the proposed minimum §2.6 B9 crossing ONLY IF D1 proves production uses
+    `SupabasePersistenceRepository` (Postgres). Exact scope: `persistence/repository.py` gains
+    `save_prediction_bundle` with one transaction and content-based identical-vs-conflict detection;
+    `_persist_work_confirmed` consumes it; regenerate the exact evaluator pin and write the §2.6 record; red tests
+    untouched. PERS-0 must make C1b and C3 PASS before publication/release. If D1=REST, do not implement this
+    Postgres variant; return the REST-specific design.
+    D3: NO FOR NOW. Keep UX-1 held. Do not regenerate F1/UOR handoff examples or analysis-hash goldens merely for
+    the wording change.
+    D4: HOLD. Before any real-data run, prepare a no-execution classification note proving the exact public
+    source, dates, retrieval path and dataset are outside F3, §5A, protected/sealed spans and any consumed
+    evidence lane. F3 stays KEEP_UNSPENT. If this cannot be proven from governing contracts, stop at the
+    classification boundary.
+    Before calling B9/Phase 3 complete, verify §23 against PERS-0 S8/circuit-open behavior. B9 may close C1b/C3
+    only; do not silently defer a required acceptance criterion merely because durable reconciliation would need
+    another table."
+  Before it: Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never rerun.
   - One batched question: may a change to the analysis payload regenerate the committed F1 radar_evidence.v1
     examples and the analysis_hash goldens? Schema and semantics are unchanged; only the example digests change.
     UX-1 needs this, and so will any payload change, such as a DecisionView.
@@ -3408,7 +3491,14 @@ OWNER_BOUNDARY=Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never r
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: D1-D4. Then Claude:
+NEXT_ACTION=The owner: one analysis in the app (M1). Then Claude continues automatically, by reading the logs:
+  - M1 = SupabasePersistenceRepository:
+    - B9 per D2's exact scope (B9_DESIGN.md §A), with the pin regenerated and the §2.6 record;
+    - its PR's PERS-0 rerun must show C1b and C3 PASS, and C1a, C2 and C4 still PASS, before publication;
+    - then a release (T4), returned to the owner as a live-release boundary.
+  - M1 = SupabaseRestRepository: implement nothing; return the REST design (B9_DESIGN.md §B) for a ruling.
+  - D4 stays HOLD (the run needs the owner's authorization). D3 stays NO.
+  Before it: The owner: D1-D4. Then Claude:
   - after D1 (M1 = Postgres) and D2: implement B9 exactly as authorized, with the pin regenerated and PERS-0 rerun
     (C1b and C3 must flip to PASS); a release (T4);
   - after D3: UX-1, with the F1 examples and the analysis_hash goldens regenerated;
