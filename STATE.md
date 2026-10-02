@@ -1,6 +1,24 @@
 # STATE
 
-Updated: 2026-10-02 (SEC-1 RELEASED; UX-1 held for an owner ruling; REL-1 next). **SEC-1 IS LIVE. The owner ran
+Updated: 2026-10-02 (REL-1 and OBS-2 merged; the OBS-2 release; UX-1 still held). **OBS-2 IS LIVE. Production is D
+bc90e69b / UCPE-PROD-OBS2-20261002-A, and the guard is HEALTHY at that pin. The H2-safe rollback target is 51a15fd0.**
+- **REL-1** #168 → 5cfd60d4 (release tooling): preflight check 5b refuses a changed app.js or styles.css under its
+  old ?v= token. The asset-token test is conditional on a pending frontend delta. Mutation 4/4.
+- **OBS-2** #169 → 4b3fb592 (plan §9.4):
+  - per-stage analysis timings (provider, quant, gate, news, present, total) in analysis_completed, through
+    CURRENT_STAGE_MS;
+  - the payload is unchanged: the analysis_hash golden and the F1 examples pass untouched;
+  - mutation 5/5.
+- **The OBS-2 release:** identity → D bc90e69b (UCPE-PROD-OBS2-20261002-A).
+  - B3 REPRODUCIBLE=PASS (sha256:19c741a79496…) + SMOKE=PASS.
+  - The guard on D: PASS (run 36971213769).
+  - The rollback target 51a15fd0: PASS, local.
+  - The re-pin precomputed: fa9f99b3.
+  - The runtime delta reviewed: digest 70259379…; preflight PASS.
+- **Deploy, settle, live checks, re-pin #171 → R 904fb048**: GUARD_VERIFY=PASS (run 36971940072).
+  Main R: CI success (run 36971919795); reproducibility PASS (run 36971919733).
+- **UX-1** stays HELD (the F1/UOR artifact boundary, the owner's Q1).
+Previously (SEC-1 RELEASED; UX-1 held for an owner ruling; REL-1 next). **SEC-1 IS LIVE. The owner ran
 the one Run action: PREFLIGHT=PASS 7/7, then DEPLOY=PASS, 46a1de6..51a15fd with no force, consumed. Production is
 D 51a15fd0 / UCPE-PROD-SEC1-20261002-A, and the guard is HEALTHY at that pin. The H2-safe rollback target is
 46a1de68.**
@@ -646,7 +664,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-02): SEC-1 is released.
+LOOP_STATE=IN PROGRESS (2026-10-02): OBS-2 is released. Next: PERS-0, the §22 item 7 persistence fault-injection
+  measurement on scratch PG.
+  Before it: IN PROGRESS (2026-10-02): SEC-1 is released.
   - Next: REL-1, the release tooling's cache-bust rule.
   - UX-1 waits on the owner's F1-artifact ruling.
   Before it: AT THE OWNER'S RUN ACTION (2026-10-02): the SEC-1 deploy.
@@ -2291,7 +2311,9 @@ LOOP_STATE=IN PROGRESS (2026-10-02): SEC-1 is released.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02):
+CURRENT_MILESTONE=PHASES 2-3 and 7 (2026-10-02): OBS-2 RELEASED (production bc90e69b / UCPE-PROD-OBS2-20261002-A);
+  REL-1 merged; UX-1 held.
+  Before it: PHASES 2-3 and 7 (2026-10-02):
   - SEC-1 RELEASED: production 51a15fd0 / UCPE-PROD-SEC1-20261002-A;
   - FEAS-1 sealed;
   - UX-1 held.
@@ -2476,7 +2498,9 @@ CURRENT_BRANCH=chore/state-sec1-release-feas1 (PR #166, this record), extended a
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=504ddd5d (main = R, PR #167: the SEC-1 re-pin; over 51a15fd0 = D, deployed).
+LAST_GREEN_SHA=904fb048 (main = R, the OBS-2 re-pin; over D bc90e69b). Push CI success (run 36971919795);
+  reproducibility PASS (run 36971919733).
+  Before it: 504ddd5d (main = R, PR #167: the SEC-1 re-pin; over 51a15fd0 = D, deployed).
   - Push CI success (run 36966111025); reproducibility PASS (run 36966111011).
   - The guard on R: PASS 8/8 (run 36966123856), delta [].
   Before it: 51a15fd0 (main = the SEC-1 release commit D, PR #165; over 04074527, PR #164: SEC-1; over 39c6d518, PR
@@ -3357,7 +3381,10 @@ OWNER_BOUNDARY=Roadmap (2026-10-02). The SEC-1 deploy is consumed and is never r
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude:
+NEXT_ACTION=Claude: PERS-0, the plan §22 item 7 persistence crash/idempotency rehearsal of the current PG writer
+  on scratch PostgreSQL in CI, against the §23 Persistence criteria. It measures and fixes nothing: B9 needs
+  M1 and a §2.6 crossing. UX-1 waits on Q1.
+  Before it: Claude:
   1. REL-1 (release tooling):
      - a changed frontend/app.js or styles.css must ship a new cache token, checked in preflight;
      - the asset-token test becomes conditional on a pending frontend delta.
