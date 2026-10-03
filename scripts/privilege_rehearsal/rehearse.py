@@ -84,8 +84,9 @@ imported, rotated-in signing key. On it:
   with the owner and never goes into the Space: only a short-lived writer token does.
 
 D1-D4 D6 (the privilege design's step 6, ruled 2026-10-03: B, after the next release; the six core
-evidence tables and the two bundle functions; keep SELECT, revoke write and EXECUTE), its DRAFT
-(scripts/privilege_rehearsal/draft_0018_narrow_service_role.sql) on top of the applied 0017:
+evidence tables and the two bundle functions; keep SELECT, revoke write and EXECUTE), migration 0018
+(migrations/0018_narrow_service_role.sql, its reviewed bytes, frozen after the production inventory
+was clean) on top of the applied 0017:
 - D1 INVENTORY: scripts/core_write_inventory.py finds exactly the surfaces the draft revokes, none
   omitted; and each kind of surface the draft would NOT revoke, planted in a transaction that is
   rolled back, is caught as omitted (the inventory is not vacuous);
@@ -133,8 +134,8 @@ ROLLBACK = HERE / "rollback_0016.sql"
 # Migration 0017 itself (the bytes its one-shot route pins), and its rollback.
 DRAFT_0017 = ROOT / "migrations" / "0017_forecast_bundle_rpc.sql"
 ROLLBACK_0017 = HERE / "rollback_0017.sql"
-# D6's draft of migration 0018 and its rollback (scripts/privilege_rehearsal/, never migrations/).
-DRAFT_0018 = HERE / "draft_0018_narrow_service_role.sql"
+# Migration 0018 itself (the bytes its one-shot route pins), and its rollback.
+DRAFT_0018 = ROOT / "migrations" / "0018_narrow_service_role.sql"
 ROLLBACK_0018 = HERE / "rollback_0018.sql"
 SCHEMA_VERSION = "privilege-rehearsal.v1"
 # P1-P8: the roles (migration 0016). W1-W9: the whole core bundle in one transaction (migration
@@ -2170,7 +2171,7 @@ def main(argv: list[str] | None = None) -> int:
         "rollback_sha256": hashlib.sha256(ROLLBACK.read_bytes()).hexdigest(),
         "migration_0017_sha256": hashlib.sha256(DRAFT_0017.read_bytes()).hexdigest(),
         "rollback_0017_sha256": hashlib.sha256(ROLLBACK_0017.read_bytes()).hexdigest(),
-        "draft_0018_sha256": hashlib.sha256(DRAFT_0018.read_bytes()).hexdigest(),
+        "migration_0018_sha256": hashlib.sha256(DRAFT_0018.read_bytes()).hexdigest(),
         "rollback_0018_sha256": hashlib.sha256(ROLLBACK_0018.read_bytes()).hexdigest(),
         **result,
     }

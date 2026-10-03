@@ -1,10 +1,10 @@
-"""D6: the core-evidence write inventory (scripts/core_write_inventory.py) and the D6 draft.
+"""D6: the core-evidence write inventory (scripts/core_write_inventory.py) and migration 0018.
 
 The owner's ruling (2026-10-03): "scope=six core evidence tables + two bundle functions, keep SELECT
 and revoke write/EXECUTE, with deterministic inventory proving no omitted core write surface before
-freeze." Behind a real PostgreSQL, the privilege rehearsal's D1-D4 run the inventory and the draft;
-these tests pin what can be pinned without a database: the scope, the verdicts, the read-only
-queries, and the draft's and rollback's statements.
+freeze." Behind a real PostgreSQL, the privilege rehearsal's D1-D4 run the inventory and migration
+0018 (frozen after the clean production inventory); these tests pin what can be pinned without a
+database: the scope, the verdicts, the read-only queries, and 0018's and its rollback's statements.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import pytest
 from scripts import core_write_inventory as inventory
 
 ROOT = Path(__file__).resolve().parents[2]
-DRAFT = (ROOT / "scripts/privilege_rehearsal/draft_0018_narrow_service_role.sql").read_text()
+DRAFT = (ROOT / "migrations/0018_narrow_service_role.sql").read_text()
 ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_0018.sql").read_text()
 _MUTATING = re.compile(
     r"\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE|ALTER|DROP|GRANT|REVOKE|TRUNCATE\s+"
@@ -135,7 +135,7 @@ def _tables(sql: str) -> list[str]:
     return re.findall(r"public\.(\w+)", sql)
 
 
-def test_the_draft_revokes_exactly_the_ruled_scope_and_never_select() -> None:
+def test_migration_0018_revokes_exactly_the_ruled_scope_and_never_select() -> None:
     # Top-level statements start a line; the MAINTAIN statement is a string inside a DO block.
     revoke = re.search(r"^REVOKE ([A-Z, ]+) ON TABLE(.+?)FROM service_role;", DRAFT, re.S | re.M)
     assert revoke.group(1) == "INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER"
