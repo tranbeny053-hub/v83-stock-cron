@@ -27,15 +27,21 @@ def _obs(
     *,
     receipt: str | None = None,
     before: tuple[int, int] = (0, 0),
+    runs: int | None = None,
+    details: int | None = None,
     **extra: object,
 ) -> dict:
-    # Unless a test says otherwise, the receipt is the always-truthful one for the outcome.
+    # Unless a test says otherwise, the receipt is the always-truthful one for the outcome, and
+    # the run and the detail went with the prediction, as one transaction writes them (W-A).
     receipt = receipt or ("SAVED" if overall == "OK" else "COMMIT_UNKNOWN")
     return {
         "result": {"overall": overall},
         "receipt": receipt,
-        "db_before": {"predictions": before[0], "snapshots": before[1]},
-        "db": {"predictions": predictions, "snapshots": snapshots},
+        "db_before": {"predictions": before[0], "snapshots": before[1], "runs": before[0],
+                      "details": before[0]},
+        "db": {"predictions": predictions, "snapshots": snapshots,
+               "runs": predictions if runs is None else runs,
+               "details": predictions if details is None else details},
         **extra,
     }
 
@@ -53,6 +59,8 @@ def _ideal() -> dict:
         "S7a": _obs("UNAVAILABLE", 0, 0),
         "S7b": _obs("OK", 1, 1),
         "S8": _obs("UNAVAILABLE", 0, 0, receipt="NOT_SAVED"),
+        "S9": _obs("UNAVAILABLE", 1, 1, receipt="NOT_SAVED", before=(1, 1),
+                   conflict_reported_ok=False, stored_unchanged=True),
     }
 
 
@@ -70,6 +78,24 @@ def test_a_persisted_partial_bundle_fails_atomicity_only() -> None:
     assert result["C1a"]["verdict"] == "PASS", "not acknowledged, so C1a holds"
 
 
+@pytest.mark.parametrize(
+    ("runs", "details", "predictions", "snapshots"),
+    [(1, 1, 0, 0), (1, 0, 0, 0), (0, 0, 1, 1), (1, 0, 1, 1)],
+    ids=["run-and-detail-only", "run-only", "bundle-without-run", "missing-detail"],
+)
+def test_the_run_and_the_detail_are_part_of_the_complete_core(
+    runs: int, details: int, predictions: int, snapshots: int
+) -> None:
+    """W-A: a run or a detail left without its bundle, or a bundle without them, is partial."""
+
+    observed = _obs("UNAVAILABLE", predictions, snapshots, runs=runs, details=details)
+    result = fi.verdicts(_ideal() | {"S2": observed})
+    assert result["C1b"]["partial_bundles_persisted"] == ["S2"]
+    acknowledged = _obs("OK", predictions, snapshots, runs=runs, details=details)
+    assert fi.verdicts(_ideal() | {"S1": acknowledged})["C1a"]["acknowledged_but_incomplete"] == [
+        "S1"]
+
+
 def test_an_acknowledged_incomplete_bundle_fails_c1a() -> None:
     observations = _ideal() | {"S1": _obs("OK", 1, 0)}
     assert fi.verdicts(observations)["C1a"]["acknowledged_but_incomplete"] == ["S1"]
@@ -79,13 +105,20 @@ def test_a_conflict_reported_ok_or_overwriting_fails_c3() -> None:
     reported = _ideal() | {"S5": _obs("OK", 1, 1, conflict_reported_ok=True, stored_unchanged=True)}
     assert fi.verdicts(reported)["C3"] == {
         "verdict": "FAIL",
-        "conflicts": ["S5", "S6"],
+        "conflicts": ["S5", "S6", "S9"],
         "not_refused": ["S5"],
     }
     overwritten = _ideal() | {
         "S6": _obs("PARTIAL", 1, 1, conflict_reported_ok=False, stored_unchanged=False)
     }
     assert fi.verdicts(overwritten)["C3"]["not_refused"] == ["S6"]
+    # W-A: a conflicting run identity overwritten, as a separate upsert would, is not refused.
+    run_overwritten = _ideal() | {
+        "S9": _obs("OK", 1, 1, receipt="SAVED", before=(1, 1), conflict_reported_ok=True,
+                   stored_unchanged=False)
+    }
+    assert fi.verdicts(run_overwritten)["C3"]["not_refused"] == ["S9"]
+    assert fi.verdicts(run_overwritten)["C5"]["false_receipts"] == ["S9"]
 
 
 def test_retries_must_leave_one_complete_acknowledged_bundle() -> None:
@@ -162,13 +195,15 @@ def test_the_injected_faults_happen_exactly_where_declared() -> None:
 # ------------------------------------------------------------------------ B9: the REST route
 
 
-def test_the_emulator_executes_only_the_bundle_rpc() -> None:
+def test_the_emulator_executes_only_the_bundle_rpcs() -> None:
     import httpx
 
     from scripts.persistence_rehearsal import postgrest_emulator as pe
 
+    assert set(pe.RPC_SQLS) == {pe.RPC_PATH, pe.FORECAST_PATH}
     emulator = pe.PostgrestEmulator("postgresql:///never?host=/var/run/postgresql")
-    for path in ("/rest/v1/analysis_runs", "/rest/v1/provider_observations"):
+    for path in ("/rest/v1/analysis_runs", "/rest/v1/analysis_run_details",
+                 "/rest/v1/provider_observations"):
         answer = emulator(httpx.Request("POST", f"https://rehearsal.invalid{path}"))
         assert answer.status_code == 201, "outside the bundle: acknowledged, not stored"
     assert emulator(httpx.Request("GET", "https://rehearsal.invalid/rest/v1/x")).status_code == 404
@@ -188,6 +223,18 @@ def test_the_rpc_is_called_as_postgrest_calls_it() -> None:
         assert f"{name} => b.{name}" in pe.RPC_SQL
     with pytest.raises(ValueError):
         pe.PostgrestEmulator("postgresql:///x?host=/var/run/postgresql", fault="anything")
+
+
+def test_the_forecast_rpc_is_called_as_postgrest_calls_it() -> None:
+    from scripts.persistence_rehearsal import postgrest_emulator as pe
+
+    assert pe.FORECAST_PATH == "/rest/v1/rpc/save_forecast_bundle"
+    assert "FROM pg_catalog.jsonb_to_record(%s::jsonb)" in pe.FORECAST_SQL
+    assert ("AS b(p_run jsonb, p_prediction jsonb, p_feature_snapshot jsonb, "
+            "p_derivatives_snapshot jsonb, p_run_detail jsonb)") in pe.FORECAST_SQL
+    for name in ("p_run", "p_prediction", "p_feature_snapshot", "p_derivatives_snapshot",
+                 "p_run_detail"):
+        assert f"{name} => b.{name}" in pe.FORECAST_SQL
 
 
 def test_the_injected_fault_lives_only_in_the_scratch_rehearsal() -> None:

@@ -72,6 +72,7 @@ from crypto_probability_engine.persistence.prediction_origin import (
     validate_prediction_origin,
 )
 from crypto_probability_engine.persistence.repository import (
+    ForecastBundleWrite,
     OOSArmIdentityConflict,
     PersistenceRepository,
     PredictionBundleWrite,
@@ -899,12 +900,20 @@ def _persist_work_confirmed(
     unsettled = False
     run_confirmation: str | None = None
     detail_confirmation: str | None = None
+    # W-A (plan §8.1, migration 0017): with the forecast bundle function, the run identity and
+    # the detail payload travel inside each non-OOS forecast bundle, in its one transaction. The
+    # separate run upsert would overwrite a conflicting stored run before the bundle could refuse
+    # it, so it is not sent then, and neither is the separate detail write.
+    save_forecast = getattr(repository, "save_forecast_bundle", None)
+    forecast = callable(save_forecast) and any(
+        not str(row.get("prediction_id", "")).startswith("oosb-") for row in work.prediction_rows
+    )
     try:
-        run_confirmation = _status_text(repository.save_run(work.run_summary))
-        statuses = [
-            run_confirmation,
-            _status_text(repository.save_timeframe_result(work.timeframe_result)),
-        ]
+        statuses: list[str | None] = []
+        if not forecast:
+            run_confirmation = _status_text(repository.save_run(work.run_summary))
+            statuses.append(run_confirmation)
+        statuses.append(_status_text(repository.save_timeframe_result(work.timeframe_result)))
         statuses.extend(
             _status_text(repository.save_provider_observation(row))
             for row in work.provider_observations
@@ -917,7 +926,7 @@ def _persist_work_confirmed(
             _status_text(repository.save_news_evidence_link(row))
             for row in work.news_evidence_links
         )
-        if work.run_detail_row is not None:
+        if work.run_detail_row is not None and not forecast:
             # Before the bundle, so a stored forecast is never left without its detail by ordering.
             # An open circuit means it would not be sent: it is known not stored.
             save_detail = getattr(repository, "save_run_detail", None)
@@ -937,24 +946,44 @@ def _persist_work_confirmed(
         save_bundle = getattr(repository, "save_prediction_bundle", None)
         for prediction_row in work.prediction_rows:
             bundle_id = str(prediction_row.get("prediction_id", ""))
-            if callable(save_bundle) and not bundle_id.startswith("oosb-"):
-                # B9 (plan §8.1): the prediction and its snapshots in one transaction, or none.
+            if (forecast or callable(save_bundle)) and not bundle_id.startswith("oosb-"):
+                # B9 (plan §8.1): the prediction and its snapshots in one transaction, or none;
+                # with W-A, the run identity and the detail payload in that same transaction.
                 snapshot_row = snapshot_rows.pop(bundle_id, None)
                 derivatives_snapshot_row = derivatives_snapshot_rows.pop(bundle_id, None)
+                incomplete = (
+                    snapshot_row is None
+                    or work.feature_snapshot_build_failed
+                    or work.derivatives_snapshot_build_failed
+                )
                 if _circuit_open(repository):
                     # The repository would refuse it without sending it: skipping the call makes
                     # this receipt exact.
                     written = PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE)
                     receipts.append((RECEIPT_NOT_SAVED, "CIRCUIT_OPEN"))
+                elif forecast:
+                    unsettled = True
+                    whole: ForecastBundleWrite = save_forecast(
+                        work.run_summary,
+                        prediction_row,
+                        snapshot_row,
+                        derivatives_snapshot_row,
+                        work.run_detail_row,
+                    )
+                    written = whole.bundle
+                    receipts.append(_bundle_receipt(written, incomplete=incomplete))
+                    unsettled = False
+                    run_confirmation = _merge_artifact_status(
+                        run_confirmation, _core_row_status(whole.run)
+                    )
+                    if work.run_detail_row is not None:
+                        detail_confirmation = _merge_artifact_status(
+                            detail_confirmation, _core_row_status(whole.run_detail)
+                        )
                 else:
                     unsettled = True
                     written = save_bundle(prediction_row, snapshot_row, derivatives_snapshot_row)
-                    receipts.append(_bundle_receipt(
-                        written,
-                        incomplete=snapshot_row is None
-                        or work.feature_snapshot_build_failed
-                        or work.derivatives_snapshot_build_failed,
-                    ))
+                    receipts.append(_bundle_receipt(written, incomplete=incomplete))
                     unsettled = False
                 prediction_status = _bundle_prediction_status(written.prediction)
                 prediction_confirmation = _merge_artifact_status(
@@ -1121,6 +1150,13 @@ def _merge_artifact_status(current: str | None, new: str | None) -> str | None:
     return current if current == new else "UNAVAILABLE"
 
 
+def _core_row_status(status: object) -> str:
+    """W-A: the run identity's or the detail's outcome inside a forecast bundle, in the core
+    receipt's vocabulary: OK when the call kept it, else UNAVAILABLE (refused, undone, unknown)."""
+
+    return "OK" if _status_text(status) in _CONFIRMED_WRITES else "UNAVAILABLE"
+
+
 def _bundle_prediction_status(status: object) -> str:
     """B9: a bundle's prediction outcome in the confirmation's vocabulary: OK, CONFLICT or
     UNAVAILABLE. A refused CONFLICT is never acknowledged."""
@@ -1219,9 +1255,9 @@ def _core_receipt(
 ) -> tuple[str | None, str | None]:
     """Plan §8.1's core bundle: the run identity, the forecast bundle and, for a USER_REQUESTED
     analysis, its required detail payload. A SAVED forecast bundle stays SAVED only when the run
-    identity and that detail are confirmed too. Both are written outside the bundle's transaction.
-    An unconfirmed one may or may not have committed (COMMIT_UNKNOWN). A detail never sent is known
-    missing (NOT_SAVED)."""
+    identity and that detail are confirmed too. On the W-B path both are written outside the
+    bundle's transaction: an unconfirmed one may or may not have committed (COMMIT_UNKNOWN), and a
+    detail never sent is known missing (NOT_SAVED). On the W-A path they are confirmed inside it."""
 
     if receipt != RECEIPT_SAVED:
         return receipt, reason

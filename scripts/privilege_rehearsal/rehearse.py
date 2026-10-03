@@ -56,6 +56,17 @@ PostgREST as ucpe_api_writer with production-built rows:
 - W8 CALLERS: anon, and every role but the writer, are refused.
 - W9 ONE_SHOT and ROLLBACK: a second application is refused (UP017), and the rollback restores the
   post-0016 catalog exactly.
+- W10 PRODUCTION_WRITER: production's REST writer as released with W-A and E4, on the applied 0017:
+  - the least-privilege writer sends the API key in `apikey` and its JWT in `Authorization`;
+  - each forecast bundle is ONE call to the forecast RPC, and the run and the detail are never sent
+    beside it;
+  - a new analysis is SAVED whole, and an identical replay is SAVED;
+  - a conflicting run identity and a conflicting prediction are NOT_SAVED (CONFLICT), with nothing
+    changed;
+  - service_role (until D6) still saves through the same RPC.
+
+P2, P6 and P8 run the writer as it was live when 0016 was applied, and as an H2-safe rollback
+target runs it: the W-B path, B9's bundle with the run and the detail written beside it.
 
 Runs ONLY against a CI runner's scratch PostgreSQL and the PostgREST started there. It refuses to
 run beside any production variable, and it names no secret: its passwords and its JWT key are
@@ -115,11 +126,18 @@ CRITERIA = (
     "W7",
     "W8",
     "W9",
+    "W10",
 )
 WIDE_CRITERIA = tuple(name for name in CRITERIA if name.startswith("W"))
 REST_BASE = "https://rehearsal.invalid"
 OPERATOR = "privrehearsal"
-FORBIDDEN_ENVIRONMENT = ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+FORBIDDEN_ENVIRONMENT = (
+    "SUPABASE_DB_URL",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_WRITER_JWT",
+)
 _LOCAL_SOCKET_URL = re.compile(r"postgresql:///[a-z_][a-z0-9_]*\?host=/var/run/postgresql")
 _LOCAL_HTTP = re.compile(r"http://127\.0\.0\.1:[0-9]{2,5}")
 
@@ -628,7 +646,31 @@ def outcome_for(prediction: dict) -> dict:
     }
 
 
+class B9Writer:
+    """The REST writer without W-A's save_forecast_bundle: the W-B path, as the app live when 0016
+    was applied, and any H2-safe rollback target, persists."""
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "save_forecast_bundle":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+
 def persist_through_rest(repository: Any, work: Any) -> tuple[Any, str]:
+    """The W-B path (P2, P6, P8)."""
+
+    from crypto_probability_engine.api.analysis_service import _persist_work_confirmed
+
+    confirmation = _persist_work_confirmed(work, B9Writer(repository))
+    return confirmation, repository.circuit_state()
+
+
+def persist_through_forecast(repository: Any, work: Any) -> tuple[Any, str]:
+    """The W-A path, as released (W10)."""
+
     from crypto_probability_engine.api.analysis_service import _persist_work_confirmed
 
     confirmation = _persist_work_confirmed(work, repository)
@@ -1437,6 +1479,90 @@ def criteria_wide_bundle(
 # ------------------------------------------------------------------------- the run
 
 
+def criterion_production_writer(
+    db: Database, writer: Callable[[], tuple[Any, list]], rest: Callable[[str], Any]
+) -> dict[str, Any]:
+    """W10. Production's REST writer as released (W-A and E4) on the applied 0017."""
+
+    from crypto_probability_engine.api.analysis_service import RECEIPT_NOT_SAVED, RECEIPT_SAVED
+
+    failures: list[str] = []
+    steps: dict[str, Any] = {}
+    work, payload = analysis_work()
+    run_id = payload["run_id"]
+    prediction = work.prediction_rows[0]
+    repository, seen = writer()
+    first, circuit = persist_through_forecast(repository, work)
+    steps["first"] = [first.receipt, first.receipt_reason, first.overall, circuit]
+    if (first.receipt, first.overall, circuit) != (RECEIPT_SAVED, "OK", "CLOSED"):
+        failures.append(f"the analysis was not SAVED: {steps['first']}")
+    paths = [path for path, _headers in seen]
+    steps["requests"] = sorted(set(paths))
+    if paths.count("rpc/save_forecast_bundle") != 1:
+        failures.append("the forecast bundle was not exactly one RPC call")
+    for beside in ("analysis_runs", "analysis_run_details", "rpc/save_prediction_bundle"):
+        if beside in paths:
+            failures.append(f"{beside} was sent beside the forecast bundle")
+    # Booleans only: the report never carries a credential.
+    steps["two_headers"] = sorted({headers for _path, headers in seen})
+    if steps["two_headers"] != [(True, True)]:
+        failures.append("a request did not carry the API key and the writer's JWT apart")
+    stored = {table: db.count(table, run_id=run_id)
+              for table in ("analysis_runs", "analysis_run_details", "predictions")}
+    stored["prediction_feature_snapshots"] = db.count(
+        "prediction_feature_snapshots", prediction_id=prediction["prediction_id"]
+    )
+    steps["stored"] = stored
+    failures += [f"{table} holds {count} rows, not 1" for table, count in stored.items()
+                 if count != 1]
+
+    replay, circuit = persist_through_forecast(writer()[0], work)
+    steps["replay"] = [replay.receipt, replay.receipt_reason, circuit]
+    if (replay.receipt, circuit) != (RECEIPT_SAVED, "CLOSED"):
+        failures.append(f"the identical replay was not SAVED: {steps['replay']}")
+
+    def score() -> str:
+        return db.owner(
+            "SELECT total_score::text FROM public.analysis_runs WHERE run_id = %s", (run_id,)
+        )[0][0]
+
+    kept_score = score()
+    total = work.run_summary.get("total_score")
+    other_run = {**work.run_summary, "total_score": round(float(total or 0) + 1.5, 6)}
+    run_conflict, _ = persist_through_forecast(
+        writer()[0], dataclasses.replace(work, run_summary=other_run)
+    )
+    steps["run_conflict"] = [run_conflict.receipt, run_conflict.receipt_reason]
+    if steps["run_conflict"] != [RECEIPT_NOT_SAVED, "CONFLICT"]:
+        failures.append(f"the conflicting run identity was not refused: {steps['run_conflict']}")
+    if score() != kept_score:
+        failures.append("the conflicting run identity changed the stored run")
+
+    changed = {**prediction, "reference_price": float(prediction["reference_price"]) * 1.01}
+    conflict, _ = persist_through_forecast(
+        writer()[0], dataclasses.replace(work, prediction_rows=(changed,))
+    )
+    kept = db.owner(
+        "SELECT reference_price::float8 FROM public.predictions WHERE prediction_id = %s",
+        (prediction["prediction_id"],),
+    )[0][0]
+    steps["prediction_conflict"] = [conflict.receipt, conflict.receipt_reason]
+    if steps["prediction_conflict"] != [RECEIPT_NOT_SAVED, "CONFLICT"]:
+        failures.append(f"the conflicting prediction was not refused: {conflict.receipt}")
+    if abs(float(kept) - float(prediction["reference_price"])) > 1e-9 * max(1.0, abs(float(kept))):
+        failures.append("the conflicting prediction changed the stored prediction")
+
+    legacy_work, legacy_payload = analysis_work()
+    legacy, circuit = persist_through_forecast(rest("service_role"), legacy_work)
+    steps["service_role"] = [legacy.receipt, circuit,
+                             db.count("analysis_runs", run_id=legacy_payload["run_id"])]
+    if steps["service_role"] != [RECEIPT_SAVED, "CLOSED", 1]:
+        failures.append(
+            f"service_role did not save through the forecast RPC: {steps['service_role']}"
+        )
+    return verdict(failures, steps=steps)
+
+
 def _require_scratch(owner_url: str, postgrest_url: str) -> None:
     present = [name for name in FORBIDDEN_ENVIRONMENT if os.environ.get(name)]
     if present:
@@ -1456,6 +1582,29 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
         return SupabaseRestRepository(
             REST_BASE, mint_jwt(role, jwt_key), client=gateway_client(postgrest_url)
         )
+
+    def writer() -> tuple[SupabaseRestRepository, list]:
+        """E4's least-privilege writer: a publishable-key stand-in in `apikey` (local PostgREST,
+        without Supabase's gateway, ignores it) and the writer's JWT in `Authorization`. Each
+        request is recorded as its path and whether each header held its expected value."""
+
+        jwt = mint_jwt("ucpe_api_writer", jwt_key)
+        publishable = f"sb_publishable_scratch_{secrets.token_hex(8)}"
+        seen: list = []
+        client = gateway_client(postgrest_url)
+
+        def record(request: Any) -> None:
+            seen.append((
+                request.url.path.removeprefix("/rest/v1/"),
+                (request.headers.get("apikey") == publishable,
+                 request.headers.get("Authorization") == f"Bearer {jwt}"),
+            ))
+
+        client.event_hooks["request"].append(record)
+        repository = SupabaseRestRepository(
+            REST_BASE, "", publishable_key=publishable, writer_jwt=jwt, client=client
+        )
+        return repository, seen
 
     def raw(
         role: str | None, method: str, path: str, params: dict, body: Any
@@ -1544,6 +1693,7 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
     else:
         wait_for_reload(postgrest_url, admin_url)
         criteria.update(criteria_wide_bundle(db, version, call, raw))
+        criteria["W10"] = _guarded(lambda: criterion_production_writer(db, writer, rest))
         second_0017 = db.apply(DRAFT_0017)
         rolled_0017 = db.apply(ROLLBACK_0017)
         try:

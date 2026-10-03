@@ -60,6 +60,34 @@ class PredictionBundleWrite:
     refused: bool = False
 
 
+class CoreRowWriteStatus(StrEnum):
+    """W-A: the run identity's or the detail payload's write inside one forecast bundle.
+
+    NOT_KEPT means the call inserted it, then rolled it back with everything else on a refusal.
+    """
+
+    INSERTED = "INSERTED"
+    IDENTICAL_DUPLICATE = "IDENTICAL_DUPLICATE"
+    CONFLICT = "CONFLICT"
+    NOT_KEPT = "NOT_KEPT"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class ForecastBundleWrite:
+    """W-A (plan §8.1, migration 0017): the run identity, the required detail payload and one
+    forecast bundle, written in ONE transaction, all or nothing.
+
+    ``run_detail`` is None when no detail was submitted, or when the run's refusal came first. A
+    refused call kept nothing (``bundle.refused``). A refusal before the prediction (the run or the
+    detail conflicting) reads as the bundle's CONFLICT. An unknown outcome is UNAVAILABLE.
+    """
+
+    run: CoreRowWriteStatus
+    run_detail: CoreRowWriteStatus | None
+    bundle: PredictionBundleWrite
+
+
 class PersistenceRepository(Protocol):
     def persistence_status(self) -> PersistenceStatus:
         """Return current persistence health without exposing connection details."""
@@ -1571,13 +1599,20 @@ class SupabaseRestRepository:
         supabase_url: str,
         service_role_key: str,
         *,
+        publishable_key: str | None = None,
+        writer_jwt: str | None = None,
         timeout_seconds: float = 3.0,
         circuit_cooldown_seconds: float = 60.0,
         client: httpx.Client | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        if bool(publishable_key) != bool(writer_jwt):
+            raise ValueError("the least-privilege writer needs both its API key and its JWT")
         self._base_url = f"{supabase_url.rstrip('/')}/rest/v1"
         self._service_role_key = service_role_key
+        # E4: when set, requests run as the JWT's role (ucpe_api_writer), never as service_role.
+        self._publishable_key = publishable_key or None
+        self._writer_jwt = writer_jwt or None
         self._timeout_seconds = timeout_seconds
         self._circuit_cooldown_seconds = circuit_cooldown_seconds
         self._client = client or httpx.Client(timeout=timeout_seconds)
@@ -1799,6 +1834,60 @@ class SupabaseRestRepository:
         if written is None:
             self.mark_unavailable()
             return PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE)
+        return written
+
+    def save_forecast_bundle(
+        self,
+        run_summary: Mapping[str, Any],
+        prediction: Mapping[str, Any],
+        feature_snapshot: Mapping[str, Any] | None,
+        derivatives_snapshot: Mapping[str, Any] | None = None,
+        run_detail: Mapping[str, Any] | None = None,
+    ) -> ForecastBundleWrite:
+        """W-A (plan §8.1): the run identity, its detail payload and one forecast bundle in ONE
+        request, all or nothing.
+
+        Calls only public.save_forecast_bundle (migration 0017), in one transaction:
+        - the run is inserted, or compared on every column but persistence_status;
+        - the detail is inserted, or compared;
+        - then migration 0015's bundle.
+        Any CONFLICT refuses the whole call and keeps nothing. A refusal is an answer; a failed or
+        unreadable request is UNAVAILABLE. Section 5A OOS identities keep their own write path.
+        """
+
+        normalized_row = _prediction_row_with_origin(prediction)
+        if str(normalized_row.get("prediction_id", "")).startswith("oosb-"):
+            raise ValueError("Section 5A OOS identities keep their own write path.")
+        self._fallback.save_run(run_summary)
+        self._fallback.save_prediction(normalized_row)
+        body = {
+            "p_run": dict(run_summary),
+            "p_prediction": normalized_row,
+            "p_feature_snapshot": dict(feature_snapshot) if feature_snapshot is not None else None,
+            "p_derivatives_snapshot": (
+                dict(derivatives_snapshot) if derivatives_snapshot is not None else None
+            ),
+            "p_run_detail": dict(run_detail) if run_detail is not None else None,
+        }
+        status, answer = self._run_rest(
+            lambda: self._request("POST", "rpc/save_forecast_bundle", json=body)
+        )
+        unknown = ForecastBundleWrite(
+            CoreRowWriteStatus.UNAVAILABLE,
+            CoreRowWriteStatus.UNAVAILABLE if run_detail is not None else None,
+            PredictionBundleWrite(PredictionWriteStatus.UNAVAILABLE),
+        )
+        if status == "UNAVAILABLE":
+            return unknown
+        written = _forecast_write_from_rpc(
+            answer,
+            detail_submitted=run_detail is not None,
+            feature_submitted=feature_snapshot is not None,
+            derivatives_submitted=derivatives_snapshot is not None,
+        )
+        if written is None:
+            self.mark_unavailable()
+            return unknown
         return written
 
     def save_feature_snapshot(
@@ -2447,9 +2536,15 @@ class SupabaseRestRepository:
         return {str(row.get("prediction_id")) for row in rows if row.get("prediction_id")}
 
     def _headers(self, *, prefer: str | None = None) -> dict[str, str]:
+        if self._writer_jwt is not None:
+            # E4: Supabase's API key goes in `apikey` only; the JWT names the role PostgREST
+            # switches to.
+            key_header, bearer = self._publishable_key, self._writer_jwt
+        else:
+            key_header = bearer = self._service_role_key
         headers = {
-            "apikey": self._service_role_key,
-            "Authorization": f"Bearer {self._service_role_key}",
+            "apikey": key_header,
+            "Authorization": f"Bearer {bearer}",
             "Content-Type": "application/json",
         }
         if prefer:
@@ -3123,6 +3218,63 @@ def _bundle_write_from_rpc(
         FeatureSnapshotWriteStatus(feature) if feature is not None else None,
         DerivativesSnapshotWriteStatus(derivatives) if derivatives is not None else None,
         refused,
+    )
+
+
+_FORECAST_ANSWER_KEYS = frozenset({"run", "run_detail", *_BUNDLE_ANSWER_KEYS})
+_KEPT = frozenset({"INSERTED", "IDENTICAL_DUPLICATE"})
+_UNDONE = frozenset({"NOT_KEPT", "IDENTICAL_DUPLICATE"})
+
+
+def _forecast_write_from_rpc(
+    answer: Any, *, detail_submitted: bool, feature_submitted: bool, derivatives_submitted: bool
+) -> ForecastBundleWrite | None:
+    """W-A: migration 0017's answer, or None when it is not an answer that function can give.
+
+    A kept call has the run and the submitted detail kept and 0015's kept bundle. A refused call
+    has exactly one stage in CONFLICT, the run's, the detail's or the bundle's; every earlier stage
+    is undone or identical, and every later stage was never reached.
+    """
+
+    if not isinstance(answer, Mapping) or set(answer) != _FORECAST_ANSWER_KEYS:
+        return None
+    run, detail, refused = answer["run"], answer["run_detail"], answer["refused"]
+    if not isinstance(refused, bool) or (detail is not None and not detail_submitted):
+        return None
+    bundle_parts = {key: answer[key] for key in _BUNDLE_ANSWER_KEYS if key != "refused"}
+    not_reached = all(value is None for value in bundle_parts.values())
+    if not refused:
+        if run not in _KEPT or (detail_submitted and detail not in _KEPT):
+            return None
+        bundle = _bundle_write_from_rpc(
+            {**bundle_parts, "refused": False},
+            feature_submitted=feature_submitted,
+            derivatives_submitted=derivatives_submitted,
+        )
+    elif run == "CONFLICT":
+        if detail is not None or not not_reached:
+            return None
+        bundle = PredictionBundleWrite(PredictionWriteStatus.CONFLICT, refused=True)
+    elif run not in _UNDONE:
+        return None
+    elif detail == "CONFLICT":
+        if not not_reached:
+            return None
+        bundle = PredictionBundleWrite(PredictionWriteStatus.CONFLICT, refused=True)
+    elif detail_submitted and detail not in _UNDONE:
+        return None
+    else:
+        bundle = _bundle_write_from_rpc(
+            {**bundle_parts, "refused": True},
+            feature_submitted=feature_submitted,
+            derivatives_submitted=derivatives_submitted,
+        )
+    if bundle is None:
+        return None
+    return ForecastBundleWrite(
+        CoreRowWriteStatus(run),
+        CoreRowWriteStatus(detail) if detail is not None else None,
+        bundle,
     )
 
 
@@ -4003,12 +4155,35 @@ def _postgrest_csv(values: list[str]) -> str:
     return ",".join(f'"{value}"' for value in values)
 
 
-def build_persistence_repository(settings: Settings) -> PersistenceRepository:
-    if settings.supabase_url and settings.supabase_service_role_key:
+def _rest_repository(settings: Settings) -> SupabaseRestRepository | None:
+    """E4: the least-privilege writer when both of its values are set, else the service-role key
+    (today's writer); None without either.
+
+    Half a writer configuration is ignored, so a cutover in progress never switches the writer's
+    transport: the REST writer stays REST until both values are present.
+    """
+
+    if not settings.supabase_url:
+        return None
+    if settings.supabase_publishable_key and settings.supabase_writer_jwt:
+        return SupabaseRestRepository(
+            settings.supabase_url,
+            settings.supabase_service_role_key or "",
+            publishable_key=settings.supabase_publishable_key,
+            writer_jwt=settings.supabase_writer_jwt,
+        )
+    if settings.supabase_service_role_key:
         return SupabaseRestRepository(
             settings.supabase_url,
             settings.supabase_service_role_key,
         )
+    return None
+
+
+def build_persistence_repository(settings: Settings) -> PersistenceRepository:
+    rest = _rest_repository(settings)
+    if rest is not None:
+        return rest
     if settings.supabase_db_url:
         return SupabasePersistenceRepository(settings.supabase_db_url)
     return InMemoryPersistenceRepository()
@@ -4019,9 +4194,7 @@ def build_operator_repository(settings: Settings) -> PersistenceRepository:
 
     if settings.supabase_db_url:
         return SupabasePersistenceRepository(settings.supabase_db_url)
-    if settings.supabase_url and settings.supabase_service_role_key:
-        return SupabaseRestRepository(
-            settings.supabase_url,
-            settings.supabase_service_role_key,
-        )
+    rest = _rest_repository(settings)
+    if rest is not None:
+        return rest
     return InMemoryPersistenceRepository()

@@ -65,6 +65,11 @@ class Settings(BaseModel):
     supabase_db_url: str | None = Field(default=None, repr=False)
     supabase_url: str | None = Field(default=None, repr=False)
     supabase_service_role_key: str | None = Field(default=None, repr=False)
+    # E4 (Phase 3): the least-privilege REST writer, used only when both are set. The publishable
+    # key goes in `apikey` and the owner-minted writer JWT (role ucpe_api_writer) in
+    # `Authorization`. Supabase's API keys are not JWTs and never go in `Authorization`.
+    supabase_publishable_key: str | None = Field(default=None, repr=False)
+    supabase_writer_jwt: str | None = Field(default=None, repr=False)
     fred_api_key: str | None = Field(default=None, repr=False)
     newsapi_key: str | None = Field(default=None, repr=False)
     external_store_configured: bool = False
@@ -184,13 +189,21 @@ class Settings(BaseModel):
             supabase_db_url=os.environ.get("SUPABASE_DB_URL"),
             supabase_url=os.environ.get("SUPABASE_URL"),
             supabase_service_role_key=os.environ.get("SUPABASE_SERVICE_ROLE_KEY"),
+            supabase_publishable_key=os.environ.get("SUPABASE_PUBLISHABLE_KEY"),
+            supabase_writer_jwt=os.environ.get("SUPABASE_WRITER_JWT"),
             fred_api_key=os.environ.get("FRED_API_KEY"),
             newsapi_key=os.environ.get("NEWSAPI_KEY"),
             external_store_configured=bool(
                 os.environ.get("SUPABASE_DB_URL")
                 or (
                     os.environ.get("SUPABASE_URL")
-                    and os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+                    and (
+                        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+                        or (
+                            os.environ.get("SUPABASE_PUBLISHABLE_KEY")
+                            and os.environ.get("SUPABASE_WRITER_JWT")
+                        )
+                    )
                 )
             ),
         )
