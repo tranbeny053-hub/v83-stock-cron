@@ -26,6 +26,8 @@ ROOT = Path(__file__).resolve().parents[2]
 DRAFT = (ROOT / "scripts/privilege_rehearsal/draft_0016_least_privilege_roles.sql").read_text()
 ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0016.sql").read_text()
 FIXTURE = (ROOT / "scripts/privilege_rehearsal/00_supabase_like_authenticator.sql").read_text()
+DRAFT_0017 = (ROOT / "scripts/privilege_rehearsal/draft_0017_forecast_bundle_rpc.sql").read_text()
+ROLLBACK_0017 = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0017.sql").read_text()
 WORKFLOW = (ROOT / ".github/workflows/privilege-rehearsal.yml").read_text(encoding="utf-8")
 
 
@@ -33,7 +35,7 @@ def statements(sql: str) -> list[str]:
     """The SQL's statements, comments dropped and whitespace collapsed (no DO body has a ';')."""
 
     body = "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
-    parts = re.split(r";\s*(?=\n|$)", re.sub(r"\$\$.*?\$\$", "$$ $$", body, flags=re.S))
+    parts = re.split(r";\s*(?=\n|$)", re.sub(r"\$(\w*)\$.*?\$\1\$", "$$ $$", body, flags=re.S))
     return [" ".join(part.split()) for part in parts if part.strip()]
 
 
@@ -356,3 +358,106 @@ def test_every_criterion_is_a_gate_and_the_report_is_uploaded_always() -> None:
     upload = WORKFLOW.split("      - name: Upload the rehearsal report\n", 1)[1]
     assert "        if: always()\n" in upload
     assert "          path: privilege-rehearsal-report-${{ matrix.postgrest }}.json\n" in upload
+
+
+# ------------------------------------------------------------------------ W-A: the draft of 0017
+
+
+WIDE = "public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)"
+
+
+def test_the_wider_draft_is_not_a_migration_and_refuses_a_second_application() -> None:
+    for migration in (ROOT / "migrations").glob("*.sql"):
+        assert migration.read_text() != DRAFT_0017, migration
+    every = statements(DRAFT_0017)
+    assert every[0].startswith("DO $$") and "NOT A MIGRATION" in DRAFT_0017
+    head = DRAFT_0017.split("CREATE FUNCTION", 1)[0]
+    assert re.search(
+        r"RAISE EXCEPTION '[^']*already exists; a second application is refused'\s+"
+        r"USING ERRCODE = 'UP017';",
+        head,
+    ), "the already-exists refusal must raise UP017, which W9 expects"
+    assert "o.rolname = 'ucpe_bundle_owner'" in head, "it needs 0016 with W2"
+
+
+def test_one_definer_function_with_a_fixed_search_path_and_only_two_callers() -> None:
+    every = statements(DRAFT_0017)
+    created = [s for s in every if s.startswith("CREATE FUNCTION")]
+    assert len(created) == 1
+    assert "SECURITY DEFINER SET search_path = pg_catalog, pg_temp" in created[0]
+    assert "CREATE OR REPLACE" not in DRAFT_0017, "0015's function is reused, never redefined"
+    assert f"REVOKE ALL ON FUNCTION {WIDE} FROM PUBLIC, anon, authenticated" in every
+    grants = [s for s in every if s.startswith("GRANT EXECUTE")]
+    assert grants == [f"GRANT EXECUTE ON FUNCTION {WIDE} TO ucpe_api_writer, service_role"]
+
+
+def test_it_reuses_0015_and_rolls_back_its_own_writes_on_any_refusal() -> None:
+    body = DRAFT_0017.split("$function$")[1]
+    assert "bundle := public.save_prediction_bundle(p_prediction, p_feature_snapshot," in body
+    assert (
+        body.count("RAISE EXCEPTION 'save_forecast_bundle: refused' USING ERRCODE = 'UB9C1'") == 3
+    )
+    assert "WHEN SQLSTATE 'UB9C1' THEN" in body and "'refused', true" in body
+    for verb in ("UPDATE public.", "DELETE FROM", "TRUNCATE"):
+        assert verb not in body, verb
+
+
+def test_the_run_keys_are_productions_run_summary_and_only_persistence_status_is_not_compared() -> (
+    None
+):
+    from crypto_probability_engine.api.analysis_service import _run_summary
+
+    keys = re.search(r"run_keys CONSTANT text\[\] := ARRAY\[(.*?)\];", DRAFT_0017, flags=re.S)
+    run_keys = set(re.findall(r"'(\w+)'", keys.group(1)))
+    assert run_keys == set(_run_summary({}))
+    compared = re.search(
+        r"IF ROW\((\s*stored_run\..*?)\) IS NOT DISTINCT FROM", DRAFT_0017, flags=re.S
+    ).group(1)
+    stored = set(re.findall(r"stored_run\.(\w+)", compared))
+    assert stored == run_keys - {"run_id", "persistence_status"}
+    detail = re.search(r"detail_keys CONSTANT text\[\] := ARRAY\[(.*?)\];", DRAFT_0017).group(1)
+    assert set(re.findall(r"'(\w+)'", detail)) == {"run_id", "analysis_hash", "detail_payload"}
+
+
+def test_its_narrow_owner_only_inserts_and_reads_the_run_and_detail_with_policies() -> None:
+    assert table_grants(DRAFT_0017) == {
+        "ucpe_bundle_owner": {
+            "analysis_runs": {"SELECT", "INSERT"},
+            "analysis_run_details": {"SELECT", "INSERT"},
+        }
+    }
+    assert policies(DRAFT_0017) == rehearse.wide_expected_policies() - rehearse.expected_policies()
+    assert {table: set(privileges) for table, privileges in rehearse.WIDE_OWNER_TABLES.items()} == {
+        **{t: set(p) for t, p in rehearse.EXPECTED_TABLES["ucpe_bundle_owner"].items()},
+        **table_grants(DRAFT_0017)["ucpe_bundle_owner"],
+    }
+    assert "UPDATE" not in " ".join(s for s in statements(DRAFT_0017) if s.startswith("GRANT"))
+
+
+def test_the_owner_change_uses_the_same_temporary_powers_as_0016() -> None:
+    every = statements(DRAFT_0017)
+    order = [
+        "GRANT ucpe_bundle_owner TO CURRENT_USER WITH INHERIT FALSE, SET TRUE",
+        "GRANT CREATE ON SCHEMA public TO ucpe_bundle_owner",
+        f"ALTER FUNCTION {WIDE} OWNER TO ucpe_bundle_owner",
+        "REVOKE CREATE ON SCHEMA public FROM ucpe_bundle_owner",
+        "REVOKE ucpe_bundle_owner FROM CURRENT_USER",
+    ]
+    positions = [every.index(statement) for statement in order]
+    assert positions == sorted(positions) and positions[-1] - positions[0] == len(order) - 1
+
+
+def test_the_wider_rollback_removes_exactly_what_the_draft_added() -> None:
+    every = statements(ROLLBACK_0017)
+    assert f"DROP FUNCTION {WIDE}" in every
+    assert policies(ROLLBACK_0017, "DROP") == policies(DRAFT_0017)
+    assert (
+        "REVOKE SELECT, INSERT ON TABLE public.analysis_runs, public.analysis_run_details "
+        "FROM ucpe_bundle_owner"
+    ) in every
+    assert "DELETE FROM" not in ROLLBACK_0017 and "TRUNCATE" not in ROLLBACK_0017
+
+
+def test_the_harness_gates_every_wider_criterion() -> None:
+    assert rehearse.WIDE_CRITERIA == ("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9")
+    assert set(rehearse.WIDE_CRITERIA) <= set(rehearse.CRITERIA)

@@ -10,11 +10,13 @@ name: Privilege rehearsal (scratch PostgreSQL and PostgREST, no secrets)
 # - the Space's direct Postgres (calibration, and the F1 registry and ledger), as ucpe_space_db;
 # - the resolver, as ucpe_resolver.
 #
-# What it proves (scripts/privilege_rehearsal/rehearse.py, criteria P1-P8, every one a gate):
+# What it proves (scripts/privilege_rehearsal/rehearse.py, criteria P1-P8 and W1-W9, every one a gate):
 # - each role can do exactly what its list allows, and nothing else;
 # - nothing that existed before changes;
 # - a second application of the draft is refused;
-# - the rollback restores the catalog exactly.
+# - the rollback restores the catalog exactly;
+# - W-A, the DRAFT of migration 0017: the run, the detail and the forecast bundle are written in one
+#   transaction, all or nothing, with the same one-shot and rollback proofs.
 #
 # It rehearses two PostgREST versions. It references no secret and touches no real database: its
 # passwords and its JWT key are random scratch values that live for one run and are never printed.
