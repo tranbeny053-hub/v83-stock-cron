@@ -1,10 +1,10 @@
 """Source-controlled runtime build fingerprint."""
 
 SCHEMA_VERSION = "build-info.v1"
-RELEASE_ID = "UCPE-PROD-RCPT-20261003-A"
-RELEASE_LABEL = "PROD-RCPT release of main"
+RELEASE_ID = "UCPE-PROD-WA-20261003-A"
+RELEASE_LABEL = "PROD-WA release of main"
 ENVIRONMENT = "HF_PRODUCTION"
-SOURCE_MILESTONE = "prod-rcpt"
+SOURCE_MILESTONE = "prod-wa"
 
 SHORT_RELEASE_ID = RELEASE_ID.removeprefix("UCPE-")
 FINGERPRINT = f"UCPE LIVE BUILD · {SHORT_RELEASE_ID}"
