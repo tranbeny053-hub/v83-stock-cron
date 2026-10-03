@@ -43,6 +43,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.UCPE_RESOLVER_DB_URL }}
         run: |
           set -euo pipefail
+          echo "resolver credential: UCPE_RESOLVER_DB_URL"
           if [ -z "${SUPABASE_DB_URL}" ]; then
             echo "UCPE_RESOLVER_DB_URL repository secret is required."
             exit 1

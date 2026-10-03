@@ -54,6 +54,7 @@ concurrency:
 jobs:
   apply:
     runs-on: ubuntu-24.04
+    environment: production-db-owner  # C4: the owner URL lives only in this protected Environment
     timeout-minutes: 20
     steps:
       # Actions are pinned to full commit SHAs, never to movable tags.
