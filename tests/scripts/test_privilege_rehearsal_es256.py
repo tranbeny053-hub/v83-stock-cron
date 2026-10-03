@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -59,11 +60,20 @@ def test_a_token_carries_the_kid_the_role_and_a_short_expiry_and_verifies(tmp_pa
     header, claims, signature = token.split(".")
     assert json.loads(_decode(header)) == {"alg": "ES256", "kid": es256.KID, "typ": "JWT"}
     assert json.loads(_decode(claims)) == {
-        "role": "ucpe_api_writer", "sub": "ucpe-rehearsal", "iat": 1_800_000_000,
-        "exp": 1_800_000_600,
+        "role": "ucpe_api_writer", "iat": 1_800_000_000, "exp": 1_800_000_600,
     }
     assert len(_decode(signature)) == 64, "JOSE r || s, never DER"
     assert _verifies(tmp_path, key_file, token)
+
+
+def test_the_scratch_kid_is_a_uuid_and_a_sub_appears_only_when_given(tmp_path: Path) -> None:
+    """The Management API takes an imported key's kid only as a UUID. Supabase's sub is an optional
+    UUID naming a user; the writer's token has none."""
+
+    assert str(uuid.UUID(es256.KID)) == es256.KID
+    subject = "ef0493c9-3582-425f-a362-aef909588df7"
+    token = es256.mint(_key(tmp_path), "authenticated", now=1_800_000_000, subject=subject)
+    assert json.loads(_decode(token.split(".")[1]))["sub"] == subject
 
 
 def test_another_key_s_signature_does_not_verify(tmp_path: Path) -> None:

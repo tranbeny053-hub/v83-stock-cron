@@ -1,6 +1,42 @@
 # STATE
 
-Updated: 2026-10-03 (UCPE-PROD-WA-20261003-A RELEASED; the chain is complete). **Production is D a2de125f /
+Updated: 2026-10-03 (E3-A YES and E3-B 30 DAYS ruled; the signing-key helper and the repaired runbook). **Production
+is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe rollback target is
+17c9c053.**
+- **The owner's ruling (2026-10-03), verbatim:** "CONTINUE CURRENT. E3-A YES; E3-B 30 DAYS. Before asking the owner
+  to create any real credential, repair `WRITER_CUTOVER.md` so the signing-key generation/import format is exact and
+  proven against current official Supabase guidance. Prefer `supabase gen signing-key --algorithm ES256` if the CLI
+  already exists; otherwise prepare and test a local helper that produces the exact importable private JWK outside
+  the repo from the same key used to mint the writer JWT. Create no real key/token yet. Then return one minimal owner
+  card with exact UI path, exact command, exact file to import, exact `kid` handling, exact publishable-key location,
+  and exact two HF secret names. Never expose any secret value."
+- **The import format, from Supabase's own sources (re-read 2026-10-03).** The Supabase CLI is not installed here,
+  and was not installed:
+  - the CLI's `supabase gen signing-key --algorithm ES256` (supabase/cli develop 28b8aa04a1a5, signing-key.handler.ts)
+    prints one private JWK as compact JSON: kty, kid (randomUUID), use, key_ops, alg, ext, d, crv, x, y;
+  - the dashboard's "Import an existing private key" box (apps/studio create-key-dialog.tsx) checks kty EC, crv
+    P-256 and x, y, d, then sends the object unchanged;
+  - the Management API's CreateSigningKeyBody allows exactly those members for ES256, with the kid in UUID format;
+  - the signing-keys guide: a token's kid must be the imported kid; claims role and exp; sub an optional UUID.
+- **The helper, scripts/writer_signing_key.py (generate, copy-jwk, mint), in this record's PR**
+  (feat/e3-writer-signing-key-helper):
+  - generate writes the PEM and that exact JWK in ~/ucpe-keys. The folder is 0700 and the files 0600; never inside
+    the repository; it never overwrites;
+  - copy-jwk and mint first check the two files are one key: the JWK's d, x and y are the PEM's, and OpenSSL computes
+    the point from d alone;
+  - mint signs the 30-day writer token (role ucpe_api_writer, iat, exp; no sub) with the JWK's kid, to the clipboard.
+    Nothing secret is printed;
+  - 36 tests, on throwaway keys only: the CLI's members, order and compact JSON; the dashboard's check and the API
+    schema; P-256 arithmetic written in the test; `openssl dgst -verify` with the JWK's public half alone; Node's JWK
+    import (the crypto the CLI uses);
+  - J1 now mints its writer token with the helper's own builder. es256 mints no sub by default, and the scratch kid is
+    a UUID;
+  - **no real key or token was created.**
+- **docs/runbooks/WRITER_CUTOVER.md repaired:** the dashboard's exact labels (Migrate JWT secret → Move to previously
+  used → Create Standby Key with "Import an existing private key" → View key details, to check the kid → Rotate
+  keys), the publishable key (Project Settings → API Keys), and the two HF secrets.
+- **Next: the owner's credential switch**, by the runbook and the one owner card. Claude creates no value.
+Previously (UCPE-PROD-WA-20261003-A RELEASED; the chain is complete). **Production is D a2de125f /
 UCPE-PROD-WA-20261003-A. The guard is HEALTHY at that pin (R 4130a6cd). The H2-safe rollback target is 17c9c053.**
 - **The writer now saves each forecast bundle in ONE transaction** (the run, its detail, the prediction and its
   snapshots: W-A, migration 0017's function). It still uses the service-role key until the owner's switch (E3).
@@ -1141,7 +1177,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): UCPE-PROD-WA-20261003-A is RELEASED and its chain is complete (R 4130a6cd). Next is
+LOOP_STATE=AT THE OWNER (2026-10-03): E3-A YES and E3-B 30 days are ruled. The signing-key helper and the repaired
+  runbook are in this record's PR (no real key or token was created). Next is the owner's credential switch
+  (docs/runbooks/WRITER_CUTOVER.md), by one owner card.
+  Before it: AT THE OWNER (2026-10-03): UCPE-PROD-WA-20261003-A is RELEASED and its chain is complete (R 4130a6cd). Next is
   E3's credential switch: the decisions E3-A and E3-B, then the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md).
   Before it: IN PROGRESS (2026-10-03): the §2.6 package (#196) and E3's executable proof (#197) are merged. Next is the
   release package UCPE-PROD-WA-20261003-A through the B4 chain: identity → D → push CI and B3 → the guard on D →
@@ -2826,7 +2865,9 @@ LOOP_STATE=AT THE OWNER (2026-10-03): UCPE-PROD-WA-20261003-A is RELEASED and it
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-PROD-WA-20261003-A; R 4130a6cd). The writer
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
+  owner's credential switch is next. Production is unchanged (a2de125f).
+  Before it: PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-PROD-WA-20261003-A; R 4130a6cd). The writer
   saves the whole core bundle in one transaction.
   Before it: PHASE 3 (2026-10-03): the §2.6 package (E4 + the W-A client, #196) and E3's proof (#197, J1)
   merged. The release is next.
@@ -2953,7 +2994,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-wa-released (this record; worktree lanes23/state_rel).
+CURRENT_BRANCH=feat/e3-writer-signing-key-helper (this record; worktree lanes24/helper).
+  Before it: chore/state-wa-released (#201 → 4f970785; worktree lanes23/state_rel).
   - Merged: release/prod-wa (#199 → D a2de125f) and release/prod-wa-repin (#200 → R 4130a6cd).
   Before it: chore/state-s26-e3-merged (#198 → a6f881c9; worktree lanes23/state).
   - Merged: feat/s26-e4-writer-wa-client (#196 → b29ef4e4) and feat/e3-es256-signing-proof (#197 → c909915e).
@@ -3059,7 +3101,9 @@ CURRENT_BRANCH=chore/state-wa-released (this record; worktree lanes23/state_rel)
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=4130a6cd (main = R, the WA re-pin, over D a2de125f, deployed). The guard PASS on R (run 37118169873).
+LAST_GREEN_SHA=4f970785 (main, PR #201: the WA STATE record and the runbook). Push CI success (run 37118661804);
+  reproducibility success (run 37118661825).
+  Before it: 4130a6cd (main = R, the WA re-pin, over D a2de125f, deployed). The guard PASS on R (run 37118169873).
   Before it: a2de125f (D). Push CI 37116841080; reproducibility 37116841053.
   Before it: c909915e (main, PR #197: E3's proof). Its PR checks are all green; its push CI is running at this
   record's commit.
@@ -3265,7 +3309,11 @@ LAST_GREEN_SHA=4130a6cd (main = R, the WA re-pin, over D a2de125f, deployed). Th
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at 8cbfdbc3).
+LAST_VERIFY=PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR, on
+  4f970785, in its clean worktree lanes24/helper, before its push).
+  - The first run failed one test, the repository's no-silent-skips rule: the Node check had a skipif. Node is already
+    required (the frontend tests run it), so the check is now unconditional. The rerun passed.
+  Before it: PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at 8cbfdbc3).
   Before it: PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - At #193's head (ad29b24), in its clean worktree, before its push. This record is verified before its own push.
   Before it: PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
@@ -3513,7 +3561,9 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=E3's credential switch (2026-10-03):
+OWNER_BOUNDARY=E3's credential switch (2026-10-03): the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md), by one
+  owner card. E3-A YES and E3-B 30 days are ruled (verbatim in the header).
+  Before it: E3's credential switch (2026-10-03):
   - E3-A: approve the plan;
   - E3-B: the token's lifetime, 30 days (recommended) or 90;
   - then the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md).
@@ -4052,7 +4102,11 @@ OWNER_BOUNDARY=E3's credential switch (2026-10-03):
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: E3-A and E3-B, then the credential switch (docs/runbooks/WRITER_CUTOVER.md).
+NEXT_ACTION=The owner: the credential switch (docs/runbooks/WRITER_CUTOVER.md; the owner card). E3-A and E3-B are ruled.
+  - Then Claude: confirm passively that the next natural persistence_receipt is SAVED as ucpe_api_writer.
+  - Every 30 days: the owner mints a new token (the runbook's step 5) and replaces SUPABASE_WRITER_JWT.
+  - Throughout: never create verification traffic; never ask for, read or print a key or token.
+  Before it: The owner: E3-A and E3-B, then the credential switch (docs/runbooks/WRITER_CUTOVER.md).
   - Then Claude: confirm passively that the next natural persistence_receipt is SAVED as ucpe_api_writer.
   - Later: D6, which removes the service-role key and narrows service_role's grants by a migration (a T4).
   - Throughout: never create verification traffic.

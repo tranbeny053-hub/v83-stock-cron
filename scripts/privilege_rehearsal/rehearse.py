@@ -1594,6 +1594,7 @@ def criterion_signing_key(
     import tempfile
 
     from crypto_probability_engine.api.analysis_service import RECEIPT_SAVED
+    from scripts import writer_signing_key
     from scripts.privilege_rehearsal import es256
 
     failures: list[str] = []
@@ -1607,7 +1608,8 @@ def criterion_signing_key(
                 headers={"Authorization": f"Bearer {token}"},
             ).status_code
 
-    token = es256.mint(key_file, "ucpe_api_writer")
+    # The owner's own builder: the production token's shape, with the scratch key and its kid.
+    token = writer_signing_key.writer_token(key_file, kid=es256.KID)
     steps["writer_reads_runs"] = status(token, "analysis_runs")
     steps["writer_reads_outcomes"] = status(token, "prediction_outcomes")
     if (steps["writer_reads_runs"], steps["writer_reads_outcomes"]) != (200, 403):
