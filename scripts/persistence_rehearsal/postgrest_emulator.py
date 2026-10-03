@@ -17,7 +17,10 @@ the run summary and the detail) lie outside the bundles: they are acknowledged (
 Faults, each for the next RPC request only:
 - "feature_snapshot": the scratch-only trigger pers0_fault.fail_feature_snapshot raises inside the
   RPC's transaction, after the prediction row was written;
-- "lost_response": the transaction commits, then the response is lost (httpx.ReadError).
+- "lost_response": the transaction commits, then the response is lost (httpx.ReadError);
+- "lost_before_commit": the scratch-only trigger fails the RPC's transaction (nothing commits), and
+  then the response is lost (httpx.ReadError). The client cannot tell it from "lost_response"; only
+  a read can (R-1a, WB3).
 """
 
 from __future__ import annotations
@@ -59,7 +62,7 @@ FAULT_SETUP_SQL = (
     "EXECUTE FUNCTION pers0_fault.fail_feature_snapshot()",
     "GRANT USAGE ON SCHEMA pers0_fault TO service_role",
 )
-FAULTS = ("feature_snapshot", "lost_response")
+FAULTS = ("feature_snapshot", "lost_response", "lost_before_commit")
 FAULT_ON_SQL = "SELECT pg_catalog.set_config('pers0.fail_feature_snapshot', 'on', true)"
 
 
@@ -96,13 +99,16 @@ class PostgrestEmulator:
             try:
                 with connection.cursor() as cursor:
                     cursor.execute("SET LOCAL ROLE service_role")
-                    if fault == "feature_snapshot":
+                    if fault in ("feature_snapshot", "lost_before_commit"):
                         cursor.execute(FAULT_ON_SQL)
                     cursor.execute(sql, (request.content.decode("utf-8"),))
                     answer = cursor.fetchone()[0]
             except psycopg.Error as exc:
                 connection.rollback()
                 self.answers.append({"status": 400, "sqlstate": exc.sqlstate})
+                if fault == "lost_before_commit":
+                    raise httpx.ReadError("the response was lost; nothing committed",
+                                          request=request) from None
                 return httpx.Response(400, json={"code": exc.sqlstate, "message": "RPC failed"})
             connection.commit()
         self.answers.append({"status": 200, "answer": answer})

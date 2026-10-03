@@ -56,11 +56,12 @@ def _ideal() -> dict:
                    conflict_reported_ok=False, stored_unchanged=True),
         "S6": _obs("PARTIAL", 1, 1, receipt="NOT_SAVED", before=(1, 1),
                    conflict_reported_ok=False, stored_unchanged=True),
-        "S7a": _obs("UNAVAILABLE", 0, 0),
-        "S7b": _obs("OK", 1, 1),
+        "S7a": _obs("UNAVAILABLE", 1, 1, reconciled=["SAVED", "RECONCILED_COMMITTED"]),
+        "S7b": _obs("OK", 1, 1, before=(1, 1)),
         "S8": _obs("UNAVAILABLE", 0, 0, receipt="NOT_SAVED"),
         "S9": _obs("UNAVAILABLE", 1, 1, receipt="NOT_SAVED", before=(1, 1),
                    conflict_reported_ok=False, stored_unchanged=True),
+        "S10": _obs("UNAVAILABLE", 0, 0, reconciled=["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]),
     }
 
 
@@ -279,3 +280,49 @@ def test_a_required_route_must_pass_every_criterion_privilege_and_refusal() -> N
         "rest_rpc.refusals.refusals_write_nothing"]
     # A route that is not required is data, whatever it shows.
     assert fi.unmet_requirements({"postgres": _route(criteria=failing)}, []) == []
+
+
+# ---------------------------------------------------------------- C6: WB3's R-1a, one read decides
+
+
+def test_c6_one_read_reconciles_a_commit_to_saved_and_a_rollback_to_not_saved() -> None:
+    result = fi.verdicts(_ideal())["C6"]
+    assert result["verdict"] == "PASS"
+    assert result["reconciled"] == {"S7a": ["SAVED", "RECONCILED_COMMITTED"],
+                                    "S10": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}
+
+
+@pytest.mark.parametrize(
+    ("name", "change"),
+    [
+        ("S10", {"reconciled": ["SAVED", "RECONCILED_COMMITTED"]}),
+        ("S7a", {"reconciled": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}),
+        ("S7a", {"reconciled": None}),
+        ("S10", {"receipt": "NOT_SAVED"}),
+    ],
+    ids=["rollback-read-as-saved", "commit-read-as-not-saved", "undecidable", "not-unknown"],
+)
+def test_c6_fails_whenever_the_read_or_the_receipt_would_lie(name: str, change: dict) -> None:
+    observations = _ideal()
+    observations[name] = {**observations[name], **change}
+    assert fi.verdicts(observations)["C6"]["verdict"] == "FAIL"
+
+
+def test_c6_does_not_apply_where_a_bundle_is_not_one_transaction() -> None:
+    observations = _ideal()
+    del observations["S10"]
+    assert fi.verdicts(observations)["C6"]["verdict"] == "NOT_APPLICABLE"
+
+
+def test_s10_runs_only_on_the_atomic_route_with_a_loss_before_commit() -> None:
+    from scripts.persistence_rehearsal import postgrest_emulator as pe
+
+    assert "lost_before_commit" in pe.FAULTS
+    emulator = Path(pe.__file__).read_text(encoding="utf-8")
+    loss = emulator.split('if fault == "lost_before_commit":', 1)[1].split("return", 1)[0]
+    assert "raise httpx.ReadError" in loss, "after the rollback, the response is lost"
+    source = Path(fi.__file__).read_text(encoding="utf-8")
+    assert "lambda f: f, atomic=True)" in source, "the rest_rpc route is the atomic one"
+    scenarios = source.split("    def scenarios(", 1)[1].split("\n    # Route", 1)[0]
+    assert scenarios.index("if atomic:") < scenarios.index('observe("S10"')
+    assert 'faulted("lost_before_commit", fresh())' in scenarios
