@@ -1,6 +1,41 @@
 # STATE
 
-Updated: 2026-10-03 (E3-A YES and E3-B 30 DAYS ruled; the signing-key helper and the repaired runbook). **Production
+Updated: 2026-10-03 (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
+**Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe
+rollback target is 17c9c053.**
+- **The owner's message (2026-10-03), verbatim:** "SWITCHED. Verify HF secret metadata by NAME only, Space
+  RUNNING/health/build-info, and startup logs read-only; never read secret values or generate analysis traffic.
+  Treat the least-privilege writer as NOT_YET_LIVE_PROVEN until the next natural USER_REQUESTED persistence receipt
+  proves SAVED as ucpe_api_writer. Do not wait idle for that receipt: continue the highest-value safe UCPE roadmap
+  work and record the cutover state accurately."
+- **Verified read-only, 2026-10-03T12:57Z** (evidence .work/e3_cutover, sealed; no analysis traffic; no secret value
+  read):
+  - **the HF secret NAMES**, names only: SUPABASE_PUBLISHABLE_KEY and SUPABASE_WRITER_JWT are PRESENT;
+    SUPABASE_SERVICE_ROLE_KEY is kept, because the rollback target uses it;
+  - the Space is RUNNING at a2de125f; /healthcheck 200 OK; /v1/build-info 200 UCPE-PROD-WA-20261003-A;
+  - **the run logs:** the container started at 12:49:33Z, after the secret changes (the WA deploy was 10:49:56Z).
+    Uvicorn's startup completed at 12:49:38Z, with no Traceback or error line. Since then: 0 persistence_receipt
+    and 0 analysis_completed events.
+- **LEAST_PRIVILEGE_WRITER = CONFIGURED, NOT_YET_LIVE_PROVEN.**
+  - **What proves it, passively:** the next natural USER_REQUESTED analysis whose persistence_receipt is SAVED, in a
+    container that has both secrets.
+    - With both set, the writer sends the pair (apikey = the publishable key; Authorization = the writer JWT). It
+      has no service-role fallback. PostgREST runs the request as the token's role, ucpe_api_writer.
+    - The receipt's repository field is only the class name. So the proof is that SAVED plus this code path. The
+      Supabase API logs (the owner's side) show the role too.
+  - **If the receipt is NOT_SAVED or COMMIT_UNKNOWN:** the owner deletes SUPABASE_WRITER_JWT, and the service-role
+    writer is back.
+  - **The token's expiry:** 30 days after the owner minted it, between #202's merge (11:58Z) and the restart
+    (12:49Z), so 2026-11-02 between 11:58Z and 12:49Z. The owner's mint printed the exact time. Renew by
+    2026-10-30 (the runbook's step 5).
+- **The helper and the runbook: MERGED** (#202 → 38b9860b).
+  - PR checks 6/6, including the privilege rehearsal's J1 with the helper's own builder.
+  - Push CI 37121324613 and the reproducible build 37121324647: both success.
+  - Auto mode refused `gh pr create` ([Data Exfiltration]); the owner ran the one Run action.
+- **Next (Claude), while the receipt is awaited:** the highest-value safe roadmap item, prepared only (no credential,
+  no database write, no workflow switch). It is the privilege design's resolver cutover: G1, critical, because the
+  hourly resolver runs as the table owner.
+Previously (E3-A YES and E3-B 30 DAYS ruled; the signing-key helper and the repaired runbook). **Production
 is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe rollback target is
 17c9c053.**
 - **The owner's ruling (2026-10-03), verbatim:** "CONTINUE CURRENT. E3-A YES; E3-B 30 DAYS. Before asking the owner
@@ -1177,7 +1212,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): E3-A YES and E3-B 30 days are ruled. The signing-key helper and the repaired
+LOOP_STATE=IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privilege writer is CONFIGURED,
+  NOT_YET_LIVE_PROVEN (verified read-only at 12:57Z; .work/e3_cutover). Claude confirms the first natural receipt
+  passively and meanwhile prepares the resolver cutover (G1). No owner action is pending.
+  Before it: AT THE OWNER (2026-10-03): E3-A YES and E3-B 30 days are ruled. The signing-key helper and the repaired
   runbook are in this record's PR (no real key or token was created). Next is the owner's credential switch
   (docs/runbooks/WRITER_CUTOVER.md), by one owner card.
   Before it: AT THE OWNER (2026-10-03): UCPE-PROD-WA-20261003-A is RELEASED and its chain is complete (R 4130a6cd). Next is
@@ -2865,7 +2903,9 @@ LOOP_STATE=AT THE OWNER (2026-10-03): E3-A YES and E3-B 30 days are ruled. The s
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). Next,
+  prepared only: the resolver cutover (G1).
+  Before it: PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
   owner's credential switch is next. Production is unchanged (a2de125f).
   Before it: PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-PROD-WA-20261003-A; R 4130a6cd). The writer
   saves the whole core bundle in one transaction.
@@ -2994,7 +3034,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/e3-writer-signing-key-helper (this record; worktree lanes24/helper).
+CURRENT_BRANCH=chore/state-e3-switched (this record; worktree lanes24/state_cutover).
+  Before it: feat/e3-writer-signing-key-helper (#202 → 38b9860b; worktree lanes24/helper).
   Before it: chore/state-wa-released (#201 → 4f970785; worktree lanes23/state_rel).
   - Merged: release/prod-wa (#199 → D a2de125f) and release/prod-wa-repin (#200 → R 4130a6cd).
   Before it: chore/state-s26-e3-merged (#198 → a6f881c9; worktree lanes23/state).
@@ -3101,7 +3142,9 @@ CURRENT_BRANCH=feat/e3-writer-signing-key-helper (this record; worktree lanes24/
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=4f970785 (main, PR #201: the WA STATE record and the runbook). Push CI success (run 37118661804);
+LAST_GREEN_SHA=38b9860b (main, PR #202: the signing-key helper and the runbook). Push CI success (run
+  37121324613); reproducibility success (run 37121324647).
+  Before it: 4f970785 (main, PR #201: the WA STATE record and the runbook). Push CI success (run 37118661804);
   reproducibility success (run 37118661825).
   Before it: 4130a6cd (main = R, the WA re-pin, over D a2de125f, deployed). The guard PASS on R (run 37118169873).
   Before it: a2de125f (D). Push CI 37116841080; reproducibility 37116841053.
@@ -3309,7 +3352,9 @@ LAST_GREEN_SHA=4f970785 (main, PR #201: the WA STATE record and the runbook). Pu
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR, on
+LAST_VERIFY=PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at
+  38b9860b, in its clean worktree lanes24/state_cutover, before its push).
+  Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#202, on
   4f970785, in its clean worktree lanes24/helper, before its push).
   - The first run failed one test, the repository's no-silent-skips rule: the Node check had a skipif. Node is already
     required (the frontend tests run it), so the check is now unconditional. The rerun passed.
@@ -3561,7 +3606,11 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=E3's credential switch (2026-10-03): the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md), by one
+OWNER_BOUNDARY=None open now (2026-10-03). The switch is done ("SWITCHED"); its live proof is passive.
+  - Owner reminders: renew SUPABASE_WRITER_JWT by 2026-10-30, before the 2026-11-02 expiry; keep
+    SUPABASE_SERVICE_ROLE_KEY until D6.
+  - Standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD), WB3 (with S8), E2 (deferred).
+  Before it: E3's credential switch (2026-10-03): the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md), by one
   owner card. E3-A YES and E3-B 30 days are ruled (verbatim in the header).
   Before it: E3's credential switch (2026-10-03):
   - E3-A: approve the plan;
@@ -4102,7 +4151,12 @@ OWNER_BOUNDARY=E3's credential switch (2026-10-03): the owner's secret steps (do
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the credential switch (docs/runbooks/WRITER_CUTOVER.md; the owner card). E3-A and E3-B are ruled.
+NEXT_ACTION=Claude, in this order:
+  - confirm the first natural USER_REQUESTED persistence_receipt passively (bounded log reads only). SAVED makes the
+    writer LIVE_PROVEN as ucpe_api_writer;
+  - meanwhile, the resolver cutover (G1), prepared only: no credential, no database write, no workflow switch;
+  - never create verification traffic; never ask for, read or print a key or token.
+  Before it: The owner: the credential switch (docs/runbooks/WRITER_CUTOVER.md; the owner card). E3-A and E3-B are ruled.
   - Then Claude: confirm passively that the next natural persistence_receipt is SAVED as ucpe_api_writer.
   - Every 30 days: the owner mints a new token (the runbook's step 5) and replaces SUPABASE_WRITER_JWT.
   - Throughout: never create verification traffic; never ask for, read or print a key or token.
