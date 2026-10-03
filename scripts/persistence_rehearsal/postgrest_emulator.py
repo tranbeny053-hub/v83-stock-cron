@@ -14,6 +14,10 @@ executes an RPC:
 The writer's other requests (the timeframe result, provider and news rows, and on the W-B path
 the run summary and the detail) lie outside the bundles: they are acknowledged (201), not stored.
 
+Reads: exactly the two that WB3's read_core_strict sends are answered from the scratch database, as
+service_role, in their PostgREST shapes (analysis_runs by run_id=eq., predictions by
+prediction_id=in.()). Any other GET answers 404.
+
 Faults, each for the next RPC request only:
 - "feature_snapshot": the scratch-only trigger pers0_fault.fail_feature_snapshot raises inside the
   RPC's transaction, after the prediction row was written;
@@ -85,9 +89,48 @@ class PostgrestEmulator:
         self.url = url
         self.fault = fault
         self.rpc_requests = 0
+        self.reads = 0
         self.answers: list[dict[str, Any]] = []
 
+    def _read(self, request: httpx.Request) -> httpx.Response | None:
+        """read_core_strict's two GETs, from the scratch database; None for any other request."""
+
+        params = dict(request.url.params)
+        table = request.url.path.removeprefix("/rest/v1/")
+        shapes = {
+            "analysis_runs": ({"select", "run_id", "limit"}, "run_id,analysis_hash"),
+            "predictions": ({"select", "prediction_id"}, "prediction_id"),
+        }
+        if request.method != "GET" or table not in shapes or set(params) != shapes[table][0]:
+            return None
+        if params["select"] != shapes[table][1]:
+            return None
+        import psycopg
+
+        with psycopg.connect(self.url) as connection, connection.cursor() as cursor:
+            cursor.execute("SET LOCAL ROLE service_role")
+            if table == "analysis_runs":
+                cursor.execute(
+                    "SELECT run_id, analysis_hash FROM public.analysis_runs WHERE run_id = %s"
+                    " LIMIT 1",
+                    (params["run_id"].removeprefix("eq."),),
+                )
+                rows = [{"run_id": run, "analysis_hash": digest} for run, digest in cursor]
+            else:
+                listed = params["prediction_id"].removeprefix("in.(").removesuffix(")")
+                ids = [item.strip('"') for item in listed.split(",") if item]
+                cursor.execute(
+                    "SELECT prediction_id FROM public.predictions WHERE prediction_id = ANY(%s)",
+                    (ids,),
+                )
+                rows = [{"prediction_id": prediction} for (prediction,) in cursor]
+        self.reads += 1
+        return httpx.Response(200, json=rows)
+
     def __call__(self, request: httpx.Request) -> httpx.Response:
+        read = self._read(request)
+        if read is not None:
+            return read
         sql = RPC_SQLS.get(request.url.path)
         if sql is None:
             return httpx.Response(201 if request.method == "POST" else 404)

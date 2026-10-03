@@ -17,6 +17,7 @@ from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
     select_market_data,
 )
+from crypto_probability_engine.api import commit_reconciliation as _reconciliation
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
@@ -770,9 +771,91 @@ def _best_effort_persist(
         confirmation = _persist_work_confirmed(work, repository)
     except Exception as exc:
         _emit_persistence_receipt(work, repository, started, None, type(exc).__name__)
+        if work.prediction_rows:
+            _reconcile_unknown_commits(work, repository, RECEIPT_COMMIT_UNKNOWN)
         raise
     _emit_persistence_receipt(work, repository, started, confirmation, None)
+    _reconcile_unknown_commits(work, repository, confirmation.receipt)
     return confirmation.background_status
+
+
+# WB3's R-1a: the unknown commits awaiting one strict read. Identities only, never a payload, so
+# nothing here pretends durability (§8.1); what the process does not live to read stays
+# COMMIT_UNKNOWN, honestly. S8 (the owner's Option 1): a NOT_SAVED is never retried.
+_UNKNOWN_COMMITS = _reconciliation.UnknownCommits()
+_UNKNOWN_COMMITS_LOCK = threading.Lock()
+
+
+def _reconcile_unknown_commits(
+    work: PersistenceWork, repository: PersistenceRepository | None, receipt: str | None
+) -> None:
+    """R-1a (WB3): reconcile COMMIT_UNKNOWN by one strict read. Never raises; changes no status.
+
+    A COMMIT_UNKNOWN joins the bounded list. After a SAVED receipt (the store answers), each
+    pending identity is read with the repository's read_core_strict, oldest first: only the
+    database's answer decides it, and an unreadable store ends the round. Each final decision is
+    a persistence_reconciled event. A repository without read_core_strict never takes part.
+    """
+
+    read = getattr(repository, "read_core_strict", None)
+    if not callable(read):
+        return
+    try:
+        now = time.monotonic()
+        if receipt == RECEIPT_COMMIT_UNKNOWN:
+            pending = _reconciliation.unknown_commit(work.run_summary, work.prediction_rows, now)
+            if pending is None:
+                return
+            with _UNKNOWN_COMMITS_LOCK:
+                evicted = _UNKNOWN_COMMITS.add(pending)
+            if evicted is not None:
+                expired = _reconciliation.Decision(
+                    RECEIPT_COMMIT_UNKNOWN, _reconciliation.RECONCILE_EXPIRED, final=True
+                )
+                _emit_reconciled(evicted, repository, expired, reads=0)
+            return
+        if receipt != RECEIPT_SAVED:
+            return
+        with _UNKNOWN_COMMITS_LOCK:
+            due = _UNKNOWN_COMMITS.due()
+        for pending in due:
+            answer = read(pending.run_id, pending.prediction_ids)
+            stored = (
+                _reconciliation.UNREADABLE if not isinstance(answer, dict)
+                else _reconciliation.StoredCore(
+                    run=answer.get("run"),
+                    prediction_ids=frozenset(answer.get("prediction_ids") or ()),
+                )
+            )
+            decision = _reconciliation.decide(pending, stored, now=now)
+            with _UNKNOWN_COMMITS_LOCK:
+                _UNKNOWN_COMMITS.apply(pending, decision)
+            if decision.final:
+                _emit_reconciled(pending, repository, decision, reads=1)
+            if isinstance(stored, _reconciliation.Unreadable):
+                return
+    except Exception:
+        return
+
+
+def _emit_reconciled(
+    pending: _reconciliation.UnknownCommit,
+    repository: PersistenceRepository | None,
+    decision: _reconciliation.Decision,
+    *,
+    reads: int,
+) -> None:
+    try:
+        emit(
+            "persistence_reconciled",
+            run_id=pending.run_id,
+            repository=type(repository).__name__ if repository is not None else None,
+            receipt=decision.receipt,
+            receipt_reason=decision.reason,
+            attempts=pending.attempts + reads,
+        )
+    except Exception:
+        return
 
 
 def _emit_persistence_event(
