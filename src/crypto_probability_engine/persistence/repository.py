@@ -2376,6 +2376,49 @@ class SupabaseRestRepository:
             if isinstance(row, Mapping) and str(row.get("run_id")) in matching_ids
         ][:limit]
 
+    def read_core_strict(
+        self, run_id: str, prediction_ids: Sequence[str]
+    ) -> dict[str, Any] | None:
+        """WB3's R-1a: the database's own answer for one forecast bundle, or None (unreadable).
+
+        Unlike get_run, it NEVER answers from the in-memory mirror. An open circuit, a failed or a
+        malformed read is None, so a reconciliation can only rest on the database. The answer is
+        {"run": {"run_id", "analysis_hash"} or None, "prediction_ids": the expected ids stored}.
+        """
+
+        ids = [str(prediction_id) for prediction_id in prediction_ids if prediction_id]
+
+        def read() -> tuple[Any, Any]:
+            runs = self._request(
+                "GET",
+                "analysis_runs",
+                params={"select": "run_id,analysis_hash", "run_id": f"eq.{run_id}", "limit": "1"},
+            )
+            found = self._request(
+                "GET",
+                "predictions",
+                params={"select": "prediction_id", "prediction_id": f"in.({_postgrest_csv(ids)})"},
+            ) if ids else []
+            return runs, found
+
+        status, answer = self._run_rest(read)
+        if status == "UNAVAILABLE" or answer is None:
+            return None
+        runs, found = answer
+        if not isinstance(runs, list) or not isinstance(found, list) or len(runs) > 1:
+            return None
+        if not all(isinstance(row, Mapping) for row in (*runs, *found)):
+            return None
+        run = runs[0] if runs else None
+        return {
+            "run": None if run is None else {
+                "run_id": run.get("run_id"), "analysis_hash": run.get("analysis_hash"),
+            },
+            "prediction_ids": sorted(
+                {str(row["prediction_id"]) for row in found if row.get("prediction_id")}
+            ),
+        }
+
     def get_run(self, run_id: str) -> dict | None:
         status, rows = self._run_rest(
             lambda: self._request(
