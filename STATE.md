@@ -1,6 +1,115 @@
 # STATE
 
-Updated: 2026-10-03 (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
+Updated: 2026-10-03 (UCPE-PROD-R1A-20261003-A RELEASED; G1 LIVE_PROVEN; #206 closes here). **Production is D 6f4420a9 /
+UCPE-PROD-R1A-20261003-A. The guard is HEALTHY at that pin (R d4c25f2a). The rollback target is a2de125f (WA).**
+- **The owner's rulings (2026-10-03), verbatim:**
+  - "CONTINUE CURRENT — Opus 5 XHIGH. Owner rulings: WB3/R-1a AUTHORIZED for the exact pinned crossing only: add
+    `read_core_strict(run_id, prediction_ids)` to persistence/repository.py with no in-memory fallback, returning only
+    the database answer or unreadable; re-pin the evaluator and wire it into analysis_service.py. S8 = Option 1: honest
+    NOT_SAVED during the open-circuit/outage window; no payload retry, no durable outbox, no new HF dataset/secret."
+  - "CONTINUE CURRENT. #210 is green at exact head 7c7f2d2e80d430bd8811570d5b1272e4305c6572. Merge it on that exact
+    head under standing authorization and treat its merge commit as D; freeze main at D." (then the pre-deploy chain,
+    and the one-click T4).
+- **R-1a: MERGED and LIVE.** #209 → 12ffb727.
+  - read_core_strict is the authorized pinned crossing; the evaluator re-pin went 23c176a5… → ea5d8052….
+  - The reconciler lives in analysis_service.py, with the persistence_reconciled event.
+  - PERS-0 C6 PASS through read_core_strict (run 37138983552); mutation 20/20; S8 = Option 1.
+- **The release chain** (.work/release_r1a/CHAIN.md, sealed):
+  - identity #210 → D 6f4420a9 (main was frozen at D until the deploy);
+  - push CI 37139929799 and the reproducible build 37139929766: both success;
+  - the guard on D, 37139946098: PASS 8/8, delta [analysis_service.py, build_info.py];
+  - rollback findings, target a2de125f (WA): 5/5;
+  - the re-pin precomputed ×2: 67a9223f;
+  - the preflight: 9/9, digest 4130a48c…, byte-identical to the independent diff.
+- **The owner's T4 is CONSUMED:** a fresh preflight 9/9, then DEPLOY=PASS: a2de125..6f4420a, with no force. Never rerun.
+- **After the deploy:**
+  - SETTLE=PASS: RUNNING at D after 1 poll (17:25:16Z); health 200; build-info R1A; D's frontend bytes; the F1 probe
+    401 CREDENTIAL_REQUIRED;
+  - ROLLBACK_CHECK=PASS 7/7: target a2de125f, no migration after it;
+  - re-pin #211 → R d4c25f2a, equal to the precomputed 67a9223f (push CI 37140995581 (success));
+  - the guard on R: run 37141007416, GUARD_VERIFY=PASS, pin == live == 6f4420a9, delta [].
+- **The owner's rollback command** (a T4, never automatic):
+  `git push --force-with-lease=refs/heads/main:6f4420a9e9b7f027deeaff92a53d6cbeab56b5f8 hf
+  a2de125ffa449cd6f5ec452e4a7a3335286eb413:refs/heads/main`. WA saves through the least-privilege pair.
+- **G1: LIVE_PROVEN** (.work/g1_cutover/G1_PROOF.md, sealed). The natural scheduled run 37139970258 at D showed
+  "resolver credential: UCPE_RESOLVER_DB_URL", "resolver_identity role=ucpe_resolver", and success.
+  - This PR closes #206: the fallback removal, C4, C4-PIN. It merges after the deploy, because main was frozen at D.
+  - Rebased onto main, the evaluator pin now combines C4-PIN and R-1a: closure 7097afd2….
+- **E3: still NOT_YET_LIVE_PROVEN.** No natural USER_REQUESTED analysis yet (the R1A container started 17:24:55Z).
+- **D6: B's first condition is met** (the next release is live). It stays PREPARED until E3 is live-proven and the
+  production inventory is clean; then freeze and apply.
+- **Next:** C4's Environment steps (the owner card; docs/runbooks/OWNER_URL_ENVIRONMENT.md); E3, read passively.
+Previously (G1 SET by the owner: the resolver's own login is CONFIGURED, NOT_YET_LIVE_PROVEN; C4 prepared; the D6 design
+note). **Production code was then unchanged: D a2de125f / UCPE-PROD-WA-20261003-A (R 4130a6cd).**
+- **The owner's message (2026-10-03), verbatim:** "G1 SET. Verify the new GitHub secret by NAME only, never value. G1
+  remains CONFIGURED/NOT_YET_LIVE_PROVEN until the next natural scheduled Resolve Prediction Outcomes run uses current
+  main and proves: resolver credential=UCPE_RESOLVER_DB_URL, resolver_identity role=ucpe_resolver, terminal SUCCESS.
+  Do not manually dispatch resolver traffic just to prove it. While waiting, continue the highest-value safe UCPE
+  roadmap work; do not yield merely because the scheduled proof is pending. E3 writer also remains
+  NOT_YET_LIVE_PROVEN until a natural USER_REQUESTED SAVED receipt."
+- **Verified by name, 15:07Z** (.work/g1_cutover, sealed): UCPE_RESOLVER_DB_URL is PRESENT (created 15:03:32Z), and
+  SUPABASE_DB_URL (the owner URL) is still present.
+  - No resolver run on current main yet: the last was at 12:34Z, at 38b9860b.
+  - GitHub's schedule is irregular: 06:33Z and 12:34Z today.
+- **G1 = CONFIGURED, NOT_YET_LIVE_PROVEN.** The proof is the next natural scheduled run on current main showing
+  "resolver credential: UCPE_RESOLVER_DB_URL", "resolver_identity role=ucpe_resolver" and a terminal SUCCESS. No
+  manual dispatch.
+- **Merged since:**
+  - #203 (STATE) and #204 (G1 prep) → main 7d07b87;
+  - #205 → main 70a03e4 (push CI 37131173306 and the reproducible build 37131173329, both success). The identity
+    line now names only ucpe_* roles, OTHER otherwise, because this repository's Actions logs are public. No
+    resolver run had used #204's unmasked line.
+- **This PR, a DRAFT until G1's proof:**
+  - **G1 completed:** the resolver job connects only with UCPE_RESOLVER_DB_URL, and the workflow no longer
+    references secrets.SUPABASE_DB_URL. That is the design's "remove the resolver from the owner secret's users".
+  - **C4 prepared:** the 13 dispatch-only workflows that use the owner URL declare `environment:
+    production-db-owner`. Behavior is unchanged until the owner configures it (docs/runbooks/OWNER_URL_ENVIRONMENT.md).
+    A test pins the invariant.
+  - **One named exception, C4-PIN:** section-5a-evaluation.yml is on the evaluator pin, so its change needs the
+    owner's authorization.
+- **The D6 design note: SEALED** (.work/roadmap/phase3/d6/D6_DESIGN.md, sha fdbe2ff5…; read-only).
+  - The decision: D6 versus the rollback target 17c9c053, which writes as service_role.
+  - Recommended, B: D6 only after the next release, so that the rollback target itself uses the pair.
+- **E3 is still NOT_YET_LIVE_PROVEN:** 0 natural analyses since the 12:49Z restart (checked 15:29Z).
+- **The owner's rulings (2026-10-03), verbatim:** "CONTINUE CURRENT — Opus 5 XHIGH. Rulings: C4-PIN YES; add only the
+  production-db-owner environment line to section-5a-evaluation.yml and re-pin it, but do not merge #206 until G1
+  natural-run PASS. D6 timing=B after the next release; scope=six core evidence tables + two bundle functions, keep
+  SELECT and revoke write/EXECUTE, with deterministic inventory proving no omitted core write surface before freeze.
+  Continue all safe prep; no manual resolver dispatch."
+- **C4-PIN, done in this PR:**
+  - section-5a-evaluation.yml gains only `environment: production-db-owner`;
+  - the evaluator pin is re-pinned: closure 23c176a5… → e1ff5f54…. Only the digest changed, the 69 pinned files are
+    the same, and the red tests are untouched;
+  - 511 evaluation and workflow tests pass. All 14 dispatch-only users of the owner URL are now in the Environment.
+- **D6: ruled B** (after the next release). Scope: the six core evidence tables and the two bundle functions; keep
+  SELECT, revoke write and EXECUTE.
+  - **Its package is MERGED, prepared only:** #207 → main 1a0bfdd4 (the owner's "merge it if exact head is still
+    c0dc6e8e…"; push CI and the reproducible build both success).
+  - **What it holds:** the draft of migration 0018 and its rollback (scripts/privilege_rehearsal/), and
+    scripts/core_write_inventory.py, a deterministic, catalog-only, READ ONLY inventory. Its kinds are T, C, O, F,
+    V, R, G and K, run with --expect before or --expect after.
+  - **The privilege rehearsal's D1-D4 PASS** on PostgREST v14.18 and v16.4 (run 37135065108):
+    - the inventory finds exactly the revoke set, and every planted surface is caught;
+    - after the draft no surface remains, SELECT stays, and PostgREST refuses with 42501;
+    - the catalog changes by exactly the revoked entries, and the writer SAVES;
+    - UP018 on a second application; the rollback is exact.
+  - **Application stays BLOCKED** until B's conditions hold, in order: the next release, E3 live-proven, a clean
+    production inventory, then freeze and apply. The production inventory needs an owner-dispatched read-only
+    route. It belongs in D6's freeze package (the inventory before freeze, then the one-shot apply with the
+    inventory after), not before.
+- **WB3/S8 (the owner: "WB3/S8 durable recovery/reconciliation design and deterministic local tests where
+  dependency-safe"):**
+  - **The design: SEALED** (.work/roadmap/phase3/wb3_s8/WB3_S8_DESIGN.md, sha fa58bd24…).
+    - R-1a: since W-A, one strict read decides an unknown commit. That is the run as sent (run_id, analysis_hash)
+      plus every forecast prediction. Identities only, no payload, no pretended durability.
+    - S8, recommended: option 1, accept the honest NOT_SAVED (CIRCUIT_OPEN) for now. The alternatives are
+      in-memory replay, or a durable outbox in an independent failure domain such as a private HF dataset.
+  - **#208:** the model (api/commit_reconciliation.py, unwired) and 18 deterministic tests; PERS-0's new fault
+    lost_before_commit, its scenario S10 and its criterion C6, a gate on rest_rpc.
+  - **R-1a's wiring needs the owner:** a strict read in the pinned persistence/repository.py. Today
+    SupabaseRestRepository.get_run falls back to its in-memory mirror, which could falsely confirm a commit. The
+    wiring then ships with the next release.
+Previously (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
 **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe
 rollback target is 17c9c053.**
 - **The owner's message (2026-10-03), verbatim:** "SWITCHED. Verify HF secret metadata by NAME only, Space
@@ -1232,7 +1341,12 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN
+LOOP_STATE=AT THE OWNER (2026-10-03): UCPE-PROD-R1A-20261003-A is RELEASED and its chain is complete (R d4c25f2a). G1 is
+  LIVE_PROVEN, and #206 closes with this record. The owner's next step is C4's Environment (a card). E3 is read passively;
+  D6 stays PREPARED.
+  Before it: IN PROGRESS (2026-10-03): G1 SET. G1 and E3 each await a natural proof, read passively. This record's PR
+  (a draft) completes G1 and prepares C4. It merges after G1's proof, by an owner Run action if Auto refuses.
+  Before it: AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN
   (verified read-only at 12:57Z; .work/e3_cutover; 0 natural receipts at 13:32Z). G1 is PREPARED (#204, R1 PASS ×2).
   The owner has one Run action (merge #203 and #204), then G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md).
   Before it: IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privilege writer is CONFIGURED,
@@ -2926,7 +3040,11 @@ LOOP_STATE=AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). The
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9; R d4c25f2a); G1 LIVE_PROVEN; E3 CONFIGURED,
+  NOT_YET_LIVE_PROVEN; C4 merged (the owner configures the Environment); D6 PREPARED (B: release live).
+  Before it: PHASE 3 (2026-10-03): the writer (E3) and the resolver (G1) cutovers are CONFIGURED,
+  NOT_YET_LIVE_PROVEN. C4 is prepared; D6 is designed.
+  Before it: PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). The
   resolver cutover (G1) is PREPARED (#204); its credential steps are the owner's.
   Before it: PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
   owner's credential switch is next. Production is unchanged (a2de125f).
@@ -3057,7 +3175,10 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YE
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-e3-switched (this record; worktree lanes24/state_cutover).
+CURRENT_BRANCH=feat/g1-remove-owner-fallback (this record, #206; worktree lanes24/nofallback), rebased after the deploy.
+  Merged since: #209 (R-1a), #210 (identity → D), #211 (re-pin → R).
+  Before it: fix/g1-mask-owner-role (#205 → 70a03e4); feat/g1-resolver-cutover-prep (#204); chore/state-e3-switched
+  (#203).
   Before it: feat/e3-writer-signing-key-helper (#202 → 38b9860b; worktree lanes24/helper).
   Before it: chore/state-wa-released (#201 → 4f970785; worktree lanes23/state_rel).
   - Merged: release/prod-wa (#199 → D a2de125f) and release/prod-wa-repin (#200 → R 4130a6cd).
@@ -3165,7 +3286,10 @@ CURRENT_BRANCH=chore/state-e3-switched (this record; worktree lanes24/state_cuto
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=38b9860b (main, PR #202: the signing-key helper and the runbook). Push CI success (run
+LAST_GREEN_SHA=d4c25f2a (main = R, the R1A re-pin, over D 6f4420a9, deployed). Push CI 37140995581 (success). The guard PASS on R (run 37141007416).
+  Before it: 70a03e4 (main, PR #205: the identity line names only UCPE's roles). Push CI success (run 37131173306);
+  reproducibility success (run 37131173329).
+  Before it: 38b9860b (main, PR #202: the signing-key helper and the runbook). Push CI success (run
   37121324613); reproducibility success (run 37121324647).
   Before it: 4f970785 (main, PR #201: the WA STATE record and the runbook). Push CI success (run 37118661804);
   reproducibility success (run 37118661825).
@@ -3375,7 +3499,11 @@ LAST_GREEN_SHA=38b9860b (main, PR #202: the signing-key helper and the runbook).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at
+LAST_VERIFY=PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR,
+  with C4-PIN and the re-pin, in its clean worktree lanes24/nofallback, before its push). Before it: the code at e9777a6, in its clean worktree lanes24/nofallback; this STATE commit adds docs only).
+  - The first run failed the secrets scanner on the new test's constant named SECRET. It was renamed, and the scanner
+    was not narrowed.
+  Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#203, at
   38b9860b, in its clean worktree lanes24/state_cutover, before its push).
   Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#202, on
   4f970785, in its clean worktree lanes24/helper, before its push).
@@ -3629,7 +3757,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Two owner steps (2026-10-03), batched:
+OWNER_BOUNDARY=C4's Environment steps (2026-10-03; docs/runbooks/OWNER_URL_ENVIRONMENT.md): create production-db-owner
+  (required reviewer: the owner; main only), add its SUPABASE_DB_URL secret, then delete the repository secret.
+  The R1A deploy T4 is consumed. Standing items: E3's natural proof (passive), D6 (B: E3 proven + a clean production
+  inventory), the H2 hold, B5's DEGRADED half, D3, D4, E2.
+  Before it: None until G1's proof (2026-10-03). C4-PIN and D6 are ruled (verbatim in the header). Then, batched:
+  - one Run action that merges this record's PR (G1 completed, C4 with C4-PIN), only after the G1 natural-run PASS;
+  - later: C4's Environment steps (docs/runbooks/OWNER_URL_ENVIRONMENT.md); D6's freeze after the next release;
+  - open: WB3's pinned crossing (one strict read method in persistence/repository.py) and the S8 option (1
+    recommended).
+  Before it: Two owner steps (2026-10-03), batched:
   - one Run action: merge #203 (this record) and #204 (G1), each on its exact head after its checks, then fast-forward
     the main checkout. Auto mode refused Claude's merge;
   - G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md): the login SQL in the SQL Editor (the T4: the role gets its
@@ -4179,7 +4316,15 @@ OWNER_BOUNDARY=Two owner steps (2026-10-03), batched:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the Run action (merge #203 and #204), then G1's secret steps. Then Claude:
+NEXT_ACTION=The owner: C4's Environment steps. Claude, read passively with no dispatch: E3's first natural USER_REQUESTED
+  SAVED receipt (and any persistence_reconciled event). Then D6's freeze package once E3 is proven: the production
+  inventory route (read-only, in production-db-owner), the inventory with --expect before, then 0018's one-shot route.
+  Before it: Claude, read passively, with no dispatch:
+  - G1: the next natural scheduled resolver run on current main must show "resolver credential:
+    UCPE_RESOLVER_DB_URL", "resolver_identity role=ucpe_resolver" and SUCCESS. Then mark this PR ready, for the owner's
+    merge;
+  - E3: the first natural USER_REQUESTED SAVED receipt.
+  Before it: The owner: the Run action (merge #203 and #204), then G1's secret steps. Then Claude:
   - confirm G1 from the next hourly resolver run's log: "resolver credential: UCPE_RESOLVER_DB_URL" and
     "resolver_identity role=ucpe_resolver", with the run succeeding. Then a small PR removes the fallback;
   - confirm the first natural USER_REQUESTED persistence_receipt passively (bounded log reads only). SAVED makes the

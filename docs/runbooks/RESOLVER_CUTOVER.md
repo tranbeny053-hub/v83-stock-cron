@@ -72,13 +72,13 @@ Do step 3 before step 4. Until the secret exists, the resolver keeps using the o
   - `resolver credential: UCPE_RESOLVER_DB_URL`;
   - `resolver_identity role=ucpe_resolver`;
   - a run that succeeds.
-- **If that run fails:** delete the secret `UCPE_RESOLVER_DB_URL`. The resolver is back on the owner
-  URL at the next run. Then tell Claude.
+- **If a run fails as `ucpe_resolver`:** tell Claude. The fallback to the owner URL is removed (see
+  below), so going back means reverting that change; deleting the secret alone stops the resolver.
 
 ## Afterwards
 
-- **Once runs pass as `ucpe_resolver`,** a small workflow change removes the fallback. From then on
-  the resolver job never receives the owner URL.
+- **The fallback is removed.** After the first run passed as `ucpe_resolver`, the workflow connects
+  only with `UCPE_RESOLVER_DB_URL`, and the resolver job never receives the owner URL.
 - **Later (C4),** the owner URL moves into a protected GitHub Environment, used only by the
   dispatch-only apply, audit and evaluation workflows.
 - **To rotate the password:** remove the two files from `~/ucpe-keys`, then repeat steps 1 to 5.

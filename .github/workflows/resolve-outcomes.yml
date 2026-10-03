@@ -36,18 +36,16 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      # G1 (the privilege design's resolver cutover): the resolver's own ucpe_resolver login once
-      # the owner adds the secret UCPE_RESOLVER_DB_URL; the owner URL, SUPABASE_DB_URL, until then.
-      # Only the secret's NAME is ever printed.
+      # G1 (the privilege design's resolver cutover): the resolver connects only with its own
+      # ucpe_resolver login, UCPE_RESOLVER_DB_URL. The owner URL is never given to this job.
       - name: Validate resolver configuration
         env:
-          SUPABASE_DB_URL: ${{ secrets.UCPE_RESOLVER_DB_URL || secrets.SUPABASE_DB_URL }}
-          RESOLVER_CREDENTIAL: ${{ secrets.UCPE_RESOLVER_DB_URL != '' && 'UCPE_RESOLVER_DB_URL' || 'SUPABASE_DB_URL' }}
+          SUPABASE_DB_URL: ${{ secrets.UCPE_RESOLVER_DB_URL }}
         run: |
           set -euo pipefail
-          echo "resolver credential: ${RESOLVER_CREDENTIAL}"
+          echo "resolver credential: UCPE_RESOLVER_DB_URL"
           if [ -z "${SUPABASE_DB_URL}" ]; then
-            echo "UCPE_RESOLVER_DB_URL or SUPABASE_DB_URL repository secret is required."
+            echo "UCPE_RESOLVER_DB_URL repository secret is required."
             exit 1
           fi
           case "${RESOLVER_LIMIT}" in
@@ -63,7 +61,7 @@ jobs:
 
       - name: Run outcome resolver
         env:
-          SUPABASE_DB_URL: ${{ secrets.UCPE_RESOLVER_DB_URL || secrets.SUPABASE_DB_URL }}
+          SUPABASE_DB_URL: ${{ secrets.UCPE_RESOLVER_DB_URL }}
         run: |
           set -euo pipefail
           python scripts/resolve_outcomes.py --limit "${RESOLVER_LIMIT}" | tee resolver-output.txt

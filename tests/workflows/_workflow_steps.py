@@ -38,7 +38,10 @@ GITHUB_SHELL_INVOCATIONS: dict[str | None, tuple[str, ...]] = {
 _STEP_KEYS = frozenset(
     {"name", "id", "if", "uses", "with", "run", "shell", "env", "timeout-minutes"}
 )
-_JOB_KEYS = frozenset({"name", "runs-on", "timeout-minutes", "env", "steps", "if", "permissions"})
+# "environment" gates secrets and approvals (C4); it changes no step's env or shell.
+_JOB_KEYS = frozenset(
+    {"name", "runs-on", "environment", "timeout-minutes", "env", "steps", "if", "permissions"}
+)
 # Keys that change how or whether a failure surfaces, or where a step runs. Unsupported on purpose.
 _REFUSED_KEYS = frozenset(
     {"defaults", "continue-on-error", "working-directory", "strategy", "container", "services"}
