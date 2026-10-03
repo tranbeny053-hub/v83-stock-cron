@@ -8,6 +8,7 @@ SHA pins and job timeouts are enforced for every workflow by test_workflow_actio
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,8 +38,18 @@ def test_it_runs_on_pull_requests_only_with_a_read_only_token_and_no_secret() ->
 
 
 def test_the_database_is_every_migration_production_has_applied() -> None:
+    # A migration authored on main but not yet applied (the registry's explicit "applied_run":
+    # null, 0018 until the owner's T4) is not production's state, so it stays out.
+    registry = json.loads((ROOT / "ops/release/releases.json").read_text(encoding="utf-8"))
+    unapplied = {
+        migration["id"]
+        for migration in registry["migrations_applied"]
+        if "applied_run" in migration and migration["applied_run"] is None
+    }
     every = sorted(
-        path.relative_to(ROOT).as_posix() for path in (ROOT / "migrations").glob("*.sql")
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "migrations").glob("*.sql")
+        if path.name[:4] not in unapplied
     )
     assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0017.sql"' in TEXT
     assert every[-1] == "migrations/0017_forecast_bundle_rpc.sql", "update the bundle name"
