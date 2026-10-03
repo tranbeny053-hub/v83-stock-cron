@@ -322,6 +322,7 @@ def test_the_workflow_runs_on_pull_requests_only_with_a_read_only_token_and_no_s
     assert "permissions:\n  contents: read\n" in WORKFLOW
     for path in (
         "scripts/privilege_rehearsal/**",
+        "scripts/core_write_inventory.py",  # D1-D4 run the inventory
         "migrations/**",
         "src/crypto_probability_engine/persistence/**",
         "src/crypto_probability_engine/automation/**",

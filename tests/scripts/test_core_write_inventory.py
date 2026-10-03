@@ -54,10 +54,15 @@ def test_every_query_reads_catalogs_only(kind: str) -> None:
 
 def test_the_inventory_runs_read_only_and_never_prints_the_url() -> None:
     source = (ROOT / "scripts/core_write_inventory.py").read_text()
-    main = source.split("def main(", 1)[1]
-    assert main.index("cursor.execute(READ_ONLY_SQL)") < main.index("collect(")
-    assert "connection.rollback()" in main and "print(url" not in main and "{url" not in main
-    assert inventory.READ_ONLY_SQL == "SET TRANSACTION READ ONLY"
+    read = source.split("def read_inventory(", 1)[1].split("\ndef ", 1)[0]
+    assert read.index("for statement in GUARD_STATEMENTS") < read.index("collect(")
+    assert "finally:\n            connection.rollback()" in read
+    assert inventory.GUARD_STATEMENTS[0] == (
+        "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+    )
+    for leak in ("print(url", "{url", "print(database_url", "{database_url"):
+        assert leak not in source, leak
+    assert inventory.READ_ONLY_SQL == "SET TRANSACTION READ ONLY"  # the privilege rehearsal's D1-D4
 
 
 def _report(**surfaces: list[list[str]]) -> dict:
@@ -116,10 +121,14 @@ def test_an_unknown_expectation_is_refused() -> None:
         inventory.verdict(_report(), "sometimes")
 
 
-def test_without_a_url_the_inventory_refuses(monkeypatch, capsys) -> None:
-    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
-    assert inventory.main(["--expect", "before"]) == 2
-    assert "REFUSED: SUPABASE_DB_URL is not set" in capsys.readouterr().err
+def test_the_inventory_refuses_without_its_token_and_its_attested_runtime(capsys) -> None:
+    """The route's details are in test_core_write_inventory_route.py."""
+
+    assert inventory.main(["--mode=inventory", "--expect=before"], environ={}) == 2
+    assert "--confirm must be exactly" in capsys.readouterr().err
+    confirmed = ["--mode=inventory", "--expect=before", f"--confirm={inventory.CONFIRMATION}"]
+    assert inventory.main(confirmed, environ={}) == 2
+    assert "--wheelhouse is required" in capsys.readouterr().err
 
 
 def _tables(sql: str) -> list[str]:

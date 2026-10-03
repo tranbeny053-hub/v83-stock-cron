@@ -1,0 +1,75 @@
+name: Core-write inventory rehearsal (scratch PostgreSQL, no secrets)
+
+# Proves, BEFORE the inventory route can merge, that every catalog query runs on a real PostgreSQL
+# and that the inventory catches every planted write surface and nothing else. It builds a scratch
+# database on the runner from the real migrations plus one planted surface per kind, connects as a
+# role with NO privilege on any core table, and runs scripts/core_write_inventory.py
+# --mode=rehearse. It references no secret and touches no real database. The job is named `test`
+# so the owner-authorized merge procedure waits for it.
+
+"on":
+  pull_request:
+    paths:
+      - scripts/core_write_inventory.py
+      - scripts/core_write_inventory_rehearsal/**
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - .github/workflows/core-write-inventory.yml
+      - .github/workflows/core-write-inventory-rehearsal.yml
+      - migrations/0001_init.sql
+      - migrations/0002_news.sql
+      - migrations/0003_prediction_ledger.sql
+      - migrations/0004_prediction_outcomes.sql
+      - migrations/0005_prediction_feature_snapshots.sql
+      - migrations/0006_prediction_derivatives_snapshots.sql
+      - migrations/0007_prediction_origin.sql
+      - migrations/0008_analysis_run_details.sql
+      - migrations/0009_section_5a_evaluation_seal.sql
+      - migrations/0010_legacy_table_security.sql
+      - migrations/0011_prediction_target_provenance.sql
+      - migrations/0012_prediction_resolution_status.sql
+      - migrations/0013_automation_radar_ledger.sql
+      - migrations/0014_core_evidence_invariants.sql
+      - migrations/0015_prediction_bundle_rpc.sql
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse the inventory on a scratch local PostgreSQL built from the migrations
+        shell: bash
+        env:
+          INVENTORY_REHEARSAL_URL: "postgresql:///inventory_rehearsal?host=/var/run/postgresql"
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createdb inventory_rehearsal
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -d inventory_rehearsal -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          cat scripts/migration_0013_rehearsal/00_supabase_like_roles.sql scripts/migration_0013_rehearsal/01_supabase_like_grants.sql scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql scripts/core_write_inventory_rehearsal/90_planted_surfaces.sql > "$RUNNER_TEMP/inventory_rehearsal.sql"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner=postgres -d inventory_rehearsal -f - < "$RUNNER_TEMP/inventory_rehearsal.sql"
+          PYTHONPATH=src python scripts/core_write_inventory.py --mode=rehearse --report=inventory-rehearsal-report.json
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: inventory-rehearsal-report
+          path: inventory-rehearsal-report.json
+          if-no-files-found: warn

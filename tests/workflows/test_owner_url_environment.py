@@ -36,7 +36,7 @@ def _users() -> dict[str, str]:
 def test_only_dispatch_only_workflows_may_use_the_owner_url() -> None:
     users = _users()
     assert "resolve-outcomes.yml" not in users, "G1: the resolver has its own login"
-    assert len(users) == 14
+    assert len(users) == 15  # 14 -> 15: D6's read-only core-write inventory
     for name, text in users.items():
         assert set(TRIGGER.findall(text)) == {"workflow_dispatch"}, name
 
