@@ -1,15 +1,15 @@
--- P3-PRIV-R: the DRAFT of migration 0016, Phase 3's least-privilege roles (governing plan §8.2: "separate
--- migration/runtime/jobs authority"). The design is .work/roadmap/phase3/PRIVILEGE_AUDIT_AND_DESIGN.md
--- (C1-C3, option W2) with its Correction 01.
+-- Phase 3: the least-privilege roles (governing plan §8.2, "separate migration/runtime/jobs authority").
 --
--- NOT A MIGRATION. This file lives outside migrations/, so no route applies it to a real database, and
--- release check 5c ignores it. scripts/privilege_rehearsal/rehearse.py applies it ONLY to a scratch
--- PostgreSQL on a CI runner. If the owner approves the scope (E1), migration 0016 becomes these bytes
--- under its own one-shot apply route (a T4).
+-- AUTHORED, NOT APPLIED. Applying this is a T4 action that needs owner authorization. It goes
+-- through its own one-shot route, scripts/apply_migration_0016.py. The bulk scripts/apply_migrations.py
+-- applies EVERY migration and must never be used for it.
 --
--- It runs as the tables' owner, in one transaction (the caller's). The applying role needs CREATEROLE
--- (Supabase's postgres has it) or SUPERUSER, and must own the bundle RPC. A second application is
--- refused before any change.
+-- THE RULING. The owner ruled E1 = YES, option W2, on 2026-10-03. The design is
+-- .work/roadmap/phase3/PRIVILEGE_AUDIT_AND_DESIGN.md with its Correction 01: the Space's direct
+-- Postgres also serves the live F1/UOR credential registry and ledger, so its role keeps exactly what
+-- they need. Everything below the header is byte-for-byte what P3-PRIV-R rehearsed. That rehearsal ran
+-- production's own code under each role, behind a real PostgREST (v14.18 and v16.4), with criteria
+-- P1-P8 (scripts/privilege_rehearsal/rehearse.py).
 --
 -- THE ROLES. Every one is NOINHERIT, and none has SUPERUSER, CREATEDB, CREATEROLE, REPLICATION or
 -- BYPASSRLS:
@@ -18,15 +18,25 @@
 -- - ucpe_bundle_owner (NOLOGIN): owns the bundle RPC, which now runs SECURITY DEFINER as it (W2). So the
 --   runtime has no direct INSERT path to core evidence.
 -- - ucpe_space_db (NOLOGIN until the owner's credential step): the Space's direct Postgres. That is the
---   calibration endpoint, the skill-evidence refresh, and the live F1/UOR credential registry and ledger.
+--   calibration endpoint, the skill-evidence refresh, and the live F1/UOR registry (SELECT) and ledger
+--   (SELECT, INSERT, UPDATE).
 -- - ucpe_resolver (NOLOGIN until the owner's credential step): the hourly resolver.
 --
 -- THE GRANTS. Every grant has a matching permissive policy for the same role and command. Row-level
 -- security stays on everywhere, so every other role stays denied.
 --
 -- NOTHING EXISTING IS REVOKED. service_role, anon and authenticated keep exactly what they hold, so the
--- live writer keeps working (step D6 narrows service_role later). The bundle RPC changes owner and
--- becomes SECURITY DEFINER, and its body is unchanged.
+-- live writer keeps working (P6; step D6 narrows service_role later). The bundle RPC changes owner and
+-- becomes SECURITY DEFINER. Its body, its fixed search_path and service_role's EXECUTE are unchanged.
+--
+-- APPLYING IT:
+-- - It runs as the tables' owner, in the route's single transaction.
+-- - The applying role needs CREATEROLE (Supabase's postgres has it) or SUPERUSER, and must own the
+--   bundle RPC. PostgreSQL 16 or later is needed, for the GRANT ... WITH INHERIT/SET options.
+-- - A second application is refused before any change (SQLSTATE UP016). The route refuses one even
+--   earlier, as "not a first apply".
+-- - The rollback is a separate T4, never automatic: scripts/privilege_rehearsal/rollback_0016.sql. P8
+--   proves it restores the catalog exactly.
 
 DO $$
 BEGIN

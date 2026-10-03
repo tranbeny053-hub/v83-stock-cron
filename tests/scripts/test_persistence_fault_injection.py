@@ -209,7 +209,8 @@ def test_only_known_routes_can_be_required() -> None:
 def _route(**changes: Any) -> dict[str, Any]:
     report = {
         "criteria": fi.verdicts(_ideal()),
-        "privileges": {"expected": {"security_invoker": True, "execute_for_service_role": True}},
+        "privileges": {"expected": {"security_definer_of_ucpe_bundle_owner": True,
+                                    "execute_for_service_role": True}},
         "refusals": {"expected": {"anon_refused_42501": True, "refusals_write_nothing": True}},
     }
     report.update(changes)
@@ -223,9 +224,9 @@ def test_a_required_route_must_pass_every_criterion_privilege_and_refusal() -> N
     # A conflict acknowledged OK is refused by C3, and its SAVED receipt is false (C5).
     assert fi.unmet_requirements({"rest_rpc": _route(criteria=failing)}, ["rest_rpc"]) == [
         "rest_rpc.C3", "rest_rpc.C5"]
-    weak = _route(privileges={"expected": {"security_invoker": False}})
+    weak = _route(privileges={"expected": {"security_definer_of_ucpe_bundle_owner": False}})
     assert fi.unmet_requirements({"rest_rpc": weak}, ["rest_rpc"]) == [
-        "rest_rpc.privileges.security_invoker"]
+        "rest_rpc.privileges.security_definer_of_ucpe_bundle_owner"]
     leaky = _route(refusals={"expected": {"refusals_write_nothing": False}})
     assert fi.unmet_requirements({"rest_rpc": leaky}, ["rest_rpc"]) == [
         "rest_rpc.refusals.refusals_write_nothing"]

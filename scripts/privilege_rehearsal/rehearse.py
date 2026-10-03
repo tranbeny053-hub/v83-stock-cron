@@ -4,8 +4,9 @@
 The design is .work/roadmap/phase3/PRIVILEGE_AUDIT_AND_DESIGN.md (C1-C3, option W2) with its
 Correction 01.
 
-The draft (draft_0016_least_privilege_roles.sql) is applied here as the tables' owner, which holds
-CREATEROLE without SUPERUSER, as Supabase's postgres does. Production's OWN code then runs under
+Migration 0016 (migrations/0016_least_privilege_roles.sql, its reviewed bytes; owner ruling E1 =
+YES, W2) is applied here as the tables' owner, which holds CREATEROLE without SUPERUSER, as
+Supabase's postgres does. Production's OWN code then runs under
 each narrow role:
 - **the REST runtime** (the analysis service's persistence and SupabaseRestRepository) runs as
   ucpe_api_writer, through a real PostgREST with a scratch writer JWT. That is how the live Space
@@ -37,7 +38,7 @@ Criteria, each PASS or FAIL in the report (--require-all makes every one a gate)
   - anon, authenticated and service_role hold exactly what they held;
   - anon and authenticated are still denied;
   - the live service_role writer still persists through PostgREST (SAVED).
-- P7 ONE_SHOT: a second application of the draft is refused and changes nothing.
+- P7 ONE_SHOT: a second application of migration 0016 is refused and changes nothing.
 - P8 ROLLBACK: the rollback restores the pre-draft catalog exactly, and the service_role writer
   still persists (SAVED).
 
@@ -86,8 +87,9 @@ for _path in (ROOT, ROOT / "src"):
     sys.path.insert(0, str(_path))
 
 HERE = Path(__file__).resolve().parent
-DRAFT = HERE / "draft_0016_least_privilege_roles.sql"
-ROLLBACK = HERE / "rollback_draft_0016.sql"
+# Migration 0016 itself (the bytes its one-shot route pins), and its rollback.
+DRAFT = ROOT / "migrations" / "0016_least_privilege_roles.sql"
+ROLLBACK = HERE / "rollback_0016.sql"
 DRAFT_0017 = HERE / "draft_0017_forecast_bundle_rpc.sql"
 ROLLBACK_0017 = HERE / "rollback_draft_0017.sql"
 SCHEMA_VERSION = "privilege-rehearsal.v1"
@@ -151,7 +153,7 @@ POLICY_COMMANDS = ("SELECT", "INSERT", "UPDATE", "DELETE")
 SEARCH_PATH = ["search_path=pg_catalog, pg_temp"]
 
 _UPSERTED = frozenset({"SELECT", "INSERT", "UPDATE"})
-# The design, and nothing else (the draft's comments give each line's reason).
+# The design, and nothing else (migration 0016's comments give each line's reason).
 EXPECTED_TABLES: dict[str, dict[str, frozenset[str]]] = {
     "ucpe_api_writer": {
         "analysis_runs": _UPSERTED,
@@ -1494,7 +1496,7 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
     if applied is not None:
         return {
             "criteria": {
-                name: verdict([f"the draft did not apply: {applied}"]) for name in CRITERIA
+                name: verdict([f"migration 0016 did not apply: {applied}"]) for name in CRITERIA
             },
             "server_version_num": version,
             "owner": owner,
@@ -1616,12 +1618,12 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "schema_version": SCHEMA_VERSION,
         "scope": (
-            "the DRAFT of migration 0016 (Phase 3's least-privilege roles: design C1-C3 with W2"
-            " and Correction 01), on scratch PostgreSQL built from migrations 0001-0015, behind a"
-            " real PostgREST"
+            "migration 0016 (Phase 3's least-privilege roles: design C1-C3 with W2 and"
+            " Correction 01) and the DRAFT of migration 0017, on scratch PostgreSQL built from"
+            " migrations 0001-0015, behind a real PostgREST"
         ),
         "postgrest_version": os.environ.get("PRIVILEGE_REHEARSAL_POSTGREST_VERSION"),
-        "draft_sha256": hashlib.sha256(DRAFT.read_bytes()).hexdigest(),
+        "migration_0016_sha256": hashlib.sha256(DRAFT.read_bytes()).hexdigest(),
         "rollback_sha256": hashlib.sha256(ROLLBACK.read_bytes()).hexdigest(),
         **result,
     }
