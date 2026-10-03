@@ -116,10 +116,13 @@ ROUTE_LEGACY = "legacy"
 STORE_ACTIVE = "active"
 STORE_ABSENT = "absent"
 STORE_ERROR = "error"
-# G1: the role the run's database connections use, printed by name (never a credential).
+# G1: the role the run's database connections use. Only UCPE's own least-privilege roles are named
+# (the repository's logs are public); any other role, the owner's included, prints as OTHER.
 ROLE_NOT_APPLICABLE = "n/a"
 ROLE_ERROR = "error"
+ROLE_OTHER = "OTHER"
 _ROLE_NAME = re.compile(r"[a-z_][a-z0-9_]{0,62}")
+_UCPE_ROLE = re.compile(r"ucpe_[a-z0-9_]{1,58}")
 
 _RESOLVED = rq_v1.OUTCOME_RESOLVED  # "resolved"
 # How far one row's attempt got. When the attempt raises, the stage names the failure's reason.
@@ -197,10 +200,11 @@ def build_status_store(
 
 
 def connected_role(store: StatusStore | None) -> str:
-    """The role of the run's status-store connections (current_user), by name only.
+    """The role of the run's status-store connections (current_user), masked unless it is UCPE's.
 
-    G1's cutover evidence: ucpe_resolver once the owner's credential is in place, the table owner
-    before. n/a without a status store; error when it cannot be read or is not a plain role name.
+    G1's cutover evidence: ucpe_resolver once the owner's credential is in place; OTHER before (the
+    owner URL's role is never named). n/a without a status store; error when it cannot be read or
+    is not a plain role name.
     """
 
     identify = getattr(store, "connected_role", None)
@@ -210,7 +214,9 @@ def connected_role(store: StatusStore | None) -> str:
         role = identify()
     except Exception:
         return ROLE_ERROR
-    return role if isinstance(role, str) and _ROLE_NAME.fullmatch(role) else ROLE_ERROR
+    if not isinstance(role, str) or not _ROLE_NAME.fullmatch(role):
+        return ROLE_ERROR
+    return role if _UCPE_ROLE.fullmatch(role) else ROLE_OTHER
 
 
 def resolve_due_predictions(
