@@ -1,6 +1,24 @@
 # STATE
 
-Updated: 2026-10-03 (RCPT RELEASED). **THE THREE-STATE RECEIPTS AND W-B ARE LIVE. Production is D 17c9c053 /
+Updated: 2026-10-03 (W-A REHEARSED and merged; WB1 is now evidence-backed). **Production is unchanged: D 17c9c053 /
+UCPE-PROD-RCPT-20261003-A, guard HEALTHY. Main is 53e83537.**
+- **W-A, the whole §8.1 core bundle in ONE transaction: REHEARSED** (#190 → 53e83537; evidence
+  .work/roadmap/phase3/pr190, sealed).
+  - **The draft of migration 0017** (scripts/privilege_rehearsal/, outside migrations/):
+    public.save_forecast_bundle. It inserts or compares the run (on every column but persistence_status) and the
+    detail, then calls 0015's unchanged save_prediction_bundle. Any refusal rolls back the run and the detail.
+    - It is SECURITY DEFINER, owned by ucpe_bundle_owner (W2), with INSERT and SELECT only (never UPDATE).
+    - EXECUTE: the writer and, until D6, service_role.
+  - **Criteria W1-W9, all PASS on PostgREST v14.18 and v16.4** (P1-P8 unchanged, PASS):
+    - W2: all four parts stored in one call; W3: an identical replay changes nothing;
+    - W4 and W5: run and detail conflicts refused, with nothing written;
+    - W6: a CHECK failure inside, or a refusal inside 0015, keeps nothing, the run and the detail included;
+    - W7: 22023;
+    - W8: every caller but the writer refused;
+    - W9: one-shot (UP017), and the rollback is exact.
+  - **Static mutation:** 12/12.
+  - **WB1 now means:** promote this rehearsed draft to migration 0017 (after 0016, with the same §2.6 crossing as E4).
+Previously (RCPT RELEASED). **THE THREE-STATE RECEIPTS AND W-B ARE LIVE. Production is D 17c9c053 /
 UCPE-PROD-RCPT-20261003-A. The guard is HEALTHY at that pin (R 06e4733e). The H2-safe rollback target is f046140b.**
 - **The chain** (evidence .work/release_rcpt, sealed; CHAIN.md):
   - STATE #186 → ac7cd4a1;
@@ -2751,7 +2769,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCP
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-rcpt-released (this record; worktree lanes21/state_rel).
+CURRENT_BRANCH=chore/state-wa-rehearsed (this record; worktree lanes21/state_wa).
+  - Merged: feat/phase3-wa-rehearsal (#190 → 53e83537).
+  Before it: chore/state-rcpt-released (#189 → cb5d50d8; worktree lanes21/state_rel).
   - Merged: release/prod-rcpt (#187 → D 17c9c053) and release/prod-rcpt-repin (#188 → R 06e4733e).
   Before it: chore/state-phase3-rehearsed (#186 → ac7cd4a1; worktree lanes21/state_p3b).
   - Merged: feat/phase3-privilege-rehearsal (#184 → 84280b6c) and feat/phase3-wider-core-receipt (#185).
@@ -2847,7 +2867,10 @@ CURRENT_BRANCH=chore/state-rcpt-released (this record; worktree lanes21/state_re
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=06e4733e (main = R, the RCPT re-pin, over D 17c9c053, deployed). Push CI success (run 37098315075); the guard
+LAST_GREEN_SHA=53e83537 (main, PR #190: W-A rehearsed). Push CI success (run 37100317594); reproducibility success (run
+  37100317641). Production is unchanged (D 17c9c053).
+  Before it: cb5d50d8 (main, PR #189). Push CI 37099614461; reproducibility 37099614519.
+  Before it: 06e4733e (main = R, the RCPT re-pin, over D 17c9c053, deployed). Push CI success (run 37098315075); the guard
   PASS on R (run 37098323783).
   Before it: 99908969 (main, PR #185: W-B). Push CI success (run 37059683889); reproducibility success (run
   37059683937).
@@ -3291,7 +3314,7 @@ OWNER_BOUNDARY=Phase 3 decisions (2026-10-03), batched:
   - E2: the role behind the Space's DB_URL, OWNER or OTHER (never its value);
   - E3: the credential plan;
   - E4: the §2.6 crossing of repository.py and settings.py;
-  - WB1: W-A (migration 0017 plus §2.6);
+  - WB1: W-A, now rehearsed (promote draft 0017 to migration 0017, plus §2.6);
   - WB3: R-1 with S8;
   - and the standing items: the H2 hold, B5's DEGRADED half, D3, D4.
   - The RCPT T4 deploy is consumed (the owner's Run action, 2026-10-03T04:47:03Z).
