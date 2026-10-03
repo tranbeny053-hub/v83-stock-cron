@@ -41,6 +41,20 @@ Criteria, each PASS or FAIL in the report (--require-all makes every one a gate)
 - P8 ROLLBACK: the rollback restores the pre-draft catalog exactly, and the service_role writer
   still persists (SAVED).
 
+W-A (draft_0017_forecast_bundle_rpc.sql, on top of the applied 0016, before P8): plan §8.1's whole
+core bundle (the run identity, the detail, the prediction and its snapshots) in one transaction,
+called through PostgREST as ucpe_api_writer with production-built rows:
+- W1 CATALOG: the definer function, its EXECUTE list, its owner's exact matrix (insert and read,
+  never update) and policies.
+- W2 SAVED: a new bundle stores all four parts. W3 REPLAY: identical, and nothing changes.
+- W4 and W5: a different run or detail under a stored run is refused, and nothing is written.
+- W6 ATOMIC: a failure inside, or a refusal inside 0015's function, keeps none of it, the run and
+  the detail included.
+- W7 MALFORMED: an unknown key, or another run's prediction, fails with 22023 and writes nothing.
+- W8 CALLERS: anon, and every role but the writer, are refused.
+- W9 ONE_SHOT and ROLLBACK: a second application is refused (UP017), and the rollback restores the
+  post-0016 catalog exactly.
+
 Runs ONLY against a CI runner's scratch PostgreSQL and the PostgREST started there. It refuses to
 run beside any production variable, and it names no secret: its passwords and its JWT key are
 scratch values that live for one run.
@@ -74,8 +88,30 @@ for _path in (ROOT, ROOT / "src"):
 HERE = Path(__file__).resolve().parent
 DRAFT = HERE / "draft_0016_least_privilege_roles.sql"
 ROLLBACK = HERE / "rollback_draft_0016.sql"
+DRAFT_0017 = HERE / "draft_0017_forecast_bundle_rpc.sql"
+ROLLBACK_0017 = HERE / "rollback_draft_0017.sql"
 SCHEMA_VERSION = "privilege-rehearsal.v1"
-CRITERIA = ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8")
+# P1-P8: the roles (draft 0016). W1-W9: the whole core bundle in one transaction (draft 0017).
+CRITERIA = (
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7",
+    "P8",
+    "W1",
+    "W2",
+    "W3",
+    "W4",
+    "W5",
+    "W6",
+    "W7",
+    "W8",
+    "W9",
+)
+WIDE_CRITERIA = tuple(name for name in CRITERIA if name.startswith("W"))
 REST_BASE = "https://rehearsal.invalid"
 OPERATOR = "privrehearsal"
 FORBIDDEN_ENVIRONMENT = ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
@@ -1097,6 +1133,302 @@ def criterion_unchanged(
     return verdict(failures, denied=denied, service_role_receipt=confirmation.receipt)
 
 
+# ------------------------------------------------------------------------- W-A, draft 0017
+
+
+WIDE_FUNCTION = "public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)"
+# W2: what the wider function's body writes, for its narrow owner: insert and read, never update.
+WIDE_OWNER_TABLES = {
+    **EXPECTED_TABLES["ucpe_bundle_owner"],
+    "analysis_runs": frozenset({"SELECT", "INSERT"}),
+    "analysis_run_details": frozenset({"SELECT", "INSERT"}),
+}
+WIDE_EXECUTE = {
+    "ucpe_api_writer": True,
+    "service_role": True,
+    "anon": False,
+    "authenticated": False,
+    "public": False,
+    "ucpe_space_db": False,
+    "ucpe_resolver": False,
+}
+CORE_TABLES = (
+    "analysis_runs",
+    "analysis_run_details",
+    "predictions",
+    "prediction_feature_snapshots",
+)
+
+
+def wide_expected_policies() -> set[tuple[str, str, str]]:
+    return expected_policies() | {
+        (table, "ucpe_bundle_owner", command)
+        for table in ("analysis_runs", "analysis_run_details")
+        for command in ("SELECT", "INSERT")
+    }
+
+
+def wide_bundle_body() -> dict:
+    """One full analysis's core bundle, as the client after W-A would send it: production's rows."""
+
+    from crypto_probability_engine.persistence.repository import _prediction_row_with_origin
+
+    work, _ = analysis_work()
+    return {
+        "p_run": dict(work.run_summary),
+        "p_prediction": _prediction_row_with_origin(work.prediction_rows[0]),
+        "p_feature_snapshot": dict(work.feature_snapshot_rows[0]),
+        "p_derivatives_snapshot": None,
+        "p_run_detail": dict(work.run_detail_row),
+    }
+
+
+def renamed(body: dict, suffix: str, *, new_run: bool) -> dict:
+    """The same bundle under a fresh prediction id (and, with new_run, a fresh run id)."""
+
+    run_id = f"{body['p_run']['run_id']}_{suffix}" if new_run else body["p_run"]["run_id"]
+    prediction_id = f"{run_id}:{suffix}"
+    return {
+        "p_run": {**body["p_run"], "run_id": run_id},
+        "p_prediction": {**body["p_prediction"], "run_id": run_id, "prediction_id": prediction_id},
+        "p_feature_snapshot": {
+            **body["p_feature_snapshot"],
+            "run_id": run_id,
+            "prediction_id": prediction_id,
+        },
+        "p_derivatives_snapshot": None,
+        "p_run_detail": {**body["p_run_detail"], "run_id": run_id},
+    }
+
+
+def answer_of(**parts: str | None) -> dict:
+    keys = ("run", "run_detail", "prediction", "feature_snapshot", "derivatives_snapshot")
+    return {**{key: parts.get(key) for key in keys}, "refused": parts.get("refused", False)}
+
+
+def criteria_wide_bundle(
+    db: Database, version: int, call: Callable[..., Any], raw: Callable[..., Any]
+) -> dict[str, dict[str, Any]]:
+    """W1-W8 on the applied draft 0017. W9 (its rollback) is judged by the caller."""
+
+    out: dict[str, dict[str, Any]] = {}
+
+    def guarded(name: str, phase: Callable[[], dict[str, Any]]) -> None:
+        out[name] = _guarded(phase)
+
+    def w1() -> dict[str, Any]:
+        failures: list[str] = []
+        expected = {**EXPECTED_TABLES, "ucpe_bundle_owner": WIDE_OWNER_TABLES}
+        failures += matrix_differences(
+            held(db, NEW_ROLES, table_privileges(version)), expected, NEW_ROLES, TABLES
+        )
+        row = db.owner(
+            "SELECT o.rolname, p.prosecdef, p.proconfig FROM pg_catalog.pg_proc p"
+            " JOIN pg_catalog.pg_roles o ON o.oid = p.proowner"
+            f" WHERE p.oid = '{WIDE_FUNCTION}'::pg_catalog.regprocedure"
+        )[0]
+        if row[0] != "ucpe_bundle_owner" or row[1] is not True or list(row[2] or []) != SEARCH_PATH:
+            failures.append(
+                f"the wider RPC is {row}, not SECURITY DEFINER owned by ucpe_bundle_owner"
+            )
+        execute = {
+            role: bool(
+                db.owner(
+                    "SELECT pg_catalog.has_function_privilege(%s, %s, 'EXECUTE')",
+                    (role, WIDE_FUNCTION),
+                )[0][0]
+            )
+            for role in WIDE_EXECUTE
+        }
+        failures += [
+            f"EXECUTE for {role} is {execute[role]}"
+            for role in WIDE_EXECUTE
+            if execute[role] != WIDE_EXECUTE[role]
+        ]
+        update = bool(
+            db.owner(
+                "SELECT pg_catalog.has_column_privilege('ucpe_bundle_owner',"
+                " 'public.analysis_runs',"
+                " 'persistence_status', 'UPDATE')"
+            )[0][0]
+        )
+        if update:
+            failures.append("ucpe_bundle_owner may update analysis_runs")
+        found: set[tuple[str, str, str]] = set()
+        for table, _name, _permissive, roles, command, _qual, _check in (
+            db.owner(SNAPSHOT_SQL["policies"]) or []
+        ):
+            names = [n for n in roles.strip("{}").split(",") if n in NEW_ROLES]
+            if names:
+                found.add((table, names[0], command))
+        wanted = wide_expected_policies()
+        failures += [f"missing policy {item}" for item in sorted(wanted - found)]
+        failures += [f"extra policy {item}" for item in sorted(found - wanted)]
+        owned = sorted(
+            row[0] for row in db.owner(SNAPSHOT_SQL["functions_owned_by_new_roles"]) or []
+        )
+        if owned != [
+            "save_forecast_bundle(jsonb,jsonb,jsonb,jsonb,jsonb)",
+            "save_prediction_bundle(jsonb,jsonb,jsonb)",
+        ]:
+            failures.append(f"functions owned by the new roles: {owned}")
+        return verdict(failures, execute=execute, policies=len(found))
+
+    guarded("W1", w1)
+    body = wide_bundle_body()
+
+    def core_rows(bundle: dict) -> dict[str, int]:
+        run_id = bundle["p_run"]["run_id"]
+        prediction_id = bundle["p_prediction"]["prediction_id"]
+        return {
+            "analysis_runs": db.count("analysis_runs", run_id=run_id),
+            "analysis_run_details": db.count("analysis_run_details", run_id=run_id),
+            "predictions": db.count("predictions", prediction_id=prediction_id),
+            "prediction_feature_snapshots": db.count(
+                "prediction_feature_snapshots", prediction_id=prediction_id
+            ),
+        }
+
+    def w2() -> dict[str, Any]:
+        status, answer = call("ucpe_api_writer", body)
+        rows = core_rows(body)
+        expected = answer_of(
+            run="INSERTED",
+            run_detail="INSERTED",
+            prediction="INSERTED",
+            feature_snapshot="INSERTED",
+        )
+        failures = [] if (status, answer) == (200, expected) else [f"answered {status} {answer}"]
+        failures += [f"{table} not stored" for table, count in rows.items() if count != 1]
+        return verdict(failures, status=status, answer=answer, rows=rows)
+
+    def w3() -> dict[str, Any]:
+        before = db.counts()
+        status, answer = call("ucpe_api_writer", body)
+        expected = answer_of(
+            run="IDENTICAL_DUPLICATE",
+            run_detail="IDENTICAL_DUPLICATE",
+            prediction="IDENTICAL_DUPLICATE",
+            feature_snapshot="IDENTICAL_DUPLICATE",
+        )
+        failures = [] if (status, answer) == (200, expected) else [f"answered {status} {answer}"]
+        if db.counts() != before:
+            failures.append("the identical replay changed rows")
+        return verdict(failures, status=status, answer=answer)
+
+    def refusal(bundle: dict, expected: dict) -> dict[str, Any]:
+        before = db.counts()
+        status, answer = call("ucpe_api_writer", bundle)
+        failures = [] if (status, answer) == (200, expected) else [f"answered {status} {answer}"]
+        if db.counts() != before:
+            failures.append("a refused bundle changed rows")
+        return verdict(failures, status=status, answer=answer)
+
+    def w4() -> dict[str, Any]:
+        conflicting = renamed(body, "w4", new_run=False)
+        conflicting["p_run"]["analysis_hash"] = "sha256:" + "f" * 64
+        return refusal(conflicting, answer_of(run="CONFLICT", refused=True))
+
+    def w5() -> dict[str, Any]:
+        conflicting = renamed(body, "w5", new_run=False)
+        conflicting["p_run_detail"]["detail_payload"] = {
+            **body["p_run_detail"]["detail_payload"],
+            "privrehearsal": "a different detail",
+        }
+        return refusal(
+            conflicting,
+            answer_of(run="IDENTICAL_DUPLICATE", run_detail="CONFLICT", refused=True),
+        )
+
+    def w6() -> dict[str, Any]:
+        failures: list[str] = []
+        before = db.counts()
+        # A failure inside the transaction: the feature snapshot breaks CHECK (feature_count >= 0).
+        broken = renamed(body, "w6", new_run=True)
+        broken["p_feature_snapshot"]["feature_count"] = -1
+        status, answer = call("ucpe_api_writer", broken)
+        if 200 <= status < 300:
+            failures.append(f"a failing bundle was answered {status} {answer}")
+        # A refusal inside 0015's function: a new run whose prediction id is stored, other content.
+        refused_inside = renamed(body, "w6b", new_run=True)
+        refused_inside["p_prediction"] = {
+            **body["p_prediction"],
+            "run_id": refused_inside["p_run"]["run_id"],
+        }
+        refused_inside["p_feature_snapshot"] = {
+            **body["p_feature_snapshot"],
+            "run_id": refused_inside["p_run"]["run_id"],
+        }
+        inner_status, inner_answer = call("ucpe_api_writer", refused_inside)
+        expected = answer_of(
+            run="NOT_KEPT", run_detail="NOT_KEPT", prediction="CONFLICT", refused=True
+        )
+        if (inner_status, inner_answer) != (200, expected):
+            failures.append(f"the inner refusal answered {inner_status} {inner_answer}")
+        for bundle in (broken, refused_inside):
+            run_id = bundle["p_run"]["run_id"]
+            for table in ("analysis_runs", "analysis_run_details"):
+                if db.count(table, run_id=run_id):
+                    failures.append(f"{table} kept a row of the failed bundle {run_id[-8:]}")
+        if db.counts() != before:
+            failures.append("a failed bundle changed rows")
+        return verdict(failures, failure_status=status, inner=[inner_status, inner_answer])
+
+    def w7() -> dict[str, Any]:
+        failures: list[str] = []
+        before = db.counts()
+        unknown = renamed(body, "w7a", new_run=True)
+        unknown["p_run"]["not_a_column"] = 1
+        stray = renamed(body, "w7b", new_run=True)
+        stray["p_prediction"]["run_id"] = "privrehearsal_another_run"
+        outcomes = {}
+        for name, bundle in (("unknown key", unknown), ("another run's prediction", stray)):
+            status, answer = call("ucpe_api_writer", bundle)
+            outcomes[name] = [
+                status,
+                (answer or {}).get("code") if isinstance(answer, dict) else None,
+            ]
+            if not (400 <= status < 500 and outcomes[name][1] == "22023"):
+                failures.append(f"{name} answered {status} {answer}")
+        if db.counts() != before:
+            failures.append("a malformed bundle changed rows")
+        return verdict(failures, outcomes=outcomes)
+
+    def w8() -> dict[str, Any]:
+        failures: list[str] = []
+        before = db.counts()
+        outcomes: dict[str, Any] = {}
+        for role in (None, "ucpe_space_db", "ucpe_resolver"):
+            status, code = raw(
+                role, "POST", "rpc/save_forecast_bundle", {}, renamed(body, "w8", new_run=True)
+            )
+            outcomes[f"REST as {role or 'anon'}"] = [status, code]
+            if 200 <= status < 300:
+                failures.append(f"REST as {role or 'anon'} was served ({status})")
+        for role in ("ucpe_space_db", "ucpe_resolver"):
+            sqlstate = db.attempt(
+                db.login_url(role), "SELECT public.save_forecast_bundle('{}'::jsonb, '{}'::jsonb)"
+            )
+            outcomes[f"SQL as {role}"] = sqlstate
+            if sqlstate != "42501":
+                failures.append(f"SQL as {role} answered {sqlstate}")
+        if db.counts() != before:
+            failures.append("a refused caller changed rows")
+        return verdict(failures, outcomes=outcomes)
+
+    for name, phase in (
+        ("W2", w2),
+        ("W3", w3),
+        ("W4", w4),
+        ("W5", w5),
+        ("W6", w6),
+        ("W7", w7),
+        ("W8", w8),
+    ):
+        guarded(name, phase)
+    return out
+
+
 # ------------------------------------------------------------------------- the run
 
 
@@ -1135,6 +1467,22 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
         except (ValueError, AttributeError):
             code = None
         return response.status_code, code
+
+    def call(role: str, body: dict) -> tuple[int, Any]:
+        """The wider RPC, called as PostgREST serves it, with a JWT naming the role."""
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {mint_jwt(role, jwt_key)}",
+        }
+        with gateway_client(postgrest_url) as client:
+            response = client.post(
+                f"{REST_BASE}/rest/v1/rpc/save_forecast_bundle", headers=headers, json=body
+            )
+        try:
+            return response.status_code, response.json() if response.content else None
+        except ValueError:
+            return response.status_code, None
 
     version = server_version_num(db)
     owner = owner_role(db)
@@ -1181,6 +1529,34 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
         criteria["P4"] = _guarded(lambda: criterion_space_db(db, prediction))
     criteria["P5"] = _guarded(lambda: criterion_resolver(db))
     criteria["P6"] = _guarded(lambda: criterion_unchanged(db, version, api_before, rest))
+
+    # W-A: the draft of 0017 on top of the applied 0016, then its own rollback.
+    before_0017 = snapshot(db)
+    applied_0017 = db.apply(DRAFT_0017)
+    if applied_0017 is not None:
+        for name in WIDE_CRITERIA:
+            criteria[name] = verdict([f"the draft of 0017 did not apply: {applied_0017}"])
+    else:
+        wait_for_reload(postgrest_url, admin_url)
+        criteria.update(criteria_wide_bundle(db, version, call, raw))
+        second_0017 = db.apply(DRAFT_0017)
+        rolled_0017 = db.apply(ROLLBACK_0017)
+        try:
+            wait_for_reload(postgrest_url, admin_url)
+        except (RuntimeError, httpx.HTTPError) as exc:
+            rolled_0017 = rolled_0017 or f"reload: {exc}"
+        after_0017 = snapshot(db)
+        w9_differences = sorted(
+            name for name in SNAPSHOT_SQL if after_0017[name] != before_0017[name]
+        )
+        criteria["W9"] = verdict(
+            ([] if second_0017 == "UP017" else [f"the second application answered {second_0017}"])
+            + ([f"the rollback of 0017 failed: {rolled_0017}"] if rolled_0017 else [])
+            + [f"the catalog differs after the rollback of 0017: {n}" for n in w9_differences],
+            second_application_sqlstate=second_0017,
+            catalog_differences=w9_differences,
+            snapshot_sizes=sizes(before_0017),
+        )
 
     rolled = db.apply(ROLLBACK)
     try:
