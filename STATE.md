@@ -1,6 +1,39 @@
 # STATE
 
-Updated: 2026-10-03 (migrations 0016 and 0017 APPLIED in production, and the registry records both). **The production
+Updated: 2026-10-03 (the §2.6 package and E3's executable proof MERGED; the release package is next). **The production
+app is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A. Migrations 0016 and 0017 are applied. Main is c909915e, plus
+this record.**
+- **The §2.6 package (E4 + the W-A client): MERGED** (#196 → b29ef4e4; evidence .work/roadmap/phase3/pr196, sealed).
+  - **The pinned crossing** is exactly repository.py and settings.py (E4: "only repository.py+settings.py").
+    - The pin closure went af2f2641… → 23c176a5….
+    - The 69 pinned files are identical, and the red tests are untouched.
+  - **The writer:**
+    - With SUPABASE_PUBLISHABLE_KEY and SUPABASE_WRITER_JWT both set, the API key goes in `apikey` and the writer's
+      JWT in `Authorization`, so requests run as ucpe_api_writer.
+    - Otherwise today's service-role key is used. Half a configuration keeps it, so the transport never switches.
+  - **save_forecast_bundle:** one RPC call per forecast bundle, carrying the run and the detail.
+    - The separate run upsert is no longer sent on that path: it could overwrite a conflicting stored run.
+    - The W-B path stays for writers without the function.
+  - **Evidence:**
+    - P3-PRIV-R 18/18 on both PostgREST versions. **W10**, the released writer in two-header mode: SAVED through
+      one RPC call; run + detail + prediction + snapshot stored; run and prediction conflicts NOT_SAVED with
+      nothing changed; service_role SAVED.
+    - PERS-0 v3: rest_rpc C1a-C5 PASS. **S9**, a conflicting run, is NOT_SAVED and the stored run is unchanged.
+    - VERIFY 5466; mutation 24/24.
+- **E3, the supported Supabase signing path, proven by execution: MERGED** (#197 → c909915e; evidence
+  .work/roadmap/phase3/pr197, sealed). **J1** ran on a second PostgREST that trusts only a scratch ES256 key with a
+  kid, with identical results on v14.18 and v16.4:
+  - a short-lived writer token runs as ucpe_api_writer: runs 200, outcomes 403, and production's writer SAVED;
+  - an unknown kid, a tampered signature, another key under the same kid, an expired token and the HS256 secret
+    are each refused with 401;
+  - **a service_role token signed by the same key is accepted (200)**. So the signing key must stay with the owner,
+    and only a short-lived writer token ever goes into the Space;
+  - not yet proven: the hosted gateway and Supabase's JWKS. That needs the owner's key import, a secret-entry
+    boundary.
+- **Next (Claude): the release package UCPE-PROD-WA-20261003-A** through the B4 chain, up to the owner's T4 deploy.
+  - After that deploy, the writer uses the forecast RPC with the service-role key.
+  - Least privilege begins when the owner sets the two new secrets. That is E3's credential plan, an owner step.
+Previously (migrations 0016 and 0017 APPLIED in production, and the registry records both). **The production
 app is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A. The database now has the least-privilege roles and the
 forecast bundle RPC. Main is 8cbfdbc3, plus this record.**
 - **The T4 applies are CONSUMED.** The owner, in chat on 2026-10-03, wrote "please run this instead:", followed by the
@@ -1077,7 +1110,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): migrations 0016 and 0017 are APPLIED (runs 37110330500 and 37110375659, both
+LOOP_STATE=IN PROGRESS (2026-10-03): the §2.6 package (#196) and E3's executable proof (#197) are merged. Next is the
+  release package UCPE-PROD-WA-20261003-A through the B4 chain: identity → D → push CI and B3 → the guard on D →
+  the rollback findings → the re-pin precomputed twice → preflight review and accept. Then the owner's T4.
+  Before it: IN PROGRESS (2026-10-03): migrations 0016 and 0017 are APPLIED (runs 37110330500 and 37110375659, both
   adjudicated), and the registry records both. Next:
   - the §2.6 package: E4 plus the W-A client;
   - E3's executable proof;
@@ -2757,7 +2793,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): migrations 0016 and 0017 are APPLIED (runs 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 and 0017 APPLIED in production (runs 37110330500 and
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): the §2.6 package (E4 + the W-A client, #196) and E3's proof (#197, J1)
+  merged. The release is next.
+  Before it: PHASE 3 (2026-10-03): migrations 0016 and 0017 APPLIED in production (runs 37110330500 and
   37110375659). The app is unchanged (17c9c053).
   Before it: PHASE 3 (2026-10-03): migrations 0016 (E1, W2; #192 → 77dbe59e) and 0017 (WB1, W-A; #193 → a53c50b0)
   are MERGED and unapplied. Their T4 applies are at the owner. Production is unchanged (17c9c053).
@@ -2880,7 +2918,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 and 0017 APPLIED in prod
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/registry-0016-0017-applied (this record; worktree lanes22/registry_m17).
+CURRENT_BRANCH=chore/state-s26-e3-merged (this record; worktree lanes23/state).
+  - Merged: feat/s26-e4-writer-wa-client (#196 → b29ef4e4) and feat/e3-es256-signing-proof (#197 → c909915e).
+  Before it: chore/registry-0016-0017-applied (#195 → ee9173c9; worktree lanes22/registry_m17).
   Before it: chore/state-migrations-0016-0017 (#194 → 8cbfdbc3; worktree lanes22/state_m17).
   - Merged: feat/migration-0016-least-privilege-roles (#192 → 77dbe59e) and feat/migration-0017-forecast-bundle
     (#193 → a53c50b0).
@@ -2982,7 +3022,9 @@ CURRENT_BRANCH=chore/registry-0016-0017-applied (this record; worktree lanes22/r
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=8cbfdbc3 (main, PR #194: the STATE record). Push CI success (run 37109433419); reproducibility success
+LAST_GREEN_SHA=c909915e (main, PR #197: E3's proof). Its PR checks are all green; its push CI is running at this
+  record's commit.
+  Before it: 8cbfdbc3 (main, PR #194: the STATE record). Push CI success (run 37109433419); reproducibility success
   (run 37109433420). Both T4 applies ran at this SHA.
   Before it: a53c50b0 (main, PR #193: migration 0017). Push CI success (run 37108186970); reproducibility success
   (run 37108186949); its PR checks 13/13 at ad29b24. Production is unchanged (D 17c9c053).
@@ -3965,7 +4007,12 @@ OWNER_BOUNDARY=None open now (2026-10-03). Both T4 applies are consumed (runs 37
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude, in this order:
+NEXT_ACTION=Claude: the release package UCPE-PROD-WA-20261003-A, up to its T4.
+  - It goes through the B4 chain from the main that carries this record.
+  - Then the owner gets one Run action (a fresh preflight, then the deploy), with E3's credential plan to decide.
+  - After the deploy: settle, rollback-check, the re-pin PR, the guard on R, and a STATE record.
+  - Claude creates no credential value. Never create verification traffic.
+  Before it: Claude, in this order:
   1. the §2.6 package (E4 plus the W-A client): the two headers, save_forecast_bundle and its routing, PERS-0 widened to
      the whole bundle, the evaluator pin regenerated, and the §2.6 record;
   2. E3's executable proof: ES256 + kid through a real PostgREST, with scratch keys only;

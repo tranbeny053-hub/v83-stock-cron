@@ -77,8 +77,9 @@ def test_the_jwks_publishes_only_the_public_point(tmp_path: Path) -> None:
     assert set(key) == {"kty", "crv", "x", "y", "kid", "alg", "use"}
     assert (key["kty"], key["crv"], key["alg"], key["kid"]) == ("EC", "P-256", "ES256", es256.KID)
     assert len(_decode(key["x"])) == len(_decode(key["y"])) == 32
-    private = Path(key_file).read_text(encoding="ascii")
-    assert "d" not in key and key["x"] not in private
+    # Exactly those members, so never the private scalar "d". (An EC private key file holds the
+    # public point too, so comparing x against it would be meaningless, and flaky.)
+    assert "d" not in key
 
 
 @pytest.mark.parametrize(
