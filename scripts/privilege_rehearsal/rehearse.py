@@ -83,6 +83,19 @@ imported, rotated-in signing key. On it:
 - the same key also signs a service_role token that is accepted. That is why the signing key stays
   with the owner and never goes into the Space: only a short-lived writer token does.
 
+D1-D4 D6 (the privilege design's step 6, ruled 2026-10-03: B, after the next release; the six core
+evidence tables and the two bundle functions; keep SELECT, revoke write and EXECUTE), its DRAFT
+(scripts/privilege_rehearsal/draft_0018_narrow_service_role.sql) on top of the applied 0017:
+- D1 INVENTORY: scripts/core_write_inventory.py finds exactly the surfaces the draft revokes, none
+  omitted; and each kind of surface the draft would NOT revoke, planted in a transaction that is
+  rolled back, is caught as omitted (the inventory is not vacuous);
+- D2 REVOKED: after the draft the inventory finds no surface at all; service_role still reads core
+  evidence, and through PostgREST its inserts and both bundle RPCs are refused (42501);
+- D3 UNCHANGED: the catalog changes by exactly the revoked entries, and the least-privilege writer
+  still SAVES through the forecast RPC;
+- D4 ONE_SHOT and ROLLBACK: a second application is refused (UP018), and the rollback restores the
+  catalog exactly.
+
 Runs ONLY against a CI runner's scratch PostgreSQL and the PostgREST started there. It refuses to
 run beside any production variable, and it names no secret: its passwords and its JWT key are
 scratch values that live for one run.
@@ -120,6 +133,9 @@ ROLLBACK = HERE / "rollback_0016.sql"
 # Migration 0017 itself (the bytes its one-shot route pins), and its rollback.
 DRAFT_0017 = ROOT / "migrations" / "0017_forecast_bundle_rpc.sql"
 ROLLBACK_0017 = HERE / "rollback_0017.sql"
+# D6's draft of migration 0018 and its rollback (scripts/privilege_rehearsal/, never migrations/).
+DRAFT_0018 = HERE / "draft_0018_narrow_service_role.sql"
+ROLLBACK_0018 = HERE / "rollback_0018.sql"
 SCHEMA_VERSION = "privilege-rehearsal.v1"
 # P1-P8: the roles (migration 0016). W1-W9: the whole core bundle in one transaction (migration
 # 0017).
@@ -144,8 +160,48 @@ CRITERIA = (
     "W9",
     "W10",
     "J1",
+    "D1",
+    "D2",
+    "D3",
+    "D4",
 )
 WIDE_CRITERIA = tuple(name for name in CRITERIA if name.startswith("W"))
+D6_CRITERIA = tuple(name for name in CRITERIA if name.startswith("D"))
+_D6_WRITE = ("DELETE", "INSERT", "REFERENCES", "TRIGGER", "TRUNCATE", "UPDATE")
+# Each kind of core write surface the draft would NOT revoke, planted in a transaction that is
+# rolled back. The inventory must report each as omitted (C, a column grant, is covered by the
+# table REVOKE).
+D6_PROBES: dict[str, tuple[str, ...]] = {
+    "F": (
+        "CREATE FUNCTION public.d6_probe_definer() RETURNS integer LANGUAGE sql SECURITY DEFINER"
+        " AS 'SELECT 1'",
+    ),
+    "V": (
+        "CREATE VIEW public.d6_probe_view AS SELECT * FROM public.predictions",
+        "GRANT INSERT ON public.d6_probe_view TO service_role",
+    ),
+    "R": (
+        "CREATE TABLE public.d6_probe_table (x integer)",
+        "GRANT INSERT ON public.d6_probe_table TO service_role",
+        "CREATE RULE d6_probe_rule AS ON INSERT TO public.d6_probe_table"
+        " DO ALSO DELETE FROM public.prediction_outcomes WHERE false",
+    ),
+    "G": (
+        "CREATE TABLE public.d6_probe_table (x integer)",
+        "GRANT INSERT ON public.d6_probe_table TO service_role",
+        "CREATE FUNCTION public.d6_probe_trigger() RETURNS trigger LANGUAGE plpgsql"
+        " SECURITY DEFINER AS 'BEGIN RETURN NEW; END'",
+        "CREATE TRIGGER d6_probe_trigger BEFORE INSERT ON public.d6_probe_table"
+        " FOR EACH ROW EXECUTE FUNCTION public.d6_probe_trigger()",
+    ),
+    "K": (
+        "CREATE TABLE public.d6_probe_parent (id integer PRIMARY KEY)",
+        "GRANT DELETE ON public.d6_probe_parent TO service_role",
+        "ALTER TABLE public.analysis_run_details ADD COLUMN d6_probe integer"
+        " REFERENCES public.d6_probe_parent (id) ON DELETE CASCADE",
+    ),
+    "C": ("GRANT REFERENCES (run_id) ON public.analysis_run_details TO service_role",),
+}
 REST_BASE = "https://rehearsal.invalid"
 OPERATOR = "privrehearsal"
 # E3 (J1): the second PostgREST, which trusts only the scratch ES256 key, and that key's file.
@@ -1722,6 +1778,156 @@ def _require_scratch(owner_url: str, postgrest_url: str) -> None:
             raise SystemExit(f"REFUSED: {name} must be the local scratch PostgREST")
 
 
+def d6_inventory(
+    db: Database, version: int, planted: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """scripts/core_write_inventory.py's report for service_role, on one owner transaction that is
+    always rolled back: READ ONLY, or first running ``planted`` (a probe's statements)."""
+
+    import psycopg
+
+    from scripts import core_write_inventory as inventory
+
+    with psycopg.connect(db.owner_url, autocommit=False) as conn:
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(inventory.READ_ONLY_SQL if not planted else "SELECT 1")
+                for statement in planted:
+                    cursor.execute(statement)
+
+                def execute(sql: str, values: dict[str, Any]) -> list[tuple]:
+                    cursor.execute(sql, values)
+                    return cursor.fetchall()
+
+                return inventory.collect(execute, role="service_role", server_version_num=version)
+        finally:
+            conn.rollback()
+
+
+def d6_expected_before(version: int) -> dict[str, list[list[str]]]:
+    """service_role's core write surfaces before D6, as migrations 0005-0017 leave them."""
+
+    from scripts import core_write_inventory as inventory
+
+    full = ("analysis_runs", "prediction_feature_snapshots", "prediction_outcomes", "predictions")
+    privileges = (*_D6_WRITE, *(("MAINTAIN",) if version >= 170000 else ()))
+    tables = [[table, privilege] for table in full for privilege in privileges]
+    tables += [["analysis_run_details", "INSERT"], ["analysis_run_details", "UPDATE"],
+               ["prediction_derivatives_snapshots", "INSERT"]]
+    expected = {kind: [] for kind in inventory.SURFACE_KINDS}
+    expected["T"] = sorted(tables)
+    expected["F"] = [
+        ["public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)", "ucpe_bundle_owner"],
+        ["public.save_prediction_bundle(jsonb, jsonb, jsonb)", "ucpe_bundle_owner"],
+    ]
+    return expected
+
+
+def criteria_d6(
+    db: Database,
+    version: int,
+    raw: Callable[..., tuple[int, str | None]],
+    writer: Callable[[], tuple[Any, list]],
+    reload: Callable[[], None],
+) -> dict[str, dict[str, Any]]:
+    """D1-D4: D6's draft (migration 0018 to be), on top of the applied 0017, then its rollback."""
+
+    from crypto_probability_engine.api.analysis_service import RECEIPT_SAVED
+    from scripts import core_write_inventory as inventory
+
+    results: dict[str, dict[str, Any]] = {}
+    expected = d6_expected_before(version)
+
+    # D1: the inventory finds exactly what the draft revokes, and catches every planted omission.
+    before = d6_inventory(db, version)
+    probes = {}
+    for kind, statements in D6_PROBES.items():
+        report = d6_inventory(db, version, statements)
+        probes[kind] = {
+            "omitted": sorted({row[0] for row in inventory.omitted(report)}),
+            "detected": bool(report["surfaces"][kind]),
+        }
+    d1 = []
+    if before["surfaces"] != expected:
+        d1.append(f"the surfaces before D6 differ from the migrations: {before['surfaces']}")
+    if inventory.omitted(before):
+        d1.append(f"a core write surface is omitted: {inventory.omitted(before)}")
+    for kind, probe in probes.items():
+        if kind == "C":
+            if not probe["detected"] or probe["omitted"]:
+                d1.append(f"the column-grant probe was not detected as covered: {probe}")
+        elif kind not in probe["omitted"]:
+            d1.append(f"the planted {kind} surface was not caught as omitted: {probe}")
+    results["D1"] = verdict(d1, surfaces_before=before["surfaces"], probes=probes)
+
+    # D2-D3: the draft.
+    snapshot_before = snapshot(db)
+    applied = db.apply(DRAFT_0018)
+    if applied is not None:
+        failure = verdict([f"the D6 draft did not apply: {applied}"])
+        return {**results, "D2": failure, "D3": failure, "D4": failure}
+    reload()
+    after = d6_inventory(db, version)
+    reads = held(db, ("service_role",), ("SELECT",)).get("service_role", {})
+    nulls_forecast = dict.fromkeys(
+        ("p_run", "p_prediction", "p_feature_snapshot", "p_derivatives_snapshot", "p_run_detail")
+    )
+    nulls_bundle = dict.fromkeys(("p_prediction", "p_feature_snapshot", "p_derivatives_snapshot"))
+    http = {
+        "read_predictions": raw("service_role", "GET", "predictions", {"limit": "0"}, None),
+        "insert_run": raw("service_role", "POST", "analysis_runs", {}, {"run_id": "d6_probe"}),
+        "forecast_rpc": raw("service_role", "POST", "rpc/save_forecast_bundle", {}, nulls_forecast),
+        "bundle_rpc": raw("service_role", "POST", "rpc/save_prediction_bundle", {}, nulls_bundle),
+    }
+    d2 = [f"a write surface remains after D6: {row}" for row in inventory.every_surface(after)]
+    d2 += [f"service_role lost SELECT on {table}" for table in inventory.CORE_TABLES
+           if "SELECT" not in reads.get(table, set())]
+    if http["read_predictions"][0] != 200:
+        d2.append(f"service_role cannot read predictions: {http['read_predictions']}")
+    d2 += [f"{name} was not refused with 42501: {answer}" for name, answer in http.items()
+           if name != "read_predictions" and answer[1] != "42501"]
+    results["D2"] = verdict(d2, http=http)
+
+    snapshot_after = snapshot(db)
+    revoked_acl = sorted(
+        row for row in snapshot_before["relation_acl"]
+        if row[0] in inventory.CORE_TABLES and row[1] == "service_role" and row[2] != "SELECT"
+    )
+    revoked_function = [row for row in snapshot_before["function_acl"] if row[0] == "service_role"]
+    d3 = []
+    for name in SNAPSHOT_SQL:
+        gone = [row for row in snapshot_before[name] if row not in snapshot_after[name]]
+        new = [row for row in snapshot_after[name] if row not in snapshot_before[name]]
+        allowed = {"relation_acl": revoked_acl, "function_acl": revoked_function}.get(name, [])
+        if new or sorted(gone) != sorted(allowed):
+            d3.append(f"{name} changed beyond the revoked entries: gone {gone}, new {new}")
+    work, payload = analysis_work()
+    confirmation, circuit = persist_through_forecast(writer()[0], work)
+    saved = [confirmation.receipt, confirmation.overall, circuit,
+             db.count("analysis_runs", run_id=payload["run_id"])]
+    if saved != [RECEIPT_SAVED, "OK", "CLOSED", 1]:
+        d3.append(f"the least-privilege writer did not save after D6: {saved}")
+    results["D3"] = verdict(d3, revoked_entries=len(revoked_acl) + len(revoked_function),
+                            writer_saves=saved)
+
+    # D4: one-shot, then the rollback restores the catalog exactly.
+    second = db.apply(DRAFT_0018)
+    unchanged = snapshot(db) == snapshot_after
+    rolled = db.apply(ROLLBACK_0018)
+    reload()
+    restored = snapshot(db)
+    differences = sorted(name for name in SNAPSHOT_SQL if restored[name] != snapshot_before[name])
+    again = d6_inventory(db, version)
+    d4 = ([] if second == "UP018" else [f"the second application answered {second}"])
+    d4 += [] if unchanged else ["the refused second application changed the catalog"]
+    d4 += [f"the rollback failed: {rolled}"] if rolled else []
+    d4 += [f"the catalog differs after the rollback: {name}" for name in differences]
+    if again["surfaces"] != expected:
+        d4.append("the inventory after the rollback differs from before D6")
+    results["D4"] = verdict(d4, second_application_sqlstate=second, catalog_differences=differences)
+    return results
+
+
 def run(
     db: Database,
     postgrest_url: str,
@@ -1844,7 +2050,7 @@ def run(
     before_0017 = snapshot(db)
     applied_0017 = db.apply(DRAFT_0017)
     if applied_0017 is not None:
-        for name in (*WIDE_CRITERIA, "J1"):
+        for name in (*WIDE_CRITERIA, "J1", *D6_CRITERIA):
             criteria[name] = verdict([f"migration 0017 did not apply: {applied_0017}"])
     else:
         wait_for_reload(postgrest_url, admin_url)
@@ -1868,6 +2074,14 @@ def run(
             criteria["J1"] = _guarded(lambda: criterion_signing_key(
                 db, es256_url, key_file, es256_writer, mint_jwt("ucpe_api_writer", jwt_key)
             ))
+        # D6's draft on the applied 0017, rolled back before 0017's own rollback.
+        try:
+            criteria.update(criteria_d6(
+                db, version, raw, writer, lambda: wait_for_reload(postgrest_url, admin_url)
+            ))
+        except Exception as exc:  # noqa: BLE001 - the report records the first failure, never a secret
+            for name in D6_CRITERIA:
+                criteria.setdefault(name, verdict([f"{type(exc).__name__}: {exc}"]))
         second_0017 = db.apply(DRAFT_0017)
         rolled_0017 = db.apply(ROLLBACK_0017)
         try:
@@ -1956,6 +2170,8 @@ def main(argv: list[str] | None = None) -> int:
         "rollback_sha256": hashlib.sha256(ROLLBACK.read_bytes()).hexdigest(),
         "migration_0017_sha256": hashlib.sha256(DRAFT_0017.read_bytes()).hexdigest(),
         "rollback_0017_sha256": hashlib.sha256(ROLLBACK_0017.read_bytes()).hexdigest(),
+        "draft_0018_sha256": hashlib.sha256(DRAFT_0018.read_bytes()).hexdigest(),
+        "rollback_0018_sha256": hashlib.sha256(ROLLBACK_0018.read_bytes()).hexdigest(),
         **result,
     }
     Path(args.report).write_text(
