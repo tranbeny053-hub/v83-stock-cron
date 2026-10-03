@@ -1,6 +1,38 @@
 # STATE
 
-Updated: 2026-10-03 (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
+Updated: 2026-10-03 (G1 SET by the owner: the resolver's own login is CONFIGURED, NOT_YET_LIVE_PROVEN; C4 prepared; the
+D6 design note). **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A (R 4130a6cd).**
+- **The owner's message (2026-10-03), verbatim:** "G1 SET. Verify the new GitHub secret by NAME only, never value. G1
+  remains CONFIGURED/NOT_YET_LIVE_PROVEN until the next natural scheduled Resolve Prediction Outcomes run uses current
+  main and proves: resolver credential=UCPE_RESOLVER_DB_URL, resolver_identity role=ucpe_resolver, terminal SUCCESS.
+  Do not manually dispatch resolver traffic just to prove it. While waiting, continue the highest-value safe UCPE
+  roadmap work; do not yield merely because the scheduled proof is pending. E3 writer also remains
+  NOT_YET_LIVE_PROVEN until a natural USER_REQUESTED SAVED receipt."
+- **Verified by name, 15:07Z** (.work/g1_cutover, sealed): UCPE_RESOLVER_DB_URL is PRESENT (created 15:03:32Z), and
+  SUPABASE_DB_URL (the owner URL) is still present.
+  - No resolver run on current main yet: the last was at 12:34Z, at 38b9860b.
+  - GitHub's schedule is irregular: 06:33Z and 12:34Z today.
+- **G1 = CONFIGURED, NOT_YET_LIVE_PROVEN.** The proof is the next natural scheduled run on current main showing
+  "resolver credential: UCPE_RESOLVER_DB_URL", "resolver_identity role=ucpe_resolver" and a terminal SUCCESS. No
+  manual dispatch.
+- **Merged since:**
+  - #203 (STATE) and #204 (G1 prep) → main 7d07b87;
+  - #205 → main 70a03e4 (push CI 37131173306 and the reproducible build 37131173329, both success). The identity
+    line now names only ucpe_* roles, OTHER otherwise, because this repository's Actions logs are public. No
+    resolver run had used #204's unmasked line.
+- **This PR, a DRAFT until G1's proof:**
+  - **G1 completed:** the resolver job connects only with UCPE_RESOLVER_DB_URL, and the workflow no longer
+    references secrets.SUPABASE_DB_URL. That is the design's "remove the resolver from the owner secret's users".
+  - **C4 prepared:** the 13 dispatch-only workflows that use the owner URL declare `environment:
+    production-db-owner`. Behavior is unchanged until the owner configures it (docs/runbooks/OWNER_URL_ENVIRONMENT.md).
+    A test pins the invariant.
+  - **One named exception, C4-PIN:** section-5a-evaluation.yml is on the evaluator pin, so its change needs the
+    owner's authorization.
+- **The D6 design note: SEALED** (.work/roadmap/phase3/d6/D6_DESIGN.md, sha fdbe2ff5…; read-only).
+  - The decision: D6 versus the rollback target 17c9c053, which writes as service_role.
+  - Recommended, B: D6 only after the next release, so that the rollback target itself uses the pair.
+- **E3 is still NOT_YET_LIVE_PROVEN:** 0 natural analyses since the 12:49Z restart (checked 15:13Z).
+Previously (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
 **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe
 rollback target is 17c9c053.**
 - **The owner's message (2026-10-03), verbatim:** "SWITCHED. Verify HF secret metadata by NAME only, Space
@@ -1232,7 +1264,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN
+LOOP_STATE=IN PROGRESS (2026-10-03): G1 SET. G1 and E3 each await a natural proof, read passively. This record's PR
+  (a draft) completes G1 and prepares C4. It merges after G1's proof, by an owner Run action if Auto refuses.
+  Before it: AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN
   (verified read-only at 12:57Z; .work/e3_cutover; 0 natural receipts at 13:32Z). G1 is PREPARED (#204, R1 PASS ×2).
   The owner has one Run action (merge #203 and #204), then G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md).
   Before it: IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privilege writer is CONFIGURED,
@@ -2926,7 +2960,9 @@ LOOP_STATE=AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). The
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer (E3) and the resolver (G1) cutovers are CONFIGURED,
+  NOT_YET_LIVE_PROVEN. C4 is prepared; D6 is designed.
+  Before it: PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). The
   resolver cutover (G1) is PREPARED (#204); its credential steps are the owner's.
   Before it: PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
   owner's credential switch is next. Production is unchanged (a2de125f).
@@ -3057,7 +3093,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YE
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-e3-switched (this record; worktree lanes24/state_cutover).
+CURRENT_BRANCH=feat/g1-remove-owner-fallback (this record; worktree lanes24/nofallback).
+  Before it: fix/g1-mask-owner-role (#205 → 70a03e4); feat/g1-resolver-cutover-prep (#204); chore/state-e3-switched
+  (#203).
   Before it: feat/e3-writer-signing-key-helper (#202 → 38b9860b; worktree lanes24/helper).
   Before it: chore/state-wa-released (#201 → 4f970785; worktree lanes23/state_rel).
   - Merged: release/prod-wa (#199 → D a2de125f) and release/prod-wa-repin (#200 → R 4130a6cd).
@@ -3165,7 +3203,9 @@ CURRENT_BRANCH=chore/state-e3-switched (this record; worktree lanes24/state_cuto
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=38b9860b (main, PR #202: the signing-key helper and the runbook). Push CI success (run
+LAST_GREEN_SHA=70a03e4 (main, PR #205: the identity line names only UCPE's roles). Push CI success (run 37131173306);
+  reproducibility success (run 37131173329).
+  Before it: 38b9860b (main, PR #202: the signing-key helper and the runbook). Push CI success (run
   37121324613); reproducibility success (run 37121324647).
   Before it: 4f970785 (main, PR #201: the WA STATE record and the runbook). Push CI success (run 37118661804);
   reproducibility success (run 37118661825).
@@ -3375,7 +3415,11 @@ LAST_GREEN_SHA=38b9860b (main, PR #202: the signing-key helper and the runbook).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at
+LAST_VERIFY=PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR:
+  the code at e9777a6, in its clean worktree lanes24/nofallback; this STATE commit adds docs only).
+  - The first run failed the secrets scanner on the new test's constant named SECRET. It was renamed, and the scanner
+    was not narrowed.
+  Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#203, at
   38b9860b, in its clean worktree lanes24/state_cutover, before its push).
   Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#202, on
   4f970785, in its clean worktree lanes24/helper, before its push).
@@ -3629,7 +3673,10 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Two owner steps (2026-10-03), batched:
+OWNER_BOUNDARY=None until G1's proof (2026-10-03). Then, batched:
+  - one Run action that merges this record's PR (G1 completed, C4 prepared);
+  - later: C4's Environment steps and the C4-PIN decision; after E3's proof, D6's decision (B recommended, or A).
+  Before it: Two owner steps (2026-10-03), batched:
   - one Run action: merge #203 (this record) and #204 (G1), each on its exact head after its checks, then fast-forward
     the main checkout. Auto mode refused Claude's merge;
   - G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md): the login SQL in the SQL Editor (the T4: the role gets its
@@ -4179,7 +4226,12 @@ OWNER_BOUNDARY=Two owner steps (2026-10-03), batched:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the Run action (merge #203 and #204), then G1's secret steps. Then Claude:
+NEXT_ACTION=Claude, read passively, with no dispatch:
+  - G1: the next natural scheduled resolver run on current main must show "resolver credential:
+    UCPE_RESOLVER_DB_URL", "resolver_identity role=ucpe_resolver" and SUCCESS. Then mark this PR ready, for the owner's
+    merge;
+  - E3: the first natural USER_REQUESTED SAVED receipt.
+  Before it: The owner: the Run action (merge #203 and #204), then G1's secret steps. Then Claude:
   - confirm G1 from the next hourly resolver run's log: "resolver credential: UCPE_RESOLVER_DB_URL" and
     "resolver_identity role=ucpe_resolver", with the run succeeding. Then a small PR removes the fallback;
   - confirm the first natural USER_REQUESTED persistence_receipt passively (bounded log reads only). SAVED makes the
