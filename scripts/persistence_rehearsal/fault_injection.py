@@ -446,26 +446,36 @@ PRIVILEGES_SQL = (
     " pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE'),"
     " pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE'),"
     " pg_catalog.has_function_privilege('service_role', p.oid, 'EXECUTE'),"
-    " p.prosecdef, COALESCE(p.proconfig, ARRAY[]::text[])"
+    " p.prosecdef, COALESCE(p.proconfig, ARRAY[]::text[]),"
+    " pg_catalog.pg_get_userbyid(p.proowner),"
+    " pg_catalog.has_function_privilege('ucpe_api_writer', p.oid, 'EXECUTE')"
     " FROM pg_catalog.pg_proc AS p"
     f" WHERE p.oid = '{BUNDLE_FUNCTION}'::regprocedure"
 )
 
 
 def rest_privileges(url: str) -> dict[str, Any]:
-    """The catalog facts of the bundle RPC: who may execute it, how it runs."""
+    """The catalog facts of the bundle RPC: who may execute it, how it runs.
+
+    Since migration 0016 (W2) it runs SECURITY DEFINER as its narrow owner, ucpe_bundle_owner, and
+    the writer role may execute it beside service_role (the live writer's).
+    """
 
     import psycopg
 
     with psycopg.connect(url) as connection, connection.cursor() as cursor:
         cursor.execute(PRIVILEGES_SQL)
-        public, anon, authenticated, service_role, definer, config = cursor.fetchone()
+        public, anon, authenticated, service_role, definer, config, owner, writer = (
+            cursor.fetchone()
+        )
     observed = {
         "execute_public": public,
         "execute_anon": anon,
         "execute_authenticated": authenticated,
         "execute_service_role": service_role,
+        "execute_writer": writer,
         "security_definer": definer,
+        "owner": owner,
         "config": list(config),
     }
     return {
@@ -473,7 +483,10 @@ def rest_privileges(url: str) -> dict[str, Any]:
         "expected": {
             "no_execute_for_public_anon_authenticated": not (public or anon or authenticated),
             "execute_for_service_role": service_role is True,
-            "security_invoker": definer is False,
+            "execute_for_the_writer": writer is True,
+            "security_definer_of_ucpe_bundle_owner": (
+                definer is True and owner == "ucpe_bundle_owner"
+            ),
             "fixed_search_path": list(config) == ["search_path=pg_catalog, pg_temp"],
         },
     }

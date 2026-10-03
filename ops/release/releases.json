@@ -82,6 +82,12 @@
       "applied_run": 37033014490,
       "id": "0015",
       "note": "one SECURITY INVOKER function (public.save_prediction_bundle), EXECUTE for service_role only; no table change; older code never calls it"
+    },
+    {
+      "additive": true,
+      "applied_run": null,
+      "id": "0016",
+      "note": "four NOLOGIN roles with their grants and policies; the bundle RPC becomes SECURITY DEFINER of ucpe_bundle_owner, body and service_role EXECUTE unchanged; nothing revoked, so every H2-safe target writes exactly as before (P3-PRIV-R P6)"
     }
   ],
   "releases": [

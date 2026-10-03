@@ -1,13 +1,13 @@
--- P3-PRIV-R: the rollback of draft_0016_least_privilege_roles.sql. It restores the catalog to exactly its
--- state before the draft:
+-- The rollback of migration 0016 (migrations/0016_least_privilege_roles.sql). It restores the catalog to
+-- exactly its state before 0016:
 -- - the bundle RPC goes back to SECURITY INVOKER, owned by the applying role, with its EXECUTE list
 --   restored;
 -- - every policy and grant of the four roles is removed;
 -- - the writer's membership in authenticator is removed;
 -- - the four roles are dropped.
 -- Rows they wrote stay: evidence is never deleted. It runs as the tables' owner, in one transaction (the
--- caller's). In this rehearsal it runs ONLY on a scratch PostgreSQL. If the draft becomes migration 0016,
--- this becomes its rollback evidence.
+-- caller's). Against production it is a separate T4, never automatic. P3-PRIV-R's P8 proves it on
+-- scratch PostgreSQL behind a real PostgREST.
 
 -- The owner change back needs the privileges of the current owner (an INHERIT membership). Granted for
 -- that one statement only.

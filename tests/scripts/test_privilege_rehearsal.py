@@ -23,8 +23,9 @@ import pytest
 from scripts.privilege_rehearsal import rehearse
 
 ROOT = Path(__file__).resolve().parents[2]
-DRAFT = (ROOT / "scripts/privilege_rehearsal/draft_0016_least_privilege_roles.sql").read_text()
-ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0016.sql").read_text()
+# Migration 0016 itself (owner ruling E1 = YES, W2), which the harness applies, and its rollback.
+DRAFT = (ROOT / "migrations/0016_least_privilege_roles.sql").read_text()
+ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_0016.sql").read_text()
 FIXTURE = (ROOT / "scripts/privilege_rehearsal/00_supabase_like_authenticator.sql").read_text()
 DRAFT_0017 = (ROOT / "scripts/privilege_rehearsal/draft_0017_forecast_bundle_rpc.sql").read_text()
 ROLLBACK_0017 = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0017.sql").read_text()
@@ -74,12 +75,13 @@ def policies(sql: str, verb: str = "CREATE") -> set[tuple[str, str, str]]:
 # ------------------------------------------------------------------------ the draft
 
 
-def test_the_draft_is_not_a_migration() -> None:
-    """Nothing applies it to a real database, and release check 5c never sees it."""
+def test_migration_0016_is_authored_with_its_route_and_is_what_the_harness_applies() -> None:
+    """The rehearsed bytes are the migration's: the harness applies migrations/0016 itself."""
 
-    for migration in (ROOT / "migrations").glob("*.sql"):
-        assert migration.read_text() != DRAFT, migration
-    assert "NOT A MIGRATION" in DRAFT
+    assert "AUTHORED, NOT APPLIED" in DRAFT and "scripts/apply_migration_0016.py" in DRAFT
+    assert "NOT A MIGRATION" not in DRAFT
+    assert rehearse.DRAFT == ROOT / "migrations" / "0016_least_privilege_roles.sql"
+    assert not (ROOT / "scripts/privilege_rehearsal/draft_0016_least_privilege_roles.sql").exists()
 
 
 def test_a_second_application_is_refused_before_any_change() -> None:
@@ -337,13 +339,17 @@ def test_postgrest_is_two_pinned_release_binaries_checked_by_sha256() -> None:
     )
 
 
-def test_the_database_is_every_migration_and_the_scratch_values_are_never_on_a_command_line() -> (
+def test_the_database_is_every_migration_before_0016_and_no_scratch_value_on_a_command_line() -> (
     None
 ):
-    every = sorted(
-        path.relative_to(ROOT).as_posix() for path in (ROOT / "migrations").glob("*.sql")
+    # The harness applies migration 0016 itself, then the draft of 0017.
+    earlier = sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "migrations").glob("*.sql")
+        if path.name < "0016"
     )
-    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0015.sql"' in WORKFLOW
+    assert len(earlier) == 15
+    assert f'cat {" ".join(earlier)} > "$RUNNER_TEMP/migrations_0001_0015.sql"' in WORKFLOW
     assert 'PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD="$(openssl rand -hex 24)"' in WORKFLOW
     assert 'PGRST_JWT_SECRET="$(openssl rand -hex 32)"' in WORKFLOW
     assert "--preserve-env=PRIVILEGE_REHEARSAL_AUTHENTICATOR_PASSWORD -u postgres psql" in WORKFLOW
