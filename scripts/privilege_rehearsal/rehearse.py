@@ -68,6 +68,17 @@ PostgREST as ucpe_api_writer with production-built rows:
 P2, P6 and P8 run the writer as it was live when 0016 was applied, and as an H2-safe rollback
 target runs it: the W-B path, B9's bundle with the run and the detail written beside it.
 
+J1 SIGNING_KEY (E3, the supported Supabase path for a custom-role JWT). A second PostgREST trusts
+only a scratch ES256 key with a kid (scripts/privilege_rehearsal/es256.py), as a project trusts its
+imported, rotated-in signing key. On it:
+- a token signed by that key, claiming ucpe_api_writer with a short expiry, runs as the writer. It
+  reads runs, is refused outcomes, and production's two-header writer SAVES through the forecast
+  RPC;
+- an unknown kid, a tampered signature, another key under the same kid, an expired token and a
+  token signed with the HS256 secret are each refused (401);
+- the same key also signs a service_role token that is accepted. That is why the signing key stays
+  with the owner and never goes into the Space: only a short-lived writer token does.
+
 Runs ONLY against a CI runner's scratch PostgreSQL and the PostgREST started there. It refuses to
 run beside any production variable, and it names no secret: its passwords and its JWT key are
 scratch values that live for one run.
@@ -127,10 +138,17 @@ CRITERIA = (
     "W8",
     "W9",
     "W10",
+    "J1",
 )
 WIDE_CRITERIA = tuple(name for name in CRITERIA if name.startswith("W"))
 REST_BASE = "https://rehearsal.invalid"
 OPERATOR = "privrehearsal"
+# E3 (J1): the second PostgREST, which trusts only the scratch ES256 key, and that key's file.
+ES256_ENVIRONMENT = (
+    "PRIVILEGE_REHEARSAL_ES256_POSTGREST_URL",
+    "PRIVILEGE_REHEARSAL_ES256_POSTGREST_ADMIN_URL",
+    "PRIVILEGE_REHEARSAL_ES256_KEY_FILE",
+)
 FORBIDDEN_ENVIRONMENT = (
     "SUPABASE_DB_URL",
     "SUPABASE_URL",
@@ -1563,6 +1581,81 @@ def criterion_production_writer(
     return verdict(failures, steps=steps)
 
 
+def criterion_signing_key(
+    db: Database,
+    es256_url: str,
+    key_file: str,
+    writer: Callable[[str], Any],
+    hs256_token: str,
+) -> dict[str, Any]:
+    """J1 (E3). Behind a PostgREST that trusts only a scratch ES256 key with a kid."""
+
+    import subprocess
+    import tempfile
+
+    from crypto_probability_engine.api.analysis_service import RECEIPT_SAVED
+    from scripts.privilege_rehearsal import es256
+
+    failures: list[str] = []
+    steps: dict[str, Any] = {}
+
+    def status(token: str, table: str) -> int:
+        with gateway_client(es256_url) as client:
+            return client.get(
+                f"{REST_BASE}/rest/v1/{table}",
+                params={"limit": "0"},
+                headers={"Authorization": f"Bearer {token}"},
+            ).status_code
+
+    token = es256.mint(key_file, "ucpe_api_writer")
+    steps["writer_reads_runs"] = status(token, "analysis_runs")
+    steps["writer_reads_outcomes"] = status(token, "prediction_outcomes")
+    if (steps["writer_reads_runs"], steps["writer_reads_outcomes"]) != (200, 403):
+        failures.append(
+            "the ES256 writer token did not run as ucpe_api_writer: "
+            f"{steps['writer_reads_runs']} {steps['writer_reads_outcomes']}"
+        )
+    work, payload = analysis_work()
+    confirmation, circuit = persist_through_forecast(writer(token), work)
+    steps["writer_saves"] = [confirmation.receipt, confirmation.overall, circuit,
+                             db.count("analysis_runs", run_id=payload["run_id"])]
+    if steps["writer_saves"] != [RECEIPT_SAVED, "OK", "CLOSED", 1]:
+        failures.append(f"the ES256 writer did not save: {steps['writer_saves']}")
+
+    header, claims, signature = token.split(".")
+    middle = len(signature) // 2
+    swapped = "A" if signature[middle] != "A" else "B"
+    tampered = f"{header}.{claims}.{signature[:middle]}{swapped}{signature[middle + 1:]}"
+    with tempfile.TemporaryDirectory() as scratch:
+        other = f"{scratch}/other-es256.pem"
+        subprocess.run(
+            ["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", other],
+            check=True, capture_output=True,
+        )
+        another_key = es256.mint(other, "ucpe_api_writer")
+    refused = {
+        "unknown_kid": es256.mint(key_file, "ucpe_api_writer", kid="ucpe-unknown-kid"),
+        "tampered_signature": tampered,
+        "another_key_same_kid": another_key,
+        "expired": es256.mint(key_file, "ucpe_api_writer", now=int(time.time()) - 3600,
+                              lifetime=60),
+        "hs256_secret": hs256_token,
+    }
+    steps["refused"] = {name: status(value, "analysis_runs") for name, value in refused.items()}
+    failures += [f"{name} answered {code}, not 401" for name, code in steps["refused"].items()
+                 if code != 401]
+
+    steps["signing_key_claims_service_role"] = status(
+        es256.mint(key_file, "service_role"), "prediction_outcomes"
+    )
+    if steps["signing_key_claims_service_role"] != 200:
+        failures.append(
+            "a service_role token signed by the trusted key was not accepted: "
+            f"{steps['signing_key_claims_service_role']}"
+        )
+    return verdict(failures, steps=steps)
+
+
 def _require_scratch(owner_url: str, postgrest_url: str) -> None:
     present = [name for name in FORBIDDEN_ENVIRONMENT if os.environ.get(name)]
     if present:
@@ -1571,9 +1664,19 @@ def _require_scratch(owner_url: str, postgrest_url: str) -> None:
         raise SystemExit("REFUSED: the owner URL must be a scratch local unix-socket URL")
     if not _LOCAL_HTTP.fullmatch(postgrest_url):
         raise SystemExit("REFUSED: PostgREST must be the local scratch one")
+    for name in ES256_ENVIRONMENT[:2]:
+        value = os.environ.get(name)
+        if value and not _LOCAL_HTTP.fullmatch(value):
+            raise SystemExit(f"REFUSED: {name} must be the local scratch PostgREST")
 
 
-def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -> dict[str, Any]:
+def run(
+    db: Database,
+    postgrest_url: str,
+    admin_url: str | None,
+    jwt_key: str,
+    es256: tuple[str, str | None, str] | None = None,
+) -> dict[str, Any]:
     import httpx
 
     from crypto_probability_engine.persistence.repository import SupabaseRestRepository
@@ -1688,12 +1791,30 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
     before_0017 = snapshot(db)
     applied_0017 = db.apply(DRAFT_0017)
     if applied_0017 is not None:
-        for name in WIDE_CRITERIA:
+        for name in (*WIDE_CRITERIA, "J1"):
             criteria[name] = verdict([f"migration 0017 did not apply: {applied_0017}"])
     else:
         wait_for_reload(postgrest_url, admin_url)
         criteria.update(criteria_wide_bundle(db, version, call, raw))
         criteria["W10"] = _guarded(lambda: criterion_production_writer(db, writer, rest))
+        if es256 is None:
+            criteria["J1"] = verdict(["the ES256 PostgREST of E3 is not configured"])
+        else:
+            es256_url, es256_admin_url, key_file = es256
+            wait_for_reload(es256_url, es256_admin_url)
+
+            def es256_writer(token: str) -> SupabaseRestRepository:
+                return SupabaseRestRepository(
+                    REST_BASE,
+                    "",
+                    publishable_key=f"sb_publishable_scratch_{secrets.token_hex(8)}",
+                    writer_jwt=token,
+                    client=gateway_client(es256_url),
+                )
+
+            criteria["J1"] = _guarded(lambda: criterion_signing_key(
+                db, es256_url, key_file, es256_writer, mint_jwt("ucpe_api_writer", jwt_key)
+            ))
         second_0017 = db.apply(DRAFT_0017)
         rolled_0017 = db.apply(ROLLBACK_0017)
         try:
@@ -1767,7 +1888,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("REFUSED: the scratch JWT key must be at least 32 characters")
     database = owner_url.split("///", 1)[1].split("?", 1)[0]
     db = Database(owner_url, database, int(os.environ.get("PRIVILEGE_REHEARSAL_PORT", "5432")))
-    result = run(db, postgrest_url, admin_url, jwt_key)
+    es256_url, es256_admin_url, key_file = (os.environ.get(name) for name in ES256_ENVIRONMENT)
+    es256 = (es256_url, es256_admin_url or None, key_file) if es256_url and key_file else None
+    result = run(db, postgrest_url, admin_url, jwt_key, es256)
     report = {
         "schema_version": SCHEMA_VERSION,
         "scope": (

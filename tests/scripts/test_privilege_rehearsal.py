@@ -479,9 +479,58 @@ def test_the_harness_gates_every_wider_criterion() -> None:
     assert set(rehearse.WIDE_CRITERIA) <= set(rehearse.CRITERIA)
 
 
+# ------------------------------------------------------------------------ E3: J1, the signing key
+
+
+def test_j1_is_a_gate_run_on_the_applied_0017_before_its_rollback() -> None:
+    assert rehearse.CRITERIA[-1] == "J1"
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    run = source.split("\ndef run(", 1)[1]
+    assert run.index('criteria["W10"]') < run.index('criteria["J1"] = _guarded(') < run.index(
+        "rolled_0017 = db.apply(ROLLBACK_0017)")
+    assert 'criteria["J1"] = verdict(["the ES256 PostgREST of E3 is not configured"])' in run
+    assert 'for name in (*WIDE_CRITERIA, "J1"):' in run, "0017 not applying fails J1 too"
+
+
+def test_j1_expects_the_documented_acceptances_and_refusals() -> None:
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    j1 = source.split("def criterion_signing_key(", 1)[1].split("\ndef ", 1)[0]
+    assert '!= (200, 403)' in j1, "the writer reads runs and is refused outcomes"
+    for refusal in ("unknown_kid", "tampered_signature", "another_key_same_kid", "expired",
+                    "hs256_secret"):
+        assert f'"{refusal}":' in j1, refusal
+    assert "if code != 401" in j1
+    assert 'es256.mint(key_file, "service_role"), "prediction_outcomes"' in j1
+    assert "persist_through_forecast(writer(token), work)" in j1
+
+
+@pytest.mark.parametrize("name", rehearse.ES256_ENVIRONMENT[:2])
+def test_the_es256_postgrest_must_be_the_local_scratch_one(monkeypatch, name: str) -> None:
+    for forbidden in rehearse.FORBIDDEN_ENVIRONMENT:
+        monkeypatch.delenv(forbidden, raising=False)
+    monkeypatch.setenv(name, "https://project.supabase.co")
+    with pytest.raises(SystemExit, match="must be the local scratch PostgREST"):
+        rehearse._require_scratch(
+            "postgresql:///privilege_rehearsal?host=/var/run/postgresql", "http://127.0.0.1:3000"
+        )
+
+
+def test_the_workflow_runs_a_second_postgrest_that_trusts_only_the_scratch_es256_key() -> None:
+    key = '"$RUNNER_TEMP/scratch-es256.pem"'
+    assert f"openssl ecparam -name prime256v1 -genkey -noout -out {key}" in WORKFLOW
+    assert (f'PGRST_JWT_SECRET="$(python scripts/privilege_rehearsal/es256.py {key})"'
+            in WORKFLOW)
+    assert "PGRST_SERVER_PORT=3002" in WORKFLOW and "PGRST_ADMIN_SERVER_PORT=3003" in WORKFLOW
+    assert 'PRIVILEGE_REHEARSAL_ES256_POSTGREST_URL="http://127.0.0.1:3002"' in WORKFLOW
+    assert 'PRIVILEGE_REHEARSAL_ES256_POSTGREST_ADMIN_URL="http://127.0.0.1:3003"' in WORKFLOW
+    assert f"PRIVILEGE_REHEARSAL_ES256_KEY_FILE={key}" in WORKFLOW
+    for leak in ("cat \"$RUNNER_TEMP/scratch-es256.pem\"", "scratch-es256.pem\" |"):
+        assert leak not in WORKFLOW, "the private key is never printed or piped"
+
+
 def test_w10_runs_the_released_writer_on_the_applied_0017_before_its_rollback() -> None:
     source = Path(rehearse.__file__).read_text(encoding="utf-8")
-    run = source.split("def run(db: Database", 1)[1]
+    run = source.split("\ndef run(", 1)[1]
     wired = 'criteria["W10"] = _guarded(lambda: criterion_production_writer(db, writer, rest))'
     assert run.index("criteria_wide_bundle(") < run.index(wired) < run.index(
         "rolled_0017 = db.apply(ROLLBACK_0017)")
