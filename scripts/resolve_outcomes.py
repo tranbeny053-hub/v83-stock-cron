@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
+import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -114,6 +116,10 @@ ROUTE_LEGACY = "legacy"
 STORE_ACTIVE = "active"
 STORE_ABSENT = "absent"
 STORE_ERROR = "error"
+# G1: the role the run's database connections use, printed by name (never a credential).
+ROLE_NOT_APPLICABLE = "n/a"
+ROLE_ERROR = "error"
+_ROLE_NAME = re.compile(r"[a-z_][a-z0-9_]{0,62}")
 
 _RESOLVED = rq_v1.OUTCOME_RESOLVED  # "resolved"
 # How far one row's attempt got. When the attempt raises, the stage names the failure's reason.
@@ -188,6 +194,23 @@ def build_status_store(
     except Exception:
         return None, STORE_ERROR
     return (store, STORE_ACTIVE) if ready is True else (None, STORE_ABSENT)
+
+
+def connected_role(store: StatusStore | None) -> str:
+    """The role of the run's status-store connections (current_user), by name only.
+
+    G1's cutover evidence: ucpe_resolver once the owner's credential is in place, the table owner
+    before. n/a without a status store; error when it cannot be read or is not a plain role name.
+    """
+
+    identify = getattr(store, "connected_role", None)
+    if not callable(identify):
+        return ROLE_NOT_APPLICABLE
+    try:
+        role = identify()
+    except Exception:
+        return ROLE_ERROR
+    return role if isinstance(role, str) and _ROLE_NAME.fullmatch(role) else ROLE_ERROR
 
 
 def resolve_due_predictions(
@@ -705,6 +728,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     repository_type = repository.repository_type()
     status_store, store_state = build_status_store(settings, repository)
     route = ROUTE_LEGACY if status_store is None else ROUTE_C
+    # On stderr: stdout stays the two-line contract that the workflow and the tests read.
+    print(f"resolver_identity role={connected_role(status_store)}", file=sys.stderr)
     try:
         stats = resolve_due_predictions(
             repository,
