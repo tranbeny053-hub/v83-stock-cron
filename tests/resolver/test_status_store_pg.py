@@ -684,7 +684,8 @@ def test_a_due_scan_failure_prints_one_line_without_the_url(monkeypatch, capsys)
         "failed=1 error=StatusStoreError: SUPABASE_POSTGRES status due scan failed: "
         "OperationalError [query]"
     ]
-    assert "resolver_identity role=postgres" in everything, "before the cutover: the owner"
+    assert "resolver_identity role=OTHER" in everything, "before the cutover: the owner, unnamed"
+    assert "postgres" not in everything.replace("postgresql://", "")
     assert not any(part in everything for part in URL_PARTS)
 
 
@@ -771,14 +772,16 @@ def test_a_role_read_that_fails_names_no_url() -> None:
         (None, "n/a"),
         (object(), "n/a"),
         (type("Store", (), {"connected_role": lambda self: "ucpe_resolver"})(), "ucpe_resolver"),
-        (type("Store", (), {"connected_role": lambda self: "postgres"})(), "postgres"),
+        (type("Store", (), {"connected_role": lambda self: "postgres"})(), "OTHER"),
+        (type("Store", (), {"connected_role": lambda self: "ucpe_space_db"})(), "ucpe_space_db"),
+        (type("Store", (), {"connected_role": lambda self: "ucpe_"})(), "OTHER"),
         (type("Store", (), {"connected_role": lambda self: 1 / 0})(), "error"),
         (type("Store", (), {"connected_role": lambda self: "x; select 1"})(), "error"),
         (type("Store", (), {"connected_role": lambda self: URL})(), "error"),
         (type("Store", (), {"connected_role": lambda self: None})(), "error"),
     ],
-    ids=["no-store", "legacy-store", "resolver", "owner", "raises", "not-a-name", "a-url",
-         "none"],
+    ids=["no-store", "legacy-store", "resolver", "owner-masked", "another-ucpe-role",
+         "bare-prefix", "raises", "not-a-name", "a-url", "none"],
 )
-def test_the_resolver_prints_only_a_plain_role_name(store, printed) -> None:
+def test_the_resolver_names_only_ucpe_s_own_roles(store, printed) -> None:
     assert resolve_outcomes.connected_role(store) == printed
