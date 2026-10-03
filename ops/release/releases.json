@@ -150,6 +150,12 @@
       "deployed_over": "f046140b121d4e4ed8969e58d3c137538b661725",
       "h2_hold": true,
       "release_id": "UCPE-PROD-RCPT-20261003-A"
+    },
+    {
+      "commit": "a2de125ffa449cd6f5ec452e4a7a3335286eb413",
+      "deployed_over": "17c9c053d420b0f06ee860ff18944660ea407acf",
+      "h2_hold": true,
+      "release_id": "UCPE-PROD-WA-20261003-A"
     }
   ],
   "schema_version": "ucpe-release-registry.v1"
