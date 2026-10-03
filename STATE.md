@@ -1,6 +1,80 @@
 # STATE
 
-Updated: 2026-10-03 (W-A REHEARSED and merged; WB1 is now evidence-backed). **Production is unchanged: D 17c9c053 /
+Updated: 2026-10-03 (migrations 0016 and 0017 MERGED with their one-shot T4 packages; NOTHING IS APPLIED). **Production
+is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A, guard HEALTHY. Main is a53c50b0, plus this record.**
+- **The owner's rulings (2026-10-03), verbatim:** "E1 YES W2; E2 DEFER—do not inspect/expose SUPABASE_DB_URL; E3 YES
+  in principle after proving the supported Supabase JWT/signing path; E4 YES only repository.py+settings.py; WB1 YES
+  after 0016; WB3 YES later with S8. Build/rehearse migration 0016 and its one-shot T4 package, preserving corrected
+  F1/UOR grants. Then prepare 0017/WB1; create no credential values yet. Auto remains default; return only at exact
+  T4, secret-entry, security conflict, or failure boundary."
+- **Migration 0016, the least-privilege roles (E1, W2): MERGED** (#192 → 77dbe59e; evidence
+  .work/roadmap/phase3/pr192, sealed). Main push CI 37106452298 and the reproducible build 37106452296: success.
+  - migrations/0016_least_privilege_roles.sql (sha256 5d89f5bd…) is P3-PRIV-R's rehearsed statements, byte for byte.
+  - **The one-shot route** is scripts/apply_migration_0016.py (lock 5000016, token APPLY-MIGRATION-0016-ONCE). Its
+    trust machinery is 0011's, verbatim.
+    - Pre-checks:
+      - PostgreSQL 16 or later, and authenticator exists;
+      - the applier holds CREATEROLE (or SUPERUSER) and schema public's owner privileges, and owns every table;
+      - the bundle RPC is exactly 0015's;
+      - none of the four roles or 40 policies exists (otherwise "not a first apply").
+    - Post-checks:
+      - the four roles have no power at all;
+      - the only new memberships are authenticator → writer (SET, no INHERIT) and PG16's creator ADMIN grants;
+      - the table, sequence and schema grants are exact, with the 40 policies;
+      - the bundle RPC is SECURITY DEFINER of ucpe_bundle_owner, with its body, search_path and EXECUTE list as
+        reviewed;
+      - everything else is unchanged.
+  - **Evidence:**
+    - the rehearsal on scratch PostgreSQL 16.15: APPLIED, then a second apply refused, then the probe PASS;
+    - PERS-0 on 0001-0016: PASS;
+    - P3-PRIV-R P1-P8 and W1-W9: PASS on PostgREST v14.18 and v16.4;
+    - mutation 20/20.
+  - **F1/UOR (Correction 01) is preserved:** ucpe_space_db holds SELECT on automation_credential and INSERT, SELECT and
+    UPDATE on automation_radar_ledger. The route, the probe and P4 each assert it.
+- **Migration 0017, the forecast bundle RPC (WB1, W-A): MERGED** (#193 → a53c50b0; evidence
+  .work/roadmap/phase3/pr193, sealed).
+  - migrations/0017_forecast_bundle_rpc.sql (sha256 53591dfa…) is the rehearsed draft, byte-identical from `DO $$` on.
+    The draft is retired. P3-PRIV-R now applies the migration itself, plus rollback_0017.sql.
+  - **The one-shot route** is scripts/apply_migration_0017.py (lock 5000017, token APPLY-MIGRATION-0017-ONCE). Its trust
+    machinery is 0011's, verbatim; its checks are 0016's reviewed SQL plus the new function's.
+    - Pre-checks:
+      - 0016 is applied exactly: roles, memberships, grants, schema rights, the 40 policies and the bundle RPC;
+      - the applier holds ADMIN on ucpe_bundle_owner (or SUPERUSER) and schema public's rights, and owns every table;
+      - none of 0017's objects exists (otherwise "not a first apply").
+    - Post-checks:
+      - save_forecast_bundle is exactly as reviewed: SECURITY DEFINER of ucpe_bundle_owner, its fixed search_path, its
+        body;
+      - its EXECUTE list holds the owner, the writer and service_role, and never PUBLIC, anon, authenticated, the
+        resolver or the Space role;
+      - ucpe_bundle_owner gains exactly INSERT and SELECT on analysis_runs and analysis_run_details;
+      - there are 44 policies, and everything else is unchanged.
+  - **Evidence:**
+    - the rehearsal on scratch PostgreSQL 16.15, built from 0001-0016: APPLIED, then a second apply refused for three
+      reasons, then the probe PASS;
+    - PERS-0 on 0001-0017: PASS;
+    - P3-PRIV-R 17/17 PASS on both PostgREST versions, applying the migration's own bytes;
+    - mutation 29/29; VERIFY=PASS 5382.
+- **Registry:** 0016 and 0017 are additive and unapplied (applied_run null). Release check 5c therefore blocks every
+  release until both are applied and recorded. No release is pending.
+- **E3, the supported Supabase path** (Supabase's docs, re-read 2026-10-03; nothing was created):
+  - **Minting your own JWT** (the signing-keys guide): import a private key, which starts in standby; rotate it in;
+    then sign with alg ES256, its kid, and the claims role and exp (sub is optional). The guide says to prefer
+    shorter-lived tokens. Previously used keys stay trusted until revoked, so the legacy keys keep working through a
+    rotation.
+  - **Custom roles** need `grant <role> to authenticator`. Migration 0016 does exactly that, for ucpe_api_writer only.
+  - **The new API keys** (sb_publishable_, sb_secret_) are not JWTs and go only in `apikey`. A secret key still maps
+    to service_role (BYPASSRLS), so it is not least privilege by itself (G4).
+  - **Supabase deprecates the legacy anon and service_role keys by the end of 2026.** Today's REST client sends one
+    key in both `apikey` and `Authorization`, which a secret key cannot do. **E4's two-header change is needed before
+    that date regardless.**
+  - **Caveat:** the JWT guide no longer recommends overriding the Authorization header in Supabase *clients* that also
+    carry an Auth session. UCPE's writer is a server-side httpx client with no Auth session.
+  - **Not yet proven by execution:**
+    - ES256 + kid through a real PostgREST (provable in CI, with scratch keys);
+    - the hosted gateway accepting a publishable key plus the writer JWT (this needs the owner's key import).
+  - **For the credential plan:** the signing key must never sit in the Space. It can sign any role, service_role
+    included. A pre-minted, short-expiry writer JWT carries only ucpe_api_writer.
+Previously (W-A REHEARSED and merged; WB1 is now evidence-backed). **Production is unchanged: D 17c9c053 /
 UCPE-PROD-RCPT-20261003-A, guard HEALTHY. Main is 53e83537.**
 - **W-A, the whole §8.1 core bundle in ONE transaction: REHEARSED** (#190 → 53e83537; evidence
   .work/roadmap/phase3/pr190, sealed).
@@ -978,7 +1052,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): RCPT is RELEASED and its chain is complete (R 06e4733e). Next are the batched
+LOOP_STATE=AT THE OWNER (2026-10-03): migrations 0016 and 0017 are merged with their one-shot T4 packages. Main is
+  frozen at this record's merge for the dispatch. The owner's one Run action applies 0016, then 0017 only if 0016
+  succeeded. Nothing is applied yet. The rulings E1-E4, WB1 and WB3 are answered (verbatim in the header).
+  Before it: AT THE OWNER (2026-10-03): RCPT is RELEASED and its chain is complete (R 06e4733e). Next are the batched
   Phase 3 decisions E1-E4, WB1 and WB3.
   Before it: IN PROGRESS (2026-10-03): the release package UCPE-PROD-RCPT-20261003-A (the receipts #182 + W-B #185) goes
   through the B4 chain: identity → D → push CI and B3 → the guard on D → the rollback findings (target f046140b over
@@ -2650,7 +2727,9 @@ LOOP_STATE=AT THE OWNER (2026-10-03): RCPT is RELEASED and its chain is complete
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCPE-PROD-RCPT-20261003-A; R 06e4733e).
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 (E1, W2; #192 → 77dbe59e) and 0017 (WB1, W-A; #193 → a53c50b0)
+  are MERGED and unapplied. Their T4 applies are at the owner. Production is unchanged (17c9c053).
+  Before it: PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCPE-PROD-RCPT-20261003-A; R 06e4733e).
   The receipts and W-B are live.
   Before it: PHASE 3 (2026-10-03): the privilege rehearsal merged (#184 → 84280b6c, P1-P8 PASS ×2); W-B merged
   (#185 → 99908969); the release package UCPE-PROD-RCPT-20261003-A next.
@@ -2769,7 +2848,10 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCP
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-wa-rehearsed (this record; worktree lanes21/state_wa).
+CURRENT_BRANCH=chore/state-migrations-0016-0017 (this record; worktree lanes22/state_m17).
+  - Merged: feat/migration-0016-least-privilege-roles (#192 → 77dbe59e) and feat/migration-0017-forecast-bundle
+    (#193 → a53c50b0).
+  Before it: chore/state-wa-rehearsed (#191 → 22b2a6ae; worktree lanes21/state_wa).
   - Merged: feat/phase3-wa-rehearsal (#190 → 53e83537).
   Before it: chore/state-rcpt-released (#189 → cb5d50d8; worktree lanes21/state_rel).
   - Merged: release/prod-rcpt (#187 → D 17c9c053) and release/prod-rcpt-repin (#188 → R 06e4733e).
@@ -2867,7 +2949,10 @@ CURRENT_BRANCH=chore/state-wa-rehearsed (this record; worktree lanes21/state_wa)
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=53e83537 (main, PR #190: W-A rehearsed). Push CI success (run 37100317594); reproducibility success (run
+LAST_GREEN_SHA=a53c50b0 (main, PR #193: migration 0017). Push CI success (run 37108186970); reproducibility success
+  (run 37108186949); its PR checks 13/13 at ad29b24. Production is unchanged (D 17c9c053).
+  Before it: 77dbe59e (main, PR #192: migration 0016). Push CI 37106452298; reproducibility 37106452296.
+  Before it: 53e83537 (main, PR #190: W-A rehearsed). Push CI success (run 37100317594); reproducibility success (run
   37100317641). Production is unchanged (D 17c9c053).
   Before it: cb5d50d8 (main, PR #189). Push CI 37099614461; reproducibility 37099614519.
   Before it: 06e4733e (main = R, the RCPT re-pin, over D 17c9c053, deployed). Push CI success (run 37098315075); the guard
@@ -3064,7 +3149,9 @@ LAST_GREEN_SHA=53e83537 (main, PR #190: W-A rehearsed). Push CI success (run 371
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+LAST_VERIFY=PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+  - At #193's head (ad29b24), in its clean worktree, before its push. This record is verified before its own push.
+  Before it: PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at R 06e4733e, verified before its push.
   Before it: PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at main 99908969, verified before its push.
@@ -3309,7 +3396,15 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Phase 3 decisions (2026-10-03), batched:
+OWNER_BOUNDARY=Two T4 applies (2026-10-03), in one Run action, in order:
+  1. apply-migration-0016.yml (expected_sha = main at this record's merge; confirm APPLY-MIGRATION-0016-ONCE);
+  2. only if 1 succeeded, apply-migration-0017.yml (the same expected_sha; confirm APPLY-MIGRATION-0017-ONCE).
+  - Each is one-shot and never rerun. A refusal changes nothing, and its uploaded report names why.
+  - Answered (2026-10-03, verbatim in the header): E1 YES W2; E2 DEFER; E3 YES in principle, after the proof; E4 YES,
+    only repository.py + settings.py; WB1 YES after 0016; WB3 YES later, with S8.
+  - Still open, for later batches: E3's credential plan (after its executable proof); E2 (deferred); WB3 (with S8);
+    and the standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD).
+  Before it: Phase 3 decisions (2026-10-03), batched:
   - E1: promote the rehearsed draft to migration 0016, W2 or INVOKER;
   - E2: the role behind the Space's DB_URL, OWNER or OTHER (never its value);
   - E3: the credential plan;
@@ -3832,7 +3927,17 @@ OWNER_BOUNDARY=Phase 3 decisions (2026-10-03), batched:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: E1-E4, WB1 and WB3.
+NEXT_ACTION=The owner: the one Run action (0016, then 0017).
+  - Then Claude:
+    1. adjudicate both apply reports (raw first);
+    2. the registry PR recording both applied runs;
+    3. the §2.6 package (E4 + the W-A client): the two headers, save_forecast_bundle and its routing, PERS-0 widened to
+       the whole bundle, the evaluator pin regenerated, and the §2.6 record;
+    4. E3's executable proof: ES256 + kid through a real PostgREST, with scratch keys only;
+    5. then the release package, up to its T4.
+  - Claude creates no credential value. The writer JWT and the publishable key are the owner's, after the release.
+  - Throughout: never create verification traffic.
+  Before it: The owner: E1-E4, WB1 and WB3.
   - Then Claude, as answered: the migration-0016 route, that is the rehearsed draft promoted into
     migrations/0016, its one-shot apply route, rehearsal and registry entry, and its T4 apply card. Then W-A, if
     WB1 = yes, and the §2.6 package, if E4 = yes.
