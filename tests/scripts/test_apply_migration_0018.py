@@ -808,8 +808,25 @@ def test_the_applying_role_is_withheld_even_where_only_its_own_row_names_it() ->
     payload = {
         "pre_roles": [{"role": "solo_owner", "is_applying_role": True}],
         "detail": "the applying role solo_owner refused",
-        "grantor_only": "{anon=r/grantor_only_role}",
+        "acl": "{anon=r/grantor_only_role}",
     }
     text = json.dumps(apply_0018._published(payload))
     assert "solo_owner" not in text and "grantor_only_role" not in text
     assert "anon=r/" in text
+
+
+def test_only_acl_text_is_read_for_role_names() -> None:
+    payload = {
+        "pre_roles": [{"role": "ucpe_api_writer", "is_applying_role": False}],
+        "pre_function": [
+            {"config": ["search_path=pg_catalog, pg_temp"], "acl": ["x_admin=EXECUTE"]}
+        ],
+        "pre_schema_fingerprint": [
+            {"item": "t/column/c", "detail": "text notnull=true acl={y_admin=r/z}"}
+        ],
+    }
+    published = apply_0018._published(payload)
+    assert published["pre_function"][0]["config"] == ["search_path=pg_catalog, pg_temp"]
+    assert published["pre_function"][0]["acl"] == [f"{apply_0018.WITHHELD}=EXECUTE"]
+    detail = published["pre_schema_fingerprint"][0]["detail"]
+    assert detail == f"text notnull=true acl={{{apply_0018.WITHHELD}=r/{apply_0018.WITHHELD}}}"

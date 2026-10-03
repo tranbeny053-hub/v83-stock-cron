@@ -801,8 +801,11 @@ def _role_names(value: Any, key: str, names: set[str]) -> None:
     elif isinstance(value, str):
         if key in _ROLE_KEYS:
             names.add(value)
-        for grantee, grantor in _ACL_NAMES.findall(value):
-            names.update(name for name in (grantee, grantor) if name)
+        if key == "acl" or (key == "detail" and "acl=" in value):
+            # ACL text only: a function's or table's grants, or a column's in the fingerprint.
+            acl = value.split("acl=", 1)[1] if key == "detail" else value
+            for grantee, grantor in _ACL_NAMES.findall(acl):
+                names.update(name for name in (grantee, grantor) if name)
 
 
 def _substituted(value: Any, pattern: re.Pattern[str]) -> Any:
