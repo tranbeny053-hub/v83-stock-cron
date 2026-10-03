@@ -29,6 +29,7 @@ name: Privilege rehearsal (scratch PostgreSQL and PostgREST, no secrets)
   pull_request:
     paths:
       - scripts/privilege_rehearsal/**
+      - scripts/core_write_inventory.py
       - scripts/migration_0013_rehearsal/**
       - scripts/resolve_outcomes.py
       - migrations/**

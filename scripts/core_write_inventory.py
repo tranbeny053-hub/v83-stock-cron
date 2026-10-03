@@ -23,6 +23,27 @@ on the six core evidence tables is listed by kind:
 D6's revoke set covers T and C on the six tables (a table REVOKE also revokes column privileges) and
 F for the two bundle functions. Before freeze nothing else may appear; after D6 nothing may appear.
 Informational, never a surface: BYPASSRLS, memberships, and default privileges for future tables.
+
+THE ROUTE, .github/workflows/core-write-inventory.yml: owner-dispatched, inside the protected
+Environment production-db-owner, as ``python -I -S -B`` within the closed trust boundary of the
+other database routes (exact CPython, bundled pip, lock-authenticated wheels), with the dispatch
+verified against THIS workflow in the owner repository, on main, at expected_sha.
+
+    --mode attest      verify isolation, dispatch and runtime; touches no database
+    --mode rehearse    the inventory against a scratch local PostgreSQL built from the migrations
+                       with one planted surface per kind, as a role holding no privilege on any
+                       core table; never where the production secret is present, never over the
+                       network
+    --mode inventory   THE READ-ONLY INVENTORY; requires --expect and the confirmation token
+
+READ ONLY, CATALOGS ONLY, NEVER COMMITTED: one REPEATABLE READ snapshot made READ ONLY by its first
+statement, refused unless the server says it is read only, and rolled back. The repository is
+public, and so are its logs and artifacts: a role name is reported only if it is an API role,
+PostgreSQL's own (pg_*) or UCPE's (ucpe_*), none of which can be the owner login. Every other name
+is withheld; the connecting role and the database URL are never reported, and an unexpected failure
+is reported by its type only.
+
+THIS FILE IMPORTS ONLY THE STANDARD LIBRARY AT MODULE LEVEL, exactly like the other routes.
 """
 
 from __future__ import annotations
@@ -30,8 +51,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
+import re
+import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 CORE_TABLES = (
@@ -50,7 +75,6 @@ WRITE_PRIVILEGES = ("INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRI
 COLUMN_PRIVILEGES = ("INSERT", "UPDATE", "REFERENCES")
 EXPOSED_SCHEMAS = ("public", "graphql_public")
 READ_ONLY_SQL = "SET TRANSACTION READ ONLY"
-STATEMENT_TIMEOUT_SQL = "SET LOCAL statement_timeout = '60s'"
 SURFACE_KINDS = ("T", "C", "O", "F", "V", "R", "G", "K")
 
 _CORE = (
@@ -219,43 +243,515 @@ def verdict(report: dict[str, Any], expect: str) -> list[str]:
     raise ValueError(f"unknown expectation {expect!r}")
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+# --------------------------------------------------------------------------- the route
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "src"
+SCRIPT = "scripts/core_write_inventory.py"
+WORKFLOW = ".github/workflows/core-write-inventory.yml"
+CONFIRMATION = "READ-ONLY-CORE-WRITE-INVENTORY-ONCE"
+REPORT_SCHEMA = "core-write-inventory.v1"
+DISPATCH_SCHEMA = "core-write-inventory-dispatch.v1"
+MODE_ATTEST = "attest"
+MODE_REHEARSE = "rehearse"
+MODE_INVENTORY = "inventory"
+EXPECTATIONS = ("before", "after")
+ROLE = "service_role"
+REQUIRED_EVENT = "workflow_dispatch"
+REQUIRED_REF = "refs/heads/main"
+EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
+PINNED_PYTHON = ("CPython", "3.13.14")
+GUARD_STATEMENTS = (
+    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+    "SET LOCAL statement_timeout = '60s'",
+    "SET LOCAL lock_timeout = '5s'",
+)
+TRANSACTION_READ_ONLY_SQL = "SELECT pg_catalog.current_setting('transaction_read_only')"
+SERVER_VERSION_SQL = "SELECT pg_catalog.current_setting('server_version_num')"
+# The rehearsal's own role must hold nothing on a core table: a query that read an application row
+# would then fail, so success proves the inventory reads catalogs only.
+REHEARSAL_HELD_SQL = (
+    "SELECT t FROM unnest(%(core)s::text[]) t"
+    f" WHERE pg_catalog.has_table_privilege(current_user, {_TABLE},"
+    " 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')"
+    f" OR pg_catalog.has_any_column_privilege(current_user, {_TABLE},"
+    " 'SELECT,INSERT,UPDATE,REFERENCES') ORDER BY 1"
+)
+REHEARSAL_URL_VARIABLE = "INVENTORY_REHEARSAL_URL"
+REHEARSAL_MARKER = "inventory_probe"
+REHEARSAL_PLANTED_KINDS = ("F", "V", "R", "G", "K")
+# Reportable role names: the API roles, PostgreSQL's own (pg_*) and UCPE's (ucpe_*). None of them
+# can be the owner login. Every other name, in a surface's column or inside an ACL, is withheld.
+REPORTED_ROLES = frozenset({"anon", "authenticated", "authenticator", "service_role"})
+WITHHELD = "<role withheld>"
+ROLE_COLUMNS = {"O": 1, "F": 1, "G": 1}
+_REPORTED_ROLE = re.compile(r"(?:pg|ucpe)_[a-z0-9_]{1,58}")
+_ACL_ITEM = re.compile(r"(?P<grantee>[^=/,]*)=(?P<privileges>[A-Za-z*]*)/(?P<grantor>[^=/,]+)")
+# The rehearsal reaches only a local server through its unix socket: never a network host.
+_LOCAL_SOCKET_URL = re.compile(r"^postgresql:///[a-z_][a-z0-9_]*\?host=/var/run/postgresql$")
+_COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_DIGITS = re.compile(r"[0-9]+")
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="D6: the core-evidence write inventory, read-only."
     )
-    parser.add_argument("--role", default="service_role")
-    parser.add_argument("--url-env", default="SUPABASE_DB_URL",
-                        help="the environment variable holding the database URL (never printed)")
-    parser.add_argument("--exposed", default=",".join(EXPOSED_SCHEMAS),
-                        help="the schemas PostgREST exposes, comma-separated")
-    parser.add_argument("--expect", choices=("before", "after"), required=True)
-    arguments = parser.parse_args(argv)
-    url = os.environ.get(arguments.url_env)
-    if not url:
-        print(f"REFUSED: {arguments.url_env} is not set", file=sys.stderr)
-        return 2
+    parser.add_argument(
+        "--mode", choices=[MODE_ATTEST, MODE_REHEARSE, MODE_INVENTORY], default=MODE_ATTEST
+    )
+    parser.add_argument(
+        "--expect", default="", help="required for --mode inventory: exactly before or after"
+    )
+    parser.add_argument(
+        "--confirm", default="", help="required for --mode inventory: the exact confirmation token"
+    )
+    parser.add_argument(
+        "--expected-sha",
+        default="",
+        help="required: the full commit SHA on main that the owner reviewed and dispatched",
+    )
+    parser.add_argument(
+        "--wheelhouse",
+        default="",
+        help="required: the directory of lock-authenticated wheels that were installed",
+    )
+    parser.add_argument(
+        "--report", default=None, help="write this run's outcome, success or refusal, as JSON"
+    )
+    return parser
+
+
+def ensure_source_path() -> None:
+    """Make the first-party source importable, AFTER the interpreter's own library."""
+
+    if str(SOURCE) not in sys.path:
+        sys.path.append(str(SOURCE))
+
+
+def enter_isolated_runtime(wheelhouse: str):
+    """The isolated process and its authenticated import surface, verified first (J1=B)."""
+
+    ensure_source_path()
+    from crypto_probability_engine import runtime_isolation
+
+    if not wheelhouse:
+        raise _refusal("--wheelhouse is required; installed code is authenticated against it")
+    return runtime_isolation.enter(ROOT, wheelhouse=Path(wheelhouse))
+
+
+def observe(environ: Mapping[str, str], isolation) -> tuple[dict[str, str], dict[str, Any]]:
+    """The dispatch facts GitHub sets, and this process's and checkout's. Nothing is judged."""
+
+    from crypto_probability_engine import runtime_isolation
+
+    dispatch = {
+        field: str(environ.get(variable, ""))
+        for field, variable in (
+            ("github_actions", "GITHUB_ACTIONS"),
+            ("event_name", "GITHUB_EVENT_NAME"),
+            ("repository", "GITHUB_REPOSITORY"),
+            ("workflow_ref", "GITHUB_WORKFLOW_REF"),
+            ("ref", "GITHUB_REF"),
+            ("sha", "GITHUB_SHA"),
+            ("run_id", "GITHUB_RUN_ID"),
+            ("run_attempt", "GITHUB_RUN_ATTEMPT"),
+        )
+    }
+    status = _git("status", "--porcelain=v1", "--untracked-files=no")
+    runtime = {
+        "git_head": _git("rev-parse", "HEAD") or "",
+        "tracked_tree_clean": status == "" if status is not None else None,
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "interpreter_flags": runtime_isolation.interpreter_flags(),
+        "installed_files_sha256": getattr(isolation, "installed_files_sha256", ""),
+    }
+    return dispatch, runtime
+
+
+def verify_dispatch(
+    dispatch: Mapping[str, str], runtime: Mapping[str, Any], *, expected_sha: str
+) -> dict[str, Any]:
+    """Pure: a manual dispatch of THIS workflow, in the owner repository, on main, at the SHA."""
+
+    from crypto_probability_engine.runtime_isolation import REQUIRED_FLAGS_TEXT
+
+    failures: list[str] = []
+
+    def need(condition: bool, message: str) -> None:
+        if not condition:
+            failures.append(message)
+
+    repository = str(dispatch.get("repository", ""))
+    need(dispatch.get("github_actions") == "true", "not running inside GitHub Actions")
+    need(
+        repository == EXPECTED_REPOSITORY,
+        f"repository is {repository!r}, not the owner repository {EXPECTED_REPOSITORY}",
+    )
+    need(
+        dispatch.get("event_name") == REQUIRED_EVENT,
+        f"event is {dispatch.get('event_name')!r}, not a manual {REQUIRED_EVENT}",
+    )
+    need(dispatch.get("ref") == REQUIRED_REF, f"ref is {dispatch.get('ref')!r}, not {REQUIRED_REF}")
+    need(
+        dispatch.get("workflow_ref") == f"{EXPECTED_REPOSITORY}/{WORKFLOW}@{REQUIRED_REF}",
+        f"workflow is {dispatch.get('workflow_ref')!r}, not {WORKFLOW} on {REQUIRED_REF}",
+    )
+    sha_is_canonical = isinstance(expected_sha, str) and bool(_COMMIT_SHA.fullmatch(expected_sha))
+    need(
+        sha_is_canonical,
+        "expected_sha must be the full 40-character lowercase commit SHA of the reviewed commit",
+    )
+    need(
+        sha_is_canonical and dispatch.get("sha") == expected_sha,
+        f"the dispatched commit {dispatch.get('sha')!r} is not expected_sha",
+    )
+    need(
+        sha_is_canonical and runtime.get("git_head") == expected_sha,
+        f"the checked-out commit {runtime.get('git_head')!r} is not expected_sha",
+    )
+    need(
+        runtime.get("tracked_tree_clean") is True,
+        "tracked files differ from the checked-out commit",
+    )
+    interpreter = (runtime.get("python_implementation"), runtime.get("python_version"))
+    need(
+        interpreter == PINNED_PYTHON,
+        f"interpreter is {runtime.get('python_implementation')} {runtime.get('python_version')}, "
+        f"not {PINNED_PYTHON[0]} {PINNED_PYTHON[1]}",
+    )
+    need(
+        runtime.get("interpreter_flags") == REQUIRED_FLAGS_TEXT,
+        f"the process did not start isolated (flags [{runtime.get('interpreter_flags')}])",
+    )
+    need(
+        bool(_SHA256.fullmatch(str(runtime.get("installed_files_sha256", "")))),
+        "the installed files were not verified against their records",
+    )
+    need(bool(_DIGITS.fullmatch(str(dispatch.get("run_id", "")))), "run_id is not a GitHub run id")
+    need(
+        bool(_DIGITS.fullmatch(str(dispatch.get("run_attempt", "")))),
+        "run_attempt is not a number",
+    )
+    if failures:
+        raise _refusal("the dispatch does not verify: " + "; ".join(failures))
+    return {
+        "schema_version": DISPATCH_SCHEMA,
+        "dispatch_verified": True,
+        "workflow": WORKFLOW,
+        "event_name": str(dispatch["event_name"]),
+        "repository": repository,
+        "workflow_ref": str(dispatch["workflow_ref"]),
+        "ref": str(dispatch["ref"]),
+        "sha": str(dispatch["sha"]),
+        "expected_sha": expected_sha,
+        "git_head": str(runtime["git_head"]),
+        "run_id": str(dispatch["run_id"]),
+        "run_attempt": str(dispatch["run_attempt"]),
+        "python_version": str(runtime["python_version"]),
+        "interpreter_flags": str(runtime["interpreter_flags"]),
+        "installed_files_sha256": str(runtime["installed_files_sha256"]),
+    }
+
+
+def attest_dispatch(expected_sha: str, environ: Mapping[str, str], isolation) -> dict[str, Any]:
+    dispatch, runtime = observe(environ, isolation)
+    return verify_dispatch(dispatch, runtime, expected_sha=expected_sha)
+
+
+def attest_loaded_modules(isolation) -> int:
+    """Every loaded module came from the stdlib, a locked file, the evaluator pin or this script."""
+
+    from crypto_probability_engine import runtime_isolation
+    from crypto_probability_engine.oos.evaluation.evaluator_pin import pinned_files
+
+    return runtime_isolation.attest_loaded_modules(
+        isolation, pinned=(*pinned_files(ROOT), SCRIPT), root=ROOT
+    )
+
+
+def load_driver():
+    """The locked driver, imported WITHOUT connecting. enter() authenticated its files first."""
+
     import psycopg
 
-    with psycopg.connect(url, autocommit=False, prepare_threshold=None) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(READ_ONLY_SQL)
-            cursor.execute(STATEMENT_TIMEOUT_SQL)
-            cursor.execute("SHOW server_version_num")
-            version = int(cursor.fetchone()[0])
-
-            def execute(sql: str, values: dict[str, Any]) -> list[tuple]:
-                cursor.execute(sql, values)
-                return cursor.fetchall()
-
-            report = collect(execute, role=arguments.role, server_version_num=version,
-                             exposed=[name for name in arguments.exposed.split(",") if name])
-        connection.rollback()
-    failures = verdict(report, arguments.expect)
-    report["expect"], report["failures"] = arguments.expect, failures
-    report["verdict"] = "PASS" if not failures else "FAIL"
-    print(json.dumps(report, indent=1, sort_keys=True))
-    return 0 if not failures else 1
+    return psycopg
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def main(argv: Sequence[str] | None = None, *, environ: Mapping[str, str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    captured: dict[str, Any] = {}
+    try:
+        outcome = _run(args, os.environ if environ is None else environ, captured)
+    except Exception as exc:  # noqa: BLE001 - every failure is reported, then fails the step
+        record = _refusal_record(args.mode, exc, captured)
+        if args.report:
+            _write_report(Path(args.report), record)
+        print(f"{record['outcome']}: {record['error_type']}: {record['detail']}", file=sys.stderr)
+        return 2 if record["outcome"] == "REFUSED" else 1
+    print(json.dumps(outcome, indent=2, sort_keys=True))
+    if args.report:
+        _write_report(Path(args.report), outcome)
+    return 1 if outcome.get("verdict") == "FAIL" else 0
+
+
+def _run(
+    args: argparse.Namespace, environ: Mapping[str, str], captured: dict[str, Any]
+) -> dict[str, Any]:
+    if args.mode == MODE_INVENTORY and args.confirm != CONFIRMATION:
+        raise _refusal(f"--confirm must be exactly {CONFIRMATION}")
+    if args.mode == MODE_INVENTORY and args.expect not in EXPECTATIONS:
+        raise _refusal("--expect must be exactly before or after")
+    if args.mode == MODE_REHEARSE:
+        return rehearse(args, environ, captured)
+
+    isolation = enter_isolated_runtime(args.wheelhouse)
+    record = attest_dispatch(args.expected_sha, environ, isolation)
+    attest_loaded_modules(isolation)
+    base = {
+        "schema_version": REPORT_SCHEMA,
+        "role": ROLE,
+        "core_tables": list(CORE_TABLES),
+        "bundle_functions": list(BUNDLE_FUNCTIONS),
+        "run_provenance": record,
+    }
+    if args.mode == MODE_ATTEST:
+        load_driver()
+        attest_loaded_modules(isolation)
+        from crypto_probability_engine import runtime_isolation
+
+        return {
+            **base,
+            "mode": MODE_ATTEST,
+            "touches_database": False,
+            "driver_helpers": runtime_isolation.loaded_dynamic_helpers(),
+        }
+
+    database_url = environ.get("SUPABASE_DB_URL", "")
+    if not database_url:
+        raise _refusal("SUPABASE_DB_URL is not set")
+    driver = load_driver()
+    attest_loaded_modules(isolation)  # the driver's origin, verified before it reaches the network
+    report, _held = read_inventory(
+        lambda: driver.connect(
+            database_url, connect_timeout=8, autocommit=False, prepare_threshold=None
+        ),
+        captured,
+    )
+    published = redacted(report)
+    failures = verdict(published, args.expect)
+    return {
+        **base,
+        "mode": MODE_INVENTORY,
+        "outcome": "INVENTORIED",
+        "committed": False,
+        "expect": args.expect,
+        "verdict": "PASS" if not failures else "FAIL",
+        "failures": failures,
+        "inventory": published,
+    }
+
+
+def rehearse(
+    args: argparse.Namespace, environ: Mapping[str, str], captured: dict[str, Any]
+) -> dict[str, Any]:
+    """The inventory, end to end, against the scratch database the rehearsal fixtures built.
+
+    It connects as a role holding no privilege on any core table, so success proves the inventory
+    reads catalogs only. It must then report exactly the planted surfaces as omitted.
+    """
+
+    url = environ.get(REHEARSAL_URL_VARIABLE, "")
+    if not _LOCAL_SOCKET_URL.fullmatch(url):
+        raise _refusal(
+            f"{REHEARSAL_URL_VARIABLE} must be a local unix-socket URL, e.g. "
+            "postgresql:///inventory_rehearsal?host=/var/run/postgresql"
+        )
+    if environ.get("SUPABASE_DB_URL"):
+        raise _refusal("the rehearsal never runs where the production database secret is present")
+    isolation = enter_isolated_runtime(args.wheelhouse) if args.wheelhouse else None
+    driver = load_driver()
+    if isolation is not None:
+        attest_loaded_modules(isolation)
+    report, held = read_inventory(
+        lambda: driver.connect(url, connect_timeout=8, autocommit=False, prepare_threshold=None),
+        captured,
+        rehearsal=True,
+    )
+    published = redacted(report)
+    failures = rehearsal_failures(published, held)
+    if failures:
+        captured["inventory"] = published
+        raise _refusal("the rehearsal does not match its fixtures: " + "; ".join(failures))
+    return {
+        "schema_version": REPORT_SCHEMA,
+        "mode": MODE_REHEARSE,
+        "outcome": "REHEARSED",
+        "committed": False,
+        "omitted": [" ".join(row) for row in omitted(published)],
+        "inventory": published,
+    }
+
+
+def read_inventory(
+    open_connection: Callable[[], Any], captured: dict[str, Any], *, rehearsal: bool = False
+) -> tuple[dict[str, Any], list[str]]:
+    """The inventory of service_role in ONE read-only snapshot, always rolled back.
+
+    With ``rehearsal``, also the core tables on which the connecting role itself holds anything.
+    """
+
+    held: list[str] = []
+    with open_connection() as connection:
+        try:
+            with connection.cursor() as cursor:
+                for statement in GUARD_STATEMENTS:
+                    cursor.execute(statement)
+                cursor.execute(TRANSACTION_READ_ONLY_SQL)
+                read_only = _single(cursor.fetchone(), "read-only check")
+                captured["transaction_read_only"] = read_only
+                if read_only != "on":
+                    raise _refusal(f"the server reports transaction_read_only={read_only!r}")
+                cursor.execute(SERVER_VERSION_SQL)
+                version = int(_single(cursor.fetchone(), "server version"))
+                captured["maintain_inventoried"] = version >= 170000
+
+                def execute(sql: str, values: dict[str, Any]) -> list[tuple]:
+                    cursor.execute(sql, values)
+                    return cursor.fetchall()
+
+                report = collect(execute, role=ROLE, server_version_num=version)
+                if rehearsal:
+                    held = [
+                        str(row[0])
+                        for row in execute(REHEARSAL_HELD_SQL, {"core": list(CORE_TABLES)})
+                    ]
+        finally:
+            connection.rollback()
+    captured["rolled_back"] = True
+    return report, held
+
+
+def rehearsal_failures(report: Mapping[str, Any], held: Sequence[str]) -> list[str]:
+    """Pure: what the rehearsal fixtures were built to show, and was not shown."""
+
+    failures: list[str] = []
+    if held:
+        failures.append(
+            f"the rehearsal role holds a privilege on {list(held)}: catalogs only is not proven"
+        )
+    left = omitted(report)
+    strays = [" ".join(row) for row in left if REHEARSAL_MARKER not in " ".join(row)]
+    if strays:
+        failures.append(f"a surface outside the planted ones is omitted: {strays}")
+    for kind in REHEARSAL_PLANTED_KINDS:
+        if not any(row[0] == kind and REHEARSAL_MARKER in " ".join(row) for row in left):
+            failures.append(f"the planted {kind} surface was not caught as omitted")
+    for table in CORE_TABLES:
+        if [table, "INSERT"] not in report["surfaces"]["T"]:
+            failures.append(f"{ROLE} INSERT on {table} was not seen")
+    return failures
+
+
+def redacted(report: Mapping[str, Any]) -> dict[str, Any]:
+    """The report as it may be published: every role name that is not reportable is withheld, and
+    the server's version is reduced to whether MAINTAIN was inventoried (PostgreSQL 17 or later)."""
+
+    clean = json.loads(json.dumps(report))
+    version = clean.pop("server_version_num", 0)
+    clean["maintain_inventoried"] = isinstance(version, int) and version >= 170000
+    for kind, column in ROLE_COLUMNS.items():
+        for row in clean["surfaces"][kind]:
+            row[column] = reported_role(row[column])
+    information = clean["information"]
+    information["memberships"] = [[reported_role(row[0])] for row in information["memberships"]]
+    information["default_privileges"] = [
+        [reported_role(row[0]), row[1], row[2], reported_acl(row[3])]
+        for row in information["default_privileges"]
+    ]
+    return clean
+
+
+def reported_role(name: str) -> str:
+    return name if name in REPORTED_ROLES or _REPORTED_ROLE.fullmatch(name) else WITHHELD
+
+
+def reported_acl(acl: str) -> str:
+    """An ACL's text, item by item: a name that is not reportable is withheld, and an item that
+    does not parse (a quoted name, say) is withheld whole. PUBLIC's empty grantee stays empty."""
+
+    items = []
+    for item in acl.split(","):
+        match = _ACL_ITEM.fullmatch(item)
+        if match is None:
+            items.append(WITHHELD)
+            continue
+        grantee = reported_role(match["grantee"]) if match["grantee"] else ""
+        items.append(f"{grantee}={match['privileges']}/{reported_role(match['grantor'])}")
+    return ",".join(items)
+
+
+def _single(row: Any, what: str) -> Any:
+    if row is None or len(row) != 1:
+        raise _refusal(f"the {what} returned {row!r}, not one value")
+    return row[0]
+
+
+def _git(*arguments: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", *arguments],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip()
+
+
+def _refusal(message: str) -> Exception:
+    ensure_source_path()
+    from crypto_probability_engine.runtime_isolation import ProvenanceRefused  # stdlib-only
+
+    return ProvenanceRefused(f"core-write inventory refused: {message}")
+
+
+def _refusal_record(mode: str, exc: BaseException, captured: Mapping[str, Any]) -> dict[str, Any]:
+    """Deliberate refusals name no secret; any other failure is reported by type only."""
+
+    refused = _is_refusal(exc)
+    return {
+        "schema_version": REPORT_SCHEMA,
+        "mode": mode,
+        "outcome": "REFUSED" if refused else "FAILED",
+        "error_type": type(exc).__name__,
+        "detail": str(exc)
+        if refused
+        else "unexpected failure; the detail is withheld because driver messages can name the host",
+        "committed": False,
+        "captured": dict(captured),
+    }
+
+
+def _is_refusal(exc: BaseException) -> bool:
+    ensure_source_path()
+    from crypto_probability_engine.runtime_isolation import ProvenanceRefused  # stdlib-only
+
+    return isinstance(exc, ProvenanceRefused)
+
+
+def _write_report(path: Path, payload: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n"
+    path.write_text(text, encoding="utf-8")
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
+    sys.exit(main())
