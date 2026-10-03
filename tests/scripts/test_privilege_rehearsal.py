@@ -473,5 +473,36 @@ def test_the_wider_rollback_removes_exactly_what_migration_0017_added() -> None:
 
 
 def test_the_harness_gates_every_wider_criterion() -> None:
-    assert rehearse.WIDE_CRITERIA == ("W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9")
+    assert rehearse.WIDE_CRITERIA == (
+        "W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"
+    )
     assert set(rehearse.WIDE_CRITERIA) <= set(rehearse.CRITERIA)
+
+
+def test_w10_runs_the_released_writer_on_the_applied_0017_before_its_rollback() -> None:
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    run = source.split("def run(db: Database", 1)[1]
+    wired = 'criteria["W10"] = _guarded(lambda: criterion_production_writer(db, writer, rest))'
+    assert run.index("criteria_wide_bundle(") < run.index(wired) < run.index(
+        "rolled_0017 = db.apply(ROLLBACK_0017)")
+    # E4: the API key and the writer's JWT apart, and only booleans about them in the report.
+    assert "publishable_key=publishable, writer_jwt=jwt" in run
+    assert 'request.headers.get("apikey") == publishable' in run
+
+
+def test_p2_p6_and_p8_keep_the_w_b_writer_and_w10_the_released_one() -> None:
+    class Released:
+        def save_forecast_bundle(self) -> str:
+            return "W-A"
+
+        def circuit_state(self) -> str:
+            return "CLOSED"
+
+    view = rehearse.B9Writer(Released())
+    assert not hasattr(view, "save_forecast_bundle"), "the W-B path, as the live app persists"
+    assert view.circuit_state() == "CLOSED", "everything else goes straight through"
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    p2 = source.split("def criterion_writer(", 1)[1].split("\ndef ", 1)[0]
+    w10 = source.split("def criterion_production_writer(", 1)[1].split("\ndef ", 1)[0]
+    assert "persist_through_rest(" in p2 and "persist_through_forecast(" not in p2
+    assert "persist_through_forecast(" in w10 and "persist_through_rest(" not in w10

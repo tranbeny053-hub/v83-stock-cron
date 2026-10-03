@@ -96,6 +96,20 @@ def repository(endpoint: Endpoint) -> SupabaseRestRepository:
     )
 
 
+class B9Writer:
+    """The REST writer without W-A's save_forecast_bundle (migration 0017): the W-B path, where the
+    run and the detail are written beside B9's bundle. The W-A path is tested in
+    test_forecast_bundle_receipts.py."""
+
+    def __init__(self, inner: SupabaseRestRepository) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str):
+        if name == "save_forecast_bundle":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+
 def answer(prediction_status: str, feature=None, derivatives=None, refused=False) -> dict:
     return {"prediction": prediction_status, "feature_snapshot": feature,
             "derivatives_snapshot": derivatives, "refused": refused}
@@ -235,7 +249,7 @@ def work(*rows: dict, snapshots: tuple[dict, ...] = ()) -> PersistenceWork:
 def test_the_confirmation_acknowledges_only_a_complete_bundle() -> None:
     endpoint = Endpoint(answer("INSERTED", "INSERTED"))
     confirmation = _persist_work_confirmed(work(prediction(), snapshots=(snapshot(),)),
-                                           repository(endpoint))
+                                           B9Writer(repository(endpoint)))
     assert (confirmation.prediction, confirmation.feature_snapshot, confirmation.overall) == (
         "OK", "INSERTED", "OK")
     (call,) = endpoint.rpc_calls()
@@ -245,7 +259,7 @@ def test_the_confirmation_acknowledges_only_a_complete_bundle() -> None:
 def test_a_conflicting_prediction_is_refused_never_acknowledged() -> None:
     endpoint = Endpoint(answer("CONFLICT", refused=True))
     confirmation = _persist_work_confirmed(work(prediction(), snapshots=(snapshot(),)),
-                                           repository(endpoint))
+                                           B9Writer(repository(endpoint)))
     assert confirmation.prediction == "CONFLICT"
     assert confirmation.overall == "UNAVAILABLE"
 
@@ -253,7 +267,7 @@ def test_a_conflicting_prediction_is_refused_never_acknowledged() -> None:
 def test_a_conflicting_snapshot_is_partial_as_before() -> None:
     endpoint = Endpoint(answer("IDENTICAL_DUPLICATE", "CONFLICT", refused=True))
     confirmation = _persist_work_confirmed(work(prediction(), snapshots=(snapshot(),)),
-                                           repository(endpoint))
+                                           B9Writer(repository(endpoint)))
     assert (confirmation.prediction, confirmation.feature_snapshot, confirmation.overall) == (
         "OK", "CONFLICT", "PARTIAL")
 
@@ -261,13 +275,13 @@ def test_a_conflicting_snapshot_is_partial_as_before() -> None:
 def test_a_failed_bundle_is_unavailable() -> None:
     endpoint = Endpoint(httpx.Response(500))
     confirmation = _persist_work_confirmed(work(prediction(), snapshots=(snapshot(),)),
-                                           repository(endpoint))
+                                           B9Writer(repository(endpoint)))
     assert (confirmation.prediction, confirmation.overall) == ("UNAVAILABLE", "UNAVAILABLE")
 
 
 def test_a_missing_snapshot_still_writes_the_prediction_atomically_but_partial() -> None:
     endpoint = Endpoint(answer("INSERTED"))
-    confirmation = _persist_work_confirmed(work(prediction()), repository(endpoint))
+    confirmation = _persist_work_confirmed(work(prediction()), B9Writer(repository(endpoint)))
     assert confirmation.overall == "PARTIAL"
     assert endpoint.rpc_calls()[0]["p_feature_snapshot"] is None
 
@@ -276,7 +290,9 @@ def test_oos_rows_keep_their_own_path() -> None:
     endpoint = Endpoint()
     oos_id = "oosb-" + "1" * 32 + ":4H:CANDIDATE"
     row = prediction(prediction_id=oos_id, prediction_origin="SCHEDULED_SHADOW_EVIDENCE")
-    _persist_work_confirmed(work(row, snapshots=(snapshot(oos_id),)), repository(endpoint))
+    _persist_work_confirmed(
+        work(row, snapshots=(snapshot(oos_id),)), B9Writer(repository(endpoint))
+    )
     paths = [request.url.path for request in endpoint.requests]
     assert "/rest/v1/rpc/save_prediction_bundle" not in paths
     assert "/rest/v1/predictions" in paths

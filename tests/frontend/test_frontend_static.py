@@ -1270,7 +1270,8 @@ def test_frontend_has_no_direct_supabase_reference() -> None:
             read_frontend("app.js"),
         ]
     )
-    for marker in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+    for marker in ("SUPABASE_DB_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY",
+                   "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_WRITER_JWT"):
         assert marker not in combined
 
 

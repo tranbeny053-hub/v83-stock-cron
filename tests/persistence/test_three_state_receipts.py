@@ -7,8 +7,9 @@
   response, an unreadable answer, an exception mid-write.
 
 Deterministic: production's REST writer runs unchanged against an httpx.MockTransport, with each
-fault injected exactly where named. The same receipts are measured against migration 0015 on
-scratch PostgreSQL by PERS-0 (criterion C5).
+fault injected exactly where named, on the W-B path (B9's bundle, the run and the detail written
+beside it). The W-A path (migration 0017's one transaction) is test_forecast_bundle_receipts.py.
+Both are measured on scratch PostgreSQL by PERS-0 (criterion C5).
 """
 
 from __future__ import annotations
@@ -64,10 +65,24 @@ class Endpoint:
         return httpx.Response(200, json=answer)
 
 
-def rest(endpoint: Endpoint) -> SupabaseRestRepository:
-    return SupabaseRestRepository(
+class B9Writer:
+    """The REST writer without W-A's save_forecast_bundle (migration 0017): the W-B path, where the
+    run and the detail are written beside B9's bundle. The W-A path is tested in
+    test_forecast_bundle_receipts.py."""
+
+    def __init__(self, inner: SupabaseRestRepository) -> None:
+        self._inner = inner
+
+    def __getattr__(self, name: str):
+        if name == "save_forecast_bundle":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+
+def rest(endpoint: Endpoint) -> B9Writer:
+    return B9Writer(SupabaseRestRepository(
         BASE, "test-key", client=httpx.Client(transport=httpx.MockTransport(endpoint))
-    )
+    ))
 
 
 def answer(prediction: str, feature: str | None = None, refused: bool = False) -> dict:
@@ -160,9 +175,9 @@ def test_a_failure_before_any_bundle_write_is_not_attempted() -> None:
             raise RuntimeError("the run summary could not be built")
 
     endpoint = Endpoint()
-    repository = AuxiliaryFails(
+    repository = B9Writer(AuxiliaryFails(
         BASE, "test-key", client=httpx.Client(transport=httpx.MockTransport(endpoint))
-    )
+    ))
     confirmation = _persist_work_confirmed(work(), repository)
     assert receipt(confirmation) == (RECEIPT_NOT_SAVED, "NOT_ATTEMPTED")
     assert endpoint.rpc_calls == 0
@@ -190,8 +205,8 @@ def test_an_exception_mid_write_is_commit_unknown() -> None:
         def save_prediction_bundle(self, *args, **kwargs):
             raise RuntimeError("the client failed after sending")
 
-    repository = Raising(BASE, "test-key", client=httpx.Client(
-        transport=httpx.MockTransport(Endpoint())))
+    repository = B9Writer(Raising(BASE, "test-key", client=httpx.Client(
+        transport=httpx.MockTransport(Endpoint()))))
     confirmation = _persist_work_confirmed(work(), repository)
     assert receipt(confirmation) == (RECEIPT_COMMIT_UNKNOWN, "UNCONFIRMED_EXCEPTION")
 

@@ -1,13 +1,16 @@
-"""PERS-0: the persistence writers under injected faults (B9 adds the REST bundle route).
+"""PERS-0: the persistence writers under injected faults (B9 adds the REST bundle route; W-A widens
+it to the whole core bundle).
 
 Plan references: §22 item 7, and the §23 Persistence criteria.
 
 Two routes, each measured on the same scenarios:
 - "postgres": the direct-Postgres writer (SupabasePersistenceRepository), unchanged by B9 and not
   production's writer (M1 = REST, CONFIG_PROVEN). Its verdicts are data;
-- "rest_rpc": production's REST writer (SupabaseRestRepository) and its B9 bundle, migration 0015's
-  public.save_prediction_bundle, called exactly as PostgREST calls it (postgrest_emulator.py). With
-  --require-route rest_rpc every one of its criteria must PASS, or the run fails.
+- "rest_rpc": production's REST writer (SupabaseRestRepository). With W-A it sends each forecast
+  bundle through migration 0017's public.save_forecast_bundle: the run identity, the detail
+  payload, the prediction and its snapshots in one transaction. Called exactly as PostgREST calls
+  it (postgrest_emulator.py). With --require-route rest_rpc every one of its criteria must PASS, or
+  the run fails.
 
 Each scenario persists bundles built exactly as the real pipeline builds them: the writer's own
 prediction row and feature snapshot, as in the 0014 writer probe. It persists them through the
@@ -27,8 +30,10 @@ The scenarios:
 - S7 a response lost after commit (postgres: save_prediction commits, then raises; rest_rpc: the
   RPC commits, then the HTTP response is lost); then a same-content retry.
 - S8 the circuit after a failure: a new bundle on the repository that just failed.
+- S9 a conflicting run identity: S1's run_id with another total_score.
 
-The §23 criteria are derived from what is observed:
+The §23 criteria are derived from what is observed. A complete bundle is plan §8.1's core: the run
+identity, the detail payload, the prediction and its feature snapshot.
 - C1a an acknowledged result (overall OK) always has its complete bundle in the database;
 - C1b no partial bundle is ever persisted (atomicity);
 - C2 a same-content retry is idempotent and leaves exactly one complete bundle;
@@ -64,11 +69,12 @@ for _path in (ROOT, ROOT / "src"):
         sys.path.remove(str(_path))
     sys.path.insert(0, str(_path))
 
-SCHEMA_VERSION = "persistence-fault-rehearsal.v2"
+SCHEMA_VERSION = "persistence-fault-rehearsal.v3"
 ROUTES = ("postgres", "rest_rpc")
 REST_BASE = "https://rehearsal.invalid"
 REST_KEY = "rehearsal-service-role-key"
 BUNDLE_FUNCTION = "public.save_prediction_bundle(jsonb,jsonb,jsonb)"
+FORECAST_FUNCTION = "public.save_forecast_bundle(jsonb,jsonb,jsonb,jsonb,jsonb)"
 CRITERIA = ("C1a", "C1b", "C2", "C3", "C4", "C5")
 
 
@@ -84,11 +90,16 @@ def require_scratch(url: str) -> None:
 def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """The §23 criteria from the scenario observations. Pure: unit-tested without a database."""
 
+    def parts(state: dict[str, Any]) -> list[int]:
+        # Plan §8.1's core: the prediction, its snapshot, the run identity, the detail payload.
+        return [state["predictions"], state["snapshots"], state["runs"], state["details"]]
+
     def complete(obs: dict[str, Any]) -> bool:
-        return obs["db"]["predictions"] == 1 and obs["db"]["snapshots"] == 1
+        return parts(obs["db"]) == [1, 1, 1, 1]
 
     def partial(obs: dict[str, Any]) -> bool:
-        return obs["db"]["predictions"] == 1 and obs["db"]["snapshots"] == 0
+        stored = parts(obs["db"])
+        return any(stored) and stored != [1, 1, 1, 1]
 
     acknowledged = [
         name for name, obs in observations.items() if obs["result"].get("overall") == "OK"
@@ -103,7 +114,7 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
             complete(observations[name]) and observations[name]["result"].get("overall") == "OK"
         )
     ]
-    conflicts = [name for name in ("S5", "S6") if name in observations]
+    conflicts = [name for name in ("S5", "S6", "S9") if name in observations]
     c3_bad = [
         name
         for name in conflicts
@@ -114,8 +125,10 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
     c5_bad = []
     for name, obs in observations.items():
         receipt = obs.get("receipt")
-        before = obs.get("db_before") or {"predictions": 0, "snapshots": 0}
-        was_complete = before["predictions"] == 1 and before["snapshots"] == 1
+        before = obs.get("db_before") or dict.fromkeys(
+            ("predictions", "snapshots", "runs", "details"), 0
+        )
+        was_complete = parts(before) == [1, 1, 1, 1]
         if receipt not in {"SAVED", "NOT_SAVED", "COMMIT_UNKNOWN"}:
             c5_bad.append(name)
         elif receipt == "SAVED" and (not complete(obs) or name in conflicts):
@@ -206,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
     from crypto_probability_engine.persistence.run_store import InMemoryRunStore
     from crypto_probability_engine.quant.pipeline import run_quant_pipeline
     from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
+    from crypto_probability_engine.utils.sanitize import sanitize_for_export
     from scripts.persistence_rehearsal.postgrest_emulator import PostgrestEmulator, install_faults
     from tests.fixtures.market_data import make_high_volatility_snapshot, make_snapshot
 
@@ -251,12 +265,36 @@ def main(argv: list[str] | None = None) -> int:
         if row is None:
             raise SystemExit("the writer built no prediction row")
         work = _persistence_work(payload, "OK", consume_pending=False)
+        # A USER_REQUESTED analysis's required detail, exactly as schedule_best_effort_persist adds
+        # it, so plan §8.1's whole core is measured.
+        detail = {
+            "run_id": payload["run_id"],
+            "analysis_hash": payload.get("analysis_hash"),
+            "detail_payload": sanitize_for_export(payload["detail_view"]),
+        }
         return dataclasses.replace(
-            work, prediction_rows=(row,), feature_snapshot_rows=(snapshot_row(row, make_snapshot),)
+            work,
+            prediction_rows=(row,),
+            feature_snapshot_rows=(snapshot_row(row, make_snapshot),),
+            run_detail_row=detail,
         )
 
-    def db(prediction_id: str) -> dict[str, Any]:
+    def db(work: Any) -> dict[str, Any]:
+        prediction_id = work.prediction_rows[0]["prediction_id"]
+        run_id = work.run_summary["run_id"]
         with psycopg.connect(url) as conn, conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM public.analysis_runs WHERE run_id = %s", (run_id,)
+            )
+            runs = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT count(*) FROM public.analysis_run_details WHERE run_id = %s", (run_id,)
+            )
+            details = int(cursor.fetchone()[0])
+            cursor.execute(
+                "SELECT total_score::text FROM public.analysis_runs WHERE run_id = %s", (run_id,)
+            )
+            stored_run = cursor.fetchone()
             cursor.execute(
                 "SELECT count(*) FROM public.predictions WHERE prediction_id = %s", (prediction_id,)
             )
@@ -280,8 +318,11 @@ def main(argv: list[str] | None = None) -> int:
         return {
             "predictions": predictions,
             "snapshots": snapshots,
+            "runs": runs,
+            "details": details,
             "reference_price": stored[0] if stored else None,
             "snapshot_hash": snapshot_hash[0] if snapshot_hash else None,
+            "total_score": stored_run[0] if stored_run else None,
         }
 
     def run(work: Any, repository: Any) -> tuple[dict[str, Any], tuple[Any, Any]]:
@@ -303,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
 
         def observe(name: str, fault: str, work: Any, repository: Any,
                     **extra: Any) -> dict[str, Any]:
-            before = db(work.prediction_rows[0]["prediction_id"])
+            before = db(work)
             result, (receipt, reason) = run(work, repository)
             obs = {
                 "fault": fault,
@@ -311,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
                 "receipt": receipt,
                 "receipt_reason": reason,
                 "db_before": before,
-                "db": db(work.prediction_rows[0]["prediction_id"]),
+                "db": db(work),
                 **extra,
             }
             observations[name] = obs
@@ -328,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
         observe("S3", "none (a same-content retry of S2)", s2, fresh())
         observe("S4", "none (a same-content retry of S1)", s1, fresh())
 
-        before = db(s1.prediction_rows[0]["prediction_id"])
+        before = db(s1)
         changed = dict(s1.prediction_rows[0])
         changed["reference_price"] = float(changed["reference_price"]) * 1.01
         conflict = dataclasses.replace(s1, prediction_rows=(changed,))
@@ -351,6 +392,18 @@ def main(argv: list[str] | None = None) -> int:
             "IDENTICAL_DUPLICATE",
         }
         obs["stored_unchanged"] = obs["db"]["snapshot_hash"] == before["snapshot_hash"]
+
+        before = db(s1)
+        score = s1.run_summary.get("total_score")
+        other_run = {**s1.run_summary, "total_score": round(float(score or 0) + 1.5, 6)}
+        obs = observe(
+            "S9",
+            "a conflicting run identity (same run_id, another total_score)",
+            dataclasses.replace(s1, run_summary=other_run),
+            fresh(),
+        )
+        obs["conflict_reported_ok"] = obs["result"].get("overall") == "OK"
+        obs["stored_unchanged"] = obs["db"]["total_score"] == before["total_score"]
 
         s7 = bundle()
         observe("S7a", "the write commits, then the response is lost", s7,
@@ -398,8 +451,9 @@ def main(argv: list[str] | None = None) -> int:
         "routes": report_routes,
         "scope": (
             "postgres: the direct-Postgres writer, not production's; rest_rpc: production's REST "
-            "writer and migration 0015's bundle RPC, called as PostgREST calls it, on scratch "
-            "PostgreSQL built from migrations 0001-0015"
+            "writer and migration 0017's forecast bundle RPC (the run, the detail, the prediction "
+            "and its snapshot in one transaction), called as PostgREST calls it, on scratch "
+            "PostgreSQL built from migrations 0001-0017"
         ),
     }
     Path(args.report).write_text(
@@ -441,6 +495,10 @@ def unmet_requirements(
     return unmet
 
 
+def _privileges_sql(function: str) -> str:
+    return PRIVILEGES_SQL.replace(f"'{BUNDLE_FUNCTION}'", f"'{function}'")
+
+
 PRIVILEGES_SQL = (
     "SELECT pg_catalog.has_function_privilege('public', p.oid, 'EXECUTE'),"
     " pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE'),"
@@ -455,41 +513,45 @@ PRIVILEGES_SQL = (
 
 
 def rest_privileges(url: str) -> dict[str, Any]:
-    """The catalog facts of the bundle RPC: who may execute it, how it runs.
+    """The catalog facts of both bundle RPCs: who may execute them, how they run.
 
-    Since migration 0016 (W2) it runs SECURITY DEFINER as its narrow owner, ucpe_bundle_owner, and
-    the writer role may execute it beside service_role (the live writer's).
+    Since migration 0016 (W2) B9's runs SECURITY DEFINER as its narrow owner, ucpe_bundle_owner,
+    and the writer role may execute it beside service_role (the live writer's). Migration 0017's
+    forecast bundle runs the same way. Its facts are prefixed forecast_.
     """
 
     import psycopg
 
-    with psycopg.connect(url) as connection, connection.cursor() as cursor:
-        cursor.execute(PRIVILEGES_SQL)
-        public, anon, authenticated, service_role, definer, config, owner, writer = (
-            cursor.fetchone()
-        )
-    observed = {
-        "execute_public": public,
-        "execute_anon": anon,
-        "execute_authenticated": authenticated,
-        "execute_service_role": service_role,
-        "execute_writer": writer,
-        "security_definer": definer,
-        "owner": owner,
-        "config": list(config),
-    }
-    return {
-        "observed": observed,
-        "expected": {
-            "no_execute_for_public_anon_authenticated": not (public or anon or authenticated),
-            "execute_for_service_role": service_role is True,
-            "execute_for_the_writer": writer is True,
-            "security_definer_of_ucpe_bundle_owner": (
+    observed: dict[str, Any] = {}
+    expected: dict[str, bool] = {}
+    for prefix, function in (("", BUNDLE_FUNCTION), ("forecast_", FORECAST_FUNCTION)):
+        with psycopg.connect(url) as connection, connection.cursor() as cursor:
+            cursor.execute(_privileges_sql(function))
+            public, anon, authenticated, service_role, definer, config, owner, writer = (
+                cursor.fetchone()
+            )
+        observed.update({
+            f"{prefix}execute_public": public,
+            f"{prefix}execute_anon": anon,
+            f"{prefix}execute_authenticated": authenticated,
+            f"{prefix}execute_service_role": service_role,
+            f"{prefix}execute_writer": writer,
+            f"{prefix}security_definer": definer,
+            f"{prefix}owner": owner,
+            f"{prefix}config": list(config),
+        })
+        expected.update({
+            f"{prefix}no_execute_for_public_anon_authenticated": not (
+                public or anon or authenticated
+            ),
+            f"{prefix}execute_for_service_role": service_role is True,
+            f"{prefix}execute_for_the_writer": writer is True,
+            f"{prefix}security_definer_of_ucpe_bundle_owner": (
                 definer is True and owner == "ucpe_bundle_owner"
             ),
-            "fixed_search_path": list(config) == ["search_path=pg_catalog, pg_temp"],
-        },
-    }
+            f"{prefix}fixed_search_path": list(config) == ["search_path=pg_catalog, pg_temp"],
+        })
+    return {"observed": observed, "expected": expected}
 
 
 def rest_refusals(url: str, rest: Callable[..., Any]) -> dict[str, Any]:
@@ -498,19 +560,24 @@ def rest_refusals(url: str, rest: Callable[..., Any]) -> dict[str, Any]:
     import psycopg
 
     observed: dict[str, Any] = {}
-    for role in ("anon", "authenticated"):
-        with psycopg.connect(url) as connection:
-            try:
-                with connection.cursor() as cursor:
-                    cursor.execute(f"SET LOCAL ROLE {role}")
-                    cursor.execute(
-                        f"SELECT {BUNDLE_FUNCTION.split('(')[0]}"
-                        "('{\"prediction_id\": \"pers0_refused\"}'::jsonb)"
-                    )
-                observed[f"{role}_sqlstate"] = None
-            except psycopg.Error as exc:
-                observed[f"{role}_sqlstate"] = exc.sqlstate
-                connection.rollback()
+    calls = {
+        "": f"SELECT {BUNDLE_FUNCTION.split('(')[0]}"
+        "('{\"prediction_id\": \"pers0_refused\"}'::jsonb)",
+        "forecast_": f"SELECT {FORECAST_FUNCTION.split('(')[0]}"
+        "('{\"run_id\": \"pers0_refused\"}'::jsonb,"
+        " '{\"prediction_id\": \"pers0_refused\"}'::jsonb)",
+    }
+    for prefix, call in calls.items():
+        for role in ("anon", "authenticated"):
+            with psycopg.connect(url) as connection:
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(f"SET LOCAL ROLE {role}")
+                        cursor.execute(call)
+                    observed[f"{prefix}{role}_sqlstate"] = None
+                except psycopg.Error as exc:
+                    observed[f"{prefix}{role}_sqlstate"] = exc.sqlstate
+                    connection.rollback()
     malformed = {
         "unknown_key": ({"prediction_id": "pers0_malformed_1", "not_a_column": 1}, None),
         "oos_identity": ({"prediction_id": "oosb-" + "0" * 32 + ":4H:BASELINE",
@@ -530,10 +597,25 @@ def rest_refusals(url: str, rest: Callable[..., Any]) -> dict[str, Any]:
         except ValueError:
             statuses[name] = "REFUSED_BY_CLIENT"
     observed["malformed"] = statuses
+    forecast_malformed = {
+        "run_unknown_key": (
+            {"run_id": "pers0_malformed_run_1", "not_a_column": 1},
+            {"prediction_id": "pers0_malformed_3", "run_id": "pers0_malformed_run_1"},
+        ),
+        "prediction_of_another_run": ({"run_id": "pers0_malformed_run_2"},
+                                      {"prediction_id": "pers0_malformed_4", "run_id": "other"}),
+    }
+    forecast_statuses = {}
+    for name, (run_row, row) in forecast_malformed.items():
+        written = rest().save_forecast_bundle(run_row, row, None)
+        forecast_statuses[name] = str(written.bundle.prediction)
+    observed["forecast_malformed"] = forecast_statuses
     with psycopg.connect(url) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "SELECT count(*) FROM public.predictions WHERE prediction_id LIKE 'pers0_malformed%'"
-            " OR prediction_id = 'pers0_refused'"
+            "SELECT (SELECT count(*) FROM public.predictions"
+            " WHERE prediction_id LIKE 'pers0_malformed%' OR prediction_id = 'pers0_refused')"
+            " + (SELECT count(*) FROM public.analysis_runs"
+            " WHERE run_id LIKE 'pers0_malformed%' OR run_id = 'pers0_refused')"
         )
         observed["rows_written_by_refusals"] = int(cursor.fetchone()[0])
     return {
@@ -541,8 +623,15 @@ def rest_refusals(url: str, rest: Callable[..., Any]) -> dict[str, Any]:
         "expected": {
             "anon_refused_42501": observed["anon_sqlstate"] == "42501",
             "authenticated_refused_42501": observed["authenticated_sqlstate"] == "42501",
+            "forecast_anon_refused_42501": observed["forecast_anon_sqlstate"] == "42501",
+            "forecast_authenticated_refused_42501": (
+                observed["forecast_authenticated_sqlstate"] == "42501"
+            ),
             "malformed_bundles_unavailable": all(
                 status in {"UNAVAILABLE", "REFUSED_BY_CLIENT"} for status in statuses.values()
+            ),
+            "malformed_forecast_bundles_unavailable": all(
+                status == "UNAVAILABLE" for status in forecast_statuses.values()
             ),
             "refusals_write_nothing": observed["rows_written_by_refusals"] == 0,
         },
