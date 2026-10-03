@@ -144,12 +144,12 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
         "applied, so a new migration must say whether it is additive"
     )
     # An explicit "applied_run": null marks a migration authored on main but not yet applied
-    # (0001-0007 predate apply tracking and carry no applied_run key at all). 0015 was applied by
-    # run 37033014490. 0016 (the least-privilege roles) and 0017 (the wider bundle RPC, after 0016)
-    # are authored and wait for their one-shot T4s, vouched additive.
+    # (0001-0007 predate apply tracking and carry no applied_run key at all). Every authored
+    # migration is applied: 0015 by run 37033014490, 0016 by run 37110330500 and 0017 by run
+    # 37110375659. A new one must be vouched additive.
     unapplied = [m for m in registry["migrations_applied"]
                  if "applied_run" in m and m["applied_run"] is None]
-    assert [m["id"] for m in unapplied] == ["0016", "0017"]
+    assert [m["id"] for m in unapplied] == []
     assert all(m["additive"] is True for m in unapplied), (
         "an authored, unapplied migration must be vouched additive, or merging it would block "
         "every H2-safe rollback"
