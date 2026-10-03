@@ -1,31 +1,40 @@
--- P3-W-A: the DRAFT of migration 0017, plan §8.1's whole core bundle in ONE transaction
--- (.work/roadmap/phase3/WIDER_BUNDLE_DESIGN.md, option W-A).
+-- Phase 3: plan §8.1's whole core bundle in ONE transaction (the wider bundle, option W-A).
 --
--- NOT A MIGRATION. This file lives outside migrations/, so no route applies it to a real database, and
--- release check 5c ignores it. scripts/privilege_rehearsal/rehearse.py applies it ONLY to a scratch
--- PostgreSQL on a CI runner, after the draft of 0016 (it needs W2's ucpe_bundle_owner). If the owner
--- approves it (WB1), migration 0017 becomes these bytes under its own one-shot apply route (a T4).
+-- AUTHORED, NOT APPLIED. Applying this is a T4 action that needs owner authorization. It goes
+-- through its own one-shot route, scripts/apply_migration_0017.py, and only after migration 0016 is
+-- applied. The bulk scripts/apply_migrations.py applies EVERY migration and must never be used for it.
+--
+-- THE RULING. The owner ruled WB1 = YES, after 0016, on 2026-10-03. The design is
+-- .work/roadmap/phase3/WIDER_BUNDLE_DESIGN.md, option W-A. Everything below the header is
+-- byte-for-byte what P3-PRIV-R rehearsed: criteria W1-W9 on PostgREST v14.18 and v16.4
+-- (scripts/privilege_rehearsal/rehearse.py).
 --
 -- ONE FUNCTION: public.save_forecast_bundle(p_run, p_prediction, p_feature_snapshot,
 -- p_derivatives_snapshot, p_run_detail). In one transaction it writes:
--- - **the run identity** (analysis_runs). It is inserted, or compared with the stored row on every column
---   but persistence_status, a scheduling-time hint the first write keeps. A different stored run is a
---   CONFLICT;
--- - **the required detail payload**, when given (analysis_run_details, USER_REQUESTED analyses). It is
---   inserted, or compared on (analysis_hash, detail_payload). Different content is a CONFLICT;
--- - **the forecast bundle**, through migration 0015's unchanged public.save_prediction_bundle: the
---   prediction and its snapshots, inserted or compared.
---
+-- - **the run identity** (analysis_runs). It is inserted, or compared with the stored row on every
+--   column but persistence_status, a scheduling-time hint the first write keeps. A different stored
+--   run is a CONFLICT;
+-- - **the required detail payload**, when given (analysis_run_details). It is inserted, or compared on
+--   (analysis_hash, detail_payload). Different content is a CONFLICT;
+-- - **the forecast bundle**, through migration 0015's unchanged public.save_prediction_bundle.
 -- ANY CONFLICT refuses the call: everything it wrote is rolled back, and the answer says so
--- ("refused": true). Any error fails the request with nothing written. It only INSERTs and SELECTs,
--- so no UPDATE privilege is needed, and 0014's append-only triggers never fire.
+-- ("refused": true). Any error fails the request with nothing written. It only INSERTs and SELECTs.
 --
 -- SECURITY:
--- - SECURITY DEFINER, owned by ucpe_bundle_owner (W2), which holds only INSERT and SELECT on what the
---   function writes, each with its policy;
+-- - SECURITY DEFINER, owned by migration 0016's ucpe_bundle_owner (W2), which gains only INSERT and
+--   SELECT on the run and detail tables, each with its policy;
 -- - a fixed search_path, with every object qualified (§8.2);
--- - EXECUTE for ucpe_api_writer and, until step D6, service_role. Never PUBLIC, anon or authenticated.
--- It runs as the tables' owner, in one transaction (the caller's), and refuses a second application.
+-- - EXECUTE for ucpe_api_writer and, until step D6, service_role. Never PUBLIC, anon or
+--   authenticated.
+--
+-- NOTHING EXISTING CHANGES. Older code never calls it. Nothing is revoked, and no table changes.
+--
+-- APPLYING IT:
+-- - It runs as the tables' owner, in the route's single transaction.
+-- - A second application is refused before any change (SQLSTATE UP017), and the route refuses one
+--   even earlier, as "not a first apply".
+-- - The rollback is a separate T4, never automatic: scripts/privilege_rehearsal/rollback_0017.sql.
+--   W9 proves it restores the post-0016 catalog exactly.
 
 DO $$
 BEGIN
