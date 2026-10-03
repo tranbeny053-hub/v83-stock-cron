@@ -31,6 +31,8 @@ The scenarios:
   RPC commits, then the HTTP response is lost); then a same-content retry.
 - S8 the circuit after a failure: a new bundle on the repository that just failed.
 - S9 a conflicting run identity: S1's run_id with another total_score.
+- S10 (rest_rpc only, WB3's R-1a) the bundle fails inside its transaction, and then the response is
+  lost: to the client exactly like S7a, but nothing committed.
 
 The §23 criteria are derived from what is observed. A complete bundle is plan §8.1's core: the run
 identity, the detail payload, the prediction and its feature snapshot.
@@ -42,6 +44,9 @@ identity, the detail payload, the prediction and its feature snapshot.
 - C5 the receipt (plan §8.1) never lies: SAVED only when the complete bundle is stored (and never
   for a conflicting submission); NOT_SAVED only when the submission stored no complete bundle;
   COMMIT_UNKNOWN is always truthful.
+- C6 (WB3's R-1a) one strict read decides an unknown commit: S7a's COMMIT_UNKNOWN reconciles to
+  SAVED and S10's to NOT_SAVED, by api/commit_reconciliation.py on the database's own answer. It
+  applies only where the bundle is one transaction (rest_rpc); elsewhere it is NOT_APPLICABLE.
 
 The script exits 0 when every scenario ran and the report was written, 1 if the harness itself
 failed, and 3 when a route named by --require-route has a criterion that is not PASS.
@@ -75,7 +80,7 @@ REST_BASE = "https://rehearsal.invalid"
 REST_KEY = "rehearsal-service-role-key"
 BUNDLE_FUNCTION = "public.save_prediction_bundle(jsonb,jsonb,jsonb)"
 FORECAST_FUNCTION = "public.save_forecast_bundle(jsonb,jsonb,jsonb,jsonb,jsonb)"
-CRITERIA = ("C1a", "C1b", "C2", "C3", "C4", "C5")
+CRITERIA = ("C1a", "C1b", "C2", "C3", "C4", "C5", "C6")
 
 
 class InjectedFault(RuntimeError):
@@ -135,6 +140,18 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
             c5_bad.append(name)
         elif receipt == "NOT_SAVED" and complete(obs) and not was_complete:
             c5_bad.append(name)
+    s7a, s10 = observations.get("S7a"), observations.get("S10")
+    if s10 is None:
+        c6 = {"verdict": "NOT_APPLICABLE",
+              "reason": "one read decides only an atomic bundle; this route is not one transaction"}
+    else:
+        expected = {"S7a": ["SAVED", "RECONCILED_COMMITTED"],
+                    "S10": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}
+        reconciled = {name: (obs or {}).get("reconciled") for name, obs in (("S7a", s7a),
+                                                                             ("S10", s10))}
+        unknown = all((obs or {}).get("receipt") == "COMMIT_UNKNOWN" for obs in (s7a, s10))
+        c6 = {"verdict": "PASS" if unknown and reconciled == expected else "FAIL",
+              "reconciled": reconciled}
     return {
         "C1a": {
             "verdict": "PASS" if not c1a_bad else "FAIL",
@@ -158,6 +175,7 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
             "receipts": {name: obs.get("receipt") for name, obs in observations.items()},
             "false_receipts": c5_bad,
         },
+        "C6": c6,
     }
 
 
@@ -332,12 +350,47 @@ def main(argv: list[str] | None = None) -> int:
             return {"raised": type(exc).__name__}, ("COMMIT_UNKNOWN", "UNCONFIRMED_EXCEPTION")
         return confirmation.public_result(), (confirmation.receipt, confirmation.receipt_reason)
 
-    def scenarios(fresh: Callable[..., Any], faulted: Callable[[str, Any], Any],
-                  reuse: Callable[[Any], Any]) -> dict[str, dict[str, Any]]:
+    def strict_core(work: Any) -> Any:
+        """R-1a's strict read, taken here from the scratch database itself: never a mirror."""
+
+        from crypto_probability_engine.api.commit_reconciliation import StoredCore
+
+        ids = [row["prediction_id"] for row in work.prediction_rows]
+        with psycopg.connect(url) as conn, conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT run_id, analysis_hash FROM public.analysis_runs WHERE run_id = %s",
+                (work.run_summary["run_id"],),
+            )
+            run = cursor.fetchone()
+            cursor.execute(
+                "SELECT prediction_id FROM public.predictions WHERE prediction_id = ANY(%s)",
+                (ids,),
+            )
+            found = frozenset(row[0] for row in cursor.fetchall())
+        stored_run = {"run_id": run[0], "analysis_hash": run[1]} if run else None
+        return StoredCore(run=stored_run, prediction_ids=found)
+
+    def reconciled(work: Any) -> list[str] | None:
+        from crypto_probability_engine.api.commit_reconciliation import decide, unknown_commit
+
+        pending = unknown_commit(work.run_summary, work.prediction_rows, now=0.0)
+        if pending is None:
+            return None
+        decision = decide(pending, strict_core(work), now=0.0)
+        return [decision.receipt, decision.reason]
+
+    def scenarios(
+        fresh: Callable[..., Any],
+        faulted: Callable[[str, Any], Any],
+        reuse: Callable[[Any], Any],
+        *,
+        atomic: bool = False,
+    ) -> dict[str, dict[str, Any]]:
         """The same scenarios on one route.
 
         ``fresh()`` is a new repository; ``faulted(fault, repository)`` is one that injects
-        ``fault``; ``reuse(faulted)`` is the repository S8 reuses after S2's failure.
+        ``fault``; ``reuse(faulted)`` is the repository S8 reuses after S2's failure. ``atomic``
+        (one transaction per bundle) adds S10 and R-1a's reconciliation of S7a and S10.
         """
 
         observations: dict[str, dict[str, Any]] = {}
@@ -406,9 +459,16 @@ def main(argv: list[str] | None = None) -> int:
         obs["stored_unchanged"] = obs["db"]["total_score"] == before["total_score"]
 
         s7 = bundle()
-        observe("S7a", "the write commits, then the response is lost", s7,
-                faulted("lost_response", fresh()))
+        s7a = observe("S7a", "the write commits, then the response is lost", s7,
+                      faulted("lost_response", fresh()))
+        if atomic:
+            s7a["reconciled"] = reconciled(s7)
         observe("S7b", "none (a same-content retry after the lost response)", s7, fresh())
+        if atomic:
+            s10 = bundle()
+            obs = observe("S10", "the transaction fails, then the response is lost", s10,
+                          faulted("lost_before_commit", fresh()))
+            obs["reconciled"] = reconciled(s10)
         return observations
 
     # Route "postgres": the direct-Postgres writer, faults through the Faulty wrapper.
@@ -432,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
             lambda: SupabasePersistenceRepository(url), postgres_faulted, lambda f: f._real
         )
         report_routes["postgres"] = {"scenarios": postgres, "criteria": verdicts(postgres)}
-        rest_obs = scenarios(rest, lambda fault, _unused: rest(fault), lambda f: f)
+        rest_obs = scenarios(rest, lambda fault, _unused: rest(fault), lambda f: f, atomic=True)
         report_routes["rest_rpc"] = {
             "scenarios": rest_obs,
             "criteria": verdicts(rest_obs),
