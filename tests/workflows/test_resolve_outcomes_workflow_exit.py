@@ -54,7 +54,28 @@ DETAIL_EVERY_COUNT = resolve_outcomes.format_detail_line(
 
 def _environment(**stub: str) -> dict[str, str]:
     job = resolve_env(JOB.env, CONTEXTS, {"RESOLVER_LIMIT": "50"})
-    return {**job, **resolve_env(RESOLVER.env, CONTEXTS), **stub}
+    # The fallback expression (pinned below) as it evaluates before the owner's G1 secret exists.
+    url = {"SUPABASE_DB_URL": CONTEXTS["secrets.SUPABASE_DB_URL"]}
+    return {**job, **resolve_env(RESOLVER.env, CONTEXTS, url), **stub}
+
+
+FALLBACK = "${{ secrets.UCPE_RESOLVER_DB_URL || secrets.SUPABASE_DB_URL }}"
+CREDENTIAL_NAME = (
+    "${{ secrets.UCPE_RESOLVER_DB_URL != '' && 'UCPE_RESOLVER_DB_URL' || 'SUPABASE_DB_URL' }}"
+)
+
+
+def test_g1_the_resolver_uses_its_own_login_once_present_and_prints_only_its_name() -> None:
+    """The resolver cutover: UCPE_RESOLVER_DB_URL (ucpe_resolver) when the owner adds it, the owner
+    URL until then. Both steps connect with the same expression; only a NAME is ever echoed."""
+
+    validate = next(step for step in JOB.steps if step.name == "Validate resolver configuration")
+    assert validate.env["SUPABASE_DB_URL"] == RESOLVER.env["SUPABASE_DB_URL"] == FALLBACK
+    assert validate.env["RESOLVER_CREDENTIAL"] == CREDENTIAL_NAME
+    assert 'echo "resolver credential: ${RESOLVER_CREDENTIAL}"' in validate.run
+    for step in JOB.steps:
+        for line in (step.run or "").splitlines():
+            assert "SUPABASE_DB_URL}" not in line or line.strip().startswith("if "), line
 
 
 def test_the_resolver_step_pipes_its_output_under_pipefail() -> None:

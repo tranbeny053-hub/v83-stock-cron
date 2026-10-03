@@ -45,6 +45,7 @@ from crypto_probability_engine.targets.contract_v1 import (
 
 CONNECT_TIMEOUT_SECONDS = 8
 SET_STATEMENT_TIMEOUT_SQL = "SET LOCAL statement_timeout = '30s'"
+CONNECTED_ROLE_SQL = "SELECT current_user"
 
 # The pinned due query's 24 columns, in its order (tests pin them to persistence/repository.py).
 BASE_COLUMNS = (
@@ -251,6 +252,15 @@ class PgStatusStore:
 
     def __repr__(self) -> str:
         return "PgStatusStore(<redacted>)"
+
+    def connected_role(self) -> str:
+        """The role this store's connections run as (current_user). G1's cutover evidence: the
+        resolver's runs show ucpe_resolver once the owner's credential is in place."""
+
+        with self._transaction("status identity") as cursor:
+            cursor.execute(CONNECTED_ROLE_SQL)
+            row = cursor.fetchone()
+        return str(row[0]) if row else ""
 
     def preflight(self) -> bool:
         with self._transaction("status preflight") as cursor:

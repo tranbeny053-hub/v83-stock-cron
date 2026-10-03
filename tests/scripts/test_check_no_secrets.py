@@ -1,6 +1,7 @@
 """The heuristic secret scan (scripts/check_no_secrets.py): one of the three mandatory scanners.
 
-It may only ever widen. E4 adds the least-privilege writer's two secrets to the names it watches.
+It may only ever widen. E4 adds the least-privilege writer's two secrets to the names it watches;
+G1 adds the resolver's own connection string.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ _SPEC.loader.exec_module(scanner)
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_WRITER_JWT",
+        "UCPE_RESOLVER_DB_URL",
         "FRED_API_KEY",
         "NEWSAPI_KEY",
         "PASSWORD",

@@ -41,6 +41,10 @@ Criteria, each PASS or FAIL in the report (--require-all makes every one a gate)
 - P7 ONE_SHOT: a second application of migration 0016 is refused and changes nothing.
 - P8 ROLLBACK: the rollback restores the pre-draft catalog exactly, and the service_role writer
   still persists (SAVED).
+- R1 RESOLVER_LOGIN (G1, the resolver cutover): every login is granted as the owner's helper does
+  it (scripts/resolver_credential.py), with a SCRAM-SHA-256 secret computed client-side, never the
+  password. Over local TCP (scram-sha-256), the helper's URL logs in as ucpe_resolver, and the same
+  URL with a wrong password is refused.
 
 W-A (migration 0017, migrations/0017_forecast_bundle_rpc.sql, its reviewed bytes; owner ruling
 WB1 = YES, after 0016), on top of the applied 0016, before P8: plan §8.1's whole core bundle (the
@@ -128,6 +132,7 @@ CRITERIA = (
     "P6",
     "P7",
     "P8",
+    "R1",
     "W1",
     "W2",
     "W3",
@@ -352,14 +357,18 @@ class Database:
         return None
 
     def grant_login(self, role: str) -> None:
-        """The owner's credential step, rehearsed: LOGIN and a scratch password for one run."""
+        """The owner's credential step, rehearsed as the owner's helper does it: LOGIN with a
+        SCRAM-SHA-256 secret computed client-side, never the password. A scratch password, for one
+        run."""
 
         from psycopg import sql
+
+        from scripts.resolver_credential import scram_verifier
 
         value = secrets.token_hex(24)
         self.owner(
             sql.SQL("ALTER ROLE {} WITH LOGIN PASSWORD {}").format(
-                sql.Identifier(role), sql.Literal(value)
+                sql.Identifier(role), sql.Literal(scram_verifier(value))
             )
         )
         self.logins[role] = value
@@ -1069,6 +1078,47 @@ def criterion_space_db(db: Database, prediction: dict) -> dict[str, Any]:
     details["refusals"] = outcomes
     failures += [f"{name} was not refused" for name in refused(outcomes)]
     return verdict(failures, **details)
+
+
+def criterion_resolver_login(db: Database) -> dict[str, Any]:
+    """R1 (G1): the resolver's login exactly as the owner's helper makes it.
+
+    grant_login stored the helper's SCRAM-SHA-256 secret. The helper's own URL builder logs in over
+    local TCP as ucpe_resolver; a wrong password is refused, so the proof is not vacuous. Only
+    outcomes are recorded, never a URL or a password.
+    """
+
+    import psycopg
+
+    from scripts import resolver_credential
+
+    def login(plain: str) -> str:
+        url = resolver_credential.build_url(
+            "postgresql", "ucpe_resolver", plain, "127.0.0.1", str(db.port), db.name
+        )
+        try:
+            with psycopg.connect(url, connect_timeout=5) as conn:
+                return str(conn.execute("SELECT current_user").fetchone()[0])
+        except psycopg.OperationalError as exc:
+            refused = "password authentication failed" in str(exc)
+            return "REFUSED" if refused else type(exc).__name__
+
+    rows = db.owner("SELECT rolcanlogin FROM pg_catalog.pg_roles WHERE rolname = 'ucpe_resolver'")
+    steps = {
+        "can_login": bool(rows and rows[0][0] is True),
+        "right_password": login(db.logins["ucpe_resolver"]),
+        "wrong_password": login("not-" + db.logins["ucpe_resolver"]),
+    }
+    failures = [
+        message for check, message in (
+            (steps["can_login"], "ucpe_resolver cannot log in"),
+            (steps["right_password"] == "ucpe_resolver",
+             f"the helper's URL logged in as {steps['right_password']}"),
+            (steps["wrong_password"] == "REFUSED",
+             f"a wrong password answered {steps['wrong_password']}, not a refusal"),
+        ) if not check
+    ]
+    return verdict(failures, **steps)
 
 
 def criterion_resolver(db: Database) -> dict[str, Any]:
@@ -1787,6 +1837,7 @@ def run(
         criteria["P3"] = _guarded(lambda: criterion_writer_refusals(db, raw, prediction, owner))
         criteria["P4"] = _guarded(lambda: criterion_space_db(db, prediction))
     criteria["P5"] = _guarded(lambda: criterion_resolver(db))
+    criteria["R1"] = _guarded(lambda: criterion_resolver_login(db))
     criteria["P6"] = _guarded(lambda: criterion_unchanged(db, version, api_before, rest))
 
     # W-A: migration 0017 on top of the applied 0016, then its own rollback.

@@ -26,6 +26,7 @@ from crypto_probability_engine.resolution import status_store as store_module
 from crypto_probability_engine.resolution.rq_v1 import ExistingStatus, StatusWrite
 from crypto_probability_engine.resolution.status_store import (
     BASE_COLUMNS,
+    CONNECTED_ROLE_SQL,
     DUE_SCAN_SQL,
     OUTCOME_READBACK_SQL,
     PREDICTION_COLUMNS,
@@ -588,6 +589,7 @@ def test_a_route_c_run_through_the_postgres_store(monkeypatch, capsys) -> None:
     batch = FakeConnection(("v0-binance",))  # RETURNING: the one upsert was applied
     connect = FakeConnect(
         FakeConnection((True, 4)),
+        FakeConnection(("ucpe_resolver",)),  # G1: the run's role, by name
         FakeConnection([db_row(stuck, status), db_row(tc)]),
         readback,
         batch,
@@ -618,7 +620,8 @@ def test_a_route_c_run_through_the_postgres_store(monkeypatch, capsys) -> None:
         ("okx", "OKX_PUBLIC"),
     ]
     assert [row["data_source"] for row in repository.saved] == ["OKX_PUBLIC"]
-    assert connect.calls == [(URL, KWARGS)] * 4
+    assert connect.calls == [(URL, KWARGS)] * 5
+    assert "resolver_identity role=ucpe_resolver" in everything
     upserts = [entry for entry in batch.statements if entry[1] == STATUS_UPSERT_SQL]
     assert [entry[0] for entry in upserts] == ["execute"]
     assert [entry[2] for entry in upserts] == [
@@ -647,6 +650,7 @@ def test_a_failed_status_batch_exits_1_with_failed_0_and_writes_nothing(monkeypa
     batch = FakeConnection(fail_on="INSERT INTO", error=psycopg.errors.SerializationFailure(URL))
     connect = FakeConnect(
         FakeConnection((True, 4)),
+        FakeConnection(("ucpe_resolver",)),
         FakeConnection([db_row(v0_row("v0-binance"))]),
         batch,
     )
@@ -670,7 +674,7 @@ def test_a_due_scan_failure_prints_one_line_without_the_url(monkeypatch, capsys)
         fail_on="FROM public.predictions p",
         error=psycopg.OperationalError(f"server closed the connection: {URL}"),
     )
-    connect = FakeConnect(FakeConnection((True, 4)), failing)
+    connect = FakeConnect(FakeConnection((True, 4)), FakeConnection(("postgres",)), failing)
 
     code, lines, everything = _run_main(monkeypatch, capsys, connect, FakeSupabase())
 
@@ -680,6 +684,7 @@ def test_a_due_scan_failure_prints_one_line_without_the_url(monkeypatch, capsys)
         "failed=1 error=StatusStoreError: SUPABASE_POSTGRES status due scan failed: "
         "OperationalError [query]"
     ]
+    assert "resolver_identity role=postgres" in everything, "before the cutover: the owner"
     assert not any(part in everything for part in URL_PARTS)
 
 
@@ -734,3 +739,46 @@ def test_the_store_modules_never_import_the_pinned_repository() -> None:
         assert not [name for name in imported if name and ".persistence" in name], module
         assert "_prediction_row_from_db" not in source
         assert "_execute_due_prediction_query" not in source
+
+
+# --------------------------------------------------------------------------- G1: the run's role
+
+
+def test_the_store_reads_its_role_by_name_in_one_bounded_transaction() -> None:
+    connection = FakeConnection(("ucpe_resolver",))
+    connect = FakeConnect(connection)
+
+    assert PgStatusStore(URL, connect=connect).connected_role() == "ucpe_resolver"
+    assert CONNECTED_ROLE_SQL == "SELECT current_user"
+    assert [entry[1] for entry in connection.statements] == [
+        SET_STATEMENT_TIMEOUT_SQL, CONNECTED_ROLE_SQL,
+    ]
+    assert connection.log[-2:] == ["commit", "close"]
+    assert connect.calls == [(URL, KWARGS)]
+
+
+def test_a_role_read_that_fails_names_no_url() -> None:
+    connect = FakeConnect(error=psycopg.OperationalError(f"could not connect: {URL}"))
+
+    with pytest.raises(StatusStoreError) as raised:
+        PgStatusStore(URL, connect=connect).connected_role()
+    assert not any(part in str(raised.value) for part in URL_PARTS)
+
+
+@pytest.mark.parametrize(
+    ("store", "printed"),
+    [
+        (None, "n/a"),
+        (object(), "n/a"),
+        (type("Store", (), {"connected_role": lambda self: "ucpe_resolver"})(), "ucpe_resolver"),
+        (type("Store", (), {"connected_role": lambda self: "postgres"})(), "postgres"),
+        (type("Store", (), {"connected_role": lambda self: 1 / 0})(), "error"),
+        (type("Store", (), {"connected_role": lambda self: "x; select 1"})(), "error"),
+        (type("Store", (), {"connected_role": lambda self: URL})(), "error"),
+        (type("Store", (), {"connected_role": lambda self: None})(), "error"),
+    ],
+    ids=["no-store", "legacy-store", "resolver", "owner", "raises", "not-a-name", "a-url",
+         "none"],
+)
+def test_the_resolver_prints_only_a_plain_role_name(store, printed) -> None:
+    assert resolve_outcomes.connected_role(store) == printed

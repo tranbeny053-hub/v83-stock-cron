@@ -558,3 +558,19 @@ def test_p2_p6_and_p8_keep_the_w_b_writer_and_w10_the_released_one() -> None:
     w10 = source.split("def criterion_production_writer(", 1)[1].split("\ndef ", 1)[0]
     assert "persist_through_rest(" in p2 and "persist_through_forecast(" not in p2
     assert "persist_through_forecast(" in w10 and "persist_through_rest(" not in w10
+
+
+def test_r1_proves_the_resolver_login_the_owner_s_helper_makes() -> None:
+    """G1: every rehearsed login stores the helper's SCRAM secret, never the password, and R1 logs
+    in through the helper's own URL builder and is refused with a wrong password."""
+
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    assert rehearse.CRITERIA.index("R1") == rehearse.CRITERIA.index("P8") + 1
+    grant = source.split("    def grant_login(", 1)[1].split("\n    def ", 1)[0]
+    assert "from scripts.resolver_credential import scram_verifier" in grant
+    assert "sql.Literal(scram_verifier(value))" in grant and "sql.Literal(value)" not in grant
+    r1 = source.split("def criterion_resolver_login(", 1)[1].split("\ndef ", 1)[0]
+    assert "resolver_credential.build_url(" in r1
+    assert '"wrong_password": login("not-" + db.logins["ucpe_resolver"])' in r1
+    assert 'steps["wrong_password"] == "REFUSED"' in r1
+    assert 'criteria["R1"] = _guarded(lambda: criterion_resolver_login(db))' in source
