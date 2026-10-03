@@ -9,11 +9,9 @@ on main. The repository is public, so this is the last broad exposure of owner a
 **Preconditions:**
 - **G1 is complete:** the resolver connects with its own login, and no scheduled workflow uses the
   owner URL. A test pins both.
-- **The 13 dispatch-only workflows that use the owner URL declare `environment:
-  production-db-owner`.** Until the Environment is configured, nothing changes.
-- **One open decision (C4-PIN):** `section-5a-evaluation.yml` is on the evaluator pin, so it cannot
-  declare the Environment without the owner's authorization. Until it does, deleting the repository
-  secret (step 5) cuts it off.
+- **All 14 dispatch-only workflows that use the owner URL declare `environment:
+  production-db-owner`.** That includes the pinned section 5A evaluation workflow, by the owner's
+  ruling C4-PIN (re-pinned). Until the Environment is configured, nothing changes.
 
 ## The steps
 
@@ -25,13 +23,14 @@ on main. The repository is public, so this is the last broad exposure of owner a
 4. **Environment secrets → Add environment secret.** Use the name `SUPABASE_DB_URL` and the same
    owner URL as the repository secret, from your password manager. If you no longer have it, stop:
    never reset the database password for this, because the Space may use the same login (E2).
-5. **Only after C4-PIN is decided:** Settings → Secrets and variables → Actions → delete the
-   repository secret `SUPABASE_DB_URL`.
+5. **After step 4:** Settings → Secrets and variables → Actions → delete the repository secret
+   `SUPABASE_DB_URL`. From then on only approved runs in the Environment can read the owner URL.
 
 ## How it is verified (no extra traffic)
 
 - The next owner-dispatched database workflow stops at "Waiting for review". You click **Review
   deployments**, then **Approve and deploy**, and it runs. No workflow is dispatched just to test
   this.
-- Before step 5, the repository secret still serves every workflow. After it, only approved runs in
-  the Environment can read the owner URL.
+- Before step 5, the repository secret still serves every workflow. After it, a workflow that does not
+  declare the Environment can no longer read the owner URL, and a test keeps every user of the
+  owner URL inside the Environment.

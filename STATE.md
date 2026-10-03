@@ -31,7 +31,20 @@ D6 design note). **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261
 - **The D6 design note: SEALED** (.work/roadmap/phase3/d6/D6_DESIGN.md, sha fdbe2ff5…; read-only).
   - The decision: D6 versus the rollback target 17c9c053, which writes as service_role.
   - Recommended, B: D6 only after the next release, so that the rollback target itself uses the pair.
-- **E3 is still NOT_YET_LIVE_PROVEN:** 0 natural analyses since the 12:49Z restart (checked 15:13Z).
+- **E3 is still NOT_YET_LIVE_PROVEN:** 0 natural analyses since the 12:49Z restart (checked 15:29Z).
+- **The owner's rulings (2026-10-03), verbatim:** "CONTINUE CURRENT — Opus 5 XHIGH. Rulings: C4-PIN YES; add only the
+  production-db-owner environment line to section-5a-evaluation.yml and re-pin it, but do not merge #206 until G1
+  natural-run PASS. D6 timing=B after the next release; scope=six core evidence tables + two bundle functions, keep
+  SELECT and revoke write/EXECUTE, with deterministic inventory proving no omitted core write surface before freeze.
+  Continue all safe prep; no manual resolver dispatch."
+- **C4-PIN, done in this PR:**
+  - section-5a-evaluation.yml gains only `environment: production-db-owner`;
+  - the evaluator pin is re-pinned: closure 23c176a5… → e1ff5f54…. Only the digest changed, the 69 pinned files are
+    the same, and the red tests are untouched;
+  - 511 evaluation and workflow tests pass. All 14 dispatch-only users of the owner URL are now in the Environment.
+- **D6: ruled B** (after the next release). Scope: the six core evidence tables and the two bundle functions; keep
+  SELECT, revoke write and EXECUTE. Its package is prepared next, never applied: the draft, its rehearsal, and the
+  deterministic inventory proving that no core write surface is omitted before freeze.
 Previously (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
 **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe
 rollback target is 17c9c053.**
@@ -3415,8 +3428,8 @@ LAST_GREEN_SHA=70a03e4 (main, PR #205: the identity line names only UCPE's roles
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR:
-  the code at e9777a6, in its clean worktree lanes24/nofallback; this STATE commit adds docs only).
+LAST_VERIFY=PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR,
+  with C4-PIN and the re-pin, in its clean worktree lanes24/nofallback, before its push). Before it: the code at e9777a6, in its clean worktree lanes24/nofallback; this STATE commit adds docs only).
   - The first run failed the secrets scanner on the new test's constant named SECRET. It was renamed, and the scanner
     was not narrowed.
   Before it: PASS ruff ok | 5517 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (#203, at
@@ -3673,9 +3686,9 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None until G1's proof (2026-10-03). Then, batched:
-  - one Run action that merges this record's PR (G1 completed, C4 prepared);
-  - later: C4's Environment steps and the C4-PIN decision; after E3's proof, D6's decision (B recommended, or A).
+OWNER_BOUNDARY=None until G1's proof (2026-10-03). C4-PIN and D6 are ruled (verbatim in the header). Then, batched:
+  - one Run action that merges this record's PR (G1 completed, C4 with C4-PIN), only after the G1 natural-run PASS;
+  - later: C4's Environment steps (docs/runbooks/OWNER_URL_ENVIRONMENT.md); D6's freeze after the next release.
   Before it: Two owner steps (2026-10-03), batched:
   - one Run action: merge #203 (this record) and #204 (G1), each on its exact head after its checks, then fast-forward
     the main checkout. Auto mode refused Claude's merge;

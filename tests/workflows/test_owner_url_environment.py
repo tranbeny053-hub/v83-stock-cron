@@ -3,9 +3,9 @@ and only inside the protected Environment production-db-owner.
 
 The privilege design's C4: "The existing owner URL stays only in a GitHub Environment ... with
 required reviewers. Only the dispatch-only apply, audit and evaluation workflows reference it."
-The repository is public, and the resolver (G1) never receives the owner URL. One exception is
-named, not hidden: the pinned section 5A evaluation workflow, whose change needs the owner's
-authorization (the evaluator pin).
+The repository is public, and the resolver (G1) never receives the owner URL. The pinned section 5A
+evaluation workflow takes the Environment too, by the owner's ruling C4-PIN (2026-10-03: "add only
+the production-db-owner environment line to section-5a-evaluation.yml and re-pin it").
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 OWNER_URL_REF = "secrets.SUPABASE_DB_URL"
 ENVIRONMENT = "production-db-owner"
-PINNED_EXCEPTION = "section-5a-evaluation.yml"
+PINNED_EVALUATION = "section-5a-evaluation.yml"
 TRIGGER = re.compile(
     r"^  (schedule|push|pull_request|pull_request_target|workflow_run|workflow_dispatch"
     r"|workflow_call):",
@@ -48,14 +48,17 @@ def test_every_job_using_the_owner_url_runs_in_the_protected_environment() -> No
             if OWNER_URL_REF not in str(job.env) + steps:
                 continue
             environment = str(job.fields.get("environment", "")).split("#")[0].strip()
-            if name == PINNED_EXCEPTION:
-                assert environment == "", "if the owner authorized it, drop the exception"
-                continue
             assert environment == ENVIRONMENT, f"{name}: job {job_name}"
 
 
-def test_the_one_exception_is_the_pinned_evaluation_workflow() -> None:
+def test_c4_pin_the_pinned_evaluation_workflow_changed_only_by_its_environment_line() -> None:
+    """C4-PIN: the evaluator pin still holds the workflow (re-pinned), and the one added line is the
+    Environment's; nothing else of the pinned workflow changed."""
+
     pin = json.loads((ROOT / "ops/section_5a_evaluator_pin.json").read_text(encoding="utf-8"))
     pinned = {entry["path"] if isinstance(entry, dict) else entry for entry in pin["pinned_files"]}
-    assert f".github/workflows/{PINNED_EXCEPTION}" in pinned
-    assert PINNED_EXCEPTION in _users()
+    assert f".github/workflows/{PINNED_EVALUATION}" in pinned
+    text = (WORKFLOWS / PINNED_EVALUATION).read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line.strip().startswith("environment:")]
+    assert lines == [f"    environment: {ENVIRONMENT}  # C4: the owner URL lives only in this "
+                     "protected Environment"]
