@@ -35,6 +35,26 @@ rollback target is 17c9c053.**
 - **Next (Claude), while the receipt is awaited:** the highest-value safe roadmap item, prepared only (no credential,
   no database write, no workflow switch). It is the privilege design's resolver cutover: G1, critical, because the
   hourly resolver runs as the table owner.
+- **G1, the resolver cutover: PREPARED** (PR #204, head 4b0ff683; ./verify.sh PASS 5556).
+  - **scripts/resolver_credential.py** (owner-only; generate, copy-sql, copy-url). From the dashboard's connection URI
+    template (with [YOUR-PASSWORD]), it writes owner-only in ~/ucpe-keys:
+    - the login SQL, holding PostgreSQL's SCRAM-SHA-256 secret computed client-side, never the password (RFC 7677's
+      worked example is reproduced in the tests);
+    - the resolver URL, whose user is the role: [ROLE].[PROJECT-REF] through the shared pooler, per Supabase's
+      connecting-to-postgres guide.
+    Nothing secret is printed.
+  - **resolve-outcomes.yml** uses UCPE_RESOLVER_DB_URL once the owner adds it, and SUPABASE_DB_URL until then
+    (identical until then). It prints the secret's NAME only.
+  - **The resolver prints `resolver_identity role=<current_user>` on stderr** (stdout's two-line contract is
+    unchanged), from the status store's new connected_role(). Production runs Route C (status_store=active), so
+    the next hourly run's log is the evidence.
+  - **The privilege rehearsal** grants every login with the helper's SCRAM secret. R1 logs in through the helper's
+    URL builder and refuses a wrong password. Run 37127635969: P1-P8, R1, W1-W10 and J1 all PASS on PostgREST v14.18
+    and v16.4.
+  - The secrets scanner also watches UCPE_RESOLVER_DB_URL (widened). The owner's steps:
+    docs/runbooks/RESOLVER_CUTOVER.md.
+  - **Auto mode refused merging #203** ([Merge Without Review]). The owner gets one Run action that merges #203 and
+    #204, each on its exact head after its checks.
 Previously (E3-A YES and E3-B 30 DAYS ruled; the signing-key helper and the repaired runbook). **Production
 is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe rollback target is
 17c9c053.**
@@ -1212,7 +1232,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privilege writer is CONFIGURED,
+LOOP_STATE=AT THE OWNER (2026-10-03): E3 SWITCHED; the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN
+  (verified read-only at 12:57Z; .work/e3_cutover; 0 natural receipts at 13:32Z). G1 is PREPARED (#204, R1 PASS ×2).
+  The owner has one Run action (merge #203 and #204), then G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md).
+  Before it: IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privilege writer is CONFIGURED,
   NOT_YET_LIVE_PROVEN (verified read-only at 12:57Z; .work/e3_cutover). Claude confirms the first natural receipt
   passively and meanwhile prepares the resolver cutover (G1). No owner action is pending.
   Before it: AT THE OWNER (2026-10-03): E3-A YES and E3-B 30 days are ruled. The signing-key helper and the repaired
@@ -2903,8 +2926,8 @@ LOOP_STATE=IN PROGRESS (2026-10-03): E3 SWITCHED by the owner. The least-privile
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). Next,
-  prepared only: the resolver cutover (G1).
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): the writer cutover is CONFIGURED, NOT_YET_LIVE_PROVEN (E3 switched). The
+  resolver cutover (G1) is PREPARED (#204); its credential steps are the owner's.
   Before it: PHASE 3 (2026-10-03): E3-A YES, E3-B 30 days. The signing-key helper and the repaired runbook; the
   owner's credential switch is next. Production is unchanged (a2de125f).
   Before it: PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-PROD-WA-20261003-A; R 4130a6cd). The writer
@@ -3606,7 +3629,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None open now (2026-10-03). The switch is done ("SWITCHED"); its live proof is passive.
+OWNER_BOUNDARY=Two owner steps (2026-10-03), batched:
+  - one Run action: merge #203 (this record) and #204 (G1), each on its exact head after its checks, then fast-forward
+    the main checkout. Auto mode refused Claude's merge;
+  - G1's secret steps (docs/runbooks/RESOLVER_CUTOVER.md): the login SQL in the SQL Editor (the T4: the role gets its
+    login, holding only a SCRAM secret), then the GitHub secret UCPE_RESOLVER_DB_URL.
+  Before it: None open now (2026-10-03). The switch is done ("SWITCHED"); its live proof is passive.
   - Owner reminders: renew SUPABASE_WRITER_JWT by 2026-10-30, before the 2026-11-02 expiry; keep
     SUPABASE_SERVICE_ROLE_KEY until D6.
   - Standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD), WB3 (with S8), E2 (deferred).
@@ -4151,7 +4179,12 @@ OWNER_BOUNDARY=None open now (2026-10-03). The switch is done ("SWITCHED"); its 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude, in this order:
+NEXT_ACTION=The owner: the Run action (merge #203 and #204), then G1's secret steps. Then Claude:
+  - confirm G1 from the next hourly resolver run's log: "resolver credential: UCPE_RESOLVER_DB_URL" and
+    "resolver_identity role=ucpe_resolver", with the run succeeding. Then a small PR removes the fallback;
+  - confirm the first natural USER_REQUESTED persistence_receipt passively (bounded log reads only). SAVED makes the
+    writer LIVE_PROVEN as ucpe_api_writer;
+  Before it: Claude, in this order:
   - confirm the first natural USER_REQUESTED persistence_receipt passively (bounded log reads only). SAVED makes the
     writer LIVE_PROVEN as ucpe_api_writer;
   - meanwhile, the resolver cutover (G1), prepared only: no credential, no database write, no workflow switch;
