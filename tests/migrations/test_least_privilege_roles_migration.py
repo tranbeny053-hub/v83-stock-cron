@@ -141,8 +141,9 @@ def test_no_older_role_gains_anything_and_nothing_existing_is_revoked() -> None:
     ]
 
 
-def test_the_registry_vouches_it_additive_and_awaiting_its_apply() -> None:
+def test_the_registry_vouches_it_additive_and_records_its_one_apply() -> None:
     registry = json.loads((ROOT / "ops/release/releases.json").read_text(encoding="utf-8"))
     entry = next(m for m in registry["migrations_applied"] if m["id"] == "0016")
-    assert entry["additive"] is True and entry["applied_run"] is None
+    # Applied once by the owner-authorized dispatch, run 37110330500 (2026-10-03, adjudicated).
+    assert entry["additive"] is True and entry["applied_run"] == 37110330500
     assert "nothing revoked" in entry["note"]

@@ -82,10 +82,11 @@ def test_no_older_role_gains_a_table_right_and_nothing_existing_is_revoked() -> 
     ], "only the new function's defaults and the owner change's temporary powers are revoked"
 
 
-def test_the_registry_vouches_it_additive_and_awaiting_its_apply_after_0016() -> None:
+def test_the_registry_vouches_it_additive_and_records_its_one_apply_after_0016() -> None:
     registry = json.loads((ROOT / "ops/release/releases.json").read_text(encoding="utf-8"))
     ids = [m["id"] for m in registry["migrations_applied"]]
     assert ids.index("0017") == ids.index("0016") + 1
     entry = next(m for m in registry["migrations_applied"] if m["id"] == "0017")
-    assert entry["additive"] is True and entry["applied_run"] is None
+    # Applied once, right after 0016's run, by the owner-authorized dispatch, run 37110375659.
+    assert entry["additive"] is True and entry["applied_run"] == 37110375659
     assert "nothing revoked" in entry["note"] and "older code never calls it" in entry["note"]

@@ -1,6 +1,31 @@
 # STATE
 
-Updated: 2026-10-03 (migrations 0016 and 0017 MERGED with their one-shot T4 packages; NOTHING IS APPLIED). **Production
+Updated: 2026-10-03 (migrations 0016 and 0017 APPLIED in production, and the registry records both). **The production
+app is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A. The database now has the least-privilege roles and the
+forecast bundle RPC. Main is 8cbfdbc3, plus this record.**
+- **The T4 applies are CONSUMED.** The owner, in chat on 2026-10-03, wrote "please run this instead:", followed by the
+  exact command. Claude ran it once, unmodified. Evidence: .work/t4_0016_0017 (COMMAND.sh, RAW_OUTPUT.txt, both
+  reports, ADJUDICATION.md), with its MANIFEST sealed.
+  - **0016: run 37110330500**, APPLIED and committed, at 8cbfdbc3, on PostgreSQL 17.6.
+    - The route's own verdicts, re-run on the raw rows: pre [] and post [].
+    - The CREATEROLE path. The four roles have no power. The writer is in authenticator (SET, no INHERIT).
+      40 policies.
+    - The bundle RPC is now SECURITY DEFINER of ucpe_bundle_owner (EXECUTE: service_role, the writer, its owner).
+      Its body is unchanged.
+    - **F1/UOR:** ucpe_space_db holds exactly the registry read and the ledger read, insert and update.
+  - **0017: run 37110375659**, APPLIED and committed. Re-adjudicated: pre [] and post [].
+    - save_forecast_bundle is exactly as reviewed: SECURITY DEFINER of ucpe_bundle_owner (EXECUTE: service_role,
+      the writer, its owner).
+    - The owner gained INSERT and SELECT on runs and details. Policies 40 → 44. Everything else is unchanged.
+  - **Never re-dispatch either workflow.**
+- **The registry** (this record) records 0016 = 37110330500 and 0017 = 37110375659. No migration is unapplied, so release
+  check 5c allows a release again.
+- **Live effect, by design:** nothing existing was revoked. The live writer (service_role) keeps executing the bundle
+  RPC, now as its definer (P6, PERS-0). It is observed only passively, through the next natural persistence_receipt.
+  No verification traffic is created.
+- **Next (Claude):** the §2.6 package (E4 plus the W-A client) and E3's executable proof. Then the release, up to its T4.
+  Claude creates no credential value.
+Previously (migrations 0016 and 0017 MERGED with their one-shot T4 packages; NOTHING IS APPLIED). **Production
 is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A, guard HEALTHY. Main is a53c50b0, plus this record.**
 - **The owner's rulings (2026-10-03), verbatim:** "E1 YES W2; E2 DEFER—do not inspect/expose SUPABASE_DB_URL; E3 YES
   in principle after proving the supported Supabase JWT/signing path; E4 YES only repository.py+settings.py; WB1 YES
@@ -1052,7 +1077,12 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-03): migrations 0016 and 0017 are merged with their one-shot T4 packages. Main is
+LOOP_STATE=IN PROGRESS (2026-10-03): migrations 0016 and 0017 are APPLIED (runs 37110330500 and 37110375659, both
+  adjudicated), and the registry records both. Next:
+  - the §2.6 package: E4 plus the W-A client;
+  - E3's executable proof;
+  - then the release package, up to its T4.
+  Before it: AT THE OWNER (2026-10-03): migrations 0016 and 0017 are merged with their one-shot T4 packages. Main is
   frozen at this record's merge for the dispatch. The owner's one Run action applies 0016, then 0017 only if 0016
   succeeded. Nothing is applied yet. The rulings E1-E4, WB1 and WB3 are answered (verbatim in the header).
   Before it: AT THE OWNER (2026-10-03): RCPT is RELEASED and its chain is complete (R 06e4733e). Next are the batched
@@ -2727,7 +2757,9 @@ LOOP_STATE=AT THE OWNER (2026-10-03): migrations 0016 and 0017 are merged with t
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 (E1, W2; #192 → 77dbe59e) and 0017 (WB1, W-A; #193 → a53c50b0)
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 and 0017 APPLIED in production (runs 37110330500 and
+  37110375659). The app is unchanged (17c9c053).
+  Before it: PHASE 3 (2026-10-03): migrations 0016 (E1, W2; #192 → 77dbe59e) and 0017 (WB1, W-A; #193 → a53c50b0)
   are MERGED and unapplied. Their T4 applies are at the owner. Production is unchanged (17c9c053).
   Before it: PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCPE-PROD-RCPT-20261003-A; R 06e4733e).
   The receipts and W-B are live.
@@ -2848,7 +2880,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): migrations 0016 (E1, W2; #192 → 77dbe5
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-migrations-0016-0017 (this record; worktree lanes22/state_m17).
+CURRENT_BRANCH=chore/registry-0016-0017-applied (this record; worktree lanes22/registry_m17).
+  Before it: chore/state-migrations-0016-0017 (#194 → 8cbfdbc3; worktree lanes22/state_m17).
   - Merged: feat/migration-0016-least-privilege-roles (#192 → 77dbe59e) and feat/migration-0017-forecast-bundle
     (#193 → a53c50b0).
   Before it: chore/state-wa-rehearsed (#191 → 22b2a6ae; worktree lanes21/state_wa).
@@ -2949,7 +2982,9 @@ CURRENT_BRANCH=chore/state-migrations-0016-0017 (this record; worktree lanes22/s
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=a53c50b0 (main, PR #193: migration 0017). Push CI success (run 37108186970); reproducibility success
+LAST_GREEN_SHA=8cbfdbc3 (main, PR #194: the STATE record). Push CI success (run 37109433419); reproducibility success
+  (run 37109433420). Both T4 applies ran at this SHA.
+  Before it: a53c50b0 (main, PR #193: migration 0017). Push CI success (run 37108186970); reproducibility success
   (run 37108186949); its PR checks 13/13 at ad29b24. Production is unchanged (D 17c9c053).
   Before it: 77dbe59e (main, PR #192: migration 0016). Push CI 37106452298; reproducibility 37106452296.
   Before it: 53e83537 (main, PR #190: W-A rehearsed). Push CI success (run 37100317594); reproducibility success (run
@@ -3149,7 +3184,8 @@ LAST_GREEN_SHA=a53c50b0 (main, PR #193: migration 0017). Push CI success (run 37
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+LAST_VERIFY=PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record, at 8cbfdbc3).
+  Before it: PASS ruff ok | 5382 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - At #193's head (ad29b24), in its clean worktree, before its push. This record is verified before its own push.
   Before it: PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at R 06e4733e, verified before its push.
@@ -3396,7 +3432,9 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Two T4 applies (2026-10-03), in one Run action, in order:
+OWNER_BOUNDARY=None open now (2026-10-03). Both T4 applies are consumed (runs 37110330500 and 37110375659). The next
+  boundary is the release T4, after the §2.6 package; later, E3's credential plan (after its executable proof).
+  Before it: Two T4 applies (2026-10-03), in one Run action, in order:
   1. apply-migration-0016.yml (expected_sha = main at this record's merge; confirm APPLY-MIGRATION-0016-ONCE);
   2. only if 1 succeeded, apply-migration-0017.yml (the same expected_sha; confirm APPLY-MIGRATION-0017-ONCE).
   - Each is one-shot and never rerun. A refusal changes nothing, and its uploaded report names why.
@@ -3927,7 +3965,13 @@ OWNER_BOUNDARY=Two T4 applies (2026-10-03), in one Run action, in order:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the one Run action (0016, then 0017).
+NEXT_ACTION=Claude, in this order:
+  1. the §2.6 package (E4 plus the W-A client): the two headers, save_forecast_bundle and its routing, PERS-0 widened to
+     the whole bundle, the evaluator pin regenerated, and the §2.6 record;
+  2. E3's executable proof: ES256 + kid through a real PostgREST, with scratch keys only;
+  3. the release package, up to its T4.
+  - Claude creates no credential value. Throughout: never create verification traffic.
+  Before it: The owner: the one Run action (0016, then 0017).
   - Then Claude:
     1. adjudicate both apply reports (raw first);
     2. the registry PR recording both applied runs;
