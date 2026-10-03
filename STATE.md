@@ -1,8 +1,38 @@
 # STATE
 
-Updated: 2026-10-03 (C4 SET by the owner, verified by name; the D6 production-inventory route is DRAFT PR #212; E3
-still NOT_YET_LIVE_PROVEN). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). main is 9d2f109c (#206
-merged). The rollback target is a2de125f (WA).**
+Updated: 2026-10-03 (E3 LIVE_PROVEN naturally; #212 MERGED; the D6 production inventory is CLEAN; 0018's freeze is being
+prepared). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). main is 946145bc (#212 merged). The
+rollback target is a2de125f (WA), which also saves through the least-privilege pair.**
+- **The owner (2026-10-03), verbatim:**
+  - "RESUME CURRENT — check passive E3 evidence first. If E3 is naturally LIVE_PROVEN, continue the governed D6
+    sequence from draft #212; otherwise continue no production action and do not manufacture traffic."
+  - "INVENTORY RUN. Read and adjudicate the exact latest Core-write inventory workflow run on main
+    946145bcd35722bc1ad5436faa305f86af832c56. Do not infer PASS from workflow SUCCESS alone: verify expected_sha,
+    expect=before, rehearsal, READ ONLY/rollback evidence, and the raw production inventory verdict. If and only if the
+    inventory is clean under the frozen D6 scope, seal the evidence, record STATE, then prepare migration 0018 +
+    rollback + rehearsal/mutation gates continuously. Do not apply 0018 yet; return with the exact one-shot T4 apply
+    boundary. If inventory finds any omitted write surface, HOLD and report it without narrowing/waiving scope."
+- **E3: LIVE_PROVEN, naturally** (.work/e3_live_proof/E3_PROOF.md, sealed):
+  - 5 USER_REQUESTED analyses at 19:41:33Z; each persistence_receipt is SAVED via SupabaseRestRepository. By 19:42:30Z
+    there were 10, all SAVED, with no NOT_SAVED or COMMIT_UNKNOWN.
+  - The writer pair is present by name, so SAVED means saved as ucpe_api_writer. Claude created no traffic and cannot
+    see who requested the analyses.
+- **#212 MERGED** (ready, then merged on its exact head f9e0e481, 7/7 green) → main 946145bc at 19:44:47Z; push CI
+  37149005706 and the reproducible build 37149005710: success.
+- **The D6 production inventory: CLEAN** (.work/d6_inventory/ADJUDICATION.md, sealed with the raw artifacts):
+  - The auto-mode classifier refused Claude's dispatch. The owner dispatched run 37149774863 (the only run) and
+    approved it in production-db-owner.
+  - Verified from the raw report, not the run's status: expected_sha = sha = git_head = 946145bc; expect=before; the
+    in-run rehearsal REHEARSED (exactly the six planted surfaces); 119 in-job tests passed; READ ONLY and rollback by
+    the pinned code path; verdict PASS, failures [].
+  - Production holds 31 table-privilege rows on the six core tables (MAINTAIN included: PostgreSQL 17 or later) and
+    EXECUTE on both bundle functions (definers owned by ucpe_bundle_owner). There is no C, O, V, R, G or K surface.
+  - Informational, not waived: default privileges grant service_role ALL on FUTURE objects in public, storage, graphql
+    and graphql_public. A future core table must revoke explicitly.
+- **Next, the owner's sequence:** freeze migration 0018 (the frozen D6 scope) with its rollback and one-shot route,
+  behind rehearsal and mutation gates; then the owner's T4 apply.
+Previously (C4 SET by the owner, verified by name; the D6 production-inventory route was DRAFT PR #212; E3 not yet
+proven). **Production was then, as now, D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a).**
 - **The owner (2026-10-03), verbatim:** "RESUME CURRENT — C4 SET confirmed by owner: production-db-owner configured with
   required reviewer, self-review allowed, main-only deployment branch, environment secret SUPABASE_DB_URL present, and
   repository-level SUPABASE_DB_URL deleted." Then: "Finish the D6 production-inventory route completely ... then open a
@@ -1377,7 +1407,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): C4 SET (verified by name). The D6 production-inventory route is a DRAFT PR, never
+LOOP_STATE=IN PROGRESS (2026-10-03): E3 LIVE_PROVEN; the D6 inventory is CLEAN (run 37149774863). Claude
+  prepares 0018's freeze (migration, rollback, one-shot route, gates). Nothing is applied before the owner's T4.
+  Before it: IN PROGRESS (2026-10-03): C4 SET (verified by name). The D6 production-inventory route is a DRAFT PR, never
   dispatched. E3 is read passively; D6 waits for E3's natural proof.
   Before it: AT THE OWNER (2026-10-03): UCPE-PROD-R1A-20261003-A is RELEASED and its chain is complete (R d4c25f2a). G1 is
   LIVE_PROVEN, and #206 closes with this record. The owner's next step is C4's Environment (a card). E3 is read passively;
@@ -3078,7 +3110,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): C4 SET (verified by name). The D6 productio
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 LIVE_PROVEN; C4 SET; E3 CONFIGURED,
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 and E3 LIVE_PROVEN; C4 SET;
+  D6: the inventory is CLEAN, and 0018's freeze is in preparation.
+  Before it: PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 LIVE_PROVEN; C4 SET; E3 CONFIGURED,
   NOT_YET_LIVE_PROVEN; D6 PREPARED, with its production-inventory route as a DRAFT PR.
   Before it: PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9; R d4c25f2a); G1 LIVE_PROVEN; E3 CONFIGURED,
   NOT_YET_LIVE_PROVEN; C4 merged (the owner configures the Environment); D6 PREPARED (B: release live).
@@ -3215,7 +3249,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 L
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-c4-set (this record; worktree lanes26/state). DRAFT #212 is feat/d6-core-write-inventory-route
+CURRENT_BRANCH=chore/state-d6-inventory-clean (this record). Next: feat/d6-migration-0018 (the freeze).
+  Before it: chore/state-c4-set (this record; worktree lanes26/state). DRAFT #212 is feat/d6-core-write-inventory-route
   (worktree lanes26/inv), from main 9d2f109c.
   Before it: feat/g1-remove-owner-fallback (#206; worktree lanes24/nofallback), rebased after the deploy.
   Merged since: #209 (R-1a), #210 (identity → D), #211 (re-pin → R).
@@ -3328,7 +3363,8 @@ CURRENT_BRANCH=chore/state-c4-set (this record; worktree lanes26/state). DRAFT #
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=9d2f109c (main, #206 merged). Push CI 37141757629 and the reproducible build 37141757688: success.
+LAST_GREEN_SHA=946145bc (main, #212 merged). Push CI 37149005706 and the reproducible build 37149005710: success.
+  Before it: 9d2f109c (main, #206 merged). Push CI 37141757629 and the reproducible build 37141757688: success.
   Before it: d4c25f2a (main = R, the R1A re-pin, over D 6f4420a9, deployed). Push CI 37140995581 (success). The guard PASS on R (run 37141007416).
   Before it: 70a03e4 (main, PR #205: the identity line names only UCPE's roles). Push CI success (run 37131173306);
   reproducibility success (run 37131173329).
@@ -3542,7 +3578,8 @@ LAST_GREEN_SHA=9d2f109c (main, #206 merged). Push CI 37141757629 and the reprodu
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body). #212's tree: PASS 5726
+LAST_VERIFY=PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body). #212's tree: PASS 5726
   (c08f722). #206's tree: PASS 5645.
   Before it: PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR,
   with C4-PIN and the re-pin, in its clean worktree lanes24/nofallback, before its push). Before it: the code at e9777a6, in its clean worktree lanes24/nofallback; this STATE commit adds docs only).
@@ -3802,7 +3839,10 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None now (2026-10-03): C4 is SET. The next owner steps come with D6, after E3's natural proof: authorize
+OWNER_BOUNDARY=None now (2026-10-03). Next: the owner's T4 apply of 0018 (its one-shot route, approved in
+  production-db-owner), once Claude's freeze package is merged. Standing items: the H2 hold, B5's DEGRADED half, D3,
+  D4, E2.
+  Before it: None now (2026-10-03): C4 is SET. The next owner steps come with D6, after E3's natural proof: authorize
   #212's merge, approve its run (expect=before) in production-db-owner; then 0018's freeze and its T4.
   Standing items: E3's natural proof (passive), the H2 hold, B5's DEGRADED half, D3, D4, E2.
   Before it: C4's Environment steps (2026-10-03; docs/runbooks/OWNER_URL_ENVIRONMENT.md): create production-db-owner
@@ -4364,7 +4404,9 @@ OWNER_BOUNDARY=None now (2026-10-03): C4 is SET. The next owner steps come with 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: read E3's first natural USER_REQUESTED SAVED receipt passively (no dispatch, no traffic); keep this
+NEXT_ACTION=Claude: freeze 0018 (migration, rollback, one-shot route, rehearsal and mutation gates), verify,
+  PR, merge on its exact green head, then return with the exact T4 apply command. No production action meanwhile.
+  Before it: Claude: read E3's first natural USER_REQUESTED SAVED receipt passively (no dispatch, no traffic); keep this
   route's DRAFT PR (#212) green; other safe Phase 3 prep. The owner: nothing until E3 is proven.
   Before it: The owner: C4's Environment steps. Claude, read passively with no dispatch: E3's first natural USER_REQUESTED
   SAVED receipt (and any persistence_reconciled event). Then D6's freeze package once E3 is proven: the production
