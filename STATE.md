@@ -43,8 +43,33 @@ D6 design note). **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261
     the same, and the red tests are untouched;
   - 511 evaluation and workflow tests pass. All 14 dispatch-only users of the owner URL are now in the Environment.
 - **D6: ruled B** (after the next release). Scope: the six core evidence tables and the two bundle functions; keep
-  SELECT, revoke write and EXECUTE. Its package is prepared next, never applied: the draft, its rehearsal, and the
-  deterministic inventory proving that no core write surface is omitted before freeze.
+  SELECT, revoke write and EXECUTE.
+  - **Its package is MERGED, prepared only:** #207 → main 1a0bfdd4 (the owner's "merge it if exact head is still
+    c0dc6e8e…"; push CI and the reproducible build both success).
+  - **What it holds:** the draft of migration 0018 and its rollback (scripts/privilege_rehearsal/), and
+    scripts/core_write_inventory.py, a deterministic, catalog-only, READ ONLY inventory. Its kinds are T, C, O, F,
+    V, R, G and K, run with --expect before or --expect after.
+  - **The privilege rehearsal's D1-D4 PASS** on PostgREST v14.18 and v16.4 (run 37135065108):
+    - the inventory finds exactly the revoke set, and every planted surface is caught;
+    - after the draft no surface remains, SELECT stays, and PostgREST refuses with 42501;
+    - the catalog changes by exactly the revoked entries, and the writer SAVES;
+    - UP018 on a second application; the rollback is exact.
+  - **Application stays BLOCKED** until B's conditions hold, in order: the next release, E3 live-proven, a clean
+    production inventory, then freeze and apply. The production inventory needs an owner-dispatched read-only
+    route. It belongs in D6's freeze package (the inventory before freeze, then the one-shot apply with the
+    inventory after), not before.
+- **WB3/S8 (the owner: "WB3/S8 durable recovery/reconciliation design and deterministic local tests where
+  dependency-safe"):**
+  - **The design: SEALED** (.work/roadmap/phase3/wb3_s8/WB3_S8_DESIGN.md, sha fa58bd24…).
+    - R-1a: since W-A, one strict read decides an unknown commit. That is the run as sent (run_id, analysis_hash)
+      plus every forecast prediction. Identities only, no payload, no pretended durability.
+    - S8, recommended: option 1, accept the honest NOT_SAVED (CIRCUIT_OPEN) for now. The alternatives are
+      in-memory replay, or a durable outbox in an independent failure domain such as a private HF dataset.
+  - **#208:** the model (api/commit_reconciliation.py, unwired) and 18 deterministic tests; PERS-0's new fault
+    lost_before_commit, its scenario S10 and its criterion C6, a gate on rest_rpc.
+  - **R-1a's wiring needs the owner:** a strict read in the pinned persistence/repository.py. Today
+    SupabaseRestRepository.get_run falls back to its in-memory mirror, which could falsely confirm a commit. The
+    wiring then ships with the next release.
 Previously (E3 SWITCHED by the owner: the least-privilege writer is CONFIGURED, NOT_YET_LIVE_PROVEN).
 **Production code is unchanged: D a2de125f / UCPE-PROD-WA-20261003-A, the guard HEALTHY at R 4130a6cd. The H2-safe
 rollback target is 17c9c053.**
@@ -3688,7 +3713,9 @@ GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=None until G1's proof (2026-10-03). C4-PIN and D6 are ruled (verbatim in the header). Then, batched:
   - one Run action that merges this record's PR (G1 completed, C4 with C4-PIN), only after the G1 natural-run PASS;
-  - later: C4's Environment steps (docs/runbooks/OWNER_URL_ENVIRONMENT.md); D6's freeze after the next release.
+  - later: C4's Environment steps (docs/runbooks/OWNER_URL_ENVIRONMENT.md); D6's freeze after the next release;
+  - open: WB3's pinned crossing (one strict read method in persistence/repository.py) and the S8 option (1
+    recommended).
   Before it: Two owner steps (2026-10-03), batched:
   - one Run action: merge #203 (this record) and #204 (G1), each on its exact head after its checks, then fast-forward
     the main checkout. Auto mode refused Claude's merge;
