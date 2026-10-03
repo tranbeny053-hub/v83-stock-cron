@@ -913,6 +913,32 @@ def cmd_guard_verify(env: Env, args: argparse.Namespace) -> int:
 # ------------------------------------------------------------------------------------- rollback
 
 
+def migration_rollback_safe(
+    env: Env, migration: dict[str, Any], target: str, registry: dict[str, Any]
+) -> bool:
+    """A migration applied after ``target`` keeps a rollback to it safe: it is additive, or it names
+    a registered release (``rollback_safe_from``) that the target is or descends from, because every
+    release from there on keeps working after it (0018: the releases that write through the
+    least-privilege pair)."""
+
+    if migration.get("additive") is True:
+        return True
+    anchor = migration.get("rollback_safe_from")
+    return (
+        isinstance(anchor, str)
+        and bool(SHA_RE.fullmatch(anchor))
+        and any(entry["commit"] == anchor for entry in registry["releases"])
+        and is_ancestor(env, anchor, target)
+    )
+
+
+def _migration_label(migration: dict[str, Any]) -> str:
+    anchor = migration.get("rollback_safe_from")
+    if migration.get("additive") is True or not isinstance(anchor, str):
+        return str(migration["id"])
+    return f"{migration['id']} (rollback-safe from {anchor[:12]})"
+
+
 def rollback_findings(
     env: Env, target: str, current: str, registry: dict[str, Any]
 ) -> list[tuple[bool, str]]:
@@ -931,9 +957,9 @@ def rollback_findings(
          "the target's build identity matches its registry entry"),
         (target != current and is_ancestor(env, target, current),
          f"the target is an older ancestor of the current production {current[:12]}"),
-        (all(m.get("additive") is True for m in newer),
-         "every migration applied after the target is additive: "
-         + (", ".join(f"{m['id']}" for m in newer) or "none")),
+        (all(migration_rollback_safe(env, m, target, registry) for m in newer),
+         "every migration applied after the target is additive, or rollback-safe from the target"
+         " or an ancestor of it: " + (", ".join(_migration_label(m) for m in newer) or "none")),
     ]
 
 

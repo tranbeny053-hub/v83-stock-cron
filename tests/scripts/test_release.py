@@ -144,16 +144,19 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
         "applied, so a new migration must say whether it is additive"
     )
     # An explicit "applied_run": null marks a migration authored on main but not yet applied
-    # (0001-0007 predate apply tracking and carry no applied_run key at all). Every authored
-    # migration is applied: 0015 by run 37033014490, 0016 by run 37110330500 and 0017 by run
-    # 37110375659. A new one must be vouched additive.
+    # (0001-0007 predate apply tracking and carry no applied_run key at all). 0015 was applied by
+    # run 37033014490, 0016 by run 37110330500 and 0017 by run 37110375659. 0018 (D6) is authored
+    # and waits for the owner's T4; no release ships before it is applied and recorded (check 5c).
     unapplied = [m for m in registry["migrations_applied"]
                  if "applied_run" in m and m["applied_run"] is None]
-    assert [m["id"] for m in unapplied] == []
-    assert all(m["additive"] is True for m in unapplied), (
-        "an authored, unapplied migration must be vouched additive, or merging it would block "
-        "every H2-safe rollback"
-    )
+    assert [m["id"] for m in unapplied] == ["0018"]
+    # Each one is vouched additive, or rollback-safe from a registered H2-safe release; otherwise
+    # merging it would block every H2-safe rollback.
+    held = {entry["commit"] for entry in releases if entry["h2_hold"] is True}
+    for migration in unapplied:
+        assert migration["additive"] is True or migration.get("rollback_safe_from") in held, (
+            migration["id"]
+        )
 
 
 def test_the_config_names_no_local_path_secret_or_release_id() -> None:
@@ -590,6 +593,40 @@ def test_rollback_check_refuses_unsafe_targets(world: World, tmp_path: Path) -> 
     # The target must be older than production.
     results = rel.rollback_findings(env, world.c0, world.c0, registry)
     assert results[3][0] is False
+
+
+def test_a_non_additive_migration_is_rollback_safe_only_from_its_named_release(
+    world: World,
+) -> None:
+    """0018's rule: not additive, but every release from a named, registered one on keeps working
+    after it, so a rollback to that release, or to one descending from it, stays safe."""
+
+    d = _prepare_beta(world)
+    env = world.env()
+    registry = json.loads((world.work / rel.REGISTRY_PATH).read_text())
+    registry["releases"] = registry["releases"][:1]
+    newer = registry["migrations_applied"][1]
+    newer["additive"] = False
+    newer["rollback_safe_from"] = world.c0
+    results = rel.rollback_findings(env, world.c0, d, registry)
+    assert [ok for ok, _ in results] == [True, True, True, True, True]
+    assert results[4][1].endswith(f"0011 (rollback-safe from {world.c0[:12]})")
+    # Named after the target: a rollback to the target would cross it.
+    registry["releases"].append({"commit": d, "deployed_over": world.c0, "h2_hold": True,
+                                 "release_id": BETA})
+    newer["rollback_safe_from"] = d
+    assert rel.rollback_findings(env, world.c0, d, registry)[4][0] is False
+    # Named but not a registered release, or not a commit, or not named at all.
+    registry["releases"] = registry["releases"][:1]
+    for anchor in (d, "not-a-sha", None):
+        newer["rollback_safe_from"] = anchor
+        assert rel.rollback_findings(env, world.c0, d, registry)[4][0] is False, anchor
+    # The target itself, but not a registered release.
+    registry["releases"] = []
+    newer["rollback_safe_from"] = world.c0
+    assert rel.rollback_findings(env, world.c0, d, registry)[4][0] is False
+    del newer["rollback_safe_from"]
+    assert rel.rollback_findings(env, world.c0, d, registry)[4][0] is False
 
 
 def test_repin_refuses_a_relabel_that_keeps_the_release_id(

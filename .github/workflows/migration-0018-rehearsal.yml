@@ -1,0 +1,79 @@
+name: Migration 0018 rehearsal (scratch PostgreSQL, no secrets)
+
+# Phase 3, the privilege design's step D6 (owner ruling: timing B; the six core evidence tables and
+# the two bundle functions; keep SELECT, revoke write and EXECUTE). Runs on every pull request that
+# touches it. It builds a real PostgreSQL from migrations 0001-0017 (production's state, 0017
+# applied), with Supabase-like roles, default privileges, PostgREST's authenticator, and an owner
+# holding CREATEROLE without SUPERUSER, which creates 0016's roles. On it, it proves:
+# - the one-shot route (scripts/apply_migration_0018.py --mode=rehearse) applies 0018 once, with every
+#   pre- and post-check (D6's inventory read in the same transaction), and refuses a second apply;
+# - an independent probe agrees with the applied catalog:
+#   - service_role keeps SELECT and loses every write privilege on the six core evidence tables;
+#   - service_role executes neither bundle function, while their owner and the writer still do;
+#   - the temporary ownership grant is gone, and the four roles' grants and policies are unchanged.
+# Database roles are cluster-wide, so no second scratch database is built here: it would see the roles
+# 0016 created.
+# The result's behaviour through PostgREST is proven by .github/workflows/privilege-rehearsal.yml
+# (D1-D4). It references no secret and touches no real database. Applying 0018 to production is a
+# separate owner-authorized T4 through .github/workflows/apply-migration-0018.yml.
+
+"on":
+  pull_request:
+    paths:
+      - migrations/**
+      - scripts/migration_0016_rehearsal/**
+      - scripts/migration_0017_rehearsal/**
+      - scripts/migration_0018_rehearsal/**
+      - scripts/core_write_inventory.py
+      - scripts/apply_migration_0018.py
+      - .github/workflows/apply-migration-0018.yml
+      - src/crypto_probability_engine/persistence/**
+      - src/crypto_probability_engine/api/analysis_service.py
+      - .github/workflows/migration-0018-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse migration 0018 on scratch local PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -f - < scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql
+          sudo -u postgres createdb -O "$(id -un)" migration_0018_rehearsal
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0018_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0018_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql > "$RUNNER_TEMP/migrations_0001_0017.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0018_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0017.sql"
+          MIGRATION_0018_REHEARSAL_URL="postgresql:///migration_0018_rehearsal?host=/var/run/postgresql" PYTHONPATH=src python scripts/apply_migration_0018.py --mode=rehearse --report=migration-0018-rehearsal-report.json
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0018_rehearsal -f - < scripts/migration_0018_rehearsal/10_probe.sql
+          echo "MIGRATION_0018_REHEARSAL=PASS"
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: migration-0018-rehearsal-report
+          path: migration-0018-rehearsal-report.json
+          if-no-files-found: warn

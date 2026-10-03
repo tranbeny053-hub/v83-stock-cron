@@ -1,5 +1,5 @@
--- The rollback of the D6 draft (draft_0018_narrow_service_role.sql). It gives service_role back exactly
--- what the draft revoked, table by table as migrations 0005, 0006, 0008 and 0010 left it (with
+-- The rollback of migration 0018 (migrations/0018_narrow_service_role.sql). It gives service_role back
+-- exactly what 0018 revoked, table by table as migrations 0005, 0006, 0008 and 0010 left it (with
 -- Supabase's default MAINTAIN on PostgreSQL 17), and EXECUTE on both bundle functions. It runs as the
 -- tables' owner, in one transaction (the caller's). Against production it is a separate T4, never
 -- automatic. P3-PRIV-R's D4 proves it restores the catalog exactly on scratch PostgreSQL.

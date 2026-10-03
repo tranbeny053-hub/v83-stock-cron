@@ -502,14 +502,15 @@ def test_d6_runs_on_the_applied_0017_and_is_rolled_back_before_it() -> None:
     run = source.split("\ndef run(", 1)[1]
     assert run.index('criteria["J1"] = _guarded(') < run.index("criteria.update(criteria_d6(") < (
         run.index("second_0017 = db.apply(DRAFT_0017)"))
-    assert rehearse.DRAFT_0018.parent == rehearse.HERE, "a draft, never in migrations/"
+    assert rehearse.DRAFT_0018 == rehearse.ROOT / "migrations" / "0018_narrow_service_role.sql", (
+        "migration 0018's reviewed bytes, frozen after the clean production inventory")
     d6 = source.split("def criteria_d6(", 1)[1].split("\ndef ", 1)[0]
     for step in ("d6_inventory(db, version)", "db.apply(DRAFT_0018)", "db.apply(ROLLBACK_0018)",
                  'second == "UP018"', "inventory.every_surface(after)", 'answer[1] != "42501"',
                  "persist_through_forecast(writer()[0], work)"):
         assert step in d6, step
     assert set(rehearse.D6_PROBES) == {"F", "V", "R", "G", "K", "C"}
-    assert '"draft_0018_sha256"' in source and '"rollback_0018_sha256"' in source
+    assert '"migration_0018_sha256"' in source and '"rollback_0018_sha256"' in source
 
 
 def test_j1_expects_the_documented_acceptances_and_refusals() -> None:

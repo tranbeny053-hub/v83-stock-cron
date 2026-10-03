@@ -1,11 +1,13 @@
--- DRAFT of migration 0018: Phase 3, the privilege design's step D6. NOT A MIGRATION, NOT APPLIED.
+-- Phase 3, the privilege design's step D6: migration 0018. AUTHORED, NOT APPLIED.
+-- service_role keeps SELECT on core evidence and loses every way to write it. It is applied ONCE, by
+-- the owner's T4, through scripts/apply_migration_0018.py (.github/workflows/apply-migration-0018.yml);
+-- the bulk scripts/apply_migrations.py never applies it.
 --
--- It lives in scripts/privilege_rehearsal/, outside migrations/, so release check 5c ignores it.
 -- THE RULING (the owner, 2026-10-03): "D6 timing=B after the next release; scope=six core evidence
 -- tables + two bundle functions, keep SELECT and revoke write/EXECUTE, with deterministic inventory
--- proving no omitted core write surface before freeze." Freezing it (into migrations/, with its
--- one-shot route) comes after the next release, and only once scripts/core_write_inventory.py, run
--- read-only against production with --expect before, finds no core write surface outside this file.
+-- proving no omitted core write surface before freeze." The next release (UCPE-PROD-R1A-20261003-A) is
+-- live, E3 is LIVE_PROVEN, and the production inventory (run 37149774863, read only, expect=before)
+-- found no core write surface outside this file. These are the statements P3-PRIV-R rehearsed (D1-D4).
 --
 -- service_role LOSES:
 -- - INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER (and MAINTAIN on PostgreSQL 17) on the
@@ -14,19 +16,23 @@
 --   REVOKE also revokes the matching column privileges;
 -- - EXECUTE on the two bundle functions, save_prediction_bundle and save_forecast_bundle.
 -- service_role KEEPS SELECT on them, so a leaked key only reads. Nothing else changes: anon,
--- authenticated and the ucpe_* roles keep exactly what they hold.
+-- authenticated and the ucpe_* roles keep exactly what they hold, and the writer (ucpe_api_writer)
+-- keeps EXECUTE on both functions, its write path.
 -- - A second application is refused before any change (SQLSTATE UP018).
--- - The rollback is scripts/privilege_rehearsal/rollback_0018.sql. P3-PRIV-R's D4 proves it exact.
+-- - NOT ADDITIVE. A code rollback stays safe only to a release from a2de125f (UCPE-PROD-WA-20261003-A)
+--   on: those write through the least-privilege pair (ops/release/releases.json, rollback_safe_from).
+-- - The rollback is scripts/privilege_rehearsal/rollback_0018.sql, a separate owner T4. P3-PRIV-R's D4
+--   proves it restores the catalog exactly.
 
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'ucpe_bundle_owner')
        OR pg_catalog.to_regprocedure('public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)') IS NULL
     THEN
-        RAISE EXCEPTION 'draft 0018: migrations 0016 and 0017 must be applied first' USING ERRCODE = 'UP018';
+        RAISE EXCEPTION 'migration 0018: migrations 0016 and 0017 must be applied first' USING ERRCODE = 'UP018';
     END IF;
     IF NOT pg_catalog.has_table_privilege('service_role', 'public.predictions', 'INSERT') THEN
-        RAISE EXCEPTION 'draft 0018: service_role already cannot write core evidence; a second application is refused'
+        RAISE EXCEPTION 'migration 0018: service_role already cannot write core evidence; a second application is refused'
             USING ERRCODE = 'UP018';
     END IF;
 END;

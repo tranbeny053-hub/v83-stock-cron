@@ -94,6 +94,13 @@
       "applied_run": 37110375659,
       "id": "0017",
       "note": "one SECURITY DEFINER function (public.save_forecast_bundle) of ucpe_bundle_owner, EXECUTE for ucpe_api_writer and service_role; ucpe_bundle_owner gains INSERT and SELECT on analysis_runs and analysis_run_details with four policies; no table change, nothing revoked; older code never calls it (P3-PRIV-R W1-W9)"
+    },
+    {
+      "additive": false,
+      "applied_run": null,
+      "id": "0018",
+      "note": "D6: service_role loses INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER (and MAINTAIN) on the six core evidence tables and EXECUTE on both bundle functions, and keeps SELECT; not additive: a code rollback stays safe only to a release from a2de125f (WA) on, which writes through the least-privilege pair (P3-PRIV-R D1-D4)",
+      "rollback_safe_from": "a2de125ffa449cd6f5ec452e4a7a3335286eb413"
     }
   ],
   "releases": [

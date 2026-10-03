@@ -1,8 +1,37 @@
 # STATE
 
-Updated: 2026-10-03 (E3 LIVE_PROVEN naturally; #212 MERGED; the D6 production inventory is CLEAN; 0018's freeze is being
-prepared). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). main is 946145bc (#212 merged). The
-rollback target is a2de125f (WA), which also saves through the least-privilege pair.**
+Updated: 2026-10-03 (D6 FROZEN: migration 0018, its one-shot route and its gates are merged by this record's PR;
+the owner's one-shot T4 apply is the boundary). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a).
+The rollback target is a2de125f (WA), which writes through the least-privilege pair.**
+- **The owner (2026-10-03), verbatim:** "If and only if the inventory is clean under the frozen D6 scope, seal the
+  evidence, record STATE, then prepare migration 0018 + rollback + rehearsal/mutation gates continuously. Do not
+  apply 0018 yet; return with the exact one-shot T4 apply boundary."
+- **The inventory was CLEAN** (record #214, main 8c900a0; .work/d6_inventory/ADJUDICATION.md, sealed).
+- **The D6 freeze package (this record's PR):**
+  - migrations/0018_narrow_service_role.sql: the rehearsed draft's statements, now frozen. service_role loses
+    INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER (and MAINTAIN on PostgreSQL 17) on the six core
+    evidence tables, and EXECUTE on both bundle functions. It keeps SELECT. A second application is refused
+    (UP018). The draft file is removed; P3-PRIV-R's D1-D4 now run 0018's reviewed bytes.
+  - scripts/apply_migration_0018.py: 0017's one-shot route, its trust machinery verbatim (tests enforce it).
+    - Pre-checks: 0016 and 0017 exactly; ADMIN on ucpe_bundle_owner; service_role's exact pre-D6 privileges; and
+      D6's inventory, read in the same transaction (no surface outside the revoke set).
+    - Post-checks: service_role SELECT only; EXECUTE gone; no inventory surface; everything else unchanged.
+    - Its printed and written output withholds every role name that is not an API, pg_* or ucpe_* role (the
+      repository is public). 0016 and 0017 predate that rule.
+  - .github/workflows/apply-migration-0018.yml: dispatch-only, in production-db-owner. It rehearses the whole apply
+    on a scratch PostgreSQL before its only secret step. migration-0018-rehearsal.yml does the same on pull
+    requests, followed by an independent probe.
+  - The release tool: a non-additive migration may name a registered release (rollback_safe_from); a rollback to
+    it, or to a descendant, stays allowed. The 0018 entry: additive false, applied_run null, rollback_safe_from
+    a2de125f (WA). No release ships before 0018 is applied and recorded (check 5c).
+  - Mutation gate: 25/25 killed. Tests: the route 116, both workflows, the migration, the release rule.
+  - docs/runbooks/MIGRATION_0018_APPLY.md: the T4, the approval, what follows, and the rollback.
+  - MODEL SUBSTITUTION: Claude implemented it (CODEX_PAUSED_BY_OWNER). Review: CLAUDE_ADVERSARIAL_REVIEW.
+- **Next:** the owner's one-shot T4: dispatch apply-migration-0018.yml at this PR's merge commit and approve it in
+  production-db-owner. Then Claude adjudicates the raw report, records the registry entry (applied_run), and the
+  owner runs the inventory with expect=after.
+Previously (E3 LIVE_PROVEN naturally; #212 MERGED; the D6 production inventory is CLEAN; 0018's freeze was being
+prepared).
 - **The owner (2026-10-03), verbatim:**
   - "RESUME CURRENT — check passive E3 evidence first. If E3 is naturally LIVE_PROVEN, continue the governed D6
     sequence from draft #212; otherwise continue no production action and do not manufacture traffic."
@@ -1407,7 +1436,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): E3 LIVE_PROVEN; the D6 inventory is CLEAN (run 37149774863). Claude
+LOOP_STATE=AT THE OWNER (2026-10-03): D6 is FROZEN (migration 0018 with its route and gates, merged by
+  this record's PR). The boundary is the owner's one-shot T4 apply of 0018. Nothing is applied yet.
+  Before it: IN PROGRESS (2026-10-03): E3 LIVE_PROVEN; the D6 inventory is CLEAN (run 37149774863). Claude
   prepares 0018's freeze (migration, rollback, one-shot route, gates). Nothing is applied before the owner's T4.
   Before it: IN PROGRESS (2026-10-03): C4 SET (verified by name). The D6 production-inventory route is a DRAFT PR, never
   dispatched. E3 is read passively; D6 waits for E3's natural proof.
@@ -3110,7 +3141,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): E3 LIVE_PROVEN; the D6 inventory is CLEAN (
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 and E3 LIVE_PROVEN; C4 SET;
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED; G1 and E3 LIVE_PROVEN; C4 SET; D6: inventory CLEAN,
+  0018 FROZEN, its T4 apply at the owner.
+  Before it: PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 and E3 LIVE_PROVEN; C4 SET;
   D6: the inventory is CLEAN, and 0018's freeze is in preparation.
   Before it: PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 LIVE_PROVEN; C4 SET; E3 CONFIGURED,
   NOT_YET_LIVE_PROVEN; D6 PREPARED, with its production-inventory route as a DRAFT PR.
@@ -3249,7 +3282,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): R1A RELEASED (production 6f4420a9); G1 a
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-d6-inventory-clean (this record). Next: feat/d6-migration-0018 (the freeze).
+CURRENT_BRANCH=feat/d6-migration-0018 (this record; worktree lanes27/m0018).
+  Before it: chore/state-d6-inventory-clean (this record). Next: feat/d6-migration-0018 (the freeze).
   Before it: chore/state-c4-set (this record; worktree lanes26/state). DRAFT #212 is feat/d6-core-write-inventory-route
   (worktree lanes26/inv), from main 9d2f109c.
   Before it: feat/g1-remove-owner-fallback (#206; worktree lanes24/nofallback), rebased after the deploy.
@@ -3363,7 +3397,8 @@ CURRENT_BRANCH=chore/state-d6-inventory-clean (this record). Next: feat/d6-migra
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=946145bc (main, #212 merged). Push CI 37149005706 and the reproducible build 37149005710: success.
+LAST_GREEN_SHA=8c900a0b (main, #214: the inventory record).
+  Before it: 946145bc (main, #212 merged). Push CI 37149005706 and the reproducible build 37149005710: success.
   Before it: 9d2f109c (main, #206 merged). Push CI 37141757629 and the reproducible build 37141757688: success.
   Before it: d4c25f2a (main = R, the R1A re-pin, over D 6f4420a9, deployed). Push CI 37140995581 (success). The guard PASS on R (run 37141007416).
   Before it: 70a03e4 (main, PR #205: the identity line names only UCPE's roles). Push CI success (run 37131173306);
@@ -3579,6 +3614,7 @@ LAST_GREEN_SHA=946145bc (main, #212 merged). Push CI 37149005706 and the reprodu
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body). #212's tree: PASS 5726
   (c08f722). #206's tree: PASS 5645.
   Before it: PASS ruff ok | 5561 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03 (this record's PR,
@@ -3839,7 +3875,10 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None now (2026-10-03). Next: the owner's T4 apply of 0018 (its one-shot route, approved in
+OWNER_BOUNDARY=The one-shot T4 apply of migration 0018 (2026-10-03): dispatch apply-migration-0018.yml at
+  this PR's merge commit (with the main guard), then approve it in production-db-owner. Standing items: the
+  expect=after inventory (after the apply), the H2 hold, B5's DEGRADED half, D3, D4, E2.
+  Before it: None now (2026-10-03). Next: the owner's T4 apply of 0018 (its one-shot route, approved in
   production-db-owner), once Claude's freeze package is merged. Standing items: the H2 hold, B5's DEGRADED half, D3,
   D4, E2.
   Before it: None now (2026-10-03): C4 is SET. The next owner steps come with D6, after E3's natural proof: authorize
@@ -4404,7 +4443,9 @@ OWNER_BOUNDARY=None now (2026-10-03). Next: the owner's T4 apply of 0018 (its on
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: freeze 0018 (migration, rollback, one-shot route, rehearsal and mutation gates), verify,
+NEXT_ACTION=The owner: the T4 apply of 0018 (docs/runbooks/MIGRATION_0018_APPLY.md). Then Claude: adjudicate the
+  raw apply report, record 0018's applied_run (registry PR), and hand over the expect=after inventory.
+  Before it: Claude: freeze 0018 (migration, rollback, one-shot route, rehearsal and mutation gates), verify,
   PR, merge on its exact green head, then return with the exact T4 apply command. No production action meanwhile.
   Before it: Claude: read E3's first natural USER_REQUESTED SAVED receipt passively (no dispatch, no traffic); keep this
   route's DRAFT PR (#212) green; other safe Phase 3 prep. The owner: nothing until E3 is proven.
