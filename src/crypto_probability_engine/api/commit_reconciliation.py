@@ -7,12 +7,11 @@ So reading the core back decides the whole bundle. The run exists as sent (run_i
 analysis_hash, the columns the function itself compares), and every forecast prediction id exists,
 if and only if that transaction committed.
 
-NOT WIRED YET. The design is .work/roadmap/phase3/wb3_s8/WB3_S8_DESIGN.md. The wiring needs:
-- **a STRICT read.** The REST repository's get_run falls back to its in-memory mirror when a read
-  fails, and could so "confirm" a commit that never happened. The reconciler must only ever see the
-  database's answer, or Unreadable. That is a pinned crossing of persistence/repository.py, the
-  owner's decision;
-- **a release.**
+WIRED (the owner authorized the pinned crossing, 2026-10-03). The design is
+.work/roadmap/phase3/wb3_s8/WB3_S8_DESIGN.md. analysis_service._reconcile_unknown_commits feeds it
+the REST repository's read_core_strict: the database's own answer, or None (Unreadable). Unlike
+get_run, that read never falls back to the in-memory mirror, which could "confirm" a commit that
+never happened. S8 is the owner's Option 1: a NOT_SAVED is never retried.
 
 Nothing here keeps a payload, so nothing here pretends durability (§8.1). An unknown commit that the
 process does not live to reconcile stays COMMIT_UNKNOWN, honestly.

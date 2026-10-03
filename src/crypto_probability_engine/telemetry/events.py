@@ -32,6 +32,8 @@ EVENTS = frozenset(
         "http_request",
         "analysis_completed",
         "persistence_receipt",
+        # WB3's R-1a: an unknown commit decided by one strict read of the database
+        "persistence_reconciled",
         "persistence_admission_refused",
         "persistence_submit_failed",
     }
@@ -68,6 +70,8 @@ FIELDS = frozenset(
         # plan §8.1's receipt for the forecast bundles (SAVED, NOT_SAVED, COMMIT_UNKNOWN) and why
         "receipt",
         "receipt_reason",
+        # how many strict reads an unknown commit took to decide (R-1a)
+        "attempts",
     }
 )
 _CONTAINERS = (Mapping, list, tuple, set, frozenset, bytes, bytearray)

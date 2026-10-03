@@ -44,9 +44,11 @@ identity, the detail payload, the prediction and its feature snapshot.
 - C5 the receipt (plan §8.1) never lies: SAVED only when the complete bundle is stored (and never
   for a conflicting submission); NOT_SAVED only when the submission stored no complete bundle;
   COMMIT_UNKNOWN is always truthful.
-- C6 (WB3's R-1a) one strict read decides an unknown commit: S7a's COMMIT_UNKNOWN reconciles to
-  SAVED and S10's to NOT_SAVED, by api/commit_reconciliation.py on the database's own answer. It
-  applies only where the bundle is one transaction (rest_rpc); elsewhere it is NOT_APPLICABLE.
+- C6 (WB3's R-1a) one strict read decides an unknown commit, through production's own
+  read_core_strict: S7a's COMMIT_UNKNOWN reconciles to SAVED and S10's to NOT_SAVED, each agreeing
+  with the scratch database read directly (the oracle); and a read while S7a's circuit is OPEN stays
+  COMMIT_UNKNOWN. It applies only where the bundle is one transaction (rest_rpc); elsewhere it is
+  NOT_APPLICABLE.
 
 The script exits 0 when every scenario ran and the report was written, 1 if the harness itself
 failed, and 3 when a route named by --require-route has a criterion that is not PASS.
@@ -147,11 +149,15 @@ def verdicts(observations: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any
     else:
         expected = {"S7a": ["SAVED", "RECONCILED_COMMITTED"],
                     "S10": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}
-        reconciled = {name: (obs or {}).get("reconciled") for name, obs in (("S7a", s7a),
-                                                                             ("S10", s10))}
-        unknown = all((obs or {}).get("receipt") == "COMMIT_UNKNOWN" for obs in (s7a, s10))
-        c6 = {"verdict": "PASS" if unknown and reconciled == expected else "FAIL",
-              "reconciled": reconciled}
+        pairs = (("S7a", s7a or {}), ("S10", s10))
+        reconciled = {name: obs.get("reconciled") for name, obs in pairs}
+        oracle = {name: obs.get("oracle") for name, obs in pairs}
+        while_open = (s7a or {}).get("reconciled_while_open")
+        unknown = all(obs.get("receipt") == "COMMIT_UNKNOWN" for _, obs in pairs)
+        ok = (unknown and reconciled == expected == oracle
+              and while_open == ["COMMIT_UNKNOWN", "RECONCILE_UNREADABLE"])
+        c6 = {"verdict": "PASS" if ok else "FAIL", "reconciled": reconciled, "oracle": oracle,
+              "while_open": while_open}
     return {
         "C1a": {
             "verdict": "PASS" if not c1a_bad else "FAIL",
@@ -370,13 +376,35 @@ def main(argv: list[str] | None = None) -> int:
         stored_run = {"run_id": run[0], "analysis_hash": run[1]} if run else None
         return StoredCore(run=stored_run, prediction_ids=found)
 
-    def reconciled(work: Any) -> list[str] | None:
+    def oracle(work: Any) -> list[str] | None:
+        """The decision on the scratch database read directly: what C6's REST read must equal."""
+
         from crypto_probability_engine.api.commit_reconciliation import decide, unknown_commit
 
         pending = unknown_commit(work.run_summary, work.prediction_rows, now=0.0)
         if pending is None:
             return None
         decision = decide(pending, strict_core(work), now=0.0)
+        return [decision.receipt, decision.reason]
+
+    def reconciled(work: Any, repository: Any) -> list[str] | None:
+        """The decision through production's read_core_strict on this repository."""
+
+        from crypto_probability_engine.api.commit_reconciliation import (
+            UNREADABLE,
+            StoredCore,
+            decide,
+            unknown_commit,
+        )
+
+        pending = unknown_commit(work.run_summary, work.prediction_rows, now=0.0)
+        if pending is None:
+            return None
+        answer = repository.read_core_strict(pending.run_id, pending.prediction_ids)
+        stored = UNREADABLE if answer is None else StoredCore(
+            run=answer["run"], prediction_ids=frozenset(answer["prediction_ids"])
+        )
+        decision = decide(pending, stored, now=0.0)
         return [decision.receipt, decision.reason]
 
     def scenarios(
@@ -459,16 +487,19 @@ def main(argv: list[str] | None = None) -> int:
         obs["stored_unchanged"] = obs["db"]["total_score"] == before["total_score"]
 
         s7 = bundle()
-        s7a = observe("S7a", "the write commits, then the response is lost", s7,
-                      faulted("lost_response", fresh()))
+        lost = faulted("lost_response", fresh())
+        s7a = observe("S7a", "the write commits, then the response is lost", s7, lost)
         if atomic:
-            s7a["reconciled"] = reconciled(s7)
+            s7a["reconciled_while_open"] = reconciled(s7, lost)
+            s7a["reconciled"] = reconciled(s7, fresh())
+            s7a["oracle"] = oracle(s7)
         observe("S7b", "none (a same-content retry after the lost response)", s7, fresh())
         if atomic:
             s10 = bundle()
             obs = observe("S10", "the transaction fails, then the response is lost", s10,
                           faulted("lost_before_commit", fresh()))
-            obs["reconciled"] = reconciled(s10)
+            obs["reconciled"] = reconciled(s10, fresh())
+            obs["oracle"] = oracle(s10)
         return observations
 
     # Route "postgres": the direct-Postgres writer, faults through the Faulty wrapper.
@@ -497,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
             "scenarios": rest_obs,
             "criteria": verdicts(rest_obs),
             "rpc_requests": sum(emulator.rpc_requests for emulator in emulators),
+            "strict_reads": sum(emulator.reads for emulator in emulators),
             "privileges": rest_privileges(url),
             "refusals": rest_refusals(url, rest),
         }

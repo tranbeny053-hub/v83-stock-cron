@@ -1,7 +1,7 @@
 """R-1 (WB3): reconciling COMMIT_UNKNOWN by an idempotent read (api/commit_reconciliation.py).
 
-Deterministic and dependency-free: no database, no network, no clock. The model is not wired yet;
-these tests pin the rules the wiring must keep. SAVED only from a strict read that shows the run
+Deterministic and dependency-free: no database, no network, no clock. These tests pin the rules the
+wiring keeps. SAVED only from a strict read that shows the run
 as sent and every forecast prediction; NOT_SAVED only when the read proves the transaction did not
 commit; anything unread stays COMMIT_UNKNOWN; and no payload is ever kept.
 """
@@ -144,9 +144,12 @@ def test_a_final_decision_removes_the_entry_and_a_retry_counts_an_attempt() -> N
     assert len(commits) == 0, "applying to an absent entry changes nothing"
 
 
-def test_the_model_is_not_wired_yet() -> None:
-    """The wiring needs a strict read (a pinned crossing) and a release: nothing imports it yet."""
+def test_the_model_is_wired_through_the_strict_read_only() -> None:
+    """The owner authorized the pinned crossing: the service feeds the model read_core_strict
+    (never get_run, whose failures fall back to the in-memory mirror)."""
 
-    source = analysis_service.__file__
-    with open(source, encoding="utf-8") as handle:
-        assert "commit_reconciliation" not in handle.read()
+    with open(analysis_service.__file__, encoding="utf-8") as handle:
+        source = handle.read()
+    wiring = source.split("def _reconcile_unknown_commits(", 1)[1].split("\ndef ", 1)[0]
+    assert 'getattr(repository, "read_core_strict", None)' in wiring
+    assert "get_run" not in wiring

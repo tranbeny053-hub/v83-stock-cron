@@ -56,12 +56,15 @@ def _ideal() -> dict:
                    conflict_reported_ok=False, stored_unchanged=True),
         "S6": _obs("PARTIAL", 1, 1, receipt="NOT_SAVED", before=(1, 1),
                    conflict_reported_ok=False, stored_unchanged=True),
-        "S7a": _obs("UNAVAILABLE", 1, 1, reconciled=["SAVED", "RECONCILED_COMMITTED"]),
+        "S7a": _obs("UNAVAILABLE", 1, 1, reconciled=["SAVED", "RECONCILED_COMMITTED"],
+                    oracle=["SAVED", "RECONCILED_COMMITTED"],
+                    reconciled_while_open=["COMMIT_UNKNOWN", "RECONCILE_UNREADABLE"]),
         "S7b": _obs("OK", 1, 1, before=(1, 1)),
         "S8": _obs("UNAVAILABLE", 0, 0, receipt="NOT_SAVED"),
         "S9": _obs("UNAVAILABLE", 1, 1, receipt="NOT_SAVED", before=(1, 1),
                    conflict_reported_ok=False, stored_unchanged=True),
-        "S10": _obs("UNAVAILABLE", 0, 0, reconciled=["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]),
+        "S10": _obs("UNAVAILABLE", 0, 0, reconciled=["NOT_SAVED", "RECONCILED_NOT_COMMITTED"],
+                    oracle=["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]),
     }
 
 
@@ -299,8 +302,11 @@ def test_c6_one_read_reconciles_a_commit_to_saved_and_a_rollback_to_not_saved() 
         ("S7a", {"reconciled": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}),
         ("S7a", {"reconciled": None}),
         ("S10", {"receipt": "NOT_SAVED"}),
+        ("S7a", {"oracle": ["NOT_SAVED", "RECONCILED_NOT_COMMITTED"]}),
+        ("S7a", {"reconciled_while_open": ["SAVED", "RECONCILED_COMMITTED"]}),
     ],
-    ids=["rollback-read-as-saved", "commit-read-as-not-saved", "undecidable", "not-unknown"],
+    ids=["rollback-read-as-saved", "commit-read-as-not-saved", "undecidable", "not-unknown",
+         "rest-read-disagrees-with-the-database", "an-open-circuit-read-decided"],
 )
 def test_c6_fails_whenever_the_read_or_the_receipt_would_lie(name: str, change: dict) -> None:
     observations = _ideal()
@@ -323,6 +329,29 @@ def test_s10_runs_only_on_the_atomic_route_with_a_loss_before_commit() -> None:
     assert "raise httpx.ReadError" in loss, "after the rollback, the response is lost"
     source = Path(fi.__file__).read_text(encoding="utf-8")
     assert "lambda f: f, atomic=True)" in source, "the rest_rpc route is the atomic one"
+    assert 's7a["reconciled_while_open"] = reconciled(s7, lost)' in source
+    assert "repository.read_core_strict(pending.run_id, pending.prediction_ids)" in source
     scenarios = source.split("    def scenarios(", 1)[1].split("\n    # Route", 1)[0]
     assert scenarios.index("if atomic:") < scenarios.index('observe("S10"')
     assert 'faulted("lost_before_commit", fresh())' in scenarios
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/rest/v1/analysis_runs?select=*&run_id=eq.r&limit=1",
+        "/rest/v1/analysis_runs?select=run_id,analysis_hash&run_id=eq.r",
+        "/rest/v1/predictions?select=prediction_id",
+        "/rest/v1/watchlist?select=symbol",
+    ],
+    ids=["another-select", "no-limit", "no-filter", "another-table"],
+)
+def test_the_emulator_answers_only_the_strict_read_s_two_shapes(url: str) -> None:
+    import httpx
+
+    from scripts.persistence_rehearsal.postgrest_emulator import PostgrestEmulator
+
+    emulator = PostgrestEmulator("postgresql:///unused?host=/var/run/postgresql")
+    request = httpx.Request("GET", f"https://rehearsal.invalid{url}")
+    assert emulator._read(request) is None, "never a database read for another shape"
+    assert emulator(request).status_code == 404

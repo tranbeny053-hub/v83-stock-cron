@@ -20,9 +20,12 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# UCPE-PROD-WA-20261003-A deployed main's own tree, so nothing stands in it:
-# analysis_service.py, build_info.py cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+# UCPE-PROD-WA-20261003-A deployed main's own tree, which cleared analysis_service.py and
+# build_info.py. WB3's R-1a (the wiring of the strict-read reconciler) changes analysis_service.py
+# again, until the next release carries it.
+CURRENT_DELTA_PATHS: list[str] = [
+    "src/crypto_probability_engine/api/analysis_service.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
