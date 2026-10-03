@@ -1,6 +1,37 @@
 # STATE
 
-Updated: 2026-10-03 (the §2.6 package and E3's executable proof MERGED; the release package is next). **The production
+Updated: 2026-10-03 (UCPE-PROD-WA-20261003-A RELEASED; the chain is complete). **Production is D a2de125f /
+UCPE-PROD-WA-20261003-A. The guard is HEALTHY at that pin (R 4130a6cd). The H2-safe rollback target is 17c9c053.**
+- **The writer now saves each forecast bundle in ONE transaction** (the run, its detail, the prediction and its
+  snapshots: W-A, migration 0017's function). It still uses the service-role key until the owner's switch (E3).
+- **The chain** (evidence .work/release_wa, sealed; CHAIN.md):
+  - STATE #198 → a6f881c9. It also carries a one-clause fix of a flaky JWKS test from #197.
+  - identity #199 → D a2de125f; push CI 37116841080 and the reproducible build 37116841053, both success;
+  - the guard on D: run 37116850129, GUARD_VERIFY=PASS 8/8;
+  - rollback findings, 17c9c053 over D: 5/5;
+  - the re-pin precomputed twice: a4082e59;
+  - preflight review and accept: PASS 9/9. The delta is 4 files (analysis_service.py, build_info.py, settings.py,
+    repository.py), digest a517aecc….
+- **The T4 deploy is CONSUMED** (the owner's one Run action): a fresh preflight (PASS 9/9), then DEPLOY=PASS.
+  - It was one fast-forward push, 17c9c05..a2de125 at 10:49:56Z, with no force. Never rerun.
+- **After the deploy:**
+  - SETTLE=PASS: RUNNING at D after 1 poll; health 200; build-info WA; D's index.html, app.js and styles.css bytes;
+    the F1 probe 401 CREDENTIAL_REQUIRED;
+  - ROLLBACK_CHECK=PASS 7/7 against the live build: target 17c9c053, every migration after it additive (0016,
+    0017);
+  - re-pin #200 → R 4130a6cd, equal to the precomputed a4082e59;
+  - the guard on R: run 37118169873, GUARD_VERIFY=PASS, pin == live == a2de125f, delta [].
+- **The owner's rollback command** (a T4, never automatic):
+  `git push --force-with-lease=refs/heads/main:a2de125ffa449cd6f5ec452e4a7a3335286eb413 hf
+  17c9c053d420b0f06ee860ff18944660ea407acf:refs/heads/main`. It needs no database change.
+- **E3, the credential switch, is at the owner.** The runbook is docs/runbooks/WRITER_CUTOVER.md. Open decisions:
+  - E3-A: approve the plan (the owner's offline ES256 key, imported and rotated in; a writer token in the Space,
+    never the key);
+  - E3-B: the token's lifetime, 30 days (recommended) or 90.
+  - Its steps are secret entry, so the owner does them. Claude creates no value.
+- **Confirmation in production, observed only:** the next natural USER_REQUESTED analysis logs a persistence_receipt.
+  No verification traffic is created.
+Previously (the §2.6 package and E3's executable proof MERGED; the release package is next). **The production
 app is unchanged: D 17c9c053 / UCPE-PROD-RCPT-20261003-A. Migrations 0016 and 0017 are applied. Main is c909915e, plus
 this record.**
 - **The §2.6 package (E4 + the W-A client): MERGED** (#196 → b29ef4e4; evidence .work/roadmap/phase3/pr196, sealed).
@@ -1110,7 +1141,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): the §2.6 package (#196) and E3's executable proof (#197) are merged. Next is the
+LOOP_STATE=AT THE OWNER (2026-10-03): UCPE-PROD-WA-20261003-A is RELEASED and its chain is complete (R 4130a6cd). Next is
+  E3's credential switch: the decisions E3-A and E3-B, then the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md).
+  Before it: IN PROGRESS (2026-10-03): the §2.6 package (#196) and E3's executable proof (#197) are merged. Next is the
   release package UCPE-PROD-WA-20261003-A through the B4 chain: identity → D → push CI and B3 → the guard on D →
   the rollback findings → the re-pin precomputed twice → preflight review and accept. Then the owner's T4.
   Before it: IN PROGRESS (2026-10-03): migrations 0016 and 0017 are APPLIED (runs 37110330500 and 37110375659, both
@@ -2793,7 +2826,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): the §2.6 package (#196) and E3's executabl
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): the §2.6 package (E4 + the W-A client, #196) and E3's proof (#197, J1)
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): WA RELEASED (production a2de125f / UCPE-PROD-WA-20261003-A; R 4130a6cd). The writer
+  saves the whole core bundle in one transaction.
+  Before it: PHASE 3 (2026-10-03): the §2.6 package (E4 + the W-A client, #196) and E3's proof (#197, J1)
   merged. The release is next.
   Before it: PHASE 3 (2026-10-03): migrations 0016 and 0017 APPLIED in production (runs 37110330500 and
   37110375659). The app is unchanged (17c9c053).
@@ -2918,7 +2953,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): the §2.6 package (E4 + the W-A client, 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-s26-e3-merged (this record; worktree lanes23/state).
+CURRENT_BRANCH=chore/state-wa-released (this record; worktree lanes23/state_rel).
+  - Merged: release/prod-wa (#199 → D a2de125f) and release/prod-wa-repin (#200 → R 4130a6cd).
+  Before it: chore/state-s26-e3-merged (#198 → a6f881c9; worktree lanes23/state).
   - Merged: feat/s26-e4-writer-wa-client (#196 → b29ef4e4) and feat/e3-es256-signing-proof (#197 → c909915e).
   Before it: chore/registry-0016-0017-applied (#195 → ee9173c9; worktree lanes22/registry_m17).
   Before it: chore/state-migrations-0016-0017 (#194 → 8cbfdbc3; worktree lanes22/state_m17).
@@ -3022,7 +3059,9 @@ CURRENT_BRANCH=chore/state-s26-e3-merged (this record; worktree lanes23/state).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c909915e (main, PR #197: E3's proof). Its PR checks are all green; its push CI is running at this
+LAST_GREEN_SHA=4130a6cd (main = R, the WA re-pin, over D a2de125f, deployed). The guard PASS on R (run 37118169873).
+  Before it: a2de125f (D). Push CI 37116841080; reproducibility 37116841053.
+  Before it: c909915e (main, PR #197: E3's proof). Its PR checks are all green; its push CI is running at this
   record's commit.
   Before it: 8cbfdbc3 (main, PR #194: the STATE record). Push CI success (run 37109433419); reproducibility success
   (run 37109433420). Both T4 applies ran at this SHA.
@@ -3474,7 +3513,13 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None open now (2026-10-03). Both T4 applies are consumed (runs 37110330500 and 37110375659). The next
+OWNER_BOUNDARY=E3's credential switch (2026-10-03):
+  - E3-A: approve the plan;
+  - E3-B: the token's lifetime, 30 days (recommended) or 90;
+  - then the owner's secret steps (docs/runbooks/WRITER_CUTOVER.md).
+  The WA deploy T4 is consumed (the owner's Run action, 10:49:56Z).
+  Standing items: the H2 hold, B5's DEGRADED half, D3 (NO FOR NOW), D4 (HOLD), WB3 (with S8), E2 (deferred).
+  Before it: None open now (2026-10-03). Both T4 applies are consumed (runs 37110330500 and 37110375659). The next
   boundary is the release T4, after the §2.6 package; later, E3's credential plan (after its executable proof).
   Before it: Two T4 applies (2026-10-03), in one Run action, in order:
   1. apply-migration-0016.yml (expected_sha = main at this record's merge; confirm APPLY-MIGRATION-0016-ONCE);
@@ -4007,7 +4052,11 @@ OWNER_BOUNDARY=None open now (2026-10-03). Both T4 applies are consumed (runs 37
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: the release package UCPE-PROD-WA-20261003-A, up to its T4.
+NEXT_ACTION=The owner: E3-A and E3-B, then the credential switch (docs/runbooks/WRITER_CUTOVER.md).
+  - Then Claude: confirm passively that the next natural persistence_receipt is SAVED as ucpe_api_writer.
+  - Later: D6, which removes the service-role key and narrows service_role's grants by a migration (a T4).
+  - Throughout: never create verification traffic.
+  Before it: Claude: the release package UCPE-PROD-WA-20261003-A, up to its T4.
   - It goes through the B4 chain from the main that carries this record.
   - Then the owner gets one Run action (a fresh preflight, then the deploy), with E3's credential plan to decide.
   - After the deploy: settle, rollback-check, the re-pin PR, the guard on R, and a STATE record.
