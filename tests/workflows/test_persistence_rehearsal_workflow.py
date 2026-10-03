@@ -1,7 +1,7 @@
 """PERS-0: the persistence fault rehearsal workflow's contract.
 
 A scratch PostgreSQL on the runner only: pull requests only, a read-only token, no secret. It
-builds the database from every migration (0016, the least-privilege roles, included) and runs the
+builds the database from every migration (0017, the wider bundle RPC, included) and runs the
 rehearsal, with production's REST route required to pass every criterion.
 SHA pins and job timeouts are enforced for every workflow by test_workflow_action_runtime.py.
 """
@@ -40,8 +40,8 @@ def test_the_database_is_every_migration_production_has_applied() -> None:
     every = sorted(
         path.relative_to(ROOT).as_posix() for path in (ROOT / "migrations").glob("*.sql")
     )
-    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0016.sql"' in TEXT
-    assert every[-1] == "migrations/0016_least_privilege_roles.sql", "update the bundle name"
+    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0017.sql"' in TEXT
+    assert every[-1] == "migrations/0017_forecast_bundle_rpc.sql", "update the bundle name"
     # 0016 creates roles: PostgREST's authenticator must exist, and the owner holds CREATEROLE.
     assert ('-v owner="$(id -un)" -f - < '
             "scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql") in TEXT

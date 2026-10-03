@@ -2,8 +2,9 @@ name: Persistence fault rehearsal (scratch PostgreSQL, no secrets)
 
 # PERS-0 (plan §22 item 7; the §23 Persistence criteria) and B9 (plan §8.1). On every pull request
 # that touches a writer, migrations or this rehearsal, it measures both persistence writers under
-# injected faults on a real PostgreSQL built from every migration (0001-0016). Since 0016, the bundle
-# RPC runs SECURITY DEFINER as ucpe_bundle_owner, and the writer may execute it too:
+# injected faults on a real PostgreSQL built from every migration (0001-0017). Since 0016, the bundle
+# RPC runs SECURITY DEFINER as ucpe_bundle_owner, and the writer may execute it too; 0017 adds the
+# wider bundle function beside it, which no current writer calls yet:
 # - a write that fails after the prediction row, a response lost after commit;
 # - same-content and conflicting retries;
 # - the circuit after a failure.
@@ -57,8 +58,8 @@ jobs:
           sudo -u postgres createdb -O "$(id -un)" persistence_rehearsal
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d persistence_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d persistence_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
-          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql > "$RUNNER_TEMP/migrations_0001_0016.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d persistence_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0016.sql"
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql > "$RUNNER_TEMP/migrations_0001_0017.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d persistence_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0017.sql"
           PERSISTENCE_REHEARSAL_URL="postgresql:///persistence_rehearsal?host=/var/run/postgresql" PYTHONPATH=src python scripts/persistence_rehearsal/fault_injection.py --report=persistence-fault-rehearsal-report.json --require-route rest_rpc
 
       - name: Upload the rehearsal report

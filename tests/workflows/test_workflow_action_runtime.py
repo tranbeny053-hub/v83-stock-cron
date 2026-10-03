@@ -134,7 +134,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # not an action.
     # 68 -> 74 (migration 0016): the dispatch-only apply workflow and the pull-request rehearsal add
     # checkout, setup-python and upload-artifact each, all at the reviewed pins.
-    assert len(refs) == 74
+    # 74 -> 80 (migration 0017): its dispatch-only apply workflow and pull-request rehearsal add the
+    # same three each, at the same pins.
+    assert len(refs) == 80
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:

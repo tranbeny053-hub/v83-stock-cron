@@ -42,9 +42,10 @@ Criteria, each PASS or FAIL in the report (--require-all makes every one a gate)
 - P8 ROLLBACK: the rollback restores the pre-draft catalog exactly, and the service_role writer
   still persists (SAVED).
 
-W-A (draft_0017_forecast_bundle_rpc.sql, on top of the applied 0016, before P8): plan §8.1's whole
-core bundle (the run identity, the detail, the prediction and its snapshots) in one transaction,
-called through PostgREST as ucpe_api_writer with production-built rows:
+W-A (migration 0017, migrations/0017_forecast_bundle_rpc.sql, its reviewed bytes; owner ruling
+WB1 = YES, after 0016), on top of the applied 0016, before P8: plan §8.1's whole core bundle (the
+run identity, the detail, the prediction and its snapshots) in one transaction, called through
+PostgREST as ucpe_api_writer with production-built rows:
 - W1 CATALOG: the definer function, its EXECUTE list, its owner's exact matrix (insert and read,
   never update) and policies.
 - W2 SAVED: a new bundle stores all four parts. W3 REPLAY: identical, and nothing changes.
@@ -90,10 +91,12 @@ HERE = Path(__file__).resolve().parent
 # Migration 0016 itself (the bytes its one-shot route pins), and its rollback.
 DRAFT = ROOT / "migrations" / "0016_least_privilege_roles.sql"
 ROLLBACK = HERE / "rollback_0016.sql"
-DRAFT_0017 = HERE / "draft_0017_forecast_bundle_rpc.sql"
-ROLLBACK_0017 = HERE / "rollback_draft_0017.sql"
+# Migration 0017 itself (the bytes its one-shot route pins), and its rollback.
+DRAFT_0017 = ROOT / "migrations" / "0017_forecast_bundle_rpc.sql"
+ROLLBACK_0017 = HERE / "rollback_0017.sql"
 SCHEMA_VERSION = "privilege-rehearsal.v1"
-# P1-P8: the roles (draft 0016). W1-W9: the whole core bundle in one transaction (draft 0017).
+# P1-P8: the roles (migration 0016). W1-W9: the whole core bundle in one transaction (migration
+# 0017).
 CRITERIA = (
     "P1",
     "P2",
@@ -1135,7 +1138,7 @@ def criterion_unchanged(
     return verdict(failures, denied=denied, service_role_receipt=confirmation.receipt)
 
 
-# ------------------------------------------------------------------------- W-A, draft 0017
+# ------------------------------------------------------------------------- W-A, migration 0017
 
 
 WIDE_FUNCTION = "public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)"
@@ -1211,7 +1214,7 @@ def answer_of(**parts: str | None) -> dict:
 def criteria_wide_bundle(
     db: Database, version: int, call: Callable[..., Any], raw: Callable[..., Any]
 ) -> dict[str, dict[str, Any]]:
-    """W1-W8 on the applied draft 0017. W9 (its rollback) is judged by the caller."""
+    """W1-W8 on the applied migration 0017. W9 (its rollback) is judged by the caller."""
 
     out: dict[str, dict[str, Any]] = {}
 
@@ -1532,12 +1535,12 @@ def run(db: Database, postgrest_url: str, admin_url: str | None, jwt_key: str) -
     criteria["P5"] = _guarded(lambda: criterion_resolver(db))
     criteria["P6"] = _guarded(lambda: criterion_unchanged(db, version, api_before, rest))
 
-    # W-A: the draft of 0017 on top of the applied 0016, then its own rollback.
+    # W-A: migration 0017 on top of the applied 0016, then its own rollback.
     before_0017 = snapshot(db)
     applied_0017 = db.apply(DRAFT_0017)
     if applied_0017 is not None:
         for name in WIDE_CRITERIA:
-            criteria[name] = verdict([f"the draft of 0017 did not apply: {applied_0017}"])
+            criteria[name] = verdict([f"migration 0017 did not apply: {applied_0017}"])
     else:
         wait_for_reload(postgrest_url, admin_url)
         criteria.update(criteria_wide_bundle(db, version, call, raw))
@@ -1619,12 +1622,14 @@ def main(argv: list[str] | None = None) -> int:
         "schema_version": SCHEMA_VERSION,
         "scope": (
             "migration 0016 (Phase 3's least-privilege roles: design C1-C3 with W2 and"
-            " Correction 01) and the DRAFT of migration 0017, on scratch PostgreSQL built from"
-            " migrations 0001-0015, behind a real PostgREST"
+            " Correction 01) and migration 0017 (W-A, owner ruling WB1 = YES), on scratch"
+            " PostgreSQL built from migrations 0001-0015, behind a real PostgREST"
         ),
         "postgrest_version": os.environ.get("PRIVILEGE_REHEARSAL_POSTGREST_VERSION"),
         "migration_0016_sha256": hashlib.sha256(DRAFT.read_bytes()).hexdigest(),
         "rollback_sha256": hashlib.sha256(ROLLBACK.read_bytes()).hexdigest(),
+        "migration_0017_sha256": hashlib.sha256(DRAFT_0017.read_bytes()).hexdigest(),
+        "rollback_0017_sha256": hashlib.sha256(ROLLBACK_0017.read_bytes()).hexdigest(),
         **result,
     }
     Path(args.report).write_text(

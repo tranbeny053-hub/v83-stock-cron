@@ -88,6 +88,12 @@
       "applied_run": null,
       "id": "0016",
       "note": "four NOLOGIN roles with their grants and policies; the bundle RPC becomes SECURITY DEFINER of ucpe_bundle_owner, body and service_role EXECUTE unchanged; nothing revoked, so every H2-safe target writes exactly as before (P3-PRIV-R P6)"
+    },
+    {
+      "additive": true,
+      "applied_run": null,
+      "id": "0017",
+      "note": "one SECURITY DEFINER function (public.save_forecast_bundle) of ucpe_bundle_owner, EXECUTE for ucpe_api_writer and service_role; ucpe_bundle_owner gains INSERT and SELECT on analysis_runs and analysis_run_details with four policies; no table change, nothing revoked; older code never calls it (P3-PRIV-R W1-W9)"
     }
   ],
   "releases": [

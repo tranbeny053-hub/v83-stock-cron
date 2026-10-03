@@ -27,8 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 DRAFT = (ROOT / "migrations/0016_least_privilege_roles.sql").read_text()
 ROLLBACK = (ROOT / "scripts/privilege_rehearsal/rollback_0016.sql").read_text()
 FIXTURE = (ROOT / "scripts/privilege_rehearsal/00_supabase_like_authenticator.sql").read_text()
-DRAFT_0017 = (ROOT / "scripts/privilege_rehearsal/draft_0017_forecast_bundle_rpc.sql").read_text()
-ROLLBACK_0017 = (ROOT / "scripts/privilege_rehearsal/rollback_draft_0017.sql").read_text()
+# Migration 0017 itself (owner ruling WB1 = YES, after 0016), which the harness applies after 0016,
+# and its rollback.
+DRAFT_0017 = (ROOT / "migrations/0017_forecast_bundle_rpc.sql").read_text()
+ROLLBACK_0017 = (ROOT / "scripts/privilege_rehearsal/rollback_0017.sql").read_text()
 WORKFLOW = (ROOT / ".github/workflows/privilege-rehearsal.yml").read_text(encoding="utf-8")
 
 
@@ -342,7 +344,7 @@ def test_postgrest_is_two_pinned_release_binaries_checked_by_sha256() -> None:
 def test_the_database_is_every_migration_before_0016_and_no_scratch_value_on_a_command_line() -> (
     None
 ):
-    # The harness applies migration 0016 itself, then the draft of 0017.
+    # The harness applies migration 0016 itself, then migration 0017.
     earlier = sorted(
         path.relative_to(ROOT).as_posix()
         for path in (ROOT / "migrations").glob("*.sql")
@@ -366,17 +368,23 @@ def test_every_criterion_is_a_gate_and_the_report_is_uploaded_always() -> None:
     assert "          path: privilege-rehearsal-report-${{ matrix.postgrest }}.json\n" in upload
 
 
-# ------------------------------------------------------------------------ W-A: the draft of 0017
+# ------------------------------------------------------------------------ W-A: migration 0017
 
 
 WIDE = "public.save_forecast_bundle(jsonb, jsonb, jsonb, jsonb, jsonb)"
 
 
-def test_the_wider_draft_is_not_a_migration_and_refuses_a_second_application() -> None:
-    for migration in (ROOT / "migrations").glob("*.sql"):
-        assert migration.read_text() != DRAFT_0017, migration
+def test_migration_0017_is_authored_with_its_route_and_refuses_a_second_application() -> None:
+    """The rehearsed bytes are the migration's: the harness applies migrations/0017 itself."""
+
+    assert "AUTHORED, NOT APPLIED" in DRAFT_0017 and "scripts/apply_migration_0017.py" in DRAFT_0017
+    assert "WB1 = YES, after 0016" in DRAFT_0017 and "NOT A MIGRATION" not in DRAFT_0017
+    assert rehearse.DRAFT_0017 == ROOT / "migrations" / "0017_forecast_bundle_rpc.sql"
+    assert rehearse.ROLLBACK_0017 == ROOT / "scripts/privilege_rehearsal/rollback_0017.sql"
+    for retired in ("draft_0017_forecast_bundle_rpc.sql", "rollback_draft_0017.sql"):
+        assert not (ROOT / "scripts/privilege_rehearsal" / retired).exists(), retired
     every = statements(DRAFT_0017)
-    assert every[0].startswith("DO $$") and "NOT A MIGRATION" in DRAFT_0017
+    assert every[0].startswith("DO $$"), "the refusal must come first"
     head = DRAFT_0017.split("CREATE FUNCTION", 1)[0]
     assert re.search(
         r"RAISE EXCEPTION '[^']*already exists; a second application is refused'\s+"
@@ -453,7 +461,7 @@ def test_the_owner_change_uses_the_same_temporary_powers_as_0016() -> None:
     assert positions == sorted(positions) and positions[-1] - positions[0] == len(order) - 1
 
 
-def test_the_wider_rollback_removes_exactly_what_the_draft_added() -> None:
+def test_the_wider_rollback_removes_exactly_what_migration_0017_added() -> None:
     every = statements(ROLLBACK_0017)
     assert f"DROP FUNCTION {WIDE}" in every
     assert policies(ROLLBACK_0017, "DROP") == policies(DRAFT_0017)
