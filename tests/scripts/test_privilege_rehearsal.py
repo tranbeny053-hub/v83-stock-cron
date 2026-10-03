@@ -502,6 +502,9 @@ def test_j1_expects_the_documented_acceptances_and_refusals() -> None:
     assert "if code != 401" in j1
     assert 'es256.mint(key_file, "service_role"), "prediction_outcomes"' in j1
     assert "persist_through_forecast(writer(token), work)" in j1
+    assert "token = writer_signing_key.writer_token(key_file, kid=es256.KID)" in j1, (
+        "J1 proves the token the owner mints (scripts/writer_signing_key.py)"
+    )
 
 
 @pytest.mark.parametrize("name", rehearse.ES256_ENVIRONMENT[:2])
