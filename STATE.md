@@ -1,6 +1,34 @@
 # STATE
 
-Updated: 2026-10-03 (Phase 3: the privilege rehearsal MERGED and PASSING; W-B MERGED; the wider-bundle design
+Updated: 2026-10-03 (RCPT RELEASED). **THE THREE-STATE RECEIPTS AND W-B ARE LIVE. Production is D 17c9c053 /
+UCPE-PROD-RCPT-20261003-A. The guard is HEALTHY at that pin (R 06e4733e). The H2-safe rollback target is f046140b.**
+- **The chain** (evidence .work/release_rcpt, sealed; CHAIN.md):
+  - STATE #186 → ac7cd4a1;
+  - identity #187 → D 17c9c053, then push CI 37062479974 and the reproducible build 37062479904, both success;
+  - the guard on D: run 37062503316, GUARD_VERIFY=PASS;
+  - the rollback findings, f046140b over D: 5/5;
+  - the re-pin precomputed twice: c7a5591e;
+  - preflight review and accept, PASS 9/9: the delta is 3 files (analysis_service.py, build_info.py, events.py),
+    digest 70259379…; 5b and 5c PASS.
+- **The T4 deploy is CONSUMED.** The owner ran the one chained Run action: a fresh preflight (PASS 9/9), then
+  DEPLOY=PASS. That was a single fast-forward push, f046140..17c9c05 at 2026-10-03T04:47:03Z, with no force.
+  Never rerun.
+- **After the deploy:**
+  - SETTLE=PASS: RUNNING at D after 1 poll, health 200, build-info RCPT, D's index/app.js/styles.css bytes, the
+    F1 probe 401 CREDENTIAL_REQUIRED;
+  - ROLLBACK_CHECK=PASS 7/7 against the live build: target f046140b, no migration after it;
+  - re-pin #188 → R 06e4733e, equal to the precomputed c7a5591e;
+  - the guard on R: run 37098323783, GUARD_VERIFY=PASS, pin == live == 17c9c053, delta [].
+- **The owner's rollback command** (a T4, never automatic):
+  `git push --force-with-lease=refs/heads/main:17c9c053d420b0f06ee860ff18944660ea407acf hf
+  f046140b121d4e4ed8969e58d3c137538b661725:refs/heads/main`. It needs no database change.
+- **Confirmation in production, observed only:** the next natural USER_REQUESTED analysis logs a
+  persistence_receipt carrying receipt and receipt_reason. No verification traffic is created.
+- **Still open (Phase 3), for the owner:**
+  - E1-E4: the privilege design, rehearsed;
+  - WB1: W-A, the atomic wider bundle (migration 0017 plus §2.6);
+  - WB3: R-1 with S8.
+Previously (Phase 3: the privilege rehearsal MERGED and PASSING; W-B MERGED; the wider-bundle design
 SEALED; the receipts + W-B release package next, up to the owner's T4). **Production is unchanged: D f046140b /
 UCPE-PROD-B9-20261002-A, guard HEALTHY. Main is 99908969.**
 - **Item 1, the privilege rehearsal (P3-PRIV-R): MERGED** (#184 → 84280b6c; evidence .work/roadmap/phase3/pr184,
@@ -932,7 +960,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-03): the release package UCPE-PROD-RCPT-20261003-A (the receipts #182 + W-B #185) goes
+LOOP_STATE=AT THE OWNER (2026-10-03): RCPT is RELEASED and its chain is complete (R 06e4733e). Next are the batched
+  Phase 3 decisions E1-E4, WB1 and WB3.
+  Before it: IN PROGRESS (2026-10-03): the release package UCPE-PROD-RCPT-20261003-A (the receipts #182 + W-B #185) goes
   through the B4 chain: identity → D → push CI and B3 → the guard on D → the rollback findings (target f046140b over
   D) → the re-pin precomputed twice → preflight PASS. Then AT THE OWNER, for the T4 deploy and the batched decisions.
   Main is frozen at D until the deploy, or until the owner abandons the package.
@@ -2602,7 +2632,9 @@ LOOP_STATE=IN PROGRESS (2026-10-03): the release package UCPE-PROD-RCPT-20261003
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-03): the privilege rehearsal merged (#184 → 84280b6c, P1-P8 PASS ×2); W-B merged
+CURRENT_MILESTONE=PHASE 3 (2026-10-03): RCPT RELEASED (production 17c9c053 / UCPE-PROD-RCPT-20261003-A; R 06e4733e).
+  The receipts and W-B are live.
+  Before it: PHASE 3 (2026-10-03): the privilege rehearsal merged (#184 → 84280b6c, P1-P8 PASS ×2); W-B merged
   (#185 → 99908969); the release package UCPE-PROD-RCPT-20261003-A next.
   Before it: PHASE 3 (2026-10-03): three-state receipts merged (#182 → 43d5b543). The privilege audit and design
   are sealed; the rehearsal is next.
@@ -2719,7 +2751,9 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-03): the privilege rehearsal merged (#184 →
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-phase3-rehearsed (this record; worktree lanes21/state_p3b).
+CURRENT_BRANCH=chore/state-rcpt-released (this record; worktree lanes21/state_rel).
+  - Merged: release/prod-rcpt (#187 → D 17c9c053) and release/prod-rcpt-repin (#188 → R 06e4733e).
+  Before it: chore/state-phase3-rehearsed (#186 → ac7cd4a1; worktree lanes21/state_p3b).
   - Merged: feat/phase3-privilege-rehearsal (#184 → 84280b6c) and feat/phase3-wider-core-receipt (#185).
   Before it: chore/state-phase3-resume (#183 → 6ef98f89; worktree lanes21/state_p3).
   - Merged: feat/phase3-three-state-receipts (#182 → 43d5b543).
@@ -2813,7 +2847,9 @@ CURRENT_BRANCH=chore/state-phase3-rehearsed (this record; worktree lanes21/state
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=99908969 (main, PR #185: W-B). Push CI success (run 37059683889); reproducibility success (run
+LAST_GREEN_SHA=06e4733e (main = R, the RCPT re-pin, over D 17c9c053, deployed). Push CI success (run 37098315075); the guard
+  PASS on R (run 37098323783).
+  Before it: 99908969 (main, PR #185: W-B). Push CI success (run 37059683889); reproducibility success (run
   37059683937).
   Before it: 84280b6c (main, PR #184: the privilege rehearsal). Push CI 37057967928; reproducibility 37057967930.
   Before it: 43d5b543 (main, PR #182: three-state receipts). Push CI success (run 37049878403); reproducibility
@@ -3006,6 +3042,8 @@ LAST_GREEN_SHA=99908969 (main, PR #185: W-B). Push CI success (run 37059683889);
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
+  - This record at R 06e4733e, verified before its push.
+  Before it: PASS ruff ok | 5077 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at main 99908969, verified before its push.
   Before it: PASS ruff ok | 5030 passed, 23 warnings | schemas+smoke ok | scanners 3/3 · 2026-10-03.
   - This record at main 43d5b543, verified before its push.
@@ -3248,7 +3286,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Reached once the release package passes preflight (2026-10-03). Batched:
+OWNER_BOUNDARY=Phase 3 decisions (2026-10-03), batched:
+  - E1: promote the rehearsed draft to migration 0016, W2 or INVOKER;
+  - E2: the role behind the Space's DB_URL, OWNER or OTHER (never its value);
+  - E3: the credential plan;
+  - E4: the §2.6 crossing of repository.py and settings.py;
+  - WB1: W-A (migration 0017 plus §2.6);
+  - WB3: R-1 with S8;
+  - and the standing items: the H2 hold, B5's DEGRADED half, D3, D4.
+  - The RCPT T4 deploy is consumed (the owner's Run action, 2026-10-03T04:47:03Z).
+  Before it: Reached once the release package passes preflight (2026-10-03). Batched:
   1. the T4 deploy of UCPE-PROD-RCPT-20261003-A: one Run action (a fresh preflight, then the deploy);
   2. E1-E4: the privilege design, now rehearsed (E1: promote the draft to migration 0016, W2 or INVOKER);
   3. WB1-WB3: the wider bundle (W-A as the end state, migration 0017 plus §2.6; R-1 with S8);
@@ -3762,7 +3809,13 @@ OWNER_BOUNDARY=Reached once the release package passes preflight (2026-10-03). B
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: the release package UCPE-PROD-RCPT-20261003-A from the main that carries this record.
+NEXT_ACTION=The owner: E1-E4, WB1 and WB3.
+  - Then Claude, as answered: the migration-0016 route, that is the rehearsed draft promoted into
+    migrations/0016, its one-shot apply route, rehearsal and registry entry, and its T4 apply card. Then W-A, if
+    WB1 = yes, and the §2.6 package, if E4 = yes.
+  - Throughout: observe passively the first natural persistence_receipt with the receipt fields; never create
+    verification traffic.
+  Before it: Claude: the release package UCPE-PROD-RCPT-20261003-A from the main that carries this record.
   - The identity PR is the next merge (D). Then push CI and B3, the guard on D, the rollback findings over D, the
     re-pin precomputed twice, and preflight review and accept.
   - Stop at the owner: one Run action (a fresh preflight, then the deploy) and the batched decisions.
@@ -4586,6 +4639,13 @@ NEVER_RERUN=Consumed one-shot actions. None may run again:
     - the guard dispatches 36825556001 (D2) and 36828594390 (R);
     - the F1 canary, attempt_01 at 2026-10-01T10:25:15Z (HTTP_PASS, F1_CANARY=PASS). canary_f1.py refuses another
       attempt; never delete or edit its directory.
+    A rollback or any later deploy needs a new T4.
+  - B9 and RCPT (2026-10-02/03):
+    - the 0015 apply 37033014490 (APPLIED; the route refuses a second apply);
+    - the B9 deploy of D f046140b;
+    - the RCPT deploy of D 17c9c053, its single push at 2026-10-03T04:47:03Z (f046140b → 17c9c053; the
+      CONSUMED marker .work/release/CONSUMED_deploy_17c9c053d420…);
+    - the guard dispatches 37062503316 (D) and 37098323783 (R).
     A rollback or any later deploy needs a new T4.
   - R2 frontier research: the sealed look (folds 7-8) was consumed on 2026-09-04. Never re-run run_sealed.sh or
     edit docs/r2_evidence/SEALED_ATTESTATION.md.
