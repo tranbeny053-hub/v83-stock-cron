@@ -247,6 +247,9 @@ def test_the_injected_fault_lives_only_in_the_scratch_rehearsal() -> None:
     root = Path(__file__).resolve().parents[2]
     setup = " ".join(pe.FAULT_SETUP_SQL)
     assert "ON public.prediction_feature_snapshots" in setup and "pers0_fault." in setup
+    # The emulator writes as production's writer, switching to it as PostgREST's authenticator does.
+    assert pe.WRITER_ROLE == "ucpe_api_writer" and "service_role" not in setup
+    assert "GRANT ucpe_api_writer TO CURRENT_USER WITH INHERIT FALSE, SET TRUE" in setup
     for migration in (root / "migrations").glob("*.sql"):
         assert "pers0" not in migration.read_text(encoding="utf-8"), migration.name
 
@@ -261,7 +264,7 @@ def _route(**changes: Any) -> dict[str, Any]:
     report = {
         "criteria": fi.verdicts(_ideal()),
         "privileges": {"expected": {"security_definer_of_ucpe_bundle_owner": True,
-                                    "execute_for_service_role": True}},
+                                    "no_execute_for_service_role": True}},
         "refusals": {"expected": {"anon_refused_42501": True, "refusals_write_nothing": True}},
     }
     report.update(changes)

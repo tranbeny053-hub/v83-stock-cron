@@ -97,7 +97,7 @@
     },
     {
       "additive": false,
-      "applied_run": null,
+      "applied_run": 37172530166,
       "id": "0018",
       "note": "D6: service_role loses INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER (and MAINTAIN) on the six core evidence tables and EXECUTE on both bundle functions, and keeps SELECT; not additive: a code rollback stays safe only to a release from a2de125f (WA) on, which writes through the least-privilege pair (P3-PRIV-R D1-D4)",
       "rollback_safe_from": "a2de125ffa449cd6f5ec452e4a7a3335286eb413"

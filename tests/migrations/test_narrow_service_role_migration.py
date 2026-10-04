@@ -104,13 +104,15 @@ def test_its_rollback_gives_back_exactly_what_it_takes() -> None:
     assert "migrations/0018_narrow_service_role.sql" in ROLLBACK
 
 
-def test_the_registry_records_it_not_additive_unapplied_and_rollback_safe_from_wa() -> None:
+def test_the_registry_records_it_not_additive_applied_once_and_rollback_safe_from_wa() -> None:
     registry = json.loads((ROOT / "ops/release/releases.json").read_text(encoding="utf-8"))
     ids = [m["id"] for m in registry["migrations_applied"]]
     assert ids.index("0018") == ids.index("0017") + 1
     entry = next(m for m in registry["migrations_applied"] if m["id"] == "0018")
     assert entry["additive"] is False
-    assert entry["applied_run"] is None, "authored; the owner's T4 records its run"
+    # Applied once by the owner's T4, run 37172530166 (main 82ed9c48), after the refused, unapplied
+    # attempt 37170407623; never rerun.
+    assert entry["applied_run"] == 37172530166
     assert entry["rollback_safe_from"] == WA
     wa = next(r for r in registry["releases"] if r["commit"] == WA)
     assert wa["release_id"] == "UCPE-PROD-WA-20261003-A" and wa["h2_hold"] is True

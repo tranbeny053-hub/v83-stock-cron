@@ -18,6 +18,10 @@ inventory was clean (run 37149774863).
 - The repaired route accepts a login on exactly the design's two login roles (`ucpe_resolver` now,
   `ucpe_space_db` after E2), and its rehearsal applies G1's login, as production holds it. Dispatching
   it is a new T4, at the repaired commit.
+- **Run 37172530166** (2026-10-04, main 82ed9c48, attempt 1) **APPLIED** 0018 and committed. The
+  executed digest is the reviewed one. service_role holds SELECT only on the six core tables and
+  executes neither bundle function, and D6's inventory is empty. Evidence:
+  `.work/t4_0018_apply/ADJUDICATION.md`. The registry records `applied_run` 37172530166.
 
 ## Before
 

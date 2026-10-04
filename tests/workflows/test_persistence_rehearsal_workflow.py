@@ -51,8 +51,8 @@ def test_the_database_is_every_migration_production_has_applied() -> None:
         for path in (ROOT / "migrations").glob("*.sql")
         if path.name[:4] not in unapplied
     )
-    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0017.sql"' in TEXT
-    assert every[-1] == "migrations/0017_forecast_bundle_rpc.sql", "update the bundle name"
+    assert f'cat {" ".join(every)} > "$RUNNER_TEMP/migrations_0001_0018.sql"' in TEXT
+    assert every[-1] == "migrations/0018_narrow_service_role.sql", "update the bundle name"
     # 0016 creates roles: PostgREST's authenticator must exist, and the owner holds CREATEROLE.
     assert ('-v owner="$(id -un)" -f - < '
             "scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql") in TEXT
