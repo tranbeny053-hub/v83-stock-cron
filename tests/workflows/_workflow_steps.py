@@ -13,12 +13,15 @@ understand fails the test relying on it instead of being silently skipped.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -199,6 +202,29 @@ def resolve_env(
     return resolved
 
 
+@cache
+def _cached_stub() -> Path:
+    """Write one immutable executable per process, avoiding repeated OS assessments."""
+
+    body = (
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "from pathlib import Path\n"
+        "link = Path(sys.argv[0])\n"
+        "log = link.with_name('.' + link.name + '.stub-log').read_text(encoding='utf-8')\n"
+        "with open(log, 'a', encoding='utf-8') as handle:\n"
+        "    handle.write(json.dumps({'argv': sys.argv[1:], "
+        "'PYTHONPATH': os.environ.get('PYTHONPATH')}) + '\\n')\n"
+        "sys.stdout.write(os.environ.get('STUB_STDOUT', ''))\n"
+        "sys.exit(int(os.environ.get('STUB_EXIT', '0')))\n"
+    )
+    directory = Path(tempfile.mkdtemp(prefix="workflow-stub-"))
+    stub = directory / hashlib.sha256(body.encode("utf-8")).hexdigest()
+    stub.write_text(body, encoding="utf-8")
+    stub.chmod(0o555)
+    return stub
+
+
 def install_stub(bin_dir: Path, command: str, log: Path) -> Path:
     """An executable named ``command`` that records its argv and exits with ``$STUB_EXIT``.
 
@@ -207,17 +233,11 @@ def install_stub(bin_dir: Path, command: str, log: Path) -> Path:
 
     bin_dir.mkdir(parents=True, exist_ok=True)
     stub = bin_dir / command
-    stub.write_text(
-        f"#!{sys.executable}\n"
-        "import json, os, sys\n"
-        f"with open({str(log)!r}, 'a', encoding='utf-8') as handle:\n"
-        "    handle.write(json.dumps({'argv': sys.argv[1:], "
-        "'PYTHONPATH': os.environ.get('PYTHONPATH')}) + '\\n')\n"
-        "sys.stdout.write(os.environ.get('STUB_STDOUT', ''))\n"
-        "sys.exit(int(os.environ.get('STUB_EXIT', '0')))\n",
-        encoding="utf-8",
+    stub.with_name(f".{command}.stub-log").write_text(
+        str(log.resolve()), encoding="utf-8"
     )
-    stub.chmod(0o755)
+    stub.unlink(missing_ok=True)
+    stub.symlink_to(_cached_stub())
     return stub
 
 
