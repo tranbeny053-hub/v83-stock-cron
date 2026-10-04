@@ -1,9 +1,207 @@
 # STATE
 
-Updated: 2026-10-04 (PHASE 4 PREPARED. **The verdict is CONDITIONAL:** FEASIBLE for one claim only if the real
-hit-sequence H is low enough and a window outside F3 exists; INFEASIBLE for every other claim type. The R4-C1 identity
-module is unwired and has no constants). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The
+Updated: 2026-10-04 (**THE PUBLICATION BATCH IS COMPLETE** under the owner's T3: lane A #226, lane B #227 and the
+UOR A4 upstream artifact #228 merged on exact heads; this record is the batch's last PR. MODEL SUBSTITUTION: Codex quota
+exhausted, so Claude implemented A4 directly). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The
 rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-04), verbatim:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Codex quota is exhausted: do not invoke Codex, delegate.sh/codex exec, wait for quota, or use any paid fallback. Claude directly owns repo search, implementation, tests, debugging and T2 diff review; record MODEL SUBSTITUTION in STATE.
+Before publishing the already-completed lanes, add one bounded UCPE-owned upstream deliverable required by UOR qualification A10. UOR MUST NOT author UCPE SQL. Build and govern a sealed READ-ONLY A4 per-request audit artifact/package for the existing AUTOMATED_RADAR / radar_evidence.v1 interface.
+The artifact's sole purpose is: during one future bounded UOR qualification episode, prove the exact `public.automation_radar_ledger` row corresponding to that qualification request so UOR can adjudicate A4. Derive the minimum contract independently from current UCPE source, migration 0013, automation contract, UOR_HANDOFF and isolation evidence. Do not broaden it into a general DB inspection tool.
+Hard requirements:
+
+* no §5A/protected access and no prediction/cohort/shared prediction table as evidence authority;
+* no mutation and no production query now;
+* never output/read a credential VALUE; credential_id is non-secret identity only;
+* preserve USER_REQUESTED / CONTROLLED_SMOKE / SCHEDULED_SHADOW_EVIDENCE semantics unchanged;
+* preserve exact AUTOMATED_RADAR isolation;
+* bind the exact request using the minimum unambiguous existing non-secret identity. Because the ledger key is `(credential_id, client_request_id)`, assess that pair as the primary binding and cross-check the response `run_id`; do not rely on client_request_id alone unless you can prove that is sufficient;
+* output only the minimum deterministic scalar ledger facts needed by UOR A4; never return the stored full response body, unrelated rows, secrets or cohort data;
+* explicitly prove expected table/schema/columns against `migrations/0013_automation_radar_ledger.sql`;
+* prove response/ledger identity consistency as needed: AUTOMATED_RADAR, exact request binding, successful completed state/status, run_id and release/evidence identity, but add no field that A4 does not need;
+* make the SQL/card fail closed on zero rows, duplicate/ambiguous identity, wrong origin, wrong state/outcome/status, run mismatch, release/body identity mismatch or schema drift;
+* enforce/read-prove read-only semantics, preferably with a READ ONLY transaction plus static structural guards; PostgreSQL-specific syntax is acceptable because this ledger is PostgreSQL;
+* explicit upstream release/source identity. Do not blindly reuse the stale statement that F1 is the only release serving radar_evidence.v1: reconcile it against current production `UCPE-PROD-E2-20261004-A` / source and the actual inherited F1 route. Correct only the minimum handoff wording needed if stale;
+* seal the artifact/package and publish its SHA-256;
+* synthetic/local tests, preferably scratch PostgreSQL using existing rehearsal infrastructure where available; no production DB;
+* mutation/adversarial tests proving the audit cannot widen scope, touch cohort tables, omit AUTOMATED_RADAR isolation, accept ambiguity, or mutate;
+* after implementation/tests, perform one fresh serial read-only UCPE review in a separate Claude context/worktree with no implementation transcript. It must inspect the exact diff/artifact and return findings. If genuine independent context cannot be obtained, say NOT_INDEPENDENT rather than claiming PASS and stop only at that acceptance boundary;
+* add the minimum UCPE→UOR handoff reference needed so UOR can pin the artifact read-only. Do not change or weaken UOR Card-5/A4 acceptance to accommodate the gap.
+
+The downstream handoff MUST contain exactly these named fields with truthful values:
+A4_ARTIFACT_STATUS=
+ARTIFACT_NAME=
+ARTIFACT_SHA256=
+UPSTREAM_RELEASE_IDENTITY=
+INPUT_BINDING=
+OUTPUT_CONTRACT=
+READ_ONLY_PROOF=
+ISOLATION_PROOF=
+TESTS=
+INDEPENDENT_REVIEW=
+PRODUCTION_QUERY_EXECUTED=NO
+PACKAGE_PATH=
+Do not execute the audit against production now. Artifact PREPARED/VERIFIED locally is not production-executed evidence.
+Continue UCPE work aggressively as well. Existing completed local lanes are:
+
+* `feat/t1-test-wallclock@ebbabe6`
+* `docs/p8-tooling-inventory@953fe26`
+* pending STATE history `chore/state-phase4-infeasible`: pushed `cd4563c`, plus local `a44ccf6`.
+
+Keep the A4 lane isolated from those where possible. Max 2 proven-independent lanes; shared surfaces and STATE remain serial. Preserve Phase-4 INFEASIBLE, D4 consumed, F3 KEEP_UNSPENT, H2 hold, UX-1/Q1 and B5/deferred decisions unchanged.
+T3 AUTHORIZE one bounded publication batch after all local gates/reviews pass:
+
+1. publish/open/verify/merge the already-verified Lane A and Lane B exact heads;
+2. publish/open/verify/merge the exact A4 upstream-artifact branch;
+3. only after those merges, refresh the pending STATE record onto resulting main so it records Phase 4 + both lanes + UOR A4 truthfully; verify it, then publish/open/merge that STATE PR LAST.
+Do not treat `a44ccf6` as the final STATE if its LAST_GREEN/main references become stale. Preserve its history and rebuild/rebase the record correctly.
+
+For every PR: exact-head/diff check + required CI; merge only if green. STOP on SHA drift, unexpected files, conflict, acceptance failure or review finding that cannot be bounded-repaired. No hf deploy, production DB write/read for A4, secrets, F3/protected access or T4 in this authorization.
+After the publication batch, continue automatically through every remaining dependency-safe reversible T0/T1/T2 UCPE lane using Claude directly. Batch work/tests/reviews and do not return on routine milestones. Return only at a genuine product/methodology/T3/T4/secret/protected-evidence boundary or an unresolved causal blocker.
+```
+- **The publication, exact-head merges, every check green:**
+  - #226, lane A: `ebbabe64` became `3216992e` at 15:17:46Z. test, build-a, build-b and compare passed.
+  - #227, lane B: `953fe26c` became `cd8b508c` at 15:18:15Z. The same four passed. Main's push CI on `cd8b508c`
+    passed too (37212488457, 37212488451).
+  - #228, the A4 artifact: `16222c6f` became `e468f1f1` at 15:48:09Z.
+    - test, build-a, build-b, compare and rehearse all passed (CI 37213822939).
+    - The scratch-PostgreSQL rehearsal is run 37213822890: A4_REHEARSAL=PASS, 23 of 23 cases, isolation ok,
+      read-only ok, ledger restored.
+    - **The first causal failure:** run 37212719640 on `dde2118` failed one test, 6134 passing. CI writes bytecode,
+      unlike the local `PYTHONDONTWRITEBYTECODE=1`, so `ops/a4_ledger_audit/__pycache__/*.pyc` was counted by the
+      inventory's recursive ops/ scope.
+    - **One targeted repair,** `16222c6`: the inventory ignores `__pycache__` at every depth, with a regression test.
+      The failure was reproduced and fixed with bytecode on (VERIFY=PASS 6136).
+    - After the rebase, the reviewed files are byte-identical. The rebase added only the package's inventory rows.
+- **The UOR A4 handoff (UCPE→UOR), final values.** docs/automation/UOR_HANDOFF.md §14 carries these fields as of its
+  commit; this block adds the merge and the CI runs:
+```text
+A4_ARTIFACT_STATUS=PREPARED_AND_VERIFIED: local tests, the separate-context review, and the scratch-PostgreSQL rehearsal on PR #228 (run 37213822890, A4_REHEARSAL=PASS); merged to main e468f1f1 (#228); not production-executed
+ARTIFACT_NAME=ucpe.a4_ledger_audit.v1
+ARTIFACT_SHA256=2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577
+UPSTREAM_RELEASE_IDENTITY=UCPE-PROD-E2-20261004-A (commit 1caa8b08ebfc45b79a9b14d8217dad3b112cda8d) serves radar_evidence.v1 through the route introduced by UCPE-PROD-F1-AUTOMATION-20261001-A (5a3ef022db10462675361e8d15aa8f4f572dc1aa), byte-identical since; each request's own release is the expected build_info.release_id from its response; the artifact's source is main e468f1f118870f904d90505a3cdbb74446d5a495 (#228)
+INPUT_BINDING=(credential_id, client_request_id), the ledger's primary key, both from UOR's own request (client_request_id alone is not unique across credentials, rehearsed); cross-checked against the received 200 response: run_id, build_info.release_id, evidence_hash
+OUTPUT_CONTRACT=one canonical JSON line (sorted keys) of scalar facts: artifact, sql_sha256, verdict (PASS|FAIL), reason (OK, or the first of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN (the row), NOT_COMPLETED, NOT_SUCCEEDED, WRONG_ORIGIN (the stored body of a completed success), BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH, or a runner stop), bound_credential_id, bound_client_request_id, schema_ok, matched_rows, evidence_origin, origin_automated_radar, state, outcome_code, http_status, run_id, run_id_matches, release_id, release_id_matches, evidence_hash, evidence_hash_matches, body_identity_consistent, transaction_read_only; exit 0 only for PASS; never the stored body, another row, a timestamp, a fingerprint or a secret
+READ_ONLY_PROOF=one sealed WITH...SELECT (static guard: no write, lock, SET, TABLE, comma-join, DDL or side-effect function; 23 adversarial mutants rejected), run only inside SET TRANSACTION READ ONLY with transaction_read_only=on proven first, a 5 s timeout and an unconditional rollback; on real PostgreSQL (run 37213822890) INSERT, UPDATE, ALTER, CREATE, DELETE and TRUNCATE were all refused under that preamble and the ledger was unchanged across every audit
+ISOLATION_PROOF=reads only public.automation_radar_ledger and four pg_catalog relations; the static guard denies every other table, view and function any migration creates; requires evidence_origin AUTOMATED_RADAR on the row and in a success's stored body; on real PostgreSQL it PASSES as a role that can read only the ledger, which was refused predictions, prediction_outcomes, analysis_runs and automation_credential; no application code changed (USER_REQUESTED, CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE untouched)
+TESTS=tests/automation/test_a4_ledger_audit.py 75 (guard with the decision order enforced; schema equal to migration 0013; 23 SQL mutants; the runner offline; 14 runner mutants); tests/workflows/test_a4_ledger_audit_rehearsal_workflow.py 4; full suite PASS on PR #228 (CI 37213822939) and locally with bytecode on (6136); scratch-PostgreSQL rehearsal 23/23 (run 37213822890)
+INDEPENDENT_REVIEW=separate-context Claude review (a fresh context given only the commit and the requirements, no implementation transcript; the same model family, so not organizationally independent): first pass FINDINGS (1 blocker: in-progress and refused rows reported WRONG_ORIGIN; 6 minor), all repaired; delta review PASS with 3 minor findings, repaired without a further review
+PRODUCTION_QUERY_EXECUTED=NO
+PACKAGE_PATH=ops/a4_ledger_audit/
+```
+- **Stale handoff wording, corrected in place (#228):**
+  - §5: F1 introduced the route, which is inherited unchanged; E2 serves it now.
+  - §12: the named rollback target `2096af6d` is below migration 0018's floor (WA `a2de125f`). The current target, R1A
+    `6f4420a9`, keeps the route.
+- **This record's history is preserved.** `cd4563c` (Phase 4) and `a44ccf6` (lanes) were merged with main `e468f1f1`
+  (`640ba97`), then this record was added. Nothing was rewritten or force-pushed.
+- **MODEL SUBSTITUTION:** Codex's quota is exhausted (owner, 2026-10-04). Claude did the repo search, implementation,
+  tests, debugging and T2 diff review. The review was a separate-context Claude agent. No Codex, no wait, no paid
+  fallback.
+- **Unchanged:**
+  - Phase 4 is INFEASIBLE, D4 is consumed, F3 is KEEP_UNSPENT;
+  - the H2 hold, UX-1/Q1 and B5 stand;
+  - no hf deploy, no production read or write, no secret, no F3 or §5A access.
+Previously (**POST-PHASE-4: two dependency-safe lanes are DONE LOCALLY** under the owner's Codex resume. Both are T0/T1
+and wait only on T3 publication; nothing else is safe without an owner decision).
+- **The owner (2026-10-04), verbatim:** "CONTINUE CURRENT — Opus XHIGH. Recover from STATE.md + Git + .work; do not
+  repeat completed work. Codex resume is authorized for safe local T0/T1/T2 only. Exhaust every dependency-safe
+  reversible lane continuously, max 2 proven-independent lanes; batch implementation/tests/reviews, preserve
+  H2/F3/protected evidence and all gates. Stop only at a true owner/T3/T4/secret/product/methodology blocker and
+  return one batched owner action."
+- **Recovered:**
+  - main is 7a5ca4f9 (#225).
+  - This record's first commit (cd4563c, the Phase 4 verdict) is pushed but has no PR: Auto refused `gh pr create`
+    ([Data Exfiltration]).
+  - Lanes were taken from plan §18: Phase 4 INFEASIBLE leads to the reference/risk product. Every open item there
+    waits on an owner ruling (UX-1/D3/Q1, P7-1, custody, OD6, B5), except two.
+- **Lane A, T1: feat/t1-test-wallclock @ ebbabe6** (tests only; Codex task 902):
+  - **Measured cause:** macOS assesses a newly written executable on its first run (0.14–0.49 s; a later run, or a run
+    through a symlink to an assessed file, costs 0.01 s). install_stub wrote a new stub per test, so ~600 workflow
+    tests each paid it.
+  - **Fix:** one read-only stub body per process, linked into each test's bin dir, with the test's log path in a
+    sidecar. Behaviour unchanged; no assertion changed.
+  - **A/B on tests/workflows, interleaved:** 39 s and 91 s with the fix, against 155 s and 150 s without. Whole-suite
+    wall time swings 166–438 s with another session's load, so only the A/B is quoted.
+  - VERIFY=PASS 6018; mutants 4/4 killed.
+- **Lane B, T0/T1: docs/p8-tooling-inventory @ 953fe26** (Codex task 901, corrected by Claude):
+  - docs/TOOLING_INVENTORY.md classifies all 100 scripts/, workflow, ops/ and runbook entries (plan Phase 8: "document
+    active versus historical tooling"). Every consumed entry quotes STATE.md, and consumed workflows are dispatch-only.
+  - Claude corrected four labels: the privilege audit is a read-only reference; the two production-probability report
+    CLIs are references whose run is an owner decision (the §5A window, H2's rows).
+  - tests/docs/test_tooling_inventory.py keeps it complete (36 checks, under 1 s). VERIFY=PASS 6050; mutants 5/5 killed.
+- **Composition:** A and B share no file. Merged in a scratch tree: VERIFY=PASS 6054 (165.71 s).
+- **Evidence:** .work/roadmap/lanes_20261004/ (LANES_RECORD.md a2938b16…, MANIFEST 45197cbd…).
+- **Not done, by design:**
+  - no push, PR or merge (T3, the owner's);
+  - no production, database, secret, F3 or H2 contact, and no traffic;
+  - no STATE compaction: coordination files are 12.8% of source and test bytes, under the 20% trigger.
+Previously (**PHASE 4 VERDICT: INFEASIBLE**, final under the owner's rulings of 2026-10-04. The one D4 execution, OP-1 +
+OP-2, ran once and is consumed. No gate is weakened; the product proceeds as an honest reference and risk application).
+- **The owner (2026-10-04), verbatim:** "Owner rulings for Phase 4: 1) AUTHORIZE one bounded D4 DEV-only execution
+  containing OP-1 + OP-2 together. Use a one-time truncated BTC/ETH 1H DEV extract only, horizon_end <
+  2025-09-23T11:00Z; no folds 7-8, §5A, F1/F2, F3 or other protected/consumed rows. OP-1 fits the exact
+  r4-c1-symmetric-cb recipe; OP-2 measures coverage-hit dependence/H only. No promotion, production wiring or claim
+  acceptance. 2) F3 remains KEEP_UNSPENT. Authorize scope derivation only from canonical non-outcome metadata; do not
+  open protected outcomes/artifacts. If exact scope cannot be proven without protected access, STOP and return the
+  exact minimum file/field the owner must supply. 3) Staleness = Option C for now: conservative age cap. Do not train
+  on consumed folds and do not introduce scheduled refits yet. Use OP-1/OP-2 plus existing drift/staleness evidence
+  to derive the cap; if this makes C1 infeasible, preserve that result. 4) Freeze target margin δ = 0.03 for this
+  Phase-4 claim; do not silently widen to 0.05. Execute OP-1/OP-2 with deterministic extraction hashes, pre/post
+  corpus guards, mutation/adversarial checks and sealed evidence. Then exhaust all remaining safe Phase-4
+  protocol/reference/dependence work and independent Phase-7 work continuously. Return only with the Phase-4
+  FEASIBLE/INFEASIBLE verdict or a genuine protected/T3/T4/product boundary."
+- **The D4 execution (ruling 1), once, at 2026-10-04T11:15Z** (.work/roadmap/phase4/d4_run/D4_RUN_RECORD.md, sha256
+  8bb4f264…; the evidence is in .work/research3/phase4_d4, MANIFEST 66253115…). **It is CONSUMED: never rerun.**
+  - **Sealed before any real read:** run_d4.py (afb929f2…) under ANALYSIS_PLAN.json (11:15:38Z). All 23 mutants were
+    killed. The synthetic smoke crossed the cutoff, with a candle gap and an irregular candle.
+  - **Guards:**
+    - the corpus guard read 46/46 before and after;
+    - the code matched 48/49 (settings.py differs, as since R4), and the environment matched the commitment;
+    - no protected path was opened;
+    - the store was read only by the guards and by the one-time extract.
+  - **The extract:**
+    - source: store/{BTC,ETH}USDT_1H, with sealed bytes, read twice with identical digests;
+    - cut: R2's fold-7 train mask, horizon_end < 2025-09-23T10:59:59.999Z (one row stricter than authorized);
+    - 27,065 rows per symbol, no labels, 144 files at 0444 (BTC 719fd464…, ETH f09d9e44…);
+    - it lies only in R2's initial training span and DEV folds 1–6.
+  - **OP-1:** r4-c1-symmetric-cb's DEV constants, n = 26,915 per symbol. validate_constants accepts them and
+    independent code rebuilds them bit-identically (OP1_CONSTANTS.json 7b1dcf61…). **They are not wired, not
+    promoted and not accepted.**
+  - **OP-2 (dependence only):**
+    - the primary local Whittle gives H 0.538 (upper 95% 0.608), so **H_c = 0.65 and L = 156 weeks**;
+    - the long-scale estimators read higher: aggregated variance 0.56 / 0.65 / 0.69 at 4 / 8 / 13 weeks, weekly local
+      Whittle 0.85 ± 0.10;
+    - s_week is 0.060;
+    - every walk-forward fit is identical on a store poisoned after its split (OP2_DEPENDENCE.json 84ffb06e…).
+  - **Declared deviations:** the store, not the pickles (R4's own C1 input; the pickles were refused). The D4 note's
+    "93 entries" is corrected to 46.
+- **F3's scope (ruling 2), derived from canonical non-outcome metadata only** (F3_SCOPE_DERIVATION.md 0da95fe4…):
+  - F3 is every BTCUSDT and ETHUSDT kline (15m, 1H, 4H) from 2026-09-21T00:00Z on, with no end date. The sources are
+    G2_PROTOCOL.json, NG1_ADMISSIBILITY_MAP row 12 and R-4, and STRONGER_CANDIDATE_PATH §4.
+  - No owner-supplied field is needed.
+  - **Every prospective window lies inside F3, so none is admissible under KEEP_UNSPENT.**
+- **Staleness (ruling 3, Option C)** (STALENESS_CAP.md 9f5b7412…):
+  - The cap is 242 days. Source: V0, 1H 0.92 at 242 days and 0.73 at 403, against R4's 25% haircut.
+  - C1's constants passed the cap on 2026-05-23 and are 376 days old today.
+  - **C1 is INFEASIBLE under Option C. That result is preserved.**
+- **δ = 0.03 is frozen (ruling 4).**
+- **PHASE 4 VERDICT: INFEASIBLE** (PHASE4_VERDICT_FINAL.md be8c630f…; MANIFEST_FINAL 2114723e…):
+  - Grounds: there is no admissible window (F3), and the age cap has expired. Each is sufficient alone. OP-2's
+    long-scale H corroborates them.
+  - Plan §17: no forced gate weakening. The product proceeds as an honest reference/risk application.
+  - Phase 5 does not start for this claim.
+- **Phase 7 (P7-1), passive read** (.work/roadmap/phase7/passive_20261004/P7_PASSIVE_READ.md 4404e6c0…):
+  - since the 09:47:42Z restart there have been 0 analyses and 0 receipts, so there is no baseline data;
+  - nothing is built that can refuse a user;
+  - no dependency-independent Phase 7 step remains.
+- **Nothing else changed.** Production, the database, secrets, F3, the H2 and UX-1 holds and the Codex pause are
+  untouched, and no traffic was created.
+- **MODEL SUBSTITUTION:** Claude alone (CODEX_PAUSED_BY_OWNER). The GPT sidecar was not consulted: no trigger.
+Previously (PHASE 4 PREPARED. **The verdict is CONDITIONAL:** FEASIBLE for one claim only if the real
+hit-sequence H is low enough and a window outside F3 exists; INFEASIBLE for every other claim type. The R4-C1 identity
+module is unwired and has no constants).
 - **Phase 4 under P4-1 and P4-2**, all T0 or synthetic, sealed in .work/roadmap/phase4 and .work/roadmap/feas2:
   - CANDIDATE_IDENTITY.md (8f961fa0…): distributional-v2 ≠ C1; C1's recipe is reproducible (48/49 frozen files).
   - D4_CLASSIFICATION_NOTE.md (aafe3292…), NO EXECUTION. It prepares OP-1 (the C1 DEV refit) and OP-2 (the DEV
@@ -1714,7 +1912,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
+LOOP_STATE=IN PROGRESS (2026-10-04): the owner's T3 publication batch is COMPLETE (#226, #227, #228; this record
+  last). Claude continues with dependency-safe local lanes; any new pull request needs a new owner T3 batch.
+  Before it: AT THE OWNER (2026-10-04): POST-PHASE-4 lanes A and B are DONE LOCALLY (VERIFY=PASS, composed). The
+  one batched owner action is T3 publication of three branches. No other lane is safe without an owner decision.
+  Before it: AT THE OWNER (2026-10-04): PHASE 4 VERDICT: INFEASIBLE (final under the 2026-10-04 rulings). The D4
+  execution (OP-1 + OP-2) is consumed. No safe Claude step remains in Phase 4 or in Phase 7's independent work.
+  Before it: AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
   methodology and protected-evidence ones: OP-2's D4 execution (the real H), F3's exact scope, and the
   staleness option.
   Before it: IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 is advancing under P4-1 and P4-2,
@@ -3437,7 +3641,14 @@ LOOP_STATE=AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CON
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
+CURRENT_MILESTONE=POST-PHASE-4 (2026-10-04): lane A, lane B and the UOR A4 upstream artifact are MERGED
+  (#226-#228). The reference/risk product's remaining items wait on owner rulings.
+  Before it: POST-PHASE-4 (2026-10-04): the Phase 8 tooling inventory (lane B) and the local test wall time
+  (lane A) are done locally. The reference/risk product's remaining items wait on owner rulings.
+  Before it: PHASE 4 (2026-10-04): VERDICT INFEASIBLE (final). OP-1 and OP-2 ran once (sealed, consumed);
+  F3 is open-ended forward time, so there is no window; the Option C cap (242 days) expired on 2026-05-23; H_c 0.65
+  (L 156 weeks). Phase 7: passive only, and there is no natural traffic yet.
+  Before it: PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
   sealed; the R4-C1 module unwired. The FEASIBLE/INFEASIBLE verdict waits on OP-2 and F3's scope.
   Before it: PHASE 4 (2026-10-04): candidate identity + protocol feasibility.
   - Step 1 (identity) DONE.
@@ -3601,7 +3812,12 @@ CURRENT_MILESTONE=PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/phase4-r4-c1-candidate (this record; worktree lanes29/c1).
+CURRENT_BRANCH=chore/state-phase4-infeasible (this record, rebuilt on main e468f1f1 by a merge that keeps
+  cd4563c and a44ccf6; worktree lanes30/state).
+  Before it: chore/state-phase4-infeasible (a44ccf6; worktree lanes30/state). Lanes:
+  feat/t1-test-wallclock @ ebbabe6 (lanes31/testwall) and docs/p8-tooling-inventory @ 953fe26 (lanes31/inventory).
+  Before it: chore/state-phase4-infeasible (the Phase 4 record, cd4563c; worktree lanes30/state).
+  Before it: feat/phase4-r4-c1-candidate (#225; worktree lanes29/c1).
   Before it: chore/state-phase3-closed (this record; worktree lanes29/state).
   Before it: chore/state-e2-cutover (this record; worktree lanes28/state2).
   Before it: chore/state-e2-released (this record; worktree lanes28/state).
@@ -3724,7 +3940,9 @@ CURRENT_BRANCH=feat/phase4-r4-c1-candidate (this record; worktree lanes29/c1).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c10af044 (main, #224: Phase 3 closed).
+LAST_GREEN_SHA=e468f1f1 (main, #228: the A4 artifact; push CI green).
+  Before it: 7a5ca4f9 (main, #225: the R4-C1 identity and the Phase 4 record).
+  Before it: c10af044 (main, #224: Phase 3 closed).
   Before it: e344d002 (main, #223: the E2 cutover accepted).
   Before it: 6827e631 (main, #222: E2 released and identified). Push CI 37190639311 and the reproducible
   build 37190639232: success.
@@ -3952,6 +4170,10 @@ LAST_GREEN_SHA=c10af044 (main, #224: Phase 3 closed).
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS 2026-10-04: lane A 6018, lane B 6050, their composition 6054 (6e5dae9, scratch); a44ccf6's tree
+  (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on #225's PR tree, 2026-10-04 (the exact line is in #225's body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4125,7 +4347,11 @@ LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the 
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed; still in force
+CODEX_PENDING=NONE. Codex's quota is EXHAUSTED (owner, 2026-10-04): no Codex, no delegate.sh, no wait, no paid
+  fallback. Claude implements directly (MODEL SUBSTITUTION).
+  Before it: NONE. Codex RESUMED by the owner (2026-10-04) for safe local T0/T1/T2 only. Tasks 901 (lane B) and 902
+  (lane A) are DONE, both VERIFY=PASS; Claude read both diffs and corrected four of 901's labels.
+  Before it: NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed; still in force
   after the F1 release (the owner, 2026-10-01).
   - Codex is not invoked; every pending retry was cancelled.
   - The merge gate is a CLAUDE_ADVERSARIAL_REVIEW (not independent) plus deterministic mutation evidence.
@@ -4221,7 +4447,32 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT.md):
+OWNER_BOUNDARY=Nothing is pending from the batch.
+  - UOR side: the owner carries docs/automation/UOR_HANDOFF.md §14 (and the final values in this record) into UOR's
+    governed session. UOR pins ARTIFACT_SHA256 2007fa28... read-only.
+  - Running the A4 audit against production is a future owner decision at the qualification episode.
+  Standing items: the writer JWT renewal by 2026-10-30 (WRITER_CUTOVER.md step 5); the H2 hold, UX-1 HELD, B5, D3, F3
+  KEEP_UNSPENT; the Phase 7 rulings (P7-1 thresholds, custody, Q1/UX-1).
+  Before it: ONE BATCHED OWNER ACTION (2026-10-04), T3: publish three local branches. That means push, PRs, CI and
+  exact-head merges for:
+  - chore/state-phase4-infeasible (cd4563c, plus this commit);
+  - feat/t1-test-wallclock (ebbabe6);
+  - docs/p8-tooling-inventory (953fe26).
+  Auto refused `gh pr create` ([Data Exfiltration]). So the owner either switches this session to Manual, and Claude
+  pushes, opens the PRs, reads CI and merges on each approval, or runs the steps. The Phase 4 verdict stands: no
+  decision is pending.
+  Standing items: the writer JWT renewal by 2026-10-30 (WRITER_CUTOVER.md step 5); the H2 hold, UX-1 HELD, B5, D3, F3
+  KEEP_UNSPENT; the Phase 7 rulings (P7-1 thresholds, custody, Q1/UX-1).
+  Before it: The Phase 4 verdict (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT_FINAL.md): INFEASIBLE under
+  the rulings of 2026-10-04. No Phase 4 decision is pending.
+  - Only the owner could change the verdict, and it would take both an F3 spend (ruling 3) and a scheduled-refit
+    estimand (Option B). Neither is recommended.
+  - Serving C1 as a labelled reference range (OD5) would be a new product decision.
+  - Phase 7's remaining work waits on owner rulings: the P7-1 thresholds, the custody ruling, and Q1 with UX-1.
+  Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, UX-1 HELD, B5, D3, F3 KEEP_UNSPENT,
+  CODEX_PAUSED_BY_OWNER.
+  Before it: Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT.md), all ruled by the
+  owner on 2026-10-04 (OP-1 + OP-2 authorized and run; F3's derivation authorized and done; Option C; δ 0.03):
   1. D4 execution of OP-2 (the DEV hit-sequence H), with OP-1 (the C1 constants) optionally in the same
      session, preferably from a truncated DEV extract;
   2. F3's exact scope (a statement or an authorized derivation; plan §6.5);
@@ -4825,7 +5076,16 @@ OWNER_BOUNDARY=Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERD
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: rule on the Phase 4 decisions. Claude, after an authorization: run OP-2 (and OP-1)
+NEXT_ACTION=Claude: the remaining dependency-safe local lanes (each new pull request is a new owner T3 batch);
+  passive reads only. The owner: carry the A4 handoff fields to UOR when ready.
+  Before it: The owner: the batched T3 action above. Claude after it: CI reads, the exact-head merges, LAST_GREEN_SHA;
+  then passive reads only (the receipt watch; the Phase 7 baseline once natural traffic exists) and the JWT renewal
+  reminder (2026-10-30).
+  Before it: The owner: read the Phase 4 verdict (INFEASIBLE) and choose what comes next (the Phase 7 rulings above,
+  or another milestone). Claude meanwhile: passive reads only (the first natural receipt since the service-role
+  key's deletion; the Phase 7 baseline once natural traffic exists) and the JWT renewal reminder (2026-10-30). No
+  Codex, no GPT, no traffic.
+  Before it: The owner: rule on the Phase 4 decisions. Claude, after an authorization: run OP-2 (and OP-1)
   write-once, with an audit hook; set H_c and L; finalize FEASIBLE or INFEASIBLE; then the protocol freeze
   package.
   Before it: Claude: Phase 4 (P4-1, P4-2), with no real-data refit:
