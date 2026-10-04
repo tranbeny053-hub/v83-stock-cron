@@ -96,11 +96,14 @@ _OWNER_SQL = (
     " UNION ALL SELECT p.proowner FROM pg_catalog.pg_proc p"
     " JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public') o"
 )
+# PostgreSQL may evaluate WHERE conditions in any order, and has_sequence_privilege fails on
+# anything but a sequence (42809): the CASE makes sure it only ever sees one.
 _SEQUENCES_SQL = (
-    "SELECT count(*) FROM pg_catalog.pg_class c"
+    "SELECT count(*) FILTER (WHERE CASE WHEN c.relkind = 'S'"
+    " THEN pg_catalog.has_sequence_privilege(c.oid, 'USAGE, SELECT, UPDATE') ELSE false END)"
+    " FROM pg_catalog.pg_class c"
     " JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace"
-    " WHERE n.nspname = 'public' AND c.relkind = 'S'"
-    " AND pg_catalog.has_sequence_privilege(c.oid, 'USAGE, SELECT, UPDATE')"
+    " WHERE n.nspname = 'public'"
 )
 _CREATE_SQL = (
     "SELECT pg_catalog.has_schema_privilege('public', 'CREATE'),"

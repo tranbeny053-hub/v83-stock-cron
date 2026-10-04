@@ -420,6 +420,18 @@ def test_the_read_is_one_read_only_transaction_of_the_catalog_rolled_back() -> N
     assert ri.classify(facts)["verdict"] == "DESIGNED"
 
 
+def test_a_type_bound_privilege_check_only_ever_sees_its_own_kind() -> None:
+    """has_sequence_privilege fails on a table (42809), and PostgreSQL may evaluate WHERE conditions
+    in any order: the first E1 run on real PostgreSQL failed that way. Only a CASE guarantees it."""
+
+    assert "WHERE CASE WHEN c.relkind = 'S' THEN pg_catalog.has_sequence_privilege(" in " ".join(
+        ri._SEQUENCES_SQL.split()
+    )
+    for statement in (ri._SESSION_SQL, ri._ATTRIBUTES_SQL, ri._MEMBERSHIPS_SQL, ri._OWNER_SQL,
+                      ri._CREATE_SQL, ri._DEFINERS_SQL, ri._POLICIES_SQL, ri._relations_sql(True)):
+        assert "has_sequence_privilege" not in statement
+
+
 def test_maintain_is_asked_from_postgresql_17_only() -> None:
     for version, asked in ((170006, True), (160004, False)):
         driver = Driver(catalog(version))
