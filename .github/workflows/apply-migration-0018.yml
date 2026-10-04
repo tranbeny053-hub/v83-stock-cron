@@ -31,7 +31,8 @@ name: Migration 0018 narrows service_role on core evidence (MANUAL DISPATCH ONLY
 #
 # BEFORE THE SECRET IS HANDED TO ANY STEP, the same apply is rehearsed on a scratch local PostgreSQL.
 # It is built from migrations 0001-0017 with Supabase-like roles, default privileges, PostgREST's
-# authenticator, and an owner holding CREATEROLE without SUPERUSER, which creates 0016's roles. The
+# authenticator, and an owner holding CREATEROLE without SUPERUSER, which creates 0016's roles; then G1's
+# login for ucpe_resolver, as production holds it. The
 # apply runs once through the route, is refused a second time, and is then probed independently.
 # The result's behaviour through PostgREST is proven on every pull request by
 # .github/workflows/privilege-rehearsal.yml (P3-PRIV-R, D1-D4).
@@ -120,6 +121,7 @@ jobs:
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0018_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
           cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql > "$RUNNER_TEMP/migrations_0001_0017.sql"
           psql -X -q -v ON_ERROR_STOP=1 -d migration_0018_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0017.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d migration_0018_rehearsal -f - < scripts/migration_0018_rehearsal/00_g1_resolver_login.sql
           python -I -S -B scripts/apply_migration_0018.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0018-rehearsal-report.json
           psql -X -q -v ON_ERROR_STOP=1 -d migration_0018_rehearsal -f - < scripts/migration_0018_rehearsal/10_probe.sql
 
