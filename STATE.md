@@ -1,9 +1,42 @@
 # STATE
 
-Updated: 2026-10-04 (**PHASE 4 VERDICT: INFEASIBLE**, final under the owner's rulings of 2026-10-04. The one D4
-execution, OP-1 + OP-2, ran once and is consumed. No gate is weakened; the product proceeds as an honest reference and
-risk application). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9
-(R1A).**
+Updated: 2026-10-04 (**POST-PHASE-4: two dependency-safe lanes are DONE LOCALLY** under the owner's Codex resume.
+Both are T0/T1 and wait only on T3 publication; nothing else is safe without an owner decision). **Production is D
+1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-04), verbatim:** "CONTINUE CURRENT — Opus XHIGH. Recover from STATE.md + Git + .work; do not
+  repeat completed work. Codex resume is authorized for safe local T0/T1/T2 only. Exhaust every dependency-safe
+  reversible lane continuously, max 2 proven-independent lanes; batch implementation/tests/reviews, preserve
+  H2/F3/protected evidence and all gates. Stop only at a true owner/T3/T4/secret/product/methodology blocker and
+  return one batched owner action."
+- **Recovered:**
+  - main is 7a5ca4f9 (#225).
+  - This record's first commit (cd4563c, the Phase 4 verdict) is pushed but has no PR: Auto refused `gh pr create`
+    ([Data Exfiltration]).
+  - Lanes were taken from plan §18: Phase 4 INFEASIBLE leads to the reference/risk product. Every open item there
+    waits on an owner ruling (UX-1/D3/Q1, P7-1, custody, OD6, B5), except two.
+- **Lane A, T1: feat/t1-test-wallclock @ ebbabe6** (tests only; Codex task 902):
+  - **Measured cause:** macOS assesses a newly written executable on its first run (0.14–0.49 s; a later run, or a run
+    through a symlink to an assessed file, costs 0.01 s). install_stub wrote a new stub per test, so ~600 workflow
+    tests each paid it.
+  - **Fix:** one read-only stub body per process, linked into each test's bin dir, with the test's log path in a
+    sidecar. Behaviour unchanged; no assertion changed.
+  - **A/B on tests/workflows, interleaved:** 39 s and 91 s with the fix, against 155 s and 150 s without. Whole-suite
+    wall time swings 166–438 s with another session's load, so only the A/B is quoted.
+  - VERIFY=PASS 6018; mutants 4/4 killed.
+- **Lane B, T0/T1: docs/p8-tooling-inventory @ 953fe26** (Codex task 901, corrected by Claude):
+  - docs/TOOLING_INVENTORY.md classifies all 100 scripts/, workflow, ops/ and runbook entries (plan Phase 8: "document
+    active versus historical tooling"). Every consumed entry quotes STATE.md, and consumed workflows are dispatch-only.
+  - Claude corrected four labels: the privilege audit is a read-only reference; the two production-probability report
+    CLIs are references whose run is an owner decision (the §5A window, H2's rows).
+  - tests/docs/test_tooling_inventory.py keeps it complete (36 checks, under 1 s). VERIFY=PASS 6050; mutants 5/5 killed.
+- **Composition:** A and B share no file. Merged in a scratch tree: VERIFY=PASS 6054 (165.71 s).
+- **Evidence:** .work/roadmap/lanes_20261004/ (LANES_RECORD.md a2938b16…, MANIFEST 45197cbd…).
+- **Not done, by design:**
+  - no push, PR or merge (T3, the owner's);
+  - no production, database, secret, F3 or H2 contact, and no traffic;
+  - no STATE compaction: coordination files are 12.8% of source and test bytes, under the 20% trigger.
+Previously (**PHASE 4 VERDICT: INFEASIBLE**, final under the owner's rulings of 2026-10-04. The one D4 execution, OP-1 +
+OP-2, ran once and is consumed. No gate is weakened; the product proceeds as an honest reference and risk application).
 - **The owner (2026-10-04), verbatim:** "Owner rulings for Phase 4: 1) AUTHORIZE one bounded D4 DEV-only execution
   containing OP-1 + OP-2 together. Use a one-time truncated BTC/ETH 1H DEV extract only, horizon_end <
   2025-09-23T11:00Z; no folds 7-8, §5A, F1/F2, F3 or other protected/consumed rows. OP-1 fits the exact
@@ -1777,7 +1810,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): PHASE 4 VERDICT: INFEASIBLE (final under the 2026-10-04 rulings). The D4
+LOOP_STATE=AT THE OWNER (2026-10-04): POST-PHASE-4 lanes A and B are DONE LOCALLY (VERIFY=PASS, composed). The
+  one batched owner action is T3 publication of three branches. No other lane is safe without an owner decision.
+  Before it: AT THE OWNER (2026-10-04): PHASE 4 VERDICT: INFEASIBLE (final under the 2026-10-04 rulings). The D4
   execution (OP-1 + OP-2) is consumed. No safe Claude step remains in Phase 4 or in Phase 7's independent work.
   Before it: AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
   methodology and protected-evidence ones: OP-2's D4 execution (the real H), F3's exact scope, and the
@@ -3502,7 +3537,9 @@ LOOP_STATE=AT THE OWNER (2026-10-04): PHASE 4 VERDICT: INFEASIBLE (final under t
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 4 (2026-10-04): VERDICT INFEASIBLE (final). OP-1 and OP-2 ran once (sealed, consumed);
+CURRENT_MILESTONE=POST-PHASE-4 (2026-10-04): the Phase 8 tooling inventory (lane B) and the local test wall time
+  (lane A) are done locally. The reference/risk product's remaining items wait on owner rulings.
+  Before it: PHASE 4 (2026-10-04): VERDICT INFEASIBLE (final). OP-1 and OP-2 ran once (sealed, consumed);
   F3 is open-ended forward time, so there is no window; the Option C cap (242 days) expired on 2026-05-23; H_c 0.65
   (L 156 weeks). Phase 7: passive only, and there is no natural traffic yet.
   Before it: PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
@@ -3669,7 +3706,9 @@ CURRENT_MILESTONE=PHASE 4 (2026-10-04): VERDICT INFEASIBLE (final). OP-1 and OP-
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-phase4-infeasible (this record; worktree lanes30/state).
+CURRENT_BRANCH=chore/state-phase4-infeasible (this record's second commit; worktree lanes30/state). Lanes:
+  feat/t1-test-wallclock @ ebbabe6 (lanes31/testwall) and docs/p8-tooling-inventory @ 953fe26 (lanes31/inventory).
+  Before it: chore/state-phase4-infeasible (the Phase 4 record, cd4563c; worktree lanes30/state).
   Before it: feat/phase4-r4-c1-candidate (#225; worktree lanes29/c1).
   Before it: chore/state-phase3-closed (this record; worktree lanes29/state).
   Before it: chore/state-e2-cutover (this record; worktree lanes28/state2).
@@ -4021,7 +4060,9 @@ LAST_GREEN_SHA=7a5ca4f9 (main, #225: the R4-C1 identity and the Phase 4 record).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+LAST_VERIFY=PASS 2026-10-04: lane A 6018, lane B 6050, their composition 6054 (6e5dae9, scratch); this record's tree
+  (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on #225's PR tree, 2026-10-04 (the exact line is in #225's body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4196,7 +4237,9 @@ LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the 
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed; still in force
+CODEX_PENDING=NONE. Codex RESUMED by the owner (2026-10-04) for safe local T0/T1/T2 only. Tasks 901 (lane B) and 902
+  (lane A) are DONE, both VERIFY=PASS; Claude read both diffs and corrected four of 901's labels.
+  Before it: NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until explicitly resumed; still in force
   after the F1 release (the owner, 2026-10-01).
   - Codex is not invoked; every pending retry was cancelled.
   - The merge gate is a CLAUDE_ADVERSARIAL_REVIEW (not independent) plus deterministic mutation evidence.
@@ -4292,7 +4335,17 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The Phase 4 verdict (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT_FINAL.md): INFEASIBLE under
+OWNER_BOUNDARY=ONE BATCHED OWNER ACTION (2026-10-04), T3: publish three local branches. That means push, PRs, CI and
+  exact-head merges for:
+  - chore/state-phase4-infeasible (cd4563c, plus this commit);
+  - feat/t1-test-wallclock (ebbabe6);
+  - docs/p8-tooling-inventory (953fe26).
+  Auto refused `gh pr create` ([Data Exfiltration]). So the owner either switches this session to Manual, and Claude
+  pushes, opens the PRs, reads CI and merges on each approval, or runs the steps. The Phase 4 verdict stands: no
+  decision is pending.
+  Standing items: the writer JWT renewal by 2026-10-30 (WRITER_CUTOVER.md step 5); the H2 hold, UX-1 HELD, B5, D3, F3
+  KEEP_UNSPENT; the Phase 7 rulings (P7-1 thresholds, custody, Q1/UX-1).
+  Before it: The Phase 4 verdict (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT_FINAL.md): INFEASIBLE under
   the rulings of 2026-10-04. No Phase 4 decision is pending.
   - Only the owner could change the verdict, and it would take both an F3 spend (ruling 3) and a scheduled-refit
     estimand (Option B). Neither is recommended.
@@ -4905,7 +4958,10 @@ OWNER_BOUNDARY=The Phase 4 verdict (2026-10-04; .work/roadmap/phase4/PHASE4_VERD
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: read the Phase 4 verdict (INFEASIBLE) and choose what comes next (the Phase 7 rulings above,
+NEXT_ACTION=The owner: the batched T3 action above. Claude after it: CI reads, the exact-head merges, LAST_GREEN_SHA;
+  then passive reads only (the receipt watch; the Phase 7 baseline once natural traffic exists) and the JWT renewal
+  reminder (2026-10-30).
+  Before it: The owner: read the Phase 4 verdict (INFEASIBLE) and choose what comes next (the Phase 7 rulings above,
   or another milestone). Claude meanwhile: passive reads only (the first natural receipt since the service-role
   key's deletion; the Phase 7 baseline once natural traffic exists) and the JWT renewal reminder (2026-10-30). No
   Codex, no GPT, no traffic.
