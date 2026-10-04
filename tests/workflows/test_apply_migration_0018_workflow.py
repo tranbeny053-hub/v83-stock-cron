@@ -292,6 +292,7 @@ REHEARSAL_LINES = [
     f"-d migration_0018_rehearsal -f - < {FUNCTION_FIXTURES}/00_supabase_like_function_grants.sql",
     f"cat {' '.join(MIGRATIONS_0001_0017)} > {BUNDLE}",
     f"{PSQL} migration_0018_rehearsal -f - < {BUNDLE}",
+    f"{PSQL} migration_0018_rehearsal -f - < {FIXTURES}/00_g1_resolver_login.sql",
     f"python -I -S -B {apply_0018.SCRIPT} --mode=rehearse "
     f'--wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report={REHEARSAL_REPORT}',
     f"{PSQL} migration_0018_rehearsal -f - < {FIXTURES}/10_probe.sql",
@@ -301,6 +302,7 @@ STDIN_FILES = (
     f"{AUTHENTICATOR_FIXTURES}/00_supabase_like_authenticator.sql",
     f"{ROLES_FIXTURES}/01_supabase_like_grants.sql",
     f"{FUNCTION_FIXTURES}/00_supabase_like_function_grants.sql",
+    f"{FIXTURES}/00_g1_resolver_login.sql",
     f"{FIXTURES}/10_probe.sql",
 )
 
@@ -379,6 +381,7 @@ def test_the_rehearse_step_runs_every_command_in_order_and_fails_closed(tmp_path
         ],
         list(MIGRATIONS_0001_0017),
         rehearsal,
+        rehearsal,
         [
             *ENTRYPOINT,
             "--mode=rehearse",
@@ -428,6 +431,8 @@ def test_the_probe_asserts_d6_s_result_and_what_must_not_move() -> None:
         "OR pg_catalog.has_table_privilege('ucpe_api_writer', 'public.predictions', 'INSERT')",
         "::name[]) <> 44",
         "IF NOT pg_catalog.has_table_privilege('service_role', 'public.watchlist', 'INSERT')",
+        "WHERE rolname = 'ucpe_resolver' AND rolcanlogin",
+        "WHERE rolname IN ('ucpe_api_writer', 'ucpe_bundle_owner') AND rolcanlogin",
     ):
         assert phrase in text, phrase
 

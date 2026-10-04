@@ -8,6 +8,17 @@ inventory was clean (run 37149774863).
 
 **It is a T4: one dispatch, authorized by the owner, never rerun.**
 
+## History
+
+- **Run 37170407623** (2026-10-04, main b7d54fcc, attempt 1) was REFUSED by its pre-checks: "the role
+  ucpe_resolver holds login". The check was 0017's and predated G1's login for the resolver. **Nothing
+  was applied:** the migration statement never ran, and the transaction rolled back. The captured
+  production state is the pre-D6 state. The attempt is consumed and never rerun. Evidence:
+  `.work/t4_0018/ADJUDICATION.md`.
+- The repaired route accepts a login on exactly the design's two login roles (`ucpe_resolver` now,
+  `ucpe_space_db` after E2), and its rehearsal applies G1's login, as production holds it. Dispatching
+  it is a new T4, at the repaired commit.
+
 ## Before
 
 - The route (`scripts/apply_migration_0018.py`) and both workflows are merged on main, with every

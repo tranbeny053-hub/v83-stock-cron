@@ -46,6 +46,13 @@ SELECT_ONLY = ["SELECT"]
 # ------------------------------------------------------------------------ production after 0017
 
 
+# Production's roles: 0016's, plus G1's login for the resolver (2026-10-03), as the refused attempt
+# (run 37170407623) read them.
+ROLES = [
+    t17.AUTHENTICATOR_ROW,
+    t17.APPLIER_ROW,
+    *(t17.role_row(role, login=role == "ucpe_resolver") for role in apply_0018.NEW_ROLES),
+]
 GRANTS = t17.grant_rows(apply_0018.EXPECTED_GRANTS)
 POLICIES = [(item, *values) for item, values in sorted(apply_0018.expected_policies().items())]
 BUNDLE_ACL = list(t17.BUNDLE_ACL)
@@ -99,7 +106,7 @@ def healthy_results(version: int = PRODUCTION_SERVER, **overrides: Any) -> dict[
     pre_inventory = inventory_rows(version)
     pre_post = {
         "server": ([(version,)], [(version,)]),
-        "roles": (t17.ROLES, t17.ROLES),
+        "roles": (ROLES, ROLES),
         "memberships": (t17.MEMBERSHIPS, t17.MEMBERSHIPS),
         "grants": (GRANTS, GRANTS),
         "sequence_grants": (t17.SEQUENCE_GRANTS, t17.SEQUENCE_GRANTS),
@@ -551,7 +558,7 @@ def test_a_superuser_applier_needs_no_admin_on_the_owner() -> None:
     [
         (
             "roles",
-            [*t17.ROLES[:-1], t17.role_row("ucpe_space_db", login=True)],
+            [*ROLES[:-1], t17.role_row("ucpe_space_db", login=True)],
             "the role 'ucpe_space_db' changed during the apply",
         ),
         (
@@ -830,3 +837,79 @@ def test_only_acl_text_is_read_for_role_names() -> None:
     assert published["pre_function"][0]["acl"] == [f"{apply_0018.WITHHELD}=EXECUTE"]
     detail = published["pre_schema_fingerprint"][0]["detail"]
     assert detail == f"text notnull=true acl={{{apply_0018.WITHHELD}=r/{apply_0018.WITHHELD}}}"
+
+
+# -------------------------------------------------------------- G1's login (run 37170407623)
+
+
+def _role(name: str, **changes: Any) -> dict[str, Any]:
+    values = dict.fromkeys(apply_0018.ROLE_ATTRIBUTES, False)
+    return {"role": name, **values, **changes}
+
+
+def test_the_refused_attempt_s_roles_now_pass() -> None:
+    """Regression: the roles run 37170407623 captured from production (the applying role's name
+    withheld in its report). 0017's check refused them on G1's login for the resolver."""
+
+    captured = [
+        _role("authenticator", login=True),
+        _role(
+            apply_0018.WITHHELD,
+            inherit=True,
+            createrole=True,
+            createdb=True,
+            login=True,
+            replication=True,
+            bypassrls=True,
+            is_applying_role=True,
+        ),
+        _role("ucpe_api_writer"),
+        _role("ucpe_bundle_owner"),
+        _role("ucpe_resolver", login=True),
+        _role("ucpe_space_db"),
+    ]
+    assert apply_0017.roles_pre_check_failures(captured) == ["the role ucpe_resolver holds login"]
+    assert apply_0018.roles_pre_check_failures(captured) == []
+
+
+@pytest.mark.parametrize(
+    ("role", "changes", "expected"),
+    [
+        ("ucpe_space_db", {"login": True}, None),
+        ("ucpe_resolver", {"login": False}, None),
+        ("ucpe_api_writer", {"login": True}, "the role ucpe_api_writer holds login"),
+        ("ucpe_bundle_owner", {"login": True}, "the role ucpe_bundle_owner holds login"),
+        ("ucpe_resolver", {"createrole": True}, "the role ucpe_resolver holds createrole"),
+        (
+            "ucpe_space_db",
+            {"login": True, "bypassrls": True},
+            "the role ucpe_space_db holds bypassrls",
+        ),
+        ("ucpe_resolver", {"login": None}, "the role ucpe_resolver holds login"),
+    ],
+)
+def test_only_the_design_s_login_roles_may_log_in(
+    role: str, changes: dict[str, Any], expected: str | None
+) -> None:
+    roles = [
+        t17.AUTHENTICATOR_ROW,
+        t17.APPLIER_ROW,
+        *(
+            t17._with(row, apply_0018.ROLE_FIELDS, **(changes if row[0] == role else {}))[0]
+            for row in ROLES[2:]
+        ),
+    ]
+    pre, _post = _state(pre_overrides={"roles": roles})
+    failures = apply_0018.pre_check_failures(pre)
+    if expected is None:
+        assert failures == []
+    else:
+        assert failures == [expected]
+
+
+def test_the_login_roles_are_the_design_s() -> None:
+    assert (
+        apply_0018.LOGIN_ROLES
+        == tuple(sorted(rehearse.LOGIN_ROLES))
+        == ("ucpe_resolver", "ucpe_space_db")
+    )

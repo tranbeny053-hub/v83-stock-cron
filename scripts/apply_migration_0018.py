@@ -1264,8 +1264,16 @@ def server_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
     return []
 
 
+# The two roles the privilege design gives a login of their own (C2, C3). The owner's credential
+# steps set it, outside the migrations: G1 gave ucpe_resolver its login (2026-10-03), and E2 will
+# give ucpe_space_db its own. 0017's check, which this one replaces, predates G1: run 37170407623
+# was refused on it, and nothing was applied.
+LOGIN_ROLES = ("ucpe_resolver", "ucpe_space_db")
+
+
 def roles_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
-    """0016's four roles exist without any attribute, authenticator exists, the applier once."""
+    """0016's four roles exist without any attribute but the login the design gives two of them,
+    authenticator exists, the applier once. The writer and the bundle owner never log in."""
 
     by_name = {row.get("role"): row for row in rows}
     failures: list[str] = []
@@ -1276,7 +1284,16 @@ def roles_pre_check_failures(rows: Sequence[Mapping[str, Any]]) -> list[str]:
         if row is None:
             failures.append(f"migration 0016 is not applied: the role {role} does not exist")
             continue
-        held = [attribute for attribute in ROLE_ATTRIBUTES if row.get(attribute) is not False]
+        allowed = ("login",) if role in LOGIN_ROLES else ()
+        held = [
+            attribute
+            for attribute in ROLE_ATTRIBUTES
+            if not (
+                isinstance(row.get(attribute), bool)
+                if attribute in allowed
+                else row.get(attribute) is False
+            )
+        ]
         if held:
             failures.append(f"the role {role} holds {', '.join(held)}")
     applying = [row for row in rows if row.get("is_applying_role") is True]

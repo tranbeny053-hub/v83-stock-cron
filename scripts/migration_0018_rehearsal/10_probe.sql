@@ -49,6 +49,12 @@ BEGIN
         OR pg_catalog.has_table_privilege('ucpe_api_writer', 'public.predictions', 'INSERT') THEN
         RAISE EXCEPTION '0018 probe: a least-privilege role''s grants changed';
     END IF;
+    -- G1's login is untouched, and the writer and the bundle owner still never log in.
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'ucpe_resolver' AND rolcanlogin)
+        OR EXISTS (SELECT 1 FROM pg_catalog.pg_roles
+                   WHERE rolname IN ('ucpe_api_writer', 'ucpe_bundle_owner') AND rolcanlogin) THEN
+        RAISE EXCEPTION '0018 probe: a least-privilege role''s login changed';
+    END IF;
     -- 0016's 40 policies and 0017's 4 are untouched.
     IF (SELECT count(*) FROM pg_catalog.pg_policies
         WHERE schemaname = 'public'

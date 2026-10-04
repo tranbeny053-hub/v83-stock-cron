@@ -65,6 +65,7 @@ def test_the_roles_and_defaults_are_production_s_before_any_migration() -> None:
 def test_the_route_then_the_probe_run_in_order() -> None:
     steps = [
         f'{PSQL} migration_0018_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0017.sql"',
+        f"{PSQL} migration_0018_rehearsal -f - < {FIXTURES}/00_g1_resolver_login.sql",
         f'MIGRATION_0018_REHEARSAL_URL="{SCRATCH}" PYTHONPATH=src python '
         "scripts/apply_migration_0018.py --mode=rehearse "
         "--report=migration-0018-rehearsal-report.json",
