@@ -190,20 +190,26 @@ def migration_relations() -> set[str]:
     return names - {"automation_radar_ledger"}
 
 
-def _after(tokens: list[str], upper: list[str], index: int) -> int:
-    """The index just past a FROM/JOIN item that starts at ``index`` (with its AS alias)."""
+FROM_LIST_ENDS = {"WHERE", "GROUP", "HAVING", "ORDER", "LIMIT", "OFFSET", "UNION", "EXCEPT",
+                  "INTERSECT", "WINDOW"}
 
-    if tokens[index] == "(":
-        depth = 0
-        for end in range(index, len(tokens)):
-            depth += {"(": 1, ")": -1}.get(tokens[end], 0)
-            if depth == 0:
-                index = end
-                break
-    index += 1
-    if index < len(upper) and upper[index] == "AS":
-        index += 2
-    return index
+
+def _comma_in_from_list(tokens: list[str], upper: list[str], start: int) -> bool:
+    """A comma at the FROM list's own depth, from FROM to where that list ends."""
+
+    depth = 0
+    for index in range(start + 1, len(tokens)):
+        if tokens[index] == "(":
+            depth += 1
+        elif tokens[index] == ")":
+            depth -= 1
+            if depth < 0:  # the enclosing parenthesis closes: the FROM list is over
+                return False
+        elif depth == 0 and upper[index] in FROM_LIST_ENDS:
+            return False
+        elif depth == 0 and tokens[index] == ",":
+            return True
+    return False
 
 
 def guard_violations(sql: str) -> list[str]:
@@ -250,8 +256,7 @@ def guard_violations(sql: str) -> list[str]:
                 violations.append(f"relation {relation}")
             if relation != "(" and index + 3 < len(tokens) and upper[index + 2] == "AS":
                 aliases.add(tokens[index + 3].lower())
-            following = _after(tokens, upper, index + 1)
-            if following < len(tokens) and tokens[following] == ",":
+            if token == "FROM" and _comma_in_from_list(tokens, upper, index):
                 violations.append("a comma-join: every relation needs its own JOIN")
     for index, token in enumerate(tokens):
         if re.match(r"[A-Za-z_]", token):
@@ -364,6 +369,10 @@ MUTANTS = {
     "comma-joins a catalog view": (
         "      FROM pg_catalog.pg_class AS c\n",
         "      FROM pg_catalog.pg_class AS c, pg_stat_activity AS z\n",
+    ),
+    "comma-joins after an ON condition": (
+        "      JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace\n",
+        "      JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace, other_relation\n",
     ),
     "reads a catalog with TABLE": (
         "SELECT count(*) AS matched_rows,",
@@ -844,8 +853,8 @@ def test_the_manifest_seals_every_package_file() -> None:
     expected = json.dumps(built, indent=1, sort_keys=True) + "\n"
     assert MANIFEST.read_text(encoding="utf-8") == expected
     assert set(built["files"]) == {f"ops/a4_ledger_audit/{name}" for name in SEALED_FILES}
-    assert {path.name for path in PACKAGE.iterdir() if path.is_file()} == {
-        *SEALED_FILES, "MANIFEST.json"}
+    assert {path.name for path in PACKAGE.iterdir()
+            if path.is_file() and not path.name.startswith(".")} == {*SEALED_FILES, "MANIFEST.json"}
     migration = hashlib.sha256(MIGRATION_0013.read_bytes()).hexdigest()
     assert built["ledger_schema"]["sha256"] == migration
 
