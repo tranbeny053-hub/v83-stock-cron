@@ -1,7 +1,32 @@
 # STATE
 
-Updated: 2026-10-04 (0018's T4 attempt REFUSED, NOT_APPLIED, consumed; the route is repaired; a NEW T4 is at the
-owner). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). The rollback target is a2de125f (WA).**
+Updated: 2026-10-04 (D6 APPLIED: migration 0018 committed by run 37172530166; applied_run recorded; the
+expect=after inventory is the owner's next step). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a).
+The rollback target is a2de125f (WA), rollback-safe across 0018.**
+- **The owner (2026-10-04), verbatim:** "0018 NEW RUN DONE. Adjudicate the exact latest apply-migration-0018 workflow
+  run from raw logs + artifacts; do not infer PASS from workflow conclusion alone. ... If APPLIED: seal evidence,
+  record applied_run in the registry/STATE, then prepare the required expect=after inventory boundary."
+- **0018 is APPLIED** (.work/t4_0018_apply/ADJUDICATION.md, sealed with the raw logs and artifacts):
+  - Run 37172530166, attempt 1, main 82ed9c48, approved in production-db-owner. Every step succeeded. The in-job
+    rehearsal applied once and refused a second apply; 173 in-job tests passed.
+  - outcome APPLIED, committed true. executed_migration_sha256 = 0d334da9..., the digest pinned at main and
+    the file's.
+  - Post-state, read in the same transaction before the COMMIT:
+    - service_role holds SELECT only on all six core tables (before: 31 write privileges plus SELECT);
+    - service_role executes neither bundle function, while the writer and the owner still do;
+    - ucpe_api_writer and ucpe_resolver are unchanged (grants and attributes; the resolver keeps G1's login);
+    - D6's inventory is empty: T 31 -> 0, F 2 -> 0;
+    - everything else is identical.
+  - The run is consumed and never rerun. The earlier attempt 37170407623 was refused, unapplied, and is consumed.
+- **This record's PR:**
+  - The registry records 0018's applied_run 37172530166 (additive false, rollback_safe_from a2de125f). No
+    migration is unapplied now, so releases may ship again (check 5c).
+  - PERS-0 now writes and reads as ucpe_api_writer, as production does, instead of service_role. Its scratch
+    database includes 0018, and its RPC criterion is D6's: service_role executes neither function. On real
+    PostgreSQL, the persistence fault rehearsal proves the production writer's path after D6.
+- **Next:** the owner dispatches the read-only inventory with expect=after at this PR's merge commit and approves
+  it in production-db-owner. It must find nothing (docs/runbooks/CORE_WRITE_INVENTORY.md).
+Previously (0018's T4 attempt REFUSED, NOT_APPLIED, consumed; the route was repaired by #216).
 - **The owner (2026-10-04), verbatim:** "0018 RUN FAILED — DO NOT RERUN under any circumstance." Then: "If
   NOT_APPLIED: keep 0018 NOT_APPLIED and prepare a new governed repair/T4 boundary, not a rerun."
 - **The attempt: run 37170407623, attempt 1, main b7d54fcc, approved in production-db-owner** (.work/t4_0018/
@@ -1463,7 +1488,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): 0018's T4 attempt (run 37170407623) was REFUSED, NOT_APPLIED and is
+LOOP_STATE=AT THE OWNER (2026-10-04): D6 is APPLIED (run 37172530166, committed, adjudicated from the raw
+  report). The boundary is the read-only inventory with expect=after.
+  Before it: AT THE OWNER (2026-10-04): 0018's T4 attempt (run 37170407623) was REFUSED, NOT_APPLIED and is
   consumed. The route is repaired by this record's PR. The boundary is a NEW T4 at the repaired commit.
   Before it: AT THE OWNER (2026-10-03): D6 is FROZEN (migration 0018 with its route and gates, merged by
   this record's PR). The boundary is the owner's one-shot T4 apply of 0018. Nothing is applied yet.
@@ -3170,7 +3197,9 @@ LOOP_STATE=AT THE OWNER (2026-10-04): 0018's T4 attempt (run 37170407623) was RE
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6: inventory CLEAN, 0018 FROZEN
+CURRENT_MILESTONE=PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6 APPLIED (0018, run 37172530166);
+  the expect=after inventory and the Phase 3 exit evidence remain.
+  Before it: PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6: inventory CLEAN, 0018 FROZEN
   and NOT_APPLIED (one refused attempt, consumed); the repaired route awaits a new T4.
   Before it: PHASE 3 (2026-10-03): R1A RELEASED; G1 and E3 LIVE_PROVEN; C4 SET; D6: inventory CLEAN,
   0018 FROZEN, its T4 apply at the owner.
@@ -3313,7 +3342,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6: inven
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=fix/d6-0018-login-roles (this record; worktree lanes28/fix).
+CURRENT_BRANCH=chore/d6-0018-applied (this record; worktree lanes29/reg).
+  Before it: fix/d6-0018-login-roles (this record; worktree lanes28/fix).
   Before it: feat/d6-migration-0018 (this record; worktree lanes27/m0018).
   Before it: chore/state-d6-inventory-clean (this record). Next: feat/d6-migration-0018 (the freeze).
   Before it: chore/state-c4-set (this record; worktree lanes26/state). DRAFT #212 is feat/d6-core-write-inventory-route
@@ -3429,7 +3459,8 @@ CURRENT_BRANCH=fix/d6-0018-login-roles (this record; worktree lanes28/fix).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=b7d54fcc (main, #215: the freeze). Push CI 37153310915 and the reproducible build 37153310966: success.
+LAST_GREEN_SHA=82ed9c48 (main, #216: the repaired route). Push CI 37172067820 and the reproducible build 37172067764: success.
+  Before it: b7d54fcc (main, #215: the freeze). Push CI 37153310915 and the reproducible build 37153310966: success.
   Before it: 8c900a0b (main, #214: the inventory record).
   Before it: 946145bc (main, #212 merged). Push CI 37149005706 and the reproducible build 37149005710: success.
   Before it: 9d2f109c (main, #206 merged). Push CI 37141757629 and the reproducible build 37141757688: success.
@@ -3647,6 +3678,7 @@ LAST_GREEN_SHA=b7d54fcc (main, #215: the freeze). Push CI 37153310915 and the re
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body). #212's tree: PASS 5726
@@ -3909,7 +3941,10 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=A NEW T4, not a rerun (2026-10-04): dispatch apply-migration-0018.yml at this PR's merge commit
+OWNER_BOUNDARY=The read-only inventory with expect=after (2026-10-04): dispatch core-write-inventory.yml at this
+  PR's merge commit (with the main guard) and approve it in production-db-owner. Then the optional hygiene of
+  deleting SUPABASE_SERVICE_ROLE_KEY from the Space. Standing items: the H2 hold, B5's DEGRADED half, D3, D4, E2.
+  Before it: A NEW T4, not a rerun (2026-10-04): dispatch apply-migration-0018.yml at this PR's merge commit
   (with the main guard), then approve it in production-db-owner. Run 37170407623 is consumed and never rerun.
   Before it: The one-shot T4 apply of migration 0018 (2026-10-03): dispatch apply-migration-0018.yml at
   this PR's merge commit (with the main guard), then approve it in production-db-owner. Standing items: the
@@ -4479,7 +4514,9 @@ OWNER_BOUNDARY=A NEW T4, not a rerun (2026-10-04): dispatch apply-migration-0018
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the new T4 (docs/runbooks/MIGRATION_0018_APPLY.md). Then Claude: adjudicate the raw
+NEXT_ACTION=The owner: the expect=after inventory. Then Claude: adjudicate its raw report (verdict PASS, no
+  surface), seal it, and record Phase 3's D6 as complete.
+  Before it: The owner: the new T4 (docs/runbooks/MIGRATION_0018_APPLY.md). Then Claude: adjudicate the raw
   report, record 0018's applied_run (registry PR), and hand over the expect=after inventory.
   Before it: The owner: the T4 apply of 0018 (docs/runbooks/MIGRATION_0018_APPLY.md). Then Claude: adjudicate the
   raw apply report, record 0018's applied_run (registry PR), and hand over the expect=after inventory.

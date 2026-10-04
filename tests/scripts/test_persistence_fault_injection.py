@@ -261,7 +261,7 @@ def _route(**changes: Any) -> dict[str, Any]:
     report = {
         "criteria": fi.verdicts(_ideal()),
         "privileges": {"expected": {"security_definer_of_ucpe_bundle_owner": True,
-                                    "execute_for_service_role": True}},
+                                    "no_execute_for_service_role": True}},
         "refusals": {"expected": {"anon_refused_42501": True, "refusals_write_nothing": True}},
     }
     report.update(changes)

@@ -145,11 +145,12 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
     )
     # An explicit "applied_run": null marks a migration authored on main but not yet applied
     # (0001-0007 predate apply tracking and carry no applied_run key at all). 0015 was applied by
-    # run 37033014490, 0016 by run 37110330500 and 0017 by run 37110375659. 0018 (D6) is authored
-    # and waits for the owner's T4; no release ships before it is applied and recorded (check 5c).
+    # run 37033014490, 0016 by run 37110330500, 0017 by run 37110375659 and 0018 (D6) by run
+    # 37172530166, after the refused, unapplied attempt 37170407623. No release ships while one is
+    # still unapplied (check 5c).
     unapplied = [m for m in registry["migrations_applied"]
                  if "applied_run" in m and m["applied_run"] is None]
-    assert [m["id"] for m in unapplied] == ["0018"]
+    assert [m["id"] for m in unapplied] == []
     # Each one is vouched additive, or rollback-safe from a registered H2-safe release; otherwise
     # merging it would block every H2-safe rollback.
     held = {entry["commit"] for entry in releases if entry["h2_hold"] is True}

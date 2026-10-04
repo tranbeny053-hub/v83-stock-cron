@@ -5,8 +5,9 @@ The REST writer (SupabaseRestRepository) talks to it through an httpx.MockTransp
 writer's own code runs unchanged. Only the two bundle RPCs touch the database, B9's and W-A's
 forecast bundle (the run, the detail, the prediction and its snapshots), exactly as PostgREST
 executes an RPC:
-- one transaction per request, as the role the service-role key maps to (SET LOCAL ROLE
-  service_role);
+- one transaction per request, as the role the least-privilege writer's JWT maps to (SET LOCAL
+  ROLE ucpe_api_writer), as production writes since E3; migration 0018 (D6) took every core write
+  and both RPCs from service_role;
 - the arguments taken from the raw request body by jsonb_to_record with the function's own
   parameter types, which is PostgREST's own json_to_record call, so JSON numbers keep their
   digits;
@@ -15,7 +16,7 @@ The writer's other requests (the timeframe result, provider and news rows, and o
 the run summary and the detail) lie outside the bundles: they are acknowledged (201), not stored.
 
 Reads: exactly the two that WB3's read_core_strict sends are answered from the scratch database, as
-service_role, in their PostgREST shapes (analysis_runs by run_id=eq., predictions by
+ucpe_api_writer, in their PostgREST shapes (analysis_runs by run_id=eq., predictions by
 prediction_id=in.()). Any other GET answers 404.
 
 Faults, each for the next RPC request only:
@@ -64,9 +65,11 @@ FAULT_SETUP_SQL = (
     "CREATE TRIGGER pers0_fault_fail_feature_snapshot BEFORE INSERT "
     "ON public.prediction_feature_snapshots FOR EACH ROW "
     "EXECUTE FUNCTION pers0_fault.fail_feature_snapshot()",
-    "GRANT USAGE ON SCHEMA pers0_fault TO service_role",
+    "GRANT USAGE ON SCHEMA pers0_fault TO ucpe_api_writer",
 )
 FAULTS = ("feature_snapshot", "lost_response", "lost_before_commit")
+# The role PostgREST switches to for the production writer (E3's JWT); never service_role after D6.
+WRITER_ROLE = "ucpe_api_writer"
 FAULT_ON_SQL = "SELECT pg_catalog.set_config('pers0.fail_feature_snapshot', 'on', true)"
 
 
@@ -108,7 +111,7 @@ class PostgrestEmulator:
         import psycopg
 
         with psycopg.connect(self.url) as connection, connection.cursor() as cursor:
-            cursor.execute("SET LOCAL ROLE service_role")
+            cursor.execute(f"SET LOCAL ROLE {WRITER_ROLE}")
             if table == "analysis_runs":
                 cursor.execute(
                     "SELECT run_id, analysis_hash FROM public.analysis_runs WHERE run_id = %s"
@@ -141,7 +144,7 @@ class PostgrestEmulator:
         with psycopg.connect(self.url) as connection:
             try:
                 with connection.cursor() as cursor:
-                    cursor.execute("SET LOCAL ROLE service_role")
+                    cursor.execute(f"SET LOCAL ROLE {WRITER_ROLE}")
                     if fault in ("feature_snapshot", "lost_before_commit"):
                         cursor.execute(FAULT_ON_SQL)
                     cursor.execute(sql, (request.content.decode("utf-8"),))

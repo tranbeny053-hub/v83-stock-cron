@@ -608,8 +608,9 @@ def rest_privileges(url: str) -> dict[str, Any]:
     """The catalog facts of both bundle RPCs: who may execute them, how they run.
 
     Since migration 0016 (W2) B9's runs SECURITY DEFINER as its narrow owner, ucpe_bundle_owner,
-    and the writer role may execute it beside service_role (the live writer's). Migration 0017's
-    forecast bundle runs the same way. Its facts are prefixed forecast_.
+    and the writer role may execute it. Migration 0017's forecast bundle runs the same way. Since
+    migration 0018 (D6) service_role may execute neither. The forecast bundle's facts are prefixed
+    forecast_.
     """
 
     import psycopg
@@ -636,7 +637,7 @@ def rest_privileges(url: str) -> dict[str, Any]:
             f"{prefix}no_execute_for_public_anon_authenticated": not (
                 public or anon or authenticated
             ),
-            f"{prefix}execute_for_service_role": service_role is True,
+            f"{prefix}no_execute_for_service_role": service_role is False,
             f"{prefix}execute_for_the_writer": writer is True,
             f"{prefix}security_definer_of_ucpe_bundle_owner": (
                 definer is True and owner == "ucpe_bundle_owner"
