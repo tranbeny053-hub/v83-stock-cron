@@ -20,10 +20,12 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# UCPE-PROD-R1A-20261003-A deployed main's own tree (analysis_service.py, build_info.py cleared
-# with that release). E2 added the evidence reader's identity report to app.py.
+# Now standing in it: app.py, build_info.py, merged but not yet
+# deployed. UCPE-PROD-E2-20261004-A names the next deploy; all of them clear
+# when it lands and the baseline is re-pinned.
 CURRENT_DELTA_PATHS: list[str] = [
     "src/crypto_probability_engine/api/app.py",
+    "src/crypto_probability_engine/config/build_info.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
