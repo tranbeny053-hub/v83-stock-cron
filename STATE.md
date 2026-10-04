@@ -1,8 +1,42 @@
 # STATE
 
-Updated: 2026-10-04 (the E2 cutover is ACCEPTED: the Space reads as ucpe_space_db, DESIGNED. Next: the owner's
-consolidation, then the Phase 3 exit). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback
-target is 6f4420a9 (R1A).**
+Updated: 2026-10-04 (**PHASE 3 CLOSED: the exit is MET.** E2 is complete: consolidated, and C1's hygiene step done.
+Phase 4 has begun under the owner's rulings P4-1, P4-2 and P7-1). **Production is D 1caa8b08 /
+UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-04), verbatim:** "consolidated. Owner rulings: P4-1 = exact R4 C1 recipe gets a new separately
+  named Phase-4 candidate identity; repository distributional-v2 remains integration-feasibility only, not champion.
+  P4-2 = authorize all no-execution D4 classification/artifact/protocol/DEV-synthetic preparation, but no real-data
+  refit yet. P7-1 = defer any user-refusing analysis-budget threshold; passive measurement/design only. Verify
+  consolidation fail-closed: SUPABASE_DB_URL → ucpe_space_db → DESIGNED, and UCPE_SPACE_DB_URL +
+  SUPABASE_SERVICE_ROLE_KEY absent. If PASS, close Phase 3 with the final contract re-audit, then immediately exhaust
+  all safe Phase-4 work plus dependency-independent Phase-7 work in parallel. Batch implementation/tests/reviews; do
+  not return on routine PRs. Preserve D4 execution gate, UX-1 hold, H2 hold, F3/protected evidence and Codex pause.
+  Return only at a genuine methodology/product/T3/T4/protected-evidence/secret boundary or Phase-4
+  FEASIBLE/INFEASIBLE verdict."
+- **The consolidation is ACCEPTED** (.work/e2/consolidation/CONSOLIDATION_PROOF.md, sealed):
+  - UCPE_SPACE_DB_URL and SUPABASE_SERVICE_ROLE_KEY are ABSENT; SUPABASE_DB_URL was updated at 09:46:23Z;
+  - the restarted Space (startup 09:47:48Z) logged evidence_reader_identity at 09:47:52Z: SUPABASE_DB_URL →
+    ucpe_space_db, **DESIGNED**, release E2;
+  - health 200, build-info E2.
+
+  The owner's credential and the service-role key are gone from the public runtime.
+- **PHASE 3 EXIT: MET** (.work/roadmap/phase3/exit_final/PHASE3_EXIT_FINAL.md, sha256 6d515aaa…, sealed):
+  - X1 PASS; X2 PASS (rehearsal-proven, not yet exercised live); **X3 PASS (live-proven)**: the writer is
+    ucpe_api_writer (now its only credential), the evidence reader ucpe_space_db, and the jobs ucpe_resolver. The owner
+    URL lives only in the protected Environment, and service_role is SELECT-only on core evidence;
+  - W1, W2, W3, W5 and W6 DONE. W4 is DONE for its authored scope, with the §8.2 gaps recorded unchanged.
+
+  **Phase 3 is CLOSED.**
+- **Phase 4, step 1** (T0, .work/roadmap/phase4/CANDIDATE_IDENTITY.md, sha256 8f961fa0…): repository distributional-v2
+  is NOT IDENTICAL to the carried C1. They differ on symmetry, the 1H shape (G4 vs G1), rv_day dedup and the training
+  rows; only the venue (Binance) and the family match. R4's status attaches to C1's RECIPE under refits. The recipe is
+  exactly reproducible: 48/49 frozen code files are byte-identical, and settings.py comes from git history.
+  - P4-1 ruled: C1's exact recipe gets a NEW, separately named candidate identity. distributional-v2 stays
+    integration-feasibility only.
+- **Natural and pending:** the first natural receipt without the service-role key; the first natural skill refresh
+  and F1 call as ucpe_space_db.
+Previously (the E2 cutover is ACCEPTED: the Space reads as ucpe_space_db, DESIGNED. Next: the owner's
+consolidation, then the Phase 3 exit).
 - **The owner (2026-10-04), verbatim:** "switched. CONTINUE CURRENT — Opus 5 XHIGH. Verify E2 fail-closed; if DESIGNED,
   drive consolidation/C1 cleanup to the exact owner-secret boundary and then close Phase 3. After closure, immediately
   advance Phase 4 plus any dependency-independent Phase 7 work, batching/parallelizing all safe T0/T1/T2 work. Do not
@@ -1650,7 +1684,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): the E2 cutover is ACCEPTED (ucpe_space_db, DESIGNED). The boundary is
+LOOP_STATE=IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 is advancing under P4-1 and P4-2,
+  with Phase 7's independent work under P7-1 (passive measurement and design only).
+  Before it: AT THE OWNER (2026-10-04): the E2 cutover is ACCEPTED (ucpe_space_db, DESIGNED). The boundary is
   the owner's consolidation (secret steps). Claude meanwhile prepares the Phase 3 exit and Phase 4/7 work.
   Before it: AT THE OWNER (2026-10-04): E2 RELEASED (D 1caa8b08, R bb2a49bd), and the existing
   SUPABASE_DB_URL role is identified (the migration owner; G2 CONFIRMED). The boundary is the owner's cutover
@@ -3368,7 +3404,12 @@ LOOP_STATE=AT THE OWNER (2026-10-04): the E2 cutover is ACCEPTED (ucpe_space_db,
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-04): E2 cutover ACCEPTED. Remaining: the consolidation (owner) and
+CURRENT_MILESTONE=PHASE 4 (2026-10-04): candidate identity + protocol feasibility.
+  - Step 1 (identity) DONE.
+  - Next: C1's new identity artifact (unwired), the D4 classification note, the incumbent
+    bridge, and the protocol with DEV-synthetic feasibility.
+  - Real-data refit NOT authorized.
+  Before it: PHASE 3 (2026-10-04): E2 cutover ACCEPTED. Remaining: the consolidation (owner) and
   the final exit re-audit. Then Phase 4, with Phase 7's independent work alongside.
   Before it: PHASE 3 (2026-10-04): E2 released and identified. Remaining:
   - the cutover, then LIVE_PROVEN;
@@ -3525,7 +3566,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-04): E2 cutover ACCEPTED. Remaining: the cons
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-e2-cutover (this record; worktree lanes28/state2).
+CURRENT_BRANCH=chore/state-phase3-closed (this record; worktree lanes29/state).
+  Before it: chore/state-e2-cutover (this record; worktree lanes28/state2).
   Before it: chore/state-e2-released (this record; worktree lanes28/state).
   Before it: feat/e2-space-reader-identity (this record; worktree lanes28/e2).
   Before it: chore/phase3-exit-reaudit (this record; worktree lanes30/close).
@@ -3646,7 +3688,8 @@ CURRENT_BRANCH=chore/state-e2-cutover (this record; worktree lanes28/state2).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=6827e631 (main, #222: E2 released and identified). Push CI 37190639311 and the reproducible
+LAST_GREEN_SHA=e344d002 (main, #223: the E2 cutover accepted).
+  Before it: 6827e631 (main, #222: E2 released and identified). Push CI 37190639311 and the reproducible
   build 37190639232: success.
   Before it: bb2a49bd (main = R, the E2 re-pin over D 1caa8b08, deployed). Push CI 37190040672 and the
   reproducible build 37190040630: success. The guard PASS on R (run 37190049170).
@@ -3872,6 +3915,7 @@ LAST_GREEN_SHA=6827e631 (main, #222: E2 released and identified). Push CI 371906
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4139,7 +4183,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The E2 consolidation (2026-10-04; the owner's Space secret steps): SUPABASE_DB_URL takes the
+OWNER_BOUNDARY=None immediate (2026-10-04). Phase 4's next owner boundaries:
+  - D4 execution (any real-data refit or measurement);
+  - the protocol freeze.
+  Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, UX-1 HELD, B5's DEGRADED half, D3, D4
+  execution, F3 KEEP_UNSPENT, CODEX_PAUSED_BY_OWNER.
+  Before it: The E2 consolidation (2026-10-04; the owner's Space secret steps): SUPABASE_DB_URL takes the
   narrow URL, then delete UCPE_SPACE_DB_URL and SUPABASE_SERVICE_ROLE_KEY. Standing items: the writer JWT
   renewal by 2026-10-30; the H2 hold, B5's DEGRADED half, D3, D4.
   Before it: The E2 cutover (2026-10-04, docs/runbooks/SPACE_DB_CUTOVER.md, steps 1-5):
@@ -4729,7 +4778,14 @@ OWNER_BOUNDARY=The E2 consolidation (2026-10-04; the owner's Space secret steps)
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: detect the consolidation passively (secret names plus the restarted Space's event; accept
+NEXT_ACTION=Claude: Phase 4 (P4-1, P4-2), with no real-data refit:
+  - C1's new identity: the spec, an unwired serving module and a fitting tool tested on synthetic data;
+  - the D4 no-execution classification note;
+  - the target-matched incumbent bridge;
+  - the protocol draft with DEV-synthetic feasibility.
+  Phase 7 (P7-1): passive measurement and design only. Return at a methodology, product, T3/T4,
+  protected-evidence or secret boundary, or with the FEASIBLE/INFEASIBLE verdict.
+  Before it: Claude: detect the consolidation passively (secret names plus the restarted Space's event; accept
   only SUPABASE_DB_URL, ucpe_space_db, DESIGNED), then the final Phase 3 exit re-audit and its record. Then
   Phase 4, with Phase 7's independent work alongside.
   Before it: The owner: the cutover steps, then say "switched". Claude: read the restarted Space's
