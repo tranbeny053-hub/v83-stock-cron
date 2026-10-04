@@ -188,6 +188,7 @@ def test_a_clean_inventory_passes_and_publishes_no_unlisted_name(monkeypatch, tm
     printed = capsys.readouterr().out
     report = json.loads((tmp_path / "core-write-inventory.json").read_text())
     assert report["outcome"] == "INVENTORIED" and report["verdict"] == "PASS"
+    assert report["snapshot"] == {"transaction_read_only": "on", "rolled_back": True}
     assert report["failures"] == [] and report["expect"] == "before"
     assert report["committed"] is False and connection.rolled_back
     published = json.dumps(report) + printed

@@ -550,6 +550,11 @@ def _run(
         "expect": args.expect,
         "verdict": "PASS" if not failures else "FAIL",
         "failures": failures,
+        # The snapshot's own evidence, as the server answered it: read only, and rolled back.
+        "snapshot": {
+            "transaction_read_only": captured.get("transaction_read_only"),
+            "rolled_back": captured.get("rolled_back") is True,
+        },
         "inventory": published,
     }
 

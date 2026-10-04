@@ -1,8 +1,39 @@
 # STATE
 
-Updated: 2026-10-04 (D6 APPLIED: migration 0018 committed by run 37172530166; applied_run recorded; the
-expect=after inventory is the owner's next step). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a).
-The rollback target is a2de125f (WA), rollback-safe across 0018.**
+Updated: 2026-10-04 (D6 COMPLETE; the Phase 3 exit re-audit is done: NOT MET IN FULL, solely because E2 is
+DEFERRED). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). The rollback target is a2de125f (WA).**
+- **The owner (2026-10-04), verbatim:** "POST-D6 INVENTORY DONE and independently verified PASS: run 37181855518,
+  attempt 1, exact main 9a8a1c0415e56c6d18fdf674f6626bb50ff7f6de, expect=after, failures=[], all D6 surfaces empty.
+  Seal the raw post-D6 evidence and mark D6 COMPLETE in canonical STATE. Then perform the full Phase-3 exit
+  re-audit against the governing contracts and current deterministic/production evidence. Preserve E2 as DEFERRED
+  exactly; do not convert any deferred/hold/NOT_RUN item into PASS."
+- **D6: COMPLETE.** 0018 is APPLIED (run 37172530166, .work/t4_0018_apply). The inventory with expect=after (run
+  37181855518, re-verified from the raw report: dispatch at 9a8a1c04, attempt 1, approved in production-db-owner,
+  verdict PASS, failures [], all eight surface kinds empty) is sealed in .work/d6_inventory_after/.
+- **The Phase 3 exit re-audit** (.work/roadmap/phase3/exit/PHASE3_EXIT_REAUDIT.md, sealed), against the governing
+  plan's PHASE 3, §8.1-§8.3 and §23:
+  - X1, a complete bundle or no SAVED: **PASS**. X2, unknown commits reconcilable: **PASS** (rehearsal-proven;
+    not yet exercised live).
+  - X3, the runtime cannot mutate core evidence beyond the design: **NOT DEMONSTRATED, blocked by E2
+    (DEFERRED).** The writer, the bundle owner and the resolver equal their design in production, service_role
+    has no core write surface, and owner authority is only in the Environment. But the Space's SUPABASE_DB_URL
+    role is uninspected.
+  - Work: W1 pin transition, W2 bundle, W3 receipts and W5 privilege rehearsal are DONE. W4 DB constraints are DONE
+    for 0014's scope, with §8.2 gaps recorded as they are: no outcome foreign key and no outcome chronology
+    (engineering choices); additive correction records NOT BUILT; legacy rows not validated (OD-DB-1 = D). W6
+    transport is PARTIAL (the evidence reader's role is E2).
+  - §23 Persistence: every item PASSES on the production route as ucpe_api_writer after D6 (PERS-0 run
+    37181034616). The legacy direct-Postgres route still fails C1b, C3 and C5; it is not production's writer.
+- **This record's PR** also closes the D6 adjudication's follow-up: the inventory route's success report now
+  carries its snapshot's own evidence (transaction_read_only, rolled_back).
+- **Open, preserved exactly:**
+  - E2 (DEFERRED by the owner).
+  - Design C1 hygiene (owner T3): SUPABASE_SERVICE_ROLE_KEY is still a Space secret.
+  - The writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - The first post-D6 natural SAVED receipt (passive).
+  - The H2 hold, B5's DEGRADED half, D3, D4, F3, UX-1 and OD6, unchanged.
+Previously (D6 APPLIED: migration 0018 committed by run 37172530166; applied_run recorded; the expect=after inventory
+was the owner's next step).
 - **The owner (2026-10-04), verbatim:** "0018 NEW RUN DONE. Adjudicate the exact latest apply-migration-0018 workflow
   run from raw logs + artifacts; do not infer PASS from workflow conclusion alone. ... If APPLIED: seal evidence,
   record applied_run in the registry/STATE, then prepare the required expect=after inventory boundary."
@@ -1488,7 +1519,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): D6 is APPLIED (run 37172530166, committed, adjudicated from the raw
+LOOP_STATE=AT THE OWNER (2026-10-04): D6 COMPLETE. The Phase 3 exit is NOT MET IN FULL only because E2 is
+  DEFERRED (X1 PASS, X2 PASS, X3 NOT DEMONSTRATED). No safe Claude step remains in Phase 3.
+  Before it: AT THE OWNER (2026-10-04): D6 is APPLIED (run 37172530166, committed, adjudicated from the raw
   report). The boundary is the read-only inventory with expect=after.
   Before it: AT THE OWNER (2026-10-04): 0018's T4 attempt (run 37170407623) was REFUSED, NOT_APPLIED and is
   consumed. The route is repaired by this record's PR. The boundary is a NEW T4 at the repaired commit.
@@ -3197,7 +3230,9 @@ LOOP_STATE=AT THE OWNER (2026-10-04): D6 is APPLIED (run 37172530166, committed,
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6 APPLIED (0018, run 37172530166);
+CURRENT_MILESTONE=PHASE 3 (2026-10-04): D6 COMPLETE; the exit re-audit is done: NOT MET IN FULL (E2 DEFERRED blocks X3).
+  Everything else in Phase 3 is complete or recorded as it is.
+  Before it: PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6 APPLIED (0018, run 37172530166);
   the expect=after inventory and the Phase 3 exit evidence remain.
   Before it: PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6: inventory CLEAN, 0018 FROZEN
   and NOT_APPLIED (one refused attempt, consumed); the repaired route awaits a new T4.
@@ -3342,7 +3377,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-04): G1 and E3 LIVE_PROVEN; C4 SET; D6 APPLIE
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/d6-0018-applied (this record; worktree lanes29/reg).
+CURRENT_BRANCH=chore/phase3-exit-reaudit (this record; worktree lanes30/close).
+  Before it: chore/d6-0018-applied (this record; worktree lanes29/reg).
   Before it: fix/d6-0018-login-roles (this record; worktree lanes28/fix).
   Before it: feat/d6-migration-0018 (this record; worktree lanes27/m0018).
   Before it: chore/state-d6-inventory-clean (this record). Next: feat/d6-migration-0018 (the freeze).
@@ -3459,7 +3495,8 @@ CURRENT_BRANCH=chore/d6-0018-applied (this record; worktree lanes29/reg).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=82ed9c48 (main, #216: the repaired route). Push CI 37172067820 and the reproducible build 37172067764: success.
+LAST_GREEN_SHA=9a8a1c04 (main, #217: 0018's applied_run). Push CI 37181351658 and the reproducible build 37181351716: success.
+  Before it: 82ed9c48 (main, #216: the repaired route). Push CI 37172067820 and the reproducible build 37172067764: success.
   Before it: b7d54fcc (main, #215: the freeze). Push CI 37153310915 and the reproducible build 37153310966: success.
   Before it: 8c900a0b (main, #214: the inventory record).
   Before it: 946145bc (main, #212 merged). Push CI 37149005706 and the reproducible build 37149005710: success.
@@ -3678,6 +3715,7 @@ LAST_GREEN_SHA=82ed9c48 (main, #216: the repaired route). Push CI 37172067820 an
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-03 (the exact line is in the PR body).
@@ -3941,7 +3979,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The read-only inventory with expect=after (2026-10-04): dispatch core-write-inventory.yml at this
+OWNER_BOUNDARY=Phase 3's remaining items are the owner's (2026-10-04):
+  - E2 (DEFERRED: to un-defer or keep deferred);
+  - design C1's hygiene step (delete SUPABASE_SERVICE_ROLE_KEY from the Space, T3 configuration);
+  - the writer JWT renewal by 2026-10-30.
+  Standing items: the H2 hold, B5's DEGRADED half, D3, D4.
+  Before it: The read-only inventory with expect=after (2026-10-04): dispatch core-write-inventory.yml at this
   PR's merge commit (with the main guard) and approve it in production-db-owner. Then the optional hygiene of
   deleting SUPABASE_SERVICE_ROLE_KEY from the Space. Standing items: the H2 hold, B5's DEGRADED half, D3, D4, E2.
   Before it: A NEW T4, not a rerun (2026-10-04): dispatch apply-migration-0018.yml at this PR's merge commit
@@ -4514,7 +4557,9 @@ OWNER_BOUNDARY=The read-only inventory with expect=after (2026-10-04): dispatch 
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the expect=after inventory. Then Claude: adjudicate its raw report (verdict PASS, no
+NEXT_ACTION=The owner: rule on the Phase 3 items above. Claude: watch passively for the first post-D6 natural SAVED
+  receipt (no traffic). If E2 is un-deferred: its own governed sequence (design C2), then an X3 re-audit.
+  Before it: The owner: the expect=after inventory. Then Claude: adjudicate its raw report (verdict PASS, no
   surface), seal it, and record Phase 3's D6 as complete.
   Before it: The owner: the new T4 (docs/runbooks/MIGRATION_0018_APPLY.md). Then Claude: adjudicate the raw
   report, record 0018's applied_run (registry PR), and hand over the expect=after inventory.
