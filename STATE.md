@@ -1,8 +1,38 @@
 # STATE
 
-Updated: 2026-10-04 (**PHASE 3 CLOSED: the exit is MET.** E2 is complete: consolidated, and C1's hygiene step done.
-Phase 4 has begun under the owner's rulings P4-1, P4-2 and P7-1). **Production is D 1caa8b08 /
-UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+Updated: 2026-10-04 (PHASE 4 PREPARED. **The verdict is CONDITIONAL:** FEASIBLE for one claim only if the real
+hit-sequence H is low enough and a window outside F3 exists; INFEASIBLE for every other claim type. The R4-C1 identity
+module is unwired and has no constants). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The
+rollback target is 6f4420a9 (R1A).**
+- **Phase 4 under P4-1 and P4-2**, all T0 or synthetic, sealed in .work/roadmap/phase4 and .work/roadmap/feas2:
+  - CANDIDATE_IDENTITY.md (8f961fa0…): distributional-v2 ≠ C1; C1's recipe is reproducible (48/49 frozen files).
+  - D4_CLASSIFICATION_NOTE.md (aafe3292…), NO EXECUTION. It prepares OP-1 (the C1 DEV refit) and OP-2 (the DEV
+    hit-sequence H) on the R2 DEV rows (1H horizon_end < 2025-09-23T11:00Z). Both are outside F3, §5A, the R2 sealed
+    folds and F1/F2. It recommends a truncated DEV extract, because the pickles also hold the consumed folds 7-8.
+  - INCUMBENT_BRIDGE.md (bf3e6496…): the incumbent is heuristic-v1-wave4b0; the bridge is tc-v1 on Binance rows,
+    descriptive only.
+  - **FEAS-2** (feas2.py sealed f27777cc…, run once, report 8e9c3a94…): the C1 recipe as frozen, year-stale constants
+    in FEAS-1's four worlds.
+    - Its bias is negligible (≤ 0.1 pp).
+    - Its hits carry H 0.52–0.57 under short-memory volatility and 0.61–0.67 under long memory.
+    - Power ≥ 0.80 at δ 0.03 holds up to H ≈ 0.55 / 0.60 / 0.62 / 0.65 at 52 / 78 / 104 / 156 weeks.
+    - The NW rules are anti-conservative (size 0.05–0.20). The certified-H rule is size-valid only if H_c ≥ the true H.
+    - Declared overall: NOT_FEASIBLE (the long-memory worlds fail).
+  - PROTOCOL_DRAFT.md (4e693046…) and PHASE4_VERDICT.md (0fded469…): CONDITIONAL. STALENESS_ADDENDUM.md (785ab672…):
+    R4 V0 shows 1H frozen-constant edge 0.73 at 403 days, so DEV-only constants start a late-2026 window about 400 days
+    stale.
+- **The R4-C1 identity module** (this record's PR): quant/candidate_r4_c1.py, `r4-c1-symmetric-cb`, recipe digest
+  2f4742c6…
+  - It is unwired, has no constants, and fails closed (CandidateNotFrozenError).
+  - Its validator refuses any non-symmetric table, a wrong coefficient count, another recipe and 4H. It refuses
+    distributional-v2's own tables.
+  - 36 tests; mutation 16/16. It shares no code with distributional-v2.
+- **Phase 7 under P7-1** (.work/roadmap/phase7/P7_PASSIVE_DESIGN.md, ba51474b…): the analysis-budget design is deferred
+  and refuses no one; the performance baseline is passive; the recovery drill waits on the custody ruling.
+- **MODEL SUBSTITUTION:** Claude implemented and reviewed everything (CODEX_PAUSED_BY_OWNER); nothing was independently
+  reviewed (the plan reserves frontier quant review for Fable 5.1, at the owner's choice).
+Previously (**PHASE 3 CLOSED: the exit is MET.** E2 is complete: consolidated, and C1's hygiene step done. Phase 4 has
+begun under the owner's rulings P4-1, P4-2 and P7-1).
 - **The owner (2026-10-04), verbatim:** "consolidated. Owner rulings: P4-1 = exact R4 C1 recipe gets a new separately
   named Phase-4 candidate identity; repository distributional-v2 remains integration-feasibility only, not champion.
   P4-2 = authorize all no-execution D4 classification/artifact/protocol/DEV-synthetic preparation, but no real-data
@@ -1684,7 +1714,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 is advancing under P4-1 and P4-2,
+LOOP_STATE=AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
+  methodology and protected-evidence ones: OP-2's D4 execution (the real H), F3's exact scope, and the
+  staleness option.
+  Before it: IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 is advancing under P4-1 and P4-2,
   with Phase 7's independent work under P7-1 (passive measurement and design only).
   Before it: AT THE OWNER (2026-10-04): the E2 cutover is ACCEPTED (ucpe_space_db, DESIGNED). The boundary is
   the owner's consolidation (secret steps). Claude meanwhile prepares the Phase 3 exit and Phase 4/7 work.
@@ -3404,7 +3437,9 @@ LOOP_STATE=IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 i
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 4 (2026-10-04): candidate identity + protocol feasibility.
+CURRENT_MILESTONE=PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
+  sealed; the R4-C1 module unwired. The FEASIBLE/INFEASIBLE verdict waits on OP-2 and F3's scope.
+  Before it: PHASE 4 (2026-10-04): candidate identity + protocol feasibility.
   - Step 1 (identity) DONE.
   - Next: C1's new identity artifact (unwired), the D4 classification note, the incumbent
     bridge, and the protocol with DEV-synthetic feasibility.
@@ -3566,7 +3601,8 @@ CURRENT_MILESTONE=PHASE 4 (2026-10-04): candidate identity + protocol feasibilit
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-phase3-closed (this record; worktree lanes29/state).
+CURRENT_BRANCH=feat/phase4-r4-c1-candidate (this record; worktree lanes29/c1).
+  Before it: chore/state-phase3-closed (this record; worktree lanes29/state).
   Before it: chore/state-e2-cutover (this record; worktree lanes28/state2).
   Before it: chore/state-e2-released (this record; worktree lanes28/state).
   Before it: feat/e2-space-reader-identity (this record; worktree lanes28/e2).
@@ -3688,7 +3724,8 @@ CURRENT_BRANCH=chore/state-phase3-closed (this record; worktree lanes29/state).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=e344d002 (main, #223: the E2 cutover accepted).
+LAST_GREEN_SHA=c10af044 (main, #224: Phase 3 closed).
+  Before it: e344d002 (main, #223: the E2 cutover accepted).
   Before it: 6827e631 (main, #222: E2 released and identified). Push CI 37190639311 and the reproducible
   build 37190639232: success.
   Before it: bb2a49bd (main = R, the E2 re-pin over D 1caa8b08, deployed). Push CI 37190040672 and the
@@ -3915,6 +3952,7 @@ LAST_GREEN_SHA=e344d002 (main, #223: the E2 cutover accepted).
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4183,7 +4221,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=None immediate (2026-10-04). Phase 4's next owner boundaries:
+OWNER_BOUNDARY=Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT.md):
+  1. D4 execution of OP-2 (the DEV hit-sequence H), with OP-1 (the C1 constants) optionally in the same
+     session, preferably from a truncated DEV extract;
+  2. F3's exact scope (a statement or an authorized derivation; plan §6.5);
+  3. the staleness option: (a) train through the consumed folds, (b) a scheduled-refit estimand, or
+     (c) an age cap;
+  4. δ.
+  Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, UX-1 HELD, B5, D3, F3 KEEP_UNSPENT,
+  CODEX_PAUSED_BY_OWNER.
+  Before it: None immediate (2026-10-04). Phase 4's next owner boundaries:
   - D4 execution (any real-data refit or measurement);
   - the protocol freeze.
   Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, UX-1 HELD, B5's DEGRADED half, D3, D4
@@ -4778,7 +4825,10 @@ OWNER_BOUNDARY=None immediate (2026-10-04). Phase 4's next owner boundaries:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: Phase 4 (P4-1, P4-2), with no real-data refit:
+NEXT_ACTION=The owner: rule on the Phase 4 decisions. Claude, after an authorization: run OP-2 (and OP-1)
+  write-once, with an audit hook; set H_c and L; finalize FEASIBLE or INFEASIBLE; then the protocol freeze
+  package.
+  Before it: Claude: Phase 4 (P4-1, P4-2), with no real-data refit:
   - C1's new identity: the spec, an unwired serving module and a fitting tool tested on synthetic data;
   - the D4 no-execution classification note;
   - the target-matched incumbent bridge;
