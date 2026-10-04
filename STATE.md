@@ -1,9 +1,72 @@
 # STATE
 
-Updated: 2026-10-04 (PHASE 4 PREPARED. **The verdict is CONDITIONAL:** FEASIBLE for one claim only if the real
+Updated: 2026-10-04 (**PHASE 4 VERDICT: INFEASIBLE**, final under the owner's rulings of 2026-10-04. The one D4
+execution, OP-1 + OP-2, ran once and is consumed. No gate is weakened; the product proceeds as an honest reference and
+risk application). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9
+(R1A).**
+- **The owner (2026-10-04), verbatim:** "Owner rulings for Phase 4: 1) AUTHORIZE one bounded D4 DEV-only execution
+  containing OP-1 + OP-2 together. Use a one-time truncated BTC/ETH 1H DEV extract only, horizon_end <
+  2025-09-23T11:00Z; no folds 7-8, §5A, F1/F2, F3 or other protected/consumed rows. OP-1 fits the exact
+  r4-c1-symmetric-cb recipe; OP-2 measures coverage-hit dependence/H only. No promotion, production wiring or claim
+  acceptance. 2) F3 remains KEEP_UNSPENT. Authorize scope derivation only from canonical non-outcome metadata; do not
+  open protected outcomes/artifacts. If exact scope cannot be proven without protected access, STOP and return the
+  exact minimum file/field the owner must supply. 3) Staleness = Option C for now: conservative age cap. Do not train
+  on consumed folds and do not introduce scheduled refits yet. Use OP-1/OP-2 plus existing drift/staleness evidence
+  to derive the cap; if this makes C1 infeasible, preserve that result. 4) Freeze target margin δ = 0.03 for this
+  Phase-4 claim; do not silently widen to 0.05. Execute OP-1/OP-2 with deterministic extraction hashes, pre/post
+  corpus guards, mutation/adversarial checks and sealed evidence. Then exhaust all remaining safe Phase-4
+  protocol/reference/dependence work and independent Phase-7 work continuously. Return only with the Phase-4
+  FEASIBLE/INFEASIBLE verdict or a genuine protected/T3/T4/product boundary."
+- **The D4 execution (ruling 1), once, at 2026-10-04T11:15Z** (.work/roadmap/phase4/d4_run/D4_RUN_RECORD.md, sha256
+  8bb4f264…; the evidence is in .work/research3/phase4_d4, MANIFEST 66253115…). **It is CONSUMED: never rerun.**
+  - **Sealed before any real read:** run_d4.py (afb929f2…) under ANALYSIS_PLAN.json (11:15:38Z). All 23 mutants were
+    killed. The synthetic smoke crossed the cutoff, with a candle gap and an irregular candle.
+  - **Guards:**
+    - the corpus guard read 46/46 before and after;
+    - the code matched 48/49 (settings.py differs, as since R4), and the environment matched the commitment;
+    - no protected path was opened;
+    - the store was read only by the guards and by the one-time extract.
+  - **The extract:**
+    - source: store/{BTC,ETH}USDT_1H, with sealed bytes, read twice with identical digests;
+    - cut: R2's fold-7 train mask, horizon_end < 2025-09-23T10:59:59.999Z (one row stricter than authorized);
+    - 27,065 rows per symbol, no labels, 144 files at 0444 (BTC 719fd464…, ETH f09d9e44…);
+    - it lies only in R2's initial training span and DEV folds 1–6.
+  - **OP-1:** r4-c1-symmetric-cb's DEV constants, n = 26,915 per symbol. validate_constants accepts them and
+    independent code rebuilds them bit-identically (OP1_CONSTANTS.json 7b1dcf61…). **They are not wired, not
+    promoted and not accepted.**
+  - **OP-2 (dependence only):**
+    - the primary local Whittle gives H 0.538 (upper 95% 0.608), so **H_c = 0.65 and L = 156 weeks**;
+    - the long-scale estimators read higher: aggregated variance 0.56 / 0.65 / 0.69 at 4 / 8 / 13 weeks, weekly local
+      Whittle 0.85 ± 0.10;
+    - s_week is 0.060;
+    - every walk-forward fit is identical on a store poisoned after its split (OP2_DEPENDENCE.json 84ffb06e…).
+  - **Declared deviations:** the store, not the pickles (R4's own C1 input; the pickles were refused). The D4 note's
+    "93 entries" is corrected to 46.
+- **F3's scope (ruling 2), derived from canonical non-outcome metadata only** (F3_SCOPE_DERIVATION.md 0da95fe4…):
+  - F3 is every BTCUSDT and ETHUSDT kline (15m, 1H, 4H) from 2026-09-21T00:00Z on, with no end date. The sources are
+    G2_PROTOCOL.json, NG1_ADMISSIBILITY_MAP row 12 and R-4, and STRONGER_CANDIDATE_PATH §4.
+  - No owner-supplied field is needed.
+  - **Every prospective window lies inside F3, so none is admissible under KEEP_UNSPENT.**
+- **Staleness (ruling 3, Option C)** (STALENESS_CAP.md 9f5b7412…):
+  - The cap is 242 days. Source: V0, 1H 0.92 at 242 days and 0.73 at 403, against R4's 25% haircut.
+  - C1's constants passed the cap on 2026-05-23 and are 376 days old today.
+  - **C1 is INFEASIBLE under Option C. That result is preserved.**
+- **δ = 0.03 is frozen (ruling 4).**
+- **PHASE 4 VERDICT: INFEASIBLE** (PHASE4_VERDICT_FINAL.md be8c630f…; MANIFEST_FINAL 2114723e…):
+  - Grounds: there is no admissible window (F3), and the age cap has expired. Each is sufficient alone. OP-2's
+    long-scale H corroborates them.
+  - Plan §17: no forced gate weakening. The product proceeds as an honest reference/risk application.
+  - Phase 5 does not start for this claim.
+- **Phase 7 (P7-1), passive read** (.work/roadmap/phase7/passive_20261004/P7_PASSIVE_READ.md 4404e6c0…):
+  - since the 09:47:42Z restart there have been 0 analyses and 0 receipts, so there is no baseline data;
+  - nothing is built that can refuse a user;
+  - no dependency-independent Phase 7 step remains.
+- **Nothing else changed.** Production, the database, secrets, F3, the H2 and UX-1 holds and the Codex pause are
+  untouched, and no traffic was created.
+- **MODEL SUBSTITUTION:** Claude alone (CODEX_PAUSED_BY_OWNER). The GPT sidecar was not consulted: no trigger.
+Previously (PHASE 4 PREPARED. **The verdict is CONDITIONAL:** FEASIBLE for one claim only if the real
 hit-sequence H is low enough and a window outside F3 exists; INFEASIBLE for every other claim type. The R4-C1 identity
-module is unwired and has no constants). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The
-rollback target is 6f4420a9 (R1A).**
+module is unwired and has no constants).
 - **Phase 4 under P4-1 and P4-2**, all T0 or synthetic, sealed in .work/roadmap/phase4 and .work/roadmap/feas2:
   - CANDIDATE_IDENTITY.md (8f961fa0…): distributional-v2 ≠ C1; C1's recipe is reproducible (48/49 frozen files).
   - D4_CLASSIFICATION_NOTE.md (aafe3292…), NO EXECUTION. It prepares OP-1 (the C1 DEV refit) and OP-2 (the DEV
@@ -1714,7 +1777,9 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
+LOOP_STATE=AT THE OWNER (2026-10-04): PHASE 4 VERDICT: INFEASIBLE (final under the 2026-10-04 rulings). The D4
+  execution (OP-1 + OP-2) is consumed. No safe Claude step remains in Phase 4 or in Phase 7's independent work.
+  Before it: AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CONDITIONAL. The boundaries are
   methodology and protected-evidence ones: OP-2's D4 execution (the real H), F3's exact scope, and the
   staleness option.
   Before it: IN PROGRESS (2026-10-04): PHASE 3 CLOSED (the exit is MET). Phase 4 is advancing under P4-1 and P4-2,
@@ -3437,7 +3502,10 @@ LOOP_STATE=AT THE OWNER (2026-10-04): Phase 4 is prepared and the verdict is CON
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
+CURRENT_MILESTONE=PHASE 4 (2026-10-04): VERDICT INFEASIBLE (final). OP-1 and OP-2 ran once (sealed, consumed);
+  F3 is open-ended forward time, so there is no window; the Option C cap (242 days) expired on 2026-05-23; H_c 0.65
+  (L 156 weeks). Phase 7: passive only, and there is no natural traffic yet.
+  Before it: PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS-2, protocol draft and verdict
   sealed; the R4-C1 module unwired. The FEASIBLE/INFEASIBLE verdict waits on OP-2 and F3's scope.
   Before it: PHASE 4 (2026-10-04): candidate identity + protocol feasibility.
   - Step 1 (identity) DONE.
@@ -3601,7 +3669,8 @@ CURRENT_MILESTONE=PHASE 4 (2026-10-04): identity DONE; the D4 note, bridge, FEAS
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/phase4-r4-c1-candidate (this record; worktree lanes29/c1).
+CURRENT_BRANCH=chore/state-phase4-infeasible (this record; worktree lanes30/state).
+  Before it: feat/phase4-r4-c1-candidate (#225; worktree lanes29/c1).
   Before it: chore/state-phase3-closed (this record; worktree lanes29/state).
   Before it: chore/state-e2-cutover (this record; worktree lanes28/state2).
   Before it: chore/state-e2-released (this record; worktree lanes28/state).
@@ -3724,7 +3793,8 @@ CURRENT_BRANCH=feat/phase4-r4-c1-candidate (this record; worktree lanes29/c1).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c10af044 (main, #224: Phase 3 closed).
+LAST_GREEN_SHA=7a5ca4f9 (main, #225: the R4-C1 identity and the Phase 4 record).
+  Before it: c10af044 (main, #224: Phase 3 closed).
   Before it: e344d002 (main, #223: the E2 cutover accepted).
   Before it: 6827e631 (main, #222: E2 released and identified). Push CI 37190639311 and the reproducible
   build 37190639232: success.
@@ -3952,6 +4022,7 @@ LAST_GREEN_SHA=c10af044 (main, #224: Phase 3 closed).
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on #225's PR tree, 2026-10-04 (the exact line is in #225's body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4221,7 +4292,16 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT.md):
+OWNER_BOUNDARY=The Phase 4 verdict (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT_FINAL.md): INFEASIBLE under
+  the rulings of 2026-10-04. No Phase 4 decision is pending.
+  - Only the owner could change the verdict, and it would take both an F3 spend (ruling 3) and a scheduled-refit
+    estimand (Option B). Neither is recommended.
+  - Serving C1 as a labelled reference range (OD5) would be a new product decision.
+  - Phase 7's remaining work waits on owner rulings: the P7-1 thresholds, the custody ruling, and Q1 with UX-1.
+  Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, UX-1 HELD, B5, D3, F3 KEEP_UNSPENT,
+  CODEX_PAUSED_BY_OWNER.
+  Before it: Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERDICT.md), all ruled by the
+  owner on 2026-10-04 (OP-1 + OP-2 authorized and run; F3's derivation authorized and done; Option C; δ 0.03):
   1. D4 execution of OP-2 (the DEV hit-sequence H), with OP-1 (the C1 constants) optionally in the same
      session, preferably from a truncated DEV extract;
   2. F3's exact scope (a statement or an authorized derivation; plan §6.5);
@@ -4825,7 +4905,11 @@ OWNER_BOUNDARY=Phase 4's decisions (2026-10-04; .work/roadmap/phase4/PHASE4_VERD
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: rule on the Phase 4 decisions. Claude, after an authorization: run OP-2 (and OP-1)
+NEXT_ACTION=The owner: read the Phase 4 verdict (INFEASIBLE) and choose what comes next (the Phase 7 rulings above,
+  or another milestone). Claude meanwhile: passive reads only (the first natural receipt since the service-role
+  key's deletion; the Phase 7 baseline once natural traffic exists) and the JWT renewal reminder (2026-10-30). No
+  Codex, no GPT, no traffic.
+  Before it: The owner: rule on the Phase 4 decisions. Claude, after an authorization: run OP-2 (and OP-1)
   write-once, with an audit hook; set H_c and L; finalize FEASIBLE or INFEASIBLE; then the protocol freeze
   package.
   Before it: Claude: Phase 4 (P4-1, P4-2), with no real-data refit:
