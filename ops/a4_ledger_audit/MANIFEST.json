@@ -1,0 +1,74 @@
+{
+ "artifact": "ucpe.a4_ledger_audit.v1",
+ "files": {
+  "ops/a4_ledger_audit/CARD.md": "c9d9183abf9920adf21ab43ca6a05a5eb3ffc3a03e75447a9bc1fec9012cb473",
+  "ops/a4_ledger_audit/a4_ledger_audit.py": "b33d9ba3e6bb6ac7f3e23198e6959dcb26a883e883861377d51ed5e8f252c536",
+  "ops/a4_ledger_audit/a4_ledger_audit.sql": "115fde82e6f2452d349cb8202fcea594374e2229a7019e02d21734d9365a5f8a"
+ },
+ "input_binding": {
+  "cross_checked_against_the_response": [
+   "run_id",
+   "build_info.release_id",
+   "evidence_hash"
+  ],
+  "primary_key": [
+   "credential_id",
+   "client_request_id"
+  ]
+ },
+ "ledger_schema": {
+  "migration": "migrations/0013_automation_radar_ledger.sql",
+  "primary_key": [
+   "credential_id",
+   "client_request_id"
+  ],
+  "sha256": "c1a60c04fc03c13c9771662dd9bcf5e5a0c6386bdeffc8de7b175ecf688f2081",
+  "table": "public.automation_radar_ledger"
+ },
+ "output_keys": [
+  "artifact",
+  "audit",
+  "body_identity_consistent",
+  "bound_client_request_id",
+  "bound_credential_id",
+  "evidence_hash",
+  "evidence_hash_matches",
+  "evidence_origin",
+  "http_status",
+  "matched_rows",
+  "origin_automated_radar",
+  "outcome_code",
+  "reason",
+  "release_id",
+  "release_id_matches",
+  "run_id",
+  "run_id_matches",
+  "schema_ok",
+  "sql_sha256",
+  "state",
+  "transaction_read_only",
+  "verdict"
+ ],
+ "purpose": "Prove the one public.automation_radar_ledger row that records one UOR qualification request, so UOR can adjudicate A4. Read-only. Prepared, not run against production.",
+ "reasons": [
+  "SCHEMA_DRIFT",
+  "NO_ROW",
+  "AMBIGUOUS",
+  "WRONG_ORIGIN",
+  "NOT_COMPLETED",
+  "NOT_SUCCEEDED",
+  "BODY_IDENTITY_MISMATCH",
+  "RUN_MISMATCH",
+  "RELEASE_MISMATCH",
+  "EVIDENCE_MISMATCH",
+  "OK"
+ ],
+ "upstream_release_identity": {
+  "per_request": "the ledger row's release_id and the response's build_info.release_id name the release that served each request; the audit takes the expected value from the response",
+  "route_introduced_at": "5a3ef022db10462675361e8d15aa8f4f572dc1aa",
+  "route_introduced_by": "UCPE-PROD-F1-AUTOMATION-20261001-A",
+  "route_unchanged_since": "src/crypto_probability_engine/automation/, api/automation_endpoint.py, migration 0013 and both radar schemas are byte-identical from 5a3ef022 to 1caa8b08",
+  "serving_commit": "1caa8b08ebfc45b79a9b14d8217dad3b112cda8d",
+  "serving_release_id": "UCPE-PROD-E2-20261004-A"
+ }
+}

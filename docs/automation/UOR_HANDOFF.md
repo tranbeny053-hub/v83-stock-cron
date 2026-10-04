@@ -74,13 +74,20 @@
 
 ## 5. Release identity
 
-- Every response carries `build_info`:
+- Every response carries `build_info`, the serving release's public build identity. Under F1 it read:
   - `release_id`: `UCPE-PROD-F1-AUTOMATION-20261001-A`;
   - `release_label`: `PROD-F1-AUTOMATION release of main`;
   - `environment`: `HF_PRODUCTION`;
   - `source_milestone`: `prod-f1-automation`;
   - `fingerprint`: `UCPE LIVE BUILD · PROD-F1-AUTOMATION-20261001-A`.
-- It is the only UCPE release serving `radar_evidence.v1`.
+- **Corrected 2026-10-04.** This line used to say F1 "is the only UCPE release serving `radar_evidence.v1`".
+  That is no longer true.
+  - F1 introduced the route, and every later release inherits it unchanged:
+    `src/crypto_probability_engine/automation/`, `api/automation_endpoint.py`, migration 0013 and both radar
+    schemas are byte-identical from F1's `5a3ef022` to `1caa8b08`.
+  - Production now serves it as `UCPE-PROD-E2-20261004-A`, commit `1caa8b08`.
+  - Each response's `build_info.release_id`, and its ledger row's `release_id`, name the release that served
+    that request.
 - Adding it to UOR's `ACCEPTED_UPSTREAM_RELEASES` is an owner decision on UOR's side, made after UOR's contract
   fixtures pass against the examples in section 7.
 - The synthetic examples' `UCPE-SYNTHETIC-EXAMPLE-V1` is served by no release and must never be allowlisted.
@@ -222,3 +229,30 @@ UCPE stops here. The rest happens in UOR's own governed sessions, under the owne
 4. only then, through UOR's own chain, decide any Cron re-enable.
 
 UCPE does none of these and authorizes none of them. It has not touched UOR and never re-enables UOR Cron.
+
+## 14. A4 per-request ledger audit (`ucpe.a4_ledger_audit.v1`), read-only, for UOR qualification A10
+
+UCPE authors and seals this artifact; UOR never authors UCPE SQL. UOR pins it read-only by the digests below.
+It changes nothing in UOR's Card-5/A4 acceptance, and UCPE writes nothing to UOR.
+
+```text
+A4_ARTIFACT_STATUS=PREPARED_AND_VERIFIED_LOCALLY (not production-executed; the scratch-PostgreSQL rehearsal is a required check of the pull request that merges it)
+ARTIFACT_NAME=ucpe.a4_ledger_audit.v1
+ARTIFACT_SHA256=ad699bb0a541de7c81b7b8ef6cf59ca00b9d4e5c91f884ebb054fca3a0f6050e
+UPSTREAM_RELEASE_IDENTITY=UCPE-PROD-E2-20261004-A (commit 1caa8b08ebfc45b79a9b14d8217dad3b112cda8d) serves radar_evidence.v1 through the route introduced by UCPE-PROD-F1-AUTOMATION-20261001-A (5a3ef022db10462675361e8d15aa8f4f572dc1aa), byte-identical since; each request's own release is the expected build_info.release_id taken from its response
+INPUT_BINDING=(credential_id, client_request_id), the ledger's primary key, both from UOR's own request (client_request_id alone is not unique across credentials); cross-checked against the received 200 response: run_id, build_info.release_id, evidence_hash
+OUTPUT_CONTRACT=one canonical JSON line (sorted keys): artifact, sql_sha256, verdict (PASS|FAIL), reason (OK, or the first of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED, BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH, or a runner stop), bound_credential_id, bound_client_request_id, schema_ok, matched_rows, evidence_origin, origin_automated_radar, state, outcome_code, http_status, run_id, run_id_matches, release_id, release_id_matches, evidence_hash, evidence_hash_matches, body_identity_consistent, transaction_read_only; exit 0 only for PASS; never the stored response body, another row, a timestamp, a fingerprint or any secret
+READ_ONLY_PROOF=one sealed WITH...SELECT (static guard: no write, lock, SET, DDL or side-effect function; adversarial mutants rejected), run only inside SET TRANSACTION READ ONLY with transaction_read_only=on proven first, a 5 s statement timeout and an unconditional rollback; the rehearsal proves INSERT, UPDATE, DELETE, TRUNCATE and CREATE refused under that preamble and the ledger digest unchanged across every audit
+ISOLATION_PROOF=reads only public.automation_radar_ledger and four pg_catalog relations; the static guard denies every other table, view and function any migration creates (predictions, outcomes, analysis runs, snapshots, the credential registry, the section 5A seal); requires evidence_origin AUTOMATED_RADAR on the row and in its stored body; the rehearsal runs it as a role that can read only the ledger; no application code changes, so USER_REQUESTED, CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE are untouched
+TESTS=tests/automation/test_a4_ledger_audit.py: 52 (structural guard; schema equal to migration 0013; 18 adversarial SQL mutants rejected; runner offline: read-only session, unconditional rollback, refusals before contact, no URL, credential or exception message echoed, independent cross-check); tests/workflows/test_a4_ledger_audit_rehearsal_workflow.py: 3; runner mutants: 12/12 killed; full ./verify.sh: PASS; scratch-PostgreSQL rehearsal (23 audit cases, a ledger-only probe role, 6 refused writes): a required check of the pull request that merges this package
+INDEPENDENT_REVIEW=PENDING_REVIEW
+PRODUCTION_QUERY_EXECUTED=NO
+PACKAGE_PATH=ops/a4_ledger_audit/
+```
+
+| File | Role | sha256 |
+|---|---|---|
+| `ops/a4_ledger_audit/MANIFEST.json` | the package seal: ARTIFACT_SHA256 | `ad699bb0a541de7c81b7b8ef6cf59ca00b9d4e5c91f884ebb054fca3a0f6050e` |
+| `ops/a4_ledger_audit/a4_ledger_audit.sql` | the sealed SELECT | `115fde82e6f2452d349cb8202fcea594374e2229a7019e02d21734d9365a5f8a` |
+| `ops/a4_ledger_audit/a4_ledger_audit.py` | the read-only runner | `b33d9ba3e6bb6ac7f3e23198e6959dcb26a883e883861377d51ed5e8f252c536` |
+| `ops/a4_ledger_audit/CARD.md` | the owner card for the episode | `c9d9183abf9920adf21ab43ca6a05a5eb3ffc3a03e75447a9bc1fec9012cb473` |
