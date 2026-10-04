@@ -48,6 +48,7 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
+from crypto_probability_engine.persistence import reader_identity
 from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.repository import (
     build_operator_repository,
@@ -62,7 +63,10 @@ FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    app_settings = settings or get_settings()
+    # E2: the Space's direct Postgres uses UCPE_SPACE_DB_URL when it is set, else SUPABASE_DB_URL.
+    app_settings, reader_source = reader_identity.evidence_reader_settings(
+        settings or get_settings()
+    )
     run_store = InMemoryRunStore(limit=app_settings.recent_run_limit)
     persistence_repository = build_persistence_repository(app_settings)
     try:
@@ -73,6 +77,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        # E2 (plan §8.3): one redacted, catalog-only report of the evidence reader's role per start.
+        reader_identity.start_report(app_settings, reader_source)
         try:
             yield
         finally:

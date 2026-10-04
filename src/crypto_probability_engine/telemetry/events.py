@@ -36,6 +36,8 @@ EVENTS = frozenset(
         "persistence_reconciled",
         "persistence_admission_refused",
         "persistence_submit_failed",
+        # E2 (plan §8.3): the evidence reader's role, redacted, once per process start
+        "evidence_reader_identity",
     }
 )
 FIELDS = frozenset(
@@ -72,6 +74,25 @@ FIELDS = frozenset(
         "receipt_reason",
         # how many strict reads an unknown commit took to decide (R-1a)
         "attempts",
+        # the evidence reader's identity (E2): the secret's NAME, the role (ucpe_* or OTHER), the
+        # verdict, and the role's capabilities as booleans and counts
+        "db_url_source",
+        "db_role",
+        "login_is_role",
+        "verdict",
+        "superuser",
+        "createrole",
+        "createdb",
+        "replication",
+        "bypassrls",
+        "inherit",
+        "role_memberships",
+        "owner_rights",
+        "core_write",
+        "definer_execute",
+        "needed_privileges",
+        "rls_allows_all",
+        "extra_privileges",
     }
 )
 _CONTAINERS = (Mapping, list, tuple, set, frozenset, bytes, bytearray)

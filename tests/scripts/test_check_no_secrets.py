@@ -28,6 +28,7 @@ _SPEC.loader.exec_module(scanner)
         "SUPABASE_PUBLISHABLE_KEY",
         "SUPABASE_WRITER_JWT",
         "UCPE_RESOLVER_DB_URL",
+        "UCPE_SPACE_DB_URL",
         "FRED_API_KEY",
         "NEWSAPI_KEY",
         "PASSWORD",

@@ -97,6 +97,17 @@ was clean) on top of the applied 0017:
 - D4 ONE_SHOT and ROLLBACK: a second application is refused (UP018), and the rollback restores the
   catalog exactly.
 
+E1 READER_IDENTITY (E2, plan §8.3) runs on the applied 0018, production's catalog, between D3 and
+D4. Production's evidence-reader report (src/crypto_probability_engine/persistence/
+reader_identity.py), read from the catalog only:
+- the Space's login exactly as the owner's helper makes it (scripts/space_db_credential.py's URL
+  over local TCP) reports DESIGNED as ucpe_space_db; a wrong password is UNKNOWN, never DESIGNED;
+- the owner (role OTHER, owner rights, core writes) and ucpe_resolver (named, core writes) are
+  NOT_DESIGNED;
+- three planted deviations, each undone in place, each turn the verdict: an extra core write, a
+  restrictive policy that hides rows, and a missing needed privilege;
+- every report survives the telemetry allowlist whole, and none carries a URL or a password.
+
 Runs ONLY against a CI runner's scratch PostgreSQL and the PostgREST started there. It refuses to
 run beside any production variable, and it names no secret: its passwords and its JWT key are
 scratch values that live for one run.
@@ -165,6 +176,7 @@ CRITERIA = (
     "D2",
     "D3",
     "D4",
+    "E1",
 )
 WIDE_CRITERIA = tuple(name for name in CRITERIA if name.startswith("W"))
 D6_CRITERIA = tuple(name for name in CRITERIA if name.startswith("D"))
@@ -1178,6 +1190,99 @@ def criterion_resolver_login(db: Database) -> dict[str, Any]:
     return verdict(failures, **steps)
 
 
+def criterion_reader_identity(db: Database) -> dict[str, Any]:
+    """E1 (E2): production's evidence-reader report on production's catalog (0018 applied).
+
+    The report reads the catalog only. Its events go to a quiet recorder through the telemetry
+    allowlist, so what is checked is what the Space would log. Only those redacted fields are kept,
+    never a URL or a password.
+    """
+
+    from crypto_probability_engine.persistence import reader_identity
+    from crypto_probability_engine.telemetry.events import sanitize
+    from scripts import resolver_credential, space_db_credential
+
+    class Recorder:
+        def __init__(self) -> None:
+            self.events: list[dict[str, Any] | None] = []
+
+        def record(self, event: str, fields: dict[str, Any]) -> None:
+            self.events.append(sanitize(event, fields))
+
+    recorder = Recorder()
+
+    def space_url(plain: str) -> str:
+        return resolver_credential.build_url(
+            "postgresql", space_db_credential.ROLE, plain, "127.0.0.1", str(db.port), db.name
+        )
+
+    def probe(url: str, source: str = reader_identity.CUTOVER_ENV) -> dict[str, Any]:
+        return reader_identity.report(url, source, sink=recorder)  # type: ignore[arg-type]
+
+    plain = db.logins["ucpe_space_db"]
+    reports = {
+        "space_db": probe(space_url(plain)),
+        "wrong_password": probe(space_url("not-" + plain)),
+        "owner": probe(db.owner_url, reader_identity.LEGACY_ENV),
+        "resolver": probe(db.login_url("ucpe_resolver")),
+    }
+    failures: list[str] = []
+    wanted = {
+        "space_db": {"db_role": "ucpe_space_db", "verdict": "DESIGNED"},
+        "wrong_password": {"db_role": "error", "verdict": "UNKNOWN",
+                           "error_class": "OperationalError"},
+        "owner": {"db_role": "OTHER", "verdict": "NOT_DESIGNED", "owner_rights": True,
+                  "core_write": True},
+        "resolver": {"db_role": "ucpe_resolver", "verdict": "NOT_DESIGNED", "core_write": True},
+    }
+    for name, fields in wanted.items():
+        found = {key: reports[name].get(key) for key in fields}
+        if found != fields:
+            failures.append(f"{name} reported {found}, not {fields}")
+    designed = reports["space_db"]
+    plants = (
+        ("an extra core write",
+         "GRANT DELETE ON TABLE public.predictions TO ucpe_space_db",
+         "REVOKE DELETE ON TABLE public.predictions FROM ucpe_space_db",
+         {"core_write": True, "extra_privileges": 1}),
+        ("a policy that hides rows",
+         "CREATE POLICY e1_probe ON public.prediction_outcomes AS RESTRICTIVE FOR SELECT"
+         " TO ucpe_space_db USING (false)",
+         "DROP POLICY e1_probe ON public.prediction_outcomes",
+         {"rls_allows_all": False}),
+        ("a missing needed privilege",
+         "REVOKE UPDATE ON TABLE public.automation_radar_ledger FROM ucpe_space_db",
+         "GRANT UPDATE ON TABLE public.automation_radar_ledger TO ucpe_space_db",
+         {"needed_privileges": False}),
+    )
+    planted: dict[str, dict[str, Any]] = {}
+    for name, plant, undo, changed in plants:
+        db.owner(plant)
+        try:
+            report = probe(space_url(plain))
+        finally:
+            db.owner(undo)
+        planted[name] = report
+        difference = {key: value for key, value in report.items()
+                      if key != "verdict" and designed.get(key) != value}
+        if report.get("verdict") != "NOT_DESIGNED" or difference != changed:
+            failures.append(f"{name} reported {report.get('verdict')} {difference}, not {changed}")
+    reports["after_the_plants"] = probe(space_url(plain))
+    if reports["after_the_plants"] != designed:
+        failures.append("the planted deviations were not undone exactly")
+    events = recorder.events
+    if len(events) != len(reports) + len(plants) or any(
+        event is None or event != {"event": reader_identity.EVENT, **fields}
+        for event, fields in zip(events, [*list(reports.values())[:4], *planted.values(),
+                                          reports["after_the_plants"]], strict=True)
+    ):
+        failures.append("a report did not survive the telemetry allowlist whole")
+    printed = json.dumps(events, sort_keys=True)
+    if plain in printed or "postgresql://" in printed:
+        failures.append("a report carried a password or a URL")
+    return verdict(failures, reports=reports, planted=planted)
+
+
 def criterion_resolver(db: Database) -> dict[str, Any]:
     """P5: the resolver's repository and status store, production's code, as ucpe_resolver."""
 
@@ -1866,7 +1971,7 @@ def criteria_d6(
     applied = db.apply(DRAFT_0018)
     if applied is not None:
         failure = verdict([f"the D6 draft did not apply: {applied}"])
-        return {**results, "D2": failure, "D3": failure, "D4": failure}
+        return {**results, "D2": failure, "D3": failure, "D4": failure, "E1": failure}
     reload()
     after = d6_inventory(db, version)
     reads = held(db, ("service_role",), ("SELECT",)).get("service_role", {})
@@ -1910,6 +2015,9 @@ def criteria_d6(
         d3.append(f"the least-privilege writer did not save after D6: {saved}")
     results["D3"] = verdict(d3, revoked_entries=len(revoked_acl) + len(revoked_function),
                             writer_saves=saved)
+
+    # E1 (E2): production's evidence-reader report, here because production's catalog is this one.
+    results["E1"] = _guarded(lambda: criterion_reader_identity(db))
 
     # D4: one-shot, then the rollback restores the catalog exactly.
     second = db.apply(DRAFT_0018)
@@ -2051,7 +2159,7 @@ def run(
     before_0017 = snapshot(db)
     applied_0017 = db.apply(DRAFT_0017)
     if applied_0017 is not None:
-        for name in (*WIDE_CRITERIA, "J1", *D6_CRITERIA):
+        for name in (*WIDE_CRITERIA, "J1", *D6_CRITERIA, "E1"):
             criteria[name] = verdict([f"migration 0017 did not apply: {applied_0017}"])
     else:
         wait_for_reload(postgrest_url, admin_url)
@@ -2081,7 +2189,7 @@ def run(
                 db, version, raw, writer, lambda: wait_for_reload(postgrest_url, admin_url)
             ))
         except Exception as exc:  # noqa: BLE001 - the report records the first failure, never a secret
-            for name in D6_CRITERIA:
+            for name in (*D6_CRITERIA, "E1"):
                 criteria.setdefault(name, verdict([f"{type(exc).__name__}: {exc}"]))
         second_0017 = db.apply(DRAFT_0017)
         rolled_0017 = db.apply(ROLLBACK_0017)

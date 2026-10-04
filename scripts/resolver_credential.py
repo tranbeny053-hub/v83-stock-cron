@@ -22,6 +22,7 @@ NOLOGIN until the owner's credential step (docs/runbooks/RESOLVER_CUTOVER.md). T
 - copy-sql copies the SQL, for the dashboard's SQL Editor; copy-url copies the URL, for the GitHub
   secret UCPE_RESOLVER_DB_URL.
 Nothing secret is ever printed: not the password, the SCRAM secret or the URL.
+E2's scripts/space_db_credential.py uses the same functions for the Space's role, ucpe_space_db.
 """
 
 from __future__ import annotations
@@ -79,8 +80,8 @@ def scram_verifier(plain: str, *, salt: bytes | None = None, iterations: int = I
             f"${_b64(stored_key)}:{_b64(server_key)}")
 
 
-def login_sql(plain: str) -> str:
-    return f"ALTER ROLE {ROLE} WITH LOGIN PASSWORD '{scram_verifier(plain)}';\n"
+def login_sql(plain: str, role: str = ROLE) -> str:
+    return f"ALTER ROLE {role} WITH LOGIN PASSWORD '{scram_verifier(plain)}';\n"
 
 
 def build_url(scheme: str, user: str, plain: str, host: str, port: str, database: str,
@@ -88,8 +89,9 @@ def build_url(scheme: str, user: str, plain: str, host: str, port: str, database
     return f"{scheme}://{user}:{quote(plain, safe='')}@{host}:{port}/{database}{options}"
 
 
-def resolver_url(template: str, plain: str) -> tuple[str, str]:
-    """The resolver's URL from the dashboard's template, and its connection mode."""
+def resolver_url(template: str, plain: str, role: str = ROLE) -> tuple[str, str]:
+    """The role's URL (the resolver's by default) from the dashboard's template, and its
+    connection mode."""
 
     match = _TEMPLATE.fullmatch(template.strip())
     if match is None:
@@ -98,10 +100,10 @@ def resolver_url(template: str, plain: str) -> tuple[str, str]:
         )
     ref, host, port = match["ref"], match["host"], match["port"]
     if ref is not None and _SHARED_POOLER.fullmatch(host):
-        user = f"{ROLE}.{ref}"
+        user = f"{role}.{ref}"
         mode = "shared pooler, " + ("session mode" if port == "5432" else "transaction mode")
     elif ref is None and re.fullmatch(r"db\.[a-z0-9]{20}\.supabase\.co", host):
-        user = ROLE
+        user = role
         mode = "direct connection" if port == "5432" else "dedicated pooler, transaction mode"
     else:
         raise CredentialError("the URI's user and host are not one of Supabase's connection types")
@@ -128,21 +130,29 @@ def _write_owner_only(path: Path, data: str) -> None:
         handle.write(data)
 
 
-def generate(directory: Path, template: str) -> dict[str, str]:
-    """One new password, written as the login SQL and the resolver's URL. Never overwrites."""
+def generate(
+    directory: Path,
+    template: str,
+    *,
+    role: str = ROLE,
+    sql_name: str = SQL_NAME,
+    url_name: str = URL_NAME,
+) -> dict[str, str]:
+    """One new password, written as the role's login SQL and URL (the resolver's by default).
+    Never overwrites."""
 
     folder = _key_folder(directory)
-    sql_path, url_path = folder / SQL_NAME, folder / URL_NAME
+    sql_path, url_path = folder / sql_name, folder / url_name
     existing = [path.name for path in (sql_path, url_path) if path.exists()]
     if existing:
         raise CredentialError(f"refusing to overwrite {', '.join(existing)} in {folder}")
     plain = secrets.token_urlsafe(32)
-    url, mode = resolver_url(template, plain)
+    url, mode = resolver_url(template, plain, role)
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     folder.chmod(0o700)
     written: list[Path] = []
     try:
-        for path, data in ((sql_path, login_sql(plain)), (url_path, url + "\n")):
+        for path, data in ((sql_path, login_sql(plain, role)), (url_path, url + "\n")):
             _write_owner_only(path, data)
             written.append(path)
     except BaseException:

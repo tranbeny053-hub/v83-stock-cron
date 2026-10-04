@@ -323,6 +323,9 @@ def test_the_workflow_runs_on_pull_requests_only_with_a_read_only_token_and_no_s
     for path in (
         "scripts/privilege_rehearsal/**",
         "scripts/core_write_inventory.py",  # D1-D4 run the inventory
+        "scripts/resolver_credential.py",  # R1 and E1 log in with the owner's helpers
+        "scripts/space_db_credential.py",
+        "src/crypto_probability_engine/telemetry/events.py",  # E1 checks the allowlisted event
         "migrations/**",
         "src/crypto_probability_engine/persistence/**",
         "src/crypto_probability_engine/automation/**",
@@ -484,13 +487,14 @@ def test_the_harness_gates_every_wider_criterion() -> None:
 
 
 def test_j1_is_a_gate_run_on_the_applied_0017_before_its_rollback() -> None:
-    assert rehearse.CRITERIA[rehearse.CRITERIA.index("J1") + 1:] == rehearse.D6_CRITERIA
+    assert rehearse.CRITERIA[rehearse.CRITERIA.index("J1") + 1:] == (*rehearse.D6_CRITERIA, "E1")
     source = Path(rehearse.__file__).read_text(encoding="utf-8")
     run = source.split("\ndef run(", 1)[1]
     assert run.index('criteria["W10"]') < run.index('criteria["J1"] = _guarded(') < run.index(
         "rolled_0017 = db.apply(ROLLBACK_0017)")
     assert 'criteria["J1"] = verdict(["the ES256 PostgREST of E3 is not configured"])' in run
-    assert 'for name in (*WIDE_CRITERIA, "J1", *D6_CRITERIA):' in run, "0017 not applying fails J1"
+    assert 'for name in (*WIDE_CRITERIA, "J1", *D6_CRITERIA, "E1"):' in run, (
+        "0017 not applying fails J1 (and D1-D4 and E1)")
 
 
 def test_d6_runs_on_the_applied_0017_and_is_rolled_back_before_it() -> None:
@@ -511,6 +515,37 @@ def test_d6_runs_on_the_applied_0017_and_is_rolled_back_before_it() -> None:
         assert step in d6, step
     assert set(rehearse.D6_PROBES) == {"F", "V", "R", "G", "K", "C"}
     assert '"migration_0018_sha256"' in source and '"rollback_0018_sha256"' in source
+
+
+def test_e1_runs_production_s_reader_report_on_the_applied_0018_before_its_rollback() -> None:
+    """E1 (E2): between D3 and D4, on production's catalog; every failure path still reports it."""
+
+    assert rehearse.CRITERIA[-1] == "E1"
+    source = Path(rehearse.__file__).read_text(encoding="utf-8")
+    d6 = source.split("def criteria_d6(", 1)[1].split("\ndef ", 1)[0]
+    assert d6.index('results["D3"] = verdict(') < d6.index(
+        'results["E1"] = _guarded(lambda: criterion_reader_identity(db))') < d6.index(
+        "second = db.apply(DRAFT_0018)")
+    assert '"D4": failure, "E1": failure}' in d6, "the draft not applying fails E1"
+    run = source.split("\ndef run(", 1)[1]
+    assert 'for name in (*D6_CRITERIA, "E1"):' in run, "D6 raising fails E1"
+    e1 = source.split("def criterion_reader_identity(", 1)[1].split("\ndef ", 1)[0]
+    for step in (
+        "reader_identity.report(url, source, sink=recorder)",
+        "space_db_credential.ROLE",
+        'probe(space_url("not-" + plain))',
+        'probe(db.owner_url, reader_identity.LEGACY_ENV)',
+        'probe(db.login_url("ucpe_resolver"))',
+        '"error_class": "OperationalError"',
+        "GRANT DELETE ON TABLE public.predictions TO ucpe_space_db",
+        "AS RESTRICTIVE FOR SELECT",
+        "REVOKE UPDATE ON TABLE public.automation_radar_ledger FROM ucpe_space_db",
+        "db.owner(undo)",
+        'reports["after_the_plants"] != designed',
+        "sanitize(event, fields)",
+        'if plain in printed or "postgresql://" in printed',
+    ):
+        assert step in e1, step
 
 
 def test_j1_expects_the_documented_acceptances_and_refusals() -> None:
