@@ -1,0 +1,72 @@
+name: A4 ledger audit rehearsal (scratch PostgreSQL, no secrets)
+
+# ucpe.a4_ledger_audit.v1 (ops/a4_ledger_audit), the sealed read-only A4 per-request audit of the
+# AUTOMATED_RADAR ledger. On every pull request that touches the audit, its rehearsal, a migration,
+# the scratch-role fixtures or the example bodies it seeds from, it builds a scratch PostgreSQL from
+# every applied migration (0001-0018), as the persistence rehearsal does, and runs the sealed audit
+# against synthetic ledger rows:
+# - the qualifying row PASSES; every other shape fails closed with its reason;
+# - the binding is the (credential_id, client_request_id) pair;
+# - schema drift fails closed;
+# - a role that can read only the ledger still PASSES, and is refused every other table;
+# - every write is refused inside the audit's read-only transaction, and the ledger is unchanged.
+# It references no secret and touches no real database.
+
+"on":
+  pull_request:
+    paths:
+      - ops/a4_ledger_audit/**
+      - scripts/a4_ledger_audit_rehearsal/**
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - scripts/migration_0016_rehearsal/**
+      - docs/automation/examples/**
+      - migrations/**
+      - .github/workflows/a4-ledger-audit-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse the sealed A4 audit on scratch local PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -f - < scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql
+          sudo -u postgres createdb -O "$(id -un)" a4_rehearsal
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d a4_rehearsal -f - < scripts/migration_0013_rehearsal/01_supabase_like_grants.sql
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d a4_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
+          cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql migrations/0018_narrow_service_role.sql > "$RUNNER_TEMP/migrations_0001_0018.sql"
+          psql -X -q -v ON_ERROR_STOP=1 -d a4_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0018.sql"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d a4_rehearsal -f - < scripts/a4_ledger_audit_rehearsal/00_probe_role.sql
+          A4_REHEARSAL_URL="postgresql:///a4_rehearsal?host=/var/run/postgresql" python scripts/a4_ledger_audit_rehearsal/rehearse.py --report=a4-ledger-audit-rehearsal-report.json
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: a4-ledger-audit-rehearsal-report
+          path: a4-ledger-audit-rehearsal-report.json
+          if-no-files-found: warn
