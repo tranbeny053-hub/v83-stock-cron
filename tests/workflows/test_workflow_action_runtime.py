@@ -140,7 +140,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # add checkout, setup-python and upload-artifact each, at the same pins.
     # 86 -> 92 (D6's migration 0018): its dispatch-only apply workflow and pull-request rehearsal
     # add the same three each, at the same pins.
-    assert len(refs) == 92
+    # 92 -> 95 (ucpe.a4_ledger_audit.v1): its pull-request rehearsal adds checkout, setup-python
+    # and upload-artifact, at the same pins.
+    assert len(refs) == 95
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
