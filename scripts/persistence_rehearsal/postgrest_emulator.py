@@ -66,6 +66,9 @@ FAULT_SETUP_SQL = (
     "ON public.prediction_feature_snapshots FOR EACH ROW "
     "EXECUTE FUNCTION pers0_fault.fail_feature_snapshot()",
     "GRANT USAGE ON SCHEMA pers0_fault TO ucpe_api_writer",
+    # PostgREST switches to the writer through authenticator's SET-only membership (migration
+    # 0016). The scratch owner stands in for authenticator, so it takes the same: SET, no INHERIT.
+    "GRANT ucpe_api_writer TO CURRENT_USER WITH INHERIT FALSE, SET TRUE",
 )
 FAULTS = ("feature_snapshot", "lost_response", "lost_before_commit")
 # The role PostgREST switches to for the production writer (E3's JWT); never service_role after D6.
