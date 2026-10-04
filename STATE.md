@@ -1,9 +1,56 @@
 # STATE
 
-Updated: 2026-10-04 (E2 LIFTED by the owner. Its package is this record's PR: the evidence reader's identity
+Updated: 2026-10-04 (E2 RELEASED, and the existing SUPABASE_DB_URL role IDENTIFIED: it is the migration owner, so G2 is
+CONFIRMED. Next: the owner's cutover). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback
+target is 6f4420a9 (R1A).**
+- **The owner (2026-10-04), verbatim:** "MERGED. Canonical main is now 892713951a790d04c978ed1773a802b098fc3803.
+  Continue the full E2 governed release chain from current main ... Do not touch HF/Supabase secrets or create analysis
+  traffic yet. ... After deploy, identify the existing SUPABASE_DB_URL role passively before any credential cutover."
+  Then: "deployed".
+- **The release chain** (.work/release_e2/CHAIN.md, sealed):
+  - #219 → main 89271395 (merged by the owner); identity #220 → **D 1caa8b08** (merged by Claude on its exact head;
+    main frozen until the deploy). Push CI 37188882397 and the reproducible build 37188882398 on D: success.
+  - The guard on D (run 37188913224): GUARD_VERIFY=PASS 8/8, delta [app.py, build_info.py].
+  - Rollback findings, target 6f4420a9 (R1A): 5/5. 0018 is rollback-safe from a2de125f.
+  - The re-pin, precomputed twice: 1fc0e504.
+  - The runtime delta: 4 files, digest 87d560e1…, identical to the independent diff. Preflight: 9/9.
+- **The owner's T4 is CONSUMED:** a fresh preflight 9/9, then DEPLOY=PASS at 08:35:32Z, 6f4420a..1caa8b0, with no
+  force. Never rerun.
+- **After the deploy:**
+  - SETTLE=PASS: RUNNING at D after 1 poll; health 200; build-info E2; D's frontend bytes; the F1 probe 401;
+  - ROLLBACK_CHECK=PASS 7/7: target 6f4420a9;
+  - re-pin → **R bb2a49bd**, equal to the precomputed 1fc0e504. Push CI 37190040672 and the reproducible build 37190040630:
+    success;
+  - the guard on R (run 37190049170): GUARD_VERIFY=PASS, pin == live == 1caa8b08, delta [].
+- **The owner's rollback command** (a T4, never automatic):
+  `git push --force-with-lease=refs/heads/main:1caa8b08ebfc45b79a9b14d8217dad3b112cda8d hf
+  6f4420a9e9b7f027deeaff92a53d6cbeab56b5f8:refs/heads/main`. R1A reads only SUPABASE_DB_URL, so it runs at every E2
+  stage.
+- **The identification** (.work/e2/identification/IDENTIFICATION.md, sealed). The first evidence_reader_identity event
+  (08:35:52Z, release E2, db_url_source SUPABASE_DB_URL) shows:
+  - db_role OTHER, logged in as itself;
+  - NOSUPERUSER; CREATEROLE, CREATEDB, REPLICATION, BYPASSRLS, INHERIT;
+  - 13 memberships; owner rights in public; core write;
+  - no definer EXECUTE; extra privileges 135;
+  - verdict NOT_DESIGNED.
+
+  By elimination against the sealed 0018 report:
+  - after D6 only the ucpe_* writers and the owner of all 17 public relations can write core evidence (PUBLIC holds
+    nothing), and this role is no superuser;
+  - the migration owner's recorded attributes are exactly these.
+
+  **So SUPABASE_DB_URL is the migration owner, the role of the protected owner URL. G2 CONFIRMED:** the public runtime
+  holds owner authority.
+- **Next: the owner's cutover** (docs/runbooks/SPACE_DB_CUTOVER.md):
+  1. the template, then the helper's generate;
+  2. the login SQL in the SQL Editor;
+  3. the new Space secret UCPE_SPACE_DB_URL.
+
+  Accepted only if the restarted Space's event shows UCPE_SPACE_DB_URL, ucpe_space_db and DESIGNED. The rollback is
+  to delete that secret.
+Previously (E2 LIFTED by the owner. Its package is this record's PR: the evidence reader's identity
 report, the cutover secret, the owner's helper, the rehearsal's E1 and the runbook. Next: the E2 release, then the
-owner's cutover). **Production is D 6f4420a9 / UCPE-PROD-R1A-20261003-A (R d4c25f2a). The rollback target is
-a2de125f (WA).**
+owner's cutover).
 - **The owner (2026-10-04), verbatim:** "Owner ruling: LIFT E2 now. Complete E2 as the final Phase-3 blocker under
   the governing plan: identify and prove the exact role/privileges used by the Space's SUPABASE_DB_URL without
   exposing secret values, then migrate the Space reader to the designed narrow role `ucpe_space_db` with
@@ -62,6 +109,7 @@ a2de125f (WA).**
      - it is accepted on DESIGNED from SUPABASE_DB_URL.
   5. The final exit re-audit.
 Previously (D6 COMPLETE; the Phase 3 exit re-audit is done: NOT MET IN FULL, solely because E2 is
+DEFERRED).
 - **The owner (2026-10-04), verbatim:** "POST-D6 INVENTORY DONE and independently verified PASS: run 37181855518,
   attempt 1, exact main 9a8a1c0415e56c6d18fdf674f6626bb50ff7f6de, expect=after, failures=[], all D6 surfaces empty.
   Seal the raw post-D6 evidence and mark D6 COMPLETE in canonical STATE. Then perform the full Phase-3 exit
@@ -1579,7 +1627,10 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-04): E2 LIFTED by the owner. Its package is this record's PR. Next:
+LOOP_STATE=AT THE OWNER (2026-10-04): E2 RELEASED (D 1caa8b08, R bb2a49bd), and the existing
+  SUPABASE_DB_URL role is identified (the migration owner; G2 CONFIRMED). The boundary is the owner's cutover
+  (credential and Space secret steps).
+  Before it: IN PROGRESS (2026-10-04): E2 LIFTED by the owner. Its package is this record's PR. Next:
   the E2 release chain, up to the owner's T4 deploy.
   Before it: AT THE OWNER (2026-10-04): D6 COMPLETE. The Phase 3 exit is NOT MET IN FULL only because E2 is
   DEFERRED (X1 PASS, X2 PASS, X3 NOT DEMONSTRATED). No safe Claude step remains in Phase 3.
@@ -3292,7 +3343,11 @@ LOOP_STATE=IN PROGRESS (2026-10-04): E2 LIFTED by the owner. Its package is this
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=PHASE 3 (2026-10-04): E2 LIFTED, the final blocker. The package is in review. Then:
+CURRENT_MILESTONE=PHASE 3 (2026-10-04): E2 released and identified. Remaining:
+  - the cutover, then LIVE_PROVEN;
+  - the consolidation and C1;
+  - the final exit re-audit.
+  Before it: PHASE 3 (2026-10-04): E2 LIFTED, the final blocker. The package is in review. Then:
   - the E2 release (T4) and the identification;
   - the owner's cutover, then LIVE_PROVEN;
   - the C1 hygiene and the final exit re-audit.
@@ -3443,7 +3498,8 @@ CURRENT_MILESTONE=PHASE 3 (2026-10-04): E2 LIFTED, the final blocker. The packag
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=feat/e2-space-reader-identity (this record; worktree lanes28/e2).
+CURRENT_BRANCH=chore/state-e2-released (this record; worktree lanes28/state).
+  Before it: feat/e2-space-reader-identity (this record; worktree lanes28/e2).
   Before it: chore/phase3-exit-reaudit (this record; worktree lanes30/close).
   Before it: chore/d6-0018-applied (this record; worktree lanes29/reg).
   Before it: fix/d6-0018-login-roles (this record; worktree lanes28/fix).
@@ -3562,7 +3618,9 @@ CURRENT_BRANCH=feat/e2-space-reader-identity (this record; worktree lanes28/e2).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=1830bbc6 (main, #218: the Phase 3 exit re-audit). Push CI 37182940609 and the reproducible
+LAST_GREEN_SHA=bb2a49bd (main = R, the E2 re-pin over D 1caa8b08, deployed). Push CI 37190040672 and the
+  reproducible build 37190040630: success. The guard PASS on R (run 37190049170).
+  Before it: 1830bbc6 (main, #218: the Phase 3 exit re-audit). Push CI 37182940609 and the reproducible
   build 37182940636: success.
   Before it: 9a8a1c04 (main, #217: 0018's applied_run). Push CI 37181351658 and the reproducible build 37181351716: success.
   Before it: 82ed9c48 (main, #216: the repaired route). Push CI 37172067820 and the reproducible build 37172067764: success.
@@ -3784,6 +3842,7 @@ LAST_GREEN_SHA=1830bbc6 (main, #218: the Phase 3 exit re-audit). Push CI 3718294
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4049,7 +4108,12 @@ CODEX_PENDING=NONE. CODEX_PAUSED_BY_OWNER (owner ruling, 2026-10-01) until expli
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=The E2 release's T4 deploy (2026-10-04). Claude prepares all of it first: the identity PR
+OWNER_BOUNDARY=The E2 cutover (2026-10-04, docs/runbooks/SPACE_DB_CUTOVER.md, steps 1-5):
+  - the template and the helper's generate;
+  - the login SQL;
+  - the Space secret UCPE_SPACE_DB_URL.
+  Standing items: the writer JWT renewal by 2026-10-30; the H2 hold, B5's DEGRADED half, D3, D4.
+  Before it: The E2 release's T4 deploy (2026-10-04). Claude prepares all of it first: the identity PR
   merged, the guard HEALTHY, the preflight passed. Then the E2 cutover (docs/runbooks/SPACE_DB_CUTOVER.md):
   the login SQL and the Space secret UCPE_SPACE_DB_URL. Standing items: the writer JWT renewal by
   2026-10-30; the H2 hold, B5's DEGRADED half, D3, D4.
@@ -4631,7 +4695,11 @@ OWNER_BOUNDARY=The E2 release's T4 deploy (2026-10-04). Claude prepares all of i
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: merge this record's PR after green CI. Then the E2 release chain (the identity PR,
+NEXT_ACTION=The owner: the cutover steps, then say "switched". Claude: read the restarted Space's
+  evidence_reader_identity event passively (accept only UCPE_SPACE_DB_URL, ucpe_space_db, DESIGNED), then
+  hand over the consolidation (SUPABASE_DB_URL takes the narrow URL; delete UCPE_SPACE_DB_URL and
+  SUPABASE_SERVICE_ROLE_KEY). Then the final exit re-audit.
+  Before it: Claude: merge this record's PR after green CI. Then the E2 release chain (the identity PR,
   the guard on D, the preflight) and the owner's deploy card. After the deploy: settle, read the first
   evidence_reader_identity event (today's SUPABASE_DB_URL role), re-pin, the guard on R.
   Before it: The owner: rule on the Phase 3 items above. Claude: watch passively for the first post-D6 natural SAVED
