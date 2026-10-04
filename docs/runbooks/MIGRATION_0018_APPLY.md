@@ -22,6 +22,8 @@ inventory was clean (run 37149774863).
   executed digest is the reviewed one. service_role holds SELECT only on the six core tables and
   executes neither bundle function, and D6's inventory is empty. Evidence:
   `.work/t4_0018_apply/ADJUDICATION.md`. The registry records `applied_run` 37172530166.
+- **The inventory with `expect=after`**, run 37181855518 (main 9a8a1c04): verdict PASS, every surface empty.
+  D6 is COMPLETE. Evidence: `.work/d6_inventory_after/ADJUDICATION.md`.
 
 ## Before
 
