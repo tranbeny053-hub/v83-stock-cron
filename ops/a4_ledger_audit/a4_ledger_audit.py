@@ -38,7 +38,7 @@ from typing import Any, TextIO
 
 ARTIFACT = "ucpe.a4_ledger_audit.v1"
 SQL_PATH = Path(__file__).resolve().with_name("a4_ledger_audit.sql")
-SQL_SHA256 = "115fde82e6f2452d349cb8202fcea594374e2229a7019e02d21734d9365a5f8a"
+SQL_SHA256 = "c33aa3ad7bdbfcafe0d9f7e5bf3a16dafa3b885fac9f19d834d142d02f985eb1"
 DATABASE_URL_ENV = "A4_AUDIT_DATABASE_URL"
 STATEMENT_TIMEOUT = "5000ms"
 LOCK_TIMEOUT = "1000ms"
@@ -227,12 +227,14 @@ def expected_reason(facts: Mapping[str, Any], binding: Binding) -> str:
         return "NO_ROW"
     if facts["matched_rows"] != 1:
         return "AMBIGUOUS"
-    if facts["origin_automated_radar"] is not True or facts["evidence_origin"] != "AUTOMATED_RADAR":
+    if facts["evidence_origin"] != "AUTOMATED_RADAR":
         return "WRONG_ORIGIN"
     if facts["state"] != "COMPLETED":
         return "NOT_COMPLETED"
     if facts["outcome_code"] != "SUCCEEDED" or facts["http_status"] != 200:
         return "NOT_SUCCEEDED"
+    if facts["origin_automated_radar"] is not True:  # the stored body's origin, too
+        return "WRONG_ORIGIN"
     if facts["body_identity_consistent"] is not True:
         return "BODY_IDENTITY_MISMATCH"
     if facts["run_id"] != binding.run_id:
@@ -326,7 +328,7 @@ def main(
     connect: Callable[..., Any] | None = None,
     stdout: TextIO | None = None,
 ) -> int:
-    parser = _Parser(prog="a4_ledger_audit", add_help=True)
+    parser = _Parser(prog="a4_ledger_audit", add_help=False)  # -h must not exit 0, the PASS code
     for name in ("credential-id", "client-request-id", "run-id", "release-id", "evidence-hash"):
         parser.add_argument(f"--{name}", required=True)
     out = stdout or sys.stdout

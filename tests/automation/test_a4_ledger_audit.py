@@ -1,17 +1,21 @@
 """ucpe.a4_ledger_audit.v1 (ops/a4_ledger_audit): the sealed read-only A4 per-request ledger audit.
 
 What these tests prove without a database (the scratch-PostgreSQL rehearsal proves the rest in CI):
-- the sealed SQL passes a structural guard: one SELECT, no write or locking clause, no function
-  outside an allowlist, and no application table but public.automation_radar_ledger, nor any
-  table or view another migration creates;
-- adversarial mutants that widen scope, read a cohort or registry table, drop the AUTOMATED_RADAR
-  check, bind on client_request_id alone, drop the ambiguity or schema-drift branch, select the
-  stored body, or write, all fail that guard;
+- the sealed SQL passes a structural guard: one SELECT, no write, locking or TABLE clause, no
+  comma-join, no function outside an allowlist, no unqualified catalog name, and no application
+  table but public.automation_radar_ledger, nor any table, view or function another migration
+  creates; its decision branches are in the declared order;
+- adversarial mutants that widen scope, read a cohort, registry or catalog table, drop or reorder
+  an AUTOMATED_RADAR check, bind on client_request_id alone, drop the ambiguity or schema-drift
+  branch, select the stored body, or write, all fail that guard;
 - the expected schema in the SQL is exactly migration 0013's table, and no later migration
   changes its columns;
 - the runner pins the SQL, runs it only in a READ ONLY transaction it always rolls back, refuses
   bad inputs before contacting anything, never prints a URL, a credential value or an exception
-  message, and cross-checks the SQL's decision independently.
+  message, and cross-checks the SQL's decision independently; every runner mutant breaks one of
+  those behaviours;
+- the manifest seals every package file, and UOR_HANDOFF.md section 14 carries exactly the A4
+  fields with the seal's digest.
 """
 
 from __future__ import annotations
@@ -22,6 +26,8 @@ import io
 import json
 import re
 import sys
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -30,21 +36,25 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "ops" / "a4_ledger_audit"
 SQL_FILE = PACKAGE / "a4_ledger_audit.sql"
+RUNNER_FILE = PACKAGE / "a4_ledger_audit.py"
 MIGRATION_0013 = ROOT / "migrations" / "0013_automation_radar_ledger.sql"
 
 
-def _load_runner() -> Any:
-    spec = importlib.util.spec_from_file_location(
-        "a4_ledger_audit_runner", PACKAGE / "a4_ledger_audit.py"
-    )
+def _module(name: str, path: Path, source: str | None = None) -> Any:
+    """Load a module from its file, or from mutated source standing in for that file."""
+
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    if source is None:
+        spec.loader.exec_module(module)
+    else:
+        exec(compile(source, str(path), "exec"), module.__dict__)  # noqa: S102 - test mutants
     return module
 
 
-runner = _load_runner()
+runner = _module("a4_ledger_audit_runner", RUNNER_FILE)
 SEALED = SQL_FILE.read_text(encoding="utf-8")
 
 CRED = "uor-radar-2026-10"
@@ -83,6 +93,7 @@ FORBIDDEN_KEYWORDS = {
     "REFRESH", "NOTIFY", "LISTEN", "UNLISTEN", "PREPARE", "EXECUTE", "DEALLOCATE", "DISCARD",
     "INTO", "FOR", "RETURNING", "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "CHECKPOINT",
     "CLUSTER", "REINDEX", "SECURITY", "IMPORT", "LOAD", "RECURSIVE", "LATERAL", "TABLESAMPLE",
+    "TABLE",
 }
 DENIED_WORDS = {
     "automation_credential", "secret_sha256", "predictions", "prediction_outcomes", "analysis_runs",
@@ -99,19 +110,24 @@ REQUIRED_FRAGMENTS = [
     "(r.evidence_origin IS NOT DISTINCT FROM 'AUTOMATED_RADAR' AND r.body_evidence_origin IS NOT "
     "DISTINCT FROM 'AUTOMATED_RADAR') AS origin_automated_radar",
     "(s.schema_ok IS TRUE) AS schema_ok",
+    "CASE WHEN d.reason = 'OK' THEN 'PASS' ELSE 'FAIL' END AS verdict",
+]
+# The decision, branch by branch, in the order it must run. In-progress and refused rows have no
+# body origin, so the body's origin is judged only after the state and the outcome.
+DECISION_ORDER = [
     "WHEN k.schema_ok IS NOT TRUE THEN 'SCHEMA_DRIFT'",
     "WHEN k.matched_rows = 0 THEN 'NO_ROW'",
     "WHEN k.matched_rows <> 1 THEN 'AMBIGUOUS'",
-    "WHEN k.origin_automated_radar IS NOT TRUE THEN 'WRONG_ORIGIN'",
+    "WHEN k.evidence_origin IS DISTINCT FROM 'AUTOMATED_RADAR' THEN 'WRONG_ORIGIN'",
     "WHEN k.state IS DISTINCT FROM 'COMPLETED' THEN 'NOT_COMPLETED'",
     "WHEN k.outcome_code IS DISTINCT FROM 'SUCCEEDED' OR k.http_status IS DISTINCT FROM 200 THEN "
     "'NOT_SUCCEEDED'",
+    "WHEN k.origin_automated_radar IS NOT TRUE THEN 'WRONG_ORIGIN'",
     "WHEN k.body_identity_consistent IS NOT TRUE THEN 'BODY_IDENTITY_MISMATCH'",
     "WHEN k.run_id_matches IS NOT TRUE THEN 'RUN_MISMATCH'",
     "WHEN k.release_id_matches IS NOT TRUE THEN 'RELEASE_MISMATCH'",
     "WHEN k.evidence_hash_matches IS NOT TRUE THEN 'EVIDENCE_MISMATCH'",
     "ELSE 'OK' END AS reason",
-    "CASE WHEN d.reason = 'OK' THEN 'PASS' ELSE 'FAIL' END AS verdict",
 ]
 TOKEN = re.compile(
     r"%\(\w+\)s|[A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*)*|->>|->|<>|::|\d+|\S"
@@ -174,6 +190,22 @@ def migration_relations() -> set[str]:
     return names - {"automation_radar_ledger"}
 
 
+def _after(tokens: list[str], upper: list[str], index: int) -> int:
+    """The index just past a FROM/JOIN item that starts at ``index`` (with its AS alias)."""
+
+    if tokens[index] == "(":
+        depth = 0
+        for end in range(index, len(tokens)):
+            depth += {"(": 1, ")": -1}.get(tokens[end], 0)
+            if depth == 0:
+                index = end
+                break
+    index += 1
+    if index < len(upper) and upper[index] == "AS":
+        index += 2
+    return index
+
+
 def guard_violations(sql: str) -> list[str]:
     violations: list[str] = []
     kept, masked, literals, problems = _strip_comments(sql)
@@ -214,20 +246,24 @@ def guard_violations(sql: str) -> list[str]:
             if token == "FROM" and index > 0 and upper[index - 1] == "DISTINCT":
                 continue  # IS [NOT] DISTINCT FROM: a comparison, not a relation
             relation = tokens[index + 1]
-            if relation == "(":
-                continue
-            if relation.lower() not in ALLOWED_QUALIFIED | CTES:
+            if relation != "(" and relation.lower() not in ALLOWED_QUALIFIED | CTES:
                 violations.append(f"relation {relation}")
-            if index + 3 < len(tokens) and upper[index + 2] == "AS":
+            if relation != "(" and index + 3 < len(tokens) and upper[index + 2] == "AS":
                 aliases.add(tokens[index + 3].lower())
+            following = _after(tokens, upper, index + 1)
+            if following < len(tokens) and tokens[following] == ",":
+                violations.append("a comma-join: every relation needs its own JOIN")
     for index, token in enumerate(tokens):
-        if "." in token and re.match(r"[A-Za-z_]", token):
-            head = token.split(".", 1)[0].lower()
-            if head in SCHEMAS:
-                if token.lower() not in ALLOWED_QUALIFIED:
-                    violations.append(f"qualified name {token}")
-            elif head not in aliases:
-                violations.append(f"undeclared alias {token}")
+        if re.match(r"[A-Za-z_]", token):
+            if "." in token:
+                head = token.split(".", 1)[0].lower()
+                if head in SCHEMAS:
+                    if token.lower() not in ALLOWED_QUALIFIED:
+                        violations.append(f"qualified name {token}")
+                elif head not in aliases:
+                    violations.append(f"undeclared alias {token}")
+            elif token.lower().startswith("pg_"):
+                violations.append(f"unqualified catalog name {token}")
         if index + 1 < len(tokens) and tokens[index + 1] == "(" and re.match(r"[A-Za-z_]", token):
             if (token.lower() not in FUNCTIONS and token.upper() not in PAREN_KEYWORDS
                     and token.lower() not in CTES):
@@ -241,9 +277,12 @@ def guard_violations(sql: str) -> list[str]:
         violations.append(f"placeholders {found}")
     normalized = " ".join(kept.split()).replace("( ", "(").replace(" )", ")")
     for fragment in REQUIRED_FRAGMENTS:
-        compact = fragment.replace("( ", "(").replace(" )", ")")
-        if compact not in normalized:
+        if fragment.replace("( ", "(").replace(" )", ")") not in normalized:
             violations.append(f"missing: {fragment[:60]}")
+    decision = normalized.split("decision AS (", 1)[-1]
+    positions = [decision.find(branch) for branch in DECISION_ORDER]
+    if -1 in positions or positions != sorted(positions):
+        violations.append("the decision branches are missing or out of order")
     if normalized.count("'OK'") != 2:
         violations.append("OK must be reachable only through ELSE")
     return violations
@@ -282,6 +321,16 @@ MUTANTS = {
         "            AND r.body_evidence_origin IS NOT DISTINCT FROM 'AUTOMATED_RADAR')",
         "            AND true)",
     ),
+    "drops the row-origin branch": (
+        "               WHEN k.evidence_origin IS DISTINCT FROM 'AUTOMATED_RADAR' THEN "
+        "'WRONG_ORIGIN'\n",
+        "",
+    ),
+    "judges the body origin before the outcome": (
+        "               WHEN k.evidence_origin IS DISTINCT FROM 'AUTOMATED_RADAR' THEN "
+        "'WRONG_ORIGIN'\n",
+        "               WHEN k.origin_automated_radar IS NOT TRUE THEN 'WRONG_ORIGIN'\n",
+    ),
     "drops the ambiguity branch": (
         "               WHEN k.matched_rows <> 1 THEN 'AMBIGUOUS'\n", ""
     ),
@@ -311,6 +360,14 @@ MUTANTS = {
     ),
     "reads information_schema": (
         "      FROM pg_catalog.pg_class AS c\n", "      FROM information_schema.tables AS c\n"
+    ),
+    "comma-joins a catalog view": (
+        "      FROM pg_catalog.pg_class AS c\n",
+        "      FROM pg_catalog.pg_class AS c, pg_stat_activity AS z\n",
+    ),
+    "reads a catalog with TABLE": (
+        "SELECT count(*) AS matched_rows,",
+        "SELECT (SELECT count(*) FROM (TABLE pg_authid) AS z) AS roles, count(*) AS matched_rows,",
     ),
     "adds an input": (
         "CAST(%(credential_id)s AS text)", "CAST(%(credential_id)s || %(x)s AS text)"
@@ -380,9 +437,25 @@ def test_the_runner_columns_and_reasons_are_the_sqls() -> None:
 
 
 # --------------------------------------------------------------------------- the runner, offline
-def _row(**changes: Any) -> tuple[Any, ...]:
+FAILED_ROW = dict(
+    evidence_origin=None, origin_automated_radar=False, state=None, outcome_code=None,
+    http_status=None, run_id=None, run_id_matches=False, release_id=None, release_id_matches=False,
+    evidence_hash=None, evidence_hash_matches=False, body_identity_consistent=False,
+)
+# What the SQL returns for rows the route really writes: an in-progress row has no body; a refusal
+# stores a radar_evidence_error.v1 body, which carries no origin, run or evidence hash.
+IN_PROGRESS = dict(origin_automated_radar=False, state="IN_PROGRESS", outcome_code=None,
+                   http_status=None, run_id=None, run_id_matches=False, evidence_hash=None,
+                   evidence_hash_matches=False, body_identity_consistent=False)
+REFUSED = dict(origin_automated_radar=False, outcome_code="QUOTA_EXCEEDED", http_status=429,
+               run_id=None, run_id_matches=False, evidence_hash=None,
+               evidence_hash_matches=False, body_identity_consistent=False)
+
+
+def _row(module: Any = None, **changes: Any) -> tuple[Any, ...]:
+    module = module or runner
     facts = dict(
-        audit=runner.ARTIFACT, verdict="PASS", reason="OK", bound_credential_id=CRED,
+        audit=module.ARTIFACT, verdict="PASS", reason="OK", bound_credential_id=CRED,
         bound_client_request_id=CRID, schema_ok=True, matched_rows=1,
         evidence_origin="AUTOMATED_RADAR",
         origin_automated_radar=True, state="COMPLETED", outcome_code="SUCCEEDED", http_status=200,
@@ -448,28 +521,35 @@ class FakeCursor:
         return list(self.result)
 
 
-def _run(connection: FakeConnection | None = None, *, args: list[str] | None = None,
-         environ: dict[str, str] | None = None) -> tuple[int, dict[str, Any], list[Any], str]:
+ARGS = ["--credential-id", CRED, "--client-request-id", CRID, "--run-id", RUN,
+        "--release-id", REL, "--evidence-hash", EVH]
+
+
+def _invoke(module: Any, connection: FakeConnection | None = None, *,
+            args: list[str] | None = None, environ: dict[str, str] | None = None,
+            connect: Callable[..., Any] | None = None) -> tuple[int, dict[str, Any], list, str]:
     connection = connection or FakeConnection()
     seen: list[Any] = []
 
-    def connect(url: str, **kwargs: Any) -> FakeConnection:
+    def fake_connect(url: str, **kwargs: Any) -> FakeConnection:
         seen.append((url, kwargs))
         return connection
 
     out = io.StringIO()
-    code = runner.main(
-        args if args is not None else [
-            "--credential-id", CRED, "--client-request-id", CRID, "--run-id", RUN,
-            "--release-id", REL, "--evidence-hash", EVH,
-        ],
-        environ={runner.DATABASE_URL_ENV: URL} if environ is None else environ,
-        connect=connect, stdout=out,
+    code = module.main(
+        ARGS if args is None else args,
+        environ={module.DATABASE_URL_ENV: URL} if environ is None else environ,
+        connect=connect or fake_connect, stdout=out,
     )
     text = out.getvalue()
     assert text.endswith("\n") and text.count("\n") == 1
-    assert URL not in text and "NOT-A-REAL-PASSWORD" not in text
     return code, json.loads(text), seen, text
+
+
+def _run(connection: FakeConnection | None = None, **kwargs: Any) -> tuple[int, dict, list, str]:
+    code, payload, seen, text = _invoke(runner, connection, **kwargs)
+    assert URL not in text and "NOT-A-REAL-PASSWORD" not in text
+    return code, payload, seen, text
 
 
 def test_a_qualifying_row_passes_inside_one_read_only_transaction() -> None:
@@ -478,8 +558,7 @@ def test_a_qualifying_row_passes_inside_one_read_only_transaction() -> None:
     assert code == 0 and payload["verdict"] == "PASS" and payload["reason"] == "OK"
     assert payload["transaction_read_only"] is True and payload["sql_sha256"] == runner.SQL_SHA256
     assert text == json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
-    statements = [sql for sql, _ in connection.calls]
-    assert statements == [
+    assert [sql for sql, _ in connection.calls] == [
         "SET TRANSACTION READ ONLY",
         "SET LOCAL statement_timeout = '5000ms'",
         "SET LOCAL lock_timeout = '1000ms'",
@@ -501,19 +580,12 @@ def test_a_qualifying_row_passes_inside_one_read_only_transaction() -> None:
     ("reason", "changes"),
     [
         ("SCHEMA_DRIFT", dict(schema_ok=False)),
-        ("NO_ROW", dict(matched_rows=0, evidence_origin=None, origin_automated_radar=False,
-                        state=None, outcome_code=None, http_status=None, run_id=None,
-                        run_id_matches=False, release_id=None, release_id_matches=False,
-                        evidence_hash=None, evidence_hash_matches=False,
-                        body_identity_consistent=False)),
-        ("AMBIGUOUS", dict(matched_rows=2, evidence_origin=None, origin_automated_radar=False,
-                           state=None, outcome_code=None, http_status=None, run_id=None,
-                           run_id_matches=False, release_id=None, release_id_matches=False,
-                           evidence_hash=None, evidence_hash_matches=False,
-                           body_identity_consistent=False)),
-        ("WRONG_ORIGIN", dict(origin_automated_radar=False)),
-        ("NOT_COMPLETED", dict(state="IN_PROGRESS", outcome_code=None, http_status=None)),
-        ("NOT_SUCCEEDED", dict(outcome_code="QUOTA_EXCEEDED", http_status=429)),
+        ("NO_ROW", dict(matched_rows=0, **FAILED_ROW)),
+        ("AMBIGUOUS", dict(matched_rows=2, **FAILED_ROW)),
+        ("WRONG_ORIGIN", dict(evidence_origin="USER_REQUESTED", origin_automated_radar=False)),
+        ("NOT_COMPLETED", IN_PROGRESS),
+        ("NOT_SUCCEEDED", REFUSED),
+        ("WRONG_ORIGIN", dict(origin_automated_radar=False)),  # a success whose body says otherwise
         ("BODY_IDENTITY_MISMATCH", dict(body_identity_consistent=False)),
         ("RUN_MISMATCH", dict(run_id="run_" + "0" * 32, run_id_matches=False)),
         ("RELEASE_MISMATCH", dict(release_id="UCPE-PROD-OTHER", release_id_matches=False)),
@@ -548,16 +620,13 @@ def test_a_database_error_is_named_by_class_only_and_still_rolls_back() -> None:
     assert connection.ended == ["rollback", "close"]
 
 
-def test_a_failed_connection_is_named_by_class_only() -> None:
-    def refuse(url: str, **_: Any) -> Any:
-        raise ConnectionError("could not connect to " + url)
+def _refusing_connect(url: str, **_: Any) -> Any:
+    raise ConnectionError("could not connect to " + url)
 
-    out = io.StringIO()
-    code = runner.main(["--credential-id", CRED, "--client-request-id", CRID, "--run-id", RUN,
-                        "--release-id", REL, "--evidence-hash", EVH],
-                       environ={runner.DATABASE_URL_ENV: URL}, connect=refuse, stdout=out)
-    assert code == 4 and URL not in out.getvalue()
-    assert json.loads(out.getvalue())["error_class"] == "ConnectionError"
+
+def test_a_failed_connection_is_named_by_class_only() -> None:
+    code, payload, _, _ = _run(connect=_refusing_connect)
+    assert code == 4 and payload["error_class"] == "ConnectionError"
 
 
 def test_an_unexpected_result_shape_is_refused() -> None:
@@ -593,31 +662,176 @@ def test_a_changed_sql_is_refused_before_anything_is_contacted(
     ],
 )
 def test_malformed_inputs_are_refused_unechoed_before_contact(flag: str, value: str) -> None:
-    args = {"--credential-id": CRED, "--client-request-id": CRID, "--run-id": RUN,
-            "--release-id": REL, "--evidence-hash": EVH}
+    args = dict(zip(ARGS[::2], ARGS[1::2], strict=True))
     args[flag] = value
     code, payload, seen, text = _run(args=[item for pair in args.items() for item in pair])
     assert code == 2 and payload["reason"] == f"INPUT_REFUSED:{flag[2:].replace('-', '_')}"
     assert seen == [] and value not in text
 
 
-def test_an_unknown_argument_is_refused_unechoed() -> None:
-    code, payload, seen, text = _run(args=["--token", "ucpea.x-y-z.SECRET"])
+@pytest.mark.parametrize("args", [["--token", "ucpea.x-y-z.SECRET"], ["-h"], [*ARGS, "--help"]])
+def test_unknown_arguments_and_help_are_refused_unechoed(args: list[str]) -> None:
+    code, payload, seen, text = _run(args=args)
     assert code == 2 and payload["reason"] == "INPUT_REFUSED:arguments"
     assert seen == [] and "SECRET" not in text
 
 
 def test_the_runner_is_standalone_and_names_no_other_table() -> None:
-    source = (PACKAGE / "a4_ledger_audit.py").read_text(encoding="utf-8")
+    source = RUNNER_FILE.read_text(encoding="utf-8")
     assert "crypto_probability_engine" not in source
     for word in migration_relations() | {"automation_credential", "secret_sha256"}:
         assert not re.search(rf"\b{re.escape(word)}\b", source), word
     assert "print(" not in source
 
 
+# --------------------------------------------------------------------------- runner mutants
+def _behaviour_failures(module: Any) -> list[str]:
+    """Every behaviour the runner promises, checked against ``module``; the names that break."""
+
+    failures: list[str] = []
+
+    def check(name: str, probe: Callable[[], bool]) -> None:
+        try:
+            ok = probe()
+        except BaseException:  # noqa: BLE001 - a crashing mutant breaks the behaviour
+            ok = False
+        if not ok:
+            failures.append(name)
+
+    def happy() -> bool:
+        connection = FakeConnection(_row(module))
+        code, payload, seen, text = _invoke(module, connection)
+        return (code == 0 and connection.ended == ["rollback", "close"]
+                and [sql for sql, _ in connection.calls][:4] == list(module.READ_ONLY_PREAMBLE)
+                + ["SELECT pg_catalog.current_setting('transaction_read_only')"]
+                and seen[0][1]["autocommit"] is False
+                and text == json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+
+    def not_read_only() -> bool:
+        connection = FakeConnection(_row(module), read_only="off")
+        code, payload, _, _ = _invoke(module, connection)
+        return code == 4 and SEALED not in [sql for sql, _ in connection.calls]
+
+    def database_error() -> bool:
+        connection = FakeConnection(_row(module), fail_on="WITH binding")
+        code, payload, _, text = _invoke(module, connection)
+        return code == 4 and URL not in text and connection.ended == ["rollback", "close"]
+
+    def no_url_on_connect_failure() -> bool:
+        code, _, _, text = _invoke(module, connect=_refusing_connect)
+        return code == 4 and URL not in text
+
+    def seal() -> bool:
+        original = module.SQL_PATH
+        with tempfile.TemporaryDirectory() as folder:
+            tampered = Path(folder) / "a4_ledger_audit.sql"
+            tampered.write_text(SEALED.replace("'AMBIGUOUS'", "'OK'"), encoding="utf-8")
+            module.SQL_PATH = tampered
+            try:
+                code, _, seen, _ = _invoke(module)
+            finally:
+                module.SQL_PATH = original
+        return code == 3 and seen == []
+
+    def credential_value() -> bool:
+        args = list(ARGS)
+        args[1] = "ucpea.uor-radar-2026-10.THE-SECRET-VALUE"
+        code, _, seen, text = _invoke(module, args=args)
+        return code == 2 and seen == [] and "THE-SECRET-VALUE" not in text
+
+    def canonical_uuid_only() -> bool:
+        args = list(ARGS)
+        args[3] = CRID.upper()
+        code, _, seen, _ = _invoke(module, args=args)
+        return code == 2 and seen == []
+
+    def arguments() -> bool:
+        results = [_invoke(module, args=["--token", "ucpea.x-y-z.SECRET"]), _invoke(module,
+                   args=["-h"])]
+        return all(code == 2 and seen == [] and "SECRET" not in text
+                   for code, _, seen, text in results)
+
+    def cross_check() -> bool:
+        lying = FakeConnection(_row(module, run_id="run_" + "1" * 32))
+        code, payload, _, _ = _invoke(module, lying)
+        return code == 1 and payload["reason"] == "RUNNER_DISAGREES"
+
+    def shape() -> bool:
+        connection = FakeConnection(_row(module), columns=(*runner.SQL_COLUMNS[:-1], "extra"))
+        code, payload, _, _ = _invoke(module, connection)
+        return code == 4 and payload["reason"] == "UNEXPECTED_RESULT_SHAPE"
+
+    def real_failures() -> bool:
+        cases = [("NOT_COMPLETED", IN_PROGRESS), ("NOT_SUCCEEDED", REFUSED)]
+        return all(_invoke(module, FakeConnection(_row(module, verdict="FAIL", reason=reason,
+                                                       **changes)))[1]["reason"] == reason
+                   for reason, changes in cases)
+
+    for name, probe in [
+        ("happy path", happy), ("read-only proven", not_read_only),
+        ("database error", database_error),
+        ("no URL on connect failure", no_url_on_connect_failure),
+        ("seal", seal), ("credential value refused", credential_value),
+        ("canonical UUID only", canonical_uuid_only), ("arguments refused", arguments),
+        ("cross-check", cross_check), ("result shape", shape), ("real failing rows", real_failures),
+    ]:
+        check(name, probe)
+    return failures
+
+
+RUNNER_MUTANTS = {
+    "R01 no read-only preamble": ("                begin_read_only(cursor)\n", ""),
+    "R02 read-only not proven": (
+        '    if read_only is None or read_only[0] != "on":', "    if False:"
+    ),
+    "R03 no rollback": ("    for step in (connection.rollback, connection.close):",
+                        "    for step in (connection.close,):"),
+    "R04 exception message printed": (
+        'raise Refusal("DATABASE_ERROR", EXIT_DATABASE, type(exc).__name__) from None',
+        'raise Refusal("DATABASE_ERROR", EXIT_DATABASE, f"{type(exc).__name__}: {exc}") from None',
+    ),
+    "R05 any UUID spelling": ("        return str(uuid.UUID(value)) == value",
+                              "        return bool(uuid.UUID(value))"),
+    "R06 no cross-check": ("    reason = expected_reason(facts, binding)\n    return (",
+                           "    reason = expected_reason(facts, binding)\n    return True or ("),
+    "R07 seal not enforced": ("    if hashlib.sha256(data).hexdigest() != SQL_SHA256:",
+                              "    if False:"),
+    "R08 unsorted output": ('    return json.dumps(payload, sort_keys=True, separators=',
+                            '    return json.dumps(payload, separators='),
+    "R09 argparse echoes": (
+        "    parser = _Parser(prog=", "    parser = argparse.ArgumentParser(prog="
+    ),
+    "R10 autocommit session": ("            autocommit=False,\n", "            autocommit=True,\n"),
+    "R11 credential unchecked": ("    if not CREDENTIAL_ID.fullmatch(credential_id):",
+                                 "    if False:"),
+    "R12 result shape unchecked": ("    if names != SQL_COLUMNS or len(rows) != 1:",
+                                   "    if False:"),
+    "R13 body origin judged first": (
+        '    if facts["evidence_origin"] != "AUTOMATED_RADAR":',
+        '    if facts["evidence_origin"] != "AUTOMATED_RADAR"'
+        ' or facts["origin_automated_radar"] is not True:',
+    ),
+    "R14 help exits 0": ("add_help=False", "add_help=True"),
+}
+RUNNER_SOURCE = RUNNER_FILE.read_text(encoding="utf-8")
+
+
+def test_the_behaviour_battery_passes_the_real_runner() -> None:
+    assert _behaviour_failures(_module("a4_runner_real", RUNNER_FILE, RUNNER_SOURCE)) == []
+
+
+@pytest.mark.parametrize("name", sorted(RUNNER_MUTANTS))
+def test_every_runner_mutant_breaks_a_behaviour(name: str) -> None:
+    old, new = RUNNER_MUTANTS[name]
+    assert RUNNER_SOURCE.count(old) >= 1, name
+    mutant = _module(f"a4_runner_{name[:3]}", RUNNER_FILE, RUNNER_SOURCE.replace(old, new))
+    assert _behaviour_failures(mutant), name
+
+
 # --------------------------------------------------------------------------- seal and handoff
 MANIFEST = PACKAGE / "MANIFEST.json"
 HANDOFF = ROOT / "docs" / "automation" / "UOR_HANDOFF.md"
+SEALED_FILES = ("a4_ledger_audit.sql", "a4_ledger_audit.py", "CARD.md", "build_manifest.py")
 FIELDS = (
     "A4_ARTIFACT_STATUS", "ARTIFACT_NAME", "ARTIFACT_SHA256", "UPSTREAM_RELEASE_IDENTITY",
     "INPUT_BINDING", "OUTPUT_CONTRACT", "READ_ONLY_PROOF", "ISOLATION_PROOF", "TESTS",
@@ -625,23 +839,13 @@ FIELDS = (
 )
 
 
-def _builder() -> Any:
-    spec = importlib.util.spec_from_file_location("a4_manifest", PACKAGE / "build_manifest.py")
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 def test_the_manifest_seals_every_package_file() -> None:
-    built = _builder().manifest()
+    built = _module("a4_manifest", PACKAGE / "build_manifest.py").manifest()
     expected = json.dumps(built, indent=1, sort_keys=True) + "\n"
     assert MANIFEST.read_text(encoding="utf-8") == expected
-    assert set(built["files"]) == {
-        "ops/a4_ledger_audit/a4_ledger_audit.sql", "ops/a4_ledger_audit/a4_ledger_audit.py",
-        "ops/a4_ledger_audit/CARD.md",
-    }
+    assert set(built["files"]) == {f"ops/a4_ledger_audit/{name}" for name in SEALED_FILES}
+    assert {path.name for path in PACKAGE.iterdir() if path.is_file()} == {
+        *SEALED_FILES, "MANIFEST.json"}
     migration = hashlib.sha256(MIGRATION_0013.read_bytes()).hexdigest()
     assert built["ledger_schema"]["sha256"] == migration
 
@@ -659,5 +863,5 @@ def test_the_handoff_carries_exactly_the_a4_fields_and_the_seal() -> None:
     assert values["ARTIFACT_SHA256"] == hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     assert values["PRODUCTION_QUERY_EXECUTED"] == "NO"
     assert values["PACKAGE_PATH"] == "ops/a4_ledger_audit/"
-    for name in ("MANIFEST.json", "a4_ledger_audit.sql", "a4_ledger_audit.py", "CARD.md"):
+    for name in ("MANIFEST.json", *SEALED_FILES):
         assert f"| `ops/a4_ledger_audit/{name}` |" in section, name

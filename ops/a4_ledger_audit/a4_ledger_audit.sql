@@ -13,10 +13,11 @@
 -- response, are cross-checked against the row.
 --
 -- OUTPUT. Exactly one row of scalar facts, whatever the ledger holds. Never the stored response body:
--- only five identity keys are read from it, for the consistency check. reason is the FIRST failing
--- check, in this order: SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED,
--- BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH; else OK. verdict is PASS
--- only for OK. Every comparison is NULL-safe, so a missing fact fails closed.
+-- only six identity keys are read from it, for the consistency check. reason is the FIRST failing
+-- check, in this order: SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN (the row), NOT_COMPLETED,
+-- NOT_SUCCEEDED, WRONG_ORIGIN (the stored body: only a completed success carries a body with an
+-- origin), BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH; else OK.
+-- verdict is PASS only for OK. Every comparison is NULL-safe, so a missing fact fails closed.
 WITH binding AS (
     SELECT CAST(%(credential_id)s AS text) AS credential_id,
            CAST(%(client_request_id)s AS uuid) AS client_request_id,
@@ -146,10 +147,11 @@ decision AS (
                WHEN k.schema_ok IS NOT TRUE THEN 'SCHEMA_DRIFT'
                WHEN k.matched_rows = 0 THEN 'NO_ROW'
                WHEN k.matched_rows <> 1 THEN 'AMBIGUOUS'
-               WHEN k.origin_automated_radar IS NOT TRUE THEN 'WRONG_ORIGIN'
+               WHEN k.evidence_origin IS DISTINCT FROM 'AUTOMATED_RADAR' THEN 'WRONG_ORIGIN'
                WHEN k.state IS DISTINCT FROM 'COMPLETED' THEN 'NOT_COMPLETED'
                WHEN k.outcome_code IS DISTINCT FROM 'SUCCEEDED'
                     OR k.http_status IS DISTINCT FROM 200 THEN 'NOT_SUCCEEDED'
+               WHEN k.origin_automated_radar IS NOT TRUE THEN 'WRONG_ORIGIN'
                WHEN k.body_identity_consistent IS NOT TRUE THEN 'BODY_IDENTITY_MISMATCH'
                WHEN k.run_id_matches IS NOT TRUE THEN 'RUN_MISMATCH'
                WHEN k.release_id_matches IS NOT TRUE THEN 'RELEASE_MISMATCH'

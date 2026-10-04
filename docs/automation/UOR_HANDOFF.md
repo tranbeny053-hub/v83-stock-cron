@@ -212,8 +212,12 @@ The raw response bytes are themselves the JCS form of the full body (contract §
 - **Fastest, with no restart:** revoke the credential. The next request is refused 401.
 - **The kill switch:** clear `UCPE_AUTOMATION_ENABLED`, which restarts the Space. Every call then gets 503
   `AUTOMATION_DISABLED`.
-- **Release rollback:** a separate owner T4 to `2096af6d` (`UCPE-PROD-TC-V1-STAMP-20260930-A`), which removes the
-  route. The ledger stays inert.
+- **Release rollback (corrected 2026-10-04):** this line used to name a T4 rollback to `2096af6d`
+  (`UCPE-PROD-TC-V1-STAMP-20260930-A`) "which removes the route". That target is no longer safe.
+  - Migration 0018 makes a code rollback write-safe only to WA `a2de125f` or later (`ops/release/releases.json`).
+  - Every release from F1 on carries the route.
+  - The current rollback target, `6f4420a9` (`UCPE-PROD-R1A-20261003-A`), keeps it.
+  - To stop the route, use the kill switch or revoke the credential. The ledger stays inert.
 - **UOR** falls back to no evidence on any error. On its side, either of these returns every cycle to
   RADAR/OBSERVE with "NO UCPE EVIDENCE":
   - removing the origin or the release from its registries;
@@ -236,15 +240,15 @@ UCPE authors and seals this artifact; UOR never authors UCPE SQL. UOR pins it re
 It changes nothing in UOR's Card-5/A4 acceptance, and UCPE writes nothing to UOR.
 
 ```text
-A4_ARTIFACT_STATUS=PREPARED_AND_VERIFIED_LOCALLY (not production-executed; the scratch-PostgreSQL rehearsal is a required check of the pull request that merges it)
+A4_ARTIFACT_STATUS=PREPARED_AND_VERIFIED_LOCALLY (not production-executed; its scratch-PostgreSQL rehearsal must be green on the pull request that merges it, and STATE records that run)
 ARTIFACT_NAME=ucpe.a4_ledger_audit.v1
-ARTIFACT_SHA256=ad699bb0a541de7c81b7b8ef6cf59ca00b9d4e5c91f884ebb054fca3a0f6050e
+ARTIFACT_SHA256=2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577
 UPSTREAM_RELEASE_IDENTITY=UCPE-PROD-E2-20261004-A (commit 1caa8b08ebfc45b79a9b14d8217dad3b112cda8d) serves radar_evidence.v1 through the route introduced by UCPE-PROD-F1-AUTOMATION-20261001-A (5a3ef022db10462675361e8d15aa8f4f572dc1aa), byte-identical since; each request's own release is the expected build_info.release_id taken from its response
 INPUT_BINDING=(credential_id, client_request_id), the ledger's primary key, both from UOR's own request (client_request_id alone is not unique across credentials); cross-checked against the received 200 response: run_id, build_info.release_id, evidence_hash
 OUTPUT_CONTRACT=one canonical JSON line (sorted keys): artifact, sql_sha256, verdict (PASS|FAIL), reason (OK, or the first of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED, BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH, or a runner stop), bound_credential_id, bound_client_request_id, schema_ok, matched_rows, evidence_origin, origin_automated_radar, state, outcome_code, http_status, run_id, run_id_matches, release_id, release_id_matches, evidence_hash, evidence_hash_matches, body_identity_consistent, transaction_read_only; exit 0 only for PASS; never the stored response body, another row, a timestamp, a fingerprint or any secret
 READ_ONLY_PROOF=one sealed WITH...SELECT (static guard: no write, lock, SET, DDL or side-effect function; adversarial mutants rejected), run only inside SET TRANSACTION READ ONLY with transaction_read_only=on proven first, a 5 s statement timeout and an unconditional rollback; the rehearsal proves INSERT, UPDATE, DELETE, TRUNCATE and CREATE refused under that preamble and the ledger digest unchanged across every audit
 ISOLATION_PROOF=reads only public.automation_radar_ledger and four pg_catalog relations; the static guard denies every other table, view and function any migration creates (predictions, outcomes, analysis runs, snapshots, the credential registry, the section 5A seal); requires evidence_origin AUTOMATED_RADAR on the row and in its stored body; the rehearsal runs it as a role that can read only the ledger; no application code changes, so USER_REQUESTED, CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE are untouched
-TESTS=tests/automation/test_a4_ledger_audit.py: 52 (structural guard; schema equal to migration 0013; 18 adversarial SQL mutants rejected; runner offline: read-only session, unconditional rollback, refusals before contact, no URL, credential or exception message echoed, independent cross-check); tests/workflows/test_a4_ledger_audit_rehearsal_workflow.py: 3; runner mutants: 12/12 killed; full ./verify.sh: PASS; scratch-PostgreSQL rehearsal (23 audit cases, a ledger-only probe role, 6 refused writes): a required check of the pull request that merges this package
+TESTS=tests/automation/test_a4_ledger_audit.py: 74 (structural guard with the decision order enforced; schema equal to migration 0013; 22 adversarial SQL mutants rejected; the runner offline; 14 runner mutants, each breaking a promised behaviour); tests/workflows/test_a4_ledger_audit_rehearsal_workflow.py: 4; the scratch-PostgreSQL rehearsal (23 audit cases, a ledger-only probe role, 6 refused writes) and the full suite must be green on the pull request that merges this package; STATE records those runs
 INDEPENDENT_REVIEW=PENDING_REVIEW
 PRODUCTION_QUERY_EXECUTED=NO
 PACKAGE_PATH=ops/a4_ledger_audit/
@@ -252,7 +256,8 @@ PACKAGE_PATH=ops/a4_ledger_audit/
 
 | File | Role | sha256 |
 |---|---|---|
-| `ops/a4_ledger_audit/MANIFEST.json` | the package seal: ARTIFACT_SHA256 | `ad699bb0a541de7c81b7b8ef6cf59ca00b9d4e5c91f884ebb054fca3a0f6050e` |
-| `ops/a4_ledger_audit/a4_ledger_audit.sql` | the sealed SELECT | `115fde82e6f2452d349cb8202fcea594374e2229a7019e02d21734d9365a5f8a` |
-| `ops/a4_ledger_audit/a4_ledger_audit.py` | the read-only runner | `b33d9ba3e6bb6ac7f3e23198e6959dcb26a883e883861377d51ed5e8f252c536` |
-| `ops/a4_ledger_audit/CARD.md` | the owner card for the episode | `c9d9183abf9920adf21ab43ca6a05a5eb3ffc3a03e75447a9bc1fec9012cb473` |
+| `ops/a4_ledger_audit/MANIFEST.json` | the package seal: ARTIFACT_SHA256 | `2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577` |
+| `ops/a4_ledger_audit/a4_ledger_audit.sql` | the sealed SELECT | `c33aa3ad7bdbfcafe0d9f7e5bf3a16dafa3b885fac9f19d834d142d02f985eb1` |
+| `ops/a4_ledger_audit/a4_ledger_audit.py` | the read-only runner | `9a8e32d2a2f1a1d09070f40e1699b426678a3600d86fdcd4704e063886bc57c2` |
+| `ops/a4_ledger_audit/CARD.md` | the owner card for the episode | `29f45eccbd11e74c749f6499d13fa4a21e6814d32f1fb07c82f163c39829c4da` |
+| `ops/a4_ledger_audit/build_manifest.py` | rebuilds the seal | `4af0b7d97fec68230a643fbdf0b991909713f544e4e50763f8fda053ebaabd8b` |

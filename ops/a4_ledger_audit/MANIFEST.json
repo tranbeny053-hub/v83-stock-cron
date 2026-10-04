@@ -1,9 +1,10 @@
 {
  "artifact": "ucpe.a4_ledger_audit.v1",
  "files": {
-  "ops/a4_ledger_audit/CARD.md": "c9d9183abf9920adf21ab43ca6a05a5eb3ffc3a03e75447a9bc1fec9012cb473",
-  "ops/a4_ledger_audit/a4_ledger_audit.py": "b33d9ba3e6bb6ac7f3e23198e6959dcb26a883e883861377d51ed5e8f252c536",
-  "ops/a4_ledger_audit/a4_ledger_audit.sql": "115fde82e6f2452d349cb8202fcea594374e2229a7019e02d21734d9365a5f8a"
+  "ops/a4_ledger_audit/CARD.md": "29f45eccbd11e74c749f6499d13fa4a21e6814d32f1fb07c82f163c39829c4da",
+  "ops/a4_ledger_audit/a4_ledger_audit.py": "9a8e32d2a2f1a1d09070f40e1699b426678a3600d86fdcd4704e063886bc57c2",
+  "ops/a4_ledger_audit/a4_ledger_audit.sql": "c33aa3ad7bdbfcafe0d9f7e5bf3a16dafa3b885fac9f19d834d142d02f985eb1",
+  "ops/a4_ledger_audit/build_manifest.py": "4af0b7d97fec68230a643fbdf0b991909713f544e4e50763f8fda053ebaabd8b"
  },
  "input_binding": {
   "cross_checked_against_the_response": [

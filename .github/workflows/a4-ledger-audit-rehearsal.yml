@@ -1,9 +1,10 @@
 name: A4 ledger audit rehearsal (scratch PostgreSQL, no secrets)
 
 # ucpe.a4_ledger_audit.v1 (ops/a4_ledger_audit), the sealed read-only A4 per-request audit of the
-# AUTOMATED_RADAR ledger. On every pull request that touches the audit, its rehearsal or the
-# ledger's migration, it builds a scratch PostgreSQL from every applied migration (0001-0018), as the
-# persistence rehearsal does, and runs the sealed audit against synthetic ledger rows:
+# AUTOMATED_RADAR ledger. On every pull request that touches the audit, its rehearsal, a migration,
+# the scratch-role fixtures or the example bodies it seeds from, it builds a scratch PostgreSQL from
+# every applied migration (0001-0018), as the persistence rehearsal does, and runs the sealed audit
+# against synthetic ledger rows:
 # - the qualifying row PASSES; every other shape fails closed with its reason;
 # - the binding is the (credential_id, client_request_id) pair;
 # - schema drift fails closed;
@@ -16,7 +17,11 @@ name: A4 ledger audit rehearsal (scratch PostgreSQL, no secrets)
     paths:
       - ops/a4_ledger_audit/**
       - scripts/a4_ledger_audit_rehearsal/**
-      - migrations/0013_automation_radar_ledger.sql
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - scripts/migration_0016_rehearsal/**
+      - docs/automation/examples/**
+      - migrations/**
       - .github/workflows/a4-ledger-audit-rehearsal.yml
 
 permissions:

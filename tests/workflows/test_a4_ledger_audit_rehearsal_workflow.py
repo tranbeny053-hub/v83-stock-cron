@@ -9,6 +9,7 @@ SHA pins and job timeouts are enforced for every workflow by test_workflow_actio
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +25,11 @@ def test_it_runs_on_pull_requests_only_with_a_read_only_token_and_no_secret() ->
     for path in (
         "ops/a4_ledger_audit/**",
         "scripts/a4_ledger_audit_rehearsal/**",
-        "migrations/0013_automation_radar_ledger.sql",
+        "scripts/migration_0013_rehearsal/**",
+        "scripts/migration_0015_rehearsal/**",
+        "scripts/migration_0016_rehearsal/**",
+        "docs/automation/examples/**",
+        "migrations/**",
         ".github/workflows/a4-ledger-audit-rehearsal.yml",
     ):
         assert f"      - {path}\n" in TEXT, path
@@ -61,3 +66,15 @@ def test_it_rehearses_only_the_local_scratch_database_with_the_probe_role() -> N
         "GRANT SELECT ON TABLE public.automation_radar_ledger TO a4_probe;",
         'GRANT a4_probe TO :"owner";',
     ]
+
+
+def test_every_file_the_rehearsal_reads_triggers_it() -> None:
+    rehearsal = (ROOT / "scripts/a4_ledger_audit_rehearsal/rehearse.py").read_text(
+        encoding="utf-8")
+    assert "docs/automation/examples/" in rehearsal
+    assert "      - docs/automation/examples/**\n" in TEXT
+    fixtures = set(re.findall(r"scripts/(migration_\d{4}_rehearsal)/", TEXT))
+    assert fixtures
+    for fixture in sorted(fixtures):
+        assert f"      - scripts/{fixture}/**\n" in TEXT, fixture
+

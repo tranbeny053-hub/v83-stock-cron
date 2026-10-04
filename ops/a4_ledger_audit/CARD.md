@@ -55,6 +55,9 @@ One JSON line, with sorted keys:
 - **FAIL, the audit ran:** exit code 1, with `reason` naming the first failing check: `SCHEMA_DRIFT`, `NO_ROW`,
   `AMBIGUOUS`, `WRONG_ORIGIN`, `NOT_COMPLETED`, `NOT_SUCCEEDED`, `BODY_IDENTITY_MISMATCH`,
   `RUN_MISMATCH`, `RELEASE_MISMATCH` or `EVIDENCE_MISMATCH`.
+  - `WRONG_ORIGIN` is checked twice: first the row's origin, then, for a completed success only, the
+    origin in its stored body.
+  - `RUNNER_DISAGREES` (also exit 1) means the runner's own reading of the facts differs from the SQL's.
 - **Stopped, nothing contacted:** exit 2 means an input was refused; exit 3 means the sealed SQL does
   not match its pin.
 - **Database stop:** exit 4, named by `reason` and `error_class` only.

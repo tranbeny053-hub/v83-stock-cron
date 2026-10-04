@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "ops" / "a4_ledger_audit"
-SEALED_FILES = ("a4_ledger_audit.sql", "a4_ledger_audit.py", "CARD.md")
+SEALED_FILES = ("a4_ledger_audit.sql", "a4_ledger_audit.py", "CARD.md", "build_manifest.py")
 
 
 def _sha256(path: Path) -> str:
