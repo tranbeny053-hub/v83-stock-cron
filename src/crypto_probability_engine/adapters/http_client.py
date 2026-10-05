@@ -1,24 +1,30 @@
 """Safe public HTTP client for keyless market-data providers.
 
-Provider coalescing (governing plan §9.1; owner ruling DP-B as narrowed on 2026-10-05). Every
-request, retry, error and freshness semantic of a client is exactly what it was. Two things change
-underneath:
+Provider coalescing (governing plan §9.1; owner ruling DP-B as narrowed on 2026-10-05). A caller
+that waits on no one sends, retries, maps its outcome and meets its deadline exactly as before.
+Two things change underneath:
 - **one connection pool per process.** A client that is not handed its own ``httpx.Client`` builds
   one as before (its own cookies, timeout and rate-limit history), on the process's one shared
-  transport, so connections are reused across analyses. A client closing never closes the pool;
-  the app closes it once, at shutdown (``close_pool``). Only where httpx would route no request
-  through a proxy (none in the environment or the system settings): otherwise the client is built
-  exactly as before, unpooled and uncoalesced, because httpx mounts proxies only on a transport it
-  builds itself.
-- **one exchange for identical in-flight requests (single-flight).** When such a client sends a
-  request that is byte-identical to one already in flight (method, URL with its query, every header
-  including any cookie, and the timeout), it waits for that exchange, for no longer than its own
-  deadline, instead of sending its own. Only a success is shared: a response below 400, with a JSON
-  body and no cookie. On any other outcome (an error status, a malformed body, a cookie, a timeout,
-  a bound or deadline, a transport or unexpected failure), or no answer within its own deadline, the
-  caller sends its own request, with its own fresh deadline, exactly as it would have alone; the
-  wait is its only difference. No failure is ever passed on. Each caller still checks its own rate
-  limit, makes its own attempts and maps its own outcome exactly as before.
+  transport, so connections are reused across analyses. httpx's default limits (100 connections,
+  20 kept alive) are now the process's rather than each client's. A client closing never closes
+  the pool; the app closes it once, at shutdown (``close_pool``). Only where httpx would route no
+  request through a proxy (none in the environment or the system settings): otherwise the client
+  is built exactly as before, unpooled and uncoalesced, because httpx mounts proxies only on a
+  transport it builds itself.
+- **one exchange for identical in-flight requests (single-flight)**, on the human routes only: the
+  F1 automated analysis waits on no one (``PROVIDER_COALESCING``, which
+  ``analysis_service.analyze_request_isolated`` turns off), so its provider timing, and so its
+  own deadline, are exactly what they were. When a pooled client sends a request that is
+  byte-identical to one already in flight (method, URL with its query, every header including any
+  cookie, and the timeout), it waits for that exchange, for no longer than its own deadline,
+  instead of sending its own. Only a success is shared: a response below 400, with no cookie, whose
+  body the first caller's own parse (the only one on its clock) read as JSON. On any other outcome,
+  or no answer within its own deadline, the caller sends its own request with its own fresh
+  deadline. No failure is ever passed on; each caller checks its own rate limit, makes its own
+  attempts and maps its own outcome. What a follower gives up is time, never an outcome it did not
+  meet: it may wait up to its own deadline before its own request (so in an outage it fails over
+  later than it would have alone), and the data it shares are at most one in-flight window older
+  than its own request would have fetched.
 No retry, retry policy, failure cache, data cache or freshness change is added. The only other
 addition is passive measurement: counts and timings for the current analysis, in telemetry.
 """
@@ -30,6 +36,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -47,6 +54,8 @@ from crypto_probability_engine.telemetry.events import CURRENT_PROVIDER_STATS
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 REQUEST_DEADLINE_SECONDS = 10.0
+# Single-flight for the current analysis: on for the human routes, off for F1's automated one.
+PROVIDER_COALESCING: ContextVar[bool] = ContextVar("ucpe_provider_coalescing", default=True)
 
 ALLOWED_PUBLIC_HOSTS = frozenset(
     {
@@ -100,7 +109,7 @@ class PublicHttpClient:
             try:
                 # The start of the attempt this exchange answers: a caller that ends up sending its
                 # own request after waiting gets a fresh one, exactly as if it had not waited.
-                exchange, attempt_started = self._exchange(
+                exchange, attempt_started, parsed = self._exchange(
                     url,
                     params=params,
                     headers=headers,
@@ -131,7 +140,11 @@ class PublicHttpClient:
                         raise last_error
                 else:
                     try:
-                        payload = json.loads(exchange.body)
+                        # One parse per caller: a first caller's own parse decided whether its
+                        # success could be shared, and is not repeated on its clock.
+                        payload = (
+                            parsed.value() if parsed is not None else json.loads(exchange.body)
+                        )
                     except ValueError as exc:
                         _raise_if_deadline_exceeded(attempt_started)
                         raise ProviderError(
@@ -179,10 +192,10 @@ class PublicHttpClient:
         params: Mapping[str, Any],
         headers: Mapping[str, str] | None,
         attempt_started: float,
-    ) -> tuple[_Exchange, float]:
-        """One request and its whole bounded body, exactly as ``httpx.Client.stream`` sends it, and
-        the start of the attempt it answers; on the shared pool, one successful exchange serves
-        every identical request in flight."""
+    ) -> tuple[_Exchange, float, _Parsed | None]:
+        """One request and its whole bounded body, exactly as ``httpx.Client.stream`` sends it, the
+        start of the attempt it answers, and its body's parse when a first caller already made it;
+        on the shared pool, one successful exchange serves every identical request in flight."""
 
         client = self._client()
         request = client.build_request(
@@ -198,8 +211,8 @@ class PublicHttpClient:
 
         measured = time.perf_counter()
         try:
-            if not self._pooled:
-                return send(attempt_started), attempt_started
+            if not self._pooled or not PROVIDER_COALESCING.get():
+                return send(attempt_started), attempt_started, None
             return _SINGLE_FLIGHT.run(_request_identity(request), send, attempt_started)
         finally:
             _measure_exchange((time.perf_counter() - measured) * 1000)
@@ -365,20 +378,21 @@ class _SingleFlight:
         key: tuple[object, ...],
         send: Callable[[float], _Exchange],
         attempt_started: float,
-    ) -> tuple[_Exchange, float]:
+    ) -> tuple[_Exchange, float, _Parsed | None]:
         with self._lock:
             call = self._calls.get(key)
             leader = call is None
             if leader:
                 call = self._calls[key] = _Call()
         if leader:
-            return self._lead(key, call, send, attempt_started), attempt_started
+            exchange, parsed = self._lead(key, call, send, attempt_started)
+            return exchange, attempt_started, parsed
         remaining = REQUEST_DEADLINE_SECONDS - (time.monotonic() - attempt_started)
         if call.done.wait(max(0.0, remaining)) and call.exchange is not None:
             _measure_count("provider_coalesced")
-            return call.exchange, attempt_started
+            return call.exchange, attempt_started, None  # the follower parses its own copy
         own_start = time.monotonic()
-        return send(own_start), own_start
+        return send(own_start), own_start, None
 
     def _lead(
         self,
@@ -386,29 +400,41 @@ class _SingleFlight:
         call: _Call,
         send: Callable[[float], _Exchange],
         attempt_started: float,
-    ) -> _Exchange:
+    ) -> tuple[_Exchange, _Parsed | None]:
         try:
             exchange = send(attempt_started)
-            if _shareable(exchange):
-                call.exchange = exchange
-            return exchange
+            parsed = None
+            if exchange.status_code < 400 and not exchange.sets_cookie:
+                # The first caller's own parse, its only one, decides: a success is shared only
+                # when its body is JSON. Any other outcome is each caller's own to meet.
+                parsed = _parse(exchange.body)
+                if parsed.error is None:
+                    call.exchange = exchange
+            return exchange, parsed
         finally:
             with self._lock:
                 del self._calls[key]
             call.done.set()
 
 
-def _shareable(exchange: _Exchange) -> bool:
-    """A success the caller's own request would have read as one: a status below 400, a JSON body
-    and no cookie. Any other outcome is each caller's own to meet with its own request."""
+@dataclass(frozen=True)
+class _Parsed:
+    """A first caller's one parse of a body it might share: the payload, or the error raised."""
 
-    if exchange.sets_cookie or exchange.status_code >= 400:
-        return False
+    payload: Any = None
+    error: ValueError | None = None
+
+    def value(self) -> Any:
+        if self.error is not None:
+            raise self.error
+        return self.payload
+
+
+def _parse(body: bytes) -> _Parsed:
     try:
-        json.loads(exchange.body)
-    except ValueError:
-        return False
-    return True
+        return _Parsed(payload=json.loads(body))
+    except ValueError as exc:
+        return _Parsed(error=exc)
 
 
 _SINGLE_FLIGHT = _SingleFlight()

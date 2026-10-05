@@ -19,6 +19,7 @@ These tests prove that:
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from collections.abc import Callable, Iterator
@@ -312,6 +313,8 @@ def test_identical_requests_in_flight_make_one_exchange(monkeypatch: pytest.Monk
     assert results == [("ok", PAYLOAD)] * 4
     assert len(seen) == 1
     assert sorted(item["provider_coalesced"] for item in stats) == [0, 1, 1, 1]
+    hits = [len(client._hits_by_host["data-api.binance.vision"]) for client in clients]
+    assert hits == [1, 1, 1, 1], "a coalesced follower still spends its own rate-limit hit"
 
 
 @pytest.mark.parametrize(
@@ -386,6 +389,7 @@ FAILURES: dict[str, Handler] = {
     "server error": lambda request: httpx.Response(503, json={"code": "busy"}),
     "rate limited": lambda request: httpx.Response(429, headers={"Retry-After": "3"}),
     "symbol rejected": lambda request: httpx.Response(404, json={"code": -1121}),
+    "parameters rejected": lambda request: httpx.Response(400, json={"code": "P1"}),
     "malformed json": lambda request: httpx.Response(200, content=b"{not json"),
 }
 
@@ -755,18 +759,30 @@ def test_the_slowest_exchange_is_the_one_kept(monkeypatch: pytest.MonkeyPatch) -
 
 # --------------------------------------------------------------------------- proxies
 @pytest.mark.parametrize(
-    "environment",
+    ("environment", "expected"),
     [
-        {},
-        {"HTTPS_PROXY": "http://127.0.0.1:9"},
-        {"ALL_PROXY": "http://127.0.0.1:9"},
-        {"HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": "*"},
-        {"NO_PROXY": "example.com"},
+        ({}, None),
+        ({"HTTPS_PROXY": "http://127.0.0.1:9"}, True),
+        ({"ALL_PROXY": "http://127.0.0.1:9"}, True),
+        ({"HTTP_PROXY": "http://127.0.0.1:9"}, True),
+        ({"https_proxy": "http://127.0.0.1:9"}, True),
+        ({"HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": "localhost"}, True),
+        ({"HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": "*"}, False),
+        ({"NO_PROXY": "example.com"}, False),
     ],
-    ids=["none", "https", "all", "no proxy at all", "no proxy for one host"],
+    ids=[
+        "none",
+        "https",
+        "all",
+        "http only",
+        "lowercase",
+        "a proxy and a no-proxy list",
+        "no proxy at all",
+        "no proxy for one host",
+    ],
 )
 def test_the_pool_is_used_exactly_where_httpx_mounts_no_proxy(
-    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str]
+    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str], expected: bool | None
 ) -> None:
     for name in list(os.environ):
         if name.lower().endswith("_proxy"):
@@ -781,8 +797,8 @@ def test_the_pool_is_used_exactly_where_httpx_mounts_no_proxy(
         built = client._client()
         assert client._pooled is not proxied
         assert any(transport is not None for transport in built._mounts.values()) is proxied
-        if "HTTPS_PROXY" in environment and "NO_PROXY" not in environment:
-            assert proxied, "this case really routes through a proxy"
+        if expected is not None:  # "none" reads this machine's own system settings
+            assert proxied is expected, "the case is what it says"
     finally:
         original.close()
         if client.client is not None:
@@ -798,3 +814,90 @@ def test_without_httpx_proxy_lookup_no_client_is_pooled(monkeypatch: pytest.Monk
     finally:
         assert client.client is not None
         client.client.close()
+
+
+# --------------------------------------------------------------------------- review 2 of 948edf75
+class CountingJson:
+    """json for the client under test: each loads costs the fake clock 30 ms, and is counted."""
+
+    def __init__(self, clock: FakeTime) -> None:
+        self.clock = clock
+        self.loads_calls = 0
+        self.lock = threading.Lock()
+
+    def loads(self, body: bytes) -> Any:
+        with self.lock:
+            self.loads_calls += 1
+        self.clock.advance(0.030)
+        return json.loads(body)
+
+
+def test_a_first_caller_parses_once_on_its_own_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A body done at 9.96 s with a 30 ms parse: alone it succeeds at 9.99 s, so pooled it must
+    too. A second parse on the caller's clock would end it at 10.02 s, timed out."""
+
+    clock = FakeTime()
+    parser = CountingJson(clock)
+    monkeypatch.setattr(http_client, "time", clock)
+    monkeypatch.setattr(http_client, "json", parser)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        clock.advance(9.96)
+        return ok_json()
+
+    install(monkeypatch, handler)
+    assert outcome(lambda: get(pooled(max_retries=1))) == ("ok", PAYLOAD)
+    assert parser.loads_calls == 1
+
+
+def test_each_follower_parses_its_own_copy_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = FakeTime()
+    parser = CountingJson(clock)
+    monkeypatch.setattr(http_client, "json", parser)
+    gate = Gate(followers=2)
+    gate.install(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        gate.hold()
+        return ok_json()
+
+    seen = install(monkeypatch, handler)
+    clients = [pooled() for _ in range(3)]
+    results = run_together(3, lambda index: get(clients[index]))
+    assert results == [("ok", PAYLOAD)] * 3 and len(seen) == 1
+    assert parser.loads_calls == 3, "one parse per caller, the first caller's included"
+
+
+def test_without_coalescing_identical_requests_make_their_own_exchange(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F1's automated analysis turns coalescing off: it waits on no one, so two identical requests
+    are both in flight at once (one exchange alone would break the barrier)."""
+
+    arrived = threading.Barrier(2, timeout=5)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        arrived.wait()
+        return ok_json()
+
+    seen = install(monkeypatch, handler)
+    clients = [pooled(), pooled()]
+
+    def target(index: int) -> Any:
+        http_client.PROVIDER_COALESCING.set(False)
+        return get(clients[index])
+
+    assert run_together(2, target) == [("ok", PAYLOAD)] * 2
+    assert len(seen) == 2 and all(client._pooled for client in clients)
+
+
+def test_a_response_over_the_bound_is_not_a_deadline_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(http_client, "MAX_RESPONSE_BYTES", 64)
+    install(monkeypatch, FAILURES["oversized"])
+    stats = new_provider_stats()
+    token = CURRENT_PROVIDER_STATS.set(stats)
+    try:
+        assert outcome(lambda: get(pooled()))[2] == "Provider public request timed out."
+    finally:
+        CURRENT_PROVIDER_STATS.reset(token)
+    assert stats["provider_deadline_hits"] == 0

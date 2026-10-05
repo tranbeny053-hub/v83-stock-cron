@@ -103,3 +103,30 @@ def test_the_pool_closes_even_when_a_repository_fails_to(monkeypatch: pytest.Mon
         with TestClient(create_app(Settings(data_mode="fixture"))) as client:
             client.get("/v1/build-info")
     assert closed == [1]
+
+
+def test_the_automated_analysis_waits_on_no_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1's isolated analysis runs with single-flight off (review 2 of lane R, F3): its provider
+    timing, and so its own deadline, are exactly what they were. The human route keeps it on, and
+    the switch is restored after the analysis."""
+
+    from crypto_probability_engine.adapters import http_client
+    from crypto_probability_engine.api import analysis_service
+
+    seen: list[bool] = []
+    real = analysis_service.select_market_data
+
+    def recording(*args: object, **kwargs: object) -> object:
+        seen.append(http_client.PROVIDER_COALESCING.get())
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(analysis_service, "select_market_data", recording)
+    settings = Settings(data_mode="fixture")
+    request = AnalysisRequest(symbol="BTC/USDT", timeframe="4H")
+    analysis_service.analyze_request_isolated(request, settings=settings)
+    payload = analysis_service.analyze_request(
+        request, settings=settings, run_store=InMemoryRunStore(limit=10)
+    )
+    analysis_service._pop_prediction_persistence(payload)  # noqa: SLF001 - clean up
+    assert seen == [False, True]
+    assert http_client.PROVIDER_COALESCING.get() is True

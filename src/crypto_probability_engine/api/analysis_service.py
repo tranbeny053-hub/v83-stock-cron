@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks
 
+from crypto_probability_engine.adapters.http_client import PROVIDER_COALESCING
 from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
     select_market_data,
@@ -200,19 +201,25 @@ def analyze_request_isolated(
     origin (USER_REQUESTED, CONTROLLED_SMOKE or SCHEDULED_SHADOW_EVIDENCE).
     """
 
-    return _analyze(
-        request,
-        settings=settings,
-        run_store=None,
-        persistence_status=persistence_status,
-        prediction_origin=None,
-        deterministic_identity=False,
-        derivatives_methodology_version=derivatives_methodology_version,
-        methodology_version=methodology_version,
-        pair_context=None,
-        arm=None,
-        record_prediction=False,
-    )
+    # It waits on no other request for its provider data (DP-B's single-flight is the human routes'
+    # only): its provider timing, and so its own deadline, are exactly what they were.
+    coalescing = PROVIDER_COALESCING.set(False)
+    try:
+        return _analyze(
+            request,
+            settings=settings,
+            run_store=None,
+            persistence_status=persistence_status,
+            prediction_origin=None,
+            deterministic_identity=False,
+            derivatives_methodology_version=derivatives_methodology_version,
+            methodology_version=methodology_version,
+            pair_context=None,
+            arm=None,
+            record_prediction=False,
+        )
+    finally:
+        PROVIDER_COALESCING.reset(coalescing)
 
 
 def _analyze(

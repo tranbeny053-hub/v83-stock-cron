@@ -29,6 +29,14 @@ STAGE_FIELDS = ("provider_ms", "quant_ms", "gate_ms", "news_ms", "present_ms", "
 CURRENT_PROVIDER_STATS: ContextVar[dict[str, float] | None] = ContextVar(
     "ucpe_provider_stats", default=None
 )
+# What each provider count of one analysis means (passive; read them so before P7-1 thresholds):
+# - provider_exchanges: every attempt's exchange, a coalesced wait included, so the network
+#   exchanges are provider_exchanges - provider_coalesced;
+# - provider_coalesced: attempts answered by another caller's identical in-flight success;
+# - provider_retries: attempts after a caller's first;
+# - provider_deadline_hits: httpx's own timeouts (connect, read, write, pool) and the 10 s attempt
+#   deadline; a response over the size bound is not one;
+# - provider_exchange_max_ms: the slowest exchange, a follower's wait included.
 PROVIDER_FIELDS = (
     "provider_exchanges",
     "provider_coalesced",
