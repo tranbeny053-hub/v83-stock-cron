@@ -279,7 +279,7 @@ CASES: tuple[Case, ...] = (
         "a roles export with password verifiers",
         "REFUSED_EXPORT",
         refusals=frozenset({"PASSWORD_CLAUSE"}),
-        cluster_sql=("ALTER ROLE ucpe_resolver LOGIN PASSWORD '{password}'",),
+        cluster_sql=("ALTER ROLE ucpe_resolver LOGIN PASSWORD '{scratch_value}'",),
         with_passwords=True,
         checks=("password_never_reported",),
     ),
@@ -348,7 +348,7 @@ def _run_case(
     reference: dict[str, Any],
 ) -> dict[str, Any]:
     work.mkdir(parents=True)
-    password = secrets.token_hex(16)
+    scratch_value = secrets.token_hex(16)  # this case's throwaway login secret, never shown
     export = work / "export"
     own: scratch.Cluster | None = None
     try:
@@ -356,7 +356,7 @@ def _run_case(
             own = scratch.start(pg_bin, work, "production", superuser=SUPER)
             scratch.build_from_migrations(own, ROOT, APP_DATABASE)
             for sql in case.cluster_sql:
-                own.psql(command=sql.format(password=password))
+                own.psql(command=sql.format(scratch_value=scratch_value))
             export_with_the_card(
                 own,
                 APP_DATABASE,
@@ -416,7 +416,9 @@ def _run_case(
         checks["meta_command_never_ran"] = not (export / "META_COMMAND_RAN").exists()
     if "password_never_reported" in case.checks:
         verifier_seen = "SCRAM-SHA-256$" in json.dumps(report)
-        checks["password_never_reported"] = not verifier_seen and password not in json.dumps(report)
+        checks["password_never_reported"] = not verifier_seen and scratch_value not in json.dumps(
+            report
+        )
     shutil.rmtree(export, ignore_errors=True)  # the scratch export: nothing of it is kept
     return {
         "case": case.name,
