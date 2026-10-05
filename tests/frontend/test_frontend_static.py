@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=ux1-20261002-a"' in html
-    assert 'src="/app.js?v=ux1-20261002-a"' in html
+    assert 'href="/styles.css?v=p7p-20261005-a"' in html
+    assert 'src="/app.js?v=p7p-20261005-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -1328,3 +1328,49 @@ def test_ux1_in_band_is_the_terminal_band_outcome_never_a_timeout() -> None:
     assert "decision band" in PROBABILITY_EXPLANATION
     assert "not a clock timeout" in PROBABILITY_EXPLANATION
     assert "no decisive directional resolution" not in PROBABILITY_EXPLANATION
+
+
+def _function_text(js: str, name: str) -> str:
+    start = js.index(f"function {name}(")
+    end = js.index("\nfunction ", start + 1)
+    return js[start:end]
+
+
+def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
+    """Plan §14.1-§14.2 (owner rulings DP-A and DP-F): when the backend sends a DecisionView, the
+    card renders it first, in the plan's information order, and recomputes nothing."""
+
+    js = read_frontend("app.js")
+    rows = _function_text(js, "decisionViewRows")
+    order = [
+        '"Asset · venue"',
+        '"Reference close (UTC)"',
+        '"Horizon end (UTC)"',
+        '"Data"',
+        '"Saved"',
+        '"In band (inside the decision band)"',
+        '"Up (above the band)"',
+        '"Down (below the band)"',
+        '"Evidence level"',
+        '"Round-trip cost"',
+        '"Evidence"',
+        '"Gate disposition (not a market call)"',
+    ]
+    positions = [rows.index(label) for label in order]
+    assert positions == sorted(positions)
+    assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
+    card = _function_text(js, "overviewCard")
+    assert "const values = view ? decisionViewRows(payload, view) : [" in card
+    assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
+    assert 'headline.dataset.decisionState = view.state;' in card
+    assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
+
+
+def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
+    js = read_frontend("app.js")
+    banner = _function_text(js, "decisionDataBanner")
+    assert 'if (data.state === "OK")' in banner
+    assert "DEGRADED DATA - " in banner
+    detail = _function_text(js, "renderStructuredDetail")
+    assert 'section("Decision view", [' in detail
+    assert "...(decisionSection ? [decisionSection] : [])," in detail

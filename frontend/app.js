@@ -408,9 +408,72 @@ function firstReason(payload) {
   return candidates.find(Boolean) || "OK";
 }
 
+// The one authoritative view (plan §14.1-§14.3; owner rulings DP-A and DP-F). The backend builds it;
+// this only renders its values, in the plan's information order, and recomputes nothing.
+function decisionViewOf(payload) {
+  const view = payload?.decision_view;
+  return view && view.schema_version === "decision_view.v1" ? view : null;
+}
+
+function decisionDataBanner(data = {}) {
+  if (data.state === "OK") {
+    return `LIVE DATA - ${data.data_source}`;
+  }
+  if (data.state === "DEMO") {
+    return `DEMO DATA - ${data.data_source}`;
+  }
+  if (data.state === "UNAVAILABLE") {
+    return `DATA UNAVAILABLE - ${data.data_source || "UNAVAILABLE"}`;
+  }
+  return `DEGRADED DATA - ${data.data_source || "DEGRADED"}`;
+}
+
+function decisionEvidenceText(evidence = {}) {
+  if (evidence.directional_evidence_hold) {
+    return "Directional evidence under review (the hold is active)";
+  }
+  const outcomes =
+    evidence.resolved_outcomes === null || evidence.resolved_outcomes === undefined
+      ? null
+      : `${evidence.resolved_outcomes} resolved outcomes`;
+  return [evidence.skill_verdict, outcomes, evidence.reliability_status].filter(Boolean).join(" · ")
+    || "Unavailable";
+}
+
+function decisionViewRows(payload, view) {
+  const display = payload.frontend_display || {};
+  const data = view.data || {};
+  const time = view.time || {};
+  const range = view.range || {};
+  const cost = view.cost || {};
+  return [
+    ["Asset · venue", `${payload.normalized_symbol} · ${data.venue || data.data_source || "n/a"}`],
+    ["Reference close (UTC)", time.reference_close_utc || time.as_of_utc || "n/a"],
+    ["Horizon end (UTC)", time.horizon_end_utc || display.horizon_label || "n/a"],
+    ["Data", data.summary ? `${data.state}: ${data.summary}` : data.state],
+    [
+      "Saved",
+      persistenceStatusText(
+        payload.debug?.persistence_status || payload.detail_view?.debug_lite?.persistence_status,
+      ),
+    ],
+    [
+      "In band (inside the decision band)",
+      `${formatFractionPct(range.in_band_frac)} (band ±${formatFractionPct(range.decision_band_frac)})`,
+    ],
+    ["Up (above the band)", formatFractionPct(range.up_frac)],
+    ["Down (below the band)", formatFractionPct(range.down_frac)],
+    ["Evidence level", display.model_readiness_label || range.evidence_level || "n/a"],
+    ["Round-trip cost", formatFractionPct(cost.round_trip_cost_frac)],
+    ["Evidence", decisionEvidenceText(view.evidence)],
+    ["Gate disposition (not a market call)", display.disposition],
+  ];
+}
+
 function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
+  const view = decisionViewOf(payload);
   const timeframe = payload.timeframes?.primary || "n/a";
   const heatBand = getScoreHeatBand(display.total_score);
   node.classList.add("timeframe-card");
@@ -423,9 +486,16 @@ function overviewCard(payload) {
   }`;
   const demoBanner = document.createElement("p");
   demoBanner.className = "demo-banner";
-  demoBanner.textContent = dataBannerText(display);
+  demoBanner.textContent = view ? decisionDataBanner(view.data) : dataBannerText(display);
   node.insertBefore(demoBanner, node.querySelector("dl"));
-  const values = [
+  if (view) {
+    const headline = document.createElement("p");
+    headline.className = "decision-headline";
+    headline.dataset.decisionState = view.state;
+    headline.textContent = view.headline;
+    node.insertBefore(headline, node.querySelector("dl"));
+  }
+  const values = view ? decisionViewRows(payload, view) : [
     ["Disposition", display.disposition],
     ["Score", display.total_score],
     ["Setup", display.timeframe_label || timeframe],
@@ -2099,7 +2169,18 @@ function renderStructuredDetail(payload, detailView) {
   pre.textContent = JSON.stringify(payload, null, 2);
   rawJson.append(summary, pre);
 
+  const view = decisionViewOf(payload);
+  const decisionSection = view
+    ? section("Decision view", [
+        textBlock("p", view.headline, "decision-headline"),
+        textBlock("p", view.detail),
+        keyValueTable(decisionViewRows(payload, view)),
+        listBlock(view.evidence?.limitations || []),
+      ])
+    : null;
+
   detailPanel.replaceChildren(
+    ...(decisionSection ? [decisionSection] : []),
     renderDecisionSynthesis(payload.decision_synthesis, decisionBrief),
     renderModelQualitySection(payload.decision_synthesis || {}),
     section("Overview", [

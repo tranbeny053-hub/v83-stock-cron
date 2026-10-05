@@ -714,6 +714,8 @@ class AnalysisResponse(BaseModel):
     trend_summary: JsonObject
     decision_brief: DecisionBrief
     decision_synthesis: JsonObject = Field(default_factory=dict)
+    # One authoritative view (plan §14.1); human route only, so the automation analysis has none.
+    decision_view: JsonObject | None = None
     quant_v2: QuantV2Block
     derivatives_intelligence: DerivativesIntelligenceBlockResponse
     frontend_display: JsonObject

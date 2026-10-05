@@ -136,6 +136,7 @@
       }
     },
     "decision_synthesis": { "$ref": "#/$defs/decisionSynthesis" },
+    "decision_view": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/decisionView" }] },
     "quant_v2": {
       "$ref": "https://ultimate-crypto-probability-engine.local/schemas/response.schema.json#/$defs/quantV2"
     },
@@ -169,6 +170,145 @@
     "analysis_hash": { "type": "string" }
   },
   "$defs": {
+    "decisionView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "state",
+        "headline",
+        "detail",
+        "accepted_claim",
+        "directional_permission",
+        "data",
+        "time",
+        "range",
+        "cost",
+        "evidence"
+      ],
+      "properties": {
+        "schema_version": { "const": "decision_view.v1" },
+        "state": {
+          "enum": [
+            "INVALID_OR_UNAVAILABLE_DATA",
+            "NO_ACCEPTED_CLAIM",
+            "ACCEPTED_FORECAST_CLAIM",
+            "DIRECTIONAL_PERMISSION"
+          ]
+        },
+        "headline": { "type": "string" },
+        "detail": { "type": "string" },
+        "accepted_claim": { "type": "boolean" },
+        "directional_permission": { "type": "boolean" },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "reason",
+            "summary",
+            "venue",
+            "primary_venue",
+            "data_source",
+            "is_live_data",
+            "latest_candle_age_seconds"
+          ],
+          "properties": {
+            "state": { "enum": ["OK", "DEMO", "DEGRADED", "UNAVAILABLE"] },
+            "reason": {
+              "enum": [
+                null,
+                "PRIMARY_VENUE_ABSENT",
+                "CROSS_PROVIDER_CONFLICT",
+                "PROVIDER_UNAVAILABLE",
+                "EVIDENCE_VOID"
+              ]
+            },
+            "summary": { "type": "string" },
+            "venue": { "type": ["string", "null"] },
+            "primary_venue": { "type": ["string", "null"] },
+            "data_source": { "type": ["string", "null"] },
+            "is_live_data": { "type": "boolean" },
+            "latest_candle_age_seconds": { "type": ["number", "null"] }
+          }
+        },
+        "time": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "as_of_utc",
+            "reference_close_utc",
+            "horizon_end_utc",
+            "timeframe",
+            "horizon_bars",
+            "close_anchored"
+          ],
+          "properties": {
+            "as_of_utc": { "type": ["string", "null"] },
+            "reference_close_utc": { "type": ["string", "null"] },
+            "horizon_end_utc": { "type": ["string", "null"] },
+            "timeframe": { "type": "string" },
+            "horizon_bars": { "type": "integer", "minimum": 1 },
+            "close_anchored": { "const": true }
+          }
+        },
+        "range": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decision_band_frac",
+            "in_band_frac",
+            "up_frac",
+            "down_frac",
+            "evidence_level",
+            "meaning"
+          ],
+          "properties": {
+            "decision_band_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "in_band_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "up_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "down_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "evidence_level": { "type": ["string", "null"] },
+            "meaning": { "type": "string" }
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["round_trip_cost_frac", "taker_fee_frac", "slippage_frac", "label"],
+          "properties": {
+            "round_trip_cost_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "taker_fee_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "slippage_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "label": { "type": "string" }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model_readiness",
+            "calibration_status",
+            "reliability_status",
+            "skill_verdict",
+            "resolved_outcomes",
+            "directional_evidence_hold",
+            "profitability_claim",
+            "limitations"
+          ],
+          "properties": {
+            "model_readiness": { "type": ["string", "null"] },
+            "calibration_status": { "type": ["string", "null"] },
+            "reliability_status": { "type": ["string", "null"] },
+            "skill_verdict": { "type": ["string", "null"] },
+            "resolved_outcomes": { "type": ["integer", "null"] },
+            "directional_evidence_hold": { "type": "boolean" },
+            "profitability_claim": { "const": false },
+            "limitations": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
     "derivativesMetric": {
       "type": "object",
       "additionalProperties": false,

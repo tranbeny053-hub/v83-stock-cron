@@ -62,7 +62,12 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     functions = "\n".join(
         _extract_function(source, name)
-        for name in ("formatValue", "persistenceStatusText", "renderStructuredDetail")
+        for name in (
+            "formatValue",
+            "persistenceStatusText",
+            "decisionViewOf",
+            "renderStructuredDetail",
+        )
     )
     script = f"""
 {functions}
