@@ -1,9 +1,10 @@
 # STATE
 
-Updated: 2026-10-05 (**THE CARD-04 COMPANION IS PUBLISHED** under the owner's T3: #230 merged as 267a6eaf, a merge
-commit on the exact head 93ab50de; this record is the batch's last PR. **The owner ruled Phase 7/8 (DP-A to DP-F)**, and
-Claude runs Lane P and Lane R locally under those rulings, unpublished. MODEL SUBSTITUTION: Codex is unavailable, so
-Claude implements, tests and reviews directly).
+Updated: 2026-10-05 (**THE PHASE-7/8 LANES ARE DONE LOCALLY** under the owner's rulings DP-A to DP-F, none
+published: Lane R (DP-B narrowed + DP-C) is prepared and verified; Lane P (DP-A + DP-F) and DP-D's structure-first
+restore tooling are escalated to the owner at the repair bound; the export card stays PREPARED, NOT RUN.
+MODEL SUBSTITUTION: Codex is unavailable, so Claude implements, tests and reviews directly. Before it: the Card-04
+companion was published under the owner's T3, #230 → 267a6eaf, and its STATE record #231 → 8b1531a8).
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
 - **The owner (2026-10-05), verbatim. First, the T3:**
 ```text
@@ -2260,7 +2261,21 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-05): the Card-04 companion is PUBLISHED (#230 → main 267a6eaf; this record
+LOOP_STATE=AT THE OWNER (2026-10-05): the Phase-7/8 lanes under DP-A to DP-F are DONE LOCALLY, each through the full
+  gate, mutation testing and fresh separate-context reviews. No safe Claude step remains without an owner action.
+  Nothing is published. No production query, deploy, DB mutation, secret action, F3/§5A access or T4 happened.
+  - Lane R (DP-B narrowed + DP-C): feat/p7r-provider-pool-singleflight @ 5bcd71c3, PREPARED_AND_VERIFIED (review 3
+    PASS). The one owner action is its T3.
+  - Lane P (DP-A + DP-F): feat/p7p-decisionview-ux1-degraded @ 577591e2, ESCALATED after review 3. Two MINOR findings
+    are each the third of a class already repaired twice (A: render-level and service-level test adequacy; B: a detail
+    reopened from history reads the legacy NO_TRADE brief as a call). Under the bound, no third repair was made; the
+    owner decides (options 1-3). LOCAL ONLY in any case until the UOR qualification episode closes or the owner
+    authorizes it.
+  - DP-D (structure first): feat/p8d-restore-proof @ 65a527ff, ESCALATED after review 3 of that exact head. Its two
+    MAJOR findings are each the third of a class already repaired twice (the gate's scanner vs psql; a privilege path
+    classified as the platform's). Under the bound, no third repair was made; the owner decides (options 1-3, local
+    .work/p7/DPD_ESCALATION.md). docs/runbooks/RESTORE_PROOF_EXPORT.md stays PREPARED, NOT RUN.
+  Before it: IN PROGRESS (2026-10-05): the Card-04 companion is PUBLISHED (#230 → main 267a6eaf; this record
   last). Claude continues Lane P and Lane R locally under the owner's Phase-7/8 rulings (DP-A to DP-F), then
   DP-D's local tooling. Each publication is a new owner T3; Lane P also waits for the UOR qualification
   episode's close or the owner's authorization.
@@ -3997,7 +4012,9 @@ LOOP_STATE=IN PROGRESS (2026-10-05): the Card-04 companion is PUBLISHED (#230 �
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7 LANES (2026-10-05): the Card-04 companion is published (main
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 LANES DONE LOCALLY (2026-10-05): Lane R is prepared and verified; Lane P
+  and DP-D are escalated to the owner at the repair bound. All three are local, on main 8b1531a8.
+  Before it: POST-PHASE-4 / PHASE 7 LANES (2026-10-05): the Card-04 companion is published (main
   267a6eaf, #230). Phase 7/8 proceeds under the owner's rulings DP-A to DP-F, with Lane P and Lane R local.
   Before it: POST-PHASE-4 / UOR CARD 04 (2026-10-05): the Card-04 companion, with the cross-credential
   count and the third repair, is prepared and verified locally (0b3cbb75...); the A4 component is unchanged
@@ -4173,7 +4190,11 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7 LANES (2026-10-05): the Card-04 compani
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-a4-card04-companion (this record, merged with main 267a6eaf). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7-lanes (this record, on main 8b1531a8; local). Local and unpublished:
+  - feat/p7r-provider-pool-singleflight @ 5bcd71c3 (base fc03be8e; worktree scratchpad/wtR of session ba4955d3);
+  - feat/p7p-decisionview-ux1-degraded @ 577591e2 (base 8b1531a8; scratchpad/wtP);
+  - feat/p8d-restore-proof @ 65a527ff (base 8b1531a8; scratchpad/wtD).
+  Before it: chore/state-a4-card04-companion (this record, merged with main 267a6eaf). Local and unpublished:
   feat/p7r-provider-pool-singleflight (Lane R, worktree scratchpad/wtR of session ba4955d3) and Lane P's branch.
   Before it: chore/state-a4-card04-companion (this record, on main fc03be8e) and feat/a4-card04-companion @
   93ab50de (e882d81, 66133c5, db176ec, 116b68c, 4edd6e4, 4f3f00c, 13d3b16, 0652c43, d263c09, 93ab50d;
@@ -4306,7 +4327,9 @@ CURRENT_BRANCH=chore/state-a4-card04-companion (this record, merged with main 26
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=267a6eaf (main, #230: the Card-04 companion; push CI 37271854804 and the reproducible build
+LAST_GREEN_SHA=8b1531a8 (main, #231: the A4C STATE record; push CI 37274064511 and the reproducible build 37274064630
+  green).
+  Before it: 267a6eaf (main, #230: the Card-04 companion; push CI 37271854804 and the reproducible build
   37271854824 green).
   Before it: fc03be8e (main, #229: the STATE record; push CI 37215106950 and the reproducible build green).
   Before it: e468f1f1 (main, #228: the A4 artifact; push CI green).
@@ -4538,7 +4561,13 @@ LAST_GREEN_SHA=267a6eaf (main, #230: the Card-04 companion; push CI 37271854804 
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-05 on this record's PR tree (main 267a6eaf plus STATE.md; the exact line is in the PR
+LAST_VERIFY=PASS 2026-10-05 on each lane head (bytecode off):
+  - Lane R @ 5bcd71c3: 6202 passed, scanners 3/3; mutation 50/50 killed; onto main 8b1531a8: 6433 passed.
+  - Lane P @ 577591e2: 6422 passed, scanners 3/3; mutation 62/62 killed.
+  - DP-D @ 65a527ff: 6521 passed, scanners 3/3; rehearsal on PostgreSQL 17.6: 45/45 cases; mutation 100/100 killed.
+  - The composition main + R + P + D @ 65a527ff: 05a0493, 6633 passed, scanners 3/3 (one trivial union conflict in
+    CURRENT_DELTA_PATHS).
+  Before it: PASS 2026-10-05 on this record's PR tree (main 267a6eaf plus STATE.md; the exact line is in the PR
   body).
   Before it: PASS 2026-10-05 on feat/a4-card04-companion @ 93ab50d, bytecode on: ruff ok | 6376 passed |
   schemas+smoke ok | scanners 3/3; the scratch-PostgreSQL 17.6 rehearsal A4C_REHEARSAL=PASS (39 cases and the
@@ -4722,7 +4751,11 @@ LAST_VERIFY=PASS 2026-10-05 on this record's PR tree (main 267a6eaf plus STATE.m
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-05). Codex remains unavailable (owner): Claude implemented, tested and reviewed the
+CODEX_PENDING=NONE (2026-10-05). Codex unavailable (owner): Claude implemented, tested and reviewed every lane
+  directly (MODEL SUBSTITUTION); no paid fallback; no GPT consultation. MODEL SUBSTITUTION, recorded from the review's
+  own metadata: DP-D's review 3 ran on claude-opus-5-5 for its first 57 messages, then on claude-opus-4-8 for its last
+  32, including its final report (no override was requested). Every other review ran wholly on claude-opus-5-5.
+  Before it: NONE (2026-10-05). Codex remains unavailable (owner): Claude implemented, tested and reviewed the
   companion directly (MODEL SUBSTITUTION); no paid fallback.
   Before it: NONE. Codex's quota is EXHAUSTED (owner, 2026-10-04): no Codex, no delegate.sh, no wait, no paid
   fallback. Claude implements directly (MODEL SUBSTITUTION).
@@ -4824,7 +4857,26 @@ CODEX_PENDING=NONE (2026-10-05). Codex remains unavailable (owner): Claude imple
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Nothing is pending from the A4C batch (2026-10-05). Ahead, each the owner's:
+OWNER_BOUNDARY=ONE BATCHED OWNER BOUNDARY (2026-10-05):
+  1. T3, Lane R: publish feat/p7r-provider-pool-singleflight @ 5bcd71c3 (PR, required CI, merge commit), then this
+     STATE record last. Acceptance item: in a provider outage, a human-route request that waited on an identical
+     in-flight one fails over up to about 2x later per attempt (no outcome is ever passed on). A release is a later
+     T4.
+  2. Lane P (escalated at the bound): choose 1) authorize the one consolidated third repair (a test-only DOM harness
+     plus a service-level hold test; frontend-only framing of every legacy decision surface as the gates'
+     disposition), then one fresh review; 2) accept the two MINOR items as recorded; or 3) authorize class A only (the
+     reopened-history detail unchanged from main). Lane P stays local in any case until the UOR qualification episode
+     closes or you authorize it.
+  3. DP-D (escalated at the bound): choose 1) authorize the one consolidated third repair (the gate refuses the input
+     class review 3 found; any superuser-role membership and any PUBLIC grantee on parameter grants and settings count
+     as app; one card line for cluster-wide role defaults; tooling and docs only, local), then one fresh review
+     (recommended); 2) accept the findings as recorded; or 3) defer. Your two read-only export commands
+     (docs/runbooks/RESTORE_PROOF_EXPORT.md) are unaffected and are worth running only once the proof can be trusted
+     (after option 1). Publishing the tooling is a T3.
+  Standing: the writer JWT renewal by 2026-10-30; the A4C review-5 MINOR/NIT follow-ups (optional); the A4 v1
+  hardening as a separate identity (not built); the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE, D4 consumed. Release
+  note: the OOS arms' analysis_hash values move with UX-1's copy (keys frozen; no evaluator reads it).
+  Before it: Nothing is pending from the A4C batch (2026-10-05). Ahead, each the owner's:
   - Lane R's publication (a new T3, when ready);
   - Lane P's publication, after the UOR qualification episode closes or on the owner's explicit authorization;
   - DP-D's export, structure only, a future owner action;
@@ -5461,7 +5513,9 @@ OWNER_BOUNDARY=Nothing is pending from the A4C batch (2026-10-05). Ahead, each t
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: Lane R and Lane P locally under DP-A to DP-F (tests, mutation, full gates, fresh reviews),
+NEXT_ACTION=The owner: the batched boundary above. Claude after a T3: exact-head and file-set checks, CI reads, the
+  merge commit, then this record refreshed onto the resulting main and published last. Otherwise: passive reads only.
+  Before it: Claude: Lane R and Lane P locally under DP-A to DP-F (tests, mutation, full gates, fresh reviews),
   then DP-D's local restore tooling and the owner export card. Return at the next genuine owner boundary with
   one batched action. The owner: carry UOR_HANDOFF §14 and §15 to UOR when ready.
   Before it: The owner: the T3 batch above. Claude after it: exact-head and file-set checks, CI reads (including
