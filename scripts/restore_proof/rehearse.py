@@ -11,14 +11,23 @@ expected verdict, differences, refusals and restore errors, and passes only when
 what it sees:
 - the clean export PASSES with no difference: what was exported is what the migrations declare;
 - drift fails as app differences, each at its own path: a revoked or an extra table grant, one made
-  by a role other than the owner, a seal trigger disabled or dropped, a seal function's body
-  changed, a column added, row security off, a policy or an index dropped, an extra EXECUTE grant,
-  the default privileges of the owner or of a migration role changed, a migration role's attribute
-  or membership changed;
+  by a role other than the owner, a column grant, a schema grant, a seal trigger disabled or
+  dropped, a seal function's body changed, a column added, a CHECK constraint dropped (the
+  probability simplex), row security off or forced, a policy dropped, widened to another role or
+  given another condition, an index dropped, an extra EXECUTE grant, the default privileges of the
+  owner or of a migration role changed;
+- so does every privilege path into the app: a migration role's attribute, membership or setting
+  changed, a predefined role or the superuser granted to an API role, an API role gaining
+  BYPASSRLS, a setting on PostgREST's login role that turns the seals off, a role holding the
+  owner, a parameter grant to a migration role;
 - the owner's documented credential steps (LOGIN on ucpe_space_db and ucpe_resolver) are reported
-  as operational; a platform role's default privileges and an API role's attribute as platform;
-  none of them fails; and a role's comment, which pg_dumpall writes, passes the gate;
-- a restore error on a platform role's own setting is platform; on a migration role's, it fails;
+  as operational; a platform role's default privileges, settings and membership in an API role,
+  LOGIN and a timeout on PostgREST's login role, as platform; none of them fails; a setting's value
+  never appears in the report or the work folder; and a role's comment, which pg_dumpall writes,
+  passes the gate;
+- a restore error on a platform role's own setting, or an API role's timeout, is platform; on a
+  migration role's setting or an API role's other setting, it fails, and the refused value is not
+  shown;
 - the gate refuses, and nothing is restored from: an export with data (no --schema-only), a roles
   export with password verifiers (no --no-role-passwords, whose verifier never appears in the
   report), a psql meta-command (which never runs), a missing \\restrict and an export that would
@@ -56,6 +65,8 @@ BUNDLE = (
 # The export card's two commands (docs/runbooks/RESTORE_PROOF_EXPORT.md), less their connection.
 SCHEMA_EXPORT = ("pg_dump", "--schema-only", "--schema=public")
 ROLES_EXPORT = ("pg_dumpall", "--roles-only", "--no-role-passwords")
+# A setting value the restore refuses: it must never be shown, in the report or the work folder.
+REFUSED_VALUE = "rehearsal-refused-value"
 
 
 @dataclass(frozen=True)
@@ -231,18 +242,78 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
+        "a column grant",
+        "FAIL",
+        _app("column_acl/predictions.symbol"),
+        database_sql=((SUPER, "GRANT SELECT (symbol) ON public.predictions TO anon"),),
+    ),
+    Case(
+        "a schema grant",
+        "FAIL",
+        _app("schema/acl"),
+        database_sql=((SUPER, "GRANT CREATE ON SCHEMA public TO anon"),),
+    ),
+    Case(
+        "the probability simplex constraint dropped",
+        "FAIL",
+        _app("constraints/predictions/predictions_probability_simplex_chk"),
+        database_sql=(
+            (
+                OWNER,
+                "ALTER TABLE public.predictions "
+                "DROP CONSTRAINT predictions_probability_simplex_chk",
+            ),
+        ),
+    ),
+    Case(
+        "row security forced",
+        "FAIL",
+        _app("relations/predictions/force_row_security"),
+        database_sql=((OWNER, "ALTER TABLE public.predictions FORCE ROW LEVEL SECURITY"),),
+    ),
+    Case(
+        "a policy widened to another role",
+        "FAIL",
+        _app("policies/predictions/ucpe_space_db_select/roles"),
+        database_sql=(
+            (
+                OWNER,
+                "ALTER POLICY ucpe_space_db_select ON public.predictions TO ucpe_space_db, anon",
+            ),
+        ),
+    ),
+    Case(
+        "a policy given another condition",
+        "FAIL",
+        _app("policies/predictions/ucpe_space_db_select/using"),
+        database_sql=(
+            (OWNER, "ALTER POLICY ucpe_space_db_select ON public.predictions USING (false)"),
+        ),
+    ),
+    Case(
         "a platform role's setting the restore refuses",
         "PASS",
         errors=frozenset({"platform"}),
-        edit=_append_role_line("ALTER ROLE anon SET statement_timeout TO 'not a duration';"),
+        edit=_append_role_line(f"ALTER ROLE anon SET statement_timeout TO '{REFUSED_VALUE}';"),
+        checks=("setting_value_never_reported",),
     ),
     Case(
         "a migration role's setting the restore refuses",
         "FAIL",
         errors=frozenset({"fail"}),
         edit=_append_role_line(
-            "ALTER ROLE ucpe_api_writer SET statement_timeout TO 'not a duration';"
+            f"ALTER ROLE ucpe_api_writer SET statement_timeout TO '{REFUSED_VALUE}';"
         ),
+        checks=("setting_value_never_reported",),
+    ),
+    Case(
+        "an API role's other setting the restore refuses",
+        "FAIL",
+        errors=frozenset({"fail"}),
+        edit=_append_role_line(
+            f"ALTER ROLE authenticator SET session_replication_role TO '{REFUSED_VALUE}';"
+        ),
+        checks=("setting_value_never_reported",),
     ),
     Case(
         "a psql meta-command",
@@ -278,20 +349,95 @@ CASES: tuple[Case, ...] = (
     Case(
         "a migration role's attribute",
         "FAIL",
-        _app("roles/attributes/ucpe_api_writer/rolbypassrls"),
+        _app("cluster/attributes/ucpe_api_writer/rolbypassrls"),
         cluster_sql=("ALTER ROLE ucpe_api_writer BYPASSRLS",),
     ),
     Case(
         "a migration role's membership",
         "FAIL",
-        _app("roles/memberships/service_role to ucpe_space_db admin=False inherit=False set=True"),
+        _app(
+            "cluster/memberships/service_role to ucpe_space_db admin=False inherit=False set=True"
+        ),
         cluster_sql=("GRANT service_role TO ucpe_space_db",),
     ),
     Case(
-        "an API role's attribute",
-        "PASS",
-        frozenset({("platform", "platform_roles/attributes/anon/rolbypassrls")}),
+        "a migration role's setting",
+        "FAIL",
+        _app("cluster/settings/ucpe_api_writer in all databases"),
+        cluster_sql=("ALTER ROLE ucpe_api_writer SET statement_timeout TO '5s'",),
+    ),
+    Case(
+        "an API role gaining BYPASSRLS",
+        "FAIL",
+        _app("cluster/attributes/anon/rolbypassrls"),
         cluster_sql=("ALTER ROLE anon BYPASSRLS",),
+    ),
+    Case(
+        "a predefined role granted to an API role",
+        "FAIL",
+        _app("cluster/memberships/pg_read_all_data to anon admin=False inherit=True set=True"),
+        cluster_sql=("GRANT pg_read_all_data TO anon WITH INHERIT TRUE",),
+    ),
+    Case(
+        "the superuser granted to PostgREST's login role",
+        "FAIL",
+        _app(f"cluster/memberships/{SUPER} to authenticator admin=False inherit=False set=True"),
+        cluster_sql=(f"GRANT {SUPER} TO authenticator",),
+    ),
+    Case(
+        "a setting on PostgREST's login role that turns the seals off",
+        "FAIL",
+        _app("cluster/settings/authenticator in all databases"),
+        cluster_sql=("ALTER ROLE authenticator SET session_replication_role TO replica",),
+    ),
+    Case(
+        "a role holding the owner",
+        "FAIL",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_holder"),
+                (
+                    "app",
+                    "cluster/memberships/<owner> to rehearsal_holder admin=False inherit=True "
+                    "set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_holder LOGIN",
+            f"GRANT {OWNER} TO rehearsal_holder WITH INHERIT TRUE",
+        ),
+    ),
+    Case(
+        "a parameter grant to a migration role",
+        "FAIL",
+        _app("cluster/parameter_acl/session_replication_role"),
+        cluster_sql=("GRANT SET ON PARAMETER session_replication_role TO ucpe_api_writer",),
+    ),
+    Case(
+        "the platform's own roles, settings and memberships",
+        "PASS",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/authenticator/rolcanlogin"),
+                ("platform", "cluster/settings/authenticator in all databases"),
+                ("platform", "cluster/attributes/rehearsal_platform"),
+                ("platform", "cluster/settings/rehearsal_platform in all databases"),
+                (
+                    "platform",
+                    "cluster/memberships/anon to rehearsal_platform admin=False inherit=False "
+                    "set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "ALTER ROLE authenticator LOGIN",
+            "ALTER ROLE authenticator SET statement_timeout TO '8s'",
+            "CREATE ROLE rehearsal_platform NOINHERIT LOGIN",
+            "GRANT anon TO rehearsal_platform",
+            "ALTER ROLE rehearsal_platform SET app.rehearsal_value TO '{scratch_value}'",
+        ),
+        checks=("setting_value_never_reported",),
     ),
     Case(
         "a role's comment",
@@ -303,8 +449,8 @@ CASES: tuple[Case, ...] = (
         "PASS",
         frozenset(
             {
-                ("operational", "roles/attributes/ucpe_space_db/rolcanlogin"),
-                ("operational", "roles/attributes/ucpe_resolver/rolcanlogin"),
+                ("operational", "cluster/attributes/ucpe_space_db/rolcanlogin"),
+                ("operational", "cluster/attributes/ucpe_resolver/rolcanlogin"),
             }
         ),
         cluster_sql=("ALTER ROLE ucpe_space_db LOGIN", "ALTER ROLE ucpe_resolver LOGIN"),
@@ -354,6 +500,11 @@ def export_with_the_card(
 
 
 def rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
+    with scratch.clean_pg_environment():
+        return _rehearse(pg_bin, work)
+
+
+def _rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
     work.mkdir(parents=True, exist_ok=False)
     reference = prove.reference_fingerprint(pg_bin, work / "reference-build")
     production = scratch.start(pg_bin, work, "production", superuser=SUPER)
@@ -452,6 +603,12 @@ def _run_case(
         verifier_seen = "SCRAM-SHA-256$" in json.dumps(report)
         checks["password_never_reported"] = not verifier_seen and scratch_value not in json.dumps(
             report
+        )
+    if "setting_value_never_reported" in case.checks:
+        shown = [json.dumps(report).encode()]
+        shown += [path.read_bytes() for path in proof_work.rglob("*") if path.is_file()]
+        checks["setting_value_never_reported"] = not any(
+            marker.encode() in item for marker in (scratch_value, REFUSED_VALUE) for item in shown
         )
     shutil.rmtree(export, ignore_errors=True)  # the scratch export: nothing of it is kept
     return {

@@ -13,8 +13,8 @@ What the two files hold:
 - `schema.sql`: the `public` schema's structure only (`--schema-only`): tables, columns, constraints,
   indexes, the append-only seals and their functions, row security, the RPCs and every grant. **No
   table row**, so nothing from the section-5A window can leave the database.
-- `roles.sql`: the cluster's roles and memberships (`--roles-only`), **with no password**
-  (`--no-role-passwords`).
+- `roles.sql`: the cluster's roles with their memberships, settings and parameter grants
+  (`--roles-only`), **with no password** (`--no-role-passwords`).
 
 Never paste the connection string, the password or either file into chat, a file in this repository
 or a log. Claude needs only the folder path and the two sha256 lines from step 5.
@@ -71,35 +71,48 @@ python scripts/restore_proof/prove.py --pg-bin <PostgreSQL 17.6 bin> --export ~/
 
 1. It checks both digests against yours, then **refuses the export, and restores nothing**, unless
    it is exactly what the two commands make: a data entry, a COPY block, a password clause or
-   hash, or any psql meta-command but the `\restrict` pair is a refusal (`gate.py`).
+   hash, any psql meta-command but the `\restrict` pair, or anything psql would read differently
+   from the gate (an escape string, a psql variable, a changed string or encoding setting) is a
+   refusal (`gate.py`).
 2. It checks its own PostgreSQL is 17.6 or a later 17.x, then builds a scratch cluster from the
    migrations, as every migration rehearsal does, and restores a private copy of your two files
    (checked again against your digests, deleted once restored) into a second one. Both clusters
    are private (no network listener) and deleted at the end.
 3. It compares the two catalogs item by item and writes one report: your files' digests and
    versions, the PostgreSQL release it used, every restore error and every difference. It reads no
-   table row. The report reproduces structure text (defaults, comments, function lines), so it
-   stays out of this repository and out of chat: Claude reports the verdict and the counts.
+   table row, and it compares a role setting by its digest only, so no setting's value is ever
+   shown. The report reproduces structure text (defaults, comments, function lines), so it stays
+   out of this repository and out of chat: Claude reports the verdict and the counts.
 
-`RESTORE_PROOF=PASS` means the structure restores into PostgreSQL 17.6 and equals what the
-migrations declare. Two kinds of difference are reported without failing:
+`RESTORE_PROOF=PASS` means the structure restores into PostgreSQL 17.6, equals what the
+migrations declare, and opens no privilege path into the app that they do not declare. Two kinds
+of difference are reported without failing:
 - **operational**: the documented credential steps, LOGIN on `ucpe_space_db`
   (`SPACE_DB_CUTOVER.md`) and on `ucpe_resolver` (`RESOLVER_CUTOVER.md`);
-- **platform**: Supabase's own: the default privileges of its roles, the attributes, settings and
-  memberships of the API roles the app's grants name (anon, authenticated, service_role,
-  authenticator; authenticator logs in on Supabase, so that one is expected), a platform role's
-  own setting and a Realtime publication entry that vanilla PostgreSQL refuses. Each is read: an API
-  role gaining BYPASSRLS or SUPERUSER would be a finding.
+- **platform**: Supabase's own: its other roles with their settings and memberships, the default
+  privileges of its roles, the owner's (`postgres`) attributes, settings and parameter grants (it
+  owns every app table already), LOGIN on `authenticator` (PostgREST logs in with it), the API
+  roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes that
+  raise no privilege, a platform role's own setting and a Realtime publication entry that vanilla
+  PostgreSQL refuses.
 
-Any other difference is a finding: production's structure and the migrations disagree there. The
-report names it, and nothing is changed to hide it.
+Any other difference is a finding and fails the proof: production's structure and the migrations
+disagree there. That includes every privilege path into the app the migrations do not declare,
+whoever made it: an API role becoming a member of another role or gaining SUPERUSER, BYPASSRLS or
+the like, any setting on an API role but a timeout (one setting can turn the seals off for every
+API session), any role but Supabase's superuser able to act as `postgres`, and a parameter grant
+to an API or app role. **The first proof may say FAIL for privilege paths Supabase itself made**
+(for example a platform role granted to PostgREST's `authenticator`, or a setting on it): each is
+a finding Claude reports to you by name, for you to decide on, not a broken restore. The report
+names every finding, and nothing is changed or reclassified to hide one.
 
 ## Stop rules
 
 - If the proof says `REFUSED_EXPORT` because of `DIGEST_MISMATCH`, `DATA_ENTRY` or a `PASSWORD_`
-  kind, delete both files and run steps 4 and 5 again exactly. For any other refusal kind, stop:
-  running the same commands again gives the same files. Claude adjusts the tooling and reruns the
-  proof on the files you already made. Never edit the files by hand.
+  kind, delete both files and run steps 4 and 5 again exactly, once. If the same kind comes back,
+  stop: the commands make it every time. For any other refusal kind, stop at once: running the
+  same commands again gives the same files. Claude adjusts the tooling and reruns the proof on the
+  files you already made. Never edit the files by hand.
 - If a command asks for anything but the password, or fails, stop and tell Claude its error line
   only.
 
@@ -108,3 +121,9 @@ report names it, and nothing is changed to hide it.
 - **The data.** Full-data custody (encrypted dumps, an independent destination, retention) is a
   later ruling: DP-D option 3.
 - **An independent copy.** The export sits on your Mac only, as long as you keep it.
+- **What the two commands do not export:** default privileges set for all schemas at once (an
+  `ALTER DEFAULT PRIVILEGES` with no `IN SCHEMA`), a role's settings for one database only
+  (`ALTER ROLE … IN DATABASE … SET`), the database's own settings, every schema but `public`
+  (Supabase's `auth`, `storage`, `extensions` and the rest), and a role's comment, security label
+  and password expiry, which carry no privilege and are not compared. Supabase's settings outside
+  the database (the API keys, the JWT secret, network rules) are not in any export.

@@ -8,14 +8,19 @@ the hosting platform's bootstrap name (Supabase: ``supabase_admin``), for two re
 - it is never the migration owner ``postgres``, which a Supabase dump sets NOSUPERUSER: restoring
   the dump can then never take superuser from the role running the restore. The proof also refuses
   an export that does not keep the bootstrap name a superuser (prove.py).
+psql always reads its input as UTF-8 here, the encoding the export gate checks the files in. No
+server log keeps the text of a statement it refused, and a cluster's log is deleted with it.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +28,8 @@ BOOTSTRAP_SUPERUSER = "supabase_admin"
 # The role that runs the migrations: a non-superuser with CREATEROLE, as Supabase's postgres is.
 MIGRATION_OWNER = "postgres"
 _PSQL_ERROR = re.compile(r"^psql:(?P<file>[^:]*):(?P<line>\d+): ERROR:  (?P<message>.*)$")
+# A refused setting's error repeats its value: only the parameter's name is kept.
+_ECHOED_VALUE = re.compile(r'^(invalid value for parameter "[^"]*"): .*$')
 _VERSION = re.compile(r"\(PostgreSQL\) (\d+)\.(\d+)")
 
 
@@ -66,12 +73,32 @@ class Cluster:
             args += ["-c", command]
         if file is not None:
             args += ["-f", str(file)]
-        done = subprocess.run(args, capture_output=True, text=True, timeout=600, check=False)  # noqa: S603
+        done = subprocess.run(  # noqa: S603
+            args,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+            env={**os.environ, "PGCLIENTENCODING": "UTF8"},
+        )
         if stop_on_error and done.returncode != 0:
             # psql's own ERROR line only: never the statement it echoes, which may hold a value.
             reason = next((line for line in done.stderr.splitlines() if "ERROR:" in line), "")
             raise RuntimeError(f"psql failed on {file or 'a command'}: {reason}")
         return done
+
+
+@contextmanager
+def clean_pg_environment() -> Iterator[None]:
+    """No PG* variable of the caller's (PGHOST, PGHOSTADDR, PGSERVICE, ...) reaches psql, pg_ctl or
+    psycopg while the proof runs, so they connect to the scratch socket they are given and nowhere
+    else (psql is given PGCLIENTENCODING=UTF8 alone)."""
+
+    saved = {name: os.environ.pop(name) for name in list(os.environ) if name.startswith("PG")}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
 
 
 def server_version(bin_dir: Path) -> tuple[int, int] | None:
@@ -124,7 +151,8 @@ def start(bin_dir: Path, work: Path, name: str, *, superuser: str = BOOTSTRAP_SU
                 "-w",
                 "start",
                 "-o",
-                f"-c listen_addresses='' -c unix_socket_directories='{socket}' -c fsync=off",
+                f"-c listen_addresses='' -c unix_socket_directories='{socket}' -c fsync=off "
+                "-c log_min_error_statement=panic",
             ],
             capture_output=True,
             text=True,
@@ -149,6 +177,7 @@ def stop(cluster: Cluster, *, remove: bool = True) -> None:
     shutil.rmtree(cluster.socket, ignore_errors=True)
     if remove:
         shutil.rmtree(cluster.data, ignore_errors=True)
+        cluster.log.unlink(missing_ok=True)
 
 
 def build_from_migrations(cluster: Cluster, root: Path, database: str) -> None:
@@ -199,5 +228,6 @@ def _errors(done: subprocess.CompletedProcess[str], name: str) -> list[RestoreEr
     for line in done.stderr.splitlines():
         match = _PSQL_ERROR.match(line)
         if match:
-            errors.append(RestoreError(name, int(match["line"]), match["message"][:200]))
+            message = _ECHOED_VALUE.sub(r"\1", match["message"])[:200]
+            errors.append(RestoreError(name, int(match["line"]), message))
     return errors

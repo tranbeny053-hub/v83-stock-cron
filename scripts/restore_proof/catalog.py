@@ -3,9 +3,12 @@
 One function reads a database's structure from the system catalogs alone (never a table row): the
 public schema, its relations and columns, constraints, indexes, triggers (the seals among them),
 row-security policies, functions, sequences, types, comments, owners, every grant, column grants
-included, the schema's default privileges, and the roles the migrations create with their
-attributes, settings and memberships. Two fingerprints, one of a database built from the migrations
-and one of the restored export, are then compared item by item.
+included, the schema's default privileges, and the cluster's roles: every role's attributes, every
+membership, every role setting and every parameter grant (what a roles export restores that can
+carry a privilege; a role's comment, security label and password expiry carry none and are not
+read). A setting's value is kept as a digest only, so no value is ever shown. Two fingerprints, one
+of a database built from the migrations and one of the restored export, are then compared item by
+item.
 
 Names are normalized so that only real differences remain:
 - the role that ran the migrations (a scratch login in the reference, the project's ``postgres`` in
@@ -15,15 +18,23 @@ Names are normalized so that only real differences remain:
 - columns are compared in their order, not by attribute number (a restore renumbers dropped ones).
 
 Each difference is classified:
-- **app**: the migrations' own structure, its grants, the roles they create and the default
-  privileges of the owner and of those roles. Any app difference fails the proof.
+- **app**: the migrations' own structure and grants; the roles they create (attributes, settings,
+  memberships either way, parameter grants); the default privileges of the owner and of those
+  roles; and every privilege path into the app: an API role (one the app's grants or policies name,
+  or one holding a migration role: Supabase's anon, authenticated, service_role, authenticator)
+  becoming a member of any role, gaining SUPERUSER, CREATEROLE, CREATEDB, REPLICATION or
+  BYPASSRLS, or LOGIN (authenticator's LOGIN is the platform's), being gone, or having any setting
+  but a timeout changed (a setting such as session_replication_role on the login role would turn
+  the seals off for every API session); any role but the bootstrap superuser holding the owner; a
+  parameter grant to an API role or a migration role. Any app difference fails the proof, whoever
+  made it: one the platform made is reported to the owner by name, never reclassified.
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
-- **platform**: the hosting platform's own: the default privileges of any other role, and the
-  attributes, settings and memberships of the roles the app's grants and policies name but the
-  migrations do not create (Supabase's anon, authenticated, service_role, authenticator). Reported,
-  not failing, and read one by one: an API role gaining BYPASSRLS or SUPERUSER is a finding.
+- **platform**: the hosting platform's own: its other roles, their memberships and settings, an API
+  role's timeouts and its other attributes, the owner's attributes, settings and parameter grants
+  (the owner already owns every app object), the default privileges of any other role, other
+  parameter grants. Reported, not failing.
 """
 
 from __future__ import annotations
@@ -50,6 +61,16 @@ ROLE_ATTRIBUTES = (
 )
 # The owner's documented credential steps: these roles gain LOGIN outside the migrations.
 OPERATIONAL_LOGIN_ROLES = frozenset({"ucpe_space_db", "ucpe_resolver"})
+# The settings an API role may carry as the platform's: a timeout cannot raise a privilege.
+TIMEOUT_SETTINGS = frozenset(
+    {
+        "statement_timeout",
+        "lock_timeout",
+        "idle_in_transaction_session_timeout",
+        "idle_session_timeout",
+        "transaction_timeout",
+    }
+)
 _CREATE_ROLE = re.compile(r"^\s*CREATE\s+ROLE\s+([a-z_][a-z0-9_]*)\b", re.IGNORECASE | re.MULTILINE)
 
 
@@ -62,7 +83,7 @@ def migration_roles(migrations: Path) -> frozenset[str]:
     return frozenset(names)
 
 
-def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, Any]:
+def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
     """The structure of one database, normalized for comparison. Catalog reads only."""
 
     names = {oid: name for oid, name in _rows(conn, "SELECT oid, rolname FROM pg_roles")}
@@ -389,76 +410,19 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
         )
     )
 
-    role_rows = _rows(
-        conn,
-        "SELECT rolname, " + ", ".join(ROLE_ATTRIBUTES) + " FROM pg_roles WHERE rolname = ANY(%s)",
-        (sorted(roles),),
-    )
-    role_attributes = {
-        row[0]: dict(zip(ROLE_ATTRIBUTES, row[1:], strict=True)) for row in role_rows
-    }
-    role_settings = {
-        f"{name} in {_database_scope(database, current)}": sorted(config)
-        for name, database, current, config in _rows(
-            conn,
-            """
-            SELECT r.rolname, s.setdatabase,
-                   s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()),
-                   s.setconfig
-            FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
-            WHERE r.rolname = ANY(%s)
-            """,
-            (sorted(roles),),
-        )
-    }
-    memberships = sorted(
-        f"{named(granted)} to {named(member)} admin={admin} inherit={inherit} set={can_set}"
-        for granted, member, admin, inherit, can_set in _rows(
-            conn,
-            """
-            SELECT r.rolname, m.rolname, am.admin_option, am.inherit_option, am.set_option
-            FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
-            JOIN pg_roles m ON m.oid = am.member
-            WHERE r.rolname = ANY(%s) OR m.rolname = ANY(%s)
-            """,
-            (sorted(roles), sorted(roles)),
-        )
-    )
-
-    # The roles the app's grants and policies name but the migrations do not create: the platform's.
-    named_roles = {
-        item.split(":", 1)[0]
-        for grants in (
-            schema["acl"],
-            *(relation["acl"] for relation in relations.values()),
-            *(function["acl"] for function in functions.values()),
-            *column_acl.values(),
-            *default_privileges.values(),
-        )
-        for item in grants
-    }
-    named_roles.update(
-        role_name
-        for items in policies.values()
-        for policy in items.values()
-        for role_name in policy["roles"]
-    )
-    named_roles.update(
-        partner for item in memberships for partner in item.split(" admin=")[0].split(" to ")
-    )
-    platform_names = sorted(named_roles - set(roles) - {OWNER, PUBLIC})
-    platform_attributes = {
-        row[0]: dict(zip(ROLE_ATTRIBUTES, row[1:], strict=True))
+    # The cluster's roles, whole: every role's attributes (the predefined pg_ roles' are fixed by
+    # PostgreSQL), every membership, every setting (its value as a digest) and every parameter
+    # grant the roles export restores; _classify decides what a difference means.
+    cluster_attributes = {
+        named(row[0]): dict(zip(ROLE_ATTRIBUTES, row[1:], strict=True))
         for row in _rows(
             conn,
-            "SELECT rolname, "
-            + ", ".join(ROLE_ATTRIBUTES)
-            + " FROM pg_roles WHERE rolname = ANY(%s)",
-            (platform_names,),
+            "SELECT rolname, " + ", ".join(ROLE_ATTRIBUTES) + " FROM pg_roles "
+            "WHERE rolname !~ '^pg_'",
         )
     }
-    platform_settings = {
-        f"{name} in {_database_scope(database, current)}": sorted(config)
+    cluster_settings = {
+        f"{named(name)} in {_database_scope(database, current)}": sorted(map(_setting, config))
         for name, database, current, config in _rows(
             conn,
             """
@@ -466,12 +430,10 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
                    s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()),
                    s.setconfig
             FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
-            WHERE r.rolname = ANY(%s)
             """,
-            (platform_names,),
         )
     }
-    platform_memberships = sorted(
+    cluster_memberships = sorted(
         f"{named(granted)} to {named(member)} admin={admin} inherit={inherit} set={can_set}"
         for granted, member, admin, inherit, can_set in _rows(
             conn,
@@ -479,9 +441,14 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
             SELECT r.rolname, m.rolname, am.admin_option, am.inherit_option, am.set_option
             FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
             JOIN pg_roles m ON m.oid = am.member
-            WHERE r.rolname = ANY(%s) AND NOT m.rolname = ANY(%s)
             """,
-            (platform_names, sorted(roles)),
+        )
+    )
+    parameter_acl = acl(
+        _rows(
+            conn,
+            "SELECT p.parname, a.grantor, a.grantee, a.privilege_type, a.is_grantable "
+            "FROM pg_parameter_acl p, aclexplode(p.paracl) a",
         )
     )
 
@@ -499,15 +466,11 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
         "types": types,
         "extensions": extensions,
         "default_privileges": default_privileges,
-        "roles": {
-            "attributes": role_attributes,
-            "settings": role_settings,
-            "memberships": memberships,
-        },
-        "platform_roles": {
-            "attributes": platform_attributes,
-            "settings": platform_settings,
-            "memberships": platform_memberships,
+        "cluster": {
+            "attributes": cluster_attributes,
+            "settings": cluster_settings,
+            "memberships": cluster_memberships,
+            "parameter_acl": parameter_acl,
         },
     }
 
@@ -520,16 +483,71 @@ class Difference:
     restored: Any
 
 
+# A role attribute that raises privilege: an API role gaining one is an app difference.
+ESCALATING_ATTRIBUTES = frozenset(
+    {"rolsuper", "rolcreaterole", "rolcreatedb", "rolreplication", "rolbypassrls"}
+)
+# The API role PostgREST logs in as: LOGIN on it is the platform's (Supabase's authenticator).
+API_LOGIN_ROLE = "authenticator"
+
+
+def api_roles(
+    reference: dict[str, Any], migration: frozenset[str], bootstrap: str | None = None
+) -> frozenset[str]:
+    """The API roles: the ones the reference's own grants and policies name, or that hold a
+    migration role, beyond the migration roles, the owner and the bootstrap superuser."""
+
+    holders = {
+        member
+        for item in reference.get("cluster", {}).get("memberships", [])
+        for granted, member in [_membership(item)]
+        if granted in migration
+    }
+    return frozenset(
+        (named_roles(reference) | holders) - set(migration) - {OWNER, PUBLIC, bootstrap}
+    )
+
+
+def named_roles(fingerprint: dict[str, Any]) -> set[str]:
+    """Every role a fingerprint's grants, default privileges and policies name."""
+
+    names: set[str] = set()
+    grant_lists = [
+        fingerprint.get("schema", {}).get("acl", []),
+        *(item.get("acl", []) for item in fingerprint.get("relations", {}).values()),
+        *(item.get("acl", []) for item in fingerprint.get("functions", {}).values()),
+        *fingerprint.get("column_acl", {}).values(),
+        *fingerprint.get("default_privileges", {}).values(),
+    ]
+    names.update(item.split(":", 1)[0] for grants in grant_lists for item in grants)
+    names.update(
+        name
+        for items in fingerprint.get("policies", {}).values()
+        for policy in items.values()
+        for name in policy.get("roles", [])
+    )
+    return names
+
+
 def compare(
     reference: dict[str, Any],
     restored: dict[str, Any],
     migration_roles: frozenset[str] = frozenset(),
+    bootstrap: str | None = None,
 ) -> list[Difference]:
-    """Every difference between the two fingerprints, classified."""
+    """Every difference between the two fingerprints, classified (see api_roles)."""
 
     differences: list[Difference] = []
     _walk("", reference, restored, differences)
-    return [_classify(difference, migration_roles) for difference in differences]
+    roles = _Roles(migration_roles, api_roles(reference, migration_roles, bootstrap), bootstrap)
+    return [_classify(difference, roles) for difference in differences]
+
+
+@dataclass(frozen=True)
+class _Roles:
+    migration: frozenset[str]
+    api: frozenset[str]
+    bootstrap: str | None
 
 
 def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
@@ -555,26 +573,62 @@ def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
         out.append(Difference("app", path, left, right))
 
 
-def _classify(difference: Difference, migration_roles: frozenset[str]) -> Difference:
+def _classify(difference: Difference, roles: _Roles) -> Difference:
     parts = difference.path.split("/")
-    if (
-        parts[:2] == ["roles", "attributes"]
-        and len(parts) == 4
-        and parts[2] in OPERATIONAL_LOGIN_ROLES
-        and parts[3] == "rolcanlogin"
-        and difference.reference is False
-        and difference.restored is True
-    ):
-        return Difference("operational", difference.path, difference.reference, difference.restored)
+
+    def as_(category: str) -> Difference:
+        return Difference(category, difference.path, difference.reference, difference.restored)
+
     if parts[0] == "default_privileges" and len(parts) > 1:
         holder = parts[1].split(" ")[0]
-        if holder != OWNER and holder not in migration_roles:
-            return Difference(
-                "platform", difference.path, difference.reference, difference.restored
+        return difference if holder == OWNER or holder in roles.migration else as_("platform")
+    if parts[0] != "cluster" or len(parts) < 3:
+        return difference
+    section, subject = parts[1], parts[2]
+    if section == "attributes":
+        attribute = parts[3] if len(parts) > 3 else None
+        if subject in roles.migration:
+            operational = (
+                subject in OPERATIONAL_LOGIN_ROLES
+                and attribute == "rolcanlogin"
+                and difference.reference is False
+                and difference.restored is True
             )
-    if parts[0] == "platform_roles":
-        return Difference("platform", difference.path, difference.reference, difference.restored)
+            return as_("operational") if operational else difference
+        if subject in roles.api:
+            if attribute is None and difference.restored is None:
+                return difference  # an API role the app's grants name is gone
+            raised = difference.reference is False and difference.restored is True
+            if raised and (
+                attribute in ESCALATING_ATTRIBUTES
+                or (attribute == "rolcanlogin" and subject != API_LOGIN_ROLE)
+            ):
+                return difference
+        return as_("platform")
+    if section == "memberships":
+        granted, member = _membership(subject)
+        if granted in roles.migration or member in roles.migration or member in roles.api:
+            return difference
+        if granted == OWNER and member != roles.bootstrap:
+            return difference  # a role holding the owner holds every app object
+        return as_("platform")
+    if section == "settings":
+        role = subject.split(" in ")[0]
+        changed = set(difference.reference or []) ^ set(difference.restored or [])
+        names = {item.split(" ", 1)[0] for item in changed}
+        if role in roles.migration or (role in roles.api and not names <= TIMEOUT_SETTINGS):
+            return difference
+        return as_("platform")
+    if section == "parameter_acl":
+        changed = set(difference.reference or []) ^ set(difference.restored or [])
+        grantees = {item.split(":", 1)[0] for item in changed}
+        return difference if grantees & (roles.migration | roles.api) else as_("platform")
     return difference
+
+
+def _membership(item: str) -> tuple[str, str]:
+    granted, member = item.split(" admin=")[0].split(" to ", 1)
+    return granted, member
 
 
 def function_diff(reference: dict[str, Any], restored: dict[str, Any]) -> dict[str, Any]:
@@ -598,6 +652,13 @@ def function_diff(reference: dict[str, Any], restored: dict[str, Any]) -> dict[s
                 "restored": f"{len(right_lines)} lines",
             }
     return shown
+
+
+def _setting(item: str) -> str:
+    """A role setting as "name sha256:<digest>": compared exactly, its value never shown."""
+
+    name, _, value = item.partition("=")
+    return f"{name} sha256:{_sha(value)}"
 
 
 def _database_scope(database: int, current: bool) -> str:

@@ -3,15 +3,22 @@
 What a database is not needed for, checked here:
 - the export gate refuses, at the first sight and without echoing it, a data entry, a COPY block, a
   password clause or hash, any psql meta-command but the \\restrict pair, a statement that is not
-  schema or role DDL, the wrong pg_dump major, and a file that is not the owner's (its digest);
-- its scanner splits a psql script as psql does: nothing inside a quoted string, a quoted
-  identifier, a dollar-quoted body or a comment is taken for a statement or a meta-command;
-- the comparison classifies exactly: the owner's documented LOGIN steps are operational, a platform
-  role's default privileges are platform, and everything else is app;
+  schema or role DDL, a SET that is not one of pg_dump's own lines, the wrong pg_dump major, and a
+  file that is not the owner's (its digest);
+- its scanner splits a psql script by psql's own lexing rules (psqlscan.l): nothing inside a quoted
+  string, a quoted identifier, a dollar-quoted body or a comment is taken for a statement or a
+  meta-command, a dollar quote starts exactly where psql starts one, and whatever psql would lex
+  by a state the scanner does not model (an escape string, a psql variable, a NUL) is refused;
+- the comparison classifies exactly: the owner's documented LOGIN steps are operational; every
+  privilege path into the app (through an API role, the owner or a migration role) is app; the
+  platform's own roles, settings, memberships and default privileges are platform; a setting's
+  value is compared by its digest and never shown;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
-  own setting is platform, anything else fails;
+  own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
+  repeated;
 - the proof refuses before any server starts, and refuses an export that would take superuser from
-  the bootstrap role or that names the owner as the bootstrap;
+  the bootstrap role or that names the owner as the bootstrap; it sees no PG* variable of the
+  caller's, psql reads UTF-8, and a stopped cluster leaves no log;
 - the migration roles come from the migration files, and the card's commands are the rehearsal's.
 The database half runs in .github/workflows/restore-proof-rehearsal.yml (rehearse.py).
 """
@@ -19,6 +26,8 @@ The database half runs in .github/workflows/restore-proof-rehearsal.yml (rehears
 from __future__ import annotations
 
 import hashlib
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -27,6 +36,7 @@ from scripts.restore_proof import catalog, gate, prove, rehearse, scratch
 
 ROOT = Path(__file__).resolve().parents[2]
 CARD = (ROOT / "docs/runbooks/RESTORE_PROOF_EXPORT.md").read_text(encoding="utf-8")
+MIGRATION = catalog.migration_roles(ROOT / "migrations")
 KEY = "Abc123restrictKey"
 SCHEMA = f"""--
 -- PostgreSQL database dump
@@ -56,7 +66,7 @@ END;
 $_$;
 
 CREATE TABLE public."t;x" (id integer DEFAULT 1);
-COMMENT ON TABLE public."t;x" IS E'a \\' quote; and -- no comment';
+COMMENT ON TABLE public."t;x" IS 'a '' quote; and -- no comment';
 /* a /* nested */ comment; */
 GRANT SELECT ON TABLE public."t;x" TO anon;
 
@@ -271,10 +281,11 @@ def test_the_export_folder_holds_two_regular_files(
     assert kinds(gate.check_export(tmp_path).refusals) == ["TOO_LARGE_FOR_A_STRUCTURE_EXPORT"] * 2
 
 
-def test_the_scanner_splits_as_psql_does() -> None:
-    statements, metas = gate.scan(SCHEMA)
-    # Six statements: no split inside the quoted identifier "t;x", the E-string's "; and --", the
-    # nested comment or the dollar-quoted body (whose INSERT and backslash line are not top level).
+def test_the_scanner_splits_by_psqls_rules() -> None:
+    statements, metas, hazards = gate.scan(SCHEMA)
+    # Six statements: no split inside the quoted identifier "t;x", the string's "; and --" and
+    # doubled quote, the nested comment or the dollar-quoted body (whose INSERT and backslash line
+    # are not top level).
     assert [lead[:3] for _, lead in statements] == [
         ("SET", "STATEMENT_TIMEOUT"),
         ("SELECT", "PG_CATALOG", "SET_CONFIG"),
@@ -287,6 +298,143 @@ def test_the_scanner_splits_as_psql_does() -> None:
         ("restrict", KEY),
         ("unrestrict", KEY),
     ]
+    assert hazards == []
+
+
+@pytest.mark.parametrize(
+    ("text", "commands"),
+    [
+        ("CREATE TABLE t (a int DEFAULT 1$$ \\! x $$);", []),
+        ("CREATE TABLE t (a int DEFAULT 1.5$$ \\! x $$);", []),
+        ("CREATE TABLE x$$ \\! y $$;", ["!"]),
+        ("CREATE TABLE x$a$ \\! y $a$;", ["!"]),
+        ("CREATE TABLE t (a int DEFAULT 1_0$$ \\! y $$);", ["!"]),
+        ("CREATE TABLE \u00e9$$ \\! y $$;", ["!"]),
+        ("CREATE TABLE \u2014$$ \\! y $$;", ["!"]),
+        ("CREATE TABLE \u00a0$$ \\! y $$;", ["!"]),
+        ("CREATE TABLE t (a int DEFAULT $1$$ \\! y $$);", []),
+        ("CREATE TABLE t (a int DEFAULT $\u2014$ \\! y $\u2014$);", []),
+    ],
+    ids=[
+        "after a number",
+        "after a decimal",
+        "inside an identifier",
+        "a tag inside an identifier",
+        "after a number with trailing letters",
+        "after a non-ASCII letter",
+        "after a non-ASCII symbol",
+        "after a no-break space",
+        "after a parameter",
+        "a non-ASCII tag",
+    ],
+)
+def test_a_dollar_quote_starts_exactly_where_psql_starts_one(text: str, commands: list) -> None:
+    """Review 2 of DP-D, finding 3: psql reads every non-ASCII character as an identifier
+    character (and a no-break space is one, not a space), and an identifier takes its "$"; a "$"
+    on its own after a number or a parameter starts a dollar quote. A meta-command outside a quote
+    is seen, and one inside is not, exactly as psql would run or skip it."""
+
+    assert [command for _, command, _ in gate.scan(text)[1]] == commands
+
+
+@pytest.mark.parametrize(
+    ("statement", "hazards"),
+    [
+        ("COMMENT ON TABLE public.t IS E'x';", ["ESCAPE_STRING"]),
+        ("COMMENT ON TABLE public.t IS e'x';", ["ESCAPE_STRING"]),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT :LAST_ERROR_MESSAGE;", ["PSQL_VARIABLE"]),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT :'ENCODING';", ["PSQL_VARIABLE"]),
+        ('ALTER TABLE public.t ALTER a SET DEFAULT :"USER";', ["PSQL_VARIABLE"]),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT :{?ENCODING};", ["PSQL_VARIABLE"]),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT :::text;", ["PSQL_VARIABLE"]),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT 'x'::text;", []),
+        ("ALTER TABLE public.t ALTER a SET DEFAULT (ARRAY[1, 2])[1:2];", []),
+        ("COMMENT ON TABLE public.t IS 'E'':x';", []),
+    ],
+    ids=[
+        "an escape string",
+        "a lower-case one",
+        "a variable",
+        "a quoted variable",
+        "an identifier variable",
+        "a variable test",
+        "a variable after a cast",
+        "a cast",
+        "a slice",
+        "inside a string",
+    ],
+)
+def test_what_psql_would_lex_by_a_state_of_its_own_is_refused(
+    statement: str, hazards: list[str]
+) -> None:
+    """psql reads backslashes in an escape string and substitutes a variable's value and lexes it
+    again, so neither is guessed at; pg_dump writes neither at the top level."""
+
+    raw = schema_with("GRANT SELECT", f"{statement}\nGRANT SELECT")
+    _, refusals = gate.check_schema_dump("schema.sql", raw)
+    assert kinds(refusals) == hazards
+
+
+def test_a_nul_character_is_refused() -> None:
+    """psql's line reader stops at a NUL, so the rest of that line would never reach it."""
+
+    raw = SCHEMA.replace("BEGIN\n", "BEGIN\x00 '\n", 1).encode()
+    assert kinds(gate.check_schema_dump("schema.sql", raw)[1]) == ["NUL_CHARACTER"]
+    assert kinds(gate.check_roles_dump("roles.sql", raw)[1]) == ["NUL_CHARACTER"]
+
+
+@pytest.mark.parametrize(
+    ("line", "found"),
+    [
+        ("SET standard_conforming_strings = on;", []),
+        ("SET client_encoding = 'UTF8';", []),
+        ("SET SESSION AUTHORIZATION ucpe_resolver;", []),
+        ('SET SESSION AUTHORIZATION "a ""quoted"" role";', []),
+        ("SET standard_conforming_strings = off;", ["STATEMENT_SET_STANDARD_CONFORMING_STRINGS"]),
+        ("SET client_encoding = 'SJIS';", ["STATEMENT_SET_CLIENT_ENCODING"]),
+        ("SET SESSION standard_conforming_strings = off;", ["STATEMENT_SET_FORM"]),
+        ("SET LOCAL client_encoding = 'SJIS';", ["STATEMENT_SET_FORM"]),
+        ('SET "standard_conforming_strings" = off;', ["STATEMENT_SET_FORM"]),
+        ("SET standard_conforming_strings TO off;", ["STATEMENT_SET_FORM"]),
+        ("SET a = 1; SET standard_conforming_strings = off;", ["STATEMENT_SET_FORM"] * 2),
+    ],
+    ids=[
+        "standard strings on",
+        "UTF-8",
+        "a session authorization",
+        "a quoted one",
+        "standard strings off",
+        "another encoding",
+        "a session setting",
+        "a local setting",
+        "a quoted setting",
+        "another syntax",
+        "two on one line",
+    ],
+)
+def test_a_set_is_one_of_pg_dumps_own_lines(line: str, found: list[str]) -> None:
+    """Review 2 of DP-D, finding 3: psql reads standard_conforming_strings and client_encoding
+    back from the server and lexes by them, so each may hold only pg_dump's value, in pg_dump's
+    own form, in either file."""
+
+    schema = schema_with("GRANT SELECT", f"{line}\nGRANT SELECT")
+    assert kinds(gate.check_schema_dump("schema.sql", schema)[1]) == found
+    roles = roles_with("GRANT anon", f"{line}\nGRANT anon")
+    assert kinds(gate.check_roles_dump("roles.sql", roles)[1]) == found
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "SELECT pg_catalog.set_config('search_path', 'public', false);",
+        " SELECT pg_catalog.set_config('search_path', '', false);",
+        "SELECT pg_catalog.set_config('search_path', '', false); SELECT 1;",
+    ],
+    ids=["another path", "indented", "with another statement"],
+)
+def test_the_one_select_is_pg_dumps_exact_line(line: str) -> None:
+    raw = schema_with("SELECT pg_catalog.set_config('search_path', '', false);", line)
+    assert set(kinds(gate.check_schema_dump("schema.sql", raw)[1])) == {"STATEMENT_SELECT"}
 
 
 # --------------------------------------------------------------------------- the comparison
@@ -295,12 +443,16 @@ def fingerprint(**changes: object) -> dict:
         "relations": {"predictions": {"acl": ["anon:SELECT by <owner>"], "row_security": True}},
         "functions": {"f()": {"definition_sha256": "a", "definition": "CREATE f\nbody", "acl": []}},
         "default_privileges": {"<owner> r": ["anon:SELECT by <owner>"]},
-        "roles": {
+        "cluster": {
             "attributes": {
                 "ucpe_space_db": {"rolcanlogin": False},
                 "ucpe_api_writer": {"rolcanlogin": False},
+                "anon": {"rolbypassrls": False, "rolcanlogin": False, "rolconnlimit": -1},
+                "authenticator": {"rolcanlogin": False},
             },
+            "settings": {},
             "memberships": ["ucpe_api_writer to authenticator admin=False inherit=False set=True"],
+            "parameter_acl": {},
         },
     }
     for path, value in changes.items():
@@ -318,14 +470,18 @@ def test_identical_fingerprints_have_no_difference() -> None:
 
 def test_the_documented_login_steps_are_operational_and_nothing_else_is() -> None:
     restored = fingerprint()
-    restored["roles"]["attributes"]["ucpe_space_db"]["rolcanlogin"] = True
-    restored["roles"]["attributes"]["ucpe_api_writer"]["rolcanlogin"] = True
-    found = {(item.category, item.path) for item in catalog.compare(fingerprint(), restored)}
-    assert found == {
-        ("operational", "roles/attributes/ucpe_space_db/rolcanlogin"),
-        ("app", "roles/attributes/ucpe_api_writer/rolcanlogin"),
+    restored["cluster"]["attributes"]["ucpe_space_db"]["rolcanlogin"] = True
+    restored["cluster"]["attributes"]["ucpe_api_writer"]["rolcanlogin"] = True
+    found = {
+        (item.category, item.path) for item in catalog.compare(fingerprint(), restored, MIGRATION)
     }
-    reverse = {(item.category, item.path) for item in catalog.compare(restored, fingerprint())}
+    assert found == {
+        ("operational", "cluster/attributes/ucpe_space_db/rolcanlogin"),
+        ("app", "cluster/attributes/ucpe_api_writer/rolcanlogin"),
+    }
+    reverse = {
+        (item.category, item.path) for item in catalog.compare(restored, fingerprint(), MIGRATION)
+    }
     assert {category for category, _ in reverse} == {"app"}, "losing a login is never operational"
 
 
@@ -347,29 +503,164 @@ def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app(
     }
 
 
-def test_the_api_roles_are_reported_as_platform() -> None:
-    reference = {
-        "platform_roles": {"attributes": {"anon": {"rolbypassrls": False}}, "memberships": []}
-    }
-    restored = {
-        "platform_roles": {
-            "attributes": {"anon": {"rolbypassrls": True}},
-            "memberships": ["anon to authenticator admin=False inherit=False set=True"],
-        }
-    }
-    found = {(item.category, item.path) for item in catalog.compare(reference, restored)}
-    assert found == {
-        ("platform", "platform_roles/attributes/anon/rolbypassrls"),
+@pytest.mark.parametrize(
+    ("section", "key", "before", "after", "category"),
+    [
+        ("attributes", "anon", {"rolbypassrls": False}, {"rolbypassrls": True}, "app"),
+        ("attributes", "anon", {"rolcanlogin": False}, {"rolcanlogin": True}, "app"),
+        ("attributes", "authenticator", {"rolcanlogin": False}, {"rolcanlogin": True}, "platform"),
+        ("attributes", "anon", {"rolconnlimit": -1}, {"rolconnlimit": 5}, "platform"),
+        ("attributes", "anon", {"rolbypassrls": True}, {"rolbypassrls": False}, "platform"),
+        ("attributes", "<owner>", {"rolbypassrls": False}, {"rolbypassrls": True}, "platform"),
+        ("attributes", "supabase_storage_admin", None, {"rolcanlogin": True}, "platform"),
+        ("attributes", "anon", {"rolcanlogin": False}, None, "app"),
         (
-            "platform",
-            "platform_roles/memberships/anon to authenticator admin=False inherit=False set=True",
+            "memberships",
+            "pg_read_all_data to anon admin=False inherit=False set=True",
+            None,
+            "x",
+            "app",
         ),
-    }
+        (
+            "memberships",
+            "supabase_admin to authenticator admin=False inherit=False set=True",
+            None,
+            "x",
+            "app",
+        ),
+        (
+            "memberships",
+            "<owner> to rehearsal_x admin=False inherit=True set=True",
+            None,
+            "x",
+            "app",
+        ),
+        (
+            "memberships",
+            "<owner> to supabase_admin admin=True inherit=False set=False",
+            None,
+            "x",
+            "platform",
+        ),
+        (
+            "memberships",
+            "anon to supabase_storage_admin admin=False inherit=True set=True",
+            None,
+            "x",
+            "platform",
+        ),
+        (
+            "memberships",
+            "pg_read_all_data to <owner> admin=False inherit=True set=True",
+            None,
+            "x",
+            "platform",
+        ),
+        (
+            "settings",
+            "ucpe_api_writer in all databases",
+            None,
+            ["statement_timeout sha256:a"],
+            "app",
+        ),
+        (
+            "settings",
+            "authenticator in all databases",
+            None,
+            ["statement_timeout sha256:a"],
+            "platform",
+        ),
+        (
+            "settings",
+            "authenticator in all databases",
+            None,
+            ["session_replication_role sha256:a"],
+            "app",
+        ),
+        (
+            "settings",
+            "anon in all databases",
+            ["statement_timeout sha256:a"],
+            ["search_path sha256:b", "statement_timeout sha256:a"],
+            "app",
+        ),
+        (
+            "settings",
+            "supabase_storage_admin in all databases",
+            None,
+            ["search_path sha256:a"],
+            "platform",
+        ),
+        ("settings", "<owner> in all databases", None, ["search_path sha256:a"], "platform"),
+        (
+            "parameter_acl",
+            "session_replication_role",
+            [],
+            ["ucpe_api_writer:SET by <owner>"],
+            "app",
+        ),
+        ("parameter_acl", "session_replication_role", [], ["anon:SET by <owner>"], "app"),
+        ("parameter_acl", "session_replication_role", [], ["<owner>:SET by x"], "platform"),
+        (
+            "parameter_acl",
+            "log_min_duration_statement",
+            [],
+            ["dashboard_user:SET by x"],
+            "platform",
+        ),
+    ],
+    ids=[
+        "an API role gains BYPASSRLS",
+        "an API role gains LOGIN",
+        "the API login role logs in",
+        "an API role's connection limit",
+        "an API role loses BYPASSRLS",
+        "the owner's attributes",
+        "another platform role",
+        "an API role is gone",
+        "a predefined role granted to an API role",
+        "the superuser granted to the API login",
+        "a role holding the owner",
+        "the bootstrap superuser holding the owner",
+        "an API role granted to another role",
+        "a predefined role granted to the owner",
+        "a migration role's setting",
+        "an API role's timeout",
+        "a setting that turns the seals off for every API session",
+        "an API role's other setting beside a timeout",
+        "a platform role's setting",
+        "the owner's setting",
+        "a parameter grant to a migration role",
+        "a parameter grant to an API role",
+        "a parameter grant to the owner, who owns every app object already",
+        "a parameter grant to another role",
+    ],
+)
+def test_privilege_paths_fail_and_platform_notes_do_not(
+    section: str, key: str, before: object, after: object, category: str
+) -> None:
+    """Review 2 of DP-D, finding 1: every privilege path the roles export restores is compared,
+    and one into the app (through an API role, the owner or a migration role) fails."""
+
+    reference, restored = fingerprint(), fingerprint()
+    cluster = reference["cluster"]
+    if section == "memberships":
+        restored["cluster"]["memberships"] = [*cluster["memberships"], key]
+    else:
+        if before is not None:
+            cluster[section][key] = before
+            restored["cluster"][section][key] = before
+        if after is None:
+            restored["cluster"][section].pop(key)
+        else:
+            restored["cluster"][section][key] = after
+    found = catalog.compare(reference, restored, MIGRATION, "supabase_admin")
+    assert {item.category for item in found} == {category}, found
 
 
 def test_memberships_differ_item_by_item_and_functions_by_digest() -> None:
     restored = fingerprint()
-    restored["roles"]["memberships"] = [
+    restored["cluster"]["memberships"] = [
         "service_role to ucpe_space_db admin=False inherit=False set=True"
     ]
     restored["functions"]["f()"] = {
@@ -377,21 +668,56 @@ def test_memberships_differ_item_by_item_and_functions_by_digest() -> None:
         "definition": "CREATE f\nother",
         "acl": [],
     }
-    found = {(item.category, item.path) for item in catalog.compare(fingerprint(), restored)}
+    found = {
+        (item.category, item.path) for item in catalog.compare(fingerprint(), restored, MIGRATION)
+    }
     assert found == {
         (
             "app",
-            "roles/memberships/ucpe_api_writer to authenticator admin=False inherit=False set=True",
+            "cluster/memberships/ucpe_api_writer to authenticator "
+            "admin=False inherit=False set=True",
         ),
         (
             "app",
-            "roles/memberships/service_role to ucpe_space_db admin=False inherit=False set=True",
+            "cluster/memberships/service_role to ucpe_space_db admin=False inherit=False set=True",
         ),
         ("app", "functions/f()/definition_sha256"),
     }
     assert catalog.function_diff(fingerprint(), restored) == {
         "f()": {"line": 2, "reference": "body", "restored": "other"}
     }
+
+
+def test_the_api_roles_are_the_ones_the_app_names_or_that_hold_a_migration_role() -> None:
+    reference = {
+        "schema": {"acl": ["anon:USAGE by <owner>", "<owner>:CREATE by <owner>"]},
+        "relations": {"t": {"acl": ["authenticated:SELECT by <owner>", "PUBLIC:SELECT by x"]}},
+        "functions": {"f()": {"acl": ["service_role:EXECUTE by <owner>"]}},
+        "column_acl": {"t.a": ["column_reader:SELECT by <owner>"]},
+        "default_privileges": {"<owner> r": ["supabase_admin:SELECT by <owner>"]},
+        "policies": {"t": {"p": {"roles": ["policy_role", "ucpe_space_db"]}}},
+        "cluster": {
+            "memberships": [
+                "ucpe_api_writer to authenticator admin=False inherit=False set=True",
+                "anon to platform_member admin=False inherit=True set=True",
+            ]
+        },
+    }
+    found = catalog.api_roles(reference, MIGRATION, "supabase_admin")
+    assert found == {
+        "anon",
+        "authenticated",
+        "service_role",
+        "column_reader",
+        "policy_role",
+        "authenticator",
+    }, "never a migration role, the owner, PUBLIC or the bootstrap superuser"
+
+
+def test_a_settings_value_is_kept_as_its_digest_only() -> None:
+    kept = catalog._setting("app.settings.key=s3cr3t=value")  # noqa: SLF001
+    digest = hashlib.sha256(b"s3cr3t=value").hexdigest()
+    assert kept == f"app.settings.key sha256:{digest}" and "s3cr3t" not in kept
 
 
 def test_the_migration_roles_come_from_the_migration_files() -> None:
@@ -415,9 +741,36 @@ EXPECTED = {
     [
         ("schema.sql", 26, 'schema "public" already exists', {}, "expected"),
         ("roles.sql", 9, 'role "supabase_admin" already exists', {}, "expected"),
-        ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "ANON", "SET")}, "platform"),
-        ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "ANON", "IN")}, "platform"),
+        (
+            "roles.sql",
+            7,
+            "invalid value",
+            {7: ("ALTER", "ROLE", "DASHBOARD_USER", "SET")},
+            "platform",
+        ),
+        (
+            "roles.sql",
+            7,
+            "invalid value",
+            {7: ("ALTER", "ROLE", "DASHBOARD_USER", "IN")},
+            "platform",
+        ),
         ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "UCPE_API_WRITER", "SET")}, "fail"),
+        (
+            "roles.sql",
+            7,
+            "invalid value",
+            {7: ("ALTER", "ROLE", "ANON", "SET", "STATEMENT_TIMEOUT")},
+            "platform",
+        ),
+        (
+            "roles.sql",
+            7,
+            "invalid value",
+            {7: ("ALTER", "ROLE", "AUTHENTICATOR", "SET", "SESSION_REPLICATION_ROLE")},
+            "fail",
+        ),
+        ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "ANON", "IN", "DATABASE")}, "fail"),
         ("roles.sql", 7, "permission denied", {7: ("GRANT", "ANON", "TO", "X")}, "fail"),
         ("schema.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "ANON", "SET")}, "fail"),
         (
@@ -442,6 +795,9 @@ EXPECTED = {
         "platform set",
         "platform in",
         "migration role",
+        "an API role's timeout",
+        "an API role's other setting",
+        "an API role's database setting",
         "grant",
         "schema",
         "a publication entry",
@@ -453,9 +809,10 @@ def test_restore_errors_are_classified(
     file: str, line: int, message: str, statements: dict, category: str
 ) -> None:
     error = scratch.RestoreError(file, line, message)
-    roles = catalog.migration_roles(ROOT / "migrations")
     by_file = {file: statements}
-    assert prove._classify_error(error, by_file, roles, EXPECTED)["category"] == category  # noqa: SLF001
+    api = frozenset({"anon", "authenticator"})
+    found = prove._classify_error(error, by_file, MIGRATION, EXPECTED, api)  # noqa: SLF001
+    assert found["category"] == category
 
 
 @pytest.mark.parametrize(
@@ -579,6 +936,54 @@ def test_the_command_line_demands_both_digests(tmp_path: Path) -> None:
     assert not (tmp_path / "work").exists()
 
 
+def test_no_pg_variable_of_the_callers_reaches_the_proof(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review 2 of DP-D, finding 4: with PGHOSTADDR set, psql and psycopg ignore the socket."""
+
+    monkeypatch.setenv("PGHOSTADDR", "192.0.2.1")
+    monkeypatch.setenv("PGSERVICE", "production")
+    with scratch.clean_pg_environment():
+        assert [name for name in os.environ if name.startswith("PG")] == []
+    assert os.environ["PGHOSTADDR"] == "192.0.2.1" and os.environ["PGSERVICE"] == "production"
+
+
+def test_psql_reads_utf8_and_a_refused_value_is_not_repeated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict = {}
+    stderr = (
+        'psql:roles.sql:7: ERROR:  invalid value for parameter "statement_timeout": "s3cr3t"\n'
+        'psql:roles.sql:9: ERROR:  role "supabase_admin" already exists\n'
+    )
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(args, 3, "", stderr)
+
+    monkeypatch.setattr(scratch.subprocess, "run", fake_run)
+    cluster = scratch.Cluster(tmp_path, tmp_path / "data", tmp_path / "socket", tmp_path / "x.log")
+    done = cluster.psql(file=tmp_path / "roles.sql", stop_on_error=False)
+    assert seen["env"]["PGCLIENTENCODING"] == "UTF8"
+    assert scratch._errors(done, "roles.sql") == [  # noqa: SLF001
+        scratch.RestoreError("roles.sql", 7, 'invalid value for parameter "statement_timeout"'),
+        scratch.RestoreError("roles.sql", 9, 'role "supabase_admin" already exists'),
+    ]
+
+
+def test_a_stopped_cluster_leaves_no_data_and_no_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(scratch.subprocess, "run", fake_run)
+    cluster = scratch.Cluster(tmp_path, tmp_path / "data", tmp_path / "socket", tmp_path / "x.log")
+    for folder in (cluster.data, cluster.socket):
+        folder.mkdir()
+    cluster.log.write_text("ERROR:  a refused statement\n", encoding="utf-8")
+    scratch.stop(cluster)
+    assert not cluster.data.exists() and not cluster.socket.exists() and not cluster.log.exists()
+
+
 # --------------------------------------------------------------------------- the card
 def test_the_card_runs_the_rehearsed_commands_and_keeps_the_secret_out() -> None:
     schema = (
@@ -593,8 +998,10 @@ def test_the_card_runs_the_rehearsed_commands_and_keeps_the_secret_out() -> None
     assert 'PGBIN="$(brew --prefix postgresql@17)/bin"' in CARD and "read -r CONNECTION" in CARD
     assert "shasum -a 256 schema.sql roles.sql" in CARD
     assert "--expect-sha256 schema.sql=" in CARD and "--expect-sha256 roles.sql=" in CARD
-    # Only what a second export can fix sends the owner back to export again.
+    # Only what a second export can fix sends the owner back to export again, and only once.
     assert "`DIGEST_MISMATCH`, `DATA_ENTRY` or a `PASSWORD_`" in CARD
+    assert "again exactly, once. If the same kind comes back, stop" in " ".join(CARD.split())
+    assert "nothing is changed or reclassified to hide one" in " ".join(CARD.split())
     assert "--expect-sha256" in prove.__doc__
     assert "Status: PREPARED, NOT RUN." in CARD
     flat = " ".join(CARD.split())

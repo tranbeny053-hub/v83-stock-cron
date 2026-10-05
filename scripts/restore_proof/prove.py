@@ -16,9 +16,10 @@ It takes the owner's two export files (docs/runbooks/RESTORE_PROOF_EXPORT.md), a
    reaches no server but the two it made.
 
 RESTORE_PROOF=PASS needs: the export passed the gate, the restore raised no error but the two
-every such restore raises (the bootstrap superuser and the public schema already exist) and a
-platform role's own setting, and no app difference. Operational and platform differences are
-reported, not failing.
+every such restore raises (the bootstrap superuser and the public schema already exist), a
+platform role's own setting (an API role's only when it is a timeout) and a platform publication
+entry, and no app difference (catalog.py says what is app). Operational and platform differences
+are reported, not failing.
 """
 
 from __future__ import annotations
@@ -45,6 +46,7 @@ SCHEMA_VERSION = "ucpe.restore_proof.v1"
 REFERENCE_DATABASE = "reference"
 RESTORED_DATABASE = "restored"
 _ALTER_ROLE = re.compile(r"^ALTER ROLE (\S+) WITH (.*);$")
+TIMEOUTS = catalog.TIMEOUT_SETTINGS
 
 
 def run(
@@ -60,8 +62,33 @@ def run(
 ) -> dict[str, Any]:
     """The whole proof for one export, as a report (a dict); nothing outside ``work`` is written.
     ``reference`` is the migrations' fingerprint, when the caller has already built it, and
-    ``expected_sha256`` the owner's digests of the two files, which must match exactly."""
+    ``expected_sha256`` the owner's digests of the two files, which must match exactly. No PG*
+    environment variable is seen while it runs."""
 
+    with scratch.clean_pg_environment():
+        return _run(
+            pg_bin,
+            export,
+            work,
+            restored_owner=restored_owner,
+            bootstrap=bootstrap,
+            root=root,
+            reference=reference,
+            expected_sha256=expected_sha256,
+        )
+
+
+def _run(
+    pg_bin: Path,
+    export: Path,
+    work: Path,
+    *,
+    restored_owner: str,
+    bootstrap: str,
+    root: Path,
+    reference: dict[str, Any] | None,
+    expected_sha256: dict[str, str] | None,
+) -> dict[str, Any]:
     checked = gate.check_export(export)
     actual_sha256 = {item.name: item.sha256 for item in checked.files}
     for name in ("schema.sql", "roles.sql"):
@@ -112,13 +139,16 @@ def run(
         restored = scratch.start(pg_bin, work, "restored", superuser=bootstrap)
         try:
             errors = scratch.restore(restored, checked_copy, RESTORED_DATABASE)
-            actual = _fingerprint(restored, RESTORED_DATABASE, restored_owner, roles)
+            actual = _fingerprint(restored, RESTORED_DATABASE, restored_owner)
         finally:
             scratch.stop(restored)
     finally:
         shutil.rmtree(checked_copy, ignore_errors=True)
-    classified = [_classify_error(error, statements, roles, expected_errors) for error in errors]
-    differences = catalog.compare(expected, actual, roles)
+    api = catalog.api_roles(expected, roles, bootstrap)
+    classified = [
+        _classify_error(error, statements, roles, expected_errors, api) for error in errors
+    ]
+    differences = catalog.compare(expected, actual, roles, bootstrap)
     failing = [item for item in classified if item["category"] == "fail"]
     app = [item for item in differences if item.category == "app"]
     return {
@@ -146,20 +176,18 @@ def reference_fingerprint(
 ) -> dict[str, Any]:
     """The structure the migrations declare, read from a scratch cluster built from them."""
 
-    roles = catalog.migration_roles(root / "migrations")
-    reference = scratch.start(pg_bin, work, "reference", superuser=bootstrap)
-    try:
-        scratch.build_from_migrations(reference, root, REFERENCE_DATABASE)
-        return _fingerprint(reference, REFERENCE_DATABASE, scratch.MIGRATION_OWNER, roles)
-    finally:
-        scratch.stop(reference)
+    with scratch.clean_pg_environment():
+        reference = scratch.start(pg_bin, work, "reference", superuser=bootstrap)
+        try:
+            scratch.build_from_migrations(reference, root, REFERENCE_DATABASE)
+            return _fingerprint(reference, REFERENCE_DATABASE, scratch.MIGRATION_OWNER)
+        finally:
+            scratch.stop(reference)
 
 
-def _fingerprint(
-    cluster: scratch.Cluster, database: str, owner: str, roles: frozenset[str]
-) -> dict[str, Any]:
+def _fingerprint(cluster: scratch.Cluster, database: str, owner: str) -> dict[str, Any]:
     with psycopg.connect(cluster.url(database), autocommit=True) as conn:
-        return catalog.fingerprint(conn, owner=owner, roles=roles)
+        return catalog.fingerprint(conn, owner=owner)
 
 
 def keeps_superuser(roles_dump: Path, name: str) -> bool:
@@ -179,18 +207,22 @@ def _classify_error(
     statements: dict[str, dict[int, tuple[str, ...]]],
     roles: frozenset[str],
     expected: set[tuple[str, str]],
+    api: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     item = asdict(error)
     if (error.file, error.message) in expected:
         return {**item, "category": "expected"}
     lead = statements.get(error.file, {}).get(error.line, ())
-    # A platform role's own setting (ALTER ROLE r SET / IN DATABASE): never a migration role's.
+    # A platform role's own setting (ALTER ROLE r SET / IN DATABASE): never a migration role's,
+    # and an API role's only when it is a timeout (catalog.TIMEOUT_SETTINGS).
+    role = lead[2].lower() if len(lead) > 3 else ""
+    timeout = lead[3:4] == ("SET",) and lead[4:5] in {(name.upper(),) for name in TIMEOUTS}
     if (
         error.file == "roles.sql"
         and lead[:2] == ("ALTER", "ROLE")
-        and len(lead) == 4
-        and lead[3] in {"SET", "IN"}
-        and lead[2].lower() not in roles
+        and lead[3:4] in {("SET",), ("IN",)}
+        and role not in roles
+        and (role not in api or timeout)
     ):
         return {**item, "category": "platform"}
     # A table's place in a platform publication (Supabase Realtime): the publication is the
