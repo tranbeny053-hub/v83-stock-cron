@@ -10,12 +10,14 @@ then the proof (prove.py), with the export's own digests as the owner's. Each ca
 expected verdict, differences, refusals and restore errors, and passes only when they are exactly
 what it sees:
 - the clean export PASSES with no difference: what was exported is what the migrations declare;
-- drift fails as app differences, each at its own path: a revoked or an extra table grant, a seal
-  trigger disabled or dropped, a seal function's body changed, a column added, row security off, a
-  policy or an index dropped, an extra EXECUTE grant, the owner's default privileges changed, a
-  migration role's attribute or membership changed;
+- drift fails as app differences, each at its own path: a revoked or an extra table grant, one made
+  by a role other than the owner, a seal trigger disabled or dropped, a seal function's body
+  changed, a column added, row security off, a policy or an index dropped, an extra EXECUTE grant,
+  the default privileges of the owner or of a migration role changed, a migration role's attribute
+  or membership changed;
 - the owner's documented credential steps (LOGIN on ucpe_space_db and ucpe_resolver) are reported
-  as operational, a platform role's default privileges as platform, and neither fails;
+  as operational; a platform role's default privileges and an API role's attribute as platform;
+  none of them fails; and a role's comment, which pg_dumpall writes, passes the gate;
 - a restore error on a platform role's own setting is platform; on a migration role's, it fails;
 - the gate refuses, and nothing is restored from: an export with data (no --schema-only), a roles
   export with password verifiers (no --no-role-passwords, whose verifier never appears in the
@@ -196,6 +198,27 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
+        "a migration role's default privileges",
+        "FAIL",
+        _app("default_privileges/ucpe_bundle_owner f"),
+        database_sql=(
+            (
+                SUPER,
+                "ALTER DEFAULT PRIVILEGES FOR ROLE ucpe_bundle_owner IN SCHEMA public "
+                "GRANT EXECUTE ON FUNCTIONS TO anon",
+            ),
+        ),
+    ),
+    Case(
+        "a grant made by a role other than the owner",
+        "FAIL",
+        _app("relations/predictions/acl"),
+        database_sql=(
+            (SUPER, "GRANT SELECT ON public.predictions TO ucpe_resolver WITH GRANT OPTION"),
+            (SUPER, "SET ROLE ucpe_resolver; GRANT SELECT ON public.predictions TO anon"),
+        ),
+    ),
+    Case(
         "a platform role's default privileges",
         "PASS",
         frozenset({("platform", f"default_privileges/{SUPER} r")}),
@@ -263,6 +286,17 @@ CASES: tuple[Case, ...] = (
         "FAIL",
         _app("roles/memberships/service_role to ucpe_space_db admin=False inherit=False set=True"),
         cluster_sql=("GRANT service_role TO ucpe_space_db",),
+    ),
+    Case(
+        "an API role's attribute",
+        "PASS",
+        frozenset({("platform", "platform_roles/attributes/anon/rolbypassrls")}),
+        cluster_sql=("ALTER ROLE anon BYPASSRLS",),
+    ),
+    Case(
+        "a role's comment",
+        "PASS",
+        cluster_sql=("COMMENT ON ROLE anon IS 'a rehearsal comment'",),
     ),
     Case(
         "the owner's documented credential steps",

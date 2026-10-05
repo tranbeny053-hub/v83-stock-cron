@@ -24,8 +24,10 @@ reported, not failing.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -79,24 +81,44 @@ def run(
     }
     if not checked.passed:
         return {**report, "verdict": "REFUSED_EXPORT"}
+    version = scratch.server_version(pg_bin)
+    report["postgres"] = None if version is None else f"{version[0]}.{version[1]}"
+    if version is None or version[0] != 17 or version[1] < 6:
+        return {**report, "verdict": "REFUSED_TOOLS"}  # the governed 17.6 or a later 17.x only
     roles = catalog.migration_roles(root / "migrations")
     expected_errors = {
         ("roles.sql", f'role "{bootstrap}" already exists'),
         ("schema.sql", 'schema "public" already exists'),
     }
     work.mkdir(parents=True, exist_ok=False)
-    expected = reference
-    if expected is None:
-        expected = reference_fingerprint(pg_bin, work, bootstrap=bootstrap, root=root)
-    restored = scratch.start(pg_bin, work, "restored", superuser=bootstrap)
+    # Restore exactly the bytes the gate checked: a private copy, its digests checked again, and
+    # deleted once restored (the owner's files stay only where the owner put them).
+    checked_copy = work / "export"
+    checked_copy.mkdir()
+    for name in ("schema.sql", "roles.sql"):
+        shutil.copyfile(export / name, checked_copy / name)
+        if hashlib.sha256((checked_copy / name).read_bytes()).hexdigest() != actual_sha256[name]:
+            shutil.rmtree(checked_copy, ignore_errors=True)
+            refusal = asdict(gate.Refusal(name, None, "DIGEST_CHANGED"))
+            return {**report, "gate_refusals": [refusal], "verdict": "REFUSED_EXPORT"}
     try:
-        errors = scratch.restore(restored, export, RESTORED_DATABASE)
-        actual = _fingerprint(restored, RESTORED_DATABASE, restored_owner, roles)
+        statements = {
+            name: dict(gate.scan((checked_copy / name).read_text(encoding="utf-8"))[0])
+            for name in ("schema.sql", "roles.sql")
+        }
+        expected = reference
+        if expected is None:
+            expected = reference_fingerprint(pg_bin, work, bootstrap=bootstrap, root=root)
+        restored = scratch.start(pg_bin, work, "restored", superuser=bootstrap)
+        try:
+            errors = scratch.restore(restored, checked_copy, RESTORED_DATABASE)
+            actual = _fingerprint(restored, RESTORED_DATABASE, restored_owner, roles)
+        finally:
+            scratch.stop(restored)
     finally:
-        scratch.stop(restored)
-    statements = _role_statements(export / "roles.sql")
+        shutil.rmtree(checked_copy, ignore_errors=True)
     classified = [_classify_error(error, statements, roles, expected_errors) for error in errors]
-    differences = catalog.compare(expected, actual)
+    differences = catalog.compare(expected, actual, roles)
     failing = [item for item in classified if item["category"] == "fail"]
     app = [item for item in differences if item.category == "app"]
     return {
@@ -152,28 +174,28 @@ def keeps_superuser(roles_dump: Path, name: str) -> bool:
     return len(attributes) == 1 and "SUPERUSER" in attributes[0]
 
 
-def _role_statements(path: Path) -> dict[int, tuple[str, ...]]:
-    statements, _ = gate.scan(path.read_text(encoding="utf-8"))
-    return dict(statements)
-
-
 def _classify_error(
     error: scratch.RestoreError,
-    role_statements: dict[int, tuple[str, ...]],
+    statements: dict[str, dict[int, tuple[str, ...]]],
     roles: frozenset[str],
     expected: set[tuple[str, str]],
 ) -> dict[str, Any]:
     item = asdict(error)
     if (error.file, error.message) in expected:
         return {**item, "category": "expected"}
-    lead = role_statements.get(error.line, ()) if error.file == "roles.sql" else ()
+    lead = statements.get(error.file, {}).get(error.line, ())
     # A platform role's own setting (ALTER ROLE r SET / IN DATABASE): never a migration role's.
     if (
-        lead[:2] == ("ALTER", "ROLE")
+        error.file == "roles.sql"
+        and lead[:2] == ("ALTER", "ROLE")
         and len(lead) == 4
         and lead[3] in {"SET", "IN"}
         and lead[2].lower() not in roles
     ):
+        return {**item, "category": "platform"}
+    # A table's place in a platform publication (Supabase Realtime): the publication is the
+    # platform's, and the table itself is compared on its own.
+    if error.file == "schema.sql" and lead[:2] == ("ALTER", "PUBLICATION"):
         return {**item, "category": "platform"}
     return {**item, "category": "fail"}
 

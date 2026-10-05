@@ -23,6 +23,7 @@ BOOTSTRAP_SUPERUSER = "supabase_admin"
 # The role that runs the migrations: a non-superuser with CREATEROLE, as Supabase's postgres is.
 MIGRATION_OWNER = "postgres"
 _PSQL_ERROR = re.compile(r"^psql:(?P<file>[^:]*):(?P<line>\d+): ERROR:  (?P<message>.*)$")
+_VERSION = re.compile(r"\(PostgreSQL\) (\d+)\.(\d+)")
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,23 @@ class Cluster:
         return done
 
 
+def server_version(bin_dir: Path) -> tuple[int, int] | None:
+    """The PostgreSQL release these binaries are (major, minor), or None when they cannot say."""
+
+    try:
+        done = subprocess.run(  # noqa: S603
+            [str(bin_dir / "postgres"), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except OSError:
+        return None
+    match = _VERSION.search(done.stdout)
+    return (int(match[1]), int(match[2])) if match else None
+
+
 def start(bin_dir: Path, work: Path, name: str, *, superuser: str = BOOTSTRAP_SUPERUSER) -> Cluster:
     """A new cluster in work/name, started on a private socket only."""
 
@@ -95,23 +113,28 @@ def start(bin_dir: Path, work: Path, name: str, *, superuser: str = BOOTSTRAP_SU
     )
     socket = Path(tempfile.mkdtemp(prefix=f"rp-{name[:8]}.", dir="/tmp"))  # short: a socket path
     log = work / f"{name}.log"
-    subprocess.run(  # noqa: S603
-        [
-            str(bin_dir / "pg_ctl"),
-            "-D",
-            str(data),
-            "-l",
-            str(log),
-            "-w",
-            "start",
-            "-o",
-            f"-c listen_addresses='' -c unix_socket_directories='{socket}' -c fsync=off",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=300,
-        check=True,
-    )
+    try:
+        subprocess.run(  # noqa: S603
+            [
+                str(bin_dir / "pg_ctl"),
+                "-D",
+                str(data),
+                "-l",
+                str(log),
+                "-w",
+                "start",
+                "-o",
+                f"-c listen_addresses='' -c unix_socket_directories='{socket}' -c fsync=off",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=True,
+        )
+    except BaseException:
+        shutil.rmtree(socket, ignore_errors=True)
+        shutil.rmtree(data, ignore_errors=True)
+        raise
     return Cluster(bin=bin_dir, data=data, socket=socket, log=log, superuser=superuser)
 
 

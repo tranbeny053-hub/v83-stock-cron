@@ -4,11 +4,13 @@ owner ruling DP-D=2, 2026-10-05).
 Before anything is restored, the owner's two export files are read as text and refused unless they
 are what the export card's two commands make (docs/runbooks/RESTORE_PROOF_EXPORT.md):
 - schema.sql, from ``pg_dump --schema-only --schema=public`` (pg_dump 17). It may hold no data:
-  a data entry, a COPY block or any statement that is not schema DDL is refused, so no row (and
-  no probability from the section-5A window) can ever be loaded. The scan stops at the first data
-  marker and never reads past it.
-- roles.sql, from ``pg_dumpall --roles-only --no-role-passwords`` (pg_dumpall 17). Any password
-  clause or password hash is refused at its first sight, and its value is never printed.
+  a data entry or a COPY block is refused, and so is any statement whose leading words are not a
+  kind pg_dump writes for schema DDL, so no row (and no probability from the section-5A window)
+  can ever be loaded. The scan stops at the first data marker and never reads past it. The kinds
+  are judged by their leading words only; the owner's digests pin the bytes themselves.
+- roles.sql, from ``pg_dumpall --roles-only --no-role-passwords`` (pg_dumpall 17, which writes no
+  version line, so only schema.sql's major is checked). Any password clause or password hash is
+  refused at its first sight, and its value is never printed.
 In both, the only psql meta-commands allowed are the ``\\restrict`` and ``\\unrestrict`` pair that
 pg_dump 17.6 writes, with one key, first and last: any other (``\\!`` runs a shell command) could
 act outside the scratch server, and ``\\restrict`` keeps psql from running any meta-command between
@@ -49,9 +51,14 @@ _RESTRICT_KEY = re.compile(r"[A-Za-z0-9]{1,64}")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DOLLAR_TAG = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
 # What each file may hold: the leading words of every top-level statement.
-_SCHEMA_STATEMENTS = frozenset({"SET", "CREATE", "ALTER", "COMMENT", "GRANT", "REVOKE"})
+# pg_dump's schema DDL: RESET closes a SET SESSION AUTHORIZATION it writes for a grant made by a
+# role other than the owner, and SECURITY opens a SECURITY LABEL.
+_SCHEMA_STATEMENTS = frozenset(
+    {"SET", "RESET", "CREATE", "ALTER", "COMMENT", "GRANT", "REVOKE", "SECURITY"}
+)
 _SEARCH_PATH = ("SELECT", "PG_CATALOG", "SET_CONFIG")
-_ROLE_STATEMENTS = frozenset({"SET", "CREATE", "ALTER", "GRANT"})
+# pg_dumpall's roles: CREATE/ALTER ROLE, GRANT (memberships), COMMENT ON ROLE, SECURITY LABEL.
+_ROLE_STATEMENTS = frozenset({"SET", "CREATE", "ALTER", "GRANT", "COMMENT", "SECURITY"})
 
 
 @dataclass(frozen=True)
@@ -146,14 +153,20 @@ def check_roles_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]:
             refusals.append(Refusal(name, line, f"STATEMENT_{_kind(lead)}"))
         elif lead[0] in {"CREATE", "ALTER"} and lead[1:2] != ("ROLE",):
             refusals.append(Refusal(name, line, f"STATEMENT_{lead[0]}_{_kind(lead[1:])}"))
+        elif lead[0] == "COMMENT" and lead[1:3] != ("ON", "ROLE"):
+            refusals.append(Refusal(name, line, f"STATEMENT_COMMENT_{_kind(lead[2:])}"))
+        elif lead[0] == "SECURITY" and lead[1:2] != ("LABEL",):
+            refusals.append(Refusal(name, line, "STATEMENT_SECURITY"))
     return described, refusals
 
 
 def scan(text: str) -> tuple[list[tuple[int, tuple[str, ...]]], list[tuple[int, str, str]]]:
-    """Split a psql script as psql's own lexer does: the top-level statements (the line each
-    starts on and its first four words, upper-cased) and the top-level meta-commands (line,
-    command and its one argument). Quoted strings, quoted identifiers, dollar-quoted bodies and
-    comments are skipped, so nothing inside a function body is mistaken for either."""
+    """Split a psql script close to how psql's own lexer does: the top-level statements (the line
+    each starts on and its first four words, upper-cased) and the top-level meta-commands (line,
+    command and its one argument). Quoted strings, quoted identifiers, dollar-quoted bodies (ASCII
+    tags) and comments are skipped, so nothing inside a function body is mistaken for either. It is
+    stricter than psql in two ways that pg_dump's schema output never meets: a semicolon inside
+    parentheses or a BEGIN ATOMIC body ends a statement here."""
 
     statements: list[tuple[int, tuple[str, ...]]] = []
     metas: list[tuple[int, str, str]] = []

@@ -220,6 +220,36 @@ def test_the_roles_file_holds_role_ddl_only(line: str, kind: str) -> None:
     assert kinds(refusals) == [kind]
 
 
+@pytest.mark.parametrize(
+    "line",
+    ["COMMENT ON ROLE anon IS 'the public API role';", "SECURITY LABEL FOR x ON ROLE anon IS 'y';"],
+    ids=["role comment", "security label"],
+)
+def test_what_pg_dumpall_writes_for_a_role_passes(line: str) -> None:
+    _, refusals = gate.check_roles_dump(
+        "roles.sql", roles_with("GRANT anon", f"{line}\nGRANT anon")
+    )
+    assert refusals == []
+
+
+def test_a_comment_on_anything_but_a_role_is_refused_in_the_roles_file() -> None:
+    raw = roles_with("GRANT anon", "COMMENT ON TABLE public.t IS 'x';\nGRANT anon")
+    _, refusals = gate.check_roles_dump("roles.sql", raw)
+    assert kinds(refusals) == ["STATEMENT_COMMENT_TABLE"]
+
+
+def test_a_grant_by_another_role_passes_as_pg_dump_writes_it() -> None:
+    """pg_dump frames a grant made by a role other than the owner in SET/RESET SESSION
+    AUTHORIZATION (review 1 of DP-D, finding 4)."""
+
+    framed = "SET SESSION AUTHORIZATION ucpe_resolver;\nGRANT SELECT"
+    raw = schema_with("GRANT SELECT", framed).replace(
+        b"TO anon;\n", b"TO anon;\nRESET SESSION AUTHORIZATION;\n", 1
+    )
+    _, refusals = gate.check_schema_dump("schema.sql", raw)
+    assert refusals == []
+
+
 def test_a_roles_file_must_be_a_pg_dumpall_cluster_dump() -> None:
     raw = roles_with("-- PostgreSQL database cluster dump", "-- something else")
     _, refusals = gate.check_roles_dump("roles.sql", raw)
@@ -299,14 +329,41 @@ def test_the_documented_login_steps_are_operational_and_nothing_else_is() -> Non
     assert {category for category, _ in reverse} == {"app"}, "losing a login is never operational"
 
 
-def test_a_platform_roles_default_privileges_are_platform_and_the_owners_are_app() -> None:
+def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app() -> None:
+    """Review 1 of DP-D, finding 1: a migration role's default privileges are the app's."""
+
     restored = fingerprint()
     restored["default_privileges"]["supabase_admin r"] = ["anon:SELECT by supabase_admin"]
     restored["default_privileges"]["<owner> r"] = []
-    found = {(item.category, item.path) for item in catalog.compare(fingerprint(), restored)}
+    restored["default_privileges"]["ucpe_bundle_owner f"] = ["anon:EXECUTE by ucpe_bundle_owner"]
+    migration = frozenset({"ucpe_bundle_owner"})
+    found = {
+        (item.category, item.path) for item in catalog.compare(fingerprint(), restored, migration)
+    }
     assert found == {
         ("platform", "default_privileges/supabase_admin r"),
         ("app", "default_privileges/<owner> r"),
+        ("app", "default_privileges/ucpe_bundle_owner f"),
+    }
+
+
+def test_the_api_roles_are_reported_as_platform() -> None:
+    reference = {
+        "platform_roles": {"attributes": {"anon": {"rolbypassrls": False}}, "memberships": []}
+    }
+    restored = {
+        "platform_roles": {
+            "attributes": {"anon": {"rolbypassrls": True}},
+            "memberships": ["anon to authenticator admin=False inherit=False set=True"],
+        }
+    }
+    found = {(item.category, item.path) for item in catalog.compare(reference, restored)}
+    assert found == {
+        ("platform", "platform_roles/attributes/anon/rolbypassrls"),
+        (
+            "platform",
+            "platform_roles/memberships/anon to authenticator admin=False inherit=False set=True",
+        ),
     }
 
 
@@ -363,15 +420,42 @@ EXPECTED = {
         ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "UCPE_API_WRITER", "SET")}, "fail"),
         ("roles.sql", 7, "permission denied", {7: ("GRANT", "ANON", "TO", "X")}, "fail"),
         ("schema.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "ANON", "SET")}, "fail"),
+        (
+            "schema.sql",
+            7,
+            "does not exist",
+            {7: ("ALTER", "PUBLICATION", "SUPABASE_REALTIME")},
+            "platform",
+        ),
+        (
+            "roles.sql",
+            7,
+            "does not exist",
+            {7: ("ALTER", "PUBLICATION", "SUPABASE_REALTIME")},
+            "fail",
+        ),
+        ("schema.sql", 7, "does not exist", {7: ("CREATE", "EXTENSION", "PGSODIUM")}, "fail"),
     ],
-    ids=["public", "bootstrap", "platform set", "platform in", "migration role", "grant", "schema"],
+    ids=[
+        "public",
+        "bootstrap",
+        "platform set",
+        "platform in",
+        "migration role",
+        "grant",
+        "schema",
+        "a publication entry",
+        "a publication in the roles file",
+        "an extension",
+    ],
 )
 def test_restore_errors_are_classified(
     file: str, line: int, message: str, statements: dict, category: str
 ) -> None:
     error = scratch.RestoreError(file, line, message)
     roles = catalog.migration_roles(ROOT / "migrations")
-    assert prove._classify_error(error, statements, roles, EXPECTED)["category"] == category  # noqa: SLF001
+    by_file = {file: statements}
+    assert prove._classify_error(error, by_file, roles, EXPECTED)["category"] == category  # noqa: SLF001
 
 
 @pytest.mark.parametrize(
@@ -432,6 +516,29 @@ def test_the_proof_refuses_before_any_server_starts(
     assert not work.exists(), "no server was started, nothing was restored"
 
 
+def fake_bin(folder: Path, release: str) -> Path:
+    folder.mkdir()
+    postgres = folder / "postgres"
+    postgres.write_text(f"#!/bin/sh\necho 'postgres (PostgreSQL) {release}'\n", encoding="utf-8")
+    postgres.chmod(0o755)
+    return folder
+
+
+@pytest.mark.parametrize("release", ["16.10", "17.5", "18.0"])
+def test_the_proof_runs_only_on_postgresql_17_6_or_a_later_17(tmp_path: Path, release: str) -> None:
+    digests = write_export(tmp_path / "export")
+    work = tmp_path / "work"
+    report = prove.run(
+        fake_bin(tmp_path / "bin", release), tmp_path / "export", work, expected_sha256=digests
+    )
+    assert report["verdict"] == "REFUSED_TOOLS" and report["postgres"] == release
+    assert not work.exists()
+    assert scratch.server_version(tmp_path / "bin") == tuple(
+        int(part) for part in release.split(".")
+    )
+    assert scratch.server_version(tmp_path / "none") is None
+
+
 def test_the_command_line_demands_both_digests(tmp_path: Path) -> None:
     write_export(tmp_path / "export")
     arguments = [
@@ -452,9 +559,20 @@ def test_the_command_line_demands_both_digests(tmp_path: Path) -> None:
 
 # --------------------------------------------------------------------------- the card
 def test_the_card_runs_the_rehearsed_commands_and_keeps_the_secret_out() -> None:
-    assert " ".join(rehearse.SCHEMA_EXPORT) + " --file=schema.sql --password" in CARD
-    assert " ".join(rehearse.ROLES_EXPORT) + " --file=roles.sql --password" in CARD
+    schema = (
+        " ".join(rehearse.SCHEMA_EXPORT[1:])
+        + ' --file=schema.sql --password --dbname="$CONNECTION"'
+    )
+    roles = (
+        " ".join(rehearse.ROLES_EXPORT[1:]) + ' --file=roles.sql --password --dbname="$CONNECTION"'
+    )
+    assert f'"$PGBIN/{rehearse.SCHEMA_EXPORT[0]}" {schema}' in CARD
+    assert f'"$PGBIN/{rehearse.ROLES_EXPORT[0]}" {roles}' in CARD
+    assert 'PGBIN="$(brew --prefix postgresql@17)/bin"' in CARD and "read -r CONNECTION" in CARD
     assert "shasum -a 256 schema.sql roles.sql" in CARD
+    assert "--expect-sha256 schema.sql=" in CARD and "--expect-sha256 roles.sql=" in CARD
+    # Only what a second export can fix sends the owner back to export again.
+    assert "`DIGEST_MISMATCH`, `DATA_ENTRY` or a `PASSWORD_`" in CARD
     assert "--expect-sha256" in prove.__doc__
     assert "Status: PREPARED, NOT RUN." in CARD
     flat = " ".join(CARD.split())

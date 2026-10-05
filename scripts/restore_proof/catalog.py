@@ -15,13 +15,15 @@ Names are normalized so that only real differences remain:
 - columns are compared in their order, not by attribute number (a restore renumbers dropped ones).
 
 Each difference is classified:
-- **app**: the migrations' own structure, its grants and the roles they create. Any app difference
-  fails the proof.
+- **app**: the migrations' own structure, its grants, the roles they create and the default
+  privileges of the owner and of those roles. Any app difference fails the proof.
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
-- **platform**: the schema's default privileges for a role other than the owner (the hosting
-  platform's own). Reported, not failing.
+- **platform**: the hosting platform's own: the default privileges of any other role, and the
+  attributes, settings and memberships of the roles the app's grants and policies name but the
+  migrations do not create (Supabase's anon, authenticated, service_role, authenticator). Reported,
+  not failing, and read one by one: an API role gaining BYPASSRLS or SUPERUSER is a finding.
 """
 
 from __future__ import annotations
@@ -423,6 +425,66 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
         )
     )
 
+    # The roles the app's grants and policies name but the migrations do not create: the platform's.
+    named_roles = {
+        item.split(":", 1)[0]
+        for grants in (
+            schema["acl"],
+            *(relation["acl"] for relation in relations.values()),
+            *(function["acl"] for function in functions.values()),
+            *column_acl.values(),
+            *default_privileges.values(),
+        )
+        for item in grants
+    }
+    named_roles.update(
+        role_name
+        for items in policies.values()
+        for policy in items.values()
+        for role_name in policy["roles"]
+    )
+    named_roles.update(
+        partner for item in memberships for partner in item.split(" admin=")[0].split(" to ")
+    )
+    platform_names = sorted(named_roles - set(roles) - {OWNER, PUBLIC})
+    platform_attributes = {
+        row[0]: dict(zip(ROLE_ATTRIBUTES, row[1:], strict=True))
+        for row in _rows(
+            conn,
+            "SELECT rolname, "
+            + ", ".join(ROLE_ATTRIBUTES)
+            + " FROM pg_roles WHERE rolname = ANY(%s)",
+            (platform_names,),
+        )
+    }
+    platform_settings = {
+        f"{name} in {_database_scope(database, current)}": sorted(config)
+        for name, database, current, config in _rows(
+            conn,
+            """
+            SELECT r.rolname, s.setdatabase,
+                   s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()),
+                   s.setconfig
+            FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+            WHERE r.rolname = ANY(%s)
+            """,
+            (platform_names,),
+        )
+    }
+    platform_memberships = sorted(
+        f"{named(granted)} to {named(member)} admin={admin} inherit={inherit} set={can_set}"
+        for granted, member, admin, inherit, can_set in _rows(
+            conn,
+            """
+            SELECT r.rolname, m.rolname, am.admin_option, am.inherit_option, am.set_option
+            FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
+            JOIN pg_roles m ON m.oid = am.member
+            WHERE r.rolname = ANY(%s) AND NOT m.rolname = ANY(%s)
+            """,
+            (platform_names, sorted(roles)),
+        )
+    )
+
     return {
         "schema": schema,
         "relations": relations,
@@ -442,6 +504,11 @@ def fingerprint(conn: Any, *, owner: str, roles: frozenset[str]) -> dict[str, An
             "settings": role_settings,
             "memberships": memberships,
         },
+        "platform_roles": {
+            "attributes": platform_attributes,
+            "settings": platform_settings,
+            "memberships": platform_memberships,
+        },
     }
 
 
@@ -453,12 +520,16 @@ class Difference:
     restored: Any
 
 
-def compare(reference: dict[str, Any], restored: dict[str, Any]) -> list[Difference]:
+def compare(
+    reference: dict[str, Any],
+    restored: dict[str, Any],
+    migration_roles: frozenset[str] = frozenset(),
+) -> list[Difference]:
     """Every difference between the two fingerprints, classified."""
 
     differences: list[Difference] = []
     _walk("", reference, restored, differences)
-    return [_classify(difference) for difference in differences]
+    return [_classify(difference, migration_roles) for difference in differences]
 
 
 def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
@@ -474,7 +545,7 @@ def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
         return
     if path.endswith("/definition"):
         return  # compared by its sha256; the text is only for showing where it differs
-    if path.startswith("roles/memberships") and isinstance(left, list) and isinstance(right, list):
+    if path.endswith("/memberships") and isinstance(left, list) and isinstance(right, list):
         for item in sorted(set(left) - set(right)):
             out.append(Difference("app", f"{path}/{item}", item, None))
         for item in sorted(set(right) - set(left)):
@@ -484,7 +555,7 @@ def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
         out.append(Difference("app", path, left, right))
 
 
-def _classify(difference: Difference) -> Difference:
+def _classify(difference: Difference, migration_roles: frozenset[str]) -> Difference:
     parts = difference.path.split("/")
     if (
         parts[:2] == ["roles", "attributes"]
@@ -495,7 +566,13 @@ def _classify(difference: Difference) -> Difference:
         and difference.restored is True
     ):
         return Difference("operational", difference.path, difference.reference, difference.restored)
-    if parts[0] == "default_privileges" and len(parts) > 1 and not parts[1].startswith(OWNER):
+    if parts[0] == "default_privileges" and len(parts) > 1:
+        holder = parts[1].split(" ")[0]
+        if holder != OWNER and holder not in migration_roles:
+            return Difference(
+                "platform", difference.path, difference.reference, difference.restored
+            )
+    if parts[0] == "platform_roles":
         return Difference("platform", difference.path, difference.reference, difference.restored)
     return difference
 
