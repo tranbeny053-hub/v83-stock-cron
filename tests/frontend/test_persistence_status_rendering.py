@@ -76,6 +76,7 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "decisionDataText",
             "notAssessedByView",
             "legacyProbabilityRows",
+            "readinessText",
             "renderStructuredDetail",
         )
     )

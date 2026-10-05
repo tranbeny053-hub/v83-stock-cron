@@ -1354,7 +1354,7 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
         '"Evidence level"',
         '"Round-trip cost"',
         '"Evidence"',
-        '"Gate disposition (not a market call)"',
+        "dispositionLabel(view)",
     ]
     positions = [rows.index(label) for label in order]
     assert positions == sorted(positions)
@@ -1414,16 +1414,16 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
 
     js = read_frontend("app.js")
     card = _function_text(js, "renderFinalDecisionCard")
-    assert 'textBlock("p", "Gate disposition (not a market call)", "decision-eyebrow")' in card
+    assert 'textBlock("p", dispositionLabel(view), "decision-eyebrow")' in card
     assert "Backend final decision" not in card
     assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
     brief = _function_text(js, "renderDecisionBrief")
-    assert 'section("Gate brief (not a market call)", [' in brief
+    assert "section(gateBriefTitle(view), [" in brief
     assert 'textBlock("p", gateFramingNote(view), "decision-safety-note"),' in brief
     assert '["Gate disposition", brief.action],' in brief
     assert '"Decision Brief"' not in brief and '"Action"' not in brief
     synthesis = _function_text(js, "renderDecisionSynthesis")
-    assert 'section("Gate brief (not a market call)", [' in synthesis
+    assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
     assert 'textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),' in (
         synthesis
     )
@@ -1435,3 +1435,34 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
     assert "a gate outcome is not a forecast to act on" in note
     detail = _function_text(js, "renderStructuredDetail")
     assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail
+    # Without an accepted directional permission the labels never read as a market call.
+    for helper in ("dispositionLabel", "gateBriefTitle"):
+        assert "not a market call" in _function_text(js, helper), helper
+
+
+def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None:
+    """Owner ruling 2026-10-06: accepted forecast evidence shows its accepted state, and an
+    accepted directional permission is shown without "not a market call" while staying
+    explicitly non-advisory. test_decision_framing_rendering.py renders it; these pin the
+    wiring."""
+
+    js = read_frontend("app.js")
+    frame = "(accepted directional permission; not financial advice)"
+    for helper, permission in (
+        ("dispositionLabel", f"Gate disposition {frame}"),
+        ("gateBriefTitle", f"Gate brief {frame}"),
+    ):
+        text = _function_text(js, helper)
+        assert "view && view.directional_permission" in text and permission in text, helper
+    note = _function_text(js, "gateFramingNote")
+    assert note.index("view.directional_permission") < note.index("view.accepted_claim")
+    assert "Not financial advice: it never tells you to trade" in note
+    readiness = _function_text(js, "readinessText")
+    assert "view && view.accepted_claim ? view.headline : fallback" in readiness
+    assert "view.accepted_claim\n        ? view.headline" in _function_text(js, "decisionViewRows")
+    assert '["Model readiness", readinessText(payload, modelReadinessCopy)],' in _function_text(
+        js, "renderDecisionBrief"
+    )
+    assert "readinessText(payload, display.model_readiness_label || modelReadinessCopy)" in (
+        _function_text(js, "renderStructuredDetail")
+    )

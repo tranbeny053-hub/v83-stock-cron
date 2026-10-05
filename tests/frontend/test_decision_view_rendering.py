@@ -17,8 +17,11 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from crypto_probability_engine.api.analysis_service import METHODOLOGY_VERSION
-from crypto_probability_engine.detail.decision_view import build_decision_view
+from crypto_probability_engine.detail import decision_view
+from crypto_probability_engine.detail.decision_view import STATE_COPY, build_decision_view
 from tests.fixtures.market_data import make_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -37,6 +40,7 @@ FUNCTIONS = (
     "legacyProbabilityRows",
     "decisionEvidenceText",
     "decisionViewRows",
+    "dispositionLabel",
     "gateFramingNote",
 )
 CONSTANTS = ("NOT_ASSESSED_TEXT", "VENUE_LABELS")
@@ -264,3 +268,44 @@ def test_the_gate_framing_says_what_the_view_allows() -> None:
     )
     assert "not a market call" in notes[0] and "no reason to act or to avoid acting" in notes[0]
     assert notes[1] == "The gates' disposition: hard gates outrank everything shown."
+
+
+@pytest.mark.parametrize(
+    ("hard_blocks", "permission", "state"),
+    [
+        (("SKILL_NOT_DEMONSTRATED",), False, "ACCEPTED_FORECAST_CLAIM"),
+        ((), True, "DIRECTIONAL_PERMISSION"),
+    ],
+    ids=["an accepted forecast claim", "an accepted directional permission"],
+)
+def test_accepted_states_read_as_accepted_and_a_permission_stays_non_advisory(
+    monkeypatch: pytest.MonkeyPatch, hard_blocks: tuple[str, ...], permission: bool, state: str
+) -> None:
+    """Owner ruling 2026-10-06, on the view the owner reads first: accepted forecast evidence
+    shows its accepted state (the view's own copy, not the uncalibrated-heuristic label), and an
+    accepted directional permission is shown without "not a market call" while its label stays
+    explicitly non-advisory. Built by the real builder with the (empty) registries filled for
+    this test only."""
+
+    key = f"{_view()['range']['evidence_level']}:{METHODOLOGY_VERSION}:1H"
+    monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key}))
+    monkeypatch.setattr(
+        decision_view, "ACCEPTED_DIRECTIONAL_PERMISSIONS", frozenset({key} if permission else ())
+    )
+    view = _view(hard_blocks)
+    assert view["state"] == state
+    _, ordered, _ = _render(view)
+    rows = dict(ordered)
+    assert rows["Evidence level"] == STATE_COPY[state][0]
+    labels = [label for label, _ in ordered]
+    if permission:
+        label = "Gate disposition (accepted directional permission; not financial advice)"
+        assert rows[label] == "NO_TRADE"
+        assert not any("not a market call" in item for item in labels)
+    else:
+        assert rows["Gate disposition (not a market call)"] == "NO_TRADE"
+
+
+def test_without_an_accepted_claim_the_evidence_level_is_unchanged() -> None:
+    _, ordered, _ = _render(_view())
+    assert dict(ordered)["Evidence level"] == "Model readiness: Heuristic (uncalibrated)"

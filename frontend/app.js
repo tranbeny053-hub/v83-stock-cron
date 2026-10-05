@@ -417,6 +417,13 @@ const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 // without one (a run reopened from history, whose detail payload carries no view). A gate outcome
 // is never a market call, so the no-view note says exactly that and claims nothing it cannot know.
 function gateFramingNote(view) {
+  if (view && view.directional_permission) {
+    return (
+      "The gates' disposition, with an accepted directional permission for this model and " +
+      "timeframe. Not financial advice: it never tells you to trade, and hard gates outrank " +
+      "everything shown."
+    );
+  }
   if (view && view.accepted_claim) {
     return "The gates' disposition: hard gates outrank everything shown.";
   }
@@ -427,6 +434,28 @@ function gateFramingNote(view) {
     );
   }
   return "The gates' disposition, not a market call: a gate outcome is not a forecast to act on.";
+}
+
+// The gates' disposition and brief, labelled by what the view allows (owner ruling 2026-10-06):
+// never a market call without an accepted directional permission; with one, the permission is
+// shown, and the label stays explicitly non-advisory.
+function dispositionLabel(view) {
+  return view && view.directional_permission
+    ? "Gate disposition (accepted directional permission; not financial advice)"
+    : "Gate disposition (not a market call)";
+}
+
+function gateBriefTitle(view) {
+  return view && view.directional_permission
+    ? "Gate brief (accepted directional permission; not financial advice)"
+    : "Gate brief (not a market call)";
+}
+
+// Model readiness as the evidence stands (owner ruling 2026-10-06): under an accepted forecast
+// claim the view's own accepted-state copy replaces the uncalibrated-heuristic copy.
+function readinessText(payload, fallback) {
+  const view = decisionViewOf(payload);
+  return view && view.accepted_claim ? view.headline : fallback;
 }
 
 function decisionViewOf(payload) {
@@ -514,10 +543,15 @@ function decisionViewRows(payload, view) {
     ],
     ["Up (above the band)", notAssessed ? "Not assessed" : formatFractionPct(range.up_frac)],
     ["Down (below the band)", notAssessed ? "Not assessed" : formatFractionPct(range.down_frac)],
-    ["Evidence level", display.model_readiness_label || range.evidence_level || "n/a"],
+    [
+      "Evidence level",
+      view.accepted_claim
+        ? view.headline
+        : display.model_readiness_label || range.evidence_level || "n/a",
+    ],
     ["Round-trip cost", formatFractionPct(cost.round_trip_cost_frac)],
     ["Evidence", decisionEvidenceText(view.evidence)],
-    ["Gate disposition (not a market call)", display.disposition],
+    [dispositionLabel(view), display.disposition],
   ];
 }
 
@@ -1445,7 +1479,7 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   const headingGroup = document.createElement("div");
   const view = decisionViewOf(payload);
   headingGroup.append(
-    textBlock("p", "Gate disposition (not a market call)", "decision-eyebrow"),
+    textBlock("p", dispositionLabel(view), "decision-eyebrow"),
   );
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
   const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
@@ -2157,7 +2191,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   const available =
     synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
   if (!available) {
-    return section("Gate brief (not a market call)", [
+    return section(gateBriefTitle(decisionViewOf(payload)), [
       textBlock(
         "p",
         "No decision synthesis for this run; the existing gate brief is shown.",
@@ -2214,12 +2248,12 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
         })
         .filter(Boolean)
     : [];
-  return section("Gate brief (not a market call)", [
+  return section(gateBriefTitle(view), [
     textBlock("p", gateFramingNote(view), "decision-safety-note"),
     keyValueTable([
       ["Gate disposition", brief.action],
       ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
-      ["Model readiness", modelReadinessCopy],
+      ["Model readiness", readinessText(payload, modelReadinessCopy)],
       ["Calibration", brief.calibration_status],
       ["Reliability", brief.reliability_status],
       ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
@@ -2304,7 +2338,10 @@ function renderStructuredDetail(payload, detailView) {
           ["Down", formatPct(display.prob_down_pct)],
           ["In band", formatPct(display.prob_timeout_pct)],
         ]),
-        ["Model readiness", display.model_readiness_label || modelReadinessCopy],
+        [
+          "Model readiness",
+          readinessText(payload, display.model_readiness_label || modelReadinessCopy),
+        ],
         ["Explanation", display.probability_explanation],
       ]),
     ]),
