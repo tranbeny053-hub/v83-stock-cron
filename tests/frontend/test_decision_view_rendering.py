@@ -180,14 +180,14 @@ def test_the_rows_a_user_reads() -> None:
         "Reference close (UTC)",
         "Horizon end (UTC)",
         "Data",
-        "Saved",
+        "Storage",
     ]
     assert banner == "DEGRADED DATA - OKX_PUBLIC"
     assert rows["Data"].startswith("DEGRADED: Live data, degraded. The configured primary venue")
     assert rows["Asset · venue"] == "BTC/USDT · okx"
     assert rows["In band (inside the decision band)"] == "25.00% (band ±0.36%)"
     assert rows["Up (above the band)"] == "40.00%" and rows["Down (below the band)"] == "35.00%"
-    assert rows["Saved"].startswith("No storage configured")
+    assert rows["Storage"].startswith("No storage configured")
     assert rows["Evidence"] == "INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE"
     assert rows["Gate disposition (not a market call)"] == "NO_TRADE"
     assert rows["Reference close (UTC)"] == view["time"]["reference_close_utc"]

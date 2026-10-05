@@ -1347,7 +1347,7 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
         '"Reference close (UTC)"',
         '"Horizon end (UTC)"',
         '"Data"',
-        '"Saved"',
+        '"Storage"',
         '"In band (inside the decision band)"',
         '"Up (above the band)"',
         '"Down (below the band)"',

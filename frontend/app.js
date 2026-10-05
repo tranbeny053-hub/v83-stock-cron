@@ -483,7 +483,9 @@ function decisionViewRows(payload, view) {
     ["Horizon end (UTC)", time.horizon_end_utc || "n/a"],
     ["Data", decisionDataText(data)],
     [
-      "Saved",
+      // §14.2 item 4: storage, because whether this analysis was saved is known only after the
+      // response (its persistence receipt), never in it.
+      "Storage",
       persistenceStatusText(
         payload.debug?.persistence_status || payload.detail_view?.debug_lite?.persistence_status,
       ),
