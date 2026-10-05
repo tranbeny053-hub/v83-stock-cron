@@ -1,6 +1,352 @@
 # STATE
 
-Updated: 2026-10-04 (**THE PUBLICATION BATCH IS COMPLETE** under the owner's T3: lane A #226, lane B #227 and the
+Updated: 2026-10-05 (**THE CARD-04 COMPANION IS PUBLISHED** under the owner's T3: #230 merged as 267a6eaf, a merge
+commit on the exact head 93ab50de; this record is the batch's last PR. **The owner ruled Phase 7/8 (DP-A to DP-F)**, and
+Claude runs Lane P and Lane R locally under those rulings, unpublished. MODEL SUBSTITUTION: Codex is unavailable, so
+Claude implements, tests and reviews directly).
+**Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-05), verbatim. First, the T3:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Codex remains unavailable.
+T3 AUTHORIZE A4C-PUBLISH exactly as prepared:
+
+* `feat/a4-card04-companion@93ab50dea783724c0db9fbdbeccc4d44bafb77f9`
+* artifact `ucpe.a4_card04_companion.v1`
+* SHA256 `0b3cbb753210833d6776cab921fc6f2fa07ec89489ea150be28e2b77adddb646`
+* STATE branch currently `chore/state-a4-card04-companion@2ac100e2392f015a55a491742d82596bd38a9196`.
+
+Publish the lane, verify exact head/file set, required CI including PostgreSQL 17.6 rehearsal, and merge with MERGE COMMIT ONLY if every gate is green. No squash/rebase. Then refresh the STATE record onto resulting main, record exact merge/run identities, verify, publish and merge STATE LAST. Stop on SHA/diff/conflict/red-CI mismatch.
+IMPORTANT: UOR is only one lane. Do NOT idle or focus exclusively on UOR while its PR/CI runs.
+In parallel, use one separate worktree as lane 2 and re-read canonical STATE + governing Phase 0–8 plan from current main. Select and exhaust the highest-value genuinely dependency-safe reversible UCPE T0/T1/T2 work that is independent of A4C/UOR/STATE/shared live surfaces. Claude owns repo search, implementation, tests, debugging and review directly.
+Priority is actual UCPE product/engineering progress, not UOR support. Prefer Phase-7/Phase-8 work that improves product value, reliability, recovery, maintainability or measured performance without needing an unresolved owner ruling or manufactured traffic. Do not spend effort on further pytest speed-up or historical archival while higher-value safe product work exists.
+Max 2 proven-independent lanes total. Keep shared surfaces serial. Lane 2 remains local-only unless separately authorized for T3; do not mix its unmerged state into the A4C STATE publication.
+If no genuine implementation lane is currently executable because every remaining item depends on natural evidence or owner product/methodology rulings, do NOT invent busywork. Instead, while A4C CI runs, produce one consolidated owner-decision package that resolves the minimum set of Phase-7/8 blockers needed to unlock the largest amount of next implementation work, with recommended options and consequences. Batch those decisions rather than returning one at a time.
+After A4C + STATE publication finishes, immediately continue lane 2 or the first newly-unblocked safe UCPE work. Do not return merely because the UOR artifact merged.
+Preserve unchanged: Phase-4 INFEASIBLE; D4 consumed; F3 KEEP_UNSPENT; H2 hold; UX-1/Q1 and B5 unless explicitly ruled; evidence-origin semantics; no manufactured USER_REQUESTED traffic.
+No production A4/A4C query, HF deploy, DB mutation, secret operation, F3/protected access or T4 is authorized here.
+Return only at the next genuine owner/product/methodology/T3/T4/secret/protected-evidence boundary, with all dependency-safe UCPE work exhausted and one batched owner action.
+```
+  **Then, in Manual mode, the continuation and the Phase-7/8 rulings:**
+```text
+A4C continue — Manual mode. Complete the already-authorized T3 exactly: open the PR from `feat/a4-card04-companion@93ab50dea783724c0db9fbdbeccc4d44bafb77f9`, verify exact head/diff and all required CI including PG17.6, merge by merge commit only if green, then refresh/publish/merge the STATE PR last. Stop on any drift/red check; no production A4/A4C query.
+
+Owner Phase-7/8 rulings:
+DP-A=2.
+DP-B=2 NARROW: allow app-lifetime pooled clients, exact identical in-flight single-flight/coalescing, and passive deadline/latency measurement only. Preserve current provider request/retry/error/freshness semantics exactly. NO new retries, retry-policy change, negative/failure cache, candle/data cache or freshness-changing cache until natural baseline evidence.
+DP-C=2: observe-only measurement only; refuse nobody, change no response/payload, record no user/session identifier.
+DP-D=2: structure-first. Build/rehearse all safe local restore tooling and prepare the exact minimum owner export card, but do not access/export production schema or roles until the next genuine owner boundary.
+DP-E=1: retain named per-change §2.6 crossings.
+DP-F=2: bundle locally with DP-A, human-route only. `radar_evidence.v1` and AUTOMATED_RADAR semantics/values must remain byte/semantic compatible until a separately governed UOR contract revision; if clean separation is impossible, HOLD rather than alter UOR evidence.
+
+Execution: after A4C publication, continue continuously. Max 2 proven-independent implementation lanes:
+Lane P = DP-A + DP-F product work.
+Lane R = narrowed DP-B + DP-C runtime/measurement work.
+Use separate worktrees; shared surfaces serial. Claude implements/tests/debugs/reviews directly; no Codex. Exhaust all dependency-safe T0/T1/T2 work, mutation/adversarial tests, full gates and fresh reviews. Prepare DP-D tooling after capacity frees.
+
+DP-A product work stays LOCAL ONLY: do not publish/release regenerated UOR examples, analysis-hash goldens, UX-1, DecisionView or B5 changes until the UOR qualification episode closes or I explicitly authorize that publication. Lane R publication also remains a new T3 boundary.
+
+Preserve Phase-4 INFEASIBLE, D4 consumed, F3 KEEP_UNSPENT, H2 hold and evidence-origin semantics. No manufactured USER_REQUESTED traffic, production deploy, DB mutation, secret action, F3/§5A access or new T4.
+
+Do not return on routine milestones. Return only after all safe work under these rulings is exhausted, with one batched next owner boundary.
+```
+- **The publication** (the owner's T3 A4C-PUBLISH, consumed):
+  - Checked before the push: origin/main fc03be8e unchanged; the lane exactly 93ab50de (15 files); STATE 2ac100e2.
+  - The lane branch was pushed at 93ab50de. Auto refused `gh pr create` ([Data Exfiltration]); after the owner switched
+    to Manual mode, #230 was opened with the same title and body.
+  - The PR's checks on 93ab50de, all green, and its file set equal to the reviewed lane's:
+    - CI 37269416943 (test);
+    - the companion rehearsal 37269417063 (rehearse): A4C_REHEARSAL=PASS on server 17.6, the card's python -I -B
+      command ok;
+    - the reproducible build 37269416910 (build-a, build-b, compare).
+  - Merged at 06:19:38Z as **267a6eaf** with --match-head-commit: a merge commit (parents fc03be8e and 93ab50de) whose
+    tree equals the lane head's. SOURCE_COMMIT d263c090 is reachable from main; MANIFEST.json on main hashes to
+    0b3cbb75….
+  - Main 267a6eaf: push CI 37271854804 and the reproducible build 37271854824, both success.
+- **The UOR side is the owner's:** carry UOR_HANDOFF §14 and §15 (and this record's final values) to UOR. Running either A4
+  artifact against production stays a future owner decision at the UOR episode.
+- **Lane 2, before the rulings:** no Phase-7/8 implementation lane was executable without a ruling or natural evidence.
+  The owner-decision package (.work/roadmap/phase7/P7_P8_DECISION_PACKAGE_2026-10-05.md) led to the rulings above.
+- **Next, locally, and not part of this record's publication:**
+  - Lane P (DP-A + DP-F): UX-1, DecisionView and the human-route DEGRADED;
+  - Lane R (DP-B as narrowed + DP-C): the pooled transport, identical in-flight single-flight, passive measurement and the
+    observe-only budget counter;
+  - then DP-D's local restore tooling and the owner export card.
+
+  Lane P stays local until the UOR qualification episode closes or the owner authorizes its publication. Lane R's
+  publication is a new T3.
+- **Unchanged:** Phase 4 INFEASIBLE; D4 consumed; F3 KEEP_UNSPENT; the H2 hold; evidence-origin semantics; no
+  manufactured USER_REQUESTED traffic; no production query, deploy, database write, secret or §5A access.
+Previously (**THE CARD-04 COMPANION IS PREPARED AND VERIFIED LOCALLY**, with the owner's cross-credential
+count and the owner-authorized third repair, and the A4 handoff's two documentation defects are corrected. Both wait
+only on the owner's T3. MODEL SUBSTITUTION: Codex is unavailable, so Claude implemented, tested and reviewed directly).
+**Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-05), verbatim:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Codex remains unavailable: Claude directly owns implementation/tests/review; no paid fallback.
+UOR OWNER DECISION: KEEP UOR Card 04 unchanged. UOR already accepts the existing sealed component exactly as:
+`ucpe.a4_ledger_audit.v1`
+SHA256 `2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577`
+source `e468f1f118870f904d90505a3cdbb74446d5a495`.
+DO NOT modify/reseal that package or weaken/rewrite Card 04.
+Build one NEW UCPE-governed sealed READ-ONLY companion artifact proving only Card-04's remaining durable facts:
+
+1. `deadline_ms` for the exact AUTOMATED_RADAR request;
+2. `analysis_hash` for that exact successful response/run;
+3. count of `predictions` rows for the bound `run_id`;
+4. count of `automation_radar_ledger` rows for the bound `credential_id` since `qualification_activation_utc`.
+
+First independently prove the authoritative durable source of each fact from current migrations/code. Current schema indicates likely sources:
+
+* ledger `deadline_ms`;
+* ledger `analysis_hash`;
+* `predictions.run_id` count only;
+* ledger `credential_id` + `received_at_utc`.
+Do not assume this summary is authoritative: verify it. If any fact is not durably recoverable, STOP with `COMPANION_STATUS=BLOCKED` and the minimum future upstream schema/contract change; do not invent or infer the fact and do not mutate production.
+
+The companion must remain minimal. Prefer binding the target row by `(credential_id, client_request_id)` plus expected `run_id`; take only the additional non-secret expectations required to prove the facts, likely `expected_deadline_ms`, `expected_analysis_hash`, and canonical `qualification_activation_utc`. Do not require release_id/evidence_hash again unless technically necessary, because the accepted A4 artifact already proves those. Explain every input.
+The SQL/result may inspect ONLY the minimum required columns:
+
+* `public.automation_radar_ledger`: only columns necessary for exact row/success binding, deadline_ms, analysis_hash and credential-row count since activation;
+* `public.predictions`: `run_id` only for `count(*) WHERE run_id = expected_run_id`;
+* minimal pg_catalog metadata for schema proof.
+No prediction probabilities, labels, outcomes, feature snapshots, calibration, §5A seal/holdout, analysis payloads, full response_body output, credential registry, secrets or broad dumps.
+
+Reading `predictions` solely to return the scalar run-id count is audit/isolation evidence, never model/directional evidence. Do not create USER_REQUESTED, CONTROLLED_SMOKE or other traffic.
+Output one deterministic canonical JSON/scalar result containing only:
+
+* companion artifact identity/version and sealed SQL digest;
+* verdict PASS|FAIL and first deterministic failure reason;
+* minimum bound request/run identities;
+* `deadline_ms`, `deadline_ms_matches`;
+* `analysis_hash`, `analysis_hash_matches`;
+* `predictions_rows_for_run_id`;
+* `credential_ledger_rows_since_activation`;
+* only minimal schema/read-only proof fields.
+Do not embed UOR's acceptance threshold for either count unless the existing Card 04 itself proves that requirement; report the durable scalar fact and let unchanged UOR Card 04 adjudicate it.
+
+Fail closed on schema drift, missing/ambiguous target row, wrong AUTOMATED_RADAR origin, non-success/non-200 target, run mismatch, deadline mismatch, analysis-hash mismatch, invalid activation timestamp or activation after the bound request, database/read-only failure, or any unexpected shape. Never output the stored response body.
+Use a sealed SELECT plus a runner that:
+
+* begins/sets a PostgreSQL READ ONLY transaction and positively proves `transaction_read_only=on` before the audit;
+* uses bounded statement/lock timeouts and unconditional rollback;
+* refuses unexpected args/credential token values and never echoes DB errors/URLs/secrets;
+* pins and verifies SQL/package digests before execution;
+* has static structural guards restricting relations/columns/functions to the declared minimum.
+
+Testing/review requirements:
+
+* migration/schema proof against the current governed migrations;
+* structural SQL guard;
+* adversarial SQL mutants and runner mutants;
+* synthetic/local tests;
+* scratch PostgreSQL at the governed version;
+* least-privilege rehearsal with a role allowed to read only the exact ledger columns and `predictions.run_id` needed by the companion, with all other relevant tables/columns refused;
+* prove INSERT/UPDATE/DELETE/MERGE/CREATE/ALTER/DROP/TRUNCATE cannot execute in the runner's read-only session and database state is unchanged;
+* exact sealed MANIFEST/digests;
+* full repo gate;
+* one fresh separate-context read-only Claude review of the EXACT FINAL bytes, given only the requirements/source paths/commit, no implementation transcript or implementer summary. If findings require any material repair, repair them and run ANOTHER fresh exact-final-byte review. Do not stop with “repaired without re-review.” Truthfully state same-model-family limits.
+
+Also repair the two known documentation-only defects from the final review of the EXISTING A4 component, without changing any sealed A4 package byte or its accepted SHA:
+
+1. `UOR_HANDOFF.md §14` / STATE OUTPUT_CONTRACT omitted the actual `audit` output key;
+2. INDEPENDENT_REVIEW cites local pre-rebase `3ba2486` / `dd1093a`; verify and replace with their reachable byte-identical merged-history equivalents (`dbc5c47` / `491b460`) if Git proves that mapping.
+These are documentation corrections only. Preserve UOR's acceptance of `ucpe.a4_ledger_audit.v1` and its SHA exactly.
+
+Do NOT “fix” the existing A4 package's non-blocking guard/path/test observations in this task if doing so would change its accepted seal. Record them historically only if needed.
+Update the UCPE→UOR handoff with a separate companion section and produce exactly:
+COMPANION_STATUS=PREPARED_AND_VERIFIED|BLOCKED
+ARTIFACT_NAME=
+ARTIFACT_SHA256=
+SOURCE_COMMIT=
+UPSTREAM_RELEASE_IDENTITY=
+INPUT_BINDING=
+OUTPUT_CONTRACT=
+DEADLINE_MS_PROOF=
+ANALYSIS_HASH_PROOF=
+PREDICTIONS_RUN_ID_COUNT_PROOF=
+CREDENTIAL_ROWS_SINCE_ACTIVATION_PROOF=
+READ_ONLY_PROOF=
+ISOLATION_PROOF=
+TESTS=
+INDEPENDENT_REVIEW=
+PRODUCTION_QUERY_EXECUTED=NO
+PRODUCTION_MUTATED=NO
+PROTECTED_5A_ACCESSED=NO
+PACKAGE_PATH=
+If BLOCKED also return:
+UNPROVABLE_FACT=
+MINIMUM_FUTURE_UPSTREAM_CHANGE=
+OWNER_BOUNDARY_REQUIRED=
+No production query, deploy, database mutation, secret action, F3/protected access or UOR edit is authorized. This is local T0/T1/T2 preparation only.
+Exhaust all safe implementation, mutation tests, scratch-PG rehearsal, full verification and exact-final review continuously. Do not return on routine substeps.
+STOP only when the companion is fully PREPARED_AND_VERIFIED locally and the sole remaining boundary is publication, or if a real upstream/schema blocker is proven. Return the exact branch/head/files/digests and one batched T3 publication action; do not push/open PR/merge yet without a new owner T3 authorization.
+```
+- **The owner's ruling A4-CRID-UNIQUENESS (2026-10-05), verbatim:**
+```text
+CONTINUE CURRENT — Opus XHIGH.
+OWNER RULING A4-CRID-UNIQUENESS = YES.
+Do NOT publish the currently reviewed `feat/a4-card04-companion@4f3f00c`; the new UOR addendum changes the required companion contract, so Review 3 PASS is no longer final for the new requirement.
+Keep every previously required and verified Card-04 companion fact unchanged, and add exactly one new read-only scalar:
+`ledger_rows_for_client_request_id_across_all_credentials`
+for the bound `client_request_id`.
+Purpose: UOR Card 04 literally requires exactly one automation-ledger row for the admitted client_request_id, while the existing accepted A4 artifact proves identity using `(credential_id, client_request_id)`.
+Govern this narrowly:
+
+* authoritative source must be `public.automation_radar_ledger` only;
+* count rows matching the bound `client_request_id` across ALL credential_id values;
+* do NOT output any other credential_id, row identity, body, timestamp, fingerprint or secret;
+* preserve AUTOMATED_RADAR isolation and every existing companion field;
+* no §5A/holdout/protected access;
+* no production execution or mutation;
+* this scalar is audit evidence only.
+The UOR target acceptance value is exactly `1`. Prefer reporting the durable scalar and let unchanged UOR Card 04 adjudicate `== 1`; do not silently rewrite Card 04 or weaken any existing companion verdict rule.
+
+Before implementation, independently verify from migration 0013/current schema that this cross-credential count is durably and unambiguously recoverable without exposing credential-sensitive data. If not, STOP with the exact governance/schema conflict instead of inventing an alternative.
+Update the sealed SQL/runner/output contract/manifest/tests/CARD and §15 handoff minimally. The output must now include the new scalar in addition to every previous key; update exact key-count assertions accordingly. Keep all previous deadline_ms, analysis_hash, predictions run-id count, activation count, read-only, RLS/least-privilege and schema-drift guarantees.
+Extend the structural guard so the new query can read only `automation_radar_ledger.client_request_id` for this global count beyond the already-authorized ledger columns. Prove it cannot project or aggregate credential_id values. No GROUP BY credential_id, no arrays/json aggregation, no row dump.
+Tests/rehearsal:
+
+* add positive cases for global count 0, 1, and >1 across different credentials;
+* prove duplicate client_request_id under a second credential changes only this scalar and is visible even though the target row remains uniquely bound by `(credential_id, client_request_id)`;
+* prove RLS/filtered readers are still refused rather than allowed to undercount;
+* extend adversarial SQL/runner mutants and scratch PostgreSQL 17.6 rehearsal;
+* rerun the full repo gate.
+
+Because bytes will change, regenerate the companion seal and ARTIFACT_SHA256 and update SOURCE_COMMIT truthfully. The existing accepted `ucpe.a4_ledger_audit.v1` and SHA `2007fa28...` MUST remain byte-identical and untouched.
+Then run a NEW fresh separate-context exact-final-byte review on the resulting companion head. The reviewer must receive the full original companion requirements plus this A4-CRID-UNIQUENESS addendum, and specifically verify:
+
+1. the new scalar counts client_request_id across all credentials;
+2. no credential-sensitive identity is exposed;
+3. all earlier companion facts remain intact;
+4. exact output keys/schema/seal/docs match;
+5. scratch-PG/read-only/RLS evidence still holds.
+
+If that review finds any material issue, repair and re-review the new exact final bytes. Do not stop at “repaired without re-review.”
+Also preserve the already-planned doc-only corrections for the accepted A4 artifact (`audit` key and reachable review commit citations); do not reseal that accepted package.
+Return only when the revised companion is `PREPARED_AND_VERIFIED` and ready for one T3 publication authorization, or on a genuine governance/schema blocker. Do not push, open PR or merge yet.
+```
+- **The third-repair decision** (2026-10-05). Review 4 found the static guard's class a third time; the project's
+  rules allow two repair attempts per class, so the session put this to the owner (question and chosen option,
+  verbatim):
+```text
+QUESTION: Review 4 found a third gap of the same kind in the companion's SQL guard (a test, not a sealed file). Text inside quotes passes the guard's checks as if it were real SQL. A keyword such as current_user also passes as a column name, and PostgreSQL then returns the database role name (I checked this on PostgreSQL 17.6). The sealed SQL itself is clean, and the seal and rehearsal results still hold. The project rules allow two repair attempts per kind of failure, and both are used, so a third repair needs your go-ahead. How should I proceed?
+OPTION 1 (chosen): Guard + runner, reseal (Recommended) — Close the guard, so text in quotes counts only as a value and the exact quoted values, function uses, names and outputs are pinned, with every review-4 probe added as a refused test case. Also harden the runner: it checks every value before printing and prints no database value on a disagreement. That changes sealed files, so a new seal (UOR has not pinned the current one). Then rehearsal, full gate, fresh review 5, stop at T3.
+```
+  **The owner's answer, verbatim:**
+```text
+AUTHORIZE third repair: use Option 1 — guard + runner hardening + reseal. Also incorporate UOR’s new addendum now: keep the global client_request_id row count separate from the activation count, and harden the NEW companion CARD with exact file-set verification plus python -I -B if rehearsal proves it works. Do not modify/reseal the already-accepted A4 artifact; report any hardening of that artifact as a separate identity. Rehearse, full-gate, fresh exact-byte review again; no production query; stop at T3.
+```
+- **Superseded, never published on its own:**
+  - 4f3f00cd (ARTIFACT_SHA256 d7c269b5…), which review 3 passed for the requirements of that time; the ruling
+    changed the contract (13d3b16a added the count and resealed; 0652c431 named it in §15);
+  - 0652c431 (ARTIFACT_SHA256 64078cb4…), which review 4 found the guard's class in (FINDINGS); the owner-authorized
+    third repair replaced it (d263c090 repaired and resealed; 93ab50de named it in §15).
+  - A merge commit of the final head carries both as ancestors, as it carries every commit of the branch; the
+    published artifact is the final seal alone.
+- **The cross-credential count's durable source,** checked before any change. Migration 0013 makes `client_request_id`
+  UUID NOT NULL and part of the primary key `(credential_id, client_request_id)`. The route inserts a row only for a
+  new pair (a replay or a conflict writes nothing), never rewrites either key column, and deletes nothing; only an
+  owner-run purge removes rows older than 90 days. So the count is the number of credentials that reserved the id,
+  read from `client_request_id` alone, with no credential named. No blocker.
+- **The accepted A4 component stays as it is** (the owner: report any hardening of it as a separate identity).
+  `ucpe.a4_ledger_audit.v1` (2007fa28…) lacks what the companion's third repair added: its card starts
+  `python ops/a4_ledger_audit/a4_ledger_audit.py` without `-I -B`, its runner checks no exact folder and prints the
+  SQL's facts on RUNNER_DISAGREES, and its test guard reads literal text as SQL (review 4's class). Giving it those
+  protections would be a separate identity (for example `ucpe.a4_ledger_audit.v2`, with its own seal, review and UOR
+  pin). It is not built.
+- **The final A4 acceptance review** (2026-10-04, a fresh context, read-only, on main fc03be8e): FINAL_A4_REVIEW=FAIL on
+  two documentation defects in UOR_HANDOFF §14, and no defect in the package.
+  - Both are corrected in `e882d81`, documentation only. OUTPUT_CONTRACT now names `audit`. INDEPENDENT_REVIEW now cites
+    `dbc5c47` and `491b460`: Git proves them byte-identical on every A4 path to the pre-rebase `3ba2486` and `dd1093a`
+    (each pair's diff is exactly the rebase base's, `7a5ca4f` to `cd8b508`). ARTIFACT_SHA256 2007fa28… is unchanged.
+  - This record's own copy of the A4 OUTPUT_CONTRACT (the 2026-10-04 block below) is corrected in place, marked.
+  - Two non-blocking observations are recorded only, because fixing either would change the accepted seal:
+    - the A4 manifest's `route_unchanged_since` names `api/automation_endpoint.py`, shorthand for
+      `src/crypto_probability_engine/api/automation_endpoint.py` (the claim holds at the real path);
+    - the A4 static guard misses an unqualified relation that no migration creates when it comes first inside a
+      parenthesized join or after `SELECT DISTINCT FROM`. No such relation exists, and the probe-role rehearsal proves
+      isolation at runtime.
+  - **Retracted:** that review's third observation said §14's per-file digests were untested. That was wrong:
+    tests/automation/test_handoff_manifest.py checks every digest row of UOR_HANDOFF.md.
+  - Recorded too, from the companion's fresh reviews (2026-10-05). None is changed, by the owner's scope:
+    - the A4 test guard models less SQL than PostgreSQL parses, as the companion's guard did before its repairs: a
+      derived-table `SELECT *`, an `E''` escape string, and (review 4's class) literal text standing in for a pinned
+      fragment pass it. The A4 sealed SQL has none of them, and the A4 seal is unaffected: its guard is a test,
+      outside the seal;
+    - §14's OUTPUT_CONTRACT lists the audited line's keys, including `audit` now; a runner stop also prints
+      `error_class` (on DATABASE_ERROR and INTERNAL_ERROR), which §14 does not name (review 3's MINOR). A later
+      doc-only change, with its own review, can name it.
+- **The Card-04 companion, `ucpe.a4_card04_companion.v1`** (ops/a4_card04_companion/), on branch
+  feat/a4-card04-companion. The handoff is UOR_HANDOFF §15. Final values:
+```text
+COMPANION_STATUS=PREPARED_AND_VERIFIED (locally, on this branch: the offline tests, the scratch-PostgreSQL 17.6 rehearsal and the full suite; not production-executed; its pull-request rehearsal and the full suite must be green on the pull request that merges it, and STATE records those runs)
+ARTIFACT_NAME=ucpe.a4_card04_companion.v1
+ARTIFACT_SHA256=0b3cbb753210833d6776cab921fc6f2fa07ec89489ea150be28e2b77adddb646
+SOURCE_COMMIT=d263c090a903d1de8fd9e1172340b5cad50b3d32: the commit on branch feat/a4-card04-companion that introduced these sealed bytes; it reaches main through a merge commit (never a rebase or a squash), and STATE records the merge; the reviewed head of the branch is 93ab50dea783724c0db9fbdbeccc4d44bafb77f9
+UPSTREAM_RELEASE_IDENTITY=UCPE-PROD-E2-20261004-A (commit 1caa8b08ebfc45b79a9b14d8217dad3b112cda8d) serves radar_evidence.v1 through the route introduced by UCPE-PROD-F1-AUTOMATION-20261001-A (5a3ef022db10462675361e8d15aa8f4f572dc1aa); src/crypto_probability_engine/automation/, src/crypto_probability_engine/api/automation_endpoint.py, migration 0013 and both radar schemas are byte-identical from 5a3ef022 to 1caa8b08 and to this branch's base, main fc03be8e; public.predictions.run_id is migration 0003's, unchanged since; each request's own release is the one the accepted A4 audit proves for the same row, so the companion takes no release input
+INPUT_BINDING=(credential_id, client_request_id), the ledger's primary key, from UOR's own request (client_request_id alone is not unique across credentials), plus the received 200 response's run_id (RUN_MISMATCH otherwise; it also keys the predictions count); deadline_ms from UOR's own request and analysis_hash from the response, each compared with the row (DEADLINE_MISMATCH, ANALYSIS_HASH_MISMATCH), never trusted; qualification_activation_utc, a canonical UTC instant YYYY-MM-DDTHH:MM:SS[.ffffff]Z that opens the credential count's window and must not follow the bound request's receipt (ACTIVATION_AFTER_REQUEST); the bound client_request_id alone also keys the cross-credential count; release_id and evidence_hash are not taken, because the accepted A4 audit proves them for the same row; every input is non-secret and format-checked against migration 0013's CHECKs and the route's request contract before any contact
+OUTPUT_CONTRACT=one canonical JSON line (sorted keys), exactly these 19 keys: analysis_hash, analysis_hash_matches, artifact, artifact_sha256, bound_client_request_id, bound_credential_id, bound_qualification_activation_utc, bound_run_id, credential_ledger_rows_since_activation, deadline_ms, deadline_ms_matches, ledger_rows_for_client_request_id_across_all_credentials, predictions_rows_for_run_id, reason, row_security_off, schema_ok, sql_sha256, transaction_read_only, verdict; verdict PASS only with reason OK, else FAIL with the first failing check of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED, RUN_MISMATCH, DEADLINE_MISMATCH, ANALYSIS_HASH_MISMATCH, ACTIVATION_AFTER_REQUEST, or RUNNER_DISAGREES; artifact_sha256 is the sha256 of the MANIFEST.json the run verified; bound_qualification_activation_utc echoes the validated activation input, so the credential count names its own window; ledger_rows_for_client_request_id_across_all_credentials counts the ledger rows carrying the bound client_request_id under any credential and in any state (owner ruling A4-CRID-UNIQUENESS; Card 04 accepts exactly 1): it is at least 1 whenever the row is bound, it is reported and never judged, and it names no credential; schema_ok is the SQL's schema proof (both tables ordinary tables in public with no inheritance child, every column read with its migration's type and nullability, the ledger's primary key the pair), and transaction_read_only and row_security_off are the session proofs the runner establishes before the SELECT; exit 0 only for PASS, and the five facts are evidence only on a PASS; every value printed is an input, a boolean, a count, a reason, or a deadline or analysis hash in the ledger's own format; a runner stop prints artifact, verdict FAIL and its reason, plus sql_sha256 and the four bound identities (bound_credential_id, bound_client_request_id, bound_run_id, bound_qualification_activation_utc) once the inputs are accepted, and error_class for a database or internal error, and nothing else: RUNNER_DISAGREES (exit 1, an answer the runner cannot reproduce, none of which is printed), NOT_ISOLATED (exit 2, not started as python -I -B; refused before any input is read), INPUT_REFUSED:<input> (exit 2), SEAL_MISMATCH (exit 3: a package file, the SQL, or a folder holding anything but its five files), DATABASE_URL_MISSING, NOT_READ_ONLY, ROW_SECURITY_NOT_OFF, DATABASE_ERROR, UNEXPECTED_RESULT_SHAPE or INTERNAL_ERROR (exit 4); never the stored response body, another row, a stored timestamp, a fingerprint or a secret
+DEADLINE_MS_PROOF=the bound row's public.automation_radar_ledger.deadline_ms (migration 0013: INTEGER NOT NULL, CHECK 5000 to 60000); the route writes it once, when it reserves the row, from the validated request (automation/service.py: reserve(deadline_ms=request.deadline_ms)), and never updates it (automation/ledger.py: the completion UPDATE does not set it); it is part of the request fingerprint, so a repeat under the same key with another deadline is a 409 IDEMPOTENCY_CONFLICT, never a replay; no response body carries it, so the ledger is its only durable source; reported as deadline_ms and compared NULL-safely with UOR's own value (deadline_ms_matches, DEADLINE_MISMATCH)
+ANALYSIS_HASH_PROOF=the bound row's analysis_hash (migration 0013: TEXT; for a SUCCEEDED row its CHECKs require sha256:<64 hex> and equality with the stored 200 body's analysis_hash); the route writes it when it records the success, from the same evidence object it returns (automation/service.py: complete_success(analysis_hash=evidence["analysis_hash"]), then AutomationResult(200, evidence)), and a replay returns that stored body byte for byte; judged only after the row is bound as a completed 200 success of the bound run; reported as analysis_hash and compared with the response's (analysis_hash_matches, ANALYSIS_HASH_MISMATCH)
+PREDICTIONS_RUN_ID_COUNT_PROOF=count(*) of public.predictions rows whose run_id (migration 0003: TEXT NOT NULL, unchanged by every later migration) equals the bound run_id; the human route and the isolated automation route draw run ids from one generator (run_<uuid4 hex>, api/analysis_service.py), and the isolated route never writes a prediction (analyze_request_isolated: record_prediction=False, prediction_origin=None), so a nonzero count would mean an automated run reached the shared cohort; it reads predictions.run_id and nothing else, so no probability, label, outcome, snapshot or section 5A data (isolation evidence only, never model or directional evidence, by the owner's ruling of 2026-10-05); with row security off the count cannot be silently filtered; reported as predictions_rows_for_run_id, never judged
+CREDENTIAL_ROWS_SINCE_ACTIVATION_PROOF=count(*) of public.automation_radar_ledger rows with the bound credential_id and received_at_utc at or after qualification_activation_utc (inclusive), whatever their state, outcome or client_request_id, the bound request's own row included; a fact separate from the cross-credential count, which has no window and no credential filter; received_at_utc is TIMESTAMPTZ NOT NULL, the server's clock at admission, written once at reservation (index arl_credential_received); ledger rows are kept at least 90 days and never purged automatically; with row security off the count cannot be silently filtered; reported as credential_ledger_rows_since_activation, never judged
+READ_ONLY_PROOF=one sealed WITH...SELECT (the static structural guard in tests/automation/test_a4_card04_companion.py has two layers: the first checks every property on one token stream in which a literal is a value, never SQL: printable ASCII and standard literals only, no backslash, prefixed literal, dollar quote, quoted identifier, block comment or two adjacent literals, only the modelled operators, keywords, types and functions, every other identifier a declared name, none of them a name PostgreSQL evaluates as a value; no write, lock, SET, TABLE, comma-join, derived table, DDL or side-effect function; exactly the declared reads, literals, function calls and names; the binding, the bound row and its facts, the three counts, the checks and the final SELECT pinned token by token; the second layer admits only the sealed SQL's own token stream; 100 adversarial SQL mutants, each rejected by the first layer alone; the runner executes only those guarded bytes, pinned by sha256), run only inside SET TRANSACTION READ ONLY with statement and lock timeouts (5 s, 1 s) and row_security off, with transaction_read_only=on and row_security=off both proven before it runs, and an unconditional rollback; the runner starts only as the card runs it, python -I -B ops/a4_card04_companion/a4_card04_companion.py (NOT_ISOLATED otherwise), and before any contact checks that its folder holds exactly its five files, each a regular file, all four sealed files against MANIFEST.json and the SQL against its pinned sha256; the rehearsal runs that exact command against PostgreSQL 17.6: it PASSES with the in-process line, the folder is unchanged, every other start is refused, and a folder with one more module is refused without running it (without -I that module runs: shown); on PostgreSQL 17.6 the rehearsal refuses all 10 writes it tries under that preamble (INSERT, UPDATE, DELETE, MERGE, CREATE, ALTER, DROP, TRUNCATE), and the database, rows and catalog, is unchanged across every audit
+ISOLATION_PROOF=reads ten ledger columns (credential_id, client_request_id, evidence_origin, state, outcome_code, http_status, run_id, analysis_hash, deadline_ms, received_at_utc), predictions.run_id and five pg_catalog relations, and nothing else; the static guard allows exactly those reads (each relation's uses, every data column reference: the ledger three times, the third reading only client_request_id for one count) and pins every count token by token, so no credential_id is projected, grouped or aggregated and the two ledger counts stay separate; every value the runner prints is an input, a boolean, a count, a reason, or a deadline or analysis hash in the ledger's own format, and an answer it cannot reproduce is never printed; the guard denies every other column of both tables, any star but count(*) and the decision's k.*, any derived table, any whole-row use of a table, alias or CTE, and every other table, view and function any migration creates; it requires evidence_origin AUTOMATED_RADAR on the bound row; with row security off, a reader that a row-level policy applies to is refused rather than counted through the policy (without it, a hidden reader would count zero: rehearsed); on PostgreSQL 17.6 it PASSES as a BYPASSRLS role granted exactly those eleven columns, which is refused every other column and table; no application code changed, so USER_REQUESTED, CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE are untouched; it never names the section 5A seal or reads a holdout probability
+TESTS=tests/automation/test_a4_card04_companion.py: 231 (the structural guard's two layers: one token stream, the exact declared reads, literals, calls and names, the pinned binding, counts, checks and output, no star, derived table or whole-row use, the decision order, and the exact token stream; the schema equal to migrations 0013 and 0003, with the route's writers pinned; 100 adversarial SQL mutants; the runner offline, 87; 33 runner mutants, each breaking a promised behaviour (among them the exact folder, the python -I -B start, the ledger's formats and a disagreement printing nothing); the seal, the accepted A4 seal unchanged, this section and section 14's corrected contract); tests/workflows/test_a4_card04_companion_rehearsal_workflow.py: 7; the scratch-PostgreSQL 17.6 rehearsal (39 audit cases, among them the cross-credential count at 0, 1 and 2, a reused request id that moves only that count and an activation that moves only the credential count; the card's exact command, python -I -B, with every other start refused and a planted module refused; the eleven-column probe, two row-security readers refused, 10 refused writes): A4C_REHEARSAL=PASS locally, with the same scripts as the pull-request workflow; the full suite: VERIFY=PASS locally (6376 passed); both must be green on the pull request that merges this package, and STATE records those runs
+INDEPENDENT_REVIEW=PASS: the fifth fresh separate-context read-only Claude review of the exact head 93ab50dea783724c0db9fbdbeccc4d44bafb77f9, given the original requirements, the A4-CRID-UNIQUENESS addendum and the owner's third-repair authorization verbatim, returned REVIEW_VERDICT=PASS with all ten points VERIFIED (one MINOR and three NITs, none needing a material repair, recorded in STATE), after review 1 of db176ec1 (FINDINGS, repaired in 116b68cf), review 2 of 4edd6e4b (FINDINGS, the same class, repaired at its root in 4f3f00cd), review 3 of 4f3f00cd (PASS for the requirements of that time, superseded by the owner's ruling A4-CRID-UNIQUENESS) and review 4 of 0652c431 (FINDINGS, the same class a third time, escalated and repaired with the owner's authorization in d263c090); each was a new context given only the owner's texts, the source paths and the commit (the same model family, so not organizationally independent)
+PRODUCTION_QUERY_EXECUTED=NO
+PRODUCTION_MUTATED=NO
+PROTECTED_5A_ACCESSED=NO
+PACKAGE_PATH=ops/a4_card04_companion/
+```
+- **The review:** five fresh separate-context reviews, each a new Claude context given only the owner's texts (from review 4 on, the
+  A4-CRID-UNIQUENESS addendum too; for review 5, the owner's third-repair authorization too), the source paths and the
+  exact commit, with no transcript and no implementer summary (the same model family, so not organizationally
+  independent):
+  - Review 1, of db176ec1: FINDINGS.
+    - MAJOR: the static guard passed a star, a derived table, or a whole-row read through a CTE alias or name. The
+      sealed SQL never had them.
+    - MINOR: the card's database role. NITs: an inheritance child was not schema drift; stop-line wording; three gaps
+      in the runner battery; small text.
+    - Repaired in 116b68cf (the SQL now refuses an inheritance child: resealed d7c269b5…) and 4edd6e4b.
+  - Review 2, of 4edd6e4b: FINDINGS.
+    - MAJOR, the same causal class: the guard's literal scanner knew no `E''` escape strings, so `E'\''` hid a
+      subquery from it; a non-ASCII alias passed too.
+    - The bounded-repair rule's second attempt, at the root, in 4f3f00cd: the guard's model of SQL is closed
+      (printable ASCII, standard literals, modelled operators, keywords, types and functions, declared names, listed
+      catalog columns), and the declared reads are exact. No sealed byte changed.
+  - Review 3, of 4f3f00cd: PASS for the requirements of that time (one MINOR: §14 does not name A4's `error_class`;
+    NITs), recorded and not changed. The owner's ruling A4-CRID-UNIQUENESS then superseded that head.
+  - Review 4, of 0652c431 (the original requirements and the addendum): FINDINGS.
+    - MAJOR, the guard's class a third time: the fragment pins, the decision checks, the 'OK' count and the output
+      names read text that kept the literals' contents, so a literal could stand in for pinned SQL (11 probes passed
+      with no violation; one, resealed on scratch PostgreSQL 17.6, printed three credential ids as a count). The
+      sealed SQL was clean. NITs: §15 said "four facts"; the card said "neither count".
+    - The session's sibling scan: a name PostgreSQL evaluates as a value, declared as a column (`current_user`),
+      passed the guard; on 17.6 it returns the role.
+    - Both repair attempts of the class were used, so it went to the owner, who authorized one consolidated repair
+      with runner hardening and a reseal, with UOR's addendum (verbatim above): d263c090 (resealed 0b3cbb75…) and
+      93ab50de (§15's SOURCE_COMMIT).
+  - Review 5, of 93ab50de: PASS, all ten points VERIFIED. Recorded here and not changed, because a change would leave
+    the reviewed bytes:
+    - MINOR: the guard's first layer alone can still be satisfied by a second, nested CTE that shadows a pinned one
+      (or leaves it unused), or by `OR TRUE` added to the schema proof, which it pins only in part; the second layer,
+      the exact token stream, refuses every such SQL, so the guard as a whole holds. The test docstring and §15 credit
+      the first layer with the counts' separation, which the two layers guarantee together.
+    - NITs: "only an answer it can reproduce" (the card, the runner's docstring, §15) overstates what the runner
+      checks for the three counts (their types and the invariants it can derive, not their values); the card's exit-4
+      line names fewer stops than §15, which matches the runner; the card's "nothing else" leaves out the five
+      catalog relations of the schema proof.
+    - Its own checks added: `ucpe_space_db` and an owner under FORCE ROW LEVEL SECURITY were both refused (exit 4);
+      the card's exact command, run from a git-backed checkout, PASSED with the folder clean before and after.
+- **The owner's download approval** (2026-10-05, in chat): postgresql-17.6.tar.bz2 (21,623,975 bytes) and its .sha256
+  (90 bytes) from https://ftp.postgresql.org/pub/source/v17.6/, to build the local scratch server. The published sha256
+  e0630a3600aea27511715563259ec2111cd5f4353a4b040e0be827f94cd7a8b0 is pinned in
+  scripts/a4_card04_companion_rehearsal/build_postgres.sh, which CI also runs.
+- **Evidence:** .work/a4c/ (LANE_RECORD.md, the rehearsal report, the verify lines, the review outputs).
+- **Not done, by design:** no push, PR or merge (T3, the owner's); no production query or write; no secret; no F3, §5A
+  or protected access; no UOR edit; no traffic.
+Previously (**THE PUBLICATION BATCH IS COMPLETE** under the owner's T3: lane A #226, lane B #227 and the
 UOR A4 upstream artifact #228 merged on exact heads; this record is the batch's last PR. MODEL SUBSTITUTION: Codex quota
 exhausted, so Claude implemented A4 directly). **Production is D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The
 rollback target is 6f4420a9 (R1A).**
@@ -82,7 +428,7 @@ ARTIFACT_NAME=ucpe.a4_ledger_audit.v1
 ARTIFACT_SHA256=2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577
 UPSTREAM_RELEASE_IDENTITY=UCPE-PROD-E2-20261004-A (commit 1caa8b08ebfc45b79a9b14d8217dad3b112cda8d) serves radar_evidence.v1 through the route introduced by UCPE-PROD-F1-AUTOMATION-20261001-A (5a3ef022db10462675361e8d15aa8f4f572dc1aa), byte-identical since; each request's own release is the expected build_info.release_id from its response; the artifact's source is main e468f1f118870f904d90505a3cdbb74446d5a495 (#228)
 INPUT_BINDING=(credential_id, client_request_id), the ledger's primary key, both from UOR's own request (client_request_id alone is not unique across credentials, rehearsed); cross-checked against the received 200 response: run_id, build_info.release_id, evidence_hash
-OUTPUT_CONTRACT=one canonical JSON line (sorted keys) of scalar facts: artifact, sql_sha256, verdict (PASS|FAIL), reason (OK, or the first of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN (the row), NOT_COMPLETED, NOT_SUCCEEDED, WRONG_ORIGIN (the stored body of a completed success), BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH, or a runner stop), bound_credential_id, bound_client_request_id, schema_ok, matched_rows, evidence_origin, origin_automated_radar, state, outcome_code, http_status, run_id, run_id_matches, release_id, release_id_matches, evidence_hash, evidence_hash_matches, body_identity_consistent, transaction_read_only; exit 0 only for PASS; never the stored body, another row, a timestamp, a fingerprint or a secret
+OUTPUT_CONTRACT=one canonical JSON line (sorted keys) of scalar facts: artifact, audit, sql_sha256, verdict (PASS|FAIL), reason (OK, or the first of SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN (the row), NOT_COMPLETED, NOT_SUCCEEDED, WRONG_ORIGIN (the stored body of a completed success), BODY_IDENTITY_MISMATCH, RUN_MISMATCH, RELEASE_MISMATCH, EVIDENCE_MISMATCH, or a runner stop), bound_credential_id, bound_client_request_id, schema_ok, matched_rows, evidence_origin, origin_automated_radar, state, outcome_code, http_status, run_id, run_id_matches, release_id, release_id_matches, evidence_hash, evidence_hash_matches, body_identity_consistent, transaction_read_only; exit 0 only for PASS; never the stored body, another row, a timestamp, a fingerprint or a secret
 READ_ONLY_PROOF=one sealed WITH...SELECT (static guard: no write, lock, SET, TABLE, comma-join, DDL or side-effect function; 23 adversarial mutants rejected), run only inside SET TRANSACTION READ ONLY with transaction_read_only=on proven first, a 5 s timeout and an unconditional rollback; on real PostgreSQL (run 37213822890) INSERT, UPDATE, ALTER, CREATE, DELETE and TRUNCATE were all refused under that preamble and the ledger was unchanged across every audit
 ISOLATION_PROOF=reads only public.automation_radar_ledger and four pg_catalog relations; the static guard denies every other table, view and function any migration creates; requires evidence_origin AUTOMATED_RADAR on the row and in a success's stored body; on real PostgreSQL it PASSES as a role that can read only the ledger, which was refused predictions, prediction_outcomes, analysis_runs and automation_credential; no application code changed (USER_REQUESTED, CONTROLLED_SMOKE and SCHEDULED_SHADOW_EVIDENCE untouched)
 TESTS=tests/automation/test_a4_ledger_audit.py 75 (guard with the decision order enforced; schema equal to migration 0013; 23 SQL mutants; the runner offline; 14 runner mutants); tests/workflows/test_a4_ledger_audit_rehearsal_workflow.py 4; full suite PASS on PR #228 (CI 37213822939) and locally with bytecode on (6136); scratch-PostgreSQL rehearsal 23/23 (run 37213822890)
@@ -90,6 +436,8 @@ INDEPENDENT_REVIEW=separate-context Claude review (a fresh context given only th
 PRODUCTION_QUERY_EXECUTED=NO
 PACKAGE_PATH=ops/a4_ledger_audit/
 ```
+- **Corrected 2026-10-05:** the OUTPUT_CONTRACT above omitted `audit`, which every audited line carries (the sealed
+  SQL's own name for the artifact). It is added in place; UOR_HANDOFF §14 is corrected the same way (`e882d81`).
 - **Stale handoff wording, corrected in place (#228):**
   - §5: F1 introduced the route, which is inherited unchanged; E2 serves it now.
   - §12: the named rollback target `2096af6d` is below migration 0018's floor (WA `a2de125f`). The current target, R1A
@@ -1912,7 +2260,15 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=IN PROGRESS (2026-10-04): the owner's T3 publication batch is COMPLETE (#226, #227, #228; this record
+LOOP_STATE=IN PROGRESS (2026-10-05): the Card-04 companion is PUBLISHED (#230 → main 267a6eaf; this record
+  last). Claude continues Lane P and Lane R locally under the owner's Phase-7/8 rulings (DP-A to DP-F), then
+  DP-D's local tooling. Each publication is a new owner T3; Lane P also waits for the UOR qualification
+  episode's close or the owner's authorization.
+  Before it: AT THE OWNER (2026-10-05): the Card-04 companion (ucpe.a4_card04_companion.v1) and the A4
+  handoff's two documentation corrections are PREPARED AND VERIFIED LOCALLY on feat/a4-card04-companion @ 93ab50de,
+  with the owner's cross-credential count (A4-CRID-UNIQUENESS) and the owner-authorized third repair; 4f3f00cd
+  and 0652c431 are superseded. The fresh review of the exact head: PASS. The one owner action is the T3.
+  Before it: IN PROGRESS (2026-10-04): the owner's T3 publication batch is COMPLETE (#226, #227, #228; this record
   last). Claude continues with dependency-safe local lanes; any new pull request needs a new owner T3 batch.
   Before it: AT THE OWNER (2026-10-04): POST-PHASE-4 lanes A and B are DONE LOCALLY (VERIFY=PASS, composed). The
   one batched owner action is T3 publication of three branches. No other lane is safe without an owner decision.
@@ -3641,7 +3997,12 @@ LOOP_STATE=IN PROGRESS (2026-10-04): the owner's T3 publication batch is COMPLET
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 (2026-10-04): lane A, lane B and the UOR A4 upstream artifact are MERGED
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7 LANES (2026-10-05): the Card-04 companion is published (main
+  267a6eaf, #230). Phase 7/8 proceeds under the owner's rulings DP-A to DP-F, with Lane P and Lane R local.
+  Before it: POST-PHASE-4 / UOR CARD 04 (2026-10-05): the Card-04 companion, with the cross-credential
+  count and the third repair, is prepared and verified locally (0b3cbb75...); the A4 component is unchanged
+  (2007fa28...), its handoff corrected.
+  Before it: POST-PHASE-4 (2026-10-04): lane A, lane B and the UOR A4 upstream artifact are MERGED
   (#226-#228). The reference/risk product's remaining items wait on owner rulings.
   Before it: POST-PHASE-4 (2026-10-04): the Phase 8 tooling inventory (lane B) and the local test wall time
   (lane A) are done locally. The reference/risk product's remaining items wait on owner rulings.
@@ -3812,7 +4173,12 @@ CURRENT_MILESTONE=POST-PHASE-4 (2026-10-04): lane A, lane B and the UOR A4 upstr
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-phase4-infeasible (this record, rebuilt on main e468f1f1 by a merge that keeps
+CURRENT_BRANCH=chore/state-a4-card04-companion (this record, merged with main 267a6eaf). Local and unpublished:
+  feat/p7r-provider-pool-singleflight (Lane R, worktree scratchpad/wtR of session ba4955d3) and Lane P's branch.
+  Before it: chore/state-a4-card04-companion (this record, on main fc03be8e) and feat/a4-card04-companion @
+  93ab50de (e882d81, 66133c5, db176ec, 116b68c, 4edd6e4, 4f3f00c, 13d3b16, 0652c43, d263c09, 93ab50d;
+  worktree scratchpad/wt of session ba4955d3).
+  Before it: chore/state-phase4-infeasible (this record, rebuilt on main e468f1f1 by a merge that keeps
   cd4563c and a44ccf6; worktree lanes30/state).
   Before it: chore/state-phase4-infeasible (a44ccf6; worktree lanes30/state). Lanes:
   feat/t1-test-wallclock @ ebbabe6 (lanes31/testwall) and docs/p8-tooling-inventory @ 953fe26 (lanes31/inventory).
@@ -3940,7 +4306,10 @@ CURRENT_BRANCH=chore/state-phase4-infeasible (this record, rebuilt on main e468f
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=e468f1f1 (main, #228: the A4 artifact; push CI green).
+LAST_GREEN_SHA=267a6eaf (main, #230: the Card-04 companion; push CI 37271854804 and the reproducible build
+  37271854824 green).
+  Before it: fc03be8e (main, #229: the STATE record; push CI 37215106950 and the reproducible build green).
+  Before it: e468f1f1 (main, #228: the A4 artifact; push CI green).
   Before it: 7a5ca4f9 (main, #225: the R4-C1 identity and the Phase 4 record).
   Before it: c10af044 (main, #224: Phase 3 closed).
   Before it: e344d002 (main, #223: the E2 cutover accepted).
@@ -4169,7 +4538,13 @@ LAST_GREEN_SHA=e468f1f1 (main, #228: the A4 artifact; push CI green).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
+LAST_VERIFY=PASS 2026-10-05 on this record's PR tree (main 267a6eaf plus STATE.md; the exact line is in the PR
+  body).
+  Before it: PASS 2026-10-05 on feat/a4-card04-companion @ 93ab50d, bytecode on: ruff ok | 6376 passed |
+  schemas+smoke ok | scanners 3/3; the scratch-PostgreSQL 17.6 rehearsal A4C_REHEARSAL=PASS (39 cases and the
+  card's python -I -B command). Before it: PASS on 0652c43 (6332; 38 cases) and 4f3f00c (6314; 35 cases),
+  both superseded.
+  Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
   Before it: PASS 2026-10-04: lane A 6018, lane B 6050, their composition 6054 (6e5dae9, scratch); a44ccf6's tree
   (the exact line is in the PR body).
   Before it: PASS on this record's PR tree, 2026-10-04 (the exact line is in the PR body).
@@ -4347,7 +4722,9 @@ LAST_VERIFY=PASS on this record's PR tree, 2026-10-04 (the exact line is in the 
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. Codex's quota is EXHAUSTED (owner, 2026-10-04): no Codex, no delegate.sh, no wait, no paid
+CODEX_PENDING=NONE (2026-10-05). Codex remains unavailable (owner): Claude implemented, tested and reviewed the
+  companion directly (MODEL SUBSTITUTION); no paid fallback.
+  Before it: NONE. Codex's quota is EXHAUSTED (owner, 2026-10-04): no Codex, no delegate.sh, no wait, no paid
   fallback. Claude implements directly (MODEL SUBSTITUTION).
   Before it: NONE. Codex RESUMED by the owner (2026-10-04) for safe local T0/T1/T2 only. Tasks 901 (lane B) and 902
   (lane A) are DONE, both VERIFY=PASS; Claude read both diffs and corrected four of 901's labels.
@@ -4447,7 +4824,15 @@ CODEX_PENDING=NONE. Codex's quota is EXHAUSTED (owner, 2026-10-04): no Codex, no
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=Nothing is pending from the batch.
+OWNER_BOUNDARY=Nothing is pending from the A4C batch (2026-10-05). Ahead, each the owner's:
+  - Lane R's publication (a new T3, when ready);
+  - Lane P's publication, after the UOR qualification episode closes or on the owner's explicit authorization;
+  - DP-D's export, structure only, a future owner action;
+  - the writer JWT renewal, by 2026-10-30.
+  Before it: ONE BATCHED OWNER ACTION (2026-10-05), T3: publish feat/a4-card04-companion @ 93ab50de (PR,
+  required CI, merge commit), then this STATE record last. Running either A4 artifact against production stays a
+  future owner decision at the UOR episode.
+  Before it: Nothing is pending from the batch.
   - UOR side: the owner carries docs/automation/UOR_HANDOFF.md §14 (and the final values in this record) into UOR's
     governed session. UOR pins ARTIFACT_SHA256 2007fa28... read-only.
   - Running the A4 audit against production is a future owner decision at the qualification episode.
@@ -5076,7 +5461,13 @@ OWNER_BOUNDARY=Nothing is pending from the batch.
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: the remaining dependency-safe local lanes (each new pull request is a new owner T3 batch);
+NEXT_ACTION=Claude: Lane R and Lane P locally under DP-A to DP-F (tests, mutation, full gates, fresh reviews),
+  then DP-D's local restore tooling and the owner export card. Return at the next genuine owner boundary with
+  one batched action. The owner: carry UOR_HANDOFF §14 and §15 to UOR when ready.
+  Before it: The owner: the T3 batch above. Claude after it: exact-head and file-set checks, CI reads (including
+  the companion's rehearsal on PostgreSQL 17.6), the merge commit, then this record refreshed onto the resulting
+  main with the merge and run ids, published last. The owner: carry UOR_HANDOFF §14 and §15 to UOR when ready.
+  Before it: Claude: the remaining dependency-safe local lanes (each new pull request is a new owner T3 batch);
   passive reads only. The owner: carry the A4 handoff fields to UOR when ready.
   Before it: The owner: the batched T3 action above. Claude after it: CI reads, the exact-head merges, LAST_GREEN_SHA;
   then passive reads only (the receipt watch; the Phase 7 baseline once natural traffic exists) and the JWT renewal
