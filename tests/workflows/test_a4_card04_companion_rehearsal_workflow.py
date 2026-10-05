@@ -103,6 +103,16 @@ def test_it_rehearses_only_a_local_socket_scratch_database() -> None:
     assert "trap cleanup EXIT" in SCRATCH
 
 
+def test_it_runs_the_cards_exact_command_and_keeps_the_package_folder_as_sealed() -> None:
+    # The card's command line, python -I -B, in a child process, and every other start refused.
+    assert 'start(PACKAGE / "a4_card04_companion.py", "-I", "-B")' in REHEARSAL
+    assert 'for flags in (("-B",), ("-I",), ())' in REHEARSAL
+    assert "before == after == sorted(runner.PACKAGE_FILES)" in REHEARSAL
+    assert "not ran_under_isolation" in REHEARSAL and 'command_line["ok"]' in REHEARSAL
+    # The rehearsal itself never writes bytecode into the package folder.
+    assert "spec.loader.exec_module" not in REHEARSAL
+
+
 def test_the_readers_see_exactly_the_companions_eleven_columns() -> None:
     normalized = " ".join(PROBES.split())
     manifest = json.loads(

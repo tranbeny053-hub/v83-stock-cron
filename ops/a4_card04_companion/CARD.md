@@ -13,19 +13,26 @@ decision, made at the qualification episode itself, beside the accepted A4 audit
   - how many ledger rows the credential has from the qualification's activation on;
   - how many ledger rows carry the request's `client_request_id`, under any credential (owner ruling
     A4-CRID-UNIQUENESS, 2026-10-05). It names no credential.
+- **The two ledger counts are separate facts.** The credential count has the activation window and
+  ignores `client_request_id`; the cross-credential count has no window and no credential filter.
+  Neither is derived from the other.
 - **What it is not:** a database tool. It reads ten columns of `public.automation_radar_ledger` and
   `public.predictions.run_id`, and nothing else: no probability, label, outcome, snapshot, calibration,
   credential registry, section 5A data or response body.
 - **The `predictions` read** returns one count. It is isolation evidence, never model or directional
   evidence (owner ruling, 2026-10-05).
 - **The sealed SELECT:** `a4_card04_companion.sql`. The runner `a4_card04_companion.py` pins its sha256,
-  and before contacting anything it checks every package file against `MANIFEST.json`.
+  and before contacting anything it checks that its folder holds exactly its five files and that every
+  package file matches `MANIFEST.json`.
 - **Read only:**
   - the runner opens the transaction `READ ONLY`, with row security off, proves both, bounds it at
     5 s, and always rolls back;
-  - with row security off, a row-level policy that would hide a row raises an error instead, so neither
+  - with row security off, a row-level policy that would hide a row raises an error instead, so no
     count can be silently filtered to zero;
   - it never prints the database URL, a credential value or an exception message.
+- **What it prints:** only an answer it can reproduce. Every printed value is an input, a yes or no, a
+  count, a reason, or a deadline or analysis hash in the ledger's own format. When it cannot reproduce
+  the SQL's answer, it prints none of it.
 
 ## ACTION_ID
 A4-CARD04-COMPANION, once per qualification request, only inside the owner-authorized episode.
@@ -37,7 +44,15 @@ client_request_id has one ledger row in all (the ledger's key is the pair, not t
 the durable record rather than from UOR's own memory of it.
 
 ## WHERE
-- A terminal with this repository at the commit that carries this package.
+- A fresh checkout of this repository at the commit that carries this package. The package folder must
+  hold exactly its five files (`MANIFEST.json` and the four it seals): the runner refuses to run if
+  anything else is there, even a `__pycache__` folder or a link.
+- **The Python:** one with `psycopg` in its own site packages, such as the repository's
+  `.venv/bin/python`. The card starts it as `python -I -B`:
+  - `-I` keeps the package folder, every `PYTHON*` variable and the user's own site packages off the
+    import path, so no planted module can run;
+  - `-B` writes no bytecode, so the folder stays exactly as sealed;
+  - the runner refuses any other start (`NOT_ISOLATED`).
 - **The database role:** the role that owns both `public.automation_radar_ledger` and
   `public.predictions`, or a role with BYPASSRLS and SELECT on exactly the ten ledger columns and
   `predictions.run_id`.
@@ -58,16 +73,18 @@ the durable record rather than from UOR's own memory of it.
    - the response's `analysis_hash`;
    - the qualification's activation instant, as UTC: `YYYY-MM-DDTHH:MM:SSZ` (fractional seconds
      allowed).
-2. `read -rs A4_COMPANION_DATABASE_URL && export A4_COMPANION_DATABASE_URL`, then paste the URL. It is
+2. Check the folder: `git status --porcelain --ignored ops/a4_card04_companion` must print nothing.
+3. `read -rs A4_COMPANION_DATABASE_URL && export A4_COMPANION_DATABASE_URL`, then paste the URL. It is
    not echoed.
-3. Run:
-   `python ops/a4_card04_companion/a4_card04_companion.py --credential-id <id> --client-request-id <uuid> --run-id <run_id> --deadline-ms <deadline_ms> --analysis-hash <analysis_hash> --qualification-activation-utc <activation>`
-4. `unset A4_COMPANION_DATABASE_URL`.
+4. Run, with the Python named in WHERE:
+   `python -I -B ops/a4_card04_companion/a4_card04_companion.py --credential-id <id> --client-request-id <uuid> --run-id <run_id> --deadline-ms <deadline_ms> --analysis-hash <analysis_hash> --qualification-activation-utc <activation>`
+5. `unset A4_COMPANION_DATABASE_URL`.
 
 ## DO_NOT_DO
 - Never run it outside the episode, and never against anything but the ledger's own database.
-- Never edit the SQL or any package file. A change is a new artifact version, with a new seal that UOR
-  must pin again.
+- Never edit the SQL or any package file, and never add a file to the package folder. A change is a new
+  artifact version, with a new seal that UOR must pin again.
+- Never start it without `-I -B`.
 - Never pass the credential token or the URL as an argument.
 - Never bind on `client_request_id` alone: the ledger's key is the pair.
 - Never treat a count as accepted or rejected here. Card 04 judges the counts; this card only reports
@@ -83,17 +100,20 @@ One JSON line, with sorted keys:
   - `SCHEMA_DRIFT` means a column it reads has another type or nullability than its migration gives
     it, a table it reads is not an ordinary table (a view, for example) or has an inheritance child, or
     the ledger's primary key is not the pair. A column it does not read is not drift.
-  - `RUNNER_DISAGREES` (also exit 1) means the runner's own reading of the SQL's answer differs from it.
-- **Stopped, nothing contacted:** exit 2 means an input was refused; exit 3 means a package file or the
-  SQL does not match its seal.
+  - `RUNNER_DISAGREES` (also exit 1) means the runner could not reproduce the SQL's answer. It then
+    prints only the stop line (the artifact, the verdict, the reason, the SQL's digest and the four
+    bound inputs), with none of the SQL's values.
+- **Stopped, nothing contacted:** exit 2 means an input was refused (`INPUT_REFUSED:<input>`) or the
+  runner was not started with `-I -B` (`NOT_ISOLATED`); exit 3 (`SEAL_MISMATCH`) means a package file
+  or the SQL does not match its seal, or the folder holds anything but its five files.
 - **Database stop:** exit 4, named by `reason` and `error_class` only. `InsufficientPrivilege` means the
   role is not one of those in WHERE.
 - **The credential count** includes every ledger row of the credential received at or after the
-  activation instant, the bound request's own row included, whatever its outcome.
+  activation instant, the bound request's own row included, whatever its outcome or request id.
 - **The cross-credential count** includes every ledger row carrying the bound `client_request_id`,
-  under any credential and whatever its state or outcome. When the row is bound it is at least 1.
-  Card 04 adjudicates it (its acceptance value is 1); this card reports it and never names another
-  credential.
+  under any credential, whenever received and whatever its state or outcome. When the row is bound it
+  is at least 1. Card 04 adjudicates it (its acceptance value is 1); this card reports it and never
+  names another credential.
 - The ledger keeps rows for at least 90 days (docs/automation/RETENTION_AND_IDEMPOTENCY.md), so run it
   within that window.
 
@@ -102,7 +122,9 @@ One JSON line, with sorted keys:
 - tests/automation/test_a4_card04_companion.py checks the guard, the schema against migrations 0013 and
   0003, the adversarial mutants and the runner.
 - The scratch-PostgreSQL 17.6 rehearsal (scripts/a4_card04_companion_rehearsal/) runs every case on a
-  real server, including a role that can read only the eleven columns.
+  real server, including a role that can read only the eleven columns. It also runs this card's exact
+  command, `python -I -B`, and shows the folder unchanged after it; a folder with one more file is
+  refused, and a module planted there never runs.
 
 ## RESUME
 Hand the one JSON line to UOR for its Card 04 adjudication. UCPE writes nothing, and UCPE never writes

@@ -5,11 +5,16 @@
   "artifact_sha256": "2007fa28a52048e13c1cadbc8e7d5c67fd317dcb9d3bb9e57d1a581a728b6577",
   "source_commit": "e468f1f118870f904d90505a3cdbb74446d5a495"
  },
+ "counts": {
+  "credential_ledger_rows_since_activation": "ledger rows of the bound credential received at or after qualification_activation_utc, whatever their client_request_id",
+  "ledger_rows_for_client_request_id_across_all_credentials": "ledger rows carrying the bound client_request_id, under any credential and whenever received; no credential is named",
+  "predictions_rows_for_run_id": "public.predictions rows carrying the bound run_id"
+ },
  "files": {
-  "ops/a4_card04_companion/CARD.md": "847fb6687df9e5992203388c7d29ba06e16d743fb91686239815f95e9167532f",
-  "ops/a4_card04_companion/a4_card04_companion.py": "646e74fae7bf6c240ea77b2fe111033b688e7af2944bcf1936ef2f6bfae829f6",
+  "ops/a4_card04_companion/CARD.md": "582be23e6db14da6bebbd8bd32ecaf0fbdd3adef5f269e2727156c0b48d092a2",
+  "ops/a4_card04_companion/a4_card04_companion.py": "dc35553c8780b084763edf4ea432890c6c48cf17be526b1fff8ecc8912d8cec5",
   "ops/a4_card04_companion/a4_card04_companion.sql": "e507caaf313a82d870f753bd502c8e915be2a3af13c1f55cdeda53ee50de9e49",
-  "ops/a4_card04_companion/build_manifest.py": "86490b49eee830f6d431639bcab84114a62b5151dd1698eea547d7240e41ef45"
+  "ops/a4_card04_companion/build_manifest.py": "36be3f62ac90a93a2e95be7fba80512f96fec59eb483b5c79fa1c7973ffc7bbf"
  },
  "input_binding": {
   "count_window_from": "qualification_activation_utc (inclusive)",
@@ -25,6 +30,7 @@
    "client_request_id"
   ]
  },
+ "invocation": "python -I -B ops/a4_card04_companion/a4_card04_companion.py",
  "output_keys": [
   "analysis_hash",
   "analysis_hash_matches",
@@ -45,6 +51,13 @@
   "sql_sha256",
   "transaction_read_only",
   "verdict"
+ ],
+ "package_files": [
+  "CARD.md",
+  "MANIFEST.json",
+  "a4_card04_companion.py",
+  "a4_card04_companion.sql",
+  "build_manifest.py"
  ],
  "purpose": "Prove the five durable facts UOR Card 04 needs for one qualification request: its deadline_ms and its run's analysis_hash from its public.automation_radar_ledger row, the count of public.predictions rows carrying its run_id, the count of its credential's ledger rows since the qualification's activation, and the count of ledger rows carrying its client_request_id under any credential. Read-only. Prepared, not run against production.",
  "reads": {

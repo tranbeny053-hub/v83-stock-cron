@@ -16,7 +16,12 @@ What it proves, each as a case with expected and actual results:
   a variant bound on client_request_id alone finds two rows (AMBIGUOUS);
 - the cross-credential count (owner ruling A4-CRID-UNIQUENESS) is 0 for an unsent id, 1 for an id
   one row carries and 2 for an id two credentials carry, whatever the pair binds; when a third
-  credential reuses a bound row's id, that count alone moves;
+  credential reuses a bound row's id, that count alone moves, and when the activation moves, the
+  credential count alone moves: the two ledger counts are separate facts;
+- the card's exact command, python -I -B, PASSES with the same line as the in-process run and
+  leaves the package folder exactly as sealed; any other start is refused; a copy of the folder with
+  one more module is refused, and that module never runs under -I (without -I it would: shown with a
+  harmless marker);
 - least privilege: as a role that can read only the eleven columns (and bypasses row security), the
   companion PASSES with the owner's facts, and that role is refused every other column and table;
 - row security: a reader that row-level security applies to is refused (with or without a permissive
@@ -37,7 +42,10 @@ import importlib.util
 import io
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -76,13 +84,15 @@ SENTINEL = "public.a4c_rehearsal_sentinel"
 
 
 def load_runner() -> Any:
-    spec = importlib.util.spec_from_file_location(
-        "a4c_companion_runner", PACKAGE / "a4_card04_companion.py"
-    )
-    assert spec and spec.loader
+    """The runner, executed from its source: no bytecode is written into the package folder, which
+    must hold exactly its five files."""
+
+    path = PACKAGE / "a4_card04_companion.py"
+    spec = importlib.util.spec_from_file_location("a4c_companion_runner", path)
+    assert spec
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), module.__dict__)  # noqa: S102
     return module
 
 
@@ -425,12 +435,28 @@ class Rehearsal:
             CROSS: 2,  # the other credential's row carries the same client_request_id
         }
         owner_pass = self.case("qualifying row", self.binding("qualifying"), "OK", 0, qualifying)
-        self.case(
+        at_receipt = self.case(
             "activation at the request's own receipt: the window is inclusive",
             self.binding("qualifying", activation="2026-10-05T00:10:00Z"),
             "OK",
             0,
             {**qualifying, "credential_ledger_rows_since_activation": 4},
+        )
+        moved = sorted(key for key in owner_pass if owner_pass.get(key) != at_receipt.get(key))
+        self.cases.append(
+            {
+                "case": "the activation moves only the credential count and its own echo",
+                "expected_reason": [
+                    "bound_qualification_activation_utc",
+                    "credential_ledger_rows_since_activation",
+                ],
+                "reason": moved,
+                "ok": moved
+                == [
+                    "bound_qualification_activation_utc",
+                    "credential_ledger_rows_since_activation",
+                ],
+            }
         )
         self.case(
             "an earlier activation counts the earlier row too",
@@ -535,6 +561,7 @@ class Rehearsal:
             "AMBIGUOUS",
         )
         least_privilege = self.least_privilege(owner_pass)
+        command_line = self.isolated_command_line(owner_pass)
         row_security = self.row_security()
         read_only = self.read_only()
         end = self.drift()
@@ -547,6 +574,7 @@ class Rehearsal:
             "server_version": server_version,
             "cases": self.cases,
             "least_privilege": least_privilege,
+            "isolated_command_line": command_line,
             "row_security": row_security,
             "read_only": read_only,
             "database_restored": start == end,
@@ -554,6 +582,7 @@ class Rehearsal:
         report["all_ok"] = (
             all(case["ok"] for case in self.cases)
             and least_privilege["ok"]
+            and command_line["ok"]
             and row_security["ok"]
             and read_only["ok"]
             and report["database_restored"]
@@ -656,6 +685,95 @@ class Rehearsal:
             and set(refused_reads.values()) == {"REFUSED"}
             and same,
         }
+
+    def isolated_command_line(self, owner_pass: dict[str, Any]) -> dict[str, Any]:
+        """The card's exact command, python -I -B, in a child process against this server: it
+        PASSES with the in-process run's line and leaves the package folder exactly as sealed. Any
+        other start is refused. A copy of the folder with one more module is refused, and the module
+        never runs under -I; without -I it would, which a harmless marker shows."""
+
+        binding = self.binding("qualifying")
+        args = [
+            "--credential-id",
+            binding["credential_id"],
+            "--client-request-id",
+            binding["client_request_id"],
+            "--run-id",
+            binding["run_id"],
+            "--deadline-ms",
+            binding["deadline_ms"],
+            "--analysis-hash",
+            binding["analysis_hash"],
+            "--qualification-activation-utc",
+            binding["activation"],
+        ]
+        environment = {"PATH": os.environ.get("PATH", ""), runner.DATABASE_URL_ENV: self.url}
+
+        def start(script: Path, *flags: str) -> tuple[int, dict[str, Any]]:
+            done = subprocess.run(  # noqa: S603 - this interpreter, a sealed file, fixed arguments
+                [sys.executable, *flags, str(script), *args],
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            line = done.stdout.strip()
+            return done.returncode, json.loads(line) if line.startswith("{") else {}
+
+        before = sorted(os.listdir(PACKAGE))
+        state = self.digest()
+        isolated_code, isolated = start(PACKAGE / "a4_card04_companion.py", "-I", "-B")
+        refused = {
+            " ".join(flags): start(PACKAGE / "a4_card04_companion.py", *flags)
+            for flags in (("-B",), ("-I",), ())
+        }
+        after = sorted(os.listdir(PACKAGE))
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root) / "ops" / "a4_card04_companion"
+            shutil.copytree(PACKAGE, folder)
+            marker = Path(root) / "planted-module-ran"
+            (folder / "json.py").write_text(
+                f"open({str(marker)!r}, 'w').close()\nraise SystemExit(99)\n", encoding="utf-8"
+            )
+            planted_code, planted = start(folder / "a4_card04_companion.py", "-I", "-B")
+            ran_under_isolation = marker.exists()
+            unisolated_code, _ = start(folder / "a4_card04_companion.py", "-B")
+            ran_without_isolation = marker.exists()
+        result = {
+            "isolated_exit": isolated_code,
+            "isolated_line_equals_in_process": isolated == owner_pass,
+            "other_starts": {
+                flags or "(none)": [code, payload.get("reason")]
+                for flags, (code, payload) in refused.items()
+            },
+            "package_folder_before": before,
+            "package_folder_after": after,
+            "database_unchanged": state == self.digest(),
+            "planted_module": {
+                "isolated_exit": planted_code,
+                "isolated_reason": planted.get("reason"),
+                "ran_under_isolation": ran_under_isolation,
+                "exit_without_isolation": unisolated_code,
+                "ran_without_isolation": ran_without_isolation,
+            },
+        }
+        result["ok"] = (
+            isolated_code == 0
+            and isolated.get("verdict") == "PASS"
+            and result["isolated_line_equals_in_process"]
+            and all(
+                code == 2 and reason == "NOT_ISOLATED"
+                for code, reason in result["other_starts"].values()
+            )
+            and before == after == sorted(runner.PACKAGE_FILES)
+            and result["database_unchanged"]
+            and planted_code == 3
+            and planted.get("reason") == "SEAL_MISMATCH"
+            and not ran_under_isolation
+            and ran_without_isolation
+        )
+        return result
 
     def _probe_read(self, statement: str) -> str:
         with self.owner() as conn:
@@ -857,6 +975,7 @@ def main() -> int:
         print(("PASS " if case["ok"] else "FAIL ") + case["case"] + f" -> {case['reason']}")
     print(
         f"least_privilege ok={report['least_privilege']['ok']}"
+        f" isolated_command_line ok={report['isolated_command_line']['ok']}"
         f" row_security ok={report['row_security']['ok']}"
         f" read_only ok={report['read_only']['ok']}"
         f" database_restored={report['database_restored']}"

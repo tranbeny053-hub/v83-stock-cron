@@ -5,9 +5,15 @@ PURPOSE, and only this: during one owner-authorized UOR qualification episode, b
 A4 audit of the same request, prove the five durable facts Card 04 still needs: the request's
 deadline_ms, the run's analysis_hash, how many prediction rows carry the run id, how many ledger
 rows the credential has since the qualification's activation, and how many ledger rows carry the
-request's client_request_id under any credential. It is not a database tool.
+request's client_request_id under any credential. The two ledger counts are separate facts: the
+first has the activation window and no request filter, the second neither a window nor a credential
+filter. It is not a database tool.
 It runs exactly one sealed SELECT (``a4_card04_companion.sql``, whose sha256 is pinned below) with
 six inputs, inside a READ ONLY transaction with row security off, which it always rolls back.
+
+RUN IT AS: python -I -B ops/a4_card04_companion/a4_card04_companion.py <the six inputs>
+-I keeps this folder, every PYTHON* variable and the user's own site packages off the import path,
+and -B writes no bytecode. Started any other way, it refuses (NOT_ISOLATED) before reading an input.
 
 INPUTS, all non-secret, from UOR's own record of the request and its received 200 response:
   --credential-id                 the machine credential's id, never its value
@@ -19,12 +25,17 @@ INPUTS, all non-secret, from UOR's own record of the request and its received 20
 The database URL comes only from the environment variable A4_COMPANION_DATABASE_URL. It is never
 printed, and no exception message is printed either: errors are named by their class only.
 
-Before anything is contacted, every sealed file must match MANIFEST.json and the SQL its pin.
+Before anything is contacted, this folder must hold exactly its five files, each a regular file
+(no bytecode cache, no other module, no link), every sealed file must match MANIFEST.json and the
+SQL its pin.
 
-OUTPUT: one canonical JSON object on stdout (sorted keys, no whitespace). Exit codes:
-  0 PASS · 1 FAIL (the audit ran and the row does not qualify)
-  2 inputs refused, nothing contacted · 3 the package or the SQL does not match its seal, nothing
-  contacted · 4 database error or refused session.
+OUTPUT: one canonical JSON object on stdout (sorted keys, no whitespace). Only an answer the runner
+reproduces is printed, and each printed value is an input, a boolean, a count, a reason, or a
+deadline or analysis hash in the ledger's own format. An answer it cannot reproduce is not printed
+at all: RUNNER_DISAGREES prints the stop line only. Exit codes:
+  0 PASS · 1 FAIL (the audit ran and the row does not qualify, or the runner disagrees)
+  2 inputs or the interpreter refused, nothing contacted · 3 the package or the SQL does not match
+  its seal, nothing contacted · 4 database error or refused session.
 """
 
 from __future__ import annotations
@@ -48,6 +59,9 @@ PACKAGE_PATH = "ops/a4_card04_companion"
 SQL_PATH = PACKAGE / "a4_card04_companion.sql"
 MANIFEST_PATH = PACKAGE / "MANIFEST.json"
 SEALED_FILES = ("a4_card04_companion.sql", "a4_card04_companion.py", "CARD.md", "build_manifest.py")
+# This folder holds exactly these files, and the runner starts only as the card runs it.
+PACKAGE_FILES = (*SEALED_FILES, "MANIFEST.json")
+INVOCATION = "python -I -B ops/a4_card04_companion/a4_card04_companion.py"
 SQL_SHA256 = "e507caaf313a82d870f753bd502c8e915be2a3af13c1f55cdeda53ee50de9e49"
 DATABASE_URL_ENV = "A4_COMPANION_DATABASE_URL"
 STATEMENT_TIMEOUT = "5000ms"
@@ -183,10 +197,13 @@ def _canonical_utc(value: str) -> bool:
 
 
 def verified_package() -> tuple[str, str]:
-    """(the sealed SQL, the seal's sha256), only if every sealed file matches MANIFEST.json and the
-    SQL matches its pin."""
+    """(the sealed SQL, the seal's sha256), only if this folder holds exactly its five files, each a
+    regular file, every sealed file matches MANIFEST.json and the SQL matches its pin."""
 
     try:
+        with os.scandir(PACKAGE) as entries:
+            found = {entry.name: entry.is_file(follow_symlinks=False) for entry in entries}
+        exact = sorted(found) == sorted(PACKAGE_FILES) and all(found.values())
         manifest_bytes = MANIFEST_PATH.read_bytes()
         files = json.loads(manifest_bytes)["files"]
         expected = {f"{PACKAGE_PATH}/{name}" for name in SEALED_FILES}
@@ -198,6 +215,8 @@ def verified_package() -> tuple[str, str]:
         data = SQL_PATH.read_bytes()
     except (OSError, ValueError, KeyError, TypeError):
         raise Refusal("SEAL_MISMATCH", EXIT_SEAL) from None
+    if not exact:
+        raise Refusal("SEAL_MISMATCH", EXIT_SEAL)
     if not intact:
         raise Refusal("SEAL_MISMATCH", EXIT_SEAL)
     if hashlib.sha256(data).hexdigest() != SQL_SHA256:
@@ -283,6 +302,18 @@ def _count(value: Any) -> bool:
     return type(value) is int and value >= 0
 
 
+def _ledger_deadline(value: Any) -> bool:
+    """None, or a deadline the ledger's CHECK allows: an integer from 5000 to 60000."""
+
+    return value is None or (type(value) is int and DEADLINE_MS_MIN <= value <= DEADLINE_MS_MAX)
+
+
+def _ledger_hash(value: Any) -> bool:
+    """None, or an analysis hash in the ledger's own format: sha256: and 64 lowercase hex digits."""
+
+    return value is None or (type(value) is str and ANALYSIS_HASH.fullmatch(value) is not None)
+
+
 def cross_check(facts: Mapping[str, Any], binding: Binding) -> bool:
     """The SQL's own answer agrees with the runner's independent reading of what it returned."""
 
@@ -303,8 +334,9 @@ def cross_check(facts: Mapping[str, Any], binding: Binding) -> bool:
         facts["bound_run_id"] == binding.run_id,
         type(facts["schema_ok"]) is bool,
         (facts["schema_ok"] is False) == (reason == "SCHEMA_DRIFT"),
-        deadline is None or type(deadline) is int,
-        analysis_hash is None or type(analysis_hash) is str,
+        # Every value printed is in the ledger's own format, or the answer is not printed.
+        _ledger_deadline(deadline),
+        _ledger_hash(analysis_hash),
         facts["deadline_ms_matches"] is deadline_matches,
         facts["analysis_hash_matches"] is hash_matches,
         _count(facts["predictions_rows_for_run_id"]),
@@ -370,6 +402,9 @@ def _audit(
         if refusal.error_class:
             failed["error_class"] = refusal.error_class
         return failed, refusal.exit_code
+    if not cross_check(facts, binding):
+        # An answer the runner cannot reproduce is never printed, not even in part.
+        return {**base, "verdict": "FAIL", "reason": "RUNNER_DISAGREES"}, EXIT_FAIL
     output = {
         **base,
         **facts,
@@ -377,9 +412,6 @@ def _audit(
         "transaction_read_only": True,
         "row_security_off": True,
     }
-    if not cross_check(facts, binding):
-        output.update(verdict="FAIL", reason="RUNNER_DISAGREES")
-        return output, EXIT_FAIL
     return output, EXIT_PASS if facts["verdict"] == "PASS" else EXIT_FAIL
 
 
@@ -447,5 +479,24 @@ def main(
     return code
 
 
+def entry(
+    argv: Sequence[str] | None = None,
+    *,
+    flags: Any = None,
+    environ: Mapping[str, str] | None = None,
+    connect: Callable[..., Any] | None = None,
+    stdout: TextIO | None = None,
+) -> int:
+    """The command line, only as the card starts it, python -I -B: refused otherwise, before an
+    input is read or anything is contacted."""
+
+    flags = sys.flags if flags is None else flags
+    if not (flags.isolated and flags.dont_write_bytecode):
+        refused = {"artifact": ARTIFACT, "verdict": "FAIL", "reason": "NOT_ISOLATED"}
+        (stdout or sys.stdout).write(render(refused) + "\n")
+        return EXIT_INPUT
+    return main(argv, environ=environ, connect=connect, stdout=stdout)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(entry())

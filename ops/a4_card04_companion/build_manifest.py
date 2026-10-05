@@ -1,9 +1,11 @@
 """Regenerate ops/a4_card04_companion/MANIFEST.json, the package seal, after any package file
 changes.
 
-Run: python ops/a4_card04_companion/build_manifest.py. tests/automation/test_a4_card04_companion.py
-fails until the manifest matches the files, and tests/automation/test_handoff_manifest.py until
-docs/automation/UOR_HANDOFF.md section 15 carries their digests.
+Run: python -B ops/a4_card04_companion/build_manifest.py. It loads the runner from its source and
+writes no bytecode, because the package folder must hold exactly its five files.
+tests/automation/test_a4_card04_companion.py fails until the manifest matches the files, and
+tests/automation/test_handoff_manifest.py until docs/automation/UOR_HANDOFF.md section 15 carries
+their digests.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "ops" / "a4_card04_companion"
@@ -27,12 +30,20 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def manifest() -> dict:
-    spec = importlib.util.spec_from_file_location("a4c_runner", PACKAGE / "a4_card04_companion.py")
-    assert spec and spec.loader
+def _runner() -> Any:
+    """The runner, executed from its source: no bytecode is written into the package folder."""
+
+    path = PACKAGE / "a4_card04_companion.py"
+    spec = importlib.util.spec_from_file_location("a4c_runner", path)
+    assert spec
     runner = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner
-    spec.loader.exec_module(runner)
+    exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), runner.__dict__)  # noqa: S102
+    return runner
+
+
+def manifest() -> dict:
+    runner = _runner()
     return {
         "artifact": runner.ARTIFACT,
         "purpose": (
@@ -51,6 +62,8 @@ def manifest() -> dict:
         "files": {
             f"ops/a4_card04_companion/{name}": _sha256(PACKAGE / name) for name in SEALED_FILES
         },
+        "package_files": sorted(runner.PACKAGE_FILES),
+        "invocation": runner.INVOCATION,
         "reads": {
             "public.automation_radar_ledger": [
                 "analysis_hash",
@@ -79,6 +92,17 @@ def manifest() -> dict:
             "from_the_response": ["run_id", "analysis_hash"],
             "from_the_request": ["deadline_ms"],
             "count_window_from": "qualification_activation_utc (inclusive)",
+        },
+        "counts": {
+            "predictions_rows_for_run_id": "public.predictions rows carrying the bound run_id",
+            "credential_ledger_rows_since_activation": (
+                "ledger rows of the bound credential received at or after"
+                " qualification_activation_utc, whatever their client_request_id"
+            ),
+            "ledger_rows_for_client_request_id_across_all_credentials": (
+                "ledger rows carrying the bound client_request_id, under any credential and"
+                " whenever received; no credential is named"
+            ),
         },
         "output_keys": sorted(
             {

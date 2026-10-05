@@ -8,6 +8,9 @@ name: A4 Card-04 companion rehearsal (scratch PostgreSQL 17.6, no secrets)
 # - each qualifying row PASSES with its exact facts; every other shape fails closed with its reason;
 # - the binding is the (credential_id, client_request_id) pair; the count window is inclusive;
 # - a role that can read only the eleven columns still PASSES, and is refused everything else;
+# - the card's exact command, python -I -B, PASSES and leaves the package folder as sealed; any other
+#   start is refused, and a folder with one more module is refused without running it;
+# - the cross-credential count and the credential count move independently;
 # - a reader that row-level security applies to is refused, never counted;
 # - every write kind is refused inside the runner's read-only session, and nothing changes;
 # - schema drift fails closed.

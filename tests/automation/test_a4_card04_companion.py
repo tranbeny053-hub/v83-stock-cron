@@ -2,30 +2,39 @@
 ucpe.a4_ledger_audit.v1 for UOR Card 04.
 
 What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal proves the rest):
-- the sealed SQL passes a structural guard whose model of SQL is closed, so it refuses whatever it
-  does not model: printable ASCII only; standard literals only (no backslash, prefixed literal,
-  dollar quote, quoted identifier or block comment); only the modelled operators, keywords, types
-  and functions, and every other identifier a declared name; one SELECT, with no write, locking,
-  TABLE or SET clause, comma-join or derived table; no relation but the ledger, public.predictions
-  and five catalogs, each through an alias, and exactly the declared reads (each relation's uses,
-  every data column reference); from the ledger ten columns, from predictions only run_id, from the
-  catalogs only the listed columns; the cross-credential count (owner ruling A4-CRID-UNIQUENESS)
-  reads only client_request_id, so no credential_id is projected, grouped or aggregated; no star but
-  count(*) and the decision's k.*, and no whole-row use of any table, alias or CTE; the decision
-  branches in the declared order, judging no count;
+- the sealed SQL passes a structural guard of two layers:
+  - the first checks every property on ONE token stream, in which a literal is a value, never SQL:
+    printable ASCII only; standard literals only (no backslash, prefixed literal, dollar quote,
+    quoted identifier, block comment or two adjacent literals); only the modelled operators,
+    keywords, types and functions, and every other identifier a declared name; one SELECT, with no
+    write, locking, TABLE or SET clause, comma-join or derived table; no relation but the ledger,
+    public.predictions and five catalogs, each through an alias, and exactly the declared reads
+    (each relation's uses, every data column reference): from the ledger ten columns, from
+    predictions only run_id, from the catalogs only the listed columns; exactly the declared
+    literals, function calls and names, none of them a keyword PostgreSQL evaluates as a value;
+    the binding, the bound row and its facts, the three counts, the checks and the final SELECT
+    exactly as sealed, so the cross-credential count (owner ruling A4-CRID-UNIQUENESS) reads only
+    client_request_id, never projects, groups or aggregates a credential_id, and stays separate from
+    the credential count; no star but count(*) and the decision's k.*, and no whole-row use of any
+    table, alias or CTE; the decision branches in the declared order, judging no count;
+  - the second admits no SQL but the sealed SQL's own token stream (comments and whitespace aside),
+    whatever the first might miss;
 - adversarial mutants that widen a read, read a probability, the body, a whole row (directly, with a
   star, through a CTE or a derived table), the registry, another table or more than the declared
-  reads, hide a read in an escape string or a non-ASCII name, use an unmodelled operator, type,
-  keyword or identifier, drop or reorder a check, bind on client_request_id alone, judge a count,
-  move the count window, add or drop an output, drop the inheritance check, project, group or
-  aggregate another credential's id, scope the cross-credential count to one credential, lock or
-  write, all fail it;
+  reads, hide a read in an escape string or a non-ASCII name, stand a literal in for pinned SQL,
+  declare a name PostgreSQL evaluates (current_user), use an unmodelled operator, type, keyword or
+  identifier, drop or reorder a check, bind on client_request_id alone, judge a count, move the
+  count window, swap or add an output, drop the inheritance check, project, group or aggregate
+  another credential's id, scope the cross-credential count to one credential or window it, lock or
+  write, all fail the first layer alone;
 - the expected columns are migration 0013's and 0003's declarations, no later migration changes
   them, and the route still writes each fact where the companion reads it;
-- the runner checks the package against its seal and the SQL against its pin, runs it only in a READ
-  ONLY transaction with row security off that it always rolls back, refuses bad inputs before
-  contacting anything, never prints a URL, a credential value or an exception message, and
-  cross-checks the SQL's answer; every runner mutant breaks one of those behaviours;
+- the runner starts only as python -I -B, checks that its folder holds exactly its five files, the
+  package against its seal and the SQL against its pin, runs the SQL only in a READ ONLY
+  transaction with row security off that it always rolls back, refuses bad inputs before
+  contacting anything, never prints a URL, a credential value or an exception message, prints only
+  values in the ledger's own formats, and prints nothing of an answer it cannot reproduce; every
+  runner mutant breaks one of those behaviours;
 - the manifest seals every package file; UOR_HANDOFF.md section 15 carries exactly the companion
   fields, the seal's digest and the keys the runner really prints; the accepted A4 component's seal
   is unchanged and section 14's corrected contract names every key of the A4 audited line.
@@ -37,13 +46,16 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -64,16 +76,15 @@ A4_SOURCE_COMMIT = "e468f1f118870f904d90505a3cdbb74446d5a495"
 
 
 def _module(name: str, path: Path, source: str | None = None) -> Any:
-    """Load a module from its file, or from mutated source standing in for that file."""
+    """Load a module from its file's source, or from mutated source standing in for that file. No
+    bytecode is ever written: the package folder must hold exactly its five files."""
 
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader
+    assert spec
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    if source is None:
-        spec.loader.exec_module(module)
-    else:
-        exec(compile(source, str(path), "exec"), module.__dict__)  # noqa: S102 - test mutants
+    text = path.read_text(encoding="utf-8") if source is None else source
+    exec(compile(text, str(path), "exec"), module.__dict__)  # noqa: S102 - test mutants
     return module
 
 
@@ -243,24 +254,85 @@ PLACEHOLDERS = [
     "%(expected_analysis_hash)s",
     "%(qualification_activation_utc)s",
 ]
+# The binding, the bound row and its facts, the three counts, the checks and the output, each
+# exactly as sealed (whitespace aside), matched token by token: every mapping from an input or a
+# read to an output is pinned, and a literal can never stand in for any of it.
+F_BINDING = (
+    "WITH binding AS ( SELECT CAST(%(credential_id)s AS text) AS credential_id, "
+    "CAST(%(client_request_id)s AS uuid) AS client_request_id, CAST(%(expected_run_id)s "
+    "AS text) AS expected_run_id, CAST(%(expected_deadline_ms)s AS integer) AS "
+    "expected_deadline_ms, CAST(%(expected_analysis_hash)s AS text) AS "
+    "expected_analysis_hash, CAST(%(qualification_activation_utc)s AS timestamptz) AS "
+    "activation_utc )"
+)
+F_TARGET = (
+    "target AS ( SELECT l.evidence_origin, l.state, l.outcome_code, l.http_status, "
+    "l.run_id, l.analysis_hash, l.deadline_ms, l.received_at_utc FROM "
+    "public.automation_radar_ledger AS l JOIN binding AS b ON l.credential_id = "
+    "b.credential_id AND l.client_request_id = b.client_request_id )"
+)
+F_TARGET_FACTS = (
+    "target_facts AS ( SELECT count(*) AS matched_rows, CASE WHEN count(*) = 1 THEN "
+    "min(t.evidence_origin) END AS evidence_origin, CASE WHEN count(*) = 1 THEN "
+    "min(t.state) END AS state, CASE WHEN count(*) = 1 THEN min(t.outcome_code) END AS "
+    "outcome_code, CASE WHEN count(*) = 1 THEN min(t.http_status) END AS http_status, "
+    "CASE WHEN count(*) = 1 THEN min(t.run_id) END AS run_id, CASE WHEN count(*) = 1 THEN "
+    "min(t.analysis_hash) END AS analysis_hash, CASE WHEN count(*) = 1 THEN "
+    "min(t.deadline_ms) END AS deadline_ms, CASE WHEN count(*) = 1 THEN "
+    "min(t.received_at_utc) END AS received_at_utc FROM target AS t )"
+)
+F_RUN_PREDICTIONS = (
+    "run_predictions AS ( SELECT count(*) AS predictions_rows_for_run_id FROM "
+    "public.predictions AS p JOIN binding AS b ON p.run_id = b.expected_run_id )"
+)
+F_CREDENTIAL_ROWS = (
+    "credential_rows AS ( SELECT count(*) AS credential_ledger_rows_since_activation FROM "
+    "public.automation_radar_ledger AS w JOIN binding AS b ON w.credential_id = "
+    "b.credential_id AND w.received_at_utc >= b.activation_utc )"
+)
+F_REQUEST_ROWS = (
+    "request_rows AS ( SELECT count(*) AS "
+    "ledger_rows_for_client_request_id_across_all_credentials FROM "
+    "public.automation_radar_ledger AS g JOIN binding AS b ON g.client_request_id = "
+    "b.client_request_id )"
+)
+F_CHECKS = (
+    "checks AS ( SELECT b.credential_id AS bound_credential_id, b.client_request_id::text "
+    "AS bound_client_request_id, b.expected_run_id AS bound_run_id, (s.schema_ok IS TRUE) "
+    "AS schema_ok, f.matched_rows, f.evidence_origin, f.state, f.outcome_code, "
+    "f.http_status, (f.run_id IS NOT DISTINCT FROM b.expected_run_id) AS run_id_matches, "
+    "f.deadline_ms, (f.deadline_ms IS NOT DISTINCT FROM b.expected_deadline_ms) AS "
+    "deadline_ms_matches, f.analysis_hash, (f.analysis_hash IS NOT DISTINCT FROM "
+    "b.expected_analysis_hash) AS analysis_hash_matches, (f.received_at_utc >= "
+    "b.activation_utc) AS activation_not_after_request, rp.predictions_rows_for_run_id, "
+    "cr.credential_ledger_rows_since_activation, "
+    "rq.ledger_rows_for_client_request_id_across_all_credentials FROM binding AS b CROSS "
+    "JOIN schema_check AS s CROSS JOIN target_facts AS f CROSS JOIN run_predictions AS rp "
+    "CROSS JOIN credential_rows AS cr CROSS JOIN request_rows AS rq )"
+)
+F_FINAL = (
+    "SELECT 'ucpe.a4_card04_companion.v1' AS artifact, CASE WHEN d.reason = 'OK' THEN "
+    "'PASS' ELSE 'FAIL' END AS verdict, d.reason, d.bound_credential_id, "
+    "d.bound_client_request_id, d.bound_run_id, d.schema_ok, d.deadline_ms, "
+    "d.deadline_ms_matches, d.analysis_hash, d.analysis_hash_matches, "
+    "d.predictions_rows_for_run_id, d.credential_ledger_rows_since_activation, "
+    "d.ledger_rows_for_client_request_id_across_all_credentials FROM decision AS d"
+)
 REQUIRED_FRAGMENTS = [
-    "FROM public.automation_radar_ledger AS l JOIN binding AS b "
-    "ON l.credential_id = b.credential_id AND l.client_request_id = b.client_request_id )",
-    "FROM public.predictions AS p JOIN binding AS b ON p.run_id = b.expected_run_id )",
-    "FROM public.automation_radar_ledger AS g JOIN binding AS b "
-    "ON g.client_request_id = b.client_request_id )",
-    "FROM public.automation_radar_ledger AS w JOIN binding AS b "
-    "ON w.credential_id = b.credential_id AND w.received_at_utc >= b.activation_utc )",
+    F_BINDING,
     "WHERE n.nspname = 'public'",
     "AND c.relkind = 'r'",
     "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits AS i JOIN relations AS h "
     "ON h.oid = i.inhparent)",
-    "(s.schema_ok IS TRUE) AS schema_ok",
-    "(f.run_id IS NOT DISTINCT FROM b.expected_run_id) AS run_id_matches",
-    "(f.deadline_ms IS NOT DISTINCT FROM b.expected_deadline_ms) AS deadline_ms_matches",
-    "(f.analysis_hash IS NOT DISTINCT FROM b.expected_analysis_hash) AS analysis_hash_matches",
-    "(f.received_at_utc >= b.activation_utc) AS activation_not_after_request",
-    "CASE WHEN d.reason = 'OK' THEN 'PASS' ELSE 'FAIL' END AS verdict",
+    F_TARGET,
+    F_TARGET_FACTS,
+    F_RUN_PREDICTIONS,
+    F_CREDENTIAL_ROWS,
+    F_REQUEST_ROWS,
+    F_CHECKS,
+    "decision AS ( SELECT k.*, CASE",
+    "END AS reason FROM checks AS k )",
+    F_FINAL,
 ]
 # The decision, branch by branch, in the order it must run.
 DECISION_ORDER = [
@@ -332,6 +404,24 @@ KEYWORDS = {
     "FALSE",
 }
 CAST_TYPES = {"text", "uuid", "integer", "timestamptz"}
+# Names PostgreSQL evaluates as values, without parentheses: a SQL that declared one as a column
+# could use it bare, and the guard would read a column where PostgreSQL reads the role or the clock.
+VALUE_KEYWORDS = {
+    "current_catalog",
+    "current_date",
+    "current_role",
+    "current_schema",
+    "current_time",
+    "current_timestamp",
+    "current_user",
+    "default",
+    "localtime",
+    "localtimestamp",
+    "null",
+    "session_user",
+    "system_user",
+    "user",
+}
 # The declared minimum, exactly: how often each relation is read, and every data column reference.
 # predictions.run_id is read once, in the count's join; the ledger three times: the bound row, the
 # credential's window, and the client_request_id across all credentials (client_request_id only).
@@ -359,6 +449,82 @@ DATA_READS = {
     "w.received_at_utc": 1,
     "p.run_id": 1,
     "g.client_request_id": 1,
+}
+# Exactly the names the SQL declares (CTE columns and output names), the functions it calls and how
+# often, and its literals: nothing can be added, renamed or smuggled in a string.
+DECLARED_NAMES = {
+    "activation_not_after_request",
+    "activation_utc",
+    "analysis_hash",
+    "analysis_hash_matches",
+    "artifact",
+    "bound_client_request_id",
+    "bound_credential_id",
+    "bound_run_id",
+    "client_request_id",
+    "column_name",
+    "column_not_null",
+    "column_type",
+    "credential_id",
+    "credential_ledger_rows_since_activation",
+    "deadline_ms",
+    "deadline_ms_matches",
+    "evidence_origin",
+    "expected_analysis_hash",
+    "expected_deadline_ms",
+    "expected_run_id",
+    "http_status",
+    "ledger_rows_for_client_request_id_across_all_credentials",
+    "matched_rows",
+    "outcome_code",
+    "predictions_rows_for_run_id",
+    "reason",
+    "received_at_utc",
+    "relname",
+    "run_id",
+    "run_id_matches",
+    "schema_ok",
+    "state",
+    "verdict",
+}
+FUNCTION_USES = {"count": 14, "min": 8, "array_agg": 1, "pg_catalog.format_type": 1}
+LITERALS = {
+    "ACTIVATION_AFTER_REQUEST": 1,
+    "AMBIGUOUS": 1,
+    "ANALYSIS_HASH_MISMATCH": 1,
+    "AUTOMATED_RADAR": 1,
+    "COMPLETED": 1,
+    "DEADLINE_MISMATCH": 1,
+    "FAIL": 1,
+    "NOT_COMPLETED": 1,
+    "NOT_SUCCEEDED": 1,
+    "NO_ROW": 1,
+    "OK": 2,
+    "PASS": 1,
+    "RUN_MISMATCH": 1,
+    "SCHEMA_DRIFT": 1,
+    "SUCCEEDED": 1,
+    "WRONG_ORIGIN": 1,
+    "analysis_hash": 1,
+    "automation_radar_ledger": 12,
+    "client_request_id": 2,
+    "credential_id": 2,
+    "deadline_ms": 1,
+    "evidence_origin": 1,
+    "http_status": 1,
+    "integer": 2,
+    "outcome_code": 1,
+    "p": 1,
+    "predictions": 2,
+    "public": 1,
+    "r": 1,
+    "received_at_utc": 1,
+    "run_id": 2,
+    "state": 1,
+    "text": 7,
+    "timestamp with time zone": 1,
+    "ucpe.a4_card04_companion.v1": 1,
+    "uuid": 1,
 }
 CATALOG_COLUMNS = {
     "pg_catalog.pg_class": {"oid", "relname", "relnamespace", "relkind"},
@@ -508,23 +674,82 @@ def _is_distinct_from(upper: list[str], index: int) -> bool:
     )
 
 
-def _normalized(kept: str) -> str:
-    return " ".join(kept.split()).replace("( ", "(").replace(" )", ")")
+def _typed(sql: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """The one token stream every check reads, and the problems found reading it. A literal is one
+    token, ("L", its value), and never SQL; every other token is ("T", its text). Two adjacent
+    literals are refused: PostgreSQL joins them into one when a newline separates them."""
+
+    _, masked, literals, problems = _strip_comments(sql)
+    values = iter(literals)
+    typed = [
+        ("L", next(values, "")) if token == LITERAL else ("T", token)
+        for token in TOKEN.findall(masked)
+    ]
+    if sum(kind == "L" for kind, _ in typed) != len(literals):
+        problems.append("the literals and the token stream disagree")
+    if any(left[0] == right[0] == "L" for left, right in zip(typed, typed[1:], strict=False)):
+        problems.append("two adjacent literals, which PostgreSQL may join into one")
+    return typed, problems
+
+
+def _sequence(text: str) -> list[tuple[str, str]]:
+    return _typed(text)[0]
+
+
+def _find(
+    typed: list[tuple[str, str]], fragment: list[tuple[str, str]], start: int = 0, end: int = -1
+) -> int:
+    """Where ``fragment``'s tokens occur in ``typed``, adjacent and in order, or -1."""
+
+    stop = len(typed) if end < 0 else end
+    for index in range(max(start, 0), stop - len(fragment) + 1):
+        if typed[index : index + len(fragment)] == fragment:
+            return index
+    return -1
+
+
+def _closing(typed: list[tuple[str, str]], opening: int) -> int:
+    """The index of the parenthesis that closes the one at ``opening``, or -1."""
+
+    depth = 0
+    for index in range(opening, len(typed)):
+        depth += {("T", "("): 1, ("T", ")"): -1}.get(typed[index], 0)
+        if depth == 0:
+            return index
+    return -1
 
 
 def final_columns(sql: str) -> tuple[str, ...]:
-    """The output names of the final SELECT, in order."""
+    """The output names of the final SELECT, in order, read from the token stream."""
 
-    normalized = _normalized(_strip_comments(sql)[0])
-    final = normalized.rsplit(") SELECT ", 1)[-1].split(" FROM decision AS d", 1)[0]
-    return tuple(item.split(" AS ")[-1].split(".")[-1] for item in final.split(", "))
+    typed = _typed(sql)[0]
+    depth, start = 0, len(typed)
+    for index, token in enumerate(typed):
+        depth += {("T", "("): 1, ("T", ")"): -1}.get(token, 0)
+        if depth == 0 and token[0] == "T" and token[1].upper() == "SELECT":
+            start = index
+    items: list[list[tuple[str, str]]] = [[]]
+    depth = 0
+    for token in typed[start + 1 :]:
+        depth += {("T", "("): 1, ("T", ")"): -1}.get(token, 0)
+        if depth == 0 and token[0] == "T" and token[1].upper() == "FROM":
+            break
+        if depth == 0 and token == ("T", ","):
+            items.append([])
+        else:
+            items[-1].append(token)
+    last = [item[-1] if item else ("L", "") for item in items]
+    return tuple(text.split(".")[-1].lower() if kind == "T" else "" for kind, text in last)
 
 
-def guard_violations(sql: str) -> list[str]:
+def property_violations(sql: str) -> list[str]:
+    """The guard's first layer: every property, checked on the one token stream."""
+
     violations: list[str] = []
-    kept, masked, literals, problems = _strip_comments(sql)
+    literals = _strip_comments(sql)[2]
+    typed, problems = _typed(sql)
     violations += problems
-    tokens = TOKEN.findall(masked)
+    tokens = [LITERAL if kind == "L" else token for kind, token in typed]
     upper = [token.upper() for token in tokens]
     lower = [token.lower() for token in tokens]
     for token in tokens:
@@ -562,7 +787,9 @@ def guard_violations(sql: str) -> list[str]:
                 depth += {")": 1, "(": -1}.get(tokens[back], 0)
                 if depth == 0:
                     name_at = back - 1
-                    declared.update(lower[back + 1 : index])
+                    declared.update(
+                        name for name in lower[back + 1 : index] if name not in PUNCTUATION
+                    )
                     break
         if name_at >= 0 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[name_at]):
             ctes.add(lower[name_at])
@@ -685,25 +912,66 @@ def guard_violations(sql: str) -> list[str]:
                 violations.append(f"function {token}")
         if low.endswith("response_body"):
             violations.append("the stored body")
+    if declared != DECLARED_NAMES:
+        violations.append(f"the declared names differ: {sorted(declared ^ DECLARED_NAMES)}")
+    if declared & VALUE_KEYWORDS:
+        violations.append(f"a name PostgreSQL evaluates: {sorted(declared & VALUE_KEYWORDS)}")
+    calls = Counter(
+        lower[index]
+        for index in range(len(tokens) - 1)
+        if lower[index] in FUNCTIONS and tokens[index + 1] == "("
+    )
+    if calls != Counter(FUNCTION_USES):
+        violations.append(f"the functions are called other than declared: {dict(calls)}")
+    values, expected = Counter(value for kind, value in typed if kind == "L"), Counter(LITERALS)
+    if values != expected:
+        violations.append(
+            f"the literals differ: {sorted((values - expected) + (expected - values))}"
+        )
     found = [token for token in tokens if token.startswith("%(")]
     if sorted(found) != sorted(PLACEHOLDERS):
         violations.append(f"placeholders {found}")
     if sql.count("%") != len(PLACEHOLDERS):  # psycopg reads every %, even in a comment
         violations.append("a stray %")
-    normalized = _normalized(kept)
-    for fragment in REQUIRED_FRAGMENTS:
-        if fragment.replace("( ", "(").replace(" )", ")") not in normalized:
+    for fragment in REQUIRED_FRAGMENTS:  # token by token: a literal never stands in for SQL
+        if _find(typed, _sequence(fragment)) < 0:
             violations.append(f"missing: {fragment[:60]}")
-    decision = normalized.split("decision AS (", 1)[-1].split(") SELECT ", 1)[0]
-    positions = [decision.find(branch) for branch in DECISION_ORDER]
-    if -1 in positions or positions != sorted(positions):
+    opening = _find(typed, _sequence("decision AS ("))
+    closing = _closing(typed, opening + 2) if opening >= 0 else -1
+    at, ordered = opening, closing >= 0
+    for branch in DECISION_ORDER:
+        sequence = _sequence(branch)
+        found_at = _find(typed, sequence, at, closing) if ordered else -1
+        ordered, at = found_at >= 0, found_at + len(sequence)
+    if not ordered:
         violations.append("the decision branches are missing or out of order")
-    if set(re.findall(r"THEN '([A-Z_]+)'", decision)) != set(runner.REASONS) - {"OK"}:
+    judged = sorted(
+        typed[index + 1]
+        for index in range(max(opening, 0), closing)
+        if typed[index] == ("T", "THEN")
+    )
+    if judged != sorted(("L", reason) for reason in runner.REASONS if reason != "OK"):
         violations.append("the decision judges something else (a count?)")
-    if normalized.count("'OK'") != 2:
+    if typed.count(("L", "OK")) != 2:
         violations.append("OK must be reachable only through ELSE")
     if final_columns(sql) != runner.SQL_COLUMNS:
         violations.append("the output columns are not the declared ones")
+    return violations
+
+
+# THE GUARD'S SECOND LAYER: the sealed SQL's exact token stream, comments and whitespace aside. The
+# guard admits no other SQL, whatever the first layer's model of SQL might miss.
+TOKEN_STREAM_SHA256 = "c75a3264014389039346056c5d7c2b3545916e94b8504da27ba1266aa2e20fc5"
+
+
+def token_stream_sha256(sql: str) -> str:
+    return hashlib.sha256(json.dumps(_typed(sql)[0]).encode("utf-8")).hexdigest()
+
+
+def guard_violations(sql: str) -> list[str]:
+    violations = property_violations(sql)
+    if token_stream_sha256(sql) != TOKEN_STREAM_SHA256:
+        violations.append("not the sealed SQL's token stream")
     return violations
 
 
@@ -728,7 +996,25 @@ T_WINDOW = (
     "       AND w.received_at_utc >= b.activation_utc\n"
 )
 T_TARGET = "    SELECT l.evidence_origin,\n"
-MUTANTS = {
+# The fourth review's class: a literal carrying the text of a pinned fragment, so that a guard
+# reading literal text as SQL finds the fragment while PostgreSQL runs something else.
+L_TARGET = (
+    "FROM public.automation_radar_ledger AS l JOIN binding AS b"
+    " ON l.credential_id = b.credential_id AND l.client_request_id = b.client_request_id)"
+)
+L_WINDOW = (
+    "FROM public.automation_radar_ledger AS w JOIN binding AS b"
+    " ON w.credential_id = b.credential_id AND w.received_at_utc >= b.activation_utc)"
+)
+L_RUN = "FROM public.predictions AS p JOIN binding AS b ON p.run_id = b.expected_run_id)"
+L_REQUEST = (
+    "FROM public.automation_radar_ledger AS g JOIN binding AS b"
+    " ON g.client_request_id = b.client_request_id)"
+)
+T_CREDENTIAL_COUNT = "    SELECT count(*) AS credential_ledger_rows_since_activation\n"
+T_BOUND_RUN = "           b.expected_run_id AS bound_run_id,\n"
+T_MATCHED = "    SELECT count(*) AS matched_rows,\n"
+MUTANTS: dict[str, tuple[str, str] | list[tuple[str, str]]] = {
     "reads a probability": (T_RUN_COUNT, T_RUN_COUNT[:-1] + ", min(p.p_up_frac) AS up\n"),
     "reads a prediction's outcome": (
         T_RUN_ON,
@@ -1012,14 +1298,152 @@ MUTANTS = {
         "CAST(%(credential_id)s AS text)",
         "CAST(%(credential_id)s || %(x)s AS text)",
     ),
+    # The fourth review's class, each first shown to pass the guard before its repair: a literal
+    # carries a pinned fragment's text while the SQL around it does something else.
+    "aggregates the credential ids behind a window in a literal": [
+        (
+            T_CREDENTIAL_COUNT,
+            "    SELECT array_agg(w.credential_id ORDER BY w.received_at_utc)"
+            " AS credential_ledger_rows_since_activation\n",
+        ),
+        (T_WINDOW, f"        ON '{L_WINDOW}' <> ''\n"),
+    ],
+    "binds on the id alone behind a literal and projects a credential id as the hash": [
+        ("           l.analysis_hash,\n", "           l.credential_id AS analysis_hash,\n"),
+        (
+            T_BIND + " = b.client_request_id\n",
+            "        ON l.client_request_id = b.client_request_id\n"
+            f"       AND '{L_TARGET}' <> l.analysis_hash\n",
+        ),
+    ],
+    "binds on client_request_id alone behind a literal": (
+        T_BIND,
+        f"        ON l.credential_id <> '' AND '{L_TARGET}' <> ''\n       AND l.client_request_id",
+    ),
+    "makes the window exclusive behind a literal": (
+        T_WINDOW,
+        T_WINDOW.replace(">=", ">") + f"       AND '{L_WINDOW}' <> ''\n",
+    ),
+    "counts every credential's rows behind a literal": (
+        T_WINDOW,
+        "        ON w.credential_id <> ''\n       AND w.received_at_utc >= b.activation_utc\n"
+        f"       AND '{L_WINDOW}' <> ''\n",
+    ),
+    "drops the deadline comparison behind a literal": (
+        "(f.deadline_ms IS NOT DISTINCT FROM b.expected_deadline_ms) AS deadline_ms_matches",
+        "(TRUE OR '(f.deadline_ms IS NOT DISTINCT FROM b.expected_deadline_ms)"
+        " AS deadline_ms_matches' <> '') AS deadline_ms_matches",
+    ),
+    "drops the analysis-hash comparison behind a literal": (
+        "(f.analysis_hash IS NOT DISTINCT FROM b.expected_analysis_hash) AS analysis_hash_matches",
+        "(TRUE OR '(f.analysis_hash IS NOT DISTINCT FROM b.expected_analysis_hash)"
+        " AS analysis_hash_matches' <> '') AS analysis_hash_matches",
+    ),
+    "makes the inheritance check always true behind a literal": (
+        "                              JOIN relations AS h ON h.oid = i.inhparent)\n",
+        "                              JOIN relations AS h ON h.oid = i.inhparent"
+        " WHERE 'AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits AS i"
+        " JOIN relations AS h ON h.oid = i.inhparent)' = '')\n",
+    ),
+    "forces schema_ok behind a literal": (
+        "(s.schema_ok IS TRUE) AS schema_ok",
+        "(TRUE OR '(s.schema_ok IS TRUE) AS schema_ok' <> '') AS schema_ok",
+    ),
+    "counts every other run's predictions behind a literal": (
+        T_RUN_ON,
+        f"        ON p.run_id <> b.expected_run_id\n       AND '{L_RUN}' <> ''\n",
+    ),
+    "counts every ledger row as the cross-credential count behind a literal": (
+        T_CRID_ON,
+        f"        ON g.client_request_id <> b.client_request_id OR '{L_REQUEST}' <> ''\n",
+    ),
+    # A name PostgreSQL evaluates as a value, declared as a column and then used bare: the guard
+    # would read a column where PostgreSQL reads the database role or the schema.
+    "projects the database role through a declared name": [
+        (T_MATCHED, "    SELECT count(*) AS matched_rows, count(*) AS current_user,\n"),
+        (T_BOUND_RUN, "           current_user AS bound_run_id,\n"),
+    ],
+    "projects the session user through a declared name": [
+        (T_MATCHED, "    SELECT count(*) AS matched_rows, count(*) AS session_user,\n"),
+        (T_BOUND_RUN, "           session_user AS bound_run_id,\n"),
+    ],
+    "projects the current schema through a declared name": [
+        (T_MATCHED, "    SELECT count(*) AS matched_rows, count(*) AS current_schema,\n"),
+        (T_BOUND_RUN, "           current_schema AS bound_run_id,\n"),
+    ],
+    # Every mapping from an input or a read to an output is pinned.
+    "swaps two outputs in the final SELECT": (
+        "       d.analysis_hash,\n",
+        "       d.bound_credential_id AS analysis_hash,\n",
+    ),
+    "swaps two facts in the checks": (
+        "           f.deadline_ms,\n",
+        "           f.analysis_hash AS deadline_ms,\n",
+    ),
+    "swaps two facts of the bound row": (
+        "min(t.evidence_origin) END AS evidence_origin",
+        "min(t.state) END AS evidence_origin",
+    ),
+    "swaps two inputs in the binding": [
+        (
+            "CAST(%(credential_id)s AS text) AS credential_id",
+            "CAST(%(expected_run_id)s AS text) AS credential_id",
+        ),
+        (
+            "CAST(%(expected_run_id)s AS text) AS expected_run_id",
+            "CAST(%(credential_id)s AS text) AS expected_run_id",
+        ),
+    ],
+    # The two ledger counts stay separate (UOR's addendum): no window on the cross-credential count,
+    # no request filter on the credential count, neither reported as the other.
+    "windows the cross-credential count by the activation": (
+        T_CRID_ON,
+        T_CRID_ON + "       AND g.received_at_utc >= b.activation_utc\n",
+    ),
+    "narrows the credential count to the request": (
+        T_WINDOW,
+        T_WINDOW + "       AND w.client_request_id = b.client_request_id\n",
+    ),
+    "reports the credential count as the cross-credential count": (
+        "           rq.ledger_rows_for_client_request_id_across_all_credentials\n",
+        "           cr.credential_ledger_rows_since_activation"
+        " AS ledger_rows_for_client_request_id_across_all_credentials\n",
+    ),
+    # Exactly the declared literals and function calls, and literals PostgreSQL reads as written.
+    "adds a literal": (
+        "     WHERE a.attnum > 0\n",
+        "     WHERE a.attnum > 0 AND a.attname <> 'x'\n",
+    ),
+    "calls an allowed function once more": (
+        "            AND (SELECT count(*) FROM ledger_key) = 1\n",
+        "            AND (SELECT count(*) FROM ledger_key) >= (SELECT min(1) FROM ledger_key)\n",
+    ),
+    "splits a literal that PostgreSQL would join again": (
+        "     WHERE n.nspname = 'public'\n",
+        "     WHERE n.nspname = 'pub'\n'lic'\n",
+    ),
 }
+
+
+def _pairs(mutant: tuple[str, str] | list[tuple[str, str]]) -> list[tuple[str, str]]:
+    return mutant if isinstance(mutant, list) else [mutant]
+
+
+def mutated(name: str) -> str:
+    sql = SEALED
+    for old, new in _pairs(MUTANTS[name]):
+        assert sql.count(old) == 1, name
+        sql = sql.replace(old, new)
+    assert sql != SEALED, name
+    return sql
 
 
 @pytest.mark.parametrize("name", sorted(MUTANTS))
 def test_every_adversarial_mutant_fails_the_guard(name: str) -> None:
-    old, new = MUTANTS[name]
-    assert SEALED.count(old) == 1, name
-    assert guard_violations(SEALED.replace(old, new)), name
+    sql = mutated(name)
+    # The first layer refuses each mutant on its own; the second refuses every SQL but the sealed.
+    assert property_violations(sql), name
+    assert guard_violations(sql), name
 
 
 # --------------------------------------------------------------------------- schema proof
@@ -1124,6 +1548,29 @@ def _facts(module: Any = None, **changes: Any) -> dict[str, Any]:
 def _row(module: Any = None, **changes: Any) -> tuple[Any, ...]:
     facts = _facts(module, **changes)
     return tuple(facts[name] for name in runner.SQL_COLUMNS)
+
+
+# A stop line: the runner's own values only, never any of the SQL's answer.
+STOP_KEYS = {
+    "artifact",
+    "verdict",
+    "reason",
+    "sql_sha256",
+    "bound_credential_id",
+    "bound_client_request_id",
+    "bound_run_id",
+    "bound_qualification_activation_utc",
+}
+OTHER_CREDENTIAL = "uor-radar-other"  # a value the SQL must never get printed
+
+
+def _link(path: Path) -> None:
+    """Replace a package file by a link to a file with the same bytes, outside the folder."""
+
+    target = path.parent.parent / f"{path.name}.target"
+    target.write_bytes(path.read_bytes())
+    path.unlink()
+    path.symlink_to(target)
 
 
 class FakeConnection:
@@ -1360,11 +1807,23 @@ def test_every_failing_row_fails_with_its_reason(reason: str, changes: dict[str,
         dict(reason="ANALYSIS_HASH_MISMATCH", verdict="FAIL"),  # yet the hash matches
         dict(bound_run_id="run_" + "2" * 32),
         dict(artifact="ucpe.something_else.v1"),
+        # Values outside the ledger's own formats, though the reason agrees with them.
+        dict(
+            reason="ANALYSIS_HASH_MISMATCH",
+            verdict="FAIL",
+            analysis_hash=OTHER_CREDENTIAL,
+            analysis_hash_matches=False,
+        ),
+        dict(reason="DEADLINE_MISMATCH", verdict="FAIL", deadline_ms=1, deadline_ms_matches=False),
+        dict(credential_ledger_rows_since_activation=[OTHER_CREDENTIAL]),
     ],
 )
 def test_an_answer_the_runner_cannot_reproduce_is_refused(lie: dict[str, Any]) -> None:
-    code, payload, _, _ = _run(FakeConnection(_row(**lie)))
+    code, payload, _, text = _run(FakeConnection(_row(**lie)))
     assert code == 1 and payload["reason"] == "RUNNER_DISAGREES" and payload["verdict"] == "FAIL"
+    # None of the SQL's answer is printed: only the stop line, with the runner's own values.
+    assert set(payload) == STOP_KEYS and OTHER_CREDENTIAL not in text
+    assert payload["bound_run_id"] == RUN and payload["sql_sha256"] == runner.SQL_SHA256
 
 
 @pytest.mark.parametrize(
@@ -1457,6 +1916,26 @@ def test_a_package_that_does_not_match_its_seal_contacts_nothing(
     assert code == 3 and payload["reason"] == "SEAL_MISMATCH" and seen == []
 
 
+@pytest.mark.parametrize(
+    "plant",
+    [
+        lambda copy: (copy / "psycopg.py").write_text("raise SystemExit(99)\n", encoding="utf-8"),
+        lambda copy: (copy / "__pycache__").mkdir(),
+        lambda copy: (copy / ".DS_Store").write_bytes(b""),
+        lambda copy: _link(copy / "CARD.md"),
+    ],
+    ids=["a module", "a bytecode folder", "a hidden file", "a link with the same bytes"],
+)
+def test_a_package_folder_holding_anything_else_contacts_nothing(
+    tmp_path: Path, plant: Callable[[Path], Any]
+) -> None:
+    copy = _copied_package(tmp_path)
+    plant(copy)
+    module = _module("a4c_runner_planted", copy / "a4_card04_companion.py")
+    code, payload, seen, _ = _invoke(module, FakeConnection(_row(module)))
+    assert code == 3 and payload["reason"] == "SEAL_MISMATCH" and seen == []
+
+
 def test_an_intact_copy_of_the_package_still_runs(tmp_path: Path) -> None:
     module = _module("a4c_runner_intact_copy", _copied_package(tmp_path) / "a4_card04_companion.py")
     code, payload, _, _ = _invoke(module, FakeConnection(_row(module)))
@@ -1523,6 +2002,65 @@ def test_unknown_repeated_or_abbreviated_arguments_are_refused_unechoed(args: li
     code, payload, seen, text = _run(args=args)
     assert code == 2 and payload["reason"] == "INPUT_REFUSED:arguments"
     assert seen == [] and "SECRET" not in text
+
+
+@pytest.mark.parametrize(
+    ("isolated", "no_bytecode"), [(0, 1), (1, 0), (0, 0)], ids=["no -I", "no -B", "neither"]
+)
+def test_the_command_line_refuses_any_start_but_python_dash_i_dash_b(
+    isolated: int, no_bytecode: int
+) -> None:
+    connection, out = FakeConnection(), io.StringIO()
+    code = runner.entry(
+        ARGS,
+        flags=SimpleNamespace(isolated=isolated, dont_write_bytecode=no_bytecode),
+        environ={runner.DATABASE_URL_ENV: URL},
+        connect=lambda url, **_: connection,
+        stdout=out,
+    )
+    assert code == 2 and connection.calls == []
+    assert json.loads(out.getvalue()) == {
+        "artifact": runner.ARTIFACT,
+        "verdict": "FAIL",
+        "reason": "NOT_ISOLATED",
+    }
+
+
+def test_python_dash_i_dash_b_runs_the_audit() -> None:
+    connection, out = FakeConnection(), io.StringIO()
+    code = runner.entry(
+        ARGS,
+        flags=SimpleNamespace(isolated=1, dont_write_bytecode=1),
+        environ={runner.DATABASE_URL_ENV: URL},
+        connect=lambda url, **_: connection,
+        stdout=out,
+    )
+    assert code == 0 and json.loads(out.getvalue())["verdict"] == "PASS"
+
+
+def test_the_real_command_line_starts_only_as_python_dash_i_dash_b() -> None:
+    """The file itself, as the card runs it, in a child process given no database URL: -I -B passes
+    the start and the package check and stops at the missing URL, contacting nothing; any other
+    start is refused. The package folder is unchanged after all three."""
+
+    environment = {"PATH": os.environ.get("PATH", "")}
+    stops = {}
+    for flags in (["-I", "-B"], ["-B"], ["-I"]):
+        done = subprocess.run(  # noqa: S603 - this interpreter, this file, fixed arguments
+            [sys.executable, *flags, str(RUNNER_FILE), *ARGS],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        stops[" ".join(flags)] = (done.returncode, json.loads(done.stdout)["reason"])
+    assert stops == {
+        "-I -B": (4, "DATABASE_URL_MISSING"),
+        "-B": (2, "NOT_ISOLATED"),
+        "-I": (2, "NOT_ISOLATED"),
+    }
+    assert sorted(path.name for path in PACKAGE.iterdir()) == sorted(runner.PACKAGE_FILES)
 
 
 def test_the_runner_is_standalone_and_names_no_table() -> None:
@@ -1618,12 +2156,47 @@ def _behaviour_failures(module: Any) -> list[str]:
     def cross_check() -> bool:
         lying = FakeConnection(_row(module, deadline_ms=45000))
         code, payload, _, _ = _invoke(module, lying)
-        return code == 1 and payload["reason"] == "RUNNER_DISAGREES"
+        return code == 1 and payload["reason"] == "RUNNER_DISAGREES" and set(payload) == STOP_KEYS
 
     def disagrees(**lie: Any) -> Callable[[], bool]:
         def probe() -> bool:
-            code, payload, _, _ = _invoke(module, FakeConnection(_row(module, **lie)))
-            return code == 1 and payload["reason"] == "RUNNER_DISAGREES"
+            code, payload, _, text = _invoke(module, FakeConnection(_row(module, **lie)))
+            return (
+                code == 1
+                and payload["reason"] == "RUNNER_DISAGREES"
+                and set(payload) == STOP_KEYS
+                and OTHER_CREDENTIAL not in text
+            )
+
+        return probe
+
+    def folder(plant: Callable[[Path], Any]) -> Callable[[], bool]:
+        def probe() -> bool:
+            original = module.PACKAGE, module.MANIFEST_PATH
+            with tempfile.TemporaryDirectory() as root:
+                copy = Path(root) / "ops" / "a4_card04_companion"
+                shutil.copytree(PACKAGE, copy, ignore=shutil.ignore_patterns("__pycache__", ".*"))
+                plant(copy)
+                module.PACKAGE, module.MANIFEST_PATH = copy, copy / "MANIFEST.json"
+                try:
+                    code, _, seen, _ = _invoke(module)
+                finally:
+                    module.PACKAGE, module.MANIFEST_PATH = original
+            return code == 3 and seen == []
+
+        return probe
+
+    def started(isolated: int, no_bytecode: int, expected: int) -> Callable[[], bool]:
+        def probe() -> bool:
+            connection, out = FakeConnection(_row(module)), io.StringIO()
+            code = module.entry(
+                ARGS,
+                flags=SimpleNamespace(isolated=isolated, dont_write_bytecode=no_bytecode),
+                environ={module.DATABASE_URL_ENV: URL},
+                connect=lambda url, **_: connection,
+                stdout=out,
+            )
+            return code == expected and (expected == 0 or connection.calls == [])
 
         return probe
 
@@ -1685,6 +2258,30 @@ def _behaviour_failures(module: Any) -> list[str]:
         ),
         ("result shape", shape),
         ("real failing rows", real_failures),
+        (
+            "an extra module refused",
+            folder(lambda copy: (copy / "json.py").write_text("x = 1\n", encoding="utf-8")),
+        ),
+        ("a bytecode folder refused", folder(lambda copy: (copy / "__pycache__").mkdir())),
+        ("a link refused", folder(lambda copy: _link(copy / "CARD.md"))),
+        (
+            "a deadline outside the ledger's range never printed",
+            disagrees(
+                reason="DEADLINE_MISMATCH", verdict="FAIL", deadline_ms=1, deadline_ms_matches=False
+            ),
+        ),
+        (
+            "an analysis hash outside the ledger's format never printed",
+            disagrees(
+                reason="ANALYSIS_HASH_MISMATCH",
+                verdict="FAIL",
+                analysis_hash=OTHER_CREDENTIAL,
+                analysis_hash_matches=False,
+            ),
+        ),
+        ("a start without -I refused", started(0, 1, 2)),
+        ("a start without -B refused", started(1, 0, 2)),
+        ("a start with -I -B runs", started(1, 1, 0)),
     ]:
         check(name, probe)
     return failures
@@ -1756,6 +2353,22 @@ RUNNER_MUTANTS = {
         'reason != "AMBIGUOUS" or (request_rows_valid and request_rows >= 2)',
         "True",
     ),
+    "R27 other files accepted": ("    if not exact:", "    if False:"),
+    "R28 links followed": ("entry.is_file(follow_symlinks=False)", "entry.is_file()"),
+    "R29 any deadline printed": ("        _ledger_deadline(deadline),\n", ""),
+    "R30 any analysis hash printed": ("        _ledger_hash(analysis_hash),\n", ""),
+    "R31 a disagreement prints the answer": (
+        'return {**base, "verdict": "FAIL", "reason": "RUNNER_DISAGREES"}, EXIT_FAIL',
+        'return {**base, **facts, "verdict": "FAIL", "reason": "RUNNER_DISAGREES"}, EXIT_FAIL',
+    ),
+    "R32 a start without -I runs": (
+        "    if not (flags.isolated and flags.dont_write_bytecode):",
+        "    if not flags.dont_write_bytecode:",
+    ),
+    "R33 a start without -B runs": (
+        "    if not (flags.isolated and flags.dont_write_bytecode):",
+        "    if not flags.isolated:",
+    ),
 }
 RUNNER_SOURCE = RUNNER_FILE.read_text(encoding="utf-8")
 
@@ -1802,9 +2415,20 @@ def test_the_manifest_seals_every_package_file() -> None:
         MANIFEST.read_text(encoding="utf-8") == json.dumps(built, indent=1, sort_keys=True) + "\n"
     )
     assert set(built["files"]) == {f"ops/a4_card04_companion/{name}" for name in SEALED_FILES}
-    assert {
-        path.name for path in PACKAGE.iterdir() if path.is_file() and not path.name.startswith(".")
-    } == {*SEALED_FILES, "MANIFEST.json"}
+    # The folder holds exactly its five files, each a regular file: no test writes bytecode here.
+    assert sorted(path.name for path in PACKAGE.iterdir()) == sorted(
+        [*SEALED_FILES, "MANIFEST.json"]
+    )
+    assert all(path.is_file() and not path.is_symlink() for path in PACKAGE.iterdir())
+    assert built["package_files"] == sorted(runner.PACKAGE_FILES) == sorted(os.listdir(PACKAGE))
+    assert built["invocation"] == "python -I -B ops/a4_card04_companion/a4_card04_companion.py"
+    assert sorted(built["counts"]) == sorted(
+        [
+            "predictions_rows_for_run_id",
+            "credential_ledger_rows_since_activation",
+            "ledger_rows_for_client_request_id_across_all_credentials",
+        ]
+    )
     for path, digest in built["schema_sources"].items():
         assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == digest
     assert built["reads"]["public.automation_radar_ledger"] == sorted(DATA_COLUMNS[LEDGER])
@@ -1855,11 +2479,19 @@ def test_the_companion_output_contract_names_exactly_the_keys_the_runner_prints(
     assert (
         sorted(listed) == printed == json.loads(MANIFEST.read_text(encoding="utf-8"))["output_keys"]
     )
+    # The stop lines it names: a disagreement prints the stop keys only, and a start without -I -B
+    # is refused.
+    stop = contract.split("a runner stop", 1)[1]
+    for key in sorted(STOP_KEYS - {"verdict", "reason"}):
+        assert key in stop, key
+    assert "RUNNER_DISAGREES" in stop and "NOT_ISOLATED" in stop
+    assert runner.INVOCATION in HANDOFF.read_text(encoding="utf-8").split("## 15. ", 1)[1]
 
 
 def test_the_a4_output_contract_names_every_key_of_the_a4_audited_line() -> None:
     """The 2026-10-05 correction of section 14: the A4 runner's audited line also carries
-    ``audit``. A runner stop's keys are in the contract's prose, not in this list."""
+    ``audit``. Only the audited line's keys are checked here: section 14 does not name the A4
+    runner's error_class (recorded in STATE; section 14 is the accepted component's handoff)."""
 
     contract = _section_fields("## 14. A4 per-request ledger audit")["OUTPUT_CONTRACT"]
     for key in json.loads(A4_MANIFEST.read_text(encoding="utf-8"))["output_keys"]:
