@@ -1,13 +1,29 @@
 # STATE
 
-Updated: 2026-10-05 (**THE OWNER'S PHASE-7/8 T3 BATCH IS EXECUTED; THIS RECORD IS ITS LAST PUBLISH.** Lane R is
-PUBLISHED (#232 → main 5f165aab, merge commit only on the exact authorized head; its push CI and reproducible build
-both succeeded). Lane P and DP-D each took one owner-authorized third repair, local only, and a fresh exact-final
-review: both PASS, neither causal class recurs. They stay local — Lane P until the UOR episode closes or the owner
-authorizes publication (DP-A), DP-D as structure-first tooling with its export card PREPARED, NOT RUN. MODEL
-SUBSTITUTION, recorded: this execution session runs as Claude Opus 4.8 (was 5.5); the T3 publish and both repairs
-ran on 4.8. Before it: the lanes were done locally and escalated at the repair bound.
+Updated: 2026-10-05 (**DP-D's RESTORE-PROOF TOOLING IS PUBLISHED** under the owner's T3: #234 → main 7c65e047, merge
+commit only on the exact reviewed head 4c47657e, composed onto main 1f0fa400 byte-identically on its 11 files; every
+check green, including the new pull-request rehearsal on PostgreSQL 17.6. The export card is NOT RUN and nothing
+contacted production. This record is that batch's last publish; main 1f0fa400's push CI and reproducible build were
+verified green first. Lane P stays LOCAL (DP-A). MODEL: the owner switched this session back to Claude Opus 5.5; the
+Opus 4.8 interval covered #232, both third repairs and #233. Before it: the Phase-7/8 T3 batch, #232 Lane R and
+#233 STATE.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-05), verbatim — the DP-D publication T3 and the continuation:**
+```text
+CONTINUE CURRENT. First verify the final main push CI for `1f0fa400` once; do not infer PASS if it is still pending or failed.
+
+T3 AUTHORIZE publication of the reviewed DP-D restore-proof tooling only: `feat/p8d-restore-proof@4c47657e`. Do NOT run the export card and do not contact production. Refresh it against current main `1f0fa400`, prove the exact diff/composition remains behaviourally identical to the reviewed branch, rerun required gates/review if bytes materially change, then open PR and merge by merge commit only if every required check is green. Publish the refreshed STATE record last.
+
+Keep Lane P `feat/p7p-decisionview-ux1-degraded@77937a41` LOCAL ONLY until the UOR qualification episode closes or I explicitly authorize publication.
+
+After DP-D publication, continue automatically through every remaining dependency-safe reversible UCPE T0/T1/T2 Phase-7/8 lane. Max 2 proven-independent lanes; Claude does implementation/tests/review directly, no Codex. Do not manufacture traffic or do low-value busywork. If nothing implementable remains, return one consolidated next owner boundary.
+
+Preserve Phase-4 INFEASIBLE, D4 consumed, F3 KEEP_UNSPENT, H2 hold and all evidence-origin semantics. No production deploy, DB mutation, secret action, §5A/F3 access or DP-D export execution.
+```
+- **The owner (2026-10-05), verbatim — the Lane R T3 and the third-repair rulings (executed: #232, #233):**
+```text
+T3 AUTHORIZE P7R-PUBLISH feat/p7r-provider-pool-singleflight@5bcd71c353d1f343eeeb0e699141c27507ab7b3d, merge-commit only; verify exact diff/composition against current main 8b1531a8 and all CI before merge, then refresh/publish STATE last. LANE-P=1 and DP-D=1: authorize one consolidated third repair each, local-only, then fresh exact-final review. If either causal class recurs again, STOP; no fourth repair.
+```
 - **The owner (2026-10-05), verbatim. First, the T3:**
 ```text
 CONTINUE CURRENT — Opus XHIGH. Codex remains unavailable.
@@ -2263,7 +2279,15 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=PUBLISHING THE STATE RECORD LAST (2026-10-05), after the owner's T3 batch. Lane R is PUBLISHED; Lane P and
+LOOP_STATE=IN PROGRESS (2026-10-05): DP-D's tooling is PUBLISHED (#234 → main 7c65e047; this record last). Under the
+  owner's continuation Claude runs the remaining dependency-safe Phase-7/8 work locally (max 2 lanes):
+  - Lane R's review-3 follow-ups, fix/p7r-claims-and-close-pin @ d984b721: the F1 timing overclaim corrected in place
+    and every streamed response pinned closed. T1, VERIFY=PASS 6446. Publication is a new T3.
+  - The §23 UX owner-task scenarios and comprehension fixtures (plan Lane C) for Lane P's eventual release, local, on
+    top of Lane P.
+  Lane P stays LOCAL (DP-A). No production query, deploy, DB mutation, secret action, F3/§5A access, export execution
+  or T4.
+  Before it: PUBLISHING THE STATE RECORD LAST (2026-10-05), after the owner's T3 batch. Lane R is PUBLISHED; Lane P and
   DP-D stay local, each repaired once more under the owner's authorization and re-reviewed. No production query,
   deploy, DB mutation, secret action, F3/§5A access or T4 happened.
   - Lane R (DP-B narrowed + DP-C): PR #232 merged by merge commit 5f165aab (parents 8b1531a8 + 5bcd71c3, the exact
@@ -4025,7 +4049,9 @@ LOOP_STATE=PUBLISHING THE STATE RECORD LAST (2026-10-05), after the owner's T3 b
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-05): the owner's one batched T3 is executed — Lane R published
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-05): Lane R (#232) and DP-D's tooling (#234) are published; Lane P
+  is prepared and verified, local (DP-A); the remaining dependency-safe items run locally.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-05): the owner's one batched T3 is executed — Lane R published
   (#232 -> 5f165aab); Lane P and DP-D repaired once more under LANE-P=1 / DP-D=1 and re-reviewed, both still local.
   This record is the batch's last publish.
   Before it: POST-PHASE-4 / PHASE 7-8 LANES DONE LOCALLY (2026-10-05): Lane R is prepared and verified; Lane P
@@ -4206,7 +4232,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-05): the owner's one batched
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7-lanes (this record, refreshed onto main 5f165aab). Local and unpublished:
+CURRENT_BRANCH=chore/state-p8d-published (this record, on main 7c65e047). Local and unpublished:
+  - feat/p7p-decisionview-ux1-degraded @ 77937a41 (worktree scratchpad/wtP of session ba4955d3);
+  - fix/p7r-claims-and-close-pin @ d984b721 (scratchpad/wtR2).
+  Before it: chore/state-p7-lanes (this record, refreshed onto main 5f165aab). Local and unpublished:
   - feat/p7p-decisionview-ux1-degraded @ 77937a41 (base 8b1531a8; worktree scratchpad/wtP of session ba4955d3);
   - feat/p8d-restore-proof @ 4c47657e (base 8b1531a8; scratchpad/wtD).
   Both compose onto the published main with one trivial union (test_source_integrity_guard.py CURRENT_DELTA_PATHS);
@@ -4348,7 +4377,9 @@ CURRENT_BRANCH=chore/state-p7-lanes (this record, refreshed onto main 5f165aab).
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=5f165aab (main, #232: Lane R; the merge commit's push CI and reproducible build both succeeded). Before
+LAST_GREEN_SHA=7c65e047 (main, #234: DP-D's tooling; its PR checks test, build-a, build-b, compare and rehearse all
+  green). Before it 1f0fa400 (#233), whose push CI 37334694410 and reproducible build 37334694384 succeeded.
+  Before it: 5f165aab (main, #232: Lane R; the merge commit's push CI and reproducible build both succeeded). Before
   Lane R it was 8b1531a8 (#231).
   Before it: 8b1531a8 (main, #231: the A4C STATE record; push CI 37274064511 and the reproducible build 37274064630
   green).
@@ -4585,6 +4616,11 @@ LAST_GREEN_SHA=5f165aab (main, #232: Lane R; the merge commit's push CI and repr
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS 2026-10-05 (bytecode off):
+  - DP-D @ 4c47657e composed onto main 1f0fa400 (cdd23c52): its 11 files byte-identical to the reviewed head and every
+    other file main's; VERIFY=PASS 6592, scanners 3/3; rehearsal 48/48 on PostgreSQL 17.6.
+  - Lane R follow-up @ d984b721: VERIFY=PASS 6446, scanners 3/3; the removed-close mutant is killed by 2 of its 4
+    cases.
+  Before it: PASS 2026-10-05 (bytecode off):
   - Lane R composed onto main 8b1531a8 before merge: d45ff0c, 6442, scanners 3/3; after merge the push CI and
     reproducible build on 5f165aab succeeded.
   - Lane P @ 77937a41: 6428, scanners 3/3; frontend render harness + service-level hold test added.
@@ -4781,7 +4817,10 @@ LAST_VERIFY=PASS 2026-10-05 (bytecode off):
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-05). Codex unavailable (owner): Claude implemented, tested and reviewed every lane
+CODEX_PENDING=NONE (2026-10-05). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); no paid fallback; no GPT consultation. Model: the owner switched this session back to
+  claude-opus-5-5; the claude-opus-4-8 interval covered #232, both third repairs and #233.
+  Before it: NONE (2026-10-05). Codex unavailable (owner): Claude implemented, tested and reviewed every lane
   directly; no paid fallback; no GPT consultation. MODEL SUBSTITUTION (recorded, not requested): this execution
   session switched from claude-opus-5-5 to claude-opus-4-8 mid-batch (the T3 publish and both third repairs ran on
   claude-opus-4-8); DP-D's review 3 ran on claude-opus-5-5 then claude-opus-4-8 for its last 32 messages. Every other
@@ -4893,6 +4932,14 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-05):
+  - Lane P publication: after the UOR qualification episode closes or on your explicit authorization (one trivial
+    union in test_source_integrity_guard.py; §23's UX check before its release).
+  - Lane R follow-up publication: a T3 (T1 wording and a test; no behaviour change).
+  - DP-D's export card: your two read-only commands, at a future boundary; a proof PASS does not cover per-database or
+    all-roles settings (the card says so).
+  - Standing: the writer JWT renewal by 2026-10-30; the A4C review-5 MINOR/NIT follow-ups (optional); the H2 hold, F3
+    KEEP_UNSPENT, Phase 4 INFEASIBLE, D4 consumed.
+  Before it: AHEAD, each the owner's (2026-10-05):
   - Lane P publication: a new T3, after the UOR qualification episode closes or on your explicit authorization; it
     needs the one trivial union above. The release note holds: the OOS arms' and the radar examples' analysis_hash
     values move with UX-1's copy (keys frozen; no evaluator reads it).
@@ -5559,7 +5606,9 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-05):
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the items above, at your pace. Claude: passive reads only until then; on a Lane P T3, resolve
+NEXT_ACTION=Claude: the §23 UX comprehension lane locally, then one consolidated next owner boundary. The owner: the
+  items above, at your pace.
+  Before it: The owner: the items above, at your pace. Claude: passive reads only until then; on a Lane P T3, resolve
   the one trivial union, verify, and publish.
   Before it: The owner: the batched boundary above. Claude after a T3: exact-head and file-set checks, CI reads, the
   merge commit, then this record refreshed onto the resulting main and published last. Otherwise: passive reads only.
