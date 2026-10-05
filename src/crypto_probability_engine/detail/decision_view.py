@@ -236,12 +236,21 @@ def _time(snapshot: Any, timeframe: str) -> dict[str, Any]:
 
 
 def _limitations(state: str, hold: bool) -> list[str]:
+    # Accepted evidence shows its accepted state (owner ruling 2026-10-06); an accepted
+    # directional permission stays explicitly non-advisory. Today's states read as before.
+    accepted = state in {"ACCEPTED_FORECAST_CLAIM", "DIRECTIONAL_PERMISSION"}
     limitations = [
-        "Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.",
+        "Accepted forecast-quality claim for this model and timeframe."
+        if accepted
+        else "Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.",
         "No profitability claim.",
     ]
-    if state in {"INVALID_OR_UNAVAILABLE_DATA", "NO_ACCEPTED_CLAIM"}:
+    if not accepted:
         limitations.insert(0, "No forecast-quality claim is accepted for this model and timeframe.")
+    if state == "DIRECTIONAL_PERMISSION":
+        limitations.append(
+            "The directional permission is not financial advice: it never tells you to trade."
+        )
     if hold:
         limitations.append("Directional evidence is under review (the directional hold is active).")
     return limitations

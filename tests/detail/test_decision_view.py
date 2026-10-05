@@ -221,6 +221,37 @@ def test_accepted_states_are_reachable_only_through_their_registries(
     assert claim["accepted_claim"] is True and claim["directional_permission"] is False
 
 
+def test_the_limitations_say_what_the_evidence_is(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Owner ruling 2026-10-06: accepted forecast evidence shows its accepted state (never the
+    uncalibrated-heuristic line), an accepted directional permission stays explicitly
+    non-advisory, and today's states read exactly as before."""
+
+    uncalibrated = (
+        "Uncalibrated heuristic: its accuracy has not been established on resolved outcomes."
+    )
+    today = view_for()["evidence"]["limitations"]
+    assert today == [
+        "No forecast-quality claim is accepted for this model and timeframe.",
+        uncalibrated,
+        "No profitability claim.",
+    ]
+    key = f"UNCALIBRATED_HEURISTIC_6BAR_OUTCOME:{METHODOLOGY}:1H"
+    monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key}))
+    claim = view_for()["evidence"]["limitations"]  # SKILL_NOT_DEMONSTRATED caps it at the claim
+    accepted = "Accepted forecast-quality claim for this model and timeframe."
+    assert claim == [accepted, "No profitability claim."]
+    monkeypatch.setattr(decision_view, "ACCEPTED_DIRECTIONAL_PERMISSIONS", frozenset({key}))
+    permission = view_for(quant_result={"gate_result": {"hard_blocks": []}})
+    assert permission["state"] == "DIRECTIONAL_PERMISSION"
+    assert permission["evidence"]["limitations"] == [
+        accepted,
+        "No profitability claim.",
+        "The directional permission is not financial advice: it never tells you to trade.",
+    ]
+    for lines in (claim, permission["evidence"]["limitations"]):
+        assert uncalibrated not in lines and "No profitability claim." in lines
+
+
 def test_the_service_names_its_own_methodology(live, monkeypatch: pytest.MonkeyPatch) -> None:
     """An acceptance made for this methodology applies to this analysis, and to no other."""
 
