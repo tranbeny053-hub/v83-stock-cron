@@ -16,7 +16,9 @@ What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal
   ONLY transaction with row security off that it always rolls back, refuses bad inputs before
   contacting anything, never prints a URL, a credential value or an exception message, and
   cross-checks the SQL's answer; every runner mutant breaks one of those behaviours;
-- the manifest seals every package file, and the accepted A4 component's seal is unchanged.
+- the manifest seals every package file; UOR_HANDOFF.md section 15 carries exactly the companion
+  fields, the seal's digest and the keys the runner really prints; the accepted A4 component's seal
+  is unchanged and section 14's corrected fields name every key its runner prints.
 """
 
 from __future__ import annotations
@@ -1368,6 +1370,29 @@ def test_every_runner_mutant_breaks_a_behaviour(name: str) -> None:
 
 
 # --------------------------------------------------------------------------- seal and handoff
+FIELDS = (
+    "COMPANION_STATUS",
+    "ARTIFACT_NAME",
+    "ARTIFACT_SHA256",
+    "SOURCE_COMMIT",
+    "UPSTREAM_RELEASE_IDENTITY",
+    "INPUT_BINDING",
+    "OUTPUT_CONTRACT",
+    "DEADLINE_MS_PROOF",
+    "ANALYSIS_HASH_PROOF",
+    "PREDICTIONS_RUN_ID_COUNT_PROOF",
+    "CREDENTIAL_ROWS_SINCE_ACTIVATION_PROOF",
+    "READ_ONLY_PROOF",
+    "ISOLATION_PROOF",
+    "TESTS",
+    "INDEPENDENT_REVIEW",
+    "PRODUCTION_QUERY_EXECUTED",
+    "PRODUCTION_MUTATED",
+    "PROTECTED_5A_ACCESSED",
+    "PACKAGE_PATH",
+)
+
+
 def test_the_manifest_seals_every_package_file() -> None:
     built = _module("a4c_manifest", PACKAGE / "build_manifest.py").manifest()
     assert (
@@ -1393,3 +1418,48 @@ def test_the_accepted_a4_component_is_unchanged() -> None:
         "artifact_sha256": A4_ARTIFACT_SHA256,
         "source_commit": A4_SOURCE_COMMIT,
     }
+
+
+def _section_fields(heading: str) -> dict[str, str]:
+    section = HANDOFF.read_text(encoding="utf-8").split(heading, 1)[1]
+    block = section.split("```text\n", 1)[1].split("```", 1)[0]
+    return dict(line.split("=", 1) for line in block.strip().splitlines())
+
+
+def test_the_handoff_carries_exactly_the_companion_fields_and_the_seal() -> None:
+    text = HANDOFF.read_text(encoding="utf-8")
+    section = text.split("## 15. Card 04 companion", 1)[1]
+    block = section.split("```text\n", 1)[1].split("```", 1)[0]
+    lines = block.strip().splitlines()
+    assert [line.split("=", 1)[0] for line in lines] == list(FIELDS)
+    values = _section_fields("## 15. Card 04 companion")
+    assert all(values.values())
+    assert values["COMPANION_STATUS"].startswith("PREPARED_AND_VERIFIED")
+    assert values["ARTIFACT_NAME"] == runner.ARTIFACT
+    assert values["ARTIFACT_SHA256"] == hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
+    assert values["PRODUCTION_QUERY_EXECUTED"] == "NO"
+    assert values["PRODUCTION_MUTATED"] == "NO"
+    assert values["PROTECTED_5A_ACCESSED"] == "NO"
+    assert values["PACKAGE_PATH"] == "ops/a4_card04_companion/"
+    for name in ("MANIFEST.json", *SEALED_FILES):
+        assert f"| `ops/a4_card04_companion/{name}` |" in section, name
+
+
+def test_the_companion_output_contract_names_exactly_the_keys_the_runner_prints() -> None:
+    contract = _section_fields("## 15. Card 04 companion")["OUTPUT_CONTRACT"]
+    listed = contract.split("exactly these 18 keys: ", 1)[1].split(";", 1)[0].split(", ")
+    printed = sorted(_run()[1])
+    assert (
+        sorted(listed) == printed == json.loads(MANIFEST.read_text(encoding="utf-8"))["output_keys"]
+    )
+
+
+def test_the_a4_output_contract_names_every_key_the_a4_runner_prints() -> None:
+    """The 2026-10-05 correction of section 14: the A4 runner also prints ``audit``."""
+
+    contract = _section_fields("## 14. A4 per-request ledger audit")["OUTPUT_CONTRACT"]
+    for key in json.loads(A4_MANIFEST.read_text(encoding="utf-8"))["output_keys"]:
+        assert re.search(rf"(?<![A-Za-z_]){re.escape(key)}(?![A-Za-z_])", contract), key
+    review = _section_fields("## 14. A4 per-request ledger audit")["INDEPENDENT_REVIEW"]
+    assert "dbc5c47" in review and "491b460" in review
+    assert "3ba2486" not in review and "dd1093a" not in review
