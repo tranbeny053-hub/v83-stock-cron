@@ -55,6 +55,11 @@
 
 ## 4. Schemas, versions and pinned files
 
+Revision 2026-10-05 (local only, not published; owner ruling DP-A=2): the MANIFEST and the two synthetic success
+examples below were regenerated because UX-1 changed the analysis payload's `probability_explanation` text, which
+moves each example's `analysis_hash` and `evidence_hash`. The schemas, the contract and every value's meaning are
+unchanged. Publication waits for the UOR qualification episode to close, or for the owner's word.
+
 | File | Role | sha256 |
 |---|---|---|
 | `schemas/radar_evidence.schema.json` | pinned success schema (`radar_evidence.v1`) | `460458ade4f65e6850e024d3d3a6cc042c40219b802b8ddd89c93ae35a4be5c7` |

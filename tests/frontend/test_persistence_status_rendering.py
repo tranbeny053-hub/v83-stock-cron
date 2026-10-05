@@ -9,7 +9,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _extract_function(source: str, name: str) -> str:
     start = source.index(f"function {name}(")
-    opening_brace = source.index("{", start)
+    # Past the parameter list first: a default parameter may itself be "{}".
+    depth, index = 0, source.index("(", start)
+    while True:
+        depth += {"(": 1, ")": -1}.get(source[index], 0)
+        index += 1
+        if depth == 0:
+            break
+    opening_brace = source.index("{", index)
     depth = 0
     for index in range(opening_brace, len(source)):
         if source[index] == "{":
@@ -66,6 +73,9 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "formatValue",
             "persistenceStatusText",
             "decisionViewOf",
+            "decisionDataText",
+            "notAssessedByView",
+            "legacyProbabilityRows",
             "renderStructuredDetail",
         )
     )

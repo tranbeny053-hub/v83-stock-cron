@@ -473,10 +473,11 @@ def _analyze(
         "analysis_hash": "",
     }
     if record_prediction and arm_context is None:
-        # The one authoritative view (plan §14.1; owner rulings DP-A and DP-F): the human route
-        # only. The isolated automation analysis has none, and OOS arms stay byte-identical.
+        # The one authoritative view (plan §14.1; owner rulings DP-A and DP-F), for every recorded
+        # analysis; never for the isolated automation analysis or an OOS arm.
         response["decision_view"] = build_decision_view(
             timeframe=request.timeframe,
+            methodology_version=methodology_version,
             snapshot=snapshot,
             data_quality=data_quality,
             provider_state=provider_state,
@@ -525,7 +526,7 @@ def _analyze(
     )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     if "decision_view" not in response:
-        # No view, no key: the automation analysis and OOS arms keep their payloads exactly.
+        # No view, no key: the automation analysis and OOS arms carry no decision_view at all.
         validated.pop("decision_view", None)
     derivatives_block = validated["derivatives_intelligence"]
     derivatives_snapshot_required = derivatives_block["block_status"] in {

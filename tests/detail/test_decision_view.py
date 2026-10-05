@@ -36,6 +36,7 @@ from tests.fixtures.market_data import make_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
+METHODOLOGY = analysis_service.METHODOLOGY_VERSION
 BUILD_INFO = {
     "schema_version": "build-info.v1",
     "release_id": "UCPE-SYNTHETIC-EXAMPLE-V1",
@@ -120,6 +121,7 @@ def view_for(**overrides) -> dict:
 
     arguments = {
         "timeframe": "1H",
+        "methodology_version": METHODOLOGY,
         "snapshot": make_snapshot(provider="binance", symbol="BTC/USDT", timeframe="1H"),
         "data_quality": {"is_live_data": True, "data_source": "BINANCE_PUBLIC"},
         "provider_state": {
@@ -141,6 +143,7 @@ def view_for(**overrides) -> dict:
 def test_valid_data_with_no_accepted_claim() -> None:
     view = view_for()
     assert view["state"] == "NO_ACCEPTED_CLAIM"
+    assert "data are valid" not in view["detail"], "the data state is the view's data, not this"
     assert view["accepted_claim"] is False and view["directional_permission"] is False
     assert view["data"]["state"] == "OK"
     assert "not a market signal" in view["detail"]
@@ -186,18 +189,28 @@ def test_nothing_is_accepted_today() -> None:
 def test_accepted_states_are_reachable_only_through_their_registries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    key = "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME:1H"
+    key = f"UNCALIBRATED_HEURISTIC_6BAR_OUTCOME:{METHODOLOGY}:1H"
+    clear = {"gate_result": {"hard_blocks": []}}
     monkeypatch.setattr(decision_view, "ACCEPTED_DIRECTIONAL_PERMISSIONS", frozenset({key}))
-    assert view_for()["state"] == "NO_ACCEPTED_CLAIM", "a permission alone accepts nothing"
+    assert view_for(quant_result=clear)["state"] == "NO_ACCEPTED_CLAIM", "a permission alone"
     monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key}))
-    assert view_for()["state"] == "DIRECTIONAL_PERMISSION"
-    assert view_for(timeframe="4H")["state"] == "NO_ACCEPTED_CLAIM", "per timeframe"
+    assert view_for(quant_result=clear)["state"] == "DIRECTIONAL_PERMISSION"
+    assert view_for(quant_result=clear, timeframe="4H")["state"] == "NO_ACCEPTED_CLAIM", "per tf"
+    other = view_for(quant_result=clear, methodology_version=f"{METHODOLOGY}-next")
+    assert other["state"] == "NO_ACCEPTED_CLAIM", "an acceptance never outlives its model"
+    # Hard gates outrank everything shown: any hard block caps a permission at the claim.
+    capped = view_for(quant_result={"gate_result": {"hard_blocks": ["LIQUIDITY_NOT_VIABLE"]}})
+    assert capped["state"] == "ACCEPTED_FORECAST_CLAIM"
+    assert capped["directional_permission"] is False and capped["accepted_claim"] is True
+    # Bad data outranks a claim and a permission alike.
+    for blocks in (["EPISTEMIC_VOID"], ["PROVIDER_DEGRADED"]):
+        blocked = view_for(quant_result={"gate_result": {"hard_blocks": blocks}})
+        assert blocked["state"] == "INVALID_OR_UNAVAILABLE_DATA"
+        assert blocked["accepted_claim"] is False and blocked["directional_permission"] is False
     monkeypatch.setattr(decision_view, "ACCEPTED_DIRECTIONAL_PERMISSIONS", frozenset())
-    claim = view_for()
+    claim = view_for(quant_result=clear)
     assert claim["state"] == "ACCEPTED_FORECAST_CLAIM"
     assert claim["accepted_claim"] is True and claim["directional_permission"] is False
-    blocked = view_for(quant_result={"gate_result": {"hard_blocks": ["EPISTEMIC_VOID"]}})
-    assert blocked["state"] == "INVALID_OR_UNAVAILABLE_DATA", "bad data outranks any claim"
 
 
 def test_the_four_states_read_differently() -> None:
@@ -228,6 +241,21 @@ def test_the_four_states_read_differently() -> None:
             ("OK", None),
         ),
         (
+            {"is_live_data": True, "data_source": "OKX_PUBLIC"},
+            {
+                "status": "OK",
+                "active_provider": "okx",
+                "providers": {
+                    "binance": {
+                        "status": "QUARANTINED",
+                        "quarantine_reason": "INVALID_SYMBOL: Provider rejected symbol.",
+                    },
+                    "okx": {"status": "OK"},
+                },
+            },
+            ("OK", None),
+        ),
+        (
             {"is_live_data": True, "data_source": "BINANCE_PUBLIC"},
             {
                 "status": "OK",
@@ -251,7 +279,14 @@ def test_the_four_states_read_differently() -> None:
             ("DEMO", None),
         ),
     ],
-    ids=["primary failed", "primary lists no such symbol", "secondary failed", "conflict", "demo"],
+    ids=[
+        "primary failed",
+        "primary lists no such symbol",
+        "primary rejects the symbol",
+        "secondary failed",
+        "conflict",
+        "demo",
+    ],
 )
 def test_the_data_state(data_quality: dict, provider_state: dict, expected: tuple) -> None:
     data = view_for(data_quality=data_quality, provider_state=provider_state)["data"]

@@ -12,12 +12,17 @@ says so, and no disposition is presented as a market call.
 
 No forecast-quality claim and no directional permission is accepted today (Phase 4 INFEASIBLE; the
 H2 hold), so states 3 and 4 are reachable only through the explicit registries below, which are
-empty and change only by a governed acceptance.
+empty and change only by a governed acceptance. An acceptance names the probability type, the
+methodology version and the timeframe, so it never outlives the model it was made for; and a
+directional permission yields to any hard block (hard gates outrank everything shown).
 
 DP-F, the honest DEGRADED: when the configured primary venue was tried and failed, so that another
-venue served the data, the view's data state is DEGRADED, not OK. The analysis's own data_quality
-and provider_state are untouched, so radar_evidence.v1 and the AUTOMATED_RADAR path keep every
-value; the isolated (automation) analysis and OOS arms carry no DecisionView at all.
+venue served the data, the view's data state is DEGRADED, not OK. A primary that does not list the
+symbol has not failed. The analysis's own data_quality and provider_state are untouched, so
+radar_evidence.v1 and the AUTOMATED_RADAR path keep every value.
+
+The view is built for every recorded analysis (a user's, the cadence's, a controlled smoke's) and
+never for the isolated automation analysis or an OOS arm, which carry no decision_view key at all.
 
 Its times are the target contract's (tc-v1, docs/TARGET_CONTRACT_V1.md): the reference is the last
 closed candle, the horizon is close-anchored, and "In band" means the terminal close ends within
@@ -33,8 +38,8 @@ from typing import Any
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
 
 SCHEMA_VERSION = "decision_view.v1"
-# Governed acceptance registries, keyed "<probability_type>:<timeframe>". Empty: nothing is
-# accepted.
+# Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
+# Empty: nothing is accepted.
 ACCEPTED_FORECAST_CLAIMS: frozenset[str] = frozenset()
 ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
 # Hard blocks that mean the data cannot support an assessment at all.
@@ -48,9 +53,9 @@ STATE_COPY = {
     ),
     "NO_ACCEPTED_CLAIM": (
         "No accepted forecast",
-        "The data are valid, but no forecast-quality claim has been accepted for this model and "
-        "timeframe. The percentages are uncalibrated reference context: not a forecast, not a "
-        "market signal, and not a reason to act or to avoid acting.",
+        "No forecast-quality claim has been accepted for this model and timeframe. The "
+        "percentages are uncalibrated reference context: not a forecast, not a market signal, and "
+        "not a reason to act or to avoid acting.",
     ),
     "ACCEPTED_FORECAST_CLAIM": (
         "Accepted forecast-quality claim",
@@ -91,6 +96,7 @@ REASON_COPY = {
 def build_decision_view(
     *,
     timeframe: str,
+    methodology_version: str,
     snapshot: Any,
     data_quality: Mapping[str, Any],
     provider_state: Mapping[str, Any],
@@ -104,12 +110,12 @@ def build_decision_view(
     gate = quant_result.get("gate_result") or {}
     hard_blocks = [str(block) for block in gate.get("hard_blocks") or []]
     data = _data_state(data_quality, provider_state, hard_blocks, primary_venue)
-    claim_key = f"{decision_brief.get('probability_type')}:{timeframe}"
+    claim_key = f"{decision_brief.get('probability_type')}:{methodology_version}:{timeframe}"
     if data["state"] == "UNAVAILABLE":
         state = "INVALID_OR_UNAVAILABLE_DATA"
     elif claim_key not in ACCEPTED_FORECAST_CLAIMS:
         state = "NO_ACCEPTED_CLAIM"
-    elif claim_key in ACCEPTED_DIRECTIONAL_PERMISSIONS:
+    elif claim_key in ACCEPTED_DIRECTIONAL_PERMISSIONS and not hard_blocks:
         state = "DIRECTIONAL_PERMISSION"
     else:
         state = "ACCEPTED_FORECAST_CLAIM"
@@ -167,7 +173,12 @@ def _data_state(
     active = provider_state.get("active_provider")
     providers = provider_state.get("providers") or {}
     primary = providers.get(primary_venue) if primary_venue else None
-    primary_failed = isinstance(primary, Mapping) and primary.get("status") == "QUARANTINED"
+    # Tried and failed; a primary that does not list the symbol has not failed.
+    primary_failed = (
+        isinstance(primary, Mapping)
+        and primary.get("status") == "QUARANTINED"
+        and not str(primary.get("quarantine_reason") or "").startswith("INVALID_SYMBOL")
+    )
     cross_provider = data_quality.get("cross_provider_state") or provider_state.get(
         "cross_provider_state"
     )

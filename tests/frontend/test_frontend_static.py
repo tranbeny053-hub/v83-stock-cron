@@ -1360,7 +1360,7 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
     assert positions == sorted(positions)
     assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
     card = _function_text(js, "overviewCard")
-    assert "const values = view ? decisionViewRows(payload, view) : [" in card
+    assert "const values = view ? [...decisionViewRows(payload, view), heatRow] : [" in card
     assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
     assert 'headline.dataset.decisionState = view.state;' in card
     assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
@@ -1374,3 +1374,31 @@ def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
     detail = _function_text(js, "renderStructuredDetail")
     assert 'section("Decision view", [' in detail
     assert "...(decisionSection ? [decisionSection] : [])," in detail
+
+
+def test_every_surface_defers_to_the_decision_view() -> None:
+    """Review 1 of lane P, finding 1: the Single and Watchlist card (horizonCard) and the detail
+    panel follow the view too, so no surface shows LIVE or a percentage the view does not."""
+
+    js = read_frontend("app.js")
+    horizon = _function_text(js, "horizonCard")
+    assert "const view = decisionViewOf(payload);" in horizon
+    assert "...decisionViewRows(payload, view)," in horizon
+    assert 'textBlock("p", dataBannerFor(payload), "demo-banner")' in horizon
+    assert "dataBannerText(display)" not in horizon
+    view_branch, legacy_branch = horizon.split("} else {", 1)
+    for legacy in ('"Interpretation"', '"Directional edge"', "matrixProbabilityBlock("):
+        assert legacy not in view_branch and legacy in legacy_branch
+    detail = _function_text(js, "renderStructuredDetail")
+    data_row = 'view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data]'
+    assert data_row in detail
+    assert "...legacyProbabilityRows(payload, [" in detail
+    assert '...(view ? [["Decision view", decisionDataText(view.data)]] : []),' in detail
+    assert "renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload)" in detail
+    interpretation = _function_text(js, "renderProbabilityInterpretation")
+    assert "legacyProbabilityRows(payload, probabilityValues(probability))" in interpretation
+    row = _function_text(js, "renderActionabilityRow")
+    assert 'item.key === "data_quality" && view && view.data?.state !== "OK"' in row
+    assert "Resolution probability" not in js, "§14.3: In band is never 'unresolved'"
+    outside = '["Up + Down (outside the band)", formatFractionPct(probability.resolution_'
+    assert outside + "probability)]" in js
