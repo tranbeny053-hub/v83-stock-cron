@@ -6,10 +6,10 @@
   "source_commit": "e468f1f118870f904d90505a3cdbb74446d5a495"
  },
  "files": {
-  "ops/a4_card04_companion/CARD.md": "4f6f80f2ec8f3ef38a3be7a8d362c2986ba849354548209452a1376a0d99004a",
-  "ops/a4_card04_companion/a4_card04_companion.py": "352449d80b7fc94dd049a00df9048aac303e7f45e4e170447c085a3f98f0089c",
-  "ops/a4_card04_companion/a4_card04_companion.sql": "380a8c03ab4f2033ec9cbb72f2a7af3e5813ebebb973d1803a1da1e85b7e1a49",
-  "ops/a4_card04_companion/build_manifest.py": "1b558890abcdd0ae69495b98baf01c4610d9cfed0fa6a805ae2f4de16f4b02d2"
+  "ops/a4_card04_companion/CARD.md": "847fb6687df9e5992203388c7d29ba06e16d743fb91686239815f95e9167532f",
+  "ops/a4_card04_companion/a4_card04_companion.py": "646e74fae7bf6c240ea77b2fe111033b688e7af2944bcf1936ef2f6bfae829f6",
+  "ops/a4_card04_companion/a4_card04_companion.sql": "e507caaf313a82d870f753bd502c8e915be2a3af13c1f55cdeda53ee50de9e49",
+  "ops/a4_card04_companion/build_manifest.py": "86490b49eee830f6d431639bcab84114a62b5151dd1698eea547d7240e41ef45"
  },
  "input_binding": {
   "count_window_from": "qualification_activation_utc (inclusive)",
@@ -37,6 +37,7 @@
   "credential_ledger_rows_since_activation",
   "deadline_ms",
   "deadline_ms_matches",
+  "ledger_rows_for_client_request_id_across_all_credentials",
   "predictions_rows_for_run_id",
   "reason",
   "row_security_off",
@@ -45,7 +46,7 @@
   "transaction_read_only",
   "verdict"
  ],
- "purpose": "Prove the four durable facts UOR Card 04 needs for one qualification request: its deadline_ms and its run's analysis_hash from its public.automation_radar_ledger row, the count of public.predictions rows carrying its run_id, and the count of its credential's ledger rows since the qualification's activation. Read-only. Prepared, not run against production.",
+ "purpose": "Prove the five durable facts UOR Card 04 needs for one qualification request: its deadline_ms and its run's analysis_hash from its public.automation_radar_ledger row, the count of public.predictions rows carrying its run_id, the count of its credential's ledger rows since the qualification's activation, and the count of ledger rows carrying its client_request_id under any credential. Read-only. Prepared, not run against production.",
  "reads": {
   "pg_catalog": [
    "pg_attribute",

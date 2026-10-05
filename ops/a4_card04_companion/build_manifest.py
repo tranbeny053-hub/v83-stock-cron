@@ -36,10 +36,11 @@ def manifest() -> dict:
     return {
         "artifact": runner.ARTIFACT,
         "purpose": (
-            "Prove the four durable facts UOR Card 04 needs for one qualification request: its"
+            "Prove the five durable facts UOR Card 04 needs for one qualification request: its"
             " deadline_ms and its run's analysis_hash from its public.automation_radar_ledger row,"
-            " the count of public.predictions rows carrying its run_id, and the count of its"
-            " credential's ledger rows since the qualification's activation. Read-only. Prepared,"
+            " the count of public.predictions rows carrying its run_id, the count of its"
+            " credential's ledger rows since the qualification's activation, and the count of"
+            " ledger rows carrying its client_request_id under any credential. Read-only. Prepared,"
             " not run against production."
         ),
         "companion_of": {

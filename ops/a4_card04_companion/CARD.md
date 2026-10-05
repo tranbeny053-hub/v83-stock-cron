@@ -5,12 +5,14 @@ decision, made at the qualification episode itself, beside the accepted A4 audit
 (`ucpe.a4_ledger_audit.v1`) of the same request.
 
 ## What it is
-- **The one job:** prove the four durable facts UOR Card 04 still needs for one qualification request
+- **The one job:** prove the five durable facts UOR Card 04 still needs for one qualification request
   to `POST /v1/automation/radar-evidence`:
   - the request's `deadline_ms`, from its ledger row;
   - the run's `analysis_hash`, from the same row;
   - how many `public.predictions` rows carry the run's `run_id`;
-  - how many ledger rows the credential has from the qualification's activation on.
+  - how many ledger rows the credential has from the qualification's activation on;
+  - how many ledger rows carry the request's `client_request_id`, under any credential (owner ruling
+    A4-CRID-UNIQUENESS, 2026-10-05). It names no credential.
 - **What it is not:** a database tool. It reads ten columns of `public.automation_radar_ledger` and
   `public.predictions.run_id`, and nothing else: no probability, label, outcome, snapshot, calibration,
   credential registry, section 5A data or response body.
@@ -30,8 +32,9 @@ A4-CARD04-COMPANION, once per qualification request, only inside the owner-autho
 
 ## WHY
 UOR Card 04 must see the request's deadline, the run's analysis identity, that run's footprint in the
-shared prediction table, and the credential's ledger activity since activation, each read from the
-durable record rather than from UOR's own memory of it.
+shared prediction table, the credential's ledger activity since activation, and that the request's
+client_request_id has one ledger row in all (the ledger's key is the pair, not the id), each read from
+the durable record rather than from UOR's own memory of it.
 
 ## WHERE
 - A terminal with this repository at the commit that carries this package.
@@ -72,7 +75,7 @@ durable record rather than from UOR's own memory of it.
 
 ## EXPECTED_RESULT
 One JSON line, with sorted keys:
-- **PASS:** `"verdict":"PASS","reason":"OK"` and exit code 0. The four facts are evidence only on a
+- **PASS:** `"verdict":"PASS","reason":"OK"` and exit code 0. The five facts are evidence only on a
   PASS.
 - **FAIL, the audit ran:** exit code 1, with `reason` naming the first failing check: `SCHEMA_DRIFT`,
   `NO_ROW`, `AMBIGUOUS`, `WRONG_ORIGIN`, `NOT_COMPLETED`, `NOT_SUCCEEDED`, `RUN_MISMATCH`,
@@ -87,6 +90,10 @@ One JSON line, with sorted keys:
   role is not one of those in WHERE.
 - **The credential count** includes every ledger row of the credential received at or after the
   activation instant, the bound request's own row included, whatever its outcome.
+- **The cross-credential count** includes every ledger row carrying the bound `client_request_id`,
+  under any credential and whatever its state or outcome. When the row is bound it is at least 1.
+  Card 04 adjudicates it (its acceptance value is 1); this card reports it and never names another
+  credential.
 - The ledger keeps rows for at least 90 days (docs/automation/RETENTION_AND_IDEMPOTENCY.md), so run it
   within that window.
 

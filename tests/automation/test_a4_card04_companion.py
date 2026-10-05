@@ -9,13 +9,17 @@ What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal
   TABLE or SET clause, comma-join or derived table; no relation but the ledger, public.predictions
   and five catalogs, each through an alias, and exactly the declared reads (each relation's uses,
   every data column reference); from the ledger ten columns, from predictions only run_id, from the
-  catalogs only the listed columns; no star but count(*) and the decision's k.*, and no whole-row
-  use of any table, alias or CTE; the decision branches in the declared order, judging no count;
+  catalogs only the listed columns; the cross-credential count (owner ruling A4-CRID-UNIQUENESS)
+  reads only client_request_id, so no credential_id is projected, grouped or aggregated; no star but
+  count(*) and the decision's k.*, and no whole-row use of any table, alias or CTE; the decision
+  branches in the declared order, judging no count;
 - adversarial mutants that widen a read, read a probability, the body, a whole row (directly, with a
   star, through a CTE or a derived table), the registry, another table or more than the declared
   reads, hide a read in an escape string or a non-ASCII name, use an unmodelled operator, type,
   keyword or identifier, drop or reorder a check, bind on client_request_id alone, judge a count,
-  move the count window, add an output, drop the inheritance check, lock or write, all fail it;
+  move the count window, add or drop an output, drop the inheritance check, project, group or
+  aggregate another credential's id, scope the cross-credential count to one credential, lock or
+  write, all fail it;
 - the expected columns are migration 0013's and 0003's declarations, no later migration changes
   them, and the route still writes each fact where the companion reads it;
 - the runner checks the package against its seal and the SQL against its pin, runs it only in a READ
@@ -139,6 +143,7 @@ CTES = {
     "target_facts",
     "run_predictions",
     "credential_rows",
+    "request_rows",
     "checks",
     "decision",
 }
@@ -242,6 +247,8 @@ REQUIRED_FRAGMENTS = [
     "FROM public.automation_radar_ledger AS l JOIN binding AS b "
     "ON l.credential_id = b.credential_id AND l.client_request_id = b.client_request_id )",
     "FROM public.predictions AS p JOIN binding AS b ON p.run_id = b.expected_run_id )",
+    "FROM public.automation_radar_ledger AS g JOIN binding AS b "
+    "ON g.client_request_id = b.client_request_id )",
     "FROM public.automation_radar_ledger AS w JOIN binding AS b "
     "ON w.credential_id = b.credential_id AND w.received_at_utc >= b.activation_utc )",
     "WHERE n.nspname = 'public'",
@@ -326,10 +333,10 @@ KEYWORDS = {
 }
 CAST_TYPES = {"text", "uuid", "integer", "timestamptz"}
 # The declared minimum, exactly: how often each relation is read, and every data column reference.
-# predictions.run_id is read once, in the count's join; the ledger twice, for the bound row and the
-# credential's window.
+# predictions.run_id is read once, in the count's join; the ledger three times: the bound row, the
+# credential's window, and the client_request_id across all credentials (client_request_id only).
 RELATION_USES = {
-    LEDGER: 2,
+    LEDGER: 3,
     PREDICTIONS: 1,
     "pg_catalog.pg_class": 1,
     "pg_catalog.pg_namespace": 1,
@@ -351,6 +358,7 @@ DATA_READS = {
     "w.credential_id": 1,
     "w.received_at_utc": 1,
     "p.run_id": 1,
+    "g.client_request_id": 1,
 }
 CATALOG_COLUMNS = {
     "pg_catalog.pg_class": {"oid", "relname", "relnamespace", "relkind"},
@@ -713,6 +721,8 @@ T_LEDGER_FROM = "      FROM public.automation_radar_ledger AS l\n"
 T_BIND = "        ON l.credential_id = b.credential_id\n       AND l.client_request_id"
 T_RUN_COUNT = "    SELECT count(*) AS predictions_rows_for_run_id\n"
 T_RUN_ON = "        ON p.run_id = b.expected_run_id\n"
+T_CRID_COUNT = "    SELECT count(*) AS ledger_rows_for_client_request_id_across_all_credentials\n"
+T_CRID_ON = "        ON g.client_request_id = b.client_request_id\n"
 T_WINDOW = (
     "        ON w.credential_id = b.credential_id\n"
     "       AND w.received_at_utc >= b.activation_utc\n"
@@ -806,8 +816,8 @@ MUTANTS = {
         "               ELSE 'OK'\n",
     ),
     "adds an output column": (
-        "       d.credential_ledger_rows_since_activation\n",
-        "       d.credential_ledger_rows_since_activation,\n"
+        "       d.ledger_rows_for_client_request_id_across_all_credentials\n",
+        "       d.ledger_rows_for_client_request_id_across_all_credentials,\n"
         "       d.activation_not_after_request\n",
     ),
     "accepts a view for a table": ("       AND c.relkind = 'r'\n", ""),
@@ -952,6 +962,52 @@ MUTANTS = {
         "           b.expected_run_id AS bound_run_id,\n",
         "           (SELECT min(c2.relname) FROM pg_catalog.pg_class AS c2) AS bound_run_id,\n",
     ),
+    # A4-CRID-UNIQUENESS: the cross-credential count reads client_request_id and nothing else, names
+    # no credential, counts every credential, and is reported, never judged.
+    "aggregates other credentials' ids": (
+        T_CRID_COUNT,
+        T_CRID_COUNT[:-1] + ", array_agg(g.credential_id) AS others\n",
+    ),
+    "string-aggregates other credentials' ids": (
+        T_CRID_COUNT,
+        T_CRID_COUNT[:-1] + ", string_agg(g.credential_id, ',') AS others\n",
+    ),
+    "projects the least of the credentials' ids": (
+        T_CRID_COUNT,
+        T_CRID_COUNT[:-1] + ", min(g.credential_id) AS other\n",
+    ),
+    "json-aggregates other credentials' ids": (
+        T_CRID_COUNT,
+        T_CRID_COUNT[:-1] + ", json_agg(g.credential_id) AS others\n",
+    ),
+    "groups the count by credential": (T_CRID_ON, T_CRID_ON + "     GROUP BY g.credential_id\n"),
+    "counts only the bound credential's rows": (
+        T_CRID_ON,
+        T_CRID_ON + "       AND g.credential_id = b.credential_id\n",
+    ),
+    "counts only the other credentials' rows": (
+        T_CRID_ON,
+        T_CRID_ON + "       AND g.credential_id <> b.credential_id\n",
+    ),
+    "projects another credential's id": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(z.credential_id) FROM public.automation_radar_ledger AS z"
+        " WHERE z.client_request_id = b.client_request_id) AS bound_run_id,\n",
+    ),
+    "counts the id from the bound row alone": (
+        "      FROM public.automation_radar_ledger AS g\n",
+        "      FROM target AS g\n",
+    ),
+    "judges the cross-credential count": (
+        "               ELSE 'OK'\n",
+        "               WHEN k.ledger_rows_for_client_request_id_across_all_credentials <> 1"
+        " THEN 'CRID_NOT_UNIQUE'\n               ELSE 'OK'\n",
+    ),
+    "drops the cross-credential count": (
+        "       d.credential_ledger_rows_since_activation,\n"
+        "       d.ledger_rows_for_client_request_id_across_all_credentials\n",
+        "       d.credential_ledger_rows_since_activation\n",
+    ),
     "adds an input": (
         "CAST(%(credential_id)s AS text)",
         "CAST(%(credential_id)s || %(x)s AS text)",
@@ -1019,6 +1075,12 @@ def test_the_route_writes_each_fact_where_the_companion_reads_it() -> None:
     # deadline_ms and received_at_utc are written once, at reservation, and never updated.
     assert "deadline_ms" in insert and "received_at_utc" in insert
     assert "deadline_ms" not in complete and "received_at_utc =" not in complete
+    # The key columns are written once, at reservation, and never rewritten; no row is deleted. So
+    # the count of rows carrying a client_request_id across credentials is durable.
+    assert "client_request_id" in insert and "credential_id" in insert
+    assert "client_request_id" not in complete.split("WHERE", 1)[0]
+    assert "credential_id" not in complete.split("WHERE", 1)[0]
+    assert not re.search(r"\b(DELETE\s+FROM|TRUNCATE)\b", ledger, re.I)
     # analysis_hash is written with the outcome, from the same evidence the caller receives.
     assert "analysis_hash = %(analysis_hash)s" in complete
     service = (automation / "service.py").read_text(encoding="utf-8")
@@ -1053,6 +1115,7 @@ def _facts(module: Any = None, **changes: Any) -> dict[str, Any]:
         analysis_hash_matches=True,
         predictions_rows_for_run_id=0,
         credential_ledger_rows_since_activation=3,
+        ledger_rows_for_client_request_id_across_all_credentials=1,
     )
     facts.update(changes)
     return facts
@@ -1223,7 +1286,7 @@ def test_a_qualifying_row_passes_inside_one_read_only_unfiltered_transaction() -
     assert url == URL and kwargs["autocommit"] is False and kwargs["prepare_threshold"] is None
     assert kwargs["connect_timeout"] == 10
     assert sorted(payload) == json.loads(MANIFEST.read_text(encoding="utf-8"))["output_keys"]
-    assert len(payload) == 18 and "response_body" not in text
+    assert len(payload) == 19 and "response_body" not in text
 
 
 def test_the_output_is_byte_for_byte_deterministic() -> None:
@@ -1251,6 +1314,7 @@ def test_the_output_is_byte_for_byte_deterministic() -> None:
                 deadline_ms_matches=False,
                 analysis_hash=None,
                 analysis_hash_matches=False,
+                ledger_rows_for_client_request_id_across_all_credentials=2,
             ),
         ),
         ("WRONG_ORIGIN", {}),
@@ -1277,6 +1341,17 @@ def test_every_failing_row_fails_with_its_reason(reason: str, changes: dict[str,
         dict(analysis_hash="sha256:" + "1" * 64),  # PASS, but the hash differs
         dict(deadline_ms_matches=False),  # a match the runner cannot reproduce
         dict(predictions_rows_for_run_id=-1),
+        dict(ledger_rows_for_client_request_id_across_all_credentials=-1),
+        dict(ledger_rows_for_client_request_id_across_all_credentials=True),
+        dict(ledger_rows_for_client_request_id_across_all_credentials=0),  # a bound row, yet none
+        dict(  # an ambiguous pair is two rows carrying the id, yet one
+            reason="AMBIGUOUS",
+            verdict="FAIL",
+            deadline_ms=None,
+            deadline_ms_matches=False,
+            analysis_hash=None,
+            analysis_hash_matches=False,
+        ),
         dict(credential_ledger_rows_since_activation=True),
         dict(reason="SOMETHING_ELSE", verdict="FAIL"),
         dict(reason="RUN_MISMATCH"),  # a FAIL reason with a PASS verdict
@@ -1589,6 +1664,25 @@ def _behaviour_failures(module: Any) -> list[str]:
         ("cross-check", cross_check),
         ("bound run checked", disagrees(bound_run_id="run_" + "2" * 32)),
         ("count types checked", disagrees(predictions_rows_for_run_id=True)),
+        (
+            "request count type checked",
+            disagrees(ledger_rows_for_client_request_id_across_all_credentials=True),
+        ),
+        (
+            "a bound row is counted",
+            disagrees(ledger_rows_for_client_request_id_across_all_credentials=0),
+        ),
+        (
+            "an ambiguous pair is counted twice",
+            disagrees(
+                reason="AMBIGUOUS",
+                verdict="FAIL",
+                deadline_ms=None,
+                deadline_ms_matches=False,
+                analysis_hash=None,
+                analysis_hash_matches=False,
+            ),
+        ),
         ("result shape", shape),
         ("real failing rows", real_failures),
     ]:
@@ -1650,6 +1744,18 @@ RUNNER_MUTANTS = {
         "    return True",
     ),
     "R23 no connect timeout": ("            connect_timeout=CONNECT_TIMEOUT_SECONDS,\n", ""),
+    "R24 request count's type unchecked": (
+        "    request_rows_valid = _count(request_rows)",
+        "    request_rows_valid = True",
+    ),
+    "R25 a bound row may count no request row": (
+        'position <= REASONS.index("AMBIGUOUS") or (request_rows_valid and request_rows >= 1)',
+        "True",
+    ),
+    "R26 an ambiguous pair may count one request row": (
+        'reason != "AMBIGUOUS" or (request_rows_valid and request_rows >= 2)',
+        "True",
+    ),
 }
 RUNNER_SOURCE = RUNNER_FILE.read_text(encoding="utf-8")
 
@@ -1744,7 +1850,7 @@ def test_the_handoff_carries_exactly_the_companion_fields_and_the_seal() -> None
 
 def test_the_companion_output_contract_names_exactly_the_keys_the_runner_prints() -> None:
     contract = _section_fields("## 15. Card 04 companion")["OUTPUT_CONTRACT"]
-    listed = contract.split("exactly these 18 keys: ", 1)[1].split(";", 1)[0].split(", ")
+    listed = contract.split("exactly these 19 keys: ", 1)[1].split(";", 1)[0].split(", ")
     printed = sorted(_run()[1])
     assert (
         sorted(listed) == printed == json.loads(MANIFEST.read_text(encoding="utf-8"))["output_keys"]

@@ -2,9 +2,10 @@
 UOR Card 04.
 
 PURPOSE, and only this: during one owner-authorized UOR qualification episode, beside the accepted
-A4 audit of the same request, prove the four durable facts Card 04 still needs: the request's
-deadline_ms, the run's analysis_hash, how many prediction rows carry the run id, and how many
-ledger rows the credential has since the qualification's activation. It is not a database tool.
+A4 audit of the same request, prove the five durable facts Card 04 still needs: the request's
+deadline_ms, the run's analysis_hash, how many prediction rows carry the run id, how many ledger
+rows the credential has since the qualification's activation, and how many ledger rows carry the
+request's client_request_id under any credential. It is not a database tool.
 It runs exactly one sealed SELECT (``a4_card04_companion.sql``, whose sha256 is pinned below) with
 six inputs, inside a READ ONLY transaction with row security off, which it always rolls back.
 
@@ -47,7 +48,7 @@ PACKAGE_PATH = "ops/a4_card04_companion"
 SQL_PATH = PACKAGE / "a4_card04_companion.sql"
 MANIFEST_PATH = PACKAGE / "MANIFEST.json"
 SEALED_FILES = ("a4_card04_companion.sql", "a4_card04_companion.py", "CARD.md", "build_manifest.py")
-SQL_SHA256 = "380a8c03ab4f2033ec9cbb72f2a7af3e5813ebebb973d1803a1da1e85b7e1a49"
+SQL_SHA256 = "e507caaf313a82d870f753bd502c8e915be2a3af13c1f55cdeda53ee50de9e49"
 DATABASE_URL_ENV = "A4_COMPANION_DATABASE_URL"
 STATEMENT_TIMEOUT = "5000ms"
 LOCK_TIMEOUT = "1000ms"
@@ -82,6 +83,7 @@ SQL_COLUMNS = (
     "analysis_hash_matches",
     "predictions_rows_for_run_id",
     "credential_ledger_rows_since_activation",
+    "ledger_rows_for_client_request_id_across_all_credentials",
 )
 REASONS = (
     "SCHEMA_DRIFT",
@@ -291,6 +293,8 @@ def cross_check(facts: Mapping[str, Any], binding: Binding) -> bool:
     deadline, analysis_hash = facts["deadline_ms"], facts["analysis_hash"]
     deadline_matches = type(deadline) is int and deadline == int(binding.deadline_ms)
     hash_matches = type(analysis_hash) is str and analysis_hash == binding.analysis_hash
+    request_rows = facts["ledger_rows_for_client_request_id_across_all_credentials"]
+    request_rows_valid = _count(request_rows)
     agreements = (
         facts["artifact"] == ARTIFACT,
         facts["verdict"] == ("PASS" if reason == "OK" else "FAIL"),
@@ -305,6 +309,11 @@ def cross_check(facts: Mapping[str, Any], binding: Binding) -> bool:
         facts["analysis_hash_matches"] is hash_matches,
         _count(facts["predictions_rows_for_run_id"]),
         _count(facts["credential_ledger_rows_since_activation"]),
+        request_rows_valid,
+        # A bound row carries the bound client_request_id, so the count across credentials includes
+        # it; the two rows of an ambiguous pair carry it twice.
+        position <= REASONS.index("AMBIGUOUS") or (request_rows_valid and request_rows >= 1),
+        reason != "AMBIGUOUS" or (request_rows_valid and request_rows >= 2),
         # A missing or ambiguous row has no facts.
         reason not in ("NO_ROW", "AMBIGUOUS") or (deadline is None and analysis_hash is None),
         # A reason names the first failing check: its own check failed, every earlier one passed.

@@ -1,7 +1,7 @@
 -- ucpe.a4_card04_companion.v1: the sealed, read-only companion of ucpe.a4_ledger_audit.v1 for UOR Card 04.
 --
 -- PURPOSE, and only this: during one owner-authorized UOR qualification episode, beside the accepted A4
--- audit of the same request, prove the four durable facts Card 04 still needs, as scalars:
+-- audit of the same request, prove the five durable facts Card 04 still needs, as scalars:
 -- 1. deadline_ms: the request's own deadline, from its ledger row (migration 0013). The route writes it
 --    once, when it reserves the row, from the validated request; it is part of the request fingerprint.
 -- 2. analysis_hash: that successful run's analysis identity, from the same row. It is written with the
@@ -11,12 +11,15 @@
 --    and the route never writes a prediction.
 -- 4. credential_ledger_rows_since_activation: how many ledger rows the bound credential has whose
 --    received_at_utc is at or after qualification_activation_utc.
+-- 5. ledger_rows_for_client_request_id_across_all_credentials: how many ledger rows carry the bound
+--    client_request_id, under ANY credential (owner ruling A4-CRID-UNIQUENESS). The key makes the pair
+--    unique, not the id alone; this count reads only client_request_id and names no credential.
 -- It reads ten ledger columns and predictions.run_id, and nothing else: no other column of either
 -- table, no other table, never the stored response body. The pg_catalog reads are the schema proof.
 --
 -- SEALED. ops/a4_card04_companion/a4_card04_companion.py pins this file's sha256 and runs it, and nothing
 -- else, inside a READ ONLY transaction with row security off (a row-level policy that would hide a row
--- raises an error instead, so neither count can be silently filtered), always rolled back. A changed
+-- raises an error instead, so no count can be silently filtered), always rolled back. A changed
 -- byte is a new artifact version.
 --
 -- BINDING. The ledger's primary key (credential_id, client_request_id) and the response's run_id. The
@@ -30,7 +33,7 @@
 -- OUTPUT. Exactly one row of scalars, whatever the database holds. reason is the FIRST failing check, in
 -- this order: SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED, RUN_MISMATCH,
 -- DEADLINE_MISMATCH, ANALYSIS_HASH_MISMATCH, ACTIVATION_AFTER_REQUEST; else OK. verdict is PASS only for
--- OK. The two counts are reported, never judged: UOR Card 04 adjudicates them. Every comparison is
+-- OK. The three counts are reported, never judged: UOR Card 04 adjudicates them. Every comparison is
 -- NULL-safe, so a missing fact fails closed.
 WITH binding AS (
     SELECT CAST(%(credential_id)s AS text) AS credential_id,
@@ -137,6 +140,12 @@ credential_rows AS (
         ON w.credential_id = b.credential_id
        AND w.received_at_utc >= b.activation_utc
 ),
+request_rows AS (
+    SELECT count(*) AS ledger_rows_for_client_request_id_across_all_credentials
+      FROM public.automation_radar_ledger AS g
+      JOIN binding AS b
+        ON g.client_request_id = b.client_request_id
+),
 checks AS (
     SELECT b.credential_id AS bound_credential_id,
            b.client_request_id::text AS bound_client_request_id,
@@ -154,12 +163,14 @@ checks AS (
            (f.analysis_hash IS NOT DISTINCT FROM b.expected_analysis_hash) AS analysis_hash_matches,
            (f.received_at_utc >= b.activation_utc) AS activation_not_after_request,
            rp.predictions_rows_for_run_id,
-           cr.credential_ledger_rows_since_activation
+           cr.credential_ledger_rows_since_activation,
+           rq.ledger_rows_for_client_request_id_across_all_credentials
       FROM binding AS b
      CROSS JOIN schema_check AS s
      CROSS JOIN target_facts AS f
      CROSS JOIN run_predictions AS rp
      CROSS JOIN credential_rows AS cr
+     CROSS JOIN request_rows AS rq
 ),
 decision AS (
     SELECT k.*,
@@ -191,5 +202,6 @@ SELECT 'ucpe.a4_card04_companion.v1' AS artifact,
        d.analysis_hash,
        d.analysis_hash_matches,
        d.predictions_rows_for_run_id,
-       d.credential_ledger_rows_since_activation
+       d.credential_ledger_rows_since_activation,
+       d.ledger_rows_for_client_request_id_across_all_credentials
   FROM decision AS d

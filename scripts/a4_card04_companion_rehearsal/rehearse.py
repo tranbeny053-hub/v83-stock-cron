@@ -14,6 +14,9 @@ What it proves, each as a case with expected and actual results:
   progress, a refusal, a run, deadline or analysis hash that differs, an activation after the row;
 - the binding is the PAIR: the same client_request_id under another credential is another row, and
   a variant bound on client_request_id alone finds two rows (AMBIGUOUS);
+- the cross-credential count (owner ruling A4-CRID-UNIQUENESS) is 0 for an unsent id, 1 for an id
+  one row carries and 2 for an id two credentials carry, whatever the pair binds; when a third
+  credential reuses a bound row's id, that count alone moves;
 - least privilege: as a role that can read only the eleven columns (and bypasses row security), the
   companion PASSES with the owner's facts, and that role is refused every other column and table;
 - row security: a reader that row-level security applies to is refused (with or without a permissive
@@ -52,6 +55,8 @@ ERROR_EXAMPLE = (
 DATABASE = "a4_companion_rehearsal"
 CRED_A = "a4c-rehearsal-uor"
 CRED_B = "a4c-rehearsal-other"
+CRED_C = "a4c-rehearsal-third"
+CROSS = "ledger_rows_for_client_request_id_across_all_credentials"
 PROBE, POLICY_READER, HIDDEN_READER = "a4c_probe", "a4c_policy_reader", "a4c_hidden_reader"
 NAMESPACE = uuid.UUID("2b0b1c9e-7d61-4c3e-9a55-4c2f0e6d8a17")
 ACTIVATION = "2026-10-05T00:00:00Z"
@@ -408,6 +413,7 @@ class Rehearsal:
     # ---------------------------------------------------------------- the cases
     def run(self) -> dict[str, Any]:
         self.seed()
+        self.reused_request_id()
         start = self.digest()
         qualifying = {
             "deadline_ms": 45000,
@@ -416,6 +422,7 @@ class Rehearsal:
             "analysis_hash_matches": True,
             "predictions_rows_for_run_id": 0,
             "credential_ledger_rows_since_activation": 5,
+            CROSS: 2,  # the other credential's row carries the same client_request_id
         }
         owner_pass = self.case("qualifying row", self.binding("qualifying"), "OK", 0, qualifying)
         self.case(
@@ -437,7 +444,7 @@ class Rehearsal:
             self.binding("at activation"),
             "OK",
             0,
-            {"deadline_ms": 30000, "credential_ledger_rows_since_activation": 5},
+            {"deadline_ms": 30000, "credential_ledger_rows_since_activation": 5, CROSS: 1},
         )
         self.case(
             "an activation one microsecond after the request",
@@ -456,14 +463,18 @@ class Rehearsal:
             self.binding("leaked run"),
             "OK",
             0,
-            {"predictions_rows_for_run_id": 2},
+            {"predictions_rows_for_run_id": 2, CROSS: 2},
         )
         self.case(
             "same request id, other credential: its own row and its own count",
             self.binding("other credential"),
             "OK",
             0,
-            {"predictions_rows_for_run_id": 0, "credential_ledger_rows_since_activation": 2},
+            {
+                "predictions_rows_for_run_id": 0,
+                "credential_ledger_rows_since_activation": 2,
+                CROSS: 2,
+            },
         )
         self.case(
             "the other credential's run is not this row's",
@@ -476,21 +487,22 @@ class Rehearsal:
             self.binding("qualifying", client_request_id=rid("never sent")),
             "NO_ROW",
             1,
-            {"deadline_ms": None, "analysis_hash": None},
+            {"deadline_ms": None, "analysis_hash": None, CROSS: 0},
         )
         self.case(
             "unknown credential",
             self.binding("qualifying", credential_id="a4c-never-issued"),
             "NO_ROW",
             1,
-            {"credential_ledger_rows_since_activation": 0},
+            # No row for the pair, yet two rows carry the id: the count does not follow the pair.
+            {"credential_ledger_rows_since_activation": 0, CROSS: 2},
         )
         self.case(
             "in progress",
             self.binding("qualifying", client_request_id=rid("in progress")),
             "NOT_COMPLETED",
             1,
-            {"analysis_hash": None},
+            {"analysis_hash": None, CROSS: 1},
         )
         self.case(
             "a refusal",
@@ -548,6 +560,36 @@ class Rehearsal:
             and server_version.split()[0] == "17.6"
         )
         return report
+
+    def reused_request_id(self) -> None:
+        """A third credential reuses a bound row's client_request_id: the bound row stays unique
+        under the pair, every fact stays as it was, and only the cross-credential count moves."""
+
+        binding = self.binding("leaked run")
+        before = self.case("one row carries the request id", binding, "OK", 0, {CROSS: 1})
+        self.success(
+            "leaked run, reused by a third credential",
+            credential_id=CRED_C,
+            received="2026-10-05T00:41:00Z",
+            char="8",
+            client_request_id=self.rows["leaked run"]["client_request_id"],
+        )
+        after = self.case(
+            "a third credential reuses the request id: the same bound row, two rows carry it",
+            binding,
+            "OK",
+            0,
+            {CROSS: 2},
+        )
+        changed = sorted(key for key in before if before.get(key) != after.get(key))
+        self.cases.append(
+            {
+                "case": "the reuse changes only the cross-credential count",
+                "expected_reason": [CROSS],
+                "reason": changed,
+                "ok": changed == [CROSS],
+            }
+        )
 
     def least_privilege(self, owner_pass: dict[str, Any]) -> dict[str, Any]:
         """The probe reads exactly the eleven columns: the companion passes as it, with the owner's
@@ -670,12 +712,14 @@ class Rehearsal:
                     "reason",
                     "predictions_rows_for_run_id",
                     "credential_ledger_rows_since_activation",
+                    CROSS,
                 )
             },
             "ok": set(refused.values()) == {"InsufficientPrivilege"}
             and silent["reason"] == "NO_ROW"
             and silent["predictions_rows_for_run_id"] == 0
-            and silent["credential_ledger_rows_since_activation"] == 0,
+            and silent["credential_ledger_rows_since_activation"] == 0
+            and silent[CROSS] == 0,
         }
 
     def read_only(self) -> dict[str, Any]:
