@@ -1382,7 +1382,7 @@ def test_every_surface_defers_to_the_decision_view() -> None:
 
     js = read_frontend("app.js")
     horizon = _function_text(js, "horizonCard")
-    assert "const view = decisionViewOf(payload);" in horizon
+    assert "const view = decisionViewOf(payload);\n  if (view) {\n" in horizon
     assert "...decisionViewRows(payload, view)," in horizon
     assert 'textBlock("p", dataBannerFor(payload), "demo-banner")' in horizon
     assert "dataBannerText(display)" not in horizon

@@ -213,6 +213,17 @@ def test_accepted_states_are_reachable_only_through_their_registries(
     assert claim["accepted_claim"] is True and claim["directional_permission"] is False
 
 
+def test_the_service_names_its_own_methodology(live, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An acceptance made for this methodology applies to this analysis, and to no other."""
+
+    live()
+    key = f"UNCALIBRATED_HEURISTIC_6BAR_OUTCOME:{METHODOLOGY}:1H"
+    monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key}))
+    assert human()["decision_view"]["state"] == "ACCEPTED_FORECAST_CLAIM"
+    monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key + "-next"}))
+    assert human()["decision_view"]["state"] == "NO_ACCEPTED_CLAIM"
+
+
 def test_the_four_states_read_differently() -> None:
     """The owner-task scenarios of plan §23 (UX): each state has its own words."""
 
