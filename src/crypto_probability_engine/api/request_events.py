@@ -6,6 +6,10 @@ response's last byte (background tasks excluded) and a fresh request id, which t
 events share. The F1 automation route is passed through untouched (it keeps its own governed
 ledger). A liveness probe that answers 200, and a static asset that answers below 400, are not
 recorded. Recording never raises and never changes the response.
+
+A POST to one of the two analysis routes also carries the observe-only analysis budget's counts
+(owner ruling DP-C, 2026-10-05): this process's arrivals in the last minute and hour, and whether a
+provisional threshold would have refused this one. Nothing is refused.
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ import uuid
 from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
+from crypto_probability_engine.api import analysis_budget
+from crypto_probability_engine.api.analysis_budget import ANALYSIS_ROUTES, AnalysisBudgetObserver
 from crypto_probability_engine.config.build_info import RELEASE_ID
 from crypto_probability_engine.telemetry.events import CURRENT_REQUEST_ID, TelemetrySink
 
@@ -30,9 +36,15 @@ STATIC_ROUTE = "static"
 
 
 class RequestEventMiddleware:
-    def __init__(self, app: ASGIApp, sink: TelemetrySink) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        sink: TelemetrySink,
+        budget: AnalysisBudgetObserver | None = None,
+    ) -> None:
         self.app = app
         self.sink = sink
+        self.budget = budget
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http" or str(scope.get("path", "")).startswith(AUTOMATION_PREFIX):
@@ -40,6 +52,7 @@ class RequestEventMiddleware:
             return
         started = time.perf_counter()
         request_id = uuid.uuid4().hex[:16]
+        budget = self._observe_budget(scope)
         statuses: list[int] = []
         finished: list[float] = []
 
@@ -62,7 +75,18 @@ class RequestEventMiddleware:
             CURRENT_REQUEST_ID.reset(token)
             ended = finished[0] if finished else time.perf_counter()
             status = statuses[0] if statuses else 500
-            self._record(scope, request_id, status, (ended - started) * 1000, error_class)
+            self._record(scope, request_id, status, (ended - started) * 1000, error_class, budget)
+
+    def _observe_budget(self, scope: Scope) -> dict[str, object]:
+        """The observe-only budget's counts for an analysis request; empty for any other request.
+        It reads only the method and the path, and never raises."""
+
+        try:
+            if scope.get("method") == "POST" and scope.get("path") in ANALYSIS_ROUTES:
+                return (self.budget or analysis_budget.ANALYSIS_BUDGET).observe()
+        except Exception:
+            pass
+        return {}
 
     def _record(
         self,
@@ -71,6 +95,7 @@ class RequestEventMiddleware:
         status: int,
         duration_ms: float,
         error_class: str | None,
+        budget: dict[str, object] | None = None,
     ) -> None:
         try:
             route = _route_template(scope)
@@ -87,6 +112,7 @@ class RequestEventMiddleware:
                     "status": status,
                     "duration_ms": duration_ms,
                     "error_class": error_class,
+                    **(budget or {}),
                 },
             )
         except Exception:

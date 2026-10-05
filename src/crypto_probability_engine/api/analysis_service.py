@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks
 
+from crypto_probability_engine.adapters.http_client import PROVIDER_COALESCING
 from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
     select_market_data,
@@ -84,10 +85,13 @@ from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 from crypto_probability_engine.targets.contract_v1 import stamp_v1
 from crypto_probability_engine.telemetry.events import (
+    CURRENT_PROVIDER_STATS,
     CURRENT_REQUEST_ID,
     CURRENT_STAGE_MS,
+    PROVIDER_FIELDS,
     STAGE_FIELDS,
     emit,
+    new_provider_stats,
 )
 from crypto_probability_engine.validation.market_data import (
     DataValidationError,
@@ -197,19 +201,25 @@ def analyze_request_isolated(
     origin (USER_REQUESTED, CONTROLLED_SMOKE or SCHEDULED_SHADOW_EVIDENCE).
     """
 
-    return _analyze(
-        request,
-        settings=settings,
-        run_store=None,
-        persistence_status=persistence_status,
-        prediction_origin=None,
-        deterministic_identity=False,
-        derivatives_methodology_version=derivatives_methodology_version,
-        methodology_version=methodology_version,
-        pair_context=None,
-        arm=None,
-        record_prediction=False,
-    )
+    # It waits on no other request for its provider data (DP-B's single-flight is the human routes'
+    # only): its provider timing, and so its own deadline, are exactly what they were.
+    coalescing = PROVIDER_COALESCING.set(False)
+    try:
+        return _analyze(
+            request,
+            settings=settings,
+            run_store=None,
+            persistence_status=persistence_status,
+            prediction_origin=None,
+            deterministic_identity=False,
+            derivatives_methodology_version=derivatives_methodology_version,
+            methodology_version=methodology_version,
+            pair_context=None,
+            arm=None,
+            record_prediction=False,
+        )
+    finally:
+        PROVIDER_COALESCING.reset(coalescing)
 
 
 def _analyze(
@@ -227,6 +237,7 @@ def _analyze(
     record_prediction: bool,
 ) -> dict:
     CURRENT_STAGE_MS.set(None)
+    CURRENT_PROVIDER_STATS.set(new_provider_stats())
     if record_prediction:
         if prediction_origin is None or run_store is None:
             raise ValueError("A recorded analysis needs a prediction origin and a run store.")
@@ -927,6 +938,8 @@ def record_analysis_event(payload: dict, *, prediction_origin: str) -> None:
             persistence_status=summary["persistence_status"],
             **{key: value for key, value in (CURRENT_STAGE_MS.get() or {}).items()
                if key in STAGE_FIELDS},
+            **{key: value for key, value in (CURRENT_PROVIDER_STATS.get() or {}).items()
+               if key in PROVIDER_FIELDS},
         )
     except Exception:
         return
