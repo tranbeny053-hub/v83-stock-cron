@@ -202,7 +202,8 @@ def analyze_request_isolated(
     """
 
     # It waits on no other request for its provider data (DP-B's single-flight is the human routes'
-    # only): its provider timing, and so its own deadline, are exactly what they were.
+    # only): its retries, deadline and outcome mapping are its own, as before. Its connections come
+    # from the process's shared pool (usually warm), so its timing is not identical to before.
     coalescing = PROVIDER_COALESCING.set(False)
     try:
         return _analyze(

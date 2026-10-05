@@ -901,3 +901,59 @@ def test_a_response_over_the_bound_is_not_a_deadline_hit(monkeypatch: pytest.Mon
     finally:
         CURRENT_PROVIDER_STATS.reset(token)
     assert stats["provider_deadline_hits"] == 0
+
+
+class _TrackedStream(httpx.SyncByteStream):
+    """A response body that records whether it was closed (so its connection went back)."""
+
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+        self.closed = False
+
+    def __iter__(self) -> Iterator[bytes]:
+        yield self.body
+
+    def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "bound", "late", "raises"),
+    [
+        (200, json.dumps(PAYLOAD).encode(), None, False, None),
+        (500, b'{"error": "upstream"}', None, False, None),
+        (200, b"x" * 128, 64, False, http_client._ResponseBoundExceeded),  # noqa: SLF001
+        (200, json.dumps(PAYLOAD).encode(), None, True, http_client._DeadlineExceeded),  # noqa: SLF001
+    ],
+    ids=["a success", "an error status", "a body over the bound", "a deadline hit mid-read"],
+)
+def test_every_streamed_response_is_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    body: bytes,
+    bound: int | None,
+    late: bool,
+    raises: type[BaseException] | None,
+) -> None:
+    """Review 3 of lane R (NIT, a test gap): _send streams each response over the process's shared
+    pool, so a response it did not close would keep its connection out of the pool; enough of them
+    would exhaust it. Every response is closed, however the read ends. (httpx closes a body read to
+    its end by itself; the explicit close matters when the read is abandoned mid-stream, by the
+    bound or by the deadline, which the last two cases pin.)"""
+
+    if bound is not None:
+        monkeypatch.setattr(http_client, "MAX_RESPONSE_BYTES", bound)
+    stream = _TrackedStream(body)
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, stream=stream))
+    with httpx.Client(transport=transport) as client:
+        request = client.build_request("GET", BASE + PATH)
+        started = http_client.time.monotonic()
+        if late:  # the attempt began longer ago than the deadline: the first chunk trips it
+            started -= http_client.REQUEST_DEADLINE_SECONDS + 1
+        if raises is None:
+            exchange = http_client._send(client, request, attempt_started=started)  # noqa: SLF001
+            assert exchange.status_code == status
+        else:
+            with pytest.raises(raises):
+                http_client._send(client, request, attempt_started=started)  # noqa: SLF001
+    assert stream.closed, "the response's connection must go back to the pool"
