@@ -69,6 +69,17 @@ DATA_COPY = {
     "DEGRADED": "Live data, degraded.",
     "UNAVAILABLE": "Data unavailable.",
 }
+RANGE_MEANING = (
+    "In band: the close at the horizon ends within +/- the decision band of the reference close. "
+    "Up: above it. Down: below it."
+)
+NOT_ASSESSED = (
+    "Not assessed: the data cannot support an assessment, so no range or probability is shown."
+)
+COST_LABEL = (
+    "Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; "
+    "it is also the decision band around the reference close."
+)
 REASON_COPY = {
     "PRIMARY_VENUE_ABSENT": "The configured primary venue failed; another venue served this data.",
     "CROSS_PROVIDER_CONFLICT": "The venues disagree beyond tolerance; one venue served this data.",
@@ -107,6 +118,8 @@ def build_decision_view(
     execution = quant_result.get("execution_realism") or {}
     hold = gate.get("directional_evidence_hold")
     evidence = skill_evidence if isinstance(skill_evidence, Mapping) else {}
+    # Precedence 1: data that cannot support an assessment shows no range or probability at all.
+    assessed = state != "INVALID_OR_UNAVAILABLE_DATA"
     return {
         "schema_version": SCHEMA_VERSION,
         "state": state,
@@ -117,24 +130,19 @@ def build_decision_view(
         "data": data,
         "time": _time(snapshot, timeframe),
         "range": {
+            "assessed": assessed,
             "decision_band_frac": _fraction(execution.get("round_trip_cost_frac")),
-            "in_band_frac": _fraction(horizon.get("p_timeout_frac")),
-            "up_frac": _fraction(horizon.get("p_up_frac")),
-            "down_frac": _fraction(horizon.get("p_down_frac")),
+            "in_band_frac": _fraction(horizon.get("p_timeout_frac")) if assessed else None,
+            "up_frac": _fraction(horizon.get("p_up_frac")) if assessed else None,
+            "down_frac": _fraction(horizon.get("p_down_frac")) if assessed else None,
             "evidence_level": decision_brief.get("probability_type"),
-            "meaning": (
-                "In band: the close at the horizon ends within +/- the decision band of the "
-                "reference close. Up: above it. Down: below it."
-            ),
+            "meaning": RANGE_MEANING if assessed else NOT_ASSESSED,
         },
         "cost": {
             "round_trip_cost_frac": _fraction(execution.get("round_trip_cost_frac")),
             "taker_fee_frac": _fraction(execution.get("taker_fee_frac")),
             "slippage_frac": _fraction(execution.get("slippage_frac")),
-            "label": (
-                "Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the "
-                "reference price; it is also the decision band."
-            ),
+            "label": COST_LABEL,
         },
         "evidence": {
             "model_readiness": decision_brief.get("model_readiness"),
@@ -222,7 +230,10 @@ def _limitations(state: str, hold: bool) -> list[str]:
 
 
 def _hold_active(hold: Any) -> bool:
-    return isinstance(hold, Mapping) and hold.get("active") is True
+    """As the blocking-reason copy reads the hold (detail/frontend_display.py), so the view and the
+    card never disagree on whether it applies."""
+
+    return isinstance(hold, Mapping) and bool(hold.get("active"))
 
 
 def _fraction(value: Any) -> float | None:

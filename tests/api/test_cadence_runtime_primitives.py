@@ -35,7 +35,7 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # sha256:3bed6a3498aef7b10ea213f63ce9f355e1014e46fd075b9c3cb32d254f90e7d4.
 # Nothing in the quant, gate, or probability path changed.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:78bd764ee1e7dcc721b1e3bd40a7be5f39c504201e07ff268ceb70a684639099"
+    "sha256:66a8a4c76e3adfc975f2ac2cedd394ee5f2fedcc3fa64677a8e8ca33b10fb59a"
 )
 # Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
 # a SHA-256 over the canonical JSON of the whole response, so the added
@@ -44,7 +44,7 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # Moved 2026-10-05 for the same reasons as EXPECTED_DEFAULT_ANALYSIS_HASH above. Prior
 # value was 38fff6098e0888427c64e02537f0ef3e09229e30ddf0d65915c582ac2db595bc.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "7e3840eefa89a3b4ff1642eb29100e87b5f239116065d3c96313d478c7c27b6f"
+    "6ccffa4ed7e787098238c98fb3180700a40c84f8a87ceae600244bcb18e6cfad"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

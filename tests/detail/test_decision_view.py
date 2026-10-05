@@ -29,7 +29,7 @@ from crypto_probability_engine.automation.contract import (
     build_radar_evidence,
 )
 from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.detail import decision_view
+from crypto_probability_engine.detail import decision_view, frontend_display
 from crypto_probability_engine.detail.decision_view import STATE_COPY, build_decision_view
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from tests.fixtures.market_data import make_snapshot
@@ -86,6 +86,9 @@ def selection(
 
 
 PRIMARY_ABSENT = {"binance": {"status": "QUARANTINED"}, "okx": {"status": "OK"}}
+PROBABILITIES = {
+    "horizons": {"H_primary": {"p_up_frac": 0.4, "p_down_frac": 0.35, "p_timeout_frac": 0.25}}
+}
 
 
 @pytest.fixture
@@ -145,24 +148,34 @@ def test_valid_data_with_no_accepted_claim() -> None:
 
 
 @pytest.mark.parametrize(
-    ("overrides", "reason"),
+    ("hard_blocks", "provider_state", "reason"),
     [
+        (["PROVIDER_DEGRADED"], None, "PROVIDER_UNAVAILABLE"),
+        (["EPISTEMIC_VOID"], None, "EVIDENCE_VOID"),
         (
-            {"quant_result": {"gate_result": {"hard_blocks": ["PROVIDER_DEGRADED"]}}},
-            "PROVIDER_UNAVAILABLE",
-        ),
-        ({"quant_result": {"gate_result": {"hard_blocks": ["EPISTEMIC_VOID"]}}}, "EVIDENCE_VOID"),
-        (
-            {"provider_state": {"status": "PROVIDER_DEGRADED", "providers": {}}},
+            ["SKILL_NOT_DEMONSTRATED"],
+            {"status": "PROVIDER_DEGRADED", "providers": {}},
             "PROVIDER_UNAVAILABLE",
         ),
     ],
     ids=["provider gate", "evidence void", "provider status"],
 )
-def test_unavailable_data_comes_first(overrides: dict, reason: str) -> None:
-    view = view_for(**overrides)
+def test_unavailable_data_comes_first(
+    hard_blocks: list, provider_state: dict | None, reason: str
+) -> None:
+    quant = {"gate_result": {"hard_blocks": hard_blocks}, "probability_state": PROBABILITIES}
+    overrides = {"provider_state": provider_state} if provider_state is not None else {}
+    view = view_for(quant_result=quant, **overrides)
     assert view["state"] == "INVALID_OR_UNAVAILABLE_DATA"
     assert view["data"] == view["data"] | {"state": "UNAVAILABLE", "reason": reason}
+    # Precedence 1 shows no range or probability, though the analysis computed them.
+    assert view["range"]["assessed"] is False
+    assert [view["range"][key] for key in ("in_band_frac", "up_frac", "down_frac")] == [None] * 3
+    assert view["range"]["meaning"].startswith("Not assessed")
+    # The control: the same probabilities on valid data are shown as the analysis has them.
+    valid = view_for(quant_result={**quant, "gate_result": {"hard_blocks": []}})["range"]
+    assert valid["assessed"] is True
+    assert (valid["in_band_frac"], valid["up_frac"], valid["down_frac"]) == (0.25, 0.4, 0.35)
 
 
 def test_nothing_is_accepted_today() -> None:
@@ -292,6 +305,7 @@ def test_the_view_reads_the_analysis_and_recomputes_nothing(live) -> None:
     view = payload["decision_view"]
     horizon = payload["probability_state"]["horizons"]["H_primary"]
     execution = payload["execution_realism"]
+    assert view["range"]["assessed"] is True
     assert view["range"]["in_band_frac"] == horizon["p_timeout_frac"]
     assert view["range"]["up_frac"] == horizon["p_up_frac"]
     assert view["range"]["down_frac"] == horizon["p_down_frac"]
@@ -356,6 +370,21 @@ def test_the_hold_withholds_the_legacy_verdict() -> None:
     assert evidence["skill_verdict"] is None and evidence["resolved_outcomes"] is None
     assert evidence["directional_evidence_hold"] is True
     assert any("hold is active" in line for line in evidence["limitations"])
+
+
+@pytest.mark.parametrize("active", [True, 1, "yes", False, 0, None, ""])
+def test_the_view_and_the_card_agree_on_the_hold(active: object) -> None:
+    gate = {
+        "hard_blocks": ["SKILL_NOT_DEMONSTRATED"],
+        "directional_evidence_hold": {"active": active, "hold_reason": "H2"},
+    }
+    legacy = {"verdict": "SKILL_DEMONSTRATED", "n": 150, "observed_directional_rate": 0.58}
+    view = view_for(quant_result={"gate_result": gate}, skill_evidence=legacy)
+    (reason,) = frontend_display._blocking_reasons(gate, legacy)  # noqa: SLF001
+    card_holds = reason["headline"] == frontend_display._DIRECTIONAL_EVIDENCE_HOLD_HEADLINE  # noqa: SLF001
+    assert view["evidence"]["directional_evidence_hold"] is card_holds
+    assert (view["evidence"]["skill_verdict"] is None) is card_holds
+    assert card_holds is bool(active)
 
 
 def test_the_human_payload_validates_against_the_schema(live) -> None:

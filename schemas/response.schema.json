@@ -256,6 +256,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
+            "assessed",
             "decision_band_frac",
             "in_band_frac",
             "up_frac",
@@ -264,6 +265,7 @@
             "meaning"
           ],
           "properties": {
+            "assessed": { "type": "boolean" },
             "decision_band_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "in_band_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "up_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },

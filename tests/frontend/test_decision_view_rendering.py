@@ -39,7 +39,7 @@ def _extract_function(source: str, name: str) -> str:
     raise AssertionError(f"Could not extract {name}")
 
 
-def _view() -> dict:
+def _view(hard_blocks: tuple[str, ...] = ("SKILL_NOT_DEMONSTRATED",)) -> dict:
     return build_decision_view(
         timeframe="1H",
         snapshot=make_snapshot(provider="okx", symbol="BTC/USDT", timeframe="1H"),
@@ -50,7 +50,7 @@ def _view() -> dict:
             "providers": {"binance": {"status": "QUARANTINED"}, "okx": {"status": "OK"}},
         },
         quant_result={
-            "gate_result": {"hard_blocks": ["SKILL_NOT_DEMONSTRATED"]},
+            "gate_result": {"hard_blocks": list(hard_blocks)},
             "probability_state": {
                 "horizons": {
                     "H_primary": {"p_up_frac": 0.4, "p_down_frac": 0.35, "p_timeout_frac": 0.25}
@@ -73,7 +73,9 @@ def _view() -> dict:
     )
 
 
-def test_the_rows_a_user_reads() -> None:
+def _render(view: dict) -> tuple[str, list[list[str]]]:
+    """The banner and the rows app.js renders for a view, run under Node."""
+
     assert NODE is not None, "node is required to run the real app.js"
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     functions = "\n".join(
@@ -91,7 +93,7 @@ def test_the_rows_a_user_reads() -> None:
     )
     payload = {
         "normalized_symbol": "BTC/USDT",
-        "decision_view": _view(),
+        "decision_view": view,
         "frontend_display": {
             "disposition": "NO_TRADE",
             "model_readiness_label": "Model readiness: Heuristic (uncalibrated)",
@@ -108,15 +110,20 @@ console.log(JSON.stringify({{banner, rows: decisionViewRows(payload, view)}}));
         [NODE, "-e", script], capture_output=True, text=True, check=True, timeout=30
     )
     rendered = json.loads(done.stdout)
-    rows = dict(rendered["rows"])
-    assert [label for label, _ in rendered["rows"]][:5] == [
+    return rendered["banner"], rendered["rows"]
+
+
+def test_the_rows_a_user_reads() -> None:
+    banner, ordered = _render(_view())
+    rows = dict(ordered)
+    assert [label for label, _ in ordered][:5] == [
         "Asset · venue",
         "Reference close (UTC)",
         "Horizon end (UTC)",
         "Data",
         "Saved",
     ]
-    assert rendered["banner"] == "DEGRADED DATA - OKX_PUBLIC"
+    assert banner == "DEGRADED DATA - OKX_PUBLIC"
     assert rows["Data"].startswith("DEGRADED: Live data, degraded. The configured primary venue")
     assert rows["Asset · venue"] == "BTC/USDT · okx"
     assert rows["In band (inside the decision band)"] == "25.00% (band ±0.36%)"
@@ -125,3 +132,13 @@ console.log(JSON.stringify({{banner, rows: decisionViewRows(payload, view)}}));
     assert rows["Evidence"] == "INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE"
     assert rows["Gate disposition (not a market call)"] == "NO_TRADE"
     assert rows["Reference close (UTC)"].endswith("Z") and rows["Horizon end (UTC)"].endswith("Z")
+
+
+def test_unavailable_data_shows_no_percentages() -> None:
+    banner, ordered = _render(_view(hard_blocks=("PROVIDER_DEGRADED",)))
+    rows = dict(ordered)
+    assert banner == "DATA UNAVAILABLE - OKX_PUBLIC"
+    assert rows["Data"].startswith("UNAVAILABLE: Data unavailable.")
+    assert rows["In band (inside the decision band)"].startswith("Not assessed")
+    assert rows["Up (above the band)"] == rows["Down (below the band)"] == "Not assessed"
+    assert "%" not in "".join(rows[key] for key in rows if key != "Round-trip cost")

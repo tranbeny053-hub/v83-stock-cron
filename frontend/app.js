@@ -446,6 +446,7 @@ function decisionViewRows(payload, view) {
   const time = view.time || {};
   const range = view.range || {};
   const cost = view.cost || {};
+  const notAssessed = range.assessed === false;
   return [
     ["Asset · venue", `${payload.normalized_symbol} · ${data.venue || data.data_source || "n/a"}`],
     ["Reference close (UTC)", time.reference_close_utc || time.as_of_utc || "n/a"],
@@ -459,10 +460,12 @@ function decisionViewRows(payload, view) {
     ],
     [
       "In band (inside the decision band)",
-      `${formatFractionPct(range.in_band_frac)} (band ±${formatFractionPct(range.decision_band_frac)})`,
+      notAssessed
+        ? "Not assessed (the data cannot support an assessment)"
+        : `${formatFractionPct(range.in_band_frac)} (band ±${formatFractionPct(range.decision_band_frac)})`,
     ],
-    ["Up (above the band)", formatFractionPct(range.up_frac)],
-    ["Down (below the band)", formatFractionPct(range.down_frac)],
+    ["Up (above the band)", notAssessed ? "Not assessed" : formatFractionPct(range.up_frac)],
+    ["Down (below the band)", notAssessed ? "Not assessed" : formatFractionPct(range.down_frac)],
     ["Evidence level", display.model_readiness_label || range.evidence_level || "n/a"],
     ["Round-trip cost", formatFractionPct(cost.round_trip_cost_frac)],
     ["Evidence", decisionEvidenceText(view.evidence)],
