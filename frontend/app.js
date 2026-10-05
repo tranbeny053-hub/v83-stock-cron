@@ -413,12 +413,20 @@ function firstReason(payload) {
 const NOT_ASSESSED_TEXT = "Not assessed (the data cannot support an assessment)";
 const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 
-// Where the gates' legacy decision shows beside a view, it is framed as what it is.
+// The gates' legacy decision is framed as what it is, always: with a view (live analysis) or
+// without one (a run reopened from history, whose detail payload carries no view). A gate outcome
+// is never a market call, so the no-view note says exactly that and claims nothing it cannot know.
 function gateFramingNote(view) {
-  return view.accepted_claim
-    ? "The gates' disposition: hard gates outrank everything shown."
-    : "The gates' disposition, not a market call: with no accepted forecast it is no reason " +
-        "to act or to avoid acting.";
+  if (view && view.accepted_claim) {
+    return "The gates' disposition: hard gates outrank everything shown.";
+  }
+  if (view) {
+    return (
+      "The gates' disposition, not a market call: with no accepted forecast it is no reason " +
+      "to act or to avoid acting."
+    );
+  }
+  return "The gates' disposition, not a market call: a gate outcome is not a forecast to act on.";
 }
 
 function decisionViewOf(payload) {
@@ -1437,11 +1445,7 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   const headingGroup = document.createElement("div");
   const view = decisionViewOf(payload);
   headingGroup.append(
-    textBlock(
-      "p",
-      view ? "Gate disposition (not a market call)" : "Backend final decision",
-      "decision-eyebrow",
-    ),
+    textBlock("p", "Gate disposition (not a market call)", "decision-eyebrow"),
   );
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
   const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
@@ -1455,9 +1459,7 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   );
   card.append(header);
 
-  if (view) {
-    card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));
-  }
+  card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));
   if (backendText(decision.plain_english)) {
     card.append(textBlock("p", decision.plain_english, "decision-lead"));
   }
@@ -2155,12 +2157,17 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   const available =
     synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
   if (!available) {
-    return section("Decision", [
-      textBlock("p", "Decision synthesis unavailable for this run.", "decision-warning"),
+    return section("Gate brief (not a market call)", [
+      textBlock(
+        "p",
+        "No decision synthesis for this run; the existing gate brief is shown.",
+        "decision-warning",
+      ),
+      textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),
       keyValueTable([
-        ["Existing brief action", decisionBrief.action],
-        ["Existing brief summary", decisionBrief.state_summary],
-        ["Existing brief risk note", decisionBrief.risk_note],
+        ["Gate disposition", decisionBrief.action],
+        ["Gate brief summary", decisionBrief.state_summary],
+        ["Gate brief risk note", decisionBrief.risk_note],
       ]),
       renderTradePlanSkeleton({}),
     ]);
@@ -2207,10 +2214,10 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
         })
         .filter(Boolean)
     : [];
-  return section(view ? "Gate brief (not a market call)" : "Decision Brief", [
-    ...(view ? [textBlock("p", gateFramingNote(view), "decision-safety-note")] : []),
+  return section("Gate brief (not a market call)", [
+    textBlock("p", gateFramingNote(view), "decision-safety-note"),
     keyValueTable([
-      [view ? "Gate disposition" : "Action", brief.action],
+      ["Gate disposition", brief.action],
       ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
       ["Model readiness", modelReadinessCopy],
       ["Calibration", brief.calibration_status],

@@ -309,7 +309,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         "Market Data Quality",
         "Provider State",
         "Market Data v2 / Provider Observability",
-        "Decision Brief",
+        "Gate brief (not a market call)",
         "Quant Signals",
         "News Add-on",
         "News Authority / Macro & Micro Context",
@@ -419,7 +419,7 @@ def test_frontend_contains_no_unsafe_decision_wording() -> None:
 
 def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() -> None:
     js = read_frontend("app.js")
-    assert "Decision synthesis unavailable for this run." in js
+    assert "No decision synthesis for this run; the existing gate brief is shown." in js
     assert "decisionBrief.action" in js
     assert "decisionBrief.state_summary" in js
     assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
@@ -1406,19 +1406,32 @@ def test_every_surface_defers_to_the_decision_view() -> None:
     assert outside + "probability)]" in js
 
 
-def test_the_legacy_decision_is_framed_as_the_gates_beside_a_view() -> None:
-    """Review 2 of lane P, finding 2: missing evidence never reads as a negative call. Beside a
-    view, the detail's legacy decision card and brief say they are the gates' disposition."""
+def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> None:
+    """Review 3 of lane P, finding 2 (3rd occurrence of the class; owner-authorized third repair):
+    missing evidence never reads as a negative call, including on a run reopened from history whose
+    detail payload carries no view. The legacy decision card, brief and the unavailable fallback
+    say they are the gates' disposition, not a market call, unconditionally."""
 
     js = read_frontend("app.js")
     card = _function_text(js, "renderFinalDecisionCard")
-    assert 'view ? "Gate disposition (not a market call)" : "Backend final decision"' in card
+    assert 'textBlock("p", "Gate disposition (not a market call)", "decision-eyebrow")' in card
+    assert "Backend final decision" not in card
     assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
     brief = _function_text(js, "renderDecisionBrief")
-    assert 'section(view ? "Gate brief (not a market call)" : "Decision Brief", [' in brief
-    assert '[view ? "Gate disposition" : "Action", brief.action],' in brief
-    assert "renderFinalDecisionCard(synthesis, payload)," in _function_text(
-        js, "renderDecisionSynthesis"
+    assert 'section("Gate brief (not a market call)", [' in brief
+    assert 'textBlock("p", gateFramingNote(view), "decision-safety-note"),' in brief
+    assert '["Gate disposition", brief.action],' in brief
+    assert '"Decision Brief"' not in brief and '"Action"' not in brief
+    synthesis = _function_text(js, "renderDecisionSynthesis")
+    assert 'section("Gate brief (not a market call)", [' in synthesis
+    assert 'textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),' in (
+        synthesis
     )
+    assert '["Gate disposition", decisionBrief.action],' in synthesis
+    assert "Existing brief action" not in synthesis and '"Decision synthesis unavailable' not in js
+    assert "renderFinalDecisionCard(synthesis, payload)," in synthesis
+    # The no-view note is true unconditionally: a gate outcome is never a forecast.
+    note = _function_text(js, "gateFramingNote")
+    assert "a gate outcome is not a forecast to act on" in note
     detail = _function_text(js, "renderStructuredDetail")
     assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail
