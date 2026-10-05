@@ -1,6 +1,82 @@
 # STATE
 
-Updated: 2026-10-05 (**THE CARD-04 COMPANION IS PREPARED AND VERIFIED LOCALLY**, with the owner's cross-credential
+Updated: 2026-10-05 (**THE CARD-04 COMPANION IS PUBLISHED** under the owner's T3: #230 merged as 267a6eaf, a merge
+commit on the exact head 93ab50de; this record is the batch's last PR. **The owner ruled Phase 7/8 (DP-A to DP-F)**, and
+Claude runs Lane P and Lane R locally under those rulings, unpublished. MODEL SUBSTITUTION: Codex is unavailable, so
+Claude implements, tests and reviews directly).
+**Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-05), verbatim. First, the T3:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Codex remains unavailable.
+T3 AUTHORIZE A4C-PUBLISH exactly as prepared:
+
+* `feat/a4-card04-companion@93ab50dea783724c0db9fbdbeccc4d44bafb77f9`
+* artifact `ucpe.a4_card04_companion.v1`
+* SHA256 `0b3cbb753210833d6776cab921fc6f2fa07ec89489ea150be28e2b77adddb646`
+* STATE branch currently `chore/state-a4-card04-companion@2ac100e2392f015a55a491742d82596bd38a9196`.
+
+Publish the lane, verify exact head/file set, required CI including PostgreSQL 17.6 rehearsal, and merge with MERGE COMMIT ONLY if every gate is green. No squash/rebase. Then refresh the STATE record onto resulting main, record exact merge/run identities, verify, publish and merge STATE LAST. Stop on SHA/diff/conflict/red-CI mismatch.
+IMPORTANT: UOR is only one lane. Do NOT idle or focus exclusively on UOR while its PR/CI runs.
+In parallel, use one separate worktree as lane 2 and re-read canonical STATE + governing Phase 0–8 plan from current main. Select and exhaust the highest-value genuinely dependency-safe reversible UCPE T0/T1/T2 work that is independent of A4C/UOR/STATE/shared live surfaces. Claude owns repo search, implementation, tests, debugging and review directly.
+Priority is actual UCPE product/engineering progress, not UOR support. Prefer Phase-7/Phase-8 work that improves product value, reliability, recovery, maintainability or measured performance without needing an unresolved owner ruling or manufactured traffic. Do not spend effort on further pytest speed-up or historical archival while higher-value safe product work exists.
+Max 2 proven-independent lanes total. Keep shared surfaces serial. Lane 2 remains local-only unless separately authorized for T3; do not mix its unmerged state into the A4C STATE publication.
+If no genuine implementation lane is currently executable because every remaining item depends on natural evidence or owner product/methodology rulings, do NOT invent busywork. Instead, while A4C CI runs, produce one consolidated owner-decision package that resolves the minimum set of Phase-7/8 blockers needed to unlock the largest amount of next implementation work, with recommended options and consequences. Batch those decisions rather than returning one at a time.
+After A4C + STATE publication finishes, immediately continue lane 2 or the first newly-unblocked safe UCPE work. Do not return merely because the UOR artifact merged.
+Preserve unchanged: Phase-4 INFEASIBLE; D4 consumed; F3 KEEP_UNSPENT; H2 hold; UX-1/Q1 and B5 unless explicitly ruled; evidence-origin semantics; no manufactured USER_REQUESTED traffic.
+No production A4/A4C query, HF deploy, DB mutation, secret operation, F3/protected access or T4 is authorized here.
+Return only at the next genuine owner/product/methodology/T3/T4/secret/protected-evidence boundary, with all dependency-safe UCPE work exhausted and one batched owner action.
+```
+  **Then, in Manual mode, the continuation and the Phase-7/8 rulings:**
+```text
+A4C continue — Manual mode. Complete the already-authorized T3 exactly: open the PR from `feat/a4-card04-companion@93ab50dea783724c0db9fbdbeccc4d44bafb77f9`, verify exact head/diff and all required CI including PG17.6, merge by merge commit only if green, then refresh/publish/merge the STATE PR last. Stop on any drift/red check; no production A4/A4C query.
+
+Owner Phase-7/8 rulings:
+DP-A=2.
+DP-B=2 NARROW: allow app-lifetime pooled clients, exact identical in-flight single-flight/coalescing, and passive deadline/latency measurement only. Preserve current provider request/retry/error/freshness semantics exactly. NO new retries, retry-policy change, negative/failure cache, candle/data cache or freshness-changing cache until natural baseline evidence.
+DP-C=2: observe-only measurement only; refuse nobody, change no response/payload, record no user/session identifier.
+DP-D=2: structure-first. Build/rehearse all safe local restore tooling and prepare the exact minimum owner export card, but do not access/export production schema or roles until the next genuine owner boundary.
+DP-E=1: retain named per-change §2.6 crossings.
+DP-F=2: bundle locally with DP-A, human-route only. `radar_evidence.v1` and AUTOMATED_RADAR semantics/values must remain byte/semantic compatible until a separately governed UOR contract revision; if clean separation is impossible, HOLD rather than alter UOR evidence.
+
+Execution: after A4C publication, continue continuously. Max 2 proven-independent implementation lanes:
+Lane P = DP-A + DP-F product work.
+Lane R = narrowed DP-B + DP-C runtime/measurement work.
+Use separate worktrees; shared surfaces serial. Claude implements/tests/debugs/reviews directly; no Codex. Exhaust all dependency-safe T0/T1/T2 work, mutation/adversarial tests, full gates and fresh reviews. Prepare DP-D tooling after capacity frees.
+
+DP-A product work stays LOCAL ONLY: do not publish/release regenerated UOR examples, analysis-hash goldens, UX-1, DecisionView or B5 changes until the UOR qualification episode closes or I explicitly authorize that publication. Lane R publication also remains a new T3 boundary.
+
+Preserve Phase-4 INFEASIBLE, D4 consumed, F3 KEEP_UNSPENT, H2 hold and evidence-origin semantics. No manufactured USER_REQUESTED traffic, production deploy, DB mutation, secret action, F3/§5A access or new T4.
+
+Do not return on routine milestones. Return only after all safe work under these rulings is exhausted, with one batched next owner boundary.
+```
+- **The publication** (the owner's T3 A4C-PUBLISH, consumed):
+  - Checked before the push: origin/main fc03be8e unchanged; the lane exactly 93ab50de (15 files); STATE 2ac100e2.
+  - The lane branch was pushed at 93ab50de. Auto refused `gh pr create` ([Data Exfiltration]); after the owner switched
+    to Manual mode, #230 was opened with the same title and body.
+  - The PR's checks on 93ab50de, all green, and its file set equal to the reviewed lane's:
+    - CI 37269416943 (test);
+    - the companion rehearsal 37269417063 (rehearse): A4C_REHEARSAL=PASS on server 17.6, the card's python -I -B
+      command ok;
+    - the reproducible build 37269416910 (build-a, build-b, compare).
+  - Merged at 06:19:38Z as **267a6eaf** with --match-head-commit: a merge commit (parents fc03be8e and 93ab50de) whose
+    tree equals the lane head's. SOURCE_COMMIT d263c090 is reachable from main; MANIFEST.json on main hashes to
+    0b3cbb75….
+  - Main 267a6eaf: push CI 37271854804 and the reproducible build 37271854824, both success.
+- **The UOR side is the owner's:** carry UOR_HANDOFF §14 and §15 (and this record's final values) to UOR. Running either A4
+  artifact against production stays a future owner decision at the UOR episode.
+- **Lane 2, before the rulings:** no Phase-7/8 implementation lane was executable without a ruling or natural evidence.
+  The owner-decision package (.work/roadmap/phase7/P7_P8_DECISION_PACKAGE_2026-10-05.md) led to the rulings above.
+- **Next, locally, and not part of this record's publication:**
+  - Lane P (DP-A + DP-F): UX-1, DecisionView and the human-route DEGRADED;
+  - Lane R (DP-B as narrowed + DP-C): the pooled transport, identical in-flight single-flight, passive measurement and the
+    observe-only budget counter;
+  - then DP-D's local restore tooling and the owner export card.
+
+  Lane P stays local until the UOR qualification episode closes or the owner authorizes its publication. Lane R's
+  publication is a new T3.
+- **Unchanged:** Phase 4 INFEASIBLE; D4 consumed; F3 KEEP_UNSPENT; the H2 hold; evidence-origin semantics; no
+  manufactured USER_REQUESTED traffic; no production query, deploy, database write, secret or §5A access.
+Previously (**THE CARD-04 COMPANION IS PREPARED AND VERIFIED LOCALLY**, with the owner's cross-credential
 count and the owner-authorized third repair, and the A4 handoff's two documentation defects are corrected. Both wait
 only on the owner's T3. MODEL SUBSTITUTION: Codex is unavailable, so Claude implemented, tested and reviewed directly).
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
@@ -2184,7 +2260,11 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-05): the Card-04 companion (ucpe.a4_card04_companion.v1) and the A4
+LOOP_STATE=IN PROGRESS (2026-10-05): the Card-04 companion is PUBLISHED (#230 → main 267a6eaf; this record
+  last). Claude continues Lane P and Lane R locally under the owner's Phase-7/8 rulings (DP-A to DP-F), then
+  DP-D's local tooling. Each publication is a new owner T3; Lane P also waits for the UOR qualification
+  episode's close or the owner's authorization.
+  Before it: AT THE OWNER (2026-10-05): the Card-04 companion (ucpe.a4_card04_companion.v1) and the A4
   handoff's two documentation corrections are PREPARED AND VERIFIED LOCALLY on feat/a4-card04-companion @ 93ab50de,
   with the owner's cross-credential count (A4-CRID-UNIQUENESS) and the owner-authorized third repair; 4f3f00cd
   and 0652c431 are superseded. The fresh review of the exact head: PASS. The one owner action is the T3.
@@ -3917,7 +3997,9 @@ LOOP_STATE=AT THE OWNER (2026-10-05): the Card-04 companion (ucpe.a4_card04_comp
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / UOR CARD 04 (2026-10-05): the Card-04 companion, with the cross-credential
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7 LANES (2026-10-05): the Card-04 companion is published (main
+  267a6eaf, #230). Phase 7/8 proceeds under the owner's rulings DP-A to DP-F, with Lane P and Lane R local.
+  Before it: POST-PHASE-4 / UOR CARD 04 (2026-10-05): the Card-04 companion, with the cross-credential
   count and the third repair, is prepared and verified locally (0b3cbb75...); the A4 component is unchanged
   (2007fa28...), its handoff corrected.
   Before it: POST-PHASE-4 (2026-10-04): lane A, lane B and the UOR A4 upstream artifact are MERGED
@@ -4091,7 +4173,9 @@ CURRENT_MILESTONE=POST-PHASE-4 / UOR CARD 04 (2026-10-05): the Card-04 companion
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-a4-card04-companion (this record, on main fc03be8e) and feat/a4-card04-companion @
+CURRENT_BRANCH=chore/state-a4-card04-companion (this record, merged with main 267a6eaf). Local and unpublished:
+  feat/p7r-provider-pool-singleflight (Lane R, worktree scratchpad/wtR of session ba4955d3) and Lane P's branch.
+  Before it: chore/state-a4-card04-companion (this record, on main fc03be8e) and feat/a4-card04-companion @
   93ab50de (e882d81, 66133c5, db176ec, 116b68c, 4edd6e4, 4f3f00c, 13d3b16, 0652c43, d263c09, 93ab50d;
   worktree scratchpad/wt of session ba4955d3).
   Before it: chore/state-phase4-infeasible (this record, rebuilt on main e468f1f1 by a merge that keeps
@@ -4222,7 +4306,9 @@ CURRENT_BRANCH=chore/state-a4-card04-companion (this record, on main fc03be8e) a
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=fc03be8e (main, #229: the STATE record; push CI 37215106950 and the reproducible build green).
+LAST_GREEN_SHA=267a6eaf (main, #230: the Card-04 companion; push CI 37271854804 and the reproducible build
+  37271854824 green).
+  Before it: fc03be8e (main, #229: the STATE record; push CI 37215106950 and the reproducible build green).
   Before it: e468f1f1 (main, #228: the A4 artifact; push CI green).
   Before it: 7a5ca4f9 (main, #225: the R4-C1 identity and the Phase 4 record).
   Before it: c10af044 (main, #224: Phase 3 closed).
@@ -4452,7 +4538,9 @@ LAST_GREEN_SHA=fc03be8e (main, #229: the STATE record; push CI 37215106950 and t
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-05 on feat/a4-card04-companion @ 93ab50d, bytecode on: ruff ok | 6376 passed |
+LAST_VERIFY=PASS 2026-10-05 on this record's PR tree (main 267a6eaf plus STATE.md; the exact line is in the PR
+  body).
+  Before it: PASS 2026-10-05 on feat/a4-card04-companion @ 93ab50d, bytecode on: ruff ok | 6376 passed |
   schemas+smoke ok | scanners 3/3; the scratch-PostgreSQL 17.6 rehearsal A4C_REHEARSAL=PASS (39 cases and the
   card's python -I -B command). Before it: PASS on 0652c43 (6332; 38 cases) and 4f3f00c (6314; 35 cases),
   both superseded.
@@ -4736,7 +4824,12 @@ CODEX_PENDING=NONE (2026-10-05). Codex remains unavailable (owner): Claude imple
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=ONE BATCHED OWNER ACTION (2026-10-05), T3: publish feat/a4-card04-companion @ 93ab50de (PR,
+OWNER_BOUNDARY=Nothing is pending from the A4C batch (2026-10-05). Ahead, each the owner's:
+  - Lane R's publication (a new T3, when ready);
+  - Lane P's publication, after the UOR qualification episode closes or on the owner's explicit authorization;
+  - DP-D's export, structure only, a future owner action;
+  - the writer JWT renewal, by 2026-10-30.
+  Before it: ONE BATCHED OWNER ACTION (2026-10-05), T3: publish feat/a4-card04-companion @ 93ab50de (PR,
   required CI, merge commit), then this STATE record last. Running either A4 artifact against production stays a
   future owner decision at the UOR episode.
   Before it: Nothing is pending from the batch.
@@ -5368,7 +5461,10 @@ OWNER_BOUNDARY=ONE BATCHED OWNER ACTION (2026-10-05), T3: publish feat/a4-card04
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the T3 batch above. Claude after it: exact-head and file-set checks, CI reads (including
+NEXT_ACTION=Claude: Lane R and Lane P locally under DP-A to DP-F (tests, mutation, full gates, fresh reviews),
+  then DP-D's local restore tooling and the owner export card. Return at the next genuine owner boundary with
+  one batched action. The owner: carry UOR_HANDOFF §14 and §15 to UOR when ready.
+  Before it: The owner: the T3 batch above. Claude after it: exact-head and file-set checks, CI reads (including
   the companion's rehearsal on PostgreSQL 17.6), the merge commit, then this record refreshed onto the resulting
   main with the merge and run ids, published last. The owner: carry UOR_HANDOFF §14 and §15 to UOR when ready.
   Before it: Claude: the remaining dependency-safe local lanes (each new pull request is a new owner T3 batch);
