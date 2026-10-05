@@ -87,3 +87,19 @@ def test_the_app_closes_the_provider_pool_once_at_shutdown(monkeypatch: pytest.M
         client.get("/v1/build-info")
         assert closed == []
     assert closed == [1]
+
+
+def test_the_pool_closes_even_when_a_repository_fails_to(monkeypatch: pytest.MonkeyPatch) -> None:
+    from crypto_probability_engine.api import app as app_module
+
+    class FailingRepository:
+        def close(self) -> None:
+            raise RuntimeError("the repository could not close")
+
+    closed: list[int] = []
+    monkeypatch.setattr(app_module, "close_pool", lambda: closed.append(1))
+    monkeypatch.setattr(app_module, "build_persistence_repository", lambda _: FailingRepository())
+    with pytest.raises(RuntimeError, match="could not close"):
+        with TestClient(create_app(Settings(data_mode="fixture"))) as client:
+            client.get("/v1/build-info")
+    assert closed == [1]

@@ -5,6 +5,9 @@ hour, and says whether a provisional threshold would have refused one. It refuse
 response or payload, and records no user, session, operator, client or request identity: two counts
 and a yes/no travel on that request's own http_request event, nothing else. The thresholds are
 provisional, for the yes/no only; the owner sets real ones from these counts (P7-1).
+
+What it counts is arrivals: every POST to either route counts once, before any check, so a request
+later refused (401, 403, 413, 422) counts too, and a batch of several analyses counts as one.
 """
 
 from __future__ import annotations

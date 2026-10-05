@@ -6,17 +6,20 @@ These tests prove that:
 - the pool is shared, while cookies and rate limits stay each client's own;
 - identical requests in flight make one exchange, and any difference (query, header, cookie,
   timeout) makes its own;
-- a response that sets a cookie, and an unexpected failure, are never shared;
-- a shared timeout or transport failure maps exactly as the caller's own would, and each caller
-  keeps its own attempts and rate-limit history;
+- only a success is shared: no failure of any kind, and no response that sets a cookie, is passed
+  on; a follower then sends its own request, keeps its own attempts and rate-limit history, and
+  answers exactly as it would have alone;
+- a follower keeps its own deadline: it waits no longer than its own deadline, its own request gets
+  a fresh one, and the first request's deadline is never its result;
 - the pooled path answers byte for byte like the unpooled one, for every outcome;
-- an injected client is never pooled or coalesced;
+- an injected client, and any client where httpx would mount a proxy, is never pooled or coalesced;
 - closing a client leaves the pool open, and only close_pool closes it;
 - the passive measurement counts and changes nothing.
 """
 
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -35,8 +38,13 @@ PAYLOAD = [[1, "2", "3"]]
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
+REAL_ENVIRONMENT_PROXIES = http_client._environment_proxies
+
+
 @pytest.fixture(autouse=True)
-def fresh_pool() -> Iterator[None]:
+def fresh_pool(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    # No proxy, whatever this machine's settings: the proxy tests below set their own.
+    monkeypatch.setattr(http_client, "_environment_proxies", lambda: {})
     http_client.close_pool()
     yield
     http_client.close_pool()
@@ -163,6 +171,46 @@ def ok_json(payload: Any = PAYLOAD, **kwargs: Any) -> httpx.Response:
     return httpx.Response(200, json=payload, **kwargs)
 
 
+class FakeTime:
+    """The client's clock, moved only by the test: monotonic and perf_counter move together."""
+
+    def __init__(self) -> None:
+        self.now = 1_000.0
+        self.lock = threading.Lock()
+
+    def monotonic(self) -> float:
+        with self.lock:
+            return self.now
+
+    perf_counter = monotonic
+
+    def advance(self, seconds: float) -> None:
+        with self.lock:
+            self.now += seconds
+
+
+def lead_then_follow(
+    leader: PublicHttpClient, follower: PublicHttpClient, *, joined: Callable[[], None]
+) -> dict[str, tuple[Any, ...]]:
+    """The leader's request goes in flight first (its handler must set ``in_flight`` and hold on a
+    Gate of one follower); then ``joined`` runs and the follower sends the identical request."""
+
+    results: dict[str, tuple[Any, ...]] = {}
+    thread = threading.Thread(target=lambda: results.update(leader=outcome(lambda: get(leader))))
+    thread.start()
+    assert IN_FLIGHT.wait(5)
+    joined()
+    results["follower"] = outcome(lambda: get(follower))
+    thread.join(10)
+    return results
+
+
+IN_FLIGHT = threading.Event()
+TIMED_OUT = ("error", "PROVIDER_DEGRADED", "Provider public request timed out.", "binance") + (
+    None,
+) * 5
+
+
 # --------------------------------------------------------------------------- the shared pool
 def test_pooled_clients_share_one_pool_but_keep_their_own_cookies(
     monkeypatch: pytest.MonkeyPatch,
@@ -254,9 +302,16 @@ def test_identical_requests_in_flight_make_one_exchange(monkeypatch: pytest.Monk
 
     seen = install(monkeypatch, handler)
     clients = [pooled() for _ in range(4)]
-    results = run_together(4, lambda index: get(clients[index]))
+    stats = [new_provider_stats() for _ in range(4)]
+
+    def target(index: int) -> Any:
+        CURRENT_PROVIDER_STATS.set(stats[index])
+        return get(clients[index])
+
+    results = run_together(4, target)
     assert results == [("ok", PAYLOAD)] * 4
     assert len(seen) == 1
+    assert sorted(item["provider_coalesced"] for item in stats) == [0, 1, 1, 1]
 
 
 @pytest.mark.parametrize(
@@ -317,42 +372,58 @@ def test_a_response_that_sets_a_cookie_is_never_shared(monkeypatch: pytest.Monke
     assert all(client.client.cookies.get("venue") == "a" for client in clients if client.client)
 
 
-@pytest.mark.parametrize(
-    ("failure", "message"),
-    [
-        (httpx.ReadTimeout, "Provider public request timed out."),
-        (httpx.ConnectError, "Provider public request failed."),
-    ],
-    ids=["timeout", "transport"],
-)
-def test_a_shared_failure_maps_exactly_as_the_callers_own(
-    monkeypatch: pytest.MonkeyPatch, failure: type[httpx.HTTPError], message: str
-) -> None:
+def _raise(failure: type[httpx.HTTPError]) -> Handler:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise failure("upstream failed", request=request)
+
+    return handler
+
+
+FAILURES: dict[str, Handler] = {
+    "timeout": _raise(httpx.ReadTimeout),
+    "transport": _raise(httpx.ConnectError),
+    "oversized": lambda request: httpx.Response(200, content=b"[" + b"1," * 40 + b"1]"),
+    "server error": lambda request: httpx.Response(503, json={"code": "busy"}),
+    "rate limited": lambda request: httpx.Response(429, headers={"Retry-After": "3"}),
+    "symbol rejected": lambda request: httpx.Response(404, json={"code": -1121}),
+    "malformed json": lambda request: httpx.Response(200, content=b"{not json"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(FAILURES))
+def test_no_failure_is_ever_shared(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    """Every follower of a failed exchange sends its own request and answers exactly as it would
+    have alone; nothing it did not see itself is passed on."""
+
+    failing = FAILURES[name]
+    monkeypatch.setattr(http_client, "MAX_RESPONSE_BYTES", 64)
     gate = Gate(followers=2)
     gate.install(monkeypatch)
+    first = threading.Event()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        gate.hold()
-        raise failure("upstream failed", request=request)
+        if not first.is_set():
+            first.set()
+            gate.hold()
+        return failing(request)
 
     seen = install(monkeypatch, handler)
     clients = [pooled() for _ in range(3)]
-    results = run_together(3, lambda index: get(clients[index]))
-    reference = outcome(
-        lambda: get(
-            injected(
-                lambda request: (_ for _ in ()).throw(failure("upstream failed", request=request))
-            )
-        )
-    )
-    assert reference[2] == message
-    assert results == [reference] * 3
-    assert len(seen) == 1
+    stats = [new_provider_stats() for _ in range(3)]
+
+    def target(index: int) -> Any:
+        CURRENT_PROVIDER_STATS.set(stats[index])
+        return get(clients[index])
+
+    results = run_together(3, target)
+    alone = outcome(lambda: get(injected(failing)))
+    assert alone[0] == "error"
+    assert results == [alone] * 3
+    assert len(seen) == 3, "each follower sent its own request"
+    assert [item["provider_coalesced"] for item in stats] == [0, 0, 0]
 
 
-def test_each_caller_keeps_its_own_attempts_after_a_shared_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_a_follower_of_a_failure_keeps_its_own_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
     gate = Gate(followers=1)
     gate.install(monkeypatch)
     failed = threading.Event()
@@ -364,7 +435,7 @@ def test_each_caller_keeps_its_own_attempts_after_a_shared_failure(
             return httpx.Response(503, json={"code": "busy"})
         return ok_json()
 
-    install(monkeypatch, handler)
+    seen = install(monkeypatch, handler)
     clients = [pooled(max_retries=1), pooled(max_retries=1)]
     stats = [new_provider_stats(), new_provider_stats()]
 
@@ -374,10 +445,93 @@ def test_each_caller_keeps_its_own_attempts_after_a_shared_failure(
 
     results = run_together(2, target)
     assert results == [("ok", PAYLOAD)] * 2
-    hits = [len(client._hits_by_host["data-api.binance.vision"]) for client in clients]
-    assert hits == [2, 2], "each caller checked its own rate limit on both of its attempts"
-    assert [item["provider_retries"] for item in stats] == [1, 1]
-    assert sum(item["provider_coalesced"] for item in stats) >= 1
+    # Whichever led met the 503 and retried; the follower's own request succeeded at once.
+    hits = sorted(len(client._hits_by_host["data-api.binance.vision"]) for client in clients)
+    assert hits == [1, 2], "each caller checked its own rate limit on each of its own attempts"
+    assert sorted(item["provider_retries"] for item in stats) == [0, 1]
+    assert [item["provider_coalesced"] for item in stats] == [0, 0]
+    assert len(seen) == 3
+
+
+def test_a_follower_sending_its_own_request_gets_a_fresh_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A venue that sets a cookie on every response and answers in six seconds; the follower joins
+    one second later. Alone, each succeeds in six seconds; so must both here."""
+
+    clock = FakeTime()
+    monkeypatch.setattr(http_client, "time", clock)
+    gate = Gate(followers=1)
+    gate.install(monkeypatch)
+    IN_FLIGHT.clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not IN_FLIGHT.is_set():
+            IN_FLIGHT.set()
+            gate.hold()
+        clock.advance(6.0)
+        return ok_json(headers={"Set-Cookie": "venue=a; Path=/"})
+
+    seen = install(monkeypatch, handler)
+    results = lead_then_follow(pooled(), pooled(), joined=lambda: clock.advance(1.0))
+    assert results == {"leader": ("ok", PAYLOAD), "follower": ("ok", PAYLOAD)}
+    assert len(seen) == 2
+
+
+def test_the_first_requests_deadline_is_never_a_followers_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The first request trickles past its own deadline; the follower joined seven seconds in, and
+    its own request is answered at once."""
+
+    clock = FakeTime()
+    monkeypatch.setattr(http_client, "time", clock)
+    gate = Gate(followers=1)
+    gate.install(monkeypatch)
+    IN_FLIGHT.clear()
+    stats = new_provider_stats()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not IN_FLIGHT.is_set():
+            # In the first request's own thread and context, so its own counts land here.
+            CURRENT_PROVIDER_STATS.set(stats)
+            IN_FLIGHT.set()
+            gate.hold()
+            clock.advance(10.5)
+        return ok_json()
+
+    seen = install(monkeypatch, handler)
+    results = lead_then_follow(pooled(), pooled(), joined=lambda: clock.advance(7.0))
+    assert results == {"leader": TIMED_OUT, "follower": ("ok", PAYLOAD)}
+    assert len(seen) == 2
+    assert stats["provider_deadline_hits"] == 1, "the first request's deadline expiry is counted"
+
+
+def test_a_follower_waits_no_longer_than_its_own_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first request stalls until the follower is answered: the follower must stop waiting at
+    its own deadline and answer with its own request."""
+
+    monkeypatch.setattr(http_client, "REQUEST_DEADLINE_SECONDS", 0.3)
+    IN_FLIGHT.clear()
+    answered = threading.Event()
+    order: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not IN_FLIGHT.is_set():
+            IN_FLIGHT.set()
+            answered.wait(5)
+            order.append("first")
+            return ok_json()
+        order.append("follower's own")
+        answered.set()
+        return ok_json()
+
+    seen = install(monkeypatch, handler)
+    results = lead_then_follow(pooled(), pooled(), joined=lambda: None)
+    assert results["follower"] == ("ok", PAYLOAD)
+    assert order == ["follower's own", "first"], "the follower stopped waiting at its own deadline"
+    assert results["leader"] == TIMED_OUT, "the stalled request outlived its own deadline"
+    assert len(seen) == 2
 
 
 def test_an_unexpected_failure_is_never_shared(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -576,3 +730,71 @@ def test_without_a_current_analysis_nothing_is_measured(monkeypatch: pytest.Monk
         assert CURRENT_PROVIDER_STATS.get() is None
     finally:
         CURRENT_PROVIDER_STATS.reset(token)
+
+
+def test_the_slowest_exchange_is_the_one_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = FakeTime()
+    monkeypatch.setattr(http_client, "time", clock)
+    answers = iter([(0.050, httpx.Response(500)), (0.005, ok_json())])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seconds, response = next(answers)
+        clock.advance(seconds)
+        return response
+
+    install(monkeypatch, handler)
+    stats = new_provider_stats()
+    token = CURRENT_PROVIDER_STATS.set(stats)
+    try:
+        assert get(pooled(max_retries=1)) == PAYLOAD
+    finally:
+        CURRENT_PROVIDER_STATS.reset(token)
+    assert stats["provider_exchanges"] == 2
+    assert stats["provider_exchange_max_ms"] == pytest.approx(50.0)
+
+
+# --------------------------------------------------------------------------- proxies
+@pytest.mark.parametrize(
+    "environment",
+    [
+        {},
+        {"HTTPS_PROXY": "http://127.0.0.1:9"},
+        {"ALL_PROXY": "http://127.0.0.1:9"},
+        {"HTTPS_PROXY": "http://127.0.0.1:9", "NO_PROXY": "*"},
+        {"NO_PROXY": "example.com"},
+    ],
+    ids=["none", "https", "all", "no proxy at all", "no proxy for one host"],
+)
+def test_the_pool_is_used_exactly_where_httpx_mounts_no_proxy(
+    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str]
+) -> None:
+    for name in list(os.environ):
+        if name.lower().endswith("_proxy"):
+            monkeypatch.delenv(name)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(http_client, "_environment_proxies", REAL_ENVIRONMENT_PROXIES)
+    original = httpx.Client(timeout=8.0)  # what the client built before this change
+    client = pooled()
+    try:
+        proxied = any(transport is not None for transport in original._mounts.values())
+        built = client._client()
+        assert client._pooled is not proxied
+        assert any(transport is not None for transport in built._mounts.values()) is proxied
+        if "HTTPS_PROXY" in environment and "NO_PROXY" not in environment:
+            assert proxied, "this case really routes through a proxy"
+    finally:
+        original.close()
+        if client.client is not None:
+            client.client.close()
+
+
+def test_without_httpx_proxy_lookup_no_client_is_pooled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(http_client, "_environment_proxies", None)
+    client = pooled()
+    try:
+        client._client()
+        assert client._pooled is False
+    finally:
+        assert client.client is not None
+        client.client.close()

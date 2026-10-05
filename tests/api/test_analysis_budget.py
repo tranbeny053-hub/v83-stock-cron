@@ -48,6 +48,23 @@ def test_it_counts_the_last_minute_and_the_last_hour() -> None:
     assert observer.observe() == first
 
 
+def test_each_window_ends_exactly_at_its_edge() -> None:
+    clock = Clock(now=60.0 * 20_000)  # on a minute boundary
+    observer = AnalysisBudgetObserver(clock)
+    observer.observe()
+    clock.now += 59
+    assert observer.observe()["budget_count_60s"] == 2, "59 seconds on: still inside the minute"
+    clock.now += 1
+    assert observer.observe()["budget_count_60s"] == 2, "60 seconds on: the first one left"
+    hourly = AnalysisBudgetObserver(clock)
+    start = clock.now
+    hourly.observe()
+    clock.now = start + 59 * 60
+    assert hourly.observe()["budget_count_3600s"] == 2, "59 minutes on: still inside the hour"
+    clock.now = start + 60 * 60
+    assert hourly.observe()["budget_count_3600s"] == 2, "60 minutes on: the first one left"
+
+
 def test_the_provisional_thresholds_only_flag() -> None:
     clock = Clock()
     observer = AnalysisBudgetObserver(clock)

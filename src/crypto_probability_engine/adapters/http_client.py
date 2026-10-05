@@ -6,14 +6,19 @@ underneath:
 - **one connection pool per process.** A client that is not handed its own ``httpx.Client`` builds
   one as before (its own cookies, timeout and rate-limit history), on the process's one shared
   transport, so connections are reused across analyses. A client closing never closes the pool;
-  the app closes it once, at shutdown (``close_pool``).
+  the app closes it once, at shutdown (``close_pool``). Only where httpx would route no request
+  through a proxy (none in the environment or the system settings): otherwise the client is built
+  exactly as before, unpooled and uncoalesced, because httpx mounts proxies only on a transport it
+  builds itself.
 - **one exchange for identical in-flight requests (single-flight).** When such a client sends a
   request that is byte-identical to one already in flight (method, URL with its query, every header
-  including any cookie, and the timeout), it waits for that exchange's status and body instead of
-  sending its own. Each caller still checks its own rate limit, makes its own attempts and maps the
-  outcome exactly as before. A response that sets a cookie is never shared, and an outcome that
-  cannot be shared exactly (an unexpected error, or no answer in time) sends the caller's own
-  request.
+  including any cookie, and the timeout), it waits for that exchange, for no longer than its own
+  deadline, instead of sending its own. Only a success is shared: a response below 400, with a JSON
+  body and no cookie. On any other outcome (an error status, a malformed body, a cookie, a timeout,
+  a bound or deadline, a transport or unexpected failure), or no answer within its own deadline, the
+  caller sends its own request, with its own fresh deadline, exactly as it would have alone; the
+  wait is its only difference. No failure is ever passed on. Each caller still checks its own rate
+  limit, makes its own attempts and maps its own outcome exactly as before.
 No retry, retry policy, failure cache, data cache or freshness change is added. The only other
 addition is passive measurement: counts and timings for the current analysis, in telemetry.
 """
@@ -31,14 +36,17 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+try:  # How httpx.Client itself decides whether the environment routes a request through a proxy.
+    from httpx._utils import get_environment_proxies as _environment_proxies
+except ImportError:  # pragma: no cover - another httpx: never pool rather than guess
+    _environment_proxies = None
+
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.telemetry.events import CURRENT_PROVIDER_STATS
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 REQUEST_DEADLINE_SECONDS = 10.0
-# A safety net only: an identical exchange in flight answers within its own deadline.
-FOLLOWER_WAIT_MARGIN_SECONDS = 5.0
 
 ALLOWED_PUBLIC_HOSTS = frozenset(
     {
@@ -90,7 +98,9 @@ class PublicHttpClient:
                 _measure_count("provider_retries")
             attempt_started = time.monotonic()
             try:
-                exchange = self._exchange(
+                # The start of the attempt this exchange answers: a caller that ends up sending its
+                # own request after waiting gets a fresh one, exactly as if it had not waited.
+                exchange, attempt_started = self._exchange(
                     url,
                     params=params,
                     headers=headers,
@@ -169,9 +179,10 @@ class PublicHttpClient:
         params: Mapping[str, Any],
         headers: Mapping[str, str] | None,
         attempt_started: float,
-    ) -> _Exchange:
-        """One request and its whole bounded body, exactly as ``httpx.Client.stream`` sends it; on
-        the shared pool, one exchange serves every identical request in flight."""
+    ) -> tuple[_Exchange, float]:
+        """One request and its whole bounded body, exactly as ``httpx.Client.stream`` sends it, and
+        the start of the attempt it answers; on the shared pool, one successful exchange serves
+        every identical request in flight."""
 
         client = self._client()
         request = client.build_request(
@@ -182,21 +193,28 @@ class PublicHttpClient:
             timeout=min(self.timeout_seconds, REQUEST_DEADLINE_SECONDS),
         )
 
-        def send() -> _Exchange:
-            return _send(client, request, attempt_started=attempt_started)
+        def send(started: float) -> _Exchange:
+            return _send(client, request, attempt_started=started)
 
-        started = time.perf_counter()
+        measured = time.perf_counter()
         try:
             if not self._pooled:
-                return send()
-            return _SINGLE_FLIGHT.run(_request_identity(request), send)
+                return send(attempt_started), attempt_started
+            return _SINGLE_FLIGHT.run(_request_identity(request), send, attempt_started)
         finally:
-            _measure_exchange((time.perf_counter() - started) * 1000)
+            _measure_exchange((time.perf_counter() - measured) * 1000)
 
     def _client(self) -> httpx.Client:
         if self.client is None:
-            self.client = httpx.Client(timeout=self.timeout_seconds, transport=pooled_transport())
-            self._pooled = True
+            if _environment_routes_through_a_proxy():
+                # Exactly the original client: httpx mounts the environment's proxies only on a
+                # transport it builds itself.
+                self.client = httpx.Client(timeout=self.timeout_seconds)
+            else:
+                self.client = httpx.Client(
+                    timeout=self.timeout_seconds, transport=pooled_transport()
+                )
+                self._pooled = True
         return self.client
 
     def _build_url(self, base_url: str, path: str) -> str:
@@ -293,7 +311,17 @@ class _PooledTransport(httpx.BaseTransport):
         return None
 
 
-# httpx.HTTPTransport() is exactly the transport an httpx.Client builds by default.
+def _environment_routes_through_a_proxy() -> bool:
+    """True when an httpx.Client built with no transport would mount a proxy (from HTTP_PROXY,
+    HTTPS_PROXY, ALL_PROXY or the system settings, unless NO_PROXY is "*")."""
+
+    if _environment_proxies is None:
+        return True
+    return any(url is not None for url in _environment_proxies().values())
+
+
+# httpx.HTTPTransport() is exactly the transport an httpx.Client builds by default, when the
+# environment mounts no proxy.
 _POOL_FACTORY: Callable[[], httpx.BaseTransport] = httpx.HTTPTransport
 _POOL_LOCK = threading.Lock()
 _POOL: _PooledTransport | None = None
@@ -320,57 +348,67 @@ def close_pool() -> None:
 class _Call:
     def __init__(self) -> None:
         self.done = threading.Event()
-        self.exchange: _Exchange | None = None
-        self.failure: str | None = None  # "timeout", "bound" or "http_error"
+        self.exchange: _Exchange | None = None  # set only for a success that can be shared
 
 
 class _SingleFlight:
-    """One exchange for identical requests in flight. The first caller sends; the others wait and
-    read its outcome, or send their own when it cannot be shared exactly."""
+    """One exchange for identical requests in flight. The first caller sends; the others wait, for
+    no longer than their own deadline, and read its outcome only when it is a success that can be
+    shared. Otherwise each sends its own request, with its own fresh deadline."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._calls: dict[tuple[object, ...], _Call] = {}
 
-    def run(self, key: tuple[object, ...], send: Callable[[], _Exchange]) -> _Exchange:
+    def run(
+        self,
+        key: tuple[object, ...],
+        send: Callable[[float], _Exchange],
+        attempt_started: float,
+    ) -> tuple[_Exchange, float]:
         with self._lock:
             call = self._calls.get(key)
             leader = call is None
             if leader:
                 call = self._calls[key] = _Call()
         if leader:
-            return self._lead(key, call, send)
-        answered = call.done.wait(REQUEST_DEADLINE_SECONDS + FOLLOWER_WAIT_MARGIN_SECONDS)
-        if answered and call.exchange is not None:
+            return self._lead(key, call, send, attempt_started), attempt_started
+        remaining = REQUEST_DEADLINE_SECONDS - (time.monotonic() - attempt_started)
+        if call.done.wait(max(0.0, remaining)) and call.exchange is not None:
             _measure_count("provider_coalesced")
-            return call.exchange
-        if answered and call.failure is not None:
-            _measure_count("provider_coalesced")
-            raise _COALESCED_FAILURES[call.failure]()
-        return send()
+            return call.exchange, attempt_started
+        own_start = time.monotonic()
+        return send(own_start), own_start
 
     def _lead(
-        self, key: tuple[object, ...], call: _Call, send: Callable[[], _Exchange]
+        self,
+        key: tuple[object, ...],
+        call: _Call,
+        send: Callable[[float], _Exchange],
+        attempt_started: float,
     ) -> _Exchange:
         try:
-            exchange = send()
-        except (httpx.TimeoutException, _DeadlineExceeded):
-            call.failure = "timeout"
-            raise
-        except _ResponseBoundExceeded:
-            call.failure = "bound"
-            raise
-        except httpx.HTTPError:
-            call.failure = "http_error"
-            raise
-        else:
-            if not exchange.sets_cookie:
+            exchange = send(attempt_started)
+            if _shareable(exchange):
                 call.exchange = exchange
             return exchange
         finally:
             with self._lock:
                 del self._calls[key]
             call.done.set()
+
+
+def _shareable(exchange: _Exchange) -> bool:
+    """A success the caller's own request would have read as one: a status below 400, a JSON body
+    and no cookie. Any other outcome is each caller's own to meet with its own request."""
+
+    if exchange.sets_cookie or exchange.status_code >= 400:
+        return False
+    try:
+        json.loads(exchange.body)
+    except ValueError:
+        return False
+    return True
 
 
 _SINGLE_FLIGHT = _SingleFlight()
@@ -445,28 +483,6 @@ class _ResponseBoundExceeded(Exception):
 
 class _DeadlineExceeded(_ResponseBoundExceeded):
     """The per-attempt deadline passed: handled exactly as any bound, and counted as a deadline."""
-
-
-class _CoalescedTimeout(_DeadlineExceeded):
-    """The identical exchange this caller waited on timed out."""
-
-
-class _CoalescedBound(_ResponseBoundExceeded):
-    """The identical exchange this caller waited on exceeded the response bound."""
-
-
-class _CoalescedHTTPError(httpx.HTTPError):
-    """The identical exchange this caller waited on failed in transport."""
-
-    def __init__(self) -> None:
-        super().__init__("The identical in-flight request failed.")
-
-
-_COALESCED_FAILURES: dict[str, Callable[[], Exception]] = {
-    "timeout": _CoalescedTimeout,
-    "bound": _CoalescedBound,
-    "http_error": _CoalescedHTTPError,
-}
 
 
 def _read_bounded_body(response: httpx.Response, *, attempt_started: float) -> bytes:
