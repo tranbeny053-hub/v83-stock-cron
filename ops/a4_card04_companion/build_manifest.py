@@ -64,7 +64,13 @@ def manifest() -> dict:
                 "state",
             ],
             "public.predictions": ["run_id"],
-            "pg_catalog": ["pg_attribute", "pg_class", "pg_constraint", "pg_namespace"],
+            "pg_catalog": [
+                "pg_attribute",
+                "pg_class",
+                "pg_constraint",
+                "pg_inherits",
+                "pg_namespace",
+            ],
         },
         "schema_sources": {path: _sha256(ROOT / path) for path in SCHEMA_SOURCES},
         "input_binding": {

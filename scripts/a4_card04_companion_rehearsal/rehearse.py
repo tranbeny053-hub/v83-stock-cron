@@ -21,9 +21,9 @@ What it proves, each as a case with expected and actual results:
   this prevents;
 - read-only: under the runner's own preamble every write kind is refused (INSERT, UPDATE, DELETE,
   MERGE, CREATE, ALTER, DROP, TRUNCATE) and the database is unchanged, rows and catalog;
-- schema drift fails closed: a changed type, a nullable run_id, a view in place of predictions, a
-  missing primary key; a renamed table is a database error; an extra column the companion does not
-  read is not drift.
+- schema drift fails closed: a changed type, a nullable run_id, a view in place of predictions, an
+  inheritance child of either table, a missing primary key; a renamed table is a database error;
+  an extra column the companion does not read is not drift.
 """
 
 from __future__ import annotations
@@ -761,6 +761,13 @@ class Rehearsal:
         self.case("drift: the ledger is gone", ok, "DATABASE_ERROR", 4)
         ddl("ALTER TABLE public.a4c_ledger_moved RENAME TO automation_radar_ledger")
         self.case("drift reverted: both tables back", ok, "OK", 0)
+        ddl("CREATE TABLE public.a4c_ledger_child () INHERITS (public.automation_radar_ledger)")
+        self.case("drift: an inheritance child of the ledger", ok, "SCHEMA_DRIFT", 1)
+        ddl("DROP TABLE public.a4c_ledger_child")
+        ddl("CREATE TABLE public.a4c_predictions_child () INHERITS (public.predictions)")
+        self.case("drift: an inheritance child of predictions", ok, "SCHEMA_DRIFT", 1)
+        ddl("DROP TABLE public.a4c_predictions_child")
+        self.case("drift reverted: no inheritance child", ok, "OK", 0)
         restored = self.digest()
         ddl(f"ALTER TABLE {ledger} DROP CONSTRAINT automation_radar_ledger_pkey")
         self.case("drift: no primary key", ok, "SCHEMA_DRIFT", 1)

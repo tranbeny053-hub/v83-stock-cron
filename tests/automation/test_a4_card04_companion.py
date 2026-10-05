@@ -3,13 +3,15 @@ ucpe.a4_ledger_audit.v1 for UOR Card 04.
 
 What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal proves the rest):
 - the sealed SQL passes a structural guard: one SELECT; no write, locking, TABLE or SET clause; no
-  comma-join; no function outside an allowlist; no relation but the ledger, public.predictions and
-  four catalogs, each through an alias; from the ledger only ten columns and from predictions only
-  run_id, never a whole row; no other table, view or function any migration creates; the decision
+  comma-join and no derived table; no function outside an allowlist; no relation but the ledger,
+  public.predictions and five catalogs, each through an alias; from the ledger only ten columns and
+  from predictions only run_id; no star but count(*) and the decision's k.*, and no whole-row use of
+  any table, alias or CTE; no other table, view or function any migration creates; the decision
   branches in the declared order, with no threshold on either count;
-- adversarial mutants that widen a read, read a probability, the body, a whole row, the registry or
-  another table, drop or reorder a check, bind on client_request_id alone, judge a count, move the
-  count window, output a timestamp, lock or write, all fail that guard;
+- adversarial mutants that widen a read, read a probability, the body, a whole row (directly, with a
+  star, through a CTE or a derived table), the registry or another table, drop or reorder a check,
+  bind on client_request_id alone, judge a count, move the count window, add an output, drop the
+  inheritance check, lock or write, all fail that guard;
 - the expected columns are migration 0013's and 0003's declarations, no later migration changes
   them, and the route still writes each fact where the companion reads it;
 - the runner checks the package against its seal and the SQL against its pin, runs it only in a READ
@@ -18,7 +20,7 @@ What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal
   cross-checks the SQL's answer; every runner mutant breaks one of those behaviours;
 - the manifest seals every package file; UOR_HANDOFF.md section 15 carries exactly the companion
   fields, the seal's digest and the keys the runner really prints; the accepted A4 component's seal
-  is unchanged and section 14's corrected fields name every key its runner prints.
+  is unchanged and section 14's corrected contract names every key of the A4 audited line.
 """
 
 from __future__ import annotations
@@ -100,6 +102,7 @@ CATALOGS = {
     "pg_catalog.pg_namespace",
     "pg_catalog.pg_attribute",
     "pg_catalog.pg_constraint",
+    "pg_catalog.pg_inherits",
 }
 RELATIONS = {LEDGER, PREDICTIONS, *CATALOGS}
 ALLOWED_QUALIFIED = {*RELATIONS, "pg_catalog.format_type"}
@@ -238,6 +241,8 @@ REQUIRED_FRAGMENTS = [
     "ON w.credential_id = b.credential_id AND w.received_at_utc >= b.activation_utc )",
     "WHERE n.nspname = 'public'",
     "AND c.relkind = 'r'",
+    "AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_inherits AS i JOIN relations AS h "
+    "ON h.oid = i.inhparent)",
     "(s.schema_ok IS TRUE) AS schema_ok",
     "(f.run_id IS NOT DISTINCT FROM b.expected_run_id) AS run_id_matches",
     "(f.deadline_ms IS NOT DISTINCT FROM b.expected_deadline_ms) AS deadline_ms_matches",
@@ -394,6 +399,14 @@ def _comma_in_from_list(tokens: list[str], upper: list[str], start: int) -> bool
     return False
 
 
+def _is_distinct_from(upper: list[str], index: int) -> bool:
+    """FROM at ``index`` ends IS DISTINCT FROM or IS NOT DISTINCT FROM: a comparison."""
+
+    return upper[index - 1 : index] == ["DISTINCT"] and (
+        upper[index - 2 : index - 1] == ["IS"] or upper[index - 3 : index - 1] == ["IS", "NOT"]
+    )
+
+
 def _normalized(kept: str) -> str:
     return " ".join(kept.split()).replace("( ", "(").replace(" )", ")")
 
@@ -425,7 +438,8 @@ def guard_violations(sql: str) -> list[str]:
         for part in re.split(r"[^a-z0-9_]+", word.lower()):
             if part in denied or part.startswith(DENIED_PREFIXES):
                 violations.append(f"denied name {part}")
-    ctes = set()
+    ctes: set[str] = set()
+    definitions: set[int] = set()
     for index in range(len(tokens) - 2):
         if upper[index + 1] != "AS" or tokens[index + 2] != "(":
             continue
@@ -439,29 +453,51 @@ def guard_violations(sql: str) -> list[str]:
                     break
         if name_at >= 0 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[name_at]):
             ctes.add(lower[name_at])
+            definitions.add(name_at)
     if ctes != CTES:
         violations.append(f"unexpected CTE set {sorted(ctes ^ CTES)}")
     aliases: dict[str, str] = {}
-    declarations: set[int] = set()
+    references: set[int] = set()  # the positions that name a relation or declare its alias
     for index, token in enumerate(upper):
         if token not in {"FROM", "JOIN"} or index + 1 >= len(tokens):
             continue
-        if token == "FROM" and index > 0 and upper[index - 1] == "DISTINCT":
+        if token == "FROM" and _is_distinct_from(upper, index):
             continue  # IS [NOT] DISTINCT FROM: a comparison, not a relation
         relation = lower[index + 1]
-        if relation != "(":
-            if relation not in RELATIONS | CTES:
-                violations.append(f"relation {tokens[index + 1]}")
-            has_alias = index + 3 < len(tokens) and upper[index + 2] == "AS"
-            if has_alias and re.fullmatch(r"[a-z_][a-z0-9_]*", lower[index + 3]):
-                alias = lower[index + 3]
-                if aliases.setdefault(alias, relation) != relation:
-                    violations.append(f"alias {alias} names two relations")
-                declarations.add(index + 3)
-            elif relation in RELATIONS:
-                violations.append(f"relation {tokens[index + 1]} has no alias")
+        if relation == "(":
+            violations.append("a derived table: every relation is a named table or CTE")
+            continue
+        references.add(index + 1)
+        if relation not in RELATIONS | CTES:
+            violations.append(f"relation {tokens[index + 1]}")
+        has_alias = index + 3 < len(tokens) and upper[index + 2] == "AS"
+        if has_alias and re.fullmatch(r"[a-z_][a-z0-9_]*", lower[index + 3]):
+            alias = lower[index + 3]
+            if aliases.setdefault(alias, relation) != relation:
+                violations.append(f"alias {alias} names two relations")
+            references.add(index + 3)
+        elif relation in RELATIONS:
+            violations.append(f"relation {tokens[index + 1]} has no alias")
         if token == "FROM" and _comma_in_from_list(tokens, upper, index):
             violations.append("a comma-join: every relation needs its own JOIN")
+    # The one star that names no column of a table: decision's k.* over the explicit checks CTE.
+    decision_star = {
+        index
+        for index in range(4, len(tokens) - 2)
+        if upper[index - 4 : index] == ["DECISION", "AS", "(", "SELECT"]
+        and lower[index] == "k"
+        and tokens[index + 1 : index + 3] == [".", "*"]
+        and aliases.get("k") == "checks"
+    }
+    for index, token in enumerate(tokens):
+        if token != "*":
+            continue
+        counted = tokens[index - 2 : index] == ["count", "("] and tokens[index + 1 : index + 2] == [
+            ")"
+        ]
+        if not counted and index - 2 not in decision_star:
+            violations.append("a star: every column is named")
+    row_sources = set(aliases) | CTES
     data_aliases = {
         alias: relation for alias, relation in aliases.items() if relation in DATA_COLUMNS
     }
@@ -482,7 +518,7 @@ def guard_violations(sql: str) -> list[str]:
             else:
                 if low.startswith("pg_"):
                     violations.append(f"unqualified catalog name {token}")
-                if low in data_aliases and index not in declarations:
+                if low in row_sources and index not in references | definitions | decision_star:
                     violations.append(f"whole-row reference {token}")
                 if low in {"automation_radar_ledger", "predictions"}:
                     violations.append(f"bare table name {token}")
@@ -671,6 +707,44 @@ MUTANTS = {
     "adds a stray percent sign to a comment": (
         "-- BINDING. The ledger's primary key",
         "-- BINDING (100%). The ledger's primary key",
+    ),
+    "selects every ledger column with a star": (
+        T_TARGET + "           l.state,\n           l.outcome_code,\n           l.http_status,\n"
+        "           l.run_id,\n           l.analysis_hash,\n           l.deadline_ms,\n"
+        "           l.received_at_utc\n",
+        "    SELECT *\n",
+    ),
+    "reads a whole row through a CTE alias": (
+        "min(t.analysis_hash) END AS analysis_hash",
+        "min(t::text) END AS analysis_hash",
+    ),
+    "a star through a CTE alias": (
+        "min(t.analysis_hash) END AS analysis_hash",
+        "min(t.analysis_hash) END AS analysis_hash, count(t.*) AS n",
+    ),
+    "a whole row through a CTE name": (
+        T_RUN_COUNT,
+        T_RUN_COUNT[:-1] + ", (SELECT min(target::text) FROM target) AS w2\n",
+    ),
+    "reads a whole ledger row through a derived table": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(x::text) FROM (SELECT * FROM public.automation_radar_ledger AS z)"
+        " AS x) AS bound_run_id,\n",
+    ),
+    "reads whole prediction rows through a derived table": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(x::text) FROM (SELECT * FROM public.predictions AS z) AS x)"
+        " AS bound_run_id,\n",
+    ),
+    "reads an unqualified relation after SELECT DISTINCT": (
+        T_RUN_COUNT,
+        T_RUN_COUNT[:-1] + ", EXISTS (SELECT DISTINCT FROM users) AS u\n",
+    ),
+    "drops the inheritance check": (
+        "            AND NOT EXISTS (SELECT 1\n"
+        "                              FROM pg_catalog.pg_inherits AS i\n"
+        "                              JOIN relations AS h ON h.oid = i.inhparent)\n",
+        "",
     ),
     "adds an input": (
         "CAST(%(credential_id)s AS text)",
@@ -941,6 +1015,7 @@ def test_a_qualifying_row_passes_inside_one_read_only_unfiltered_transaction() -
     assert connection.ended == ["rollback", "close"]
     ((url, kwargs),) = seen
     assert url == URL and kwargs["autocommit"] is False and kwargs["prepare_threshold"] is None
+    assert kwargs["connect_timeout"] == 10
     assert sorted(payload) == json.loads(MANIFEST.read_text(encoding="utf-8"))["output_keys"]
     assert len(payload) == 18 and "response_body" not in text
 
@@ -1204,6 +1279,7 @@ def _behaviour_failures(module: Any) -> list[str]:
             and [sql for sql, _ in connection.calls][:5]
             == [*module.READ_ONLY_PREAMBLE, module.SESSION_PROOF]
             and seen[0][1]["autocommit"] is False
+            and seen[0][1]["connect_timeout"] == 10
             and payload["row_security_off"] is True
             and payload["transaction_read_only"] is True
             and text == json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
@@ -1263,6 +1339,13 @@ def _behaviour_failures(module: Any) -> list[str]:
         code, payload, _, _ = _invoke(module, lying)
         return code == 1 and payload["reason"] == "RUNNER_DISAGREES"
 
+    def disagrees(**lie: Any) -> Callable[[], bool]:
+        def probe() -> bool:
+            code, payload, _, _ = _invoke(module, FakeConnection(_row(module, **lie)))
+            return code == 1 and payload["reason"] == "RUNNER_DISAGREES"
+
+        return probe
+
     def shape() -> bool:
         connection = FakeConnection(_row(module), columns=(*runner.SQL_COLUMNS[:-1], "extra"))
         code, payload, _, _ = _invoke(module, connection)
@@ -1298,6 +1381,8 @@ def _behaviour_failures(module: Any) -> list[str]:
         ("repeat refused", refused([*ARGS, "--run-id", RUN])),
         ("abbreviation refused", refused([*ARGS[:-2], "--qualification-activation", ACTIVATION])),
         ("cross-check", cross_check),
+        ("bound run checked", disagrees(bound_run_id="run_" + "2" * 32)),
+        ("count types checked", disagrees(predictions_rows_for_run_id=True)),
         ("result shape", shape),
         ("real failing rows", real_failures),
     ]:
@@ -1353,6 +1438,12 @@ RUNNER_MUTANTS = {
         "        if False:",
     ),
     "R20 abbreviations accepted": ("allow_abbrev=False", "allow_abbrev=True"),
+    "R21 bound run unchecked": ('        facts["bound_run_id"] == binding.run_id,\n', ""),
+    "R22 count types unchecked": (
+        "    return type(value) is int and value >= 0",
+        "    return True",
+    ),
+    "R23 no connect timeout": ("            connect_timeout=CONNECT_TIMEOUT_SECONDS,\n", ""),
 }
 RUNNER_SOURCE = RUNNER_FILE.read_text(encoding="utf-8")
 
@@ -1454,8 +1545,9 @@ def test_the_companion_output_contract_names_exactly_the_keys_the_runner_prints(
     )
 
 
-def test_the_a4_output_contract_names_every_key_the_a4_runner_prints() -> None:
-    """The 2026-10-05 correction of section 14: the A4 runner also prints ``audit``."""
+def test_the_a4_output_contract_names_every_key_of_the_a4_audited_line() -> None:
+    """The 2026-10-05 correction of section 14: the A4 runner's audited line also carries
+    ``audit``. A runner stop's keys are in the contract's prose, not in this list."""
 
     contract = _section_fields("## 14. A4 per-request ledger audit")["OUTPUT_CONTRACT"]
     for key in json.loads(A4_MANIFEST.read_text(encoding="utf-8"))["output_keys"]:

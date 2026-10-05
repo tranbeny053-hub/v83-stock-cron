@@ -22,9 +22,10 @@
 -- BINDING. The ledger's primary key (credential_id, client_request_id) and the response's run_id. The
 -- request's deadline_ms and the response's analysis_hash are compared with the row, never trusted.
 --
--- SCHEMA PROOF. Both relations are ordinary tables in public; every column read has migration 0013's or
--- 0003's type and nullability; the ledger's primary key is the pair. Anything else is SCHEMA_DRIFT. A
--- column the companion does not read is not its concern, and a missing table is a database error.
+-- SCHEMA PROOF. Both relations are ordinary tables in public with no inheritance child (a child's rows
+-- would join every read); every column read has migration 0013's or 0003's type and nullability; the
+-- ledger's primary key is the pair. Anything else is SCHEMA_DRIFT. A column the companion does not
+-- read is not its concern, and a missing table is a database error.
 --
 -- OUTPUT. Exactly one row of scalars, whatever the database holds. reason is the FIRST failing check, in
 -- this order: SCHEMA_DRIFT, NO_ROW, AMBIGUOUS, WRONG_ORIGIN, NOT_COMPLETED, NOT_SUCCEEDED, RUN_MISMATCH,
@@ -81,6 +82,9 @@ ledger_key AS (
 ),
 schema_check AS (
     SELECT ((SELECT count(*) FROM relations) = 2
+            AND NOT EXISTS (SELECT 1
+                              FROM pg_catalog.pg_inherits AS i
+                              JOIN relations AS h ON h.oid = i.inhparent)
             AND NOT EXISTS (SELECT relname, column_name, column_type, column_not_null
                               FROM expected_columns
                             EXCEPT

@@ -38,8 +38,12 @@ durable record rather than from UOR's own memory of it.
 - **The database role:** the role that owns both `public.automation_radar_ledger` and
   `public.predictions`, or a role with BYPASSRLS and SELECT on exactly the ten ledger columns and
   `predictions.run_id`.
-  - A role that row-level policies apply to, such as `ucpe_space_db`, is refused (exit 4,
-    `InsufficientPrivilege`) rather than counted through a policy.
+  - The owning role can do far more than read; this run stays read-only only because of its READ ONLY
+    transaction, which the runner proves before it reads anything.
+  - No migration creates a BYPASSRLS reader. Creating one is a production change, for the owner to
+    authorize separately.
+  - A role that row-level policies apply to is refused (exit 4, `InsufficientPrivilege`) rather than
+    counted through a policy. That includes `ucpe_space_db`, which the A4 audit accepts.
 - The URL is entered without echo. It never goes into a command line, a chat, a file or a log.
 
 ## EXACT_STEPS
@@ -74,8 +78,8 @@ One JSON line, with sorted keys:
   `NO_ROW`, `AMBIGUOUS`, `WRONG_ORIGIN`, `NOT_COMPLETED`, `NOT_SUCCEEDED`, `RUN_MISMATCH`,
   `DEADLINE_MISMATCH`, `ANALYSIS_HASH_MISMATCH` or `ACTIVATION_AFTER_REQUEST`.
   - `SCHEMA_DRIFT` means a column it reads has another type or nullability than its migration gives
-    it, a table it reads is not an ordinary table (a view, for example), or the ledger's primary key is
-    not the pair. A column it does not read is not drift.
+    it, a table it reads is not an ordinary table (a view, for example) or has an inheritance child, or
+    the ledger's primary key is not the pair. A column it does not read is not drift.
   - `RUNNER_DISAGREES` (also exit 1) means the runner's own reading of the SQL's answer differs from it.
 - **Stopped, nothing contacted:** exit 2 means an input was refused; exit 3 means a package file or the
   SQL does not match its seal.

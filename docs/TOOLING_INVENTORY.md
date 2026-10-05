@@ -113,7 +113,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | Path | Class | Trigger | Touches | Evidence |
 | --- | --- | --- | --- | --- |
 | `ops/a4_card04_companion/CARD.md` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The owner card for ucpe.a4_card04_companion.v1; prepared, never run against production (docs/automation/UOR_HANDOFF.md section 15). |
-| `ops/a4_card04_companion/MANIFEST.json` | ACTIVE_PIN | tests only | local | The package seal, read by the runner and tests/automation/test_a4_card04_companion.py; its sha256 is ARTIFACT_SHA256 in docs/automation/UOR_HANDOFF.md section 15. |
+| `ops/a4_card04_companion/MANIFEST.json` | ACTIVE_PIN | a4_card04_companion.py; tests | local | The package seal: the runner checks every sealed file against it before any contact, and tests/automation/test_a4_card04_companion.py rebuilds it; its sha256 is ARTIFACT_SHA256 in docs/automation/UOR_HANDOFF.md section 15. |
 | `ops/a4_card04_companion/a4_card04_companion.py` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The read-only runner of ucpe.a4_card04_companion.v1, documented by ops/a4_card04_companion/CARD.md; never run against production yet. |
 | `ops/a4_card04_companion/a4_card04_companion.sql` | ACTIVE_PIN | a4_card04_companion.py | local | The sealed SELECT, pinned by sha256 in ops/a4_card04_companion/a4_card04_companion.py. |
 | `ops/a4_card04_companion/build_manifest.py` | ACTIVE_OWNER_TOOL | owner-local | local | Regenerates ops/a4_card04_companion/MANIFEST.json, checked by tests/automation/test_a4_card04_companion.py. |
