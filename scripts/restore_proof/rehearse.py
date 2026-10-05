@@ -19,12 +19,13 @@ what it sees:
 - so does every privilege path into the app: a migration role's attribute, membership or setting
   changed, a predefined role or the superuser granted to an API role, an API role gaining
   BYPASSRLS, a setting on PostgREST's login role that turns the seals off, a role holding the
-  owner, a parameter grant to a migration role;
+  owner or an API role, a role holding a predefined role that reads every table, a new superuser,
+  a parameter grant to a migration role;
 - the owner's documented credential steps (LOGIN on ucpe_space_db and ucpe_resolver) are reported
-  as operational; a platform role's default privileges, settings and membership in an API role,
-  LOGIN and a timeout on PostgREST's login role, as platform; none of them fails; a setting's value
-  never appears in the report or the work folder; and a role's comment, which pg_dumpall writes,
-  passes the gate;
+  as operational; a platform role's default privileges, its own BYPASSRLS, settings and membership
+  in another predefined role, LOGIN and a timeout on PostgREST's login role, as platform; none of
+  them fails; a setting's value never appears in the report or the work folder; and a role's
+  comment, which pg_dumpall writes, passes the gate;
 - a restore error on a platform role's own setting, or an API role's timeout, is platform; on a
   migration role's setting or an API role's other setting, it fails, and the refused value is not
   shown;
@@ -409,6 +410,48 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
+        "a platform role able to act as an API role",
+        "FAIL",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_storage"),
+                (
+                    "app",
+                    "cluster/memberships/service_role to rehearsal_storage admin=False "
+                    "inherit=False set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_storage NOINHERIT LOGIN",
+            "GRANT service_role TO rehearsal_storage",
+        ),
+    ),
+    Case(
+        "a role that reads every table",
+        "FAIL",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_reader"),
+                (
+                    "app",
+                    "cluster/memberships/pg_read_all_data to rehearsal_reader admin=False "
+                    "inherit=True set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_reader LOGIN",
+            "GRANT pg_read_all_data TO rehearsal_reader",
+        ),
+    ),
+    Case(
+        "a new superuser",
+        "FAIL",
+        _app("cluster/attributes/rehearsal_super"),
+        cluster_sql=("CREATE ROLE rehearsal_super SUPERUSER",),
+    ),
+    Case(
         "a parameter grant to a migration role",
         "FAIL",
         _app("cluster/parameter_acl/session_replication_role"),
@@ -425,16 +468,16 @@ CASES: tuple[Case, ...] = (
                 ("platform", "cluster/settings/rehearsal_platform in all databases"),
                 (
                     "platform",
-                    "cluster/memberships/anon to rehearsal_platform admin=False inherit=False "
-                    "set=True",
+                    "cluster/memberships/pg_monitor to rehearsal_platform admin=False "
+                    "inherit=False set=True",
                 ),
             }
         ),
         cluster_sql=(
             "ALTER ROLE authenticator LOGIN",
             "ALTER ROLE authenticator SET statement_timeout TO '8s'",
-            "CREATE ROLE rehearsal_platform NOINHERIT LOGIN",
-            "GRANT anon TO rehearsal_platform",
+            "CREATE ROLE rehearsal_platform NOINHERIT LOGIN BYPASSRLS",
+            "GRANT pg_monitor TO rehearsal_platform",
             "ALTER ROLE rehearsal_platform SET app.rehearsal_value TO '{scratch_value}'",
         ),
         checks=("setting_value_never_reported",),

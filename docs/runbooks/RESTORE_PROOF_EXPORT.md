@@ -89,22 +89,27 @@ migrations declare, and opens no privilege path into the app that they do not de
 of difference are reported without failing:
 - **operational**: the documented credential steps, LOGIN on `ucpe_space_db`
   (`SPACE_DB_CUTOVER.md`) and on `ucpe_resolver` (`RESOLVER_CUTOVER.md`);
-- **platform**: Supabase's own: its other roles with their settings and memberships, the default
-  privileges of its roles, the owner's (`postgres`) attributes, settings and parameter grants (it
-  owns every app table already), LOGIN on `authenticator` (PostgREST logs in with it), the API
-  roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes that
-  raise no privilege, a platform role's own setting and a Realtime publication entry that vanilla
-  PostgreSQL refuses.
+- **platform**: Supabase's own: its other roles with their own attributes (row-security bypass and
+  replication included: no app table is granted to everyone, so such a role reaches no app row by
+  itself), their settings and their memberships in the other predefined roles; the default
+  privileges of its roles; the owner's (`postgres`) attributes, settings, memberships and parameter
+  grants (it owns every app table already); LOGIN on `authenticator` (PostgREST logs in with it);
+  the API roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes
+  that raise no privilege; a platform role's own setting and a Realtime publication entry that
+  vanilla PostgreSQL refuses.
 
 Any other difference is a finding and fails the proof: production's structure and the migrations
 disagree there. That includes every privilege path into the app the migrations do not declare,
 whoever made it: an API role becoming a member of another role or gaining SUPERUSER, BYPASSRLS or
-the like, any setting on an API role but a timeout (one setting can turn the seals off for every
-API session), any role but Supabase's superuser able to act as `postgres`, and a parameter grant
-to an API or app role. **The first proof may say FAIL for privilege paths Supabase itself made**
-(for example a platform role granted to PostgREST's `authenticator`, or a setting on it): each is
-a finding Claude reports to you by name, for you to decide on, not a broken restore. The report
-names every finding, and nothing is changed or reclassified to hide one.
+the like; any setting on an API role but a timeout (one setting can turn the seals off for every
+API session); any role but Supabase's superuser and `postgres` able to act as `postgres`, an app
+role or an API role, or holding a predefined role that reads or writes every table or the
+server's files; any new superuser; and a parameter grant to an API or app role. **The first proof
+may say FAIL for privilege paths Supabase itself made** (for example one of its service roles able
+to act as an API role, a read-only role that reads every table, or a setting on PostgREST's
+`authenticator`): each is a finding Claude reports to you by name, for you to decide on, not a
+broken restore. The report names every finding, and nothing is changed or reclassified to hide
+one.
 
 ## Stop rules
 

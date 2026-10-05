@@ -25,16 +25,22 @@ Each difference is classified:
   becoming a member of any role, gaining SUPERUSER, CREATEROLE, CREATEDB, REPLICATION or
   BYPASSRLS, or LOGIN (authenticator's LOGIN is the platform's), being gone, or having any setting
   but a timeout changed (a setting such as session_replication_role on the login role would turn
-  the seals off for every API session); any role but the bootstrap superuser holding the owner; a
-  parameter grant to an API role or a migration role. Any app difference fails the proof, whoever
-  made it: one the platform made is reported to the owner by name, never reclassified.
+  the seals off for every API session); any role but the bootstrap superuser and the owner able to
+  act as one of the app's roles (holding the owner, a migration role or an API role) or to reach
+  every table (holding a predefined role that reads or writes every table or the server's files,
+  or being a superuser); a parameter grant to an API role or a migration role. Any app difference
+  fails the proof, whoever made it: one the platform made is reported to the owner by name, never
+  reclassified.
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
-- **platform**: the hosting platform's own: its other roles, their memberships and settings, an API
-  role's timeouts and its other attributes, the owner's attributes, settings and parameter grants
-  (the owner already owns every app object), the default privileges of any other role, other
-  parameter grants. Reported, not failing.
+- **platform**: the hosting platform's own: its other roles with their own attributes but
+  SUPERUSER (BYPASSRLS and REPLICATION included: no app table is granted to PUBLIC, so a role
+  reaches app rows only through the paths above, and replication is the platform's machinery),
+  their memberships among themselves and in the other predefined roles, and their settings; an API
+  role's timeouts and its other attributes; the owner's attributes, settings, memberships and
+  parameter grants (the owner already owns every app object); the default privileges of any other
+  role; other parameter grants. Reported, not failing.
 """
 
 from __future__ import annotations
@@ -489,6 +495,16 @@ ESCALATING_ATTRIBUTES = frozenset(
 )
 # The API role PostgREST logs in as: LOGIN on it is the platform's (Supabase's authenticator).
 API_LOGIN_ROLE = "authenticator"
+# The predefined roles that read or write every table, or the server's files (and so its data).
+DATA_ROLES = frozenset(
+    {
+        "pg_read_all_data",
+        "pg_write_all_data",
+        "pg_read_server_files",
+        "pg_write_server_files",
+        "pg_execute_server_program",
+    }
+)
 
 
 def api_roles(
@@ -604,13 +620,17 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
                 or (attribute == "rolcanlogin" and subject != API_LOGIN_ROLE)
             ):
                 return difference
+        if subject not in {OWNER, roles.bootstrap} and _became_superuser(difference, attribute):
+            return difference  # a superuser can act as every role, the owner included
         return as_("platform")
     if section == "memberships":
         granted, member = _membership(subject)
         if granted in roles.migration or member in roles.migration or member in roles.api:
             return difference
-        if granted == OWNER and member != roles.bootstrap:
-            return difference  # a role holding the owner holds every app object
+        if member in {OWNER, roles.bootstrap}:
+            return as_("platform")  # the owner owns every app object; the bootstrap is superuser
+        if granted == OWNER or granted in roles.api or granted in DATA_ROLES:
+            return difference  # another role able to act as an app role, or to reach every table
         return as_("platform")
     if section == "settings":
         role = subject.split(" in ")[0]
@@ -624,6 +644,16 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
         grantees = {item.split(":", 1)[0] for item in changed}
         return difference if grantees & (roles.migration | roles.api) else as_("platform")
     return difference
+
+
+def _became_superuser(difference: Difference, attribute: str | None) -> bool:
+    if attribute == "rolsuper":
+        return difference.reference is not True and difference.restored is True
+    return (
+        attribute is None
+        and isinstance(difference.restored, dict)
+        and difference.restored.get("rolsuper") is True
+    )
 
 
 def _membership(item: str) -> tuple[str, str]:
