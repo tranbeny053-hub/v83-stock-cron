@@ -60,6 +60,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/quant_v2_validation_report.py` | HISTORICAL_REFERENCE | owner-local | production DB | Reads production predictions, probabilities included (build_operator_repository); that touches the protected §5A window and H2's production rows, so a run is an owner decision. |
 | `scripts/release.py` | ACTIVE_RELEASE | owner-local | HF Space | docs/runbooks/RELEASE.md and docs/runbooks/ROLLBACK.md invoke the guarded release chain. |
 | `scripts/reproducible_build.sh` | ACTIVE_GATE | reproducible-build.yml | CI only | Invoked by .github/workflows/reproducible-build.yml for two clean builds and fixture smoke. |
+| `scripts/restore_proof/` | REHEARSAL | restore-proof-rehearsal.yml | scratch PG | DP-D structure-first restore proof: export gate, catalog fingerprint, private socket-only scratch clusters; prove.py checks the owner's export (docs/runbooks/RESTORE_PROOF_EXPORT.md) and rehearse.py is invoked by .github/workflows/restore-proof-rehearsal.yml; a local run uses the same scripts. |
 | `scripts/resolve_outcomes.py` | ACTIVE_JOB | resolve-outcomes.yml | production DB | Invoked by .github/workflows/resolve-outcomes.yml. |
 | `scripts/resolver_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/RESOLVER_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/source_integrity_guard.py` | ACTIVE_JOB | source-integrity-guard.yml | HF Space | Invoked by .github/workflows/source-integrity-guard.yml. |
@@ -103,6 +104,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `.github/workflows/persistence-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/persistence-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/privilege-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/privilege-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/reproducible-build.yml` | ACTIVE_GATE | pull_request, push | CI only | .github/workflows/reproducible-build.yml runs its checks on pull_request, push. |
+| `.github/workflows/restore-proof-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/restore-proof-rehearsal.yml runs the DP-D restore proof's scratch-PostgreSQL 17.6 rehearsal on pull_request. |
 | `.github/workflows/resolve-outcomes.yml` | ACTIVE_JOB | schedule, workflow_dispatch | production DB | .github/workflows/resolve-outcomes.yml defines the repeatable scheduled job. |
 | `.github/workflows/section-5a-apply-seal-migration.yml` | HISTORICAL_CONSUMED | workflow_dispatch | production DB | STATE.md: 'The 0009 route: 34851608514 (refused before any DB contact) and 34861816985 (applied). Never dispatch it again.' (never rerun). |
 | `.github/workflows/section-5a-evaluation.yml` | HISTORICAL_CONSUMED | workflow_dispatch | production DB | STATE.md: 'The §5A ONE LOOK, consume run 34919367341 (1d8f933, population f83c31f7…).' (never rerun). |
@@ -139,6 +141,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `docs/runbooks/OWNER_URL_ENVIRONMENT.md` | HISTORICAL_REFERENCE | none (C4 setup complete) | local | STATE.md records 'C4: SET, verified by NAME only' for this GitHub configuration procedure. |
 | `docs/runbooks/RELEASE.md` | ACTIVE_RELEASE | owner-local | HF Space | Drives scripts/release.py release procedures. |
 | `docs/runbooks/RESOLVER_CUTOVER.md` | HISTORICAL_REFERENCE | none (G1 cutover proven) | production DB | STATE.md records 'G1: LIVE_PROVEN' and run 37139970258 after this credential cutover. |
+| `docs/runbooks/RESTORE_PROOF_EXPORT.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | The owner's one-time schema-only and roles-only export for the DP-D restore proof (catalog reads, no row, no password); PREPARED, NOT RUN until the next owner boundary. |
 | `docs/runbooks/ROLLBACK.md` | ACTIVE_RELEASE | owner-local | HF Space | Drives scripts/release.py rollback procedures. |
 | `docs/runbooks/SPACE_DB_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | Documents scripts/space_db_credential.py and the owner SQL/Space credential switch. |
 | `docs/runbooks/WRITER_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | Supabase API | Documents scripts/writer_signing_key.py and recurring 30-day writer-token replacement. |

@@ -1,0 +1,64 @@
+name: Restore proof rehearsal (scratch PostgreSQL 17.6, no secrets)
+
+# DP-D (owner ruling DP-D=2, 2026-10-05; governing plan §12.1 and §23 "Backup"): the structure-first
+# restore proof. On every pull request that touches the proof, its export card, a migration or the
+# scratch-role fixtures, it builds PostgreSQL 17.6 (the governed version) from its pinned source
+# tarball and runs scripts/restore_proof/rehearse.py:
+# - scratch stand-ins for production, under Supabase's role names, built from every migration;
+# - the export card's two commands (docs/runbooks/RESTORE_PROOF_EXPORT.md) against each;
+# - the proof (prove.py), which must PASS the clean export, fail each planted drift at its own path,
+#   report the documented operational and platform differences without failing, and refuse an
+#   export with data, password verifiers, a meta-command, no \restrict, a demoted bootstrap role or
+#   a digest that is not the owner's.
+# It references no secret and touches no real database. A local run uses the same scripts.
+
+"on":
+  pull_request:
+    paths:
+      - scripts/restore_proof/**
+      - docs/runbooks/RESTORE_PROOF_EXPORT.md
+      - scripts/a4_card04_companion_rehearsal/build_postgres.sh
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - scripts/migration_0016_rehearsal/**
+      - migrations/**
+      - .github/workflows/restore-proof-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Build PostgreSQL 17.6 from its pinned source tarball
+        shell: bash
+        run: bash scripts/a4_card04_companion_rehearsal/build_postgres.sh "$RUNNER_TEMP/pg17"
+
+      - name: Rehearse the restore proof on scratch clusters
+        shell: bash
+        run: python scripts/restore_proof/rehearse.py --pg-bin "$RUNNER_TEMP/pg17/bin" --work "$RUNNER_TEMP/restore-proof" --report restore-proof-rehearsal-report.json
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: restore-proof-rehearsal-report
+          path: restore-proof-rehearsal-report.json
+          if-no-files-found: warn
