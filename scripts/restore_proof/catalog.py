@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -555,8 +555,28 @@ def compare(
 
     differences: list[Difference] = []
     _walk("", reference, restored, differences)
-    roles = _Roles(migration_roles, api_roles(reference, migration_roles, bootstrap), bootstrap)
+    # A role that is a superuser in either fingerprint can act as every role; the bootstrap is one.
+    superusers = _superuser_roles(reference) | _superuser_roles(restored)
+    if bootstrap is not None:
+        superusers = superusers | {bootstrap}
+    roles = _Roles(
+        migration_roles,
+        api_roles(reference, migration_roles, bootstrap),
+        bootstrap,
+        frozenset(superusers),
+    )
     return [_classify(difference, roles) for difference in differences]
+
+
+def _superuser_roles(fingerprint: dict[str, Any]) -> set[str]:
+    """Every role the fingerprint records with SUPERUSER (rolsuper)."""
+
+    attributes = fingerprint.get("cluster", {}).get("attributes", {})
+    return {
+        name
+        for name, values in attributes.items()
+        if isinstance(values, Mapping) and values.get("rolsuper") is True
+    }
 
 
 @dataclass(frozen=True)
@@ -564,6 +584,7 @@ class _Roles:
     migration: frozenset[str]
     api: frozenset[str]
     bootstrap: str | None
+    superusers: frozenset[str]
 
 
 def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
@@ -629,20 +650,30 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
             return difference
         if member in {OWNER, roles.bootstrap}:
             return as_("platform")  # the owner owns every app object; the bootstrap is superuser
-        if granted == OWNER or granted in roles.api or granted in DATA_ROLES:
-            return difference  # another role able to act as an app role, or to reach every table
+        if (
+            granted == OWNER
+            or granted in roles.api
+            or granted in roles.superusers
+            or granted in DATA_ROLES
+        ):
+            # Another role able to act as an app role, as a superuser, or to reach every table.
+            return difference
         return as_("platform")
     if section == "settings":
         role = subject.split(" in ")[0]
         changed = set(difference.reference or []) ^ set(difference.restored or [])
         names = {item.split(" ", 1)[0] for item in changed}
+        if role == PUBLIC:
+            return difference  # a setting on every role reaches the app's roles too
         if role in roles.migration or (role in roles.api and not names <= TIMEOUT_SETTINGS):
             return difference
         return as_("platform")
     if section == "parameter_acl":
         changed = set(difference.reference or []) ^ set(difference.restored or [])
         grantees = {item.split(":", 1)[0] for item in changed}
-        return difference if grantees & (roles.migration | roles.api) else as_("platform")
+        # PUBLIC is every role, the app's included, so a grant to it is an app difference.
+        sensitive = roles.migration | roles.api | {PUBLIC}
+        return difference if grantees & sensitive else as_("platform")
     return difference
 
 

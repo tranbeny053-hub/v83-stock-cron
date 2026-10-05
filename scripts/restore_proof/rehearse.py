@@ -117,6 +117,15 @@ def _drop_restrict(export: Path) -> None:
     )
 
 
+def _carriage_return(export: Path) -> None:
+    # A bare CR mid-line: psql would end the line here, the gate refuses it (CARRIAGE_RETURN).
+    schema = export / "schema.sql"
+    lines = schema.read_text(encoding="utf-8").split("\n")
+    opening = next(i for i, item in enumerate(lines) if item.startswith("\\restrict "))
+    lines.insert(opening + 1, "SET\rstatement_timeout = 0;")
+    schema.write_text("\n".join(lines), encoding="utf-8")
+
+
 def _demote_bootstrap(export: Path) -> None:
     roles = export / "roles.sql"
     text = roles.read_text(encoding="utf-8")
@@ -324,6 +333,12 @@ CASES: tuple[Case, ...] = (
         checks=("meta_command_never_ran",),
     ),
     Case(
+        "a bare carriage return in the export",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"CARRIAGE_RETURN"}),
+        edit=_carriage_return,
+    ),
+    Case(
         "no \\restrict",
         "REFUSED_EXPORT",
         refusals=frozenset({"RESTRICT_PAIR_MISSING"}),
@@ -456,6 +471,30 @@ CASES: tuple[Case, ...] = (
         "FAIL",
         _app("cluster/parameter_acl/session_replication_role"),
         cluster_sql=("GRANT SET ON PARAMETER session_replication_role TO ucpe_api_writer",),
+    ),
+    Case(
+        "a parameter grant to PUBLIC",
+        "FAIL",
+        _app("cluster/parameter_acl/session_replication_role"),
+        cluster_sql=("GRANT SET ON PARAMETER session_replication_role TO PUBLIC",),
+    ),
+    Case(
+        "the bootstrap superuser granted to a plain role",
+        "FAIL",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_grantee"),
+                (
+                    "app",
+                    f"cluster/memberships/{SUPER} to rehearsal_grantee admin=False "
+                    "inherit=True set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_grantee NOINHERIT LOGIN",
+            f"GRANT {SUPER} TO rehearsal_grantee WITH INHERIT TRUE",
+        ),
     ),
     Case(
         "the platform's own roles, settings and memberships",

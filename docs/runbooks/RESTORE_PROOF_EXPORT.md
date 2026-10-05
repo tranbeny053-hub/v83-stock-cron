@@ -128,7 +128,9 @@ one.
 - **An independent copy.** The export sits on your Mac only, as long as you keep it.
 - **What the two commands do not export:** default privileges set for all schemas at once (an
   `ALTER DEFAULT PRIVILEGES` with no `IN SCHEMA`), a role's settings for one database only
-  (`ALTER ROLE … IN DATABASE … SET`), the database's own settings, every schema but `public`
-  (Supabase's `auth`, `storage`, `extensions` and the rest), and a role's comment, security label
-  and password expiry, which carry no privilege and are not compared. Supabase's settings outside
-  the database (the API keys, the JWT secret, network rules) are not in any export.
+  (`ALTER ROLE … IN DATABASE … SET`), a setting applied to every role at once (`ALTER ROLE ALL
+  SET …`, which `pg_dumpall --roles-only` does not write and the proof therefore cannot compare),
+  the database's own settings, every schema but `public` (Supabase's `auth`, `storage`,
+  `extensions` and the rest), and a role's comment, security label and password expiry, which
+  carry no privilege and are not compared. Supabase's settings outside the database (the API keys,
+  the JWT secret, network rules) are not in any export.

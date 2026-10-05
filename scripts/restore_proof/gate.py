@@ -16,10 +16,10 @@ In both, the only psql meta-commands allowed are the ``\\restrict`` and ``\\unre
 pg_dump 17.6 writes, with one key, first and last: any other (``\\!`` runs a shell command) could
 act outside the scratch server, and ``\\restrict`` keeps psql from running any meta-command between
 them. The files are split by psql's own lexing rules (scan), and whatever would make psql lex them
-otherwise than this scan is refused: a NUL character (psql's line reader stops at it), an escape
-string, a psql variable reference, and a SET of standard_conforming_strings or client_encoding to
-anything but what pg_dump writes. A refusal names the file, the line and the kind, never the
-line's content.
+otherwise than this scan is refused: a NUL character or a bare carriage return (psql's line reader
+ends a line at either), an escape string, a psql variable reference, and a SET of
+standard_conforming_strings or client_encoding to anything but what pg_dump writes. A refusal names
+the file, the line and the kind, never the line's content.
 """
 
 from __future__ import annotations
@@ -336,6 +336,11 @@ def _decode(name: str, raw: bytes) -> tuple[str | None, list[Refusal]]:
         return None, [Refusal(name, None, "NOT_UTF8_TEXT")]
     if "\x00" in text:
         return None, [Refusal(name, None, "NUL_CHARACTER")]  # psql's line reader stops at one
+    # psql's line reader and comment lexer end a line at a bare carriage return as well as at a
+    # newline, so a mid-line CR could resume lexing where this scan does not. Genuine pg_dump 17
+    # output on any platform writes newline-terminated lines with no bare CR, so refuse one.
+    if "\r" in text:
+        return None, [Refusal(name, None, "CARRIAGE_RETURN")]
     return text, []
 
 

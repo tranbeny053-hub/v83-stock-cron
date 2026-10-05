@@ -392,6 +392,40 @@ def test_a_nul_character_is_refused() -> None:
     assert kinds(gate.check_roles_dump("roles.sql", raw)[1]) == ["NUL_CHARACTER"]
 
 
+def test_a_bare_carriage_return_is_refused() -> None:
+    """Review 3 of DP-D (owner-authorized third repair): psql ends a line (and a comment) at a
+    bare carriage return as well as a newline, so a mid-line CR could resume lexing where the scan
+    does not. Genuine pg_dump 17 output has none, so it is refused before any lexing or restore."""
+
+    raw = SCHEMA.replace("BEGIN\n", "BEGIN\r more\n", 1).encode()
+    assert kinds(gate.check_schema_dump("schema.sql", raw)[1]) == ["CARRIAGE_RETURN"]
+    assert kinds(gate.check_roles_dump("roles.sql", raw)[1]) == ["CARRIAGE_RETURN"]
+    # A CRLF file is refused too (the scan is newline-only by construction).
+    crlf = SCHEMA.replace("\n", "\r\n").encode()
+    assert kinds(gate.check_schema_dump("schema.sql", crlf)[1]) == ["CARRIAGE_RETURN"]
+
+
+def test_a_superuser_role_granted_to_any_role_is_app() -> None:
+    """Review 3 of DP-D, finding 2 (3rd occurrence; owner-authorized third repair): a role granted
+    a superuser role — the bootstrap, or any role the fingerprint records as SUPERUSER — can act as
+    every role, so the grant is an app difference even when neither end is an app role."""
+
+    reference, restored = fingerprint(), fingerprint()
+    restored["cluster"]["attributes"]["custom_super"] = {"rolsuper": True}
+    restored["cluster"]["memberships"] = [
+        *reference["cluster"]["memberships"],
+        "custom_super to plain_role admin=False inherit=True set=True",
+    ]
+    found = catalog.compare(reference, restored, MIGRATION, "supabase_admin")
+    paths = {(item.category, item.path) for item in found}
+    assert ("app", "cluster/attributes/custom_super") in paths  # the new superuser itself
+    assert (
+        "app",
+        "cluster/memberships/custom_super to plain_role admin=False inherit=True set=True",
+    ) in paths
+    assert all(category == "app" for category, _ in paths), found
+
+
 @pytest.mark.parametrize(
     ("line", "found"),
     [
@@ -654,6 +688,7 @@ def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app(
             "app",
         ),
         ("parameter_acl", "session_replication_role", [], ["anon:SET by <owner>"], "app"),
+        ("parameter_acl", "session_replication_role", [], ["PUBLIC:SET by <owner>"], "app"),
         ("parameter_acl", "session_replication_role", [], ["<owner>:SET by x"], "platform"),
         (
             "parameter_acl",
@@ -662,6 +697,14 @@ def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app(
             ["dashboard_user:SET by x"],
             "platform",
         ),
+        (
+            "memberships",
+            "supabase_admin to gap_holder admin=False inherit=True set=True",
+            None,
+            "x",
+            "app",
+        ),
+        ("settings", "PUBLIC in all databases", None, ["session_replication_role sha256:a"], "app"),
     ],
     ids=[
         "an API role gains BYPASSRLS",
@@ -695,8 +738,11 @@ def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app(
         "the owner's setting",
         "a parameter grant to a migration role",
         "a parameter grant to an API role",
+        "a parameter grant to PUBLIC, which is every role",
         "a parameter grant to the owner, who owns every app object already",
         "a parameter grant to another role",
+        "the bootstrap superuser granted to a plain role",
+        "a setting applied to PUBLIC, which is every role",
     ],
 )
 def test_privilege_paths_fail_and_platform_notes_do_not(
