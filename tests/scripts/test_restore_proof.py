@@ -539,6 +539,28 @@ def test_the_proof_runs_only_on_postgresql_17_6_or_a_later_17(tmp_path: Path, re
     assert scratch.server_version(tmp_path / "none") is None
 
 
+def test_the_restore_uses_the_checked_bytes_or_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The restore reads a private copy of the bytes the gate checked; a copy that differs from
+    them (the files changed after the check) is refused before any server starts, and no copy is
+    left behind."""
+
+    digests = write_export(tmp_path / "export")
+
+    def altered_copy(source: Path, target: Path) -> None:
+        Path(target).write_bytes(Path(source).read_bytes() + b"-- changed after the check\n")
+
+    monkeypatch.setattr(prove.shutil, "copyfile", altered_copy)
+    work = tmp_path / "work"
+    report = prove.run(
+        fake_bin(tmp_path / "bin", "17.6"), tmp_path / "export", work, expected_sha256=digests
+    )
+    assert report["verdict"] == "REFUSED_EXPORT"
+    assert [item["kind"] for item in report["gate_refusals"]] == ["DIGEST_CHANGED"]
+    assert not (work / "export").exists() and not (work / "restored").exists()
+
+
 def test_the_command_line_demands_both_digests(tmp_path: Path) -> None:
     write_export(tmp_path / "export")
     arguments = [
