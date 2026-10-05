@@ -1,22 +1,61 @@
-"""Safe public HTTP client for keyless market-data providers."""
+"""Safe public HTTP client for keyless market-data providers.
+
+Provider coalescing (governing plan §9.1; owner ruling DP-B as narrowed on 2026-10-05). A caller
+that waits on no one sends, retries, maps its outcome and meets its deadline exactly as before.
+Two things change underneath:
+- **one connection pool per process.** A client that is not handed its own ``httpx.Client`` builds
+  one as before (its own cookies, timeout and rate-limit history), on the process's one shared
+  transport, so connections are reused across analyses. httpx's default limits (100 connections,
+  20 kept alive) are now the process's rather than each client's. A client closing never closes
+  the pool; the app closes it once, at shutdown (``close_pool``). Only where httpx would route no
+  request through a proxy (none in the environment or the system settings): otherwise the client
+  is built exactly as before, unpooled and uncoalesced, because httpx mounts proxies only on a
+  transport it builds itself.
+- **one exchange for identical in-flight requests (single-flight)**, on the human routes only: the
+  F1 automated analysis waits on no one (``PROVIDER_COALESCING``, which
+  ``analysis_service.analyze_request_isolated`` turns off), so its provider timing, and so its
+  own deadline, are exactly what they were. When a pooled client sends a request that is
+  byte-identical to one already in flight (method, URL with its query, every header including any
+  cookie, and the timeout), it waits for that exchange, for no longer than its own deadline,
+  instead of sending its own. Only a success is shared: a response below 400, with no cookie, whose
+  body the first caller's own parse (the only one on its clock) read as JSON. On any other outcome,
+  or no answer within its own deadline, the caller sends its own request with its own fresh
+  deadline. No failure is ever passed on; each caller checks its own rate limit, makes its own
+  attempts and maps its own outcome. What a follower gives up is time, never an outcome it did not
+  meet: it may wait up to its own deadline before its own request (so in an outage it fails over
+  later than it would have alone), and the data it shares are at most one in-flight window older
+  than its own request would have fetched.
+No retry, retry policy, failure cache, data cache or freshness change is added. The only other
+addition is passive measurement: counts and timings for the current analysis, in telemetry.
+"""
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
 
+try:  # How httpx.Client itself decides whether the environment routes a request through a proxy.
+    from httpx._utils import get_environment_proxies as _environment_proxies
+except ImportError:  # pragma: no cover - another httpx: never pool rather than guess
+    _environment_proxies = None
+
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.telemetry.events import CURRENT_PROVIDER_STATS
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 REQUEST_DEADLINE_SECONDS = 10.0
+# Single-flight for the current analysis: on for the human routes, off for F1's automated one.
+PROVIDER_COALESCING: ContextVar[bool] = ContextVar("ucpe_provider_coalescing", default=True)
 
 ALLOWED_PUBLIC_HOSTS = frozenset(
     {
@@ -39,6 +78,8 @@ class PublicHttpClient:
     client: httpx.Client | None = None
     sleep_func: Callable[[float], None] = time.sleep
     _hits_by_host: dict[str, deque[float]] = field(default_factory=lambda: defaultdict(deque))
+    # True once this client built its own httpx.Client on the shared pool (it was handed none).
+    _pooled: bool = field(default=False, init=False, repr=False)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> PublicHttpClient:
@@ -62,57 +103,64 @@ class PublicHttpClient:
         last_error: ProviderError | None = None
         for attempt in range(self.max_retries + 1):
             self._check_rate_limit(host, provider)
+            if attempt:
+                _measure_count("provider_retries")
             attempt_started = time.monotonic()
             try:
-                with self._client().stream(
-                    "GET",
+                # The start of the attempt this exchange answers: a caller that ends up sending its
+                # own request after waiting gets a fresh one, exactly as if it had not waited.
+                exchange, attempt_started, parsed = self._exchange(
                     url,
-                    params=dict(params),
-                    headers=dict(headers or {}),
-                    timeout=min(self.timeout_seconds, REQUEST_DEADLINE_SECONDS),
-                ) as response:
-                    body = _read_bounded_body(response, attempt_started=attempt_started)
-                    if response.status_code in {400, 404} and provider not in {
-                        "gdelt",
-                        "fred",
-                        "newsapi",
-                    }:
+                    params=params,
+                    headers=headers,
+                    attempt_started=attempt_started,
+                )
+                if exchange.status_code in {400, 404} and provider not in {
+                    "gdelt",
+                    "fred",
+                    "newsapi",
+                }:
+                    raise ProviderError(
+                        "INVALID_SYMBOL",
+                        "Provider rejected symbol.",
+                        provider=provider,
+                        http_status=exchange.status_code,
+                        error_code="INVALID_SYMBOL",
+                        error_type="REQUEST",
+                        operation=f"GET {path}",
+                    )
+                if exchange.status_code >= 400:
+                    last_error = _provider_error_from_exchange(
+                        exchange,
+                        provider=provider,
+                        operation=f"GET {path}",
+                    )
+                    _raise_if_deadline_exceeded(attempt_started)
+                    if attempt >= self.max_retries:
+                        raise last_error
+                else:
+                    try:
+                        # One parse per caller: a first caller's own parse decided whether its
+                        # success could be shared, and is not repeated on its clock.
+                        payload = (
+                            parsed.value() if parsed is not None else json.loads(exchange.body)
+                        )
+                    except ValueError as exc:
+                        _raise_if_deadline_exceeded(attempt_started)
                         raise ProviderError(
-                            "INVALID_SYMBOL",
-                            "Provider rejected symbol.",
+                            "SCHEMA_VALIDATION_FAILED",
+                            "Provider returned malformed JSON.",
                             provider=provider,
-                            http_status=response.status_code,
-                            error_code="INVALID_SYMBOL",
-                            error_type="REQUEST",
+                            http_status=exchange.status_code,
+                            error_code="MALFORMED_JSON",
+                            error_type="SCHEMA",
                             operation=f"GET {path}",
-                        )
-                    if response.status_code >= 400:
-                        last_error = _provider_error_from_response(
-                            response,
-                            body=body,
-                            provider=provider,
-                            operation=f"GET {path}",
-                        )
-                        _raise_if_deadline_exceeded(attempt_started)
-                        if attempt >= self.max_retries:
-                            raise last_error
-                    else:
-                        try:
-                            payload = json.loads(body)
-                        except ValueError as exc:
-                            _raise_if_deadline_exceeded(attempt_started)
-                            raise ProviderError(
-                                "SCHEMA_VALIDATION_FAILED",
-                                "Provider returned malformed JSON.",
-                                provider=provider,
-                                http_status=response.status_code,
-                                error_code="MALFORMED_JSON",
-                                error_type="SCHEMA",
-                                operation=f"GET {path}",
-                            ) from exc
-                        _raise_if_deadline_exceeded(attempt_started)
-                        return payload
+                        ) from exc
+                    _raise_if_deadline_exceeded(attempt_started)
+                    return payload
             except (httpx.TimeoutException, _ResponseBoundExceeded) as exc:
+                if isinstance(exc, httpx.TimeoutException | _DeadlineExceeded):
+                    _measure_count("provider_deadline_hits")
                 last_error = ProviderError(
                     "PROVIDER_DEGRADED",
                     "Provider public request timed out.",
@@ -137,9 +185,49 @@ class PublicHttpClient:
             provider=provider,
         )
 
+    def _exchange(
+        self,
+        url: str,
+        *,
+        params: Mapping[str, Any],
+        headers: Mapping[str, str] | None,
+        attempt_started: float,
+    ) -> tuple[_Exchange, float, _Parsed | None]:
+        """One request and its whole bounded body, exactly as ``httpx.Client.stream`` sends it, the
+        start of the attempt it answers, and its body's parse when a first caller already made it;
+        on the shared pool, one successful exchange serves every identical request in flight."""
+
+        client = self._client()
+        request = client.build_request(
+            "GET",
+            url,
+            params=dict(params),
+            headers=dict(headers or {}),
+            timeout=min(self.timeout_seconds, REQUEST_DEADLINE_SECONDS),
+        )
+
+        def send(started: float) -> _Exchange:
+            return _send(client, request, attempt_started=started)
+
+        measured = time.perf_counter()
+        try:
+            if not self._pooled or not PROVIDER_COALESCING.get():
+                return send(attempt_started), attempt_started, None
+            return _SINGLE_FLIGHT.run(_request_identity(request), send, attempt_started)
+        finally:
+            _measure_exchange((time.perf_counter() - measured) * 1000)
+
     def _client(self) -> httpx.Client:
         if self.client is None:
-            self.client = httpx.Client(timeout=self.timeout_seconds)
+            if _environment_routes_through_a_proxy():
+                # Exactly the original client: httpx mounts the environment's proxies only on a
+                # transport it builds itself.
+                self.client = httpx.Client(timeout=self.timeout_seconds)
+            else:
+                self.client = httpx.Client(
+                    timeout=self.timeout_seconds, transport=pooled_transport()
+                )
+                self._pooled = True
         return self.client
 
     def _build_url(self, base_url: str, path: str) -> str:
@@ -186,15 +274,180 @@ class PublicHttpClient:
         hits.append(now)
 
 
-def _provider_error_from_response(
-    response: httpx.Response,
+@dataclass(frozen=True)
+class _Exchange:
+    """What a caller reads from one response: its status, its Retry-After and its bounded body."""
+
+    status_code: int
+    retry_after: str | None
+    body: bytes
+    sets_cookie: bool
+
+
+def _send(client: httpx.Client, request: httpx.Request, *, attempt_started: float) -> _Exchange:
+    response = client.send(request, stream=True)
+    try:
+        body = _read_bounded_body(response, attempt_started=attempt_started)
+        return _Exchange(
+            status_code=response.status_code,
+            retry_after=response.headers.get("Retry-After"),
+            body=body,
+            sets_cookie="set-cookie" in response.headers,
+        )
+    finally:
+        response.close()
+
+
+def _request_identity(request: httpx.Request) -> tuple[object, ...]:
+    """Everything that makes two requests the same request: method, URL with its query, every
+    header in order (the cookie included) and the timeout."""
+
+    timeout = request.extensions.get("timeout") or {}
+    return (
+        request.method,
+        str(request.url),
+        tuple(request.headers.raw),
+        tuple(sorted(timeout.items())),
+    )
+
+
+class _PooledTransport(httpx.BaseTransport):
+    """The process's one connection pool. A client that closes it leaves the pool open."""
+
+    def __init__(self, inner: httpx.BaseTransport) -> None:
+        self.inner = inner
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        return self.inner.handle_request(request)
+
+    def close(self) -> None:
+        return None
+
+
+def _environment_routes_through_a_proxy() -> bool:
+    """True when an httpx.Client built with no transport would mount a proxy (from HTTP_PROXY,
+    HTTPS_PROXY, ALL_PROXY or the system settings, unless NO_PROXY is "*")."""
+
+    if _environment_proxies is None:
+        return True
+    return any(url is not None for url in _environment_proxies().values())
+
+
+# httpx.HTTPTransport() is exactly the transport an httpx.Client builds by default, when the
+# environment mounts no proxy.
+_POOL_FACTORY: Callable[[], httpx.BaseTransport] = httpx.HTTPTransport
+_POOL_LOCK = threading.Lock()
+_POOL: _PooledTransport | None = None
+
+
+def pooled_transport() -> _PooledTransport:
+    global _POOL
+    with _POOL_LOCK:
+        if _POOL is None:
+            _POOL = _PooledTransport(_POOL_FACTORY())
+        return _POOL
+
+
+def close_pool() -> None:
+    """Close the shared pool (once, at app shutdown); the next pooled client opens a new one."""
+
+    global _POOL
+    with _POOL_LOCK:
+        pool, _POOL = _POOL, None
+    if pool is not None:
+        pool.inner.close()
+
+
+class _Call:
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.exchange: _Exchange | None = None  # set only for a success that can be shared
+
+
+class _SingleFlight:
+    """One exchange for identical requests in flight. The first caller sends; the others wait, for
+    no longer than their own deadline, and read its outcome only when it is a success that can be
+    shared. Otherwise each sends its own request, with its own fresh deadline."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._calls: dict[tuple[object, ...], _Call] = {}
+
+    def run(
+        self,
+        key: tuple[object, ...],
+        send: Callable[[float], _Exchange],
+        attempt_started: float,
+    ) -> tuple[_Exchange, float, _Parsed | None]:
+        with self._lock:
+            call = self._calls.get(key)
+            leader = call is None
+            if leader:
+                call = self._calls[key] = _Call()
+        if leader:
+            exchange, parsed = self._lead(key, call, send, attempt_started)
+            return exchange, attempt_started, parsed
+        remaining = REQUEST_DEADLINE_SECONDS - (time.monotonic() - attempt_started)
+        if call.done.wait(max(0.0, remaining)) and call.exchange is not None:
+            _measure_count("provider_coalesced")
+            return call.exchange, attempt_started, None  # the follower parses its own copy
+        own_start = time.monotonic()
+        return send(own_start), own_start, None
+
+    def _lead(
+        self,
+        key: tuple[object, ...],
+        call: _Call,
+        send: Callable[[float], _Exchange],
+        attempt_started: float,
+    ) -> tuple[_Exchange, _Parsed | None]:
+        try:
+            exchange = send(attempt_started)
+            parsed = None
+            if exchange.status_code < 400 and not exchange.sets_cookie:
+                # The first caller's own parse, its only one, decides: a success is shared only
+                # when its body is JSON. Any other outcome is each caller's own to meet.
+                parsed = _parse(exchange.body)
+                if parsed.error is None:
+                    call.exchange = exchange
+            return exchange, parsed
+        finally:
+            with self._lock:
+                del self._calls[key]
+            call.done.set()
+
+
+@dataclass(frozen=True)
+class _Parsed:
+    """A first caller's one parse of a body it might share: the payload, or the error raised."""
+
+    payload: Any = None
+    error: ValueError | None = None
+
+    def value(self) -> Any:
+        if self.error is not None:
+            raise self.error
+        return self.payload
+
+
+def _parse(body: bytes) -> _Parsed:
+    try:
+        return _Parsed(payload=json.loads(body))
+    except ValueError as exc:
+        return _Parsed(error=exc)
+
+
+_SINGLE_FLIGHT = _SingleFlight()
+
+
+def _provider_error_from_exchange(
+    exchange: _Exchange,
     *,
-    body: bytes,
     provider: str,
     operation: str,
 ) -> ProviderError:
-    status = response.status_code
-    provider_code = _extract_provider_error_code(body)
+    status = exchange.status_code
+    provider_code = _extract_provider_error_code(exchange.body)
     if status in {418, 429}:
         return ProviderError(
             "PROVIDER_DEGRADED",
@@ -203,7 +456,7 @@ def _provider_error_from_response(
             http_status=status,
             error_code=provider_code or "RATE_LIMITED",
             error_type="RATE_LIMIT",
-            retry_after_seconds=_retry_after_seconds(response),
+            retry_after_seconds=_retry_after_seconds(exchange.retry_after),
             operation=operation,
         )
     if status in {401, 403}:
@@ -254,6 +507,10 @@ class _ResponseBoundExceeded(Exception):
     pass
 
 
+class _DeadlineExceeded(_ResponseBoundExceeded):
+    """The per-attempt deadline passed: handled exactly as any bound, and counted as a deadline."""
+
+
 def _read_bounded_body(response: httpx.Response, *, attempt_started: float) -> bytes:
     body = bytearray()
     for chunk in response.iter_bytes():
@@ -266,14 +523,36 @@ def _read_bounded_body(response: httpx.Response, *, attempt_started: float) -> b
 
 def _raise_if_deadline_exceeded(attempt_started: float) -> None:
     if time.monotonic() - attempt_started > REQUEST_DEADLINE_SECONDS:
-        raise _ResponseBoundExceeded
+        raise _DeadlineExceeded
 
 
-def _retry_after_seconds(response: httpx.Response) -> float | None:
-    raw = response.headers.get("Retry-After")
+def _retry_after_seconds(raw: str | None) -> float | None:
     if raw is None:
         return None
     try:
         return max(0.0, float(raw))
     except ValueError:
         return None
+
+
+def _measure_count(name: str) -> None:
+    """Passive measurement for the current analysis's telemetry; never raises, changes nothing."""
+
+    try:
+        stats = CURRENT_PROVIDER_STATS.get()
+        if stats is not None:
+            stats[name] = stats.get(name, 0) + 1
+    except Exception:
+        return
+
+
+def _measure_exchange(duration_ms: float) -> None:
+    try:
+        stats = CURRENT_PROVIDER_STATS.get()
+        if stats is not None:
+            stats["provider_exchanges"] = stats.get("provider_exchanges", 0) + 1
+            stats["provider_exchange_max_ms"] = max(
+                float(stats.get("provider_exchange_max_ms", 0.0)), duration_ms
+            )
+    except Exception:
+        return

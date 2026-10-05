@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from crypto_probability_engine.adapters.http_client import close_pool
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
 from crypto_probability_engine.adapters.symbol_universe import resolve_symbol_availability
 from crypto_probability_engine.api.analysis_service import (
@@ -82,11 +83,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
-            repositories = (persistence_repository, skill_evidence_repository)
-            for repository in repositories:
-                close = getattr(repository, "close", None)
-                if callable(close):
-                    close()
+            try:
+                repositories = (persistence_repository, skill_evidence_repository)
+                for repository in repositories:
+                    close = getattr(repository, "close", None)
+                    if callable(close):
+                        close()
+            finally:
+                # The public providers' one connection pool (plan §9.1) lives as long as the app.
+                close_pool()
 
     app = FastAPI(
         title=app_settings.app_name,
