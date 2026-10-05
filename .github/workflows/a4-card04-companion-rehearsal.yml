@@ -1,0 +1,65 @@
+name: A4 Card-04 companion rehearsal (scratch PostgreSQL 17.6, no secrets)
+
+# ucpe.a4_card04_companion.v1 (ops/a4_card04_companion), the sealed read-only companion of the
+# accepted A4 audit for UOR Card 04. On every pull request that touches the companion, its
+# rehearsal, a migration, the scratch-role fixtures or the example bodies it seeds from, it builds
+# PostgreSQL 17.6 (the governed version) from its pinned source tarball, starts a scratch cluster
+# from every applied migration, and runs the sealed companion against synthetic rows:
+# - each qualifying row PASSES with its exact facts; every other shape fails closed with its reason;
+# - the binding is the (credential_id, client_request_id) pair; the count window is inclusive;
+# - a role that can read only the eleven columns still PASSES, and is refused everything else;
+# - a reader that row-level security applies to is refused, never counted;
+# - every write kind is refused inside the runner's read-only session, and nothing changes;
+# - schema drift fails closed.
+# It references no secret and touches no real database. A local run uses the same two scripts.
+
+"on":
+  pull_request:
+    paths:
+      - ops/a4_card04_companion/**
+      - scripts/a4_card04_companion_rehearsal/**
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - scripts/migration_0016_rehearsal/**
+      - docs/automation/examples/**
+      - migrations/**
+      - .github/workflows/a4-card04-companion-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Build PostgreSQL 17.6 from its pinned source tarball
+        shell: bash
+        run: bash scripts/a4_card04_companion_rehearsal/build_postgres.sh "$RUNNER_TEMP/pg17"
+
+      - name: Rehearse the sealed companion on a scratch cluster
+        shell: bash
+        run: bash scripts/a4_card04_companion_rehearsal/run_scratch.sh "$RUNNER_TEMP/pg17/bin" "$RUNNER_TEMP/a4c" a4-card04-companion-rehearsal-report.json
+
+      - name: Upload the rehearsal report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: a4-card04-companion-rehearsal-report
+          path: a4-card04-companion-rehearsal-report.json
+          if-no-files-found: warn

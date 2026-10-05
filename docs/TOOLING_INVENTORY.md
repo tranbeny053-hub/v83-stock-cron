@@ -13,6 +13,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 
 | Path | Class | Trigger | Touches | Evidence |
 | --- | --- | --- | --- | --- |
+| `scripts/a4_card04_companion_rehearsal/` | REHEARSAL | a4-card04-companion-rehearsal.yml | scratch PG | Scratch PostgreSQL 17.6 build, probe roles and rehearsal invoked by .github/workflows/a4-card04-companion-rehearsal.yml; a local run uses the same scripts. |
 | `scripts/a4_ledger_audit_rehearsal/` | REHEARSAL | a4-ledger-audit-rehearsal.yml | scratch PG | Scratch probe role and rehearsal invoked by .github/workflows/a4-ledger-audit-rehearsal.yml. |
 | `scripts/apply_migration_0008.py` | HISTORICAL_CONSUMED | none (production apply consumed; scratch rehearse only where supported) | production DB | STATE.md: '0008 was applied once, 2026-09-16 (run 35164080476).' (never rerun). |
 | `scripts/apply_migration_0010.py` | HISTORICAL_CONSUMED | none (production apply consumed; scratch rehearse only where supported) | production DB | STATE.md: 'The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).' (never rerun). |
@@ -70,6 +71,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 
 | Path | Class | Trigger | Touches | Evidence |
 | --- | --- | --- | --- | --- |
+| `.github/workflows/a4-card04-companion-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/a4-card04-companion-rehearsal.yml runs the sealed Card-04 companion's scratch-PostgreSQL 17.6 rehearsal on pull_request. |
 | `.github/workflows/a4-ledger-audit-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/a4-ledger-audit-rehearsal.yml runs the sealed A4 audit's scratch-PostgreSQL rehearsal on pull_request. |
 | `.github/workflows/apply-migration-0008.yml` | HISTORICAL_CONSUMED | workflow_dispatch | production DB | STATE.md: '0008 was applied once, 2026-09-16 (run 35164080476).' (never rerun). |
 | `.github/workflows/apply-migration-0010-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/apply-migration-0010-rehearsal.yml runs its checks on pull_request. |
@@ -110,6 +112,11 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 
 | Path | Class | Trigger | Touches | Evidence |
 | --- | --- | --- | --- | --- |
+| `ops/a4_card04_companion/CARD.md` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The owner card for ucpe.a4_card04_companion.v1; prepared, never run against production (docs/automation/UOR_HANDOFF.md section 15). |
+| `ops/a4_card04_companion/MANIFEST.json` | ACTIVE_PIN | tests only | local | The package seal, read by the runner and tests/automation/test_a4_card04_companion.py; its sha256 is ARTIFACT_SHA256 in docs/automation/UOR_HANDOFF.md section 15. |
+| `ops/a4_card04_companion/a4_card04_companion.py` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The read-only runner of ucpe.a4_card04_companion.v1, documented by ops/a4_card04_companion/CARD.md; never run against production yet. |
+| `ops/a4_card04_companion/a4_card04_companion.sql` | ACTIVE_PIN | a4_card04_companion.py | local | The sealed SELECT, pinned by sha256 in ops/a4_card04_companion/a4_card04_companion.py. |
+| `ops/a4_card04_companion/build_manifest.py` | ACTIVE_OWNER_TOOL | owner-local | local | Regenerates ops/a4_card04_companion/MANIFEST.json, checked by tests/automation/test_a4_card04_companion.py. |
 | `ops/a4_ledger_audit/CARD.md` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The owner card for ucpe.a4_ledger_audit.v1; prepared, never run against production (docs/automation/UOR_HANDOFF.md section 14). |
 | `ops/a4_ledger_audit/MANIFEST.json` | ACTIVE_PIN | tests only | local | The package seal, read by tests/automation/test_a4_ledger_audit.py; its sha256 is ARTIFACT_SHA256 in docs/automation/UOR_HANDOFF.md section 14. |
 | `ops/a4_ledger_audit/a4_ledger_audit.py` | ACTIVE_OWNER_TOOL | owner-local, one UOR qualification episode only | production DB | The read-only runner of ucpe.a4_ledger_audit.v1, documented by ops/a4_ledger_audit/CARD.md; never run against production yet. |
