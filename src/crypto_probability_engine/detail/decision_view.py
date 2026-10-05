@@ -16,9 +16,11 @@ empty and change only by a governed acceptance. An acceptance names the probabil
 methodology version and the timeframe, so it never outlives the model it was made for; and a
 directional permission yields to any hard block (hard gates outrank everything shown).
 
-DP-F, the honest DEGRADED: when the configured primary venue was tried and failed, so that another
-venue served the data, the view's data state is DEGRADED, not OK. A primary that does not list the
-symbol has not failed. The analysis's own data_quality and provider_state are untouched, so
+DP-F, the honest DEGRADED: when the configured primary venue failed, so that another venue served
+the data, the view's data state is DEGRADED, not OK. It failed when it was tried and refused for any
+reason but the symbol, or when even its symbol listing could not be read (then it is never tried,
+and the selection names that failure among its warnings). A primary that does not list the symbol
+has not failed. The analysis's own data_quality and provider_state are untouched, so
 radar_evidence.v1 and the AUTOMATED_RADAR path keep every value.
 
 The view is built for every recorded analysis (a user's, the cadence's, a controlled smoke's) and
@@ -42,8 +44,6 @@ SCHEMA_VERSION = "decision_view.v1"
 # Empty: nothing is accepted.
 ACCEPTED_FORECAST_CLAIMS: frozenset[str] = frozenset()
 ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
-# Hard blocks that mean the data cannot support an assessment at all.
-DATA_HARD_BLOCKS = frozenset({"PROVIDER_DEGRADED", "EPISTEMIC_VOID"})
 
 STATE_COPY = {
     "INVALID_OR_UNAVAILABLE_DATA": (
@@ -69,7 +69,7 @@ STATE_COPY = {
     ),
 }
 DATA_COPY = {
-    "OK": "Live data from the configured venues.",
+    "OK": "Live data.",
     "DEMO": "Demo data: not a live market view.",
     "DEGRADED": "Live data, degraded.",
     "UNAVAILABLE": "Data unavailable.",
@@ -173,11 +173,18 @@ def _data_state(
     active = provider_state.get("active_provider")
     providers = provider_state.get("providers") or {}
     primary = providers.get(primary_venue) if primary_venue else None
+    warnings = [str(item) for item in data_quality.get("warnings") or []]
     # Tried and failed; a primary that does not list the symbol has not failed.
     primary_failed = (
         isinstance(primary, Mapping)
         and primary.get("status") == "QUARANTINED"
         and not str(primary.get("quarantine_reason") or "").startswith("INVALID_SYMBOL")
+    ) or (
+        # Never tried, because even its symbol listing failed: the selection's own
+        # "<venue>:<code>: ..." warning (adapters/symbol_universe.py) names it.
+        primary_venue is not None
+        and primary is None
+        and any(item.startswith(f"{primary_venue}:") for item in warnings)
     )
     cross_provider = data_quality.get("cross_provider_state") or provider_state.get(
         "cross_provider_state"

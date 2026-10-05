@@ -16,12 +16,20 @@ These tests prove that:
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator, RefResolver
 
+from crypto_probability_engine.adapters import provider_selection
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
+from crypto_probability_engine.adapters.symbol_universe import (
+    ProviderSymbolUniverse,
+    clear_symbol_universe_cache,
+)
+from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.automation.contract import (
@@ -445,3 +453,118 @@ def test_the_human_payload_validates_against_the_schema(live) -> None:
     Draft202012Validator(schema, resolver=RefResolver.from_schema(schema, store=store)).validate(
         payload
     )
+
+
+# --------------------------------------------------------------------------- review 2 of lane P
+class Venue:
+    """A venue for the real selection path, offline: its listing and its candles, up or down."""
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        listing: frozenset[str] | None = frozenset({"BTC/USDT"}),
+        candles_fail: str | None = None,
+    ) -> None:
+        self.name = name
+        self.listing = listing  # None: even the listing call fails
+        self.candles_fail = candles_fail
+
+    def fetch_symbol_universe(self) -> ProviderSymbolUniverse:
+        if self.listing is None:
+            raise ProviderError(
+                "PROVIDER_DEGRADED", "Provider public request failed.", provider=self.name
+            )
+        return ProviderSymbolUniverse(provider=self.name, symbols=self.listing)
+
+    def fetch_market_snapshot(self, symbol, timeframe: str):
+        if self.candles_fail:
+            raise ProviderError(self.candles_fail, "venue failure", provider=self.name)
+        return make_snapshot(provider=self.name, symbol=symbol.display, timeframe=timeframe)
+
+
+LIVE = Settings(
+    data_mode="live",
+    provider_priority=("binance", "okx"),
+    candle_cache_ttl_seconds=0,
+    symbol_universe_cache_ttl_seconds=0,
+)
+UNREADABLE = None
+
+
+@pytest.mark.parametrize(
+    ("binance", "okx", "expected"),
+    [
+        (Venue("binance"), Venue("okx"), ("OK", None)),
+        (
+            Venue("binance", candles_fail="PROVIDER_DEGRADED"),
+            Venue("okx"),
+            ("DEGRADED", "PRIMARY_VENUE_ABSENT"),
+        ),
+        (
+            Venue("binance", listing=UNREADABLE, candles_fail="PROVIDER_DEGRADED"),
+            Venue("okx"),
+            ("DEGRADED", "PRIMARY_VENUE_ABSENT"),
+        ),
+        (Venue("binance", listing=frozenset({"ETH/USDT"})), Venue("okx"), ("OK", None)),
+        (
+            Venue("binance", listing=UNREADABLE, candles_fail="INVALID_SYMBOL"),
+            Venue("okx", listing=UNREADABLE),
+            ("OK", None),
+        ),
+        (
+            Venue("binance", listing=UNREADABLE, candles_fail="PROVIDER_DEGRADED"),
+            Venue("okx", listing=UNREADABLE),
+            ("DEGRADED", "PRIMARY_VENUE_ABSENT"),
+        ),
+    ],
+    ids=[
+        "both up",
+        "primary refuses, its listing read",
+        "primary unreachable, its listing too",
+        "primary does not list the symbol",
+        "no listing readable, primary rejects the symbol",
+        "no listing readable, primary down",
+    ],
+)
+def test_dp_f_through_the_real_selection_path(
+    monkeypatch: pytest.MonkeyPatch, binance: Venue, okx: Venue, expected: tuple
+) -> None:
+    """The same outage reads the same, whether or not the primary's listing could be read (review 2
+    of lane P, finding 1); the analysis's own data_quality and provider_state stay as they were."""
+
+    clear_symbol_universe_cache()
+    provider_selection.clear_provider_cache()
+
+    def select(symbol, timeframe, *, settings):
+        del settings
+        return provider_selection.select_market_data(
+            symbol, timeframe, settings=LIVE, providers=[binance, okx]
+        )
+
+    monkeypatch.setattr(analysis_service, "select_market_data", select)
+    monkeypatch.setattr(analysis_service, "get_cached_skill_evidence", lambda _tf: dict(SKILL))
+    try:
+        payload = human()
+    finally:
+        clear_symbol_universe_cache()
+        provider_selection.clear_provider_cache()
+    data = payload["decision_view"]["data"]
+    assert (data["state"], data["reason"]) == expected
+    assert payload["data_quality"]["status"] == "OK"
+    assert payload["provider_state"]["status"] == "OK"
+    analysis_service._pop_prediction_persistence(payload)  # noqa: SLF001 - clean up
+
+
+def test_the_horizon_ends_six_bars_after_the_reference_close_not_after_as_of() -> None:
+    snapshot = make_snapshot(provider="binance", symbol="BTC/USDT", timeframe="1H")
+    late = replace(snapshot, as_of_utc=snapshot.as_of_utc + timedelta(minutes=7))
+    time = view_for(snapshot=late)["time"]
+
+    def z(value: datetime) -> str:
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+    close = snapshot.candles[-1].close_time_utc
+    assert time["reference_close_utc"] == z(close)
+    assert time["horizon_end_utc"] == z(close + timedelta(hours=6))
+    assert time["as_of_utc"] == z(late.as_of_utc) != time["reference_close_utc"]

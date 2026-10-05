@@ -413,6 +413,14 @@ function firstReason(payload) {
 const NOT_ASSESSED_TEXT = "Not assessed (the data cannot support an assessment)";
 const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 
+// Where the gates' legacy decision shows beside a view, it is framed as what it is.
+function gateFramingNote(view) {
+  return view.accepted_claim
+    ? "The gates' disposition: hard gates outrank everything shown."
+    : "The gates' disposition, not a market call: with no accepted forecast it is no reason " +
+        "to act or to avoid acting.";
+}
+
 function decisionViewOf(payload) {
   const view = payload?.decision_view;
   return view && view.schema_version === "decision_view.v1" ? view : null;
@@ -1413,7 +1421,7 @@ function primaryDecisionReason(stack, decision = {}) {
   );
 }
 
-function renderFinalDecisionCard(synthesis = {}) {
+function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   const decision = synthesis.decision_synthesis || {};
   const permission = synthesis.action_permission || {};
   const quality = synthesis.model_quality_summary || {};
@@ -1427,7 +1435,14 @@ function renderFinalDecisionCard(synthesis = {}) {
 
   const header = document.createElement("header");
   const headingGroup = document.createElement("div");
-  headingGroup.append(textBlock("p", "Backend final decision", "decision-eyebrow"));
+  const view = decisionViewOf(payload);
+  headingGroup.append(
+    textBlock(
+      "p",
+      view ? "Gate disposition (not a market call)" : "Backend final decision",
+      "decision-eyebrow",
+    ),
+  );
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
   const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
   headingGroup.append(textBlock("p", `Reliability: ${reliabilityStatus}`, "muted"));
@@ -1440,6 +1455,9 @@ function renderFinalDecisionCard(synthesis = {}) {
   );
   card.append(header);
 
+  if (view) {
+    card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));
+  }
   if (backendText(decision.plain_english)) {
     card.append(textBlock("p", decision.plain_english, "decision-lead"));
   }
@@ -2166,7 +2184,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   supportGrid.append(renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}));
 
   return section("Decision", [
-    renderFinalDecisionCard(synthesis),
+    renderFinalDecisionCard(synthesis, payload),
     contextGrid,
     renderActionabilityStack(synthesis.actionability_stack, payload),
     renderAdvisorExplanations(
@@ -2178,7 +2196,8 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   ]);
 }
 
-function renderDecisionBrief(brief = {}, blockingReasons = []) {
+function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
+  const view = decisionViewOf(payload);
   const readableBlockingReasons = Array.isArray(blockingReasons)
     ? blockingReasons
         .map((reason) => {
@@ -2188,9 +2207,10 @@ function renderDecisionBrief(brief = {}, blockingReasons = []) {
         })
         .filter(Boolean)
     : [];
-  return section("Decision Brief", [
+  return section(view ? "Gate brief (not a market call)" : "Decision Brief", [
+    ...(view ? [textBlock("p", gateFramingNote(view), "decision-safety-note")] : []),
     keyValueTable([
-      ["Action", brief.action],
+      [view ? "Gate disposition" : "Action", brief.action],
       ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
       ["Model readiness", modelReadinessCopy],
       ["Calibration", brief.calibration_status],
@@ -2268,7 +2288,7 @@ function renderStructuredDetail(payload, detailView) {
         ],
       ]),
     ]),
-    renderDecisionBrief(decisionBrief, display.blocking_reasons),
+    renderDecisionBrief(decisionBrief, display.blocking_reasons, payload),
     section("Probability", [
       keyValueTable([
         ["Type", decisionBrief.probability_type],

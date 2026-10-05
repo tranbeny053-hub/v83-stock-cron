@@ -1389,6 +1389,8 @@ def test_every_surface_defers_to_the_decision_view() -> None:
     view_branch, legacy_branch = horizon.split("} else {", 1)
     for legacy in ('"Interpretation"', '"Directional edge"', "matrixProbabilityBlock("):
         assert legacy not in view_branch and legacy in legacy_branch
+    for directional in ("decisionLabelCopy", "matrixRawProbability(", "interpretation_label"):
+        assert directional not in view_branch
     detail = _function_text(js, "renderStructuredDetail")
     data_row = 'view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data]'
     assert data_row in detail
@@ -1402,3 +1404,21 @@ def test_every_surface_defers_to_the_decision_view() -> None:
     assert "Resolution probability" not in js, "§14.3: In band is never 'unresolved'"
     outside = '["Up + Down (outside the band)", formatFractionPct(probability.resolution_'
     assert outside + "probability)]" in js
+
+
+def test_the_legacy_decision_is_framed_as_the_gates_beside_a_view() -> None:
+    """Review 2 of lane P, finding 2: missing evidence never reads as a negative call. Beside a
+    view, the detail's legacy decision card and brief say they are the gates' disposition."""
+
+    js = read_frontend("app.js")
+    card = _function_text(js, "renderFinalDecisionCard")
+    assert 'view ? "Gate disposition (not a market call)" : "Backend final decision"' in card
+    assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
+    brief = _function_text(js, "renderDecisionBrief")
+    assert 'section(view ? "Gate brief (not a market call)" : "Decision Brief", [' in brief
+    assert '[view ? "Gate disposition" : "Action", brief.action],' in brief
+    assert "renderFinalDecisionCard(synthesis, payload)," in _function_text(
+        js, "renderDecisionSynthesis"
+    )
+    detail = _function_text(js, "renderStructuredDetail")
+    assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail

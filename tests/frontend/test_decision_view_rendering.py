@@ -37,6 +37,7 @@ FUNCTIONS = (
     "legacyProbabilityRows",
     "decisionEvidenceText",
     "decisionViewRows",
+    "gateFramingNote",
 )
 CONSTANTS = ("NOT_ASSESSED_TEXT", "VENUE_LABELS")
 
@@ -254,3 +255,12 @@ def test_legacy_probability_rows_defer_to_the_view() -> None:
         [label, "Not assessed (the data cannot support an assessment)"] for label, _ in rows
     ]
     assert assessed == rows and legacy == rows
+
+
+def test_the_gate_framing_says_what_the_view_allows() -> None:
+    notes = _node(
+        "console.log(JSON.stringify(views.map((view) => gateFramingNote(view))));",
+        views=[{"accepted_claim": False}, {"accepted_claim": True}],
+    )
+    assert "not a market call" in notes[0] and "no reason to act or to avoid acting" in notes[0]
+    assert notes[1] == "The gates' disposition: hard gates outrank everything shown."
