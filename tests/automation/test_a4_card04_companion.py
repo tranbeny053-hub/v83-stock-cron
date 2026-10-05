@@ -2,16 +2,20 @@
 ucpe.a4_ledger_audit.v1 for UOR Card 04.
 
 What these tests prove without a database (the scratch-PostgreSQL 17.6 rehearsal proves the rest):
-- the sealed SQL passes a structural guard: one SELECT; no write, locking, TABLE or SET clause; no
-  comma-join and no derived table; no function outside an allowlist; no relation but the ledger,
-  public.predictions and five catalogs, each through an alias; from the ledger only ten columns and
-  from predictions only run_id; no star but count(*) and the decision's k.*, and no whole-row use of
-  any table, alias or CTE; no other table, view or function any migration creates; the decision
-  branches in the declared order, with no threshold on either count;
+- the sealed SQL passes a structural guard whose model of SQL is closed, so it refuses whatever it
+  does not model: printable ASCII only; standard literals only (no backslash, prefixed literal,
+  dollar quote, quoted identifier or block comment); only the modelled operators, keywords, types
+  and functions, and every other identifier a declared name; one SELECT, with no write, locking,
+  TABLE or SET clause, comma-join or derived table; no relation but the ledger, public.predictions
+  and five catalogs, each through an alias, and exactly the declared reads (each relation's uses,
+  every data column reference); from the ledger ten columns, from predictions only run_id, from the
+  catalogs only the listed columns; no star but count(*) and the decision's k.*, and no whole-row
+  use of any table, alias or CTE; the decision branches in the declared order, judging no count;
 - adversarial mutants that widen a read, read a probability, the body, a whole row (directly, with a
-  star, through a CTE or a derived table), the registry or another table, drop or reorder a check,
-  bind on client_request_id alone, judge a count, move the count window, add an output, drop the
-  inheritance check, lock or write, all fail that guard;
+  star, through a CTE or a derived table), the registry, another table or more than the declared
+  reads, hide a read in an escape string or a non-ASCII name, use an unmodelled operator, type,
+  keyword or identifier, drop or reorder a check, bind on client_request_id alone, judge a count,
+  move the count window, add an output, drop the inheritance check, lock or write, all fail it;
 - the expected columns are migration 0013's and 0003's declarations, no later migration changes
   them, and the route still writes each fact where the companion reads it;
 - the runner checks the package against its seal and the SQL against its pin, runs it only in a READ
@@ -33,6 +37,7 @@ import re
 import shutil
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -277,9 +282,91 @@ FROM_LIST_ENDS = {
     "INTERSECT",
     "WINDOW",
 }
+# THE GUARD'S MODEL OF SQL is closed: what it does not model, it refuses. Printable ASCII only; no
+# backslash, prefixed literal (E'', U&'', B'', X'', N''), dollar quote, quoted identifier or block
+# comment; only these operators, punctuation, keywords, types and functions; every other identifier
+# is a declared CTE, alias or output name, or an allowed column.
+LITERAL = "'L'"  # a masked literal, one token
 TOKEN = re.compile(
-    r"%\(\w+\)s|[A-Za-z_][A-Za-z0-9_$]*(?:\.[A-Za-z_][A-Za-z0-9_$]*)*|->>|->|<>|<=|>=|::|\d+|\S"
+    r"%\(\w+\)s|'L'|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\d+|::"
+    r"|[-+*/<>=~!@#%^&|`?]+|\S"
 )
+OPERATORS = {"=", "<>", ">", ">=", "*", "::"}
+PUNCTUATION = {"(", ")", ",", ".", "[", "]"}
+KEYWORDS = {
+    "WITH",
+    "AS",
+    "SELECT",
+    "CAST",
+    "FROM",
+    "JOIN",
+    "CROSS",
+    "ON",
+    "WHERE",
+    "AND",
+    "OR",
+    "NOT",
+    "IN",
+    "IS",
+    "DISTINCT",
+    "EXISTS",
+    "EXCEPT",
+    "VALUES",
+    "ARRAY",
+    "ANY",
+    "ORDER",
+    "BY",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "TRUE",
+    "FALSE",
+}
+CAST_TYPES = {"text", "uuid", "integer", "timestamptz"}
+# The declared minimum, exactly: how often each relation is read, and every data column reference.
+# predictions.run_id is read once, in the count's join; the ledger twice, for the bound row and the
+# credential's window.
+RELATION_USES = {
+    LEDGER: 2,
+    PREDICTIONS: 1,
+    "pg_catalog.pg_class": 1,
+    "pg_catalog.pg_namespace": 1,
+    "pg_catalog.pg_attribute": 2,
+    "pg_catalog.pg_constraint": 1,
+    "pg_catalog.pg_inherits": 1,
+}
+DATA_READS = {
+    "l.credential_id": 1,
+    "l.client_request_id": 1,
+    "l.evidence_origin": 1,
+    "l.state": 1,
+    "l.outcome_code": 1,
+    "l.http_status": 1,
+    "l.run_id": 1,
+    "l.analysis_hash": 1,
+    "l.deadline_ms": 1,
+    "l.received_at_utc": 1,
+    "w.credential_id": 1,
+    "w.received_at_utc": 1,
+    "p.run_id": 1,
+}
+CATALOG_COLUMNS = {
+    "pg_catalog.pg_class": {"oid", "relname", "relnamespace", "relkind"},
+    "pg_catalog.pg_namespace": {"oid", "nspname"},
+    "pg_catalog.pg_attribute": {
+        "attname",
+        "atttypid",
+        "atttypmod",
+        "attnotnull",
+        "attrelid",
+        "attnum",
+        "attisdropped",
+    },
+    "pg_catalog.pg_constraint": {"conrelid", "conkey", "contype"},
+    "pg_catalog.pg_inherits": {"inhparent"},
+}
 TYPES = {
     "TEXT": "text",
     "UUID": "uuid",
@@ -299,6 +386,10 @@ def _strip_comments(sql: str) -> tuple[str, str, list[str], list[str]]:
     masked: list[str] = []
     literals: list[str] = []
     problems: list[str] = []
+    if any(char != "\n" and not " " <= char <= "~" for char in sql):
+        problems.append("a character outside printable ASCII")
+    if "\\" in sql:
+        problems.append("a backslash")
     i = 0
     while i < len(sql):
         if sql.startswith("--", i):
@@ -313,6 +404,8 @@ def _strip_comments(sql: str) -> tuple[str, str, list[str], list[str]]:
         if char in {'"', "$"}:
             problems.append(f"forbidden quoting {char}")
         if char == "'":
+            if i > 0 and (sql[i - 1].isalnum() or sql[i - 1] in "_&"):
+                problems.append("a prefixed literal")
             end = i + 1
             while end < len(sql):
                 if sql.startswith("''", end):
@@ -327,7 +420,7 @@ def _strip_comments(sql: str) -> tuple[str, str, list[str], list[str]]:
             literal = sql[i : end + 1]
             literals.append(literal[1:-1].replace("''", "'"))
             kept.append(literal)
-            masked.append("'?'")
+            masked.append(LITERAL)
             i = end + 1
             continue
         kept.append(char)
@@ -426,6 +519,16 @@ def guard_violations(sql: str) -> list[str]:
     tokens = TOKEN.findall(masked)
     upper = [token.upper() for token in tokens]
     lower = [token.lower() for token in tokens]
+    for token in tokens:
+        modelled = (
+            token == LITERAL
+            or token.startswith("%(")
+            or token.isdigit()
+            or re.match(r"[A-Za-z_]", token)
+            or token in OPERATORS | PUNCTUATION
+        )
+        if not modelled:
+            violations.append(f"an operator or character the guard does not model: {token}")
     if ";" in tokens:
         violations.append("more than one statement")
     if not upper or upper[0] != "WITH":
@@ -440,6 +543,7 @@ def guard_violations(sql: str) -> list[str]:
                 violations.append(f"denied name {part}")
     ctes: set[str] = set()
     definitions: set[int] = set()
+    declared: set[str] = set()  # the names the SQL itself declares: CTE columns and output names
     for index in range(len(tokens) - 2):
         if upper[index + 1] != "AS" or tokens[index + 2] != "(":
             continue
@@ -450,6 +554,7 @@ def guard_violations(sql: str) -> list[str]:
                 depth += {")": 1, "(": -1}.get(tokens[back], 0)
                 if depth == 0:
                     name_at = back - 1
+                    declared.update(lower[back + 1 : index])
                     break
         if name_at >= 0 and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[name_at]):
             ctes.add(lower[name_at])
@@ -501,6 +606,36 @@ def guard_violations(sql: str) -> list[str]:
     data_aliases = {
         alias: relation for alias, relation in aliases.items() if relation in DATA_COLUMNS
     }
+    uses = Counter(lower[index] for index in references if lower[index] in RELATIONS)
+    if uses != Counter(RELATION_USES):
+        violations.append(f"the relations are read other than declared: {dict(uses)}")
+    reads = Counter(low for low in lower if "." in low and low.split(".", 1)[0] in data_aliases)
+    if reads != Counter(DATA_READS):
+        violations.append("the data columns are read other than declared")
+    # A type is the token after :: or after the AS of a CAST( ... ), and only a modelled type.
+    type_positions = {index + 1 for index, token in enumerate(tokens) if token == "::"}
+    for index, token in enumerate(upper):
+        if token == "CAST" and tokens[index + 1 : index + 2] == ["("]:
+            depth = 0
+            for inner in range(index + 1, len(tokens)):
+                depth += {"(": 1, ")": -1}.get(tokens[inner], 0)
+                if depth == 0:
+                    break
+                if depth == 1 and upper[inner] == "AS":
+                    type_positions.add(inner + 1)
+    for index in type_positions:
+        if index >= len(tokens) or lower[index] not in CAST_TYPES:
+            violations.append("a type the guard does not model")
+    for index, token in enumerate(upper):  # an output name: AS <name>, not a type, alias or CTE
+        if (
+            token == "AS"
+            and index + 1 < len(tokens)
+            and index + 1 not in type_positions | references
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tokens[index + 1])
+            and tokens[index + 2 : index + 3] != ["("]
+        ):
+            declared.add(lower[index + 1])
+    columns_anywhere = declared.union(*DATA_COLUMNS.values()).union(*CATALOG_COLUMNS.values())
     for index, token in enumerate(tokens):
         low = lower[index]
         if re.match(r"[A-Za-z_]", token):
@@ -511,10 +646,16 @@ def guard_violations(sql: str) -> list[str]:
                         violations.append(f"qualified name {token}")
                 elif parts[0] not in aliases:
                     violations.append(f"undeclared alias {token}")
-                elif parts[0] in data_aliases and (
-                    len(parts) != 2 or parts[1] not in DATA_COLUMNS[data_aliases[parts[0]]]
-                ):
-                    violations.append(f"unread column {token}")
+                elif len(parts) != 2:
+                    violations.append(f"a nested name {token}")
+                elif parts[0] in data_aliases:
+                    if parts[1] not in DATA_COLUMNS[data_aliases[parts[0]]]:
+                        violations.append(f"unread column {token}")
+                elif aliases[parts[0]] in CATALOG_COLUMNS:
+                    if parts[1] not in CATALOG_COLUMNS[aliases[parts[0]]]:
+                        violations.append(f"an undeclared catalog column {token}")
+                elif parts[1] not in columns_anywhere:
+                    violations.append(f"a CTE column the SQL never declares {token}")
             else:
                 if low.startswith("pg_"):
                     violations.append(f"unqualified catalog name {token}")
@@ -522,6 +663,15 @@ def guard_violations(sql: str) -> list[str]:
                     violations.append(f"whole-row reference {token}")
                 if low in {"automation_radar_ledger", "predictions"}:
                     violations.append(f"bare table name {token}")
+                known = (
+                    upper[index] in KEYWORDS
+                    or (low in CAST_TYPES and index in type_positions)
+                    or (low in FUNCTIONS and tokens[index + 1 : index + 2] == ["("])
+                    or low in row_sources
+                    or (low in declared and low not in CAST_TYPES)
+                )
+                if not known:
+                    violations.append(f"an identifier the guard does not model: {token}")
         if index + 1 < len(tokens) and tokens[index + 1] == "(" and re.match(r"[A-Za-z_]", token):
             if low not in FUNCTIONS and token.upper() not in PAREN_KEYWORDS and low not in CTES:
                 violations.append(f"function {token}")
@@ -745,6 +895,62 @@ MUTANTS = {
         "                              FROM pg_catalog.pg_inherits AS i\n"
         "                              JOIN relations AS h ON h.oid = i.inhparent)\n",
         "",
+    ),
+    # The second review's class: SQL the guard's model did not cover. Each must be refused.
+    "hides a read inside an escape string": (
+        "       d.bound_run_id,\n",
+        "       E'\\'' || (SELECT min(z::text) FROM public.automation_radar_ledger AS z)"
+        " || E'\\'' AS bound_run_id,\n",
+    ),
+    "a Unicode-escape literal": (
+        "WHEN k.evidence_origin IS DISTINCT FROM 'AUTOMATED_RADAR' THEN 'WRONG_ORIGIN'",
+        "WHEN k.evidence_origin IS DISTINCT FROM U&'AUTOMATED_RADAR' THEN 'WRONG_ORIGIN'",
+    ),
+    "a bit-string literal": (
+        "     WHERE a.attnum > 0\n",
+        "     WHERE a.attnum > 0 AND B'1' = B'1'\n",
+    ),
+    "a non-ASCII alias": (
+        "      FROM target AS t\n",
+        "      FROM target AS t CROSS JOIN target AS \u00e4\n",
+    ),
+    "a tab": ("WITH binding AS (\n", "WITH binding AS (\n\t"),
+    "an operator the guard does not model": (
+        "     WHERE a.attnum > 0\n",
+        "     WHERE a.attnum > 0 AND a.attname <-> a.attname = 0\n",
+    ),
+    "a cast to a type the guard does not model": (
+        "b.client_request_id::text AS bound_client_request_id",
+        "b.client_request_id::regclass AS bound_client_request_id",
+    ),
+    "a CAST to a type the guard does not model": (
+        "CAST(%(credential_id)s AS text)",
+        "CAST(%(credential_id)s AS shadow_text)",
+    ),
+    "a keyword the guard does not model": (
+        "     CROSS JOIN credential_rows AS cr\n",
+        "     NATURAL JOIN credential_rows AS cr\n",
+    ),
+    "an identifier the guard does not model": (
+        "(s.schema_ok IS TRUE) AS schema_ok",
+        "(s.schema_ok IS TRUE AND current_user = current_user) AS schema_ok",
+    ),
+    "reads an undeclared catalog column": (
+        "       AND c.relkind = 'r'\n",
+        "       AND c.relkind = 'r'\n       AND c.relhassubclass = false\n",
+    ),
+    "reads prediction run ids beyond the count": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(q.run_id) FROM public.predictions AS q) AS bound_run_id,\n",
+    ),
+    "reads unrelated ledger rows": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(z.run_id) FROM public.automation_radar_ledger AS z)"
+        " AS bound_run_id,\n",
+    ),
+    "reads the catalog beyond the schema proof": (
+        "           b.expected_run_id AS bound_run_id,\n",
+        "           (SELECT min(c2.relname) FROM pg_catalog.pg_class AS c2) AS bound_run_id,\n",
     ),
     "adds an input": (
         "CAST(%(credential_id)s AS text)",
