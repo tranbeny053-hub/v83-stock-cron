@@ -1,7 +1,7 @@
 """Safe public HTTP client for keyless market-data providers.
 
 Provider coalescing (governing plan §9.1; owner ruling DP-B as narrowed on 2026-10-05). A caller
-that waits on no one sends, retries, maps its outcome and meets its deadline exactly as before.
+that waits on no one sends, retries and maps its outcome as before, against its own deadline.
 Two things change underneath:
 - **one connection pool per process.** A client that is not handed its own ``httpx.Client`` builds
   one as before (its own cookies, timeout and rate-limit history), on the process's one shared
@@ -13,8 +13,10 @@ Two things change underneath:
   transport it builds itself.
 - **one exchange for identical in-flight requests (single-flight)**, on the human routes only: the
   F1 automated analysis waits on no one (``PROVIDER_COALESCING``, which
-  ``analysis_service.analyze_request_isolated`` turns off), so its provider timing, and so its
-  own deadline, are exactly what they were. When a pooled client sends a request that is
+  ``analysis_service.analyze_request_isolated`` turns off), so it never waits on or shares another
+  request's exchange: its retries, deadline and outcome mapping are its own, as before. Its timing
+  is not identical to before, though: its connections come from the process's pool (often already
+  warm, so usually faster), whose limits it shares. When a pooled client sends a request that is
   byte-identical to one already in flight (method, URL with its query, every header including any
   cookie, and the timeout), it waits for that exchange, for no longer than its own deadline,
   instead of sending its own. Only a success is shared: a response below 400, with no cookie, whose

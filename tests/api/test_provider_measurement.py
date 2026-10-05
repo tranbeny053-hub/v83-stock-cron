@@ -106,9 +106,10 @@ def test_the_pool_closes_even_when_a_repository_fails_to(monkeypatch: pytest.Mon
 
 
 def test_the_automated_analysis_waits_on_no_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    """F1's isolated analysis runs with single-flight off (review 2 of lane R, F3): its provider
-    timing, and so its own deadline, are exactly what they were. The human route keeps it on, and
-    the switch is restored after the analysis."""
+    """F1's isolated analysis runs with single-flight off (review 2 of lane R, F3): it waits on no
+    other request, so its retries, deadline and outcome mapping are its own (its connections still
+    come from the shared pool, so its timing is not identical to before). The human route keeps it
+    on, and the switch is restored after the analysis."""
 
     from crypto_probability_engine.adapters import http_client
     from crypto_probability_engine.api import analysis_service
