@@ -24,6 +24,21 @@ CURRENT_REQUEST_ID: ContextVar[str | None] = ContextVar("ucpe_request_id", defau
 # analysis_completed event. Reset at the start of every analysis, so none outlives a failure.
 CURRENT_STAGE_MS: ContextVar[dict[str, float] | None] = ContextVar("ucpe_stage_ms", default=None)
 STAGE_FIELDS = ("provider_ms", "quant_ms", "gate_ms", "news_ms", "present_ms", "total_ms")
+# The current analysis's provider exchanges (plan §9.1/§9.4; owner ruling DP-B, 2026-10-05): passive
+# measurement only. Reset at the start of every analysis; the public provider client adds to it.
+CURRENT_PROVIDER_STATS: ContextVar[dict[str, float] | None] = ContextVar(
+    "ucpe_provider_stats", default=None
+)
+PROVIDER_FIELDS = (
+    "provider_exchanges",
+    "provider_coalesced",
+    "provider_retries",
+    "provider_deadline_hits",
+    "provider_exchange_max_ms",
+)
+# The observe-only analysis budget (plan §13; owner ruling DP-C, 2026-10-05): counts and a yes/no on
+# the http_request event of the two analysis routes, never an identity.
+BUDGET_FIELDS = ("budget_count_60s", "budget_count_3600s", "budget_would_refuse")
 BUFFER_SIZE = 256
 MAX_TEXT = 160
 
@@ -61,6 +76,10 @@ FIELDS = frozenset(
         "persistence_status",
         # the analysis stages (plan §9.4), in milliseconds
         *STAGE_FIELDS,
+        # the analysis's provider exchanges (plan §9.1): counts, and the slowest in milliseconds
+        *PROVIDER_FIELDS,
+        # the observe-only analysis budget (plan §13): counts, and whether a threshold would refuse
+        *BUDGET_FIELDS,
         # the persistence receipt
         "repository",
         "overall",
@@ -105,6 +124,12 @@ def _scalar(value: object) -> object:
         return round(value, 3) if math.isfinite(value) else None
     text = str(value)
     return text if len(text) <= MAX_TEXT else text[:MAX_TEXT] + "..."
+
+
+def new_provider_stats() -> dict[str, float]:
+    """The zeroed provider measurement of one analysis."""
+
+    return {name: 0 for name in PROVIDER_FIELDS} | {"provider_exchange_max_ms": 0.0}
 
 
 def sanitize(event: str, fields: Mapping[str, object]) -> dict[str, object] | None:

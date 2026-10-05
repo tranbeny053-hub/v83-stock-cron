@@ -22,7 +22,10 @@ DRIFT_SHA = "d" * 40
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
 # UCPE-PROD-E2-20261004-A deployed main's own tree, so nothing stands in it:
 # app.py, build_info.py cleared with that release.
-CURRENT_DELTA_PATHS: list[str] = []
+CURRENT_DELTA_PATHS: list[str] = [
+    "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
+]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
