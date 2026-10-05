@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 
 from crypto_probability_engine.detail.decision_view import build_decision_view
@@ -39,10 +41,17 @@ def _extract_function(source: str, name: str) -> str:
     raise AssertionError(f"Could not extract {name}")
 
 
-def _view(hard_blocks: tuple[str, ...] = ("SKILL_NOT_DEMONSTRATED",)) -> dict:
+def _view(
+    hard_blocks: tuple[str, ...] = ("SKILL_NOT_DEMONSTRATED",), hold: dict | None = None
+) -> dict:
+    gate: dict = {"hard_blocks": list(hard_blocks)}
+    # Seven minutes after the last close, so the reference close cannot pass for the as-of time.
+    snapshot = make_snapshot(provider="okx", symbol="BTC/USDT", timeframe="1H")
+    if hold is not None:
+        gate["directional_evidence_hold"] = hold
     return build_decision_view(
         timeframe="1H",
-        snapshot=make_snapshot(provider="okx", symbol="BTC/USDT", timeframe="1H"),
+        snapshot=replace(snapshot, as_of_utc=snapshot.as_of_utc + timedelta(minutes=7)),
         data_quality={"is_live_data": True, "data_source": "OKX_PUBLIC"},
         provider_state={
             "status": "OK",
@@ -50,7 +59,7 @@ def _view(hard_blocks: tuple[str, ...] = ("SKILL_NOT_DEMONSTRATED",)) -> dict:
             "providers": {"binance": {"status": "QUARANTINED"}, "okx": {"status": "OK"}},
         },
         quant_result={
-            "gate_result": {"hard_blocks": list(hard_blocks)},
+            "gate_result": gate,
             "probability_state": {
                 "horizons": {
                     "H_primary": {"p_up_frac": 0.4, "p_down_frac": 0.35, "p_timeout_frac": 0.25}
@@ -73,8 +82,9 @@ def _view(hard_blocks: tuple[str, ...] = ("SKILL_NOT_DEMONSTRATED",)) -> dict:
     )
 
 
-def _render(view: dict) -> tuple[str, list[list[str]]]:
-    """The banner and the rows app.js renders for a view, run under Node."""
+def _render(view: dict) -> tuple[str, list[list[str]], bool]:
+    """The banner and the rows app.js renders for a view, run under Node, and whether app.js
+    refuses the same view under an unknown schema version."""
 
     assert NODE is not None, "node is required to run the real app.js"
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
@@ -104,17 +114,20 @@ def _render(view: dict) -> tuple[str, list[list[str]]]:
 const payload = {json.dumps(payload)};
 const view = decisionViewOf(payload);
 const banner = decisionDataBanner(view.data);
-console.log(JSON.stringify({{banner, rows: decisionViewRows(payload, view)}}));
+const unknown = {{...payload, decision_view: {{...view, schema_version: "decision_view.v2"}}}};
+const refusesUnknown = decisionViewOf(unknown) === null;
+console.log(JSON.stringify({{banner, rows: decisionViewRows(payload, view), refusesUnknown}}));
 """
     done = subprocess.run(  # noqa: S603 - node on a script built here
         [NODE, "-e", script], capture_output=True, text=True, check=True, timeout=30
     )
     rendered = json.loads(done.stdout)
-    return rendered["banner"], rendered["rows"]
+    return rendered["banner"], rendered["rows"], rendered["refusesUnknown"]
 
 
 def test_the_rows_a_user_reads() -> None:
-    banner, ordered = _render(_view())
+    view = _view()
+    banner, ordered, refuses_unknown = _render(view)
     rows = dict(ordered)
     assert [label for label, _ in ordered][:5] == [
         "Asset · venue",
@@ -131,14 +144,22 @@ def test_the_rows_a_user_reads() -> None:
     assert rows["Saved"].startswith("No storage configured")
     assert rows["Evidence"] == "INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE"
     assert rows["Gate disposition (not a market call)"] == "NO_TRADE"
-    assert rows["Reference close (UTC)"].endswith("Z") and rows["Horizon end (UTC)"].endswith("Z")
+    assert rows["Reference close (UTC)"] == view["time"]["reference_close_utc"]
+    assert rows["Horizon end (UTC)"] == view["time"]["horizon_end_utc"]
+    assert rows["Reference close (UTC)"] != view["time"]["as_of_utc"]
+    assert refuses_unknown, "a view of an unknown schema version is never rendered"
 
 
 def test_unavailable_data_shows_no_percentages() -> None:
-    banner, ordered = _render(_view(hard_blocks=("PROVIDER_DEGRADED",)))
+    banner, ordered, _ = _render(_view(hard_blocks=("PROVIDER_DEGRADED",)))
     rows = dict(ordered)
     assert banner == "DATA UNAVAILABLE - OKX_PUBLIC"
     assert rows["Data"].startswith("UNAVAILABLE: Data unavailable.")
     assert rows["In band (inside the decision band)"].startswith("Not assessed")
     assert rows["Up (above the band)"] == rows["Down (below the band)"] == "Not assessed"
     assert "%" not in "".join(rows[key] for key in rows if key != "Round-trip cost")
+
+
+def test_the_hold_reads_as_under_review_not_as_a_verdict() -> None:
+    _, ordered, _ = _render(_view(hold={"active": True, "hold_reason": "H2"}))
+    assert dict(ordered)["Evidence"] == "Directional evidence under review (the hold is active)"
