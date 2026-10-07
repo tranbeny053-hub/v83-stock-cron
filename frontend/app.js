@@ -451,11 +451,27 @@ function gateBriefTitle(view) {
     : "Gate brief (not a market call)";
 }
 
-// Model readiness as the evidence stands (owner ruling 2026-10-06): under an accepted forecast
-// claim the view's own accepted-state copy replaces the uncalibrated-heuristic copy.
-function readinessText(payload, fallback) {
+// Under an accepted claim the view states the evidence level, as it states the data's health
+// (owner ruling 2026-10-06). Legacy copy written for the uncalibrated heuristic then defers to it:
+// a label reads the view's headline, an explanation its detail, and a reading the view already
+// states beside it is not repeated. The backend's data (statuses, counts, verdicts), the gates
+// and the scenario plan's prerequisites are shown as the backend states them. Without an accepted
+// claim every surface reads exactly as before.
+function acceptedViewOf(payload) {
   const view = decisionViewOf(payload);
-  return view && view.accepted_claim ? view.headline : fallback;
+  return view && view.accepted_claim ? view : null;
+}
+
+// A status the payload does not carry, under an accepted claim: missing, never "not measured".
+const NOT_REPORTED_TEXT = "Not reported";
+// The gate brief's disclaimer under an accepted claim: non-advisory, without denying the claim.
+const ACCEPTED_DISCLAIMER =
+  "Not financial advice: it never tells you to trade. No profitability claim.";
+
+// Model readiness as the evidence stands (owner ruling 2026-10-06).
+function readinessText(payload, fallback) {
+  const accepted = acceptedViewOf(payload);
+  return accepted ? accepted.headline : fallback;
 }
 
 function decisionViewOf(payload) {
@@ -1482,7 +1498,9 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
     textBlock("p", dispositionLabel(view), "decision-eyebrow"),
   );
   headingGroup.append(textBlock("h4", labelText, "decision-title"));
-  const reliabilityStatus = backendText(quality.reliability_status) || "Not measured yet";
+  const reliabilityStatus =
+    backendText(quality.reliability_status) ||
+    (acceptedViewOf(payload) ? NOT_REPORTED_TEXT : "Not measured yet");
   headingGroup.append(textBlock("p", `Reliability: ${reliabilityStatus}`, "muted"));
   header.append(headingGroup);
   header.append(
@@ -1589,22 +1607,27 @@ function probabilityValues(probability = {}) {
 }
 
 function renderProbabilityInterpretation(probability = {}, timeframeRole = {}, payload = {}) {
+  // Under an accepted claim the view's detail states what the percentages carry, in place of
+  // the heuristic reading, its "informational only" badge and its reliability warning.
+  const accepted = acceptedViewOf(payload);
   const card = document.createElement("article");
   card.className = "decision-context-card probability-interpretation";
-  if (probability.informational_only === true) {
+  if (probability.informational_only === true && !accepted) {
     card.classList.add("probability-informational");
   }
   const heading = document.createElement("div");
   heading.className = "decision-context-heading";
   heading.append(textBlock("h4", "Probability interpretation"));
-  if (probability.informational_only === true) {
+  if (probability.informational_only === true && !accepted) {
     heading.append(decisionBadge("Informational only", "warn"));
   }
   card.append(heading);
   if (backendText(probability.interpretation_label)) {
     card.append(decisionBadge(probability.interpretation_label, "info"));
   }
-  if (backendText(probability.plain_english)) {
+  if (accepted) {
+    card.append(textBlock("p", accepted.detail, "decision-context-copy"));
+  } else if (backendText(probability.plain_english)) {
     card.append(textBlock("p", probability.plain_english, "decision-context-copy"));
   }
 
@@ -1612,14 +1635,16 @@ function renderProbabilityInterpretation(probability = {}, timeframeRole = {}, p
   if (timeframeRole.raw_probability_hidden_by_default === true) {
     const advanced = document.createElement("details");
     advanced.className = "decision-advanced-probability";
-    advanced.append(textBlock("summary", "Advanced heuristic probability"));
+    advanced.append(
+      textBlock("summary", accepted ? "Advanced probability" : "Advanced heuristic probability"),
+    );
     advanced.append(rawValues);
     card.append(advanced);
   } else {
     card.append(rawValues);
   }
 
-  if (backendText(probability.reliability_warning)) {
+  if (!accepted && backendText(probability.reliability_warning)) {
     card.append(textBlock("p", probability.reliability_warning, "decision-warning"));
   }
   if (backendText(timeframeRole.plain_english)) {
@@ -1652,14 +1677,15 @@ function renderRiskSummary(items) {
   return card;
 }
 
-function renderAdvisorExplanations(explanations = {}, changes = []) {
+function renderAdvisorExplanations(explanations = {}, changes = [], accepted = null) {
   const wrapper = document.createElement("div");
   wrapper.className = "decision-subsection";
   wrapper.append(textBlock("h4", "Advisor explanation"));
   const items = [
     ["Why this decision", explanations.why_this_decision],
     ["Why immediate action is unavailable", explanations.why_not_enter_now],
-    ["Why probability is muted", explanations.why_probability_is_muted],
+    // Under an accepted claim the view states the probabilities' standing, not this reading.
+    ["Why probability is muted", accepted ? null : explanations.why_probability_is_muted],
     ["Why timeframe matters", explanations.why_timeframe_matters],
     ["Why reliability is insufficient", explanations.why_reliability_is_insufficient],
   ].filter(([, value]) => backendText(value));
@@ -1854,26 +1880,28 @@ function renderCalibrationTimeframe(item = {}) {
   return card;
 }
 
-function renderCalibrationUnavailable() {
+function renderCalibrationUnavailable(accepted = null) {
   const fallback = document.createElement("div");
   fallback.className = "calibration-unavailable";
   fallback.append(
     textBlock(
       "p",
-      "Calibration diagnostics unavailable. Keep using heuristic status.",
+      accepted
+        ? "Calibration diagnostics unavailable."
+        : "Calibration diagnostics unavailable. Keep using heuristic status.",
       "muted",
     ),
   );
   return fallback;
 }
 
-function renderCalibrationDiagnostics(payload) {
+function renderCalibrationDiagnostics(payload, accepted = null) {
   if (
     payload?.status !== "OK" ||
     !Array.isArray(payload.timeframes) ||
     payload.timeframes.length === 0
   ) {
-    return renderCalibrationUnavailable();
+    return renderCalibrationUnavailable(accepted);
   }
 
   const wrapper = document.createElement("section");
@@ -1928,11 +1956,13 @@ function renderModelQualityEducation() {
   return education;
 }
 
-function renderModelQuality(quality = {}, probability = {}) {
+function renderModelQuality(quality = {}, probability = {}, accepted = null) {
   const card = document.createElement("article");
   card.className = "decision-context-card decision-model-quality";
   card.append(textBlock("h4", "Current status"));
-  const explanation = backendText(quality.plain_english) || backendText(quality.warning);
+  const explanation = accepted
+    ? accepted.detail
+    : backendText(quality.plain_english) || backendText(quality.warning);
   card.append(
     textBlock(
       "p",
@@ -1940,9 +1970,10 @@ function renderModelQuality(quality = {}, probability = {}) {
       "decision-context-copy",
     ),
   );
+  const missing = accepted ? NOT_REPORTED_TEXT : "Not measured yet";
   const values = [
-    ["Calibration status", quality.calibration_status || "Not measured yet"],
-    ["Reliability status", quality.reliability_status || "Not measured yet"],
+    ["Calibration status", quality.calibration_status || missing],
+    ["Reliability status", quality.reliability_status || missing],
   ];
   if (hasPayloadValue(quality.reliability_available)) {
     values.push(["Reliability available", quality.reliability_available]);
@@ -1966,7 +1997,9 @@ function renderModelQuality(quality = {}, probability = {}) {
   if (quality.not_win_rate === true) {
     card.append(textBlock("p", "Historical outcome-rate metric: Not established.", "muted"));
   }
-  if (backendText(probability.reliability_warning)) {
+  if (accepted) {
+    // The view's detail above states the evidence; no heuristic warning is repeated.
+  } else if (backendText(probability.reliability_warning)) {
     card.append(
       textBlock("p", probability.reliability_warning, "model-quality-probability-warning"),
     );
@@ -1994,25 +2027,28 @@ function renderModelQuality(quality = {}, probability = {}) {
   card.append(
     textBlock(
       "p",
-      "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
+      accepted
+        ? "No profitability claim."
+        : "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
       "muted",
     ),
   );
   return card;
 }
 
-function renderModelQualitySection(synthesis = {}) {
+function renderModelQualitySection(synthesis = {}, accepted = null) {
   const calibrationMount = calibrationDiagnosticsMount();
   const calibrationContent = calibrationMount.querySelector(
     ".calibration-diagnostics-content",
   );
   void loadCalibrationDiagnostics().then((payload) => {
-    calibrationContent?.replaceChildren(renderCalibrationDiagnostics(payload));
+    calibrationContent?.replaceChildren(renderCalibrationDiagnostics(payload, accepted));
   });
   return section("Model Quality", [
     renderModelQuality(
       synthesis.model_quality_summary || {},
       synthesis.probability_interpretation || {},
+      accepted,
     ),
     calibrationMount,
     renderModelQualityEducation(),
@@ -2191,6 +2227,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   const available =
     synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
   if (!available) {
+    const accepted = acceptedViewOf(payload);
     return section(gateBriefTitle(decisionViewOf(payload)), [
       textBlock(
         "p",
@@ -2200,7 +2237,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
       textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),
       keyValueTable([
         ["Gate disposition", decisionBrief.action],
-        ["Gate brief summary", decisionBrief.state_summary],
+        ["Gate brief summary", accepted ? accepted.detail : decisionBrief.state_summary],
         ["Gate brief risk note", decisionBrief.risk_note],
       ]),
       renderTradePlanSkeleton({}),
@@ -2231,6 +2268,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
     renderAdvisorExplanations(
       synthesis.advisor_explanations || {},
       synthesis.what_would_change_decision,
+      acceptedViewOf(payload),
     ),
     supportGrid,
     renderFutureQuantHooks(synthesis.future_quant_v2_hooks || {}),
@@ -2239,6 +2277,7 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
 
 function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
   const view = decisionViewOf(payload);
+  const accepted = acceptedViewOf(payload);
   const readableBlockingReasons = Array.isArray(blockingReasons)
     ? blockingReasons
         .map((reason) => {
@@ -2257,10 +2296,10 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
       ["Calibration", brief.calibration_status],
       ["Reliability", brief.reliability_status],
       ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
-      ["State summary", brief.state_summary],
+      ["State summary", accepted ? accepted.detail : brief.state_summary],
       ["Volatility reference", brief.volatility_reference?.note],
       ["Risk note", brief.risk_note],
-      ["Disclaimer", brief.disclaimer],
+      ["Disclaimer", accepted ? ACCEPTED_DISCLAIMER : brief.disclaimer],
     ]),
     briefListGroup(
       "Key Reasons",
@@ -2293,6 +2332,7 @@ function renderStructuredDetail(payload, detailView) {
   rawJson.append(summary, pre);
 
   const view = decisionViewOf(payload);
+  const accepted = acceptedViewOf(payload);
   const decisionSection = view
     ? section("Decision view", [
         textBlock("p", view.headline, "decision-headline"),
@@ -2307,7 +2347,7 @@ function renderStructuredDetail(payload, detailView) {
   detailPanel.replaceChildren(
     ...(decisionSection ? [decisionSection] : []),
     renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload),
-    renderModelQualitySection(payload.decision_synthesis || {}),
+    renderModelQualitySection(payload.decision_synthesis || {}, accepted),
     section("Overview", [
       downloadJsonButton(payload),
       keyValueTable([
@@ -2332,7 +2372,7 @@ function renderStructuredDetail(payload, detailView) {
     renderDecisionBrief(decisionBrief, display.blocking_reasons, payload),
     section("Probability", [
       keyValueTable([
-        ["Type", decisionBrief.probability_type],
+        ["Type", accepted ? accepted.headline : decisionBrief.probability_type],
         ...legacyProbabilityRows(payload, [
           ["Up", formatPct(display.prob_up_pct)],
           ["Down", formatPct(display.prob_down_pct)],
@@ -2342,7 +2382,7 @@ function renderStructuredDetail(payload, detailView) {
           "Model readiness",
           readinessText(payload, display.model_readiness_label || modelReadinessCopy),
         ],
-        ["Explanation", display.probability_explanation],
+        ["Explanation", accepted ? accepted.detail : display.probability_explanation],
       ]),
     ]),
     section("Risk / Gates", [

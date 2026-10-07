@@ -352,7 +352,9 @@ def test_final_decision_strength_is_qualified_by_backend_reliability_status() ->
     )[0]
 
     assert "const quality = synthesis.model_quality_summary || {};" in chunk
-    assert 'backendText(quality.reliability_status) || "Not measured yet"' in chunk
+    assert "backendText(quality.reliability_status) ||" in chunk
+    # A missing status is never "not measured" under an accepted claim (owner ruling 2026-10-06).
+    assert '(acceptedViewOf(payload) ? NOT_REPORTED_TEXT : "Not measured yet")' in chunk
     assert 'textBlock("p", `Reliability: ${reliabilityStatus}`, "muted")' in chunk
 
 
@@ -721,7 +723,7 @@ def test_ui_d1_4b_calibration_render_is_non_blocking_and_diagnostic_only() -> No
     assert "calibrationDiagnosticsMount()" in model_quality_chunk
     assert "loadCalibrationDiagnostics()" in model_quality_chunk
     assert ".then((payload)" in model_quality_chunk
-    assert "renderCalibrationDiagnostics(payload)" in model_quality_chunk
+    assert "renderCalibrationDiagnostics(payload, accepted)" in model_quality_chunk
     assert "calibrationContent?.replaceChildren" in model_quality_chunk
     assert "await loadCalibrationDiagnostics()" not in model_quality_chunk
     assert "hydrateCalibrationDiagnostics" not in js
@@ -1443,8 +1445,8 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
 def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None:
     """Owner ruling 2026-10-06: accepted forecast evidence shows its accepted state, and an
     accepted directional permission is shown without "not a market call" while staying
-    explicitly non-advisory. test_decision_framing_rendering.py renders it; these pin the
-    wiring."""
+    explicitly non-advisory. test_decision_framing_rendering.py and
+    test_accepted_state_rendering.py render it; these pin the wiring."""
 
     js = read_frontend("app.js")
     frame = "(accepted directional permission; not financial advice)"
@@ -1457,8 +1459,8 @@ def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None
     note = _function_text(js, "gateFramingNote")
     assert note.index("view.directional_permission") < note.index("view.accepted_claim")
     assert "Not financial advice: it never tells you to trade" in note
-    readiness = _function_text(js, "readinessText")
-    assert "view && view.accepted_claim ? view.headline : fallback" in readiness
+    assert "view && view.accepted_claim ? view : null" in _function_text(js, "acceptedViewOf")
+    assert "accepted ? accepted.headline : fallback" in _function_text(js, "readinessText")
     assert "view.accepted_claim\n        ? view.headline" in _function_text(js, "decisionViewRows")
     assert '["Model readiness", readinessText(payload, modelReadinessCopy)],' in _function_text(
         js, "renderDecisionBrief"

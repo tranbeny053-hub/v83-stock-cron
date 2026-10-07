@@ -41,7 +41,10 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME
 
 SCHEMA_VERSION = "decision_view.v1"
 # Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
-# Empty: nothing is accepted.
+# Empty: nothing is accepted. An entry alone does not make the screen agree with it: the UI defers
+# its evidence-level copy to this view, but the backend's own data and copy (the live calibration
+# state, a fixed baseline today; the brief, synthesis and scenario-plan copy) must be made to agree
+# with the acceptance in the same change.
 ACCEPTED_FORECAST_CLAIMS: frozenset[str] = frozenset()
 ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
 
