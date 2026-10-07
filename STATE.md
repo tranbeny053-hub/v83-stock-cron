@@ -1,14 +1,17 @@
 # STATE
 
-Updated: 2026-10-07 (**LANE R's REVIEW-3 FOLLOW-UP IS PUBLISHED** under the owner's T3: #236 → main 4a99fdd8, merge
-commit only on the exact head d984b721, which composed onto main 86f877a2 byte-identically on its 4 files; all 12
-checks green. This record is that batch's last publish. The owner's product ruling on accepted states is implemented
-LOCALLY in Lane P and the §23 UX card (Lane P c62d413, card 3c6e086), repaired twice after reviews 1 and 2. Review 3
-found three more items, none needing a material repair and none reachable while nothing is accepted; one is the
-class's third occurrence, so they are ESCALATED, not repaired (OWNER_BOUNDARY: RULING-RESIDUALS). Lane P stays LOCAL
-(DP-A); no Lane-P publish, DP-D export, deploy or H2/F3 change. Before it: DP-D's tooling was published (#234, STATE
-#235).)
+Updated: 2026-10-07 (**RULING-RESIDUALS=A IS EXECUTED AS DEFERRED, NOT ACCEPTED**: under the owner's ruling, review 3's
+three residuals of the accepted-state ruling are mandatory pre-release acceptance blockers. Lane P 8e26cac adds
+ACCEPTANCE_BLOCKERS (BANNER, RELIABILITY_LABEL, RENDER_TEST) beside the registries, test-enforced: neither registry may
+hold an entry while any remains, so no forecast-quality claim or directional permission can become reachable. None is
+repaired (no fourth repair of the exhausted Lane-P classes). #237 is merged (fa582248; main's push CI and reproducible
+build green). Lane P stays LOCAL (DP-A). THIS RECORD IS LOCAL until the owner's next T3. Before it: #237, the STATE
+record of the Lane R follow-up batch.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-07), verbatim — merge #237 and RULING-RESIDUALS:**
+```text
+MERGE 237. RULING-RESIDUALS=A. Treat A as DEFERRED, not accepted: make (a), (b), and (c) mandatory pre-release acceptance blockers before any forecast-quality claim or directional permission can become reachable. Do not perform a fourth repair of the exhausted Lane-P causal classes now. After merge, continue any genuinely dependency-safe T0/T1/T2 work; otherwise stop at the next real owner boundary.
+```
 - **The owner (2026-10-06), verbatim — the Lane R follow-up T3 and the product ruling on accepted states:**
 ```text
 CONTINUE CURRENT. T3 publish fix/p7r-claims-and-close-pin@d984b721cc5042b1b292d29f16a9731399ec8531, exact diff/CI, merge-commit only, STATE last. Product ruling: accepted forecast evidence must show its accepted state; accepted directional permission must show the permission without “not a market call”, while remaining explicitly non-advisory. Implement/test/review this LOCAL in Lane P+UX card only; no Lane-P publish, DP-D export, deploy, H2/F3 change.
@@ -2284,7 +2287,19 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-07): the owner's T3 and product ruling are executed, up to the repair bound. No
+LOOP_STATE=AT THE OWNER (2026-10-07): MERGE 237 and RULING-RESIDUALS=A are executed. No production query, deploy, DB
+  mutation, secret action, F3/§5A access, DP-D export or T4 happened.
+  - #237 merged by merge commit fa582248 on the exact head 56fd0db (4/4 checks green); main's push CI and reproducible
+    build on fa582248 succeeded.
+  - RULING-RESIDUALS=A, DEFERRED not accepted. Review 3's three residuals are mandatory pre-release acceptance
+    blockers: ACCEPTANCE_BLOCKERS in decision_view.py (BANNER, RELIABILITY_LABEL, RENDER_TEST).
+    test_no_claim_is_reachable_while_an_acceptance_blocker_remains holds both registries empty while any remains. Lane
+    P 8e26cac.
+  - None of the three is repaired: no fourth repair of the exhausted Lane-P classes (owner).
+  - No dependency-safe T0/T1/T2 work remains: the rest of Phases 7-8 waits on rulings or natural evidence.
+  - This record is LOCAL (chore/state-ruling-residuals-deferred) until the owner's next T3. Lane P and the UX card
+    stay LOCAL (DP-A).
+  Before it: AT THE OWNER (2026-10-07): the owner's T3 and product ruling are executed, up to the repair bound. No
   production query, deploy, DB mutation, secret action, F3/§5A access, DP-D export or T4 happened.
   - Lane R's review-3 follow-up is PUBLISHED: #236 → main 4a99fdd8 (merge commit on the exact head d984b721; 12/12
     checks green). The F1 timing claim is corrected in place; every streamed response is pinned closed.
@@ -4075,7 +4090,10 @@ LOOP_STATE=AT THE OWNER (2026-10-07): the owner's T3 and product ruling are exec
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-07): Lane R (#232, #236) and DP-D's tooling (#234) are published;
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-07): Lane R (#232, #236) and DP-D's tooling (#234) are published.
+  Lane P, with the owner's accepted-state ruling, its mandatory acceptance blockers and the §23 comprehension card, is
+  prepared and verified locally.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-07): Lane R (#232, #236) and DP-D's tooling (#234) are published;
   Lane P with the owner's accepted-state ruling and the §23 comprehension card is prepared and verified locally.
   Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-05): Lane R (#232) and DP-D's tooling (#234) are published; Lane P
   is prepared and verified, local (DP-A); the remaining dependency-safe items run locally.
@@ -4260,7 +4278,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-07): Lane R (#232, #236) and
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7r-followup-ruling (this record, on main 4a99fdd8). Local and unpublished:
+CURRENT_BRANCH=chore/state-ruling-residuals-deferred (this record, LOCAL, on main fa582248). Local and unpublished:
+  - feat/p7p-decisionview-ux1-degraded @ 8e26cac (worktree scratchpad/wtP of session ba4955d3);
+  - feat/p7p-ux-comprehension @ 1d9634d, on Lane P (scratchpad/wtU).
+  Before it: chore/state-p7r-followup-ruling (this record, on main 4a99fdd8). Local and unpublished:
   - feat/p7p-decisionview-ux1-degraded @ c62d413 (worktree scratchpad/wtP of session ba4955d3);
   - feat/p7p-ux-comprehension @ 3c6e086, on Lane P (scratchpad/wtU).
   Before it: chore/state-p8d-published (this record, on main 7c65e047). Local and unpublished:
@@ -4408,7 +4429,9 @@ CURRENT_BRANCH=chore/state-p7r-followup-ruling (this record, on main 4a99fdd8). 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=4a99fdd8 (main, #236: Lane R's follow-up; its 12 PR checks green). Before it 86f877a2 (#235).
+LAST_GREEN_SHA=fa582248 (main, #237: the STATE record; its 4 PR checks, push CI and reproducible build green). Before
+  it 4a99fdd8 (#236).
+  Before it: 4a99fdd8 (main, #236: Lane R's follow-up; its 12 PR checks green). Before it 86f877a2 (#235).
   Before it: 7c65e047 (main, #234: DP-D's tooling; its PR checks test, build-a, build-b, compare and rehearse all
   green). Before it 1f0fa400 (#233), whose push CI 37334694410 and reproducible build 37334694384 succeeded.
   Before it: 5f165aab (main, #232: Lane R; the merge commit's push CI and reproducible build both succeeded). Before
@@ -4648,6 +4671,10 @@ LAST_GREEN_SHA=4a99fdd8 (main, #236: Lane R's follow-up; its 12 PR checks green)
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS 2026-10-07 (bytecode off), scanners 3/3 each:
+  - Lane P with the acceptance blockers @ 8e26cac: 6446. Their guard kills 4 mutants: a claim entry, a permission
+    entry, a dropped blocker, a stale path.
+  - The UX card @ 1d9634d: 6454.
+  Before it: PASS 2026-10-07 (bytecode off), scanners 3/3 each:
   - d984b721 composed onto main 86f877a2 (72f45f6, its 4 files byte-identical): 6596.
   - Lane P with the ruling and its two repairs @ c62d413: 6445.
   - The UX card @ 3c6e086 (tree ee258ee): 6453.
@@ -4857,6 +4884,8 @@ LAST_VERIFY=PASS 2026-10-07 (bytecode off), scanners 3/3 each:
     (verify_batch.output).
 CODEX_PENDING=NONE (2026-10-07). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); no paid fallback; no GPT consultation. Model: claude-opus-5-5.
+  Before it: NONE (2026-10-07). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-05). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); no paid fallback; no GPT consultation. Model: the owner switched this session back to
   claude-opus-5-5; the claude-opus-4-8 interval covered #232, both third repairs and #233.
@@ -4971,7 +5000,22 @@ CODEX_PENDING=NONE (2026-10-07). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-07):
+OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-07), nothing urgent:
+  - T3, when you choose: publish this STATE record (local branch chore/state-ruling-residuals-deferred). It is one PR,
+    only STATE.md, merge commit, CI green.
+  - Lane P publication, with the ruling, its acceptance blockers and the §23 card: after the UOR qualification episode
+    closes or on your explicit authorization (one trivial union in test_source_integrity_guard.py). Before its release
+    you run docs/runbooks/UX_COMPREHENSION_CHECK.md (about ten minutes). Publishing makes no claim reachable.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    - resolve the three blockers (BANNER: your wording; RELIABILITY_LABEL; RENDER_TEST), each in the owner-authorized
+      change that removes it;
+    - make the backend's own data and copy agree in the same T2 change: the live calibration state, a fixed baseline
+      today; the brief, synthesis and scenario-plan copy; the calibration endpoint's item warning; runs reopened from
+      history, which carry no view.
+  - DP-D's export card: your two read-only commands, when you choose.
+  - Standing: the writer JWT renewal by 2026-10-30; the A4C review-5 follow-ups (optional); the H2 hold, F3
+    KEEP_UNSPENT, Phase 4 INFEASIBLE, D4 consumed. The rest of Phases 7-8 waits on rulings or natural evidence.
+  Before it: AHEAD, each the owner's (2026-10-07):
   - RULING-RESIDUALS (one decision; nothing here is reachable while no claim is accepted). Review 3 found:
     (a) the static banner in index.html says "Uncalibrated heuristic … not validated forecasts" for every timeframe;
     (b) under an accepted claim with measured reliability, the row "Why reliability is insufficient" would contradict
@@ -5667,7 +5711,8 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-07):
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: RULING-RESIDUALS (A or B), then the items above at your pace. Claude: passive reads only until
+NEXT_ACTION=The owner: the items above at your pace. Claude: passive reads only until then.
+  Before it: The owner: RULING-RESIDUALS (A or B), then the items above at your pace. Claude: passive reads only until
   then.
   Before it: Claude: the §23 UX comprehension lane locally, then one consolidated next owner boundary. The owner: the
   items above, at your pace.
