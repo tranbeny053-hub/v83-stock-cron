@@ -3,11 +3,20 @@ reads as the uncalibrated heuristic, and under an accepted directional permissio
 "not a market call" while each stays explicitly non-advisory.
 
 The whole of app.js runs under Node on a DOM stand-in (not a browser), over real analyses the
-backend built with the governed registries patched for the test, and every text a user can read
-on the detail panel and the timeframe cards is scanned: not a list of known surfaces. Without an
-accepted claim every surface reads as before. Under one, the backend's data (statuses, counts,
-verdicts) and the scenario plan's prerequisites are still shown as the backend states them: the
-UI defers its evidence-level copy to the view and never rewrites the backend's data.
+backend built with the governed registries patched for the test. Every text a user can read is
+scanned, not a list of known surfaces:
+- the detail panel, with the calibration diagnostics both failing and answering (review 2);
+- the timeframe card and the overview card.
+Three checks hold under an accepted claim:
+- No text reads as the heuristic (a denylist).
+- The legacy evidence-level copy is gone, whatever its wording.
+- Beside today's render of the same analysis, the only new texts are the accepted state's copy,
+  and every evidence-related text that stays is the backend's own data or copy, or a listed UI
+  text.
+Without an accepted claim every surface reads as before. The backend's data (statuses, counts,
+verdicts), the gates, the scenario plan's prerequisites and the diagnostics endpoint's items are
+shown as the backend states them: the UI defers its evidence-level copy to the view and never
+rewrites the backend's data.
 """
 
 from __future__ import annotations
@@ -23,8 +32,8 @@ from typing import Any
 import pytest
 
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
-from crypto_probability_engine.api import analysis_service
-from crypto_probability_engine.api.schemas import AnalysisRequest
+from crypto_probability_engine.api import analysis_service, calibration_endpoint
+from crypto_probability_engine.api.schemas import AnalysisRequest, CalibrationResponse
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail import decision_view
 from crypto_probability_engine.detail.decision_brief import (
@@ -41,13 +50,65 @@ METHODOLOGY = analysis_service.METHODOLOGY_VERSION
 NO_SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
 SKILL = {"verdict": "SKILL_DEMONSTRATED", "n": 400, "observed_directional_rate": 0.6}
 ACCEPTED_DISCLAIMER = "Not financial advice: it never tells you to trade. No profitability claim."
+ACCEPTED_DIAGNOSTICS = "Diagnostic only — not profitability evidence, not trade EV."
+# The UI's own texts under an accepted claim (frontend/app.js), beside the view's.
+ACCEPTED_UI_TEXTS = {
+    ACCEPTED_DISCLAIMER,
+    ACCEPTED_DIAGNOSTICS,
+    "Not reported",
+    "Reliability: Not reported",
+    "Advanced probability",
+    "Calibration diagnostics unavailable.",
+    "The gates' disposition: hard gates outrank everything shown.",
+}
 
 # What would read as the uncalibrated heuristic under an accepted claim (owner ruling 2026-10-06).
 HEURISTIC_READING = re.compile(
     r"uncalibrated|heuristic|not measured|not a forecast|not reliability evidence|not validated"
-    r"|informational only|\bmuted\b",
+    r"|informational only|\bmuted\b|not accuracy|early diagnostic",
     re.IGNORECASE,
 )
+# The legacy copy that defers to the view under an accepted claim, whatever its wording.
+DEFERRED = (
+    ("decision_brief", "probability_type"),
+    ("decision_brief", "state_summary"),
+    ("decision_brief", "disclaimer"),
+    ("frontend_display", "probability_explanation"),
+    ("frontend_display", "model_readiness_label"),
+    ("decision_synthesis", "probability_interpretation", "plain_english"),
+    ("decision_synthesis", "probability_interpretation", "reliability_warning"),
+    ("decision_synthesis", "model_quality_summary", "warning"),
+    ("decision_synthesis", "advisor_explanations", "why_probability_is_muted"),
+)
+# Evidence-related wording: a text with it that stays under an accepted claim must be accounted for.
+EVIDENCE_WORDING = re.compile(
+    r"heuristic|calibrat|reliab|accura|measur|diagnos|validat|forecast|informational|muted"
+    r"|sample|skill|guarantee|estimate|uncertain|confiden|proven|demonstrat|early",
+    re.IGNORECASE,
+)
+# The UI's own texts with such wording that rightly stay under any claim: row and section labels,
+# the model-quality glossary (true under any claim), and the claim-only titles that keep "not a
+# market call" (an accepted forecast claim carries no directional permission).
+STATE_INDEPENDENT_UI_TEXTS = {
+    *("Calibration", "Calibration status", "Reliability", "Reliability status"),
+    *("Reliability available", "Evidence", "Evidence level", "Why reliability is insufficient"),
+    *("Live calibration diagnostics", "Read-only diagnostic", "news evidence"),
+    "Invalidation Conditions",
+    "Per-timeframe calibration diagnostics",
+    "Resolved-sample metrics are not surfaced in this view yet.",
+    *("Heuristic probability", "Insufficient sample", "Measured calibration"),
+    "An early estimate produced before measured calibration is established.",
+    "A comparison between forecast probabilities and resolved outcomes after the sample gate "
+    "is met.",
+    "Average squared probability error; interpret only with a comparable resolved sample.",
+    "A probability error measure that weighs confidently wrong forecasts more heavily.",
+    "How often the highest-probability label matched the resolved outcome; it is not a complete "
+    "quality measure.",
+    "Probability quality also depends on calibration, sample size, outcome mix, and evaluation "
+    "context.",
+    "Forecast diagnostics do not include execution costs, sizing, or realized returns.",
+    *("Gate brief (not a market call)", "Gate disposition (not a market call)"),
+}
 
 
 def _is_heuristic_reading(text: str) -> bool:
@@ -221,16 +282,21 @@ const sessionStorage = storage();
 const window = globalThis;
 window.addEventListener = () => {};
 window.location = { href: "http://localhost/", pathname: "/", search: "", hash: "" };
-// No backend behind the stand-in: every request fails, as an unreachable backend's does.
-globalThis.fetch = () => Promise.reject(new Error("no backend behind the DOM stand-in"));
-// The words a user can read under a node; the raw-JSON debug block, which prints the backend
-// payload verbatim by design, excepted.
-function visibleTexts(node, out = []) {
+// No backend behind the stand-in: every request fails, as an unreachable backend's does, except
+// the calibration diagnostics when the test gives their answer.
+let calibrationAnswer = null;
+globalThis.fetch = (path) =>
+  String(path).startsWith("/v1/calibration") && calibrationAnswer
+    ? Promise.resolve({ ok: true, json: async () => structuredClone(calibrationAnswer) })
+    : Promise.reject(new Error("no backend behind the DOM stand-in"));
+// The words a user can read under a node, except under the classes skipped: the raw-JSON debug
+// block prints the backend payload verbatim by design.
+function visibleTexts(node, skipped = ["raw-json"], out = []) {
   for (const child of node.children) {
     if (child instanceof FakeText) {
       if (child.textContent.trim()) out.push(child.textContent.trim());
-    } else if (!child.classList.contains("raw-json")) {
-      visibleTexts(child, out);
+    } else if (!skipped.some((name) => child.classList.contains(name))) {
+      visibleTexts(child, skipped, out);
     }
   }
   return out;
@@ -249,16 +315,26 @@ function classNames(node, out = new Set()) {
 
 _RENDER = """
 (async () => {
-  const out = { texts: {}, classes: {} };
+  const out = { texts: {}, classes: {}, cards: {} };
+  // The per-timeframe diagnostics cards are the endpoint's items, read separately.
+  const skipped = ["raw-json", "calibration-timeframe-card"];
   for (const [name, payload] of Object.entries(cases)) {
-    renderStructuredDetail(payload, payload.detail_view || {});
-    // Let the calibration diagnostics request fail and its fallback render.
-    for (let tick = 0; tick < 5; tick += 1) await new Promise((done) => setTimeout(done, 0));
-    out.texts[name] = {
-      detail: visibleTexts(detailPanel),
-      matrix: visibleTexts(fakeElement("div", "", [horizonCard(payload)])),
-      overview: visibleTexts(fakeElement("div", "", [overviewCard(payload)])),
-    };
+    const texts = {};
+    for (const [surface, answer] of [["detail", null], ["detail_diagnostics", diagnostics]]) {
+      calibrationAnswer = answer;
+      calibrationDiagnosticsCache = null;
+      calibrationDiagnosticsCachedAt = 0;
+      renderStructuredDetail(payload, payload.detail_view || {});
+      // Let the diagnostics request settle (fail, or answer) and its result render.
+      for (let tick = 0; tick < 5; tick += 1) await new Promise((done) => setTimeout(done, 0));
+      texts[surface] = visibleTexts(detailPanel, skipped);
+    }
+    out.cards[name] = detailPanel
+      .querySelectorAll(".calibration-timeframe-card")
+      .map((card) => visibleTexts(card));
+    texts.matrix = visibleTexts(fakeElement("div", "", [horizonCard(payload)]));
+    texts.overview = visibleTexts(fakeElement("div", "", [overviewCard(payload)]));
+    out.texts[name] = texts;
     out.classes[name] = [...classNames(detailPanel)];
   }
   // A pipe is written asynchronously: exit only once the whole result is flushed.
@@ -313,6 +389,73 @@ def _analysis(timeframe: str, *, claim: bool = False, permission: bool = False) 
         )
 
 
+def _diagnostics() -> dict:
+    """The calibration endpoint's answer, made by its own mapper with no database. The analyses'
+    timeframes are MEASURED, as a backend that agrees with an acceptance would report them; the
+    others are still sampling."""
+
+    items = []
+    for timeframe in calibration_endpoint.SUPPORTED_TIMEFRAMES:
+        measured = timeframe in ("1H", "1W")
+        count = 400 if measured else 40
+        report = {
+            "sample_count": count,
+            "valid_count": count,
+            "sample_gate": "MEASURED" if measured else "INSUFFICIENT_SAMPLE",
+            "metrics": (
+                {"brier_score": 0.61, "log_loss": 1.02, "top_label_hit_rate": 0.44}
+                if measured
+                else {}
+            ),
+            "outcome_distribution": {"UP": count // 2, "DOWN": count // 4, "TIMEOUT": count // 4},
+            "versions_present": {"model_versions": ["v1"], "methodology_versions": [METHODOLOGY]},
+        }
+        items.append(
+            calibration_endpoint._map_timeframe_item(timeframe, report, include_buckets=False)
+        )
+    response = CalibrationResponse(
+        status="OK",
+        repository="FIXTURE",
+        generated_at="2026-10-07T00:00:00Z",
+        timeframes=items,
+    )
+    return response.model_dump(mode="json")
+
+
+def _strings(value: Any) -> set[str]:
+    if isinstance(value, str):
+        return {value.strip()}
+    items = value.values() if isinstance(value, dict) else value if isinstance(value, list) else ()
+    return set().union(*(_strings(item) for item in items))
+
+
+def _deferred(payload: dict) -> set[str]:
+    values = set()
+    for path in DEFERRED:
+        value: Any = payload
+        for key in path:
+            value = value.get(key) if isinstance(value, dict) else None
+        if isinstance(value, str) and value.strip():
+            values.add(value.strip())
+    return values
+
+
+def _backend_says(text: str, payload: dict) -> bool:
+    """Whether a text is the backend's own data or copy, as the UI renders it."""
+
+    if text in _strings(payload) - _deferred(payload) or text.startswith(("{", "Evidence: ")):
+        return True
+    view = payload.get("decision_view") or {}
+    evidence = view.get("evidence") or {}
+    reasons = (payload.get("frontend_display") or {}).get("blocking_reasons") or []
+    return text in {
+        f"{evidence.get('skill_verdict')} · {evidence.get('resolved_outcomes')} resolved outcomes"
+        f" · {evidence.get('reliability_status')}",
+        *(f"{reason.get('headline')}: {reason.get('detail')}" for reason in reasons),
+        *(f"Reliability: {status}" for status in _strings(payload)),
+    }
+
+
 def _without(payload: dict, key: str) -> dict:
     return {name: value for name, value in payload.items() if name != key}
 
@@ -354,6 +497,7 @@ def run(cases: dict[str, dict]) -> dict[str, Any]:
             _DOM_STAND_IN,
             (ROOT / "frontend" / "app.js").read_text(encoding="utf-8"),
             f"const cases = {json.dumps(cases, default=str)};",
+            f"const diagnostics = {json.dumps(_diagnostics())};",
             _RENDER,
         ]
     )
@@ -371,6 +515,11 @@ def rendered(run: dict[str, Any]) -> dict[str, dict[str, list[str]]]:
 @pytest.fixture(scope="module")
 def styled(run: dict[str, Any]) -> dict[str, list[str]]:
     return run["classes"]
+
+
+@pytest.fixture(scope="module")
+def diagnostics_cards(run: dict[str, Any]) -> dict[str, list[list[str]]]:
+    return run["cards"]
 
 
 CASES = (
@@ -431,11 +580,15 @@ def test_the_accepted_state_is_shown_on_every_surface(rendered: dict, cases: dic
         for surface, texts in rendered[name].items():
             assert view["headline"] in texts, (name, surface)
         detail = rendered[name]["detail"]
-        assert _value(detail, "Probability", "Type") == view["headline"], name
-        assert _value(detail, "Probability", "Explanation") == view["detail"], name
+        probability = _between(detail, "Probability", "Risk / Gates")
+        # The Model readiness row states the accepted state; no Type row repeats it.
+        assert "Type" not in probability, name
+        assert _value(probability, "Model readiness") == view["headline"], name
+        assert _value(probability, "Explanation") == view["detail"], name
         assert _value(detail, "State summary") == view["detail"], name
         assert _value(detail, "Disclaimer") == ACCEPTED_DISCLAIMER, name
         assert "Calibration diagnostics unavailable." in detail, name
+        assert ACCEPTED_DIAGNOSTICS in rendered[name]["detail_diagnostics"], name
         if name.endswith("_no_synthesis"):
             assert _value(detail, "Gate brief summary") == view["detail"], name
             continue
@@ -445,6 +598,55 @@ def test_the_accepted_state_is_shown_on_every_surface(rendered: dict, cases: dic
         assert quality[1] == view["detail"] and quality[-1] == "No profitability claim.", name
     for name in ("claim_1W", "permission_1W"):
         assert "Advanced probability" in rendered[name]["detail"], name
+
+
+def test_the_legacy_evidence_copy_never_survives_an_accepted_claim(
+    rendered: dict, cases: dict
+) -> None:
+    """Review 2: a denylist cannot know every wording. Whatever its words, the legacy copy that
+    defers is gone. Beside today's render of the same analysis (the same gates; only the claim
+    differs), the only new texts are the accepted state's copy. Every evidence-related text that
+    stays is the backend's own data or copy, or a listed UI text that holds under any claim."""
+
+    for name in ACCEPTED:
+        deferred = _deferred(cases[name])
+        for surface, texts in rendered[name].items():
+            assert deferred.isdisjoint(texts), (name, surface, deferred & set(texts))
+    for claim in (name for name in ACCEPTED if name not in PERMISSION):
+        today = claim.replace("claim", "today")
+        payload = cases[claim]
+        view = payload["decision_view"]
+        accepted = {
+            view["headline"],
+            view["detail"],
+            *view["evidence"]["limitations"],
+            *ACCEPTED_UI_TEXTS,
+        }
+        run_ids = {payload["run_id"], cases[today]["run_id"]}
+        for surface, texts in rendered[claim].items():
+            shown, before = set(texts) - run_ids, set(rendered[today][surface]) - run_ids
+            assert shown - before <= accepted, (claim, surface, shown - before - accepted)
+            stayed = {text for text in shown & before if EVIDENCE_WORDING.search(text)}
+            unaccounted = {
+                text
+                for text in stayed - STATE_INDEPENDENT_UI_TEXTS
+                if not _backend_says(text, payload)
+            }
+            assert unaccounted == set(), (claim, surface, unaccounted)
+
+
+def test_the_diagnostics_cards_are_the_endpoints_items(diagnostics_cards: dict) -> None:
+    """The per-timeframe cards render the calibration endpoint's items as they are, the same
+    under any claim: a sample gate's note, the metrics and the endpoint's own warning. That
+    warning is the endpoint's copy; an acceptance must make it agree (decision_view.py)."""
+
+    for name in CASES:
+        assert diagnostics_cards[name] == diagnostics_cards["today"], name
+    by_timeframe = {card[0]: card for card in diagnostics_cards["claim"]}
+    assert list(by_timeframe) == list(calibration_endpoint.SUPPORTED_TIMEFRAMES)
+    for timeframe in ("1H", "1W"):
+        assert "Measured calibration diagnostic — not a guarantee." in by_timeframe[timeframe]
+    assert by_timeframe["1H"][-1] == calibration_endpoint._ITEM_WARNING
 
 
 def test_no_accepted_card_is_muted_as_informational(styled: dict) -> None:
@@ -490,6 +692,10 @@ def test_without_an_accepted_claim_every_surface_reads_as_before(
         assert _value(detail, "State summary") == brief["state_summary"], name
         assert _value(detail, "Disclaimer") == DISCLAIMER, name
         assert "Calibration diagnostics unavailable. Keep using heuristic status." in detail, name
+        assert (
+            "Early diagnostic only — not accuracy, not profitability evidence, not trade EV."
+            in rendered[name]["detail_diagnostics"]
+        ), name
         if name.endswith("_no_synthesis"):
             assert _value(detail, "Gate brief summary") == brief["state_summary"], name
             assert "Model quality: not measured yet." in detail, name

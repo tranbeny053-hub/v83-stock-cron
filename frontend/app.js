@@ -1910,7 +1910,9 @@ function renderCalibrationDiagnostics(payload, accepted = null) {
   wrapper.append(
     textBlock(
       "p",
-      "Early diagnostic only — not accuracy, not profitability evidence, not trade EV.",
+      accepted
+        ? "Diagnostic only — not profitability evidence, not trade EV."
+        : "Early diagnostic only — not accuracy, not profitability evidence, not trade EV.",
       "calibration-disclaimer",
     ),
   );
@@ -2372,7 +2374,8 @@ function renderStructuredDetail(payload, detailView) {
     renderDecisionBrief(decisionBrief, display.blocking_reasons, payload),
     section("Probability", [
       keyValueTable([
-        ["Type", accepted ? accepted.headline : decisionBrief.probability_type],
+        // Under an accepted claim the Model readiness row below states it; no Type row repeats it.
+        ...(accepted ? [] : [["Type", decisionBrief.probability_type]]),
         ...legacyProbabilityRows(payload, [
           ["Up", formatPct(display.prob_up_pct)],
           ["Down", formatPct(display.prob_down_pct)],
