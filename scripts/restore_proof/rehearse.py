@@ -39,8 +39,10 @@ what it sees:
   role, another predefined role for the same role, an extra setting beside the ruled ones, the
   ruled settings on another API role, the owner's grants with grant option and CREATE on the
   schema all fail as app; so does what a ruled membership reaches: a role holding a ruled role,
-  and a setting or parameter grant that turns the seals off on Storage's role, which the ruled
-  membership lets act as an API role; and a setting the restore refuses on it fails;
+  a setting or parameter grant that turns the seals off on Storage's role, which the ruled
+  membership lets act as an API role, and a role it gains that may turn them off; a setting the
+  restore refuses on it fails; and a role name the comparison could misread (one that would be
+  read as the bootstrap superuser while it holds a ruled role) fails;
 - a role's comments and settings that pg_dumpall writes as escape strings (owner ruling
   DP-D-ESCAPE=A) PASS, and escape_string_differential holds psql 17 itself against the gate on a
   seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
@@ -132,6 +134,9 @@ SUPABASE_OWNER_GRANTS = (  # run as the owner, as Supabase's initial schema is
     (OWNER, f'GRANT USAGE ON SCHEMA public TO "{OWNER}"'),
 )
 ACCEPTED = frozenset(("accepted", exception.path) for exception in catalog.PLATFORM_EXCEPTIONS)
+ACCEPTED_MEMBERSHIPS = frozenset(
+    item for item in ACCEPTED if item[1].startswith("cluster/memberships/")
+)
 SUPABASE_ROLE_ATTRIBUTES = frozenset(
     ("platform", f"cluster/attributes/{role}")
     for role in ("supabase_storage_admin", "supabase_etl_admin", "supabase_read_only_user")
@@ -601,14 +606,54 @@ CASES: tuple[Case, ...] = (
     Case(
         "a setting the restore refuses on Storage's role, which may act as an API role",
         "FAIL",
-        SUPABASE_ROLE_ATTRIBUTES
-        | {item for item in ACCEPTED if item[1].startswith("cluster/memberships/")},
+        SUPABASE_ROLE_ATTRIBUTES | ACCEPTED_MEMBERSHIPS,
         errors=frozenset({"fail"}),
         cluster_sql=SUPABASE_ROLES,
         edit=_append_role_line(
             f"ALTER ROLE supabase_storage_admin SET session_replication_role TO '{REFUSED_VALUE}';"
         ),
         checks=("setting_value_never_reported",),
+    ),
+    Case(
+        "Storage's role gaining a role that may turn the seals off",
+        "FAIL",
+        SUPABASE_ROLE_ATTRIBUTES
+        | ACCEPTED_MEMBERSHIPS
+        | {
+            ("platform", "cluster/attributes/rehearsal_param"),
+            ("platform", "cluster/parameter_acl/session_replication_role"),
+        }
+        | _app(
+            "cluster/memberships/rehearsal_param to supabase_storage_admin admin=False "
+            "inherit=False set=True"
+        ),
+        cluster_sql=(
+            *SUPABASE_ROLES,
+            "CREATE ROLE rehearsal_param NOLOGIN",
+            "GRANT SET ON PARAMETER session_replication_role TO rehearsal_param",
+            "GRANT rehearsal_param TO supabase_storage_admin",
+        ),
+    ),
+    Case(
+        "a role name the comparison could misread, holding a ruled role",
+        "FAIL",
+        SUPABASE_ROLE_ATTRIBUTES
+        | ACCEPTED_MEMBERSHIPS
+        | {
+            ("platform", "cluster/attributes/supabase_admin admin=x"),
+            # Read as the bootstrap superuser: the name itself is what fails.
+            (
+                "platform",
+                "cluster/memberships/supabase_etl_admin to supabase_admin admin=x admin=False "
+                "inherit=True set=True",
+            ),
+        }
+        | _app("cluster/unsafe_role_names"),
+        cluster_sql=(
+            *SUPABASE_ROLES,
+            'CREATE ROLE "supabase_admin admin=x" LOGIN',
+            'GRANT supabase_etl_admin TO "supabase_admin admin=x"',
+        ),
     ),
     Case(
         "near the ruled memberships: other options, a look-alike role, another predefined role",

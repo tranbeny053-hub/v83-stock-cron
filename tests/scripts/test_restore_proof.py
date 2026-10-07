@@ -21,8 +21,8 @@ What a database is not needed for, checked here:
   value, the ruled settings elsewhere, the owner's grants with grant option, from another grantor,
   beside another grantee or under another key, CREATE on the schema, an item removed or doubled:
   each stays app and fails the proof; and an accepted membership passes its reach on: whoever holds
-  a ruled member is app, and Storage's role, which may act as an API role, is held to an API role's
-  rules for its settings and parameter grants;
+  a ruled member is app, and Storage's role, which may act as an API role, is one (any role it
+  gains, any setting but a timeout, any parameter grant); a role name that could be misread is app;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
   own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
   repeated;
@@ -1400,6 +1400,30 @@ def test_only_an_app_difference_is_ever_accepted() -> None:
         ),
         (
             "memberships",
+            "pg_monitor to supabase_storage_admin admin=False inherit=False set=True",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "seal_param to supabase_storage_admin admin=False inherit=True set=False",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "pg_monitor to supabase_read_only_user admin=False inherit=True set=True",
+            None,
+            "platform",
+        ),
+        (
+            "parameter_acl",
+            "session_replication_role",
+            ["supabase_read_only_user:SET by supabase_admin"],
+            "platform",
+        ),
+        (
+            "memberships",
             "supabase_etl_admin to <owner> admin=False inherit=True set=True",
             None,
             "platform",
@@ -1433,6 +1457,10 @@ def test_only_an_app_difference_is_ever_accepted() -> None:
         "Storage's role's other setting",
         "Storage's role's setting in this database",
         "a parameter grant to Storage's role",
+        "Storage's role gaining another role",
+        "Storage's role inheriting another role",
+        "a reader gaining another role, which gives it no write",
+        "a parameter grant to a reader, which gives it no write",
         "the owner holding the ETL role, who owns every app object already",
         "the bootstrap superuser holding the read-only role",
         "Storage's role's timeout, as an API role's",
@@ -1442,8 +1470,10 @@ def test_only_an_app_difference_is_ever_accepted() -> None:
 def test_what_a_ruled_membership_reaches_is_passed_on(
     section: str, key: str, value: object, category: str
 ) -> None:
-    """Review 1 of DP-D-FINDINGS: the comparison looks one membership deep, so an accepted one
-    must pass its reach on, or a path through it would pass as the platform's."""
+    """Reviews 1 and 2 of DP-D-FINDINGS: the comparison looks one membership deep, so an accepted
+    one must pass its reach on, or a path through it would pass as the platform's. Storage's role
+    gaining a role that may set session_replication_role would turn the seals off for the API
+    writes it makes through authenticator."""
 
     production = ruled_production()
     cluster = production["cluster"]
@@ -1473,6 +1503,24 @@ def test_a_ruled_member_passes_on_only_what_production_lets_it_hold() -> None:
     assert ("platform", f"cluster/memberships/{holder}") in {
         (item.category, item.path) for item in found
     }
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["a/b", "p to q", "supabase_admin admin=x", "<owner>", "PUBLIC", "Anon", "x:y", "x by y", "x*"],
+)
+def test_a_role_name_that_could_be_misread_is_app(name: str) -> None:
+    """Review 2 of DP-D-FINDINGS: names are read back from paths, edges and grants, so a role
+    named, say, "supabase_admin admin=x" holding a ruled role would be read as the bootstrap. Any
+    name that is not a plain lowercase identifier fails the proof instead."""
+
+    plain = ["anon", "pg_read_all_data", "supabase_storage_admin", "ucpe_api_writer", "x$1"]
+    assert catalog.unsafe_role_names([*plain, name]) == [name]
+    reference, production = ruled_reference(), ruled_production()
+    reference["cluster"]["unsafe_role_names"] = []
+    production["cluster"]["unsafe_role_names"] = [name]
+    found = catalog.compare(reference, production, MIGRATION, "supabase_admin")
+    assert ("app", "cluster/unsafe_role_names") in {(item.category, item.path) for item in found}
 
 
 def test_a_whole_value_is_never_matched_as_an_item() -> None:

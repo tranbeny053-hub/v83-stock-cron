@@ -107,8 +107,9 @@ of difference are reported without failing:
   `supabase_read_only_user` in `pg_read_all_data`, each with its exact options. Each is listed by
   name in the report. Anything else at those places, or near them (another option, role, setting,
   value or grant), is still a finding. So is any path through them: a role holding one of those
-  three roles, and a setting (but a timeout) or a parameter grant on `supabase_storage_admin`,
-  which its accepted membership lets act as an API role.
+  three roles; and, since its accepted membership lets `supabase_storage_admin` act as an API role,
+  anything that would be a finding for an API role is one for it too (a role it gains, a setting
+  but a timeout, a parameter grant).
 
 **Trust note (C3).** Supabase's Access Control docs say the SQL snippets a Read-Only project member
 runs are run as `supabase_read_only_user`, which has `pg_read_all_data`. So assigning anyone
@@ -122,10 +123,12 @@ whoever made it: an API role becoming a member of another role or gaining SUPERU
 the like; any setting on an API role but a timeout (one setting can turn the seals off for every
 API session); any role but Supabase's superuser and `postgres` able to act as `postgres`, an app
 role or an API role, or holding a predefined role that reads or writes every table or the
-server's files; any new superuser; and a parameter grant to an API or app role. **A proof may say
-FAIL for privilege paths Supabase itself made** (for example one of its service roles able to act
-as an API role, a read-only role that reads every table, or a setting on PostgREST's
-`authenticator`): each is a finding Claude reports to you by name, for you to decide on, not a
+server's files; any new superuser; a parameter grant to an API or app role; and any role whose name
+is not a plain lowercase identifier (the proof reads names back from text, so a name that could be
+misread fails instead). **A proof may say FAIL for privilege paths Supabase itself made** (for
+example one of its service roles able to act as an API role, a read-only role that reads every
+table, or a setting on PostgREST's `authenticator`): each is a finding Claude reports to you by
+name, for you to decide on, not a
 broken restore. The first proof (2026-10-07) found eight such paths, and you ruled them the exact
 exceptions above; any other one is a new finding. The report names every finding, and nothing is
 changed or reclassified to hide one: only your exact ruling turns one into `accepted`, and an
