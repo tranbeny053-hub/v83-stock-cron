@@ -1,7 +1,8 @@
 # Runbook: the structure export for the restore proof (DP-D)
 
-**Status: PREPARED, NOT RUN.** Owner ruling DP-D=2 (2026-10-05): structure first. This card is ready.
-Running it is the next owner boundary: nothing here has touched the production database.
+**Status: RUN ONCE, by the owner, on 2026-10-07.** Owner ruling DP-D=2 (2026-10-05): structure first.
+The two digests and the proof's outcome are in STATE.md. Nothing here writes to the production
+database; run the card again only if a later owner ruling asks for a fresh export.
 
 The recovery drill (governing plan §12.1 and §23, "Backup") needs a scratch restore that proves the
 declared recovery set. Its first half is the structure: the schema, the roles and grants, and the
@@ -72,8 +73,9 @@ python scripts/restore_proof/prove.py --pg-bin <PostgreSQL 17.6 bin> --export ~/
 1. It checks both digests against yours, then **refuses the export, and restores nothing**, unless
    it is exactly what the two commands make: a data entry, a COPY block, a password clause or
    hash, any psql meta-command but the `\restrict` pair, or anything psql would read differently
-   from the gate (an escape string, a psql variable, a changed string or encoding setting) is a
-   refusal (`gate.py`).
+   from the gate (an escape string in any form but the one pg_dumpall writes for a role's setting,
+   comment or security label, a psql variable, a changed string or encoding setting) is a refusal
+   (`gate.py`).
 2. It checks its own PostgreSQL is 17.6 or a later 17.x, then builds a scratch cluster from the
    migrations, as every migration rehearsal does, and restores a private copy of your two files
    (checked again against your digests, deleted once restored) into a second one. Both clusters

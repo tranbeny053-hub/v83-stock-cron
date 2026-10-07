@@ -17,9 +17,19 @@ pg_dump 17.6 writes, with one key, first and last: any other (``\\!`` runs a she
 act outside the scratch server, and ``\\restrict`` keeps psql from running any meta-command between
 them. The files are split by psql's own lexing rules (scan), and whatever would make psql lex them
 otherwise than this scan is refused: a NUL character or a bare carriage return (psql's line reader
-ends a line at either), an escape string, a psql variable reference, and a SET of
-standard_conforming_strings or client_encoding to anything but what pg_dump writes. A refusal names
-the file, the line and the kind, never the line's content.
+ends a line at either), an escape string other than the one form pg_dumpall writes (below), a psql
+variable reference, and a SET of standard_conforming_strings or client_encoding to anything but
+what pg_dump writes. A refusal names the file, the line and the kind, never the line's content.
+
+The one escape string accepted (owner ruling DP-D-ESCAPE=A, 2026-10-07): pg_dumpall writes a
+literal that holds a backslash as an escape string (fe_utils' appendStringLiteralConn: " E'", every
+backslash and every quote doubled, then ";" or ", "), and only for a role's setting, its comment
+or its security label. pg_dump writes none (its literals are standard strings), so schema.sql
+still refuses every escape string. In that form each backslash comes with its pair, so psql's
+escape-string state ends the literal exactly where a standard string ends: the boundaries are the
+scan's, and the value is a standard string's with each pair read as one backslash. Any other
+escape string (another escape, a lone backslash, a lower-case "e", one not after a space, a
+continuation, another statement) is refused as before.
 """
 
 from __future__ import annotations
@@ -175,9 +185,14 @@ def check_roles_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]:
             return described, [*refusals, Refusal(name, number, "PASSWORD_HASH")]
     if _CLUSTER_DUMP not in text.split("\n")[:3]:
         refusals.append(Refusal(name, None, "NOT_A_PG_DUMPALL_ROLES_DUMP"))
-    statements, metas, hazards = scan(text)
+    escapes: list[tuple[int, int, str]] = []
+    statements, metas, hazards = scan(text, escape_strings=escapes)
     refusals.extend(_meta_refusals(name, statements, metas))
     refusals.extend(Refusal(name, line, kind) for line, kind in hazards)
+    for line, index, follower in escapes:
+        lead = statements[index][1] if index < len(statements) else ()
+        if not _pg_dumpall_writes_it(lead, follower):
+            refusals.append(Refusal(name, line, "ESCAPE_STRING"))
     lines = text.split("\n")
     for line, lead in statements:
         if lead[:1] == ("SET",):
@@ -197,6 +212,8 @@ def check_roles_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]:
 
 def scan(
     text: str,
+    *,
+    escape_strings: list[tuple[int, int, str]] | None = None,
 ) -> tuple[list[tuple[int, tuple[str, ...]]], list[tuple[int, str, str]], list[tuple[int, str]]]:
     """Split a psql script by psql's own lexing rules (psqlscan.l): the top-level statements (the
     line each starts on and its first five words, upper-cased), the top-level meta-commands (line,
@@ -204,11 +221,13 @@ def scan(
     dollar-quoted bodies and comments are skipped by psql's own character classes, so nothing inside
     a function body is mistaken for a statement or a meta-command. Where psql's lexing would depend
     on what this scan does not model, it does not guess: an escape string (E'...', whose backslashes
-    psql reads; pg_dump never writes one) and a psql variable reference (:name, which psql would
-    substitute and lex again) are hazards, which the gate refuses. It assumes standard strings and
-    UTF-8, which the gate enforces. It is stricter than psql in two ways that pg_dump's schema
-    output never meets: a semicolon inside parentheses or a BEGIN ATOMIC body ends a statement
-    here."""
+    psql reads) and a psql variable reference (:name, which psql would substitute and lex again)
+    are hazards, which the gate refuses. Given ``escape_strings``, an escape string in the one form
+    pg_dumpall writes (_pg_dumpall_escape_string) is no hazard: it is lexed exactly as psql lexes
+    it and listed there instead (its line, the index of its statement, and the ";" or "," after
+    it), for the caller to judge its statement. It assumes standard strings and UTF-8, which the
+    gate enforces. It is stricter than psql in two ways that pg_dump's schema output never meets:
+    a semicolon inside parentheses or a BEGIN ATOMIC body ends a statement here."""
 
     statements: list[tuple[int, tuple[str, ...]]] = []
     metas: list[tuple[int, str, str]] = []
@@ -250,6 +269,12 @@ def scan(
             if first_line is None:
                 first_line = line
             if char == "'" and i > 0 and text[i - 1] in "eE":
+                end = _pg_dumpall_escape_string(text, i)
+                if escape_strings is not None and end is not None:
+                    escape_strings.append((line, len(statements), text[end]))
+                    line += text.count("\n", i, end)
+                    i = end
+                    continue
                 hazards.append((line, "ESCAPE_STRING"))
             elif char == ":" and not text.startswith("::", i) and _VARIABLE.match(text, i + 1):
                 hazards.append((line, "PSQL_VARIABLE"))
@@ -288,6 +313,44 @@ def _skip_token(text: str, i: int, line: int, lead: list[str]) -> tuple[int, int
             lead.append(word.group(0).upper())
         return word.end(), line
     return i + 1, line
+
+
+def _pg_dumpall_escape_string(text: str, quote: int) -> int | None:
+    """Where the escape string opened by the quote at ``quote`` ends (its closing quote), if it is
+    in the one form pg_dumpall writes: " E'" (an upper-case E after a space, so psql starts an
+    escape string there), a body in which every backslash and every quote is doubled, and the
+    closing quote followed at once by ";" or ",". Otherwise None: another escape, a lone backslash,
+    any other prefix, an unterminated literal or anything after it (a continuation included)."""
+
+    if text[quote - 2 : quote] != " E":
+        return None
+    i, n = quote + 1, len(text)
+    while i < n:
+        if text[i] == "\\":
+            if not text.startswith("\\\\", i):
+                return None
+            i += 2
+        elif text[i] == "'":
+            if text.startswith("''", i):
+                i += 2
+                continue
+            return i + 1 if text[i + 1 : i + 2] in {";", ","} else None
+        else:
+            i += 1
+    return None
+
+
+def _pg_dumpall_writes_it(lead: tuple[str, ...], follower: str) -> bool:
+    """pg_dumpall writes an escape string for three values only (appendStringLiteralConn): a role's
+    setting (ALTER ROLE r SET p TO ..., each element of a list setting followed by ","), its
+    comment and its security label. Not for ALTER ROLE ALL or IN DATABASE, which --roles-only
+    never writes."""
+
+    if lead[:2] == ("ALTER", "ROLE"):
+        return lead[2:3] != ("ALL",) and "SET" in lead[2:4]
+    return follower == ";" and (
+        lead[:3] == ("COMMENT", "ON", "ROLE") or lead[:2] == ("SECURITY", "LABEL")
+    )
 
 
 def _set_refusal(line: str) -> str | None:

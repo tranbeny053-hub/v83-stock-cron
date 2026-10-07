@@ -141,7 +141,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `docs/runbooks/OWNER_URL_ENVIRONMENT.md` | HISTORICAL_REFERENCE | none (C4 setup complete) | local | STATE.md records 'C4: SET, verified by NAME only' for this GitHub configuration procedure. |
 | `docs/runbooks/RELEASE.md` | ACTIVE_RELEASE | owner-local | HF Space | Drives scripts/release.py release procedures. |
 | `docs/runbooks/RESOLVER_CUTOVER.md` | HISTORICAL_REFERENCE | none (G1 cutover proven) | production DB | STATE.md records 'G1: LIVE_PROVEN' and run 37139970258 after this credential cutover. |
-| `docs/runbooks/RESTORE_PROOF_EXPORT.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | The owner's one-time schema-only and roles-only export for the DP-D restore proof (catalog reads, no row, no password); PREPARED, NOT RUN until the next owner boundary. |
+| `docs/runbooks/RESTORE_PROOF_EXPORT.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | The owner's one-time schema-only and roles-only export for the DP-D restore proof (catalog reads, no row, no password); RUN ONCE by the owner on 2026-10-07 (the digests and the proof's outcome are in STATE.md). |
 | `docs/runbooks/ROLLBACK.md` | ACTIVE_RELEASE | owner-local | HF Space | Drives scripts/release.py rollback procedures. |
 | `docs/runbooks/SPACE_DB_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | Documents scripts/space_db_credential.py and the owner SQL/Space credential switch. |
 | `docs/runbooks/WRITER_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | Supabase API | Documents scripts/writer_signing_key.py and recurring 30-day writer-token replacement. |

@@ -31,8 +31,13 @@ what it sees:
   shown;
 - the gate refuses, and nothing is restored from: an export with data (no --schema-only), a roles
   export with password verifiers (no --no-role-passwords, whose verifier never appears in the
-  report), a psql meta-command (which never runs), a missing \\restrict and an export that would
-  take superuser from the bootstrap role.
+  report), a psql meta-command (which never runs), a missing \\restrict, an export that would
+  take superuser from the bootstrap role, and an escape string pg_dumpall does not write;
+- a role's comments and settings that pg_dumpall writes as escape strings (owner ruling
+  DP-D-ESCAPE=A) PASS, and escape_string_differential holds psql 17 itself against the gate on a
+  seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
+  unchanged, runs exactly the gate's meta-commands and sends the server exactly the gate's
+  statements), while every other escape string is refused.
 Every server it makes listens on a private socket only and is deleted at the end.
 """
 
@@ -41,6 +46,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
+import re
 import secrets
 import shutil
 import subprocess
@@ -50,10 +57,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import psycopg
+from psycopg import sql as pgsql
+
 if __package__ in {None, ""}:  # run as a script: make the repository root importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.restore_proof import prove, scratch  # noqa: E402
+from scripts.restore_proof import gate, prove, scratch  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 APP_DATABASE = "ucpe"
@@ -527,6 +537,31 @@ CASES: tuple[Case, ...] = (
         cluster_sql=("COMMENT ON ROLE anon IS 'a rehearsal comment'",),
     ),
     Case(
+        "a role's comments and settings that pg_dumpall writes as escape strings",
+        "PASS",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_escape"),
+                ("platform", "cluster/settings/rehearsal_escape in all databases"),
+            }
+        ),
+        cluster_sql=(
+            r"COMMENT ON ROLE anon IS E'C:\\path ''q'' \\\\ end'",
+            r"COMMENT ON ROLE authenticated IS E'line1\nline2 \\ tab\t;\\! x --y /*z :v $$'",
+            "CREATE ROLE rehearsal_escape NOLOGIN",
+            r"ALTER ROLE rehearsal_escape SET application_name TO 'a\b'",
+            r"ALTER ROLE rehearsal_escape SET search_path TO 'a\b', public",
+        ),
+    ),
+    Case(
+        "an escape string pg_dumpall does not write",
+        "REFUSED_EXPORT",
+        # psql ends nothing at the escaped quote, so the scan, reading on as a standard string,
+        # takes the closing \unrestrict into a literal too: both refusals stand.
+        refusals=frozenset({"ESCAPE_STRING", "RESTRICT_PAIR_MISSING"}),
+        edit=_append_role_line(r"COMMENT ON ROLE anon IS E'it\'s';"),
+    ),
+    Case(
         "the owner's documented credential steps",
         "PASS",
         frozenset(
@@ -581,6 +616,224 @@ def export_with_the_card(
         )
 
 
+# Owner ruling DP-D-ESCAPE=A: pieces of a role's comment or setting that would end or escape a
+# literal, or open a comment, a dollar quote, a variable or a meta-command, were the literal lexed
+# otherwise than the gate lexes it. Every corpus value holds a backslash, so pg_dumpall writes each
+# as an escape string; the corpus is seeded, so every run (CI's included) sees the same one.
+_PIECES = (
+    "a",
+    "Z",
+    " ",
+    "\t",
+    "\n",
+    ";",
+    "\\",
+    "\\\\",
+    "'",
+    "''",
+    '"',
+    "--",
+    "/*",
+    "*/",
+    "$$",
+    "$q$",
+    ":v",
+    ":'v'",
+    "\\echo rehearsal-leaked",
+    "\\!",
+    "E'",
+    "\u00e9",
+    "\u2713",
+)
+ESCAPE_CORPUS_SIZE = 48
+ESCAPE_CORPUS_SEED = 20261007
+_MARK = "rehearsal-mark-"
+_HIDDEN = "rehearsal-hidden"
+# Escape strings pg_dumpall does not write; the last one hides a meta-command psql would run.
+_OTHER_ESCAPE_STRINGS = (
+    r"COMMENT ON ROLE anon IS E'it\'s';",
+    r"COMMENT ON ROLE anon IS E'a\nb';",
+    r"COMMENT ON ROLE anon IS e'a\\b';",
+    "ALTER ROLE anon SET application_name TO E'a'\n'b';",
+    "COMMENT ON ROLE anon IS E'\\'' \\echo " + _HIDDEN + "\n';",
+)
+_LOG_ENTRY = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d")
+_LOGGED_STATEMENT = re.compile(r"^\S+ \S+ \S+ \[\d+\] LOG:  statement: (.*)$")
+
+
+def escape_corpus(size: int = ESCAPE_CORPUS_SIZE, seed: int = ESCAPE_CORPUS_SEED) -> list[str]:
+    rng = random.Random(seed)  # noqa: S311 - a fixed test corpus, not a secret
+    values: list[str] = []
+    while len(values) < size:
+        value = "".join(rng.choice(_PIECES) for _ in range(rng.randint(1, 10)))
+        if "\\" in value[:40]:
+            values.append(value)
+    return values
+
+
+def escape_string_differential(pg_bin: Path, work: Path) -> dict[str, Any]:
+    """psql 17 itself against the gate, on the escape strings pg_dumpall writes (owner ruling
+    DP-D-ESCAPE=A). The corpus values become role comments and settings (one a list setting) on a
+    scratch cluster, and pg_dumpall writes them as the card does. Then:
+    - the gate passes that export, every escape string in it lexed as pg_dumpall's own form;
+    - psql restores it into a second cluster, where every comment and setting reads back the same;
+    - with the \\restrict pair taken out (so psql would run any meta-command it saw) and a \\echo
+      marker before each statement the gate sees, psql runs exactly the gate's meta-commands (every
+      marker, and none of the backslash text inside a literal) and sends the server exactly the
+      gate's statements (the server's statement log), in the same order;
+    - every escape string pg_dumpall does not write is refused, and psql would run the
+      meta-command hidden in one of them, which is why each is refused."""
+
+    work.mkdir(parents=True)
+    values = escape_corpus()
+    dump = work / "roles.sql"
+    source = scratch.start(pg_bin, work, "escape-source", superuser=SUPER)
+    try:
+        with psycopg.connect(source.url("postgres"), autocommit=True) as conn:
+            for index, value in enumerate(values):
+                role = pgsql.Identifier(f"escape_{index:02d}")
+                literal = pgsql.Literal(value)
+                conn.execute(pgsql.SQL("CREATE ROLE {} NOLOGIN").format(role))
+                conn.execute(pgsql.SQL("COMMENT ON ROLE {} IS {}").format(role, literal))
+                conn.execute(
+                    pgsql.SQL("ALTER ROLE {} SET rehearsal.value TO {}").format(role, literal)
+                )
+                conn.execute(
+                    pgsql.SQL("ALTER ROLE {} SET search_path TO {}, public").format(
+                        role, pgsql.Literal(value[:40])
+                    )
+                )
+            expected = _escape_role_values(conn)
+        subprocess.run(  # noqa: S603
+            [
+                str(pg_bin / ROLES_EXPORT[0]),
+                *ROLES_EXPORT[1:],
+                f"--file={dump}",
+                f"--dbname={source.url('postgres')}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=True,
+        )
+    finally:
+        scratch.stop(source)
+    text = dump.read_text(encoding="utf-8")
+    refusals = gate.check_roles_dump("roles.sql", dump.read_bytes())[1]
+    found: list[tuple[int, int, str]] = []
+    statements = gate.scan(text, escape_strings=found)[0]
+
+    restored = scratch.start(pg_bin, work, "escape-restored", superuser=SUPER)
+    try:
+        restored.psql(file=dump, stop_on_error=False)
+        with psycopg.connect(restored.url("postgres"), autocommit=True) as conn:
+            actual = _escape_role_values(conn)
+    finally:
+        scratch.stop(restored)
+
+    starts = {line for line, _ in statements}
+    marked: list[str] = []
+    markers: list[str] = []
+    for number, item in enumerate(text.split("\n"), start=1):
+        if item.startswith(("\\restrict ", "\\unrestrict ")):
+            continue
+        if number in starts:
+            markers.append(f"{_MARK}{len(markers)}")
+            marked.append(f"\\echo {markers[-1]}")
+        marked.append(item)
+    script = work / "marked.sql"
+    script.write_text("\n".join(marked), encoding="utf-8")
+    script_statements, script_metas, script_hazards = gate.scan(
+        script.read_text(encoding="utf-8"), escape_strings=[]
+    )
+    gate_markers = [argument for _, command, argument in script_metas if command == "echo"]
+    hidden = work / "hidden.sql"
+    hidden.write_text(_OTHER_ESCAPE_STRINGS[-1] + "\n", encoding="utf-8")
+    lexed = scratch.start(pg_bin, work, "escape-lexed", superuser=SUPER)
+    try:
+        lexed.psql(command=f"ALTER ROLE {SUPER} SET log_statement = 'all'")
+        run = lexed.psql(file=script, stop_on_error=False)
+        log = lexed.log.read_text(encoding="utf-8", errors="replace")
+        hidden_run = lexed.psql(file=hidden, stop_on_error=False)
+    finally:
+        scratch.stop(lexed)
+    printed = run.stdout.splitlines()
+    psql_markers = [line for line in printed if line.startswith(_MARK)]
+    psql_leads = [_lead(statement) for statement in _logged_statements(log)]
+    gate_leads = [lead for _, lead in script_statements]
+    other_refused = sum(
+        "ESCAPE_STRING" in {item.kind for item in gate.check_roles_dump("roles.sql", raw)[1]}
+        for raw in (_roles_file(statement) for statement in _OTHER_ESCAPE_STRINGS)
+    )
+    result = {
+        "values": len(values),
+        "escape_strings_passed": len(found),
+        "gate_refusals": sorted({item.kind for item in refusals}),
+        "round_trip_equal": actual == expected and len(actual) == len(values),
+        "markers": {"gate": len(gate_markers), "psql": len(psql_markers)},
+        "markers_equal": markers == gate_markers == psql_markers,
+        "backslash_text_run": sum("rehearsal-leaked" in line for line in printed),
+        "statements": {"gate": len(gate_leads), "psql": len(psql_leads)},
+        "statements_equal": gate_leads == psql_leads,
+        "other_forms_refused": f"{other_refused}/{len(_OTHER_ESCAPE_STRINGS)}",
+        "psql_runs_the_hidden_meta_command": any(
+            line.startswith(_HIDDEN) for line in hidden_run.stdout.splitlines()
+        ),
+    }
+    result["passed"] = (
+        result["gate_refusals"] == []
+        and script_hazards == []
+        and len(found) >= len(values)
+        and result["round_trip_equal"]
+        and result["markers_equal"]
+        and result["backslash_text_run"] == 0
+        and result["statements_equal"]
+        and other_refused == len(_OTHER_ESCAPE_STRINGS)
+        and result["psql_runs_the_hidden_meta_command"]
+    )
+    return result
+
+
+def _escape_role_values(conn: psycopg.Connection) -> dict[str, tuple[Any, ...]]:
+    rows = conn.execute(
+        "SELECT r.rolname, pg_catalog.shobj_description(r.oid, 'pg_authid'), s.setconfig "
+        "FROM pg_catalog.pg_roles r LEFT JOIN pg_catalog.pg_db_role_setting s "
+        "ON s.setrole = r.oid AND s.setdatabase = 0 "
+        "WHERE r.rolname LIKE 'escape\\_%' ORDER BY 1"
+    ).fetchall()
+    return {row[0]: tuple(row[1:]) for row in rows}
+
+
+def _logged_statements(log: str) -> list[str]:
+    """The statements the server received, in order, from its log (log_statement = all)."""
+
+    statements: list[str] = []
+    current: list[str] | None = None
+    for line in log.split("\n"):
+        if _LOG_ENTRY.match(line):
+            if current is not None:
+                statements.append("\n".join(current))
+            match = _LOGGED_STATEMENT.match(line)
+            current = [match.group(1)] if match else None
+        elif current is not None:
+            current.append(line)
+    if current is not None:
+        statements.append("\n".join(current))
+    return statements
+
+
+def _lead(statement: str) -> tuple[str, ...]:
+    found = gate.scan(statement, escape_strings=[])[0]
+    return found[0][1] if found else ()
+
+
+def _roles_file(statement: str) -> bytes:
+    return (
+        "--\n-- PostgreSQL database cluster dump\n--\n\n\\restrict K\n\n"
+        f"{statement}\n\n\\unrestrict K\n"
+    ).encode()
+
+
 def rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
     with scratch.clean_pg_environment():
         return _rehearse(pg_bin, work)
@@ -599,10 +852,12 @@ def _rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
             )
     finally:
         scratch.stop(production)
-    passed = all(result["passed"] for result in results)
+    escape_strings = escape_string_differential(pg_bin, work / "escape-strings")
+    passed = all(result["passed"] for result in results) and escape_strings["passed"]
     return {
         "schema_version": "ucpe.restore_proof_rehearsal.v1",
         "cases": results,
+        "escape_strings": escape_strings,
         "verdict": "PASS" if passed else "FAIL",
     }
 
@@ -714,7 +969,11 @@ def main(argv: list[str] | None = None) -> int:
     report = rehearse(args.pg_bin, args.work)
     args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     passed = sum(case["passed"] for case in report["cases"])
-    print(f"REHEARSAL={report['verdict']} cases={passed}/{len(report['cases'])}")
+    escapes = report["escape_strings"]
+    print(
+        f"REHEARSAL={report['verdict']} cases={passed}/{len(report['cases'])} "
+        f"escape_strings={'PASS' if escapes['passed'] else 'FAIL'}"
+    )
     for case in report["cases"]:
         if not case["passed"]:
             print(f"  FAILED: {case['case']}")
