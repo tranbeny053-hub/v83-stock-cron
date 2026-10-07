@@ -8,7 +8,9 @@ What a database is not needed for, checked here:
 - its scanner splits a psql script by psql's own lexing rules (psqlscan.l): nothing inside a quoted
   string, a quoted identifier, a dollar-quoted body or a comment is taken for a statement or a
   meta-command, a dollar quote starts exactly where psql starts one, and whatever psql would lex
-  by a state the scanner does not model (an escape string, a psql variable, a NUL) is refused;
+  by a state the scanner does not model (an escape string, a psql variable, a NUL) is refused,
+  but for the escape strings pg_dumpall itself writes for a role's setting, comment or security
+  label, which pass in the roles file only and split exactly where psql splits them;
 - the comparison classifies exactly: the owner's documented LOGIN steps are operational; every
   privilege path into the app (through an API role, the owner or a migration role) is app; the
   platform's own roles, settings, memberships and default privileges are platform; a setting's
@@ -382,6 +384,126 @@ def test_what_psql_would_lex_by_a_state_of_its_own_is_refused(
     raw = schema_with("GRANT SELECT", f"{statement}\nGRANT SELECT")
     _, refusals = gate.check_schema_dump("schema.sql", raw)
     assert kinds(refusals) == hazards
+
+
+# Owner ruling DP-D-ESCAPE=A. pg_dumpall 17's own lines for literals that hold a backslash
+# (appendStringLiteralConn), as the PostgreSQL 17 tools wrote them for synthetic roles: " E'", every
+# backslash and quote doubled, then ";" or ",". The database half (pg_dumpall writes them, psql
+# lexes them as the gate does, the server reads the same values) is rehearse.py's.
+PG_DUMPALL_ESCAPE_STRINGS = {
+    "a comment": r"COMMENT ON ROLE anon IS E'C:\\path ''q'' \\\\ end';",
+    "a comment over two lines": "COMMENT ON ROLE anon IS E'line1\n"
+    + r"line2 \\ tab"
+    + "\t"
+    + r";\\! x --y /*z :v $$';",
+    "a setting": r"ALTER ROLE anon SET application_name TO E'a\\b';",
+    "a list setting": r"""ALTER ROLE anon SET search_path TO E'a\\b', 'public', 'we"ird';""",
+    "a quoted setting": r"""ALTER ROLE anon SET "app.q" TO E'it''s \\ here';""",
+    "a quoted role's setting": r"""ALTER ROLE "an;on" SET application_name TO E'a\\b';""",
+    "a security label": r"SECURITY LABEL FOR dummy ON ROLE anon IS E'a\\b';",
+}
+
+
+@pytest.mark.parametrize(
+    "statement", PG_DUMPALL_ESCAPE_STRINGS.values(), ids=PG_DUMPALL_ESCAPE_STRINGS.keys()
+)
+def test_the_escape_strings_pg_dumpall_writes_pass_in_the_roles_file(statement: str) -> None:
+    """Each backslash comes with its pair, so psql ends the literal where a standard string ends:
+    the line passes, and nothing inside it is a statement or a meta-command."""
+
+    raw = roles_with("GRANT anon", f"{statement}\nGRANT anon")
+    assert kinds(gate.check_roles_dump("roles.sql", raw)[1]) == []
+    found: list[tuple[int, int, str]] = []
+    statements, metas, hazards = gate.scan(raw.decode(), escape_strings=found)
+    assert [command for _, command, _ in metas] == ["restrict", "unrestrict"]
+    assert hazards == [] and len(found) == statement.count(" E'")
+    assert len(statements) == len(gate.scan(ROLES)[0]) + 1
+    # The statement after it starts on its own line, however many lines the literal spans.
+    lines = raw.decode().split("\n")
+    assert statements[-1] == (
+        next(n for n, item in enumerate(lines, 1) if item.startswith("GRANT anon")),
+        ("GRANT", "ANON", "TO", "AUTHENTICATOR", "WITH"),
+    )
+
+
+def test_an_escape_string_that_never_ends_is_a_hazard_however_it_ends() -> None:
+    """At the end of the text, with no closing quote: never pg_dumpall's form."""
+
+    for text in ("COMMENT ON ROLE anon IS E'x", "COMMENT ON ROLE anon IS E'x\n;", "x E'"):
+        found: list[tuple[int, int, str]] = []
+        assert gate.scan(text, escape_strings=found)[2] == [(1, "ESCAPE_STRING")], text
+        assert found == [], text
+
+
+def test_schema_sql_still_refuses_every_escape_string() -> None:
+    """pg_dump writes no escape string (its literals are standard strings, as the PostgreSQL 17
+    tools showed for every kind of schema object), so none passes in schema.sql."""
+
+    for statement in (
+        r"COMMENT ON TABLE public.t IS E'a\\b';",
+        r"ALTER TABLE public.t ALTER a SET DEFAULT E'a\\b';",
+    ):
+        raw = schema_with("GRANT SELECT", f"{statement}\nGRANT SELECT")
+        assert kinds(gate.check_schema_dump("schema.sql", raw)[1]) == ["ESCAPE_STRING"]
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        r"COMMENT ON ROLE anon IS E'it\'s';",
+        r"COMMENT ON ROLE anon IS E'a\nb';",
+        r"COMMENT ON ROLE anon IS E'\x41';",
+        r"COMMENT ON ROLE anon IS E'\101';",
+        r"COMMENT ON ROLE anon IS E'\u0041';",
+        r"COMMENT ON ROLE anon IS E'a\\\';",
+        r"COMMENT ON ROLE anon IS e'a\\b';",
+        r"COMMENT ON ROLE anon IS(E'a\\b');",
+        r"COMMENT ON ROLE anon IS xE'a\\b';",
+        "COMMENT ON ROLE anon IS E'a'\n'b';",
+        r"COMMENT ON ROLE anon IS E'a\\b' ;",
+        r"COMMENT ON ROLE anon IS E'a\\b', 'c';",
+        r"COMMENT ON ROLE anon IS E'unterminated",
+        "ALTER ROLE anon SET application_name TO E'a'\n'b';",
+        r"ALTER ROLE anon SET application_name TO E'a\\b' ;",
+        r"ALTER ROLE anon SET application_name TO E'unterminated",
+        r"ALTER ROLE anon WITH VALID UNTIL E'a\\b';",
+        r"ALTER ROLE ALL SET application_name TO E'a\\b';",
+        r"ALTER ROLE anon IN DATABASE postgres SET application_name TO E'a\\b';",
+        r"GRANT anon TO E'a\\b';",
+        r"SET application_name = E'a\\b';",
+        r"COMMENT ON ROLE anon IS E'\'' \! touch x ';",
+    ],
+    ids=[
+        "an escaped quote",
+        "a C escape",
+        "a hex escape",
+        "an octal escape",
+        "a Unicode escape",
+        "an odd run of backslashes",
+        "a lower-case e",
+        "not after a space",
+        "inside a word",
+        "a continuation",
+        "not followed at once by a semicolon",
+        "a comma pg_dumpall writes only in a list setting",
+        "unterminated",
+        "a setting's continuation",
+        "a setting not followed at once by a semicolon",
+        "an unterminated setting",
+        "not a setting",
+        "every role at once",
+        "one database's setting",
+        "another statement",
+        "a SET line",
+        "a meta-command psql would run",
+    ],
+)
+def test_any_other_escape_string_is_refused_in_the_roles_file(statement: str) -> None:
+    """Anything but pg_dumpall's own form is lexed by psql where the scan cannot follow: an escaped
+    quote ends nothing for psql (the last case would run a shell command were it accepted)."""
+
+    raw = roles_with("GRANT anon", f"{statement}\nGRANT anon")
+    assert "ESCAPE_STRING" in kinds(gate.check_roles_dump("roles.sql", raw)[1])
 
 
 def test_a_nul_character_is_refused() -> None:
@@ -1112,7 +1234,7 @@ def test_the_card_runs_the_rehearsed_commands_and_keeps_the_secret_out() -> None
     assert "again exactly, once. If the same kind comes back, stop" in " ".join(CARD.split())
     assert "nothing is changed or reclassified to hide one" in " ".join(CARD.split())
     assert "--expect-sha256" in prove.__doc__
-    assert "Status: PREPARED, NOT RUN." in CARD
+    assert "Status: RUN ONCE, by the owner, on 2026-10-07." in CARD
     flat = " ".join(CARD.split())
     assert "delete `:[YOUR-PASSWORD]` from it" in flat, "typed at the prompt, never stored"
     for forbidden in ("PGPASSWORD", "export UCPE", "postgresql://postgres:"):
