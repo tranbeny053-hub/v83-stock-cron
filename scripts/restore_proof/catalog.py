@@ -44,7 +44,9 @@ Each difference is classified:
 - **accepted**: an app difference that is exactly one of the owner's managed-platform exceptions
   (PLATFORM_EXCEPTIONS, owner ruling DP-D-FINDINGS): at its path, production holds exactly the
   reference's items and the ruled ones. Reported by name, not failing; anything else at that path,
-  or anywhere else, stays app.
+  or anywhere else, stays app. An accepted membership passes its reach on (exception_reach): whoever
+  holds its member is app, as whoever holds what it grants would be, and a member that may act as an
+  API role is held to an API role's rules for its settings and parameter grants.
 """
 
 from __future__ import annotations
@@ -514,6 +516,7 @@ class PlatformException:
 # else at these paths, or anywhere else, stays an app difference, and a difference that also
 # removes what the reference declares is never accepted.
 _INITIAL_SCHEMA = "db/init-scripts/00000000000000-initial-schema.sql"
+_MEMBERSHIPS = "cluster/memberships/"
 PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
     # C1: Supabase Storage's role may act as authenticator, and so as each API role authenticator
     # holds (Supabase states no reason; supabase/storage's code switches to the request's role).
@@ -670,12 +673,9 @@ def compare(
     superusers = _superuser_roles(reference) | _superuser_roles(restored)
     if bootstrap is not None:
         superusers = superusers | {bootstrap}
-    roles = _Roles(
-        migration_roles,
-        api_roles(reference, migration_roles, bootstrap),
-        bootstrap,
-        frozenset(superusers),
-    )
+    api = api_roles(reference, migration_roles, bootstrap)
+    acting, reaching = exception_reach(restored, api, migration_roles)
+    roles = _Roles(migration_roles, api, bootstrap, frozenset(superusers), acting, reaching)
     classified = [_classify(difference, roles) for difference in differences]
     # Only an app difference that is exactly one of the owner's exceptions is accepted.
     return [
@@ -684,6 +684,33 @@ def compare(
         else item
         for item in classified
     ]
+
+
+def exception_reach(
+    restored: dict[str, Any], api: frozenset[str], migration: frozenset[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """What the owner's membership exceptions let their members do, where production holds them:
+    the members that may act as one of the app's roles or an API role (Storage's role, through
+    authenticator), and those and the ones that may read every table. The comparison looks one
+    membership deep, so an accepted membership passes its reach on: whoever holds such a member is
+    app (as whoever holds what it grants would be), and one that may act as an API role is held to
+    an API role's rules for its settings, parameter grants and refused settings (prove.py). One
+    that may only read is not: no setting or parameter gives it a write."""
+
+    held = set(restored.get("cluster", {}).get("memberships", []))
+    edges = [
+        _membership(exception.path.removeprefix(_MEMBERSHIPS))
+        for exception in PLATFORM_EXCEPTIONS
+        if exception.path.startswith(_MEMBERSHIPS)
+        and exception.path.removeprefix(_MEMBERSHIPS) in held
+    ]
+    acting = frozenset(
+        member
+        for granted, member in edges
+        if granted in api or granted in migration or granted == OWNER
+    )
+    reading = {member for granted, member in edges if granted in DATA_ROLES}
+    return acting, acting | reading
 
 
 def _accepted(difference: Difference) -> bool:
@@ -727,6 +754,8 @@ class _Roles:
     api: frozenset[str]
     bootstrap: str | None
     superusers: frozenset[str]
+    acting: frozenset[str] = frozenset()  # exception_reach: may act as an API role
+    reaching: frozenset[str] = frozenset()  # exception_reach: may act as one, or read every table
 
 
 def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
@@ -797,8 +826,10 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
             or granted in roles.api
             or granted in roles.superusers
             or granted in DATA_ROLES
+            or granted in roles.reaching
         ):
-            # Another role able to act as an app role, as a superuser, or to reach every table.
+            # Another role able to act as an app role, as a superuser, or to reach every table
+            # (directly, or through an owner's exception: exception_reach).
             return difference
         return as_("platform")
     if section == "settings":
@@ -807,14 +838,15 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
         names = {item.split(" ", 1)[0] for item in changed}
         if role == PUBLIC:
             return difference  # a setting on every role reaches the app's roles too
-        if role in roles.migration or (role in roles.api and not names <= TIMEOUT_SETTINGS):
+        api = role in roles.api or role in roles.acting
+        if role in roles.migration or (api and not names <= TIMEOUT_SETTINGS):
             return difference
         return as_("platform")
     if section == "parameter_acl":
         changed = set(difference.reference or []) ^ set(difference.restored or [])
         grantees = {item.split(":", 1)[0] for item in changed}
         # PUBLIC is every role, the app's included, so a grant to it is an app difference.
-        sensitive = roles.migration | roles.api | {PUBLIC}
+        sensitive = roles.migration | roles.api | roles.acting | {PUBLIC}
         return difference if grantees & sensitive else as_("platform")
     return difference
 

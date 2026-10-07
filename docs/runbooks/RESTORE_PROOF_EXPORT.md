@@ -106,7 +106,9 @@ of difference are reported without failing:
   membership in `authenticator`; and the memberships of `supabase_etl_admin` and
   `supabase_read_only_user` in `pg_read_all_data`, each with its exact options. Each is listed by
   name in the report. Anything else at those places, or near them (another option, role, setting,
-  value or grant), is still a finding.
+  value or grant), is still a finding. So is any path through them: a role holding one of those
+  three roles, and a setting (but a timeout) or a parameter grant on `supabase_storage_admin`,
+  which its accepted membership lets act as an API role.
 
 **Trust note (C3).** Supabase's Access Control docs say the SQL snippets a Read-Only project member
 runs are run as `supabase_read_only_user`, which has `pg_read_all_data`. So assigning anyone

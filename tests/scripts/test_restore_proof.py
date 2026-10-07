@@ -20,7 +20,9 @@ What a database is not needed for, checked here:
   look-alike or another role, another predefined role, one more, one fewer or another setting
   value, the ruled settings elsewhere, the owner's grants with grant option, from another grantor,
   beside another grantee or under another key, CREATE on the schema, an item removed or doubled:
-  each stays app and fails the proof;
+  each stays app and fails the proof; and an accepted membership passes its reach on: whoever holds
+  a ruled member is app, and Storage's role, which may act as an API role, is held to an API role's
+  rules for its settings and parameter grants;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
   own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
   repeated;
@@ -1337,6 +1339,140 @@ def test_only_an_app_difference_is_ever_accepted() -> None:
     assert [(item.category, item.path) for item in found] == [
         ("platform", f"cluster/memberships/{EDGE_STORAGE}")
     ]
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value", "category"),
+    [
+        (
+            "memberships",
+            "supabase_etl_admin to evil admin=False inherit=True set=True",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "supabase_read_only_user to evil admin=False inherit=True set=True",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "supabase_storage_admin to evil admin=False inherit=False set=True",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "supabase_storage_admin to evil admin=False inherit=True set=False",
+            None,
+            "app",
+        ),
+        (
+            "memberships",
+            "supabase_read_only_user to supabase_etl_admin admin=False inherit=True set=True",
+            None,
+            "app",
+        ),
+        (
+            "settings",
+            "supabase_storage_admin in all databases",
+            [f"session_replication_role sha256:{OTHER_DIGEST}"],
+            "app",
+        ),
+        (
+            "settings",
+            "supabase_storage_admin in all databases",
+            [f"search_path sha256:{OTHER_DIGEST}"],
+            "app",
+        ),
+        (
+            "settings",
+            "supabase_storage_admin in this database",
+            [f"search_path sha256:{OTHER_DIGEST}"],
+            "app",
+        ),
+        (
+            "parameter_acl",
+            "session_replication_role",
+            ["supabase_storage_admin:SET by supabase_admin"],
+            "app",
+        ),
+        (
+            "memberships",
+            "supabase_etl_admin to <owner> admin=False inherit=True set=True",
+            None,
+            "platform",
+        ),
+        (
+            "memberships",
+            "supabase_read_only_user to supabase_admin admin=False inherit=True set=True",
+            None,
+            "platform",
+        ),
+        (
+            "settings",
+            "supabase_storage_admin in all databases",
+            [f"statement_timeout sha256:{TIMEOUT_DIGEST}"],
+            "platform",
+        ),
+        (
+            "settings",
+            "supabase_read_only_user in all databases",
+            [f"default_transaction_read_only sha256:{OTHER_DIGEST}"],
+            "platform",
+        ),
+    ],
+    ids=[
+        "a role holding the ETL role",
+        "a role holding the read-only role",
+        "a role able to become Storage's role",
+        "a role inheriting from Storage's role",
+        "one ruled reader holding the other",
+        "Storage's role turning the seals off",
+        "Storage's role's other setting",
+        "Storage's role's setting in this database",
+        "a parameter grant to Storage's role",
+        "the owner holding the ETL role, who owns every app object already",
+        "the bootstrap superuser holding the read-only role",
+        "Storage's role's timeout, as an API role's",
+        "a reader's own setting, which gives it no write",
+    ],
+)
+def test_what_a_ruled_membership_reaches_is_passed_on(
+    section: str, key: str, value: object, category: str
+) -> None:
+    """Review 1 of DP-D-FINDINGS: the comparison looks one membership deep, so an accepted one
+    must pass its reach on, or a path through it would pass as the platform's."""
+
+    production = ruled_production()
+    cluster = production["cluster"]
+    if section == "memberships":
+        cluster["memberships"] = sorted([*cluster["memberships"], key])
+    else:
+        cluster[section][key] = value
+    found = catalog.compare(ruled_reference(), production, MIGRATION, "supabase_admin")
+    assert {(item.category, item.path) for item in found} == {
+        ("accepted", path) for path in RULED
+    } | {(category, f"cluster/{section}/{key}")}
+
+
+def test_a_ruled_member_passes_on_only_what_production_lets_it_hold() -> None:
+    api = catalog.api_roles(ruled_reference(), MIGRATION, "supabase_admin")
+    acting, reaching = catalog.exception_reach(ruled_production(), api, MIGRATION)
+    assert acting == {"supabase_storage_admin"}
+    assert reaching == {"supabase_storage_admin", "supabase_etl_admin", "supabase_read_only_user"}
+    # Without its ruled membership the ETL role reaches nothing of the app: holding it is the
+    # platform's, as before.
+    production = ruled_production()
+    holder = "supabase_etl_admin to evil admin=False inherit=True set=True"
+    production["cluster"]["memberships"] = sorted(
+        [*(edge for edge in production["cluster"]["memberships"] if edge != EDGE_ETL), holder]
+    )
+    found = catalog.compare(ruled_reference(), production, MIGRATION, "supabase_admin")
+    assert ("platform", f"cluster/memberships/{holder}") in {
+        (item.category, item.path) for item in found
+    }
 
 
 def test_a_whole_value_is_never_matched_as_an_item() -> None:

@@ -38,7 +38,9 @@ what it sees:
   its path and nothing else; next to them, the same membership with other options, a look-alike
   role, another predefined role for the same role, an extra setting beside the ruled ones, the
   ruled settings on another API role, the owner's grants with grant option and CREATE on the
-  schema all fail as app;
+  schema all fail as app; so does what a ruled membership reaches: a role holding a ruled role,
+  and a setting or parameter grant that turns the seals off on Storage's role, which the ruled
+  membership lets act as an API role; and a setting the restore refuses on it fails;
 - a role's comments and settings that pg_dumpall writes as escape strings (owner ruling
   DP-D-ESCAPE=A) PASS, and escape_string_differential holds psql 17 itself against the gate on a
   seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
@@ -130,6 +132,10 @@ SUPABASE_OWNER_GRANTS = (  # run as the owner, as Supabase's initial schema is
     (OWNER, f'GRANT USAGE ON SCHEMA public TO "{OWNER}"'),
 )
 ACCEPTED = frozenset(("accepted", exception.path) for exception in catalog.PLATFORM_EXCEPTIONS)
+SUPABASE_ROLE_ATTRIBUTES = frozenset(
+    ("platform", f"cluster/attributes/{role}")
+    for role in ("supabase_storage_admin", "supabase_etl_admin", "supabase_read_only_user")
+)
 
 
 def _append_role_line(line: str) -> Callable[[Path], None]:
@@ -566,13 +572,43 @@ CASES: tuple[Case, ...] = (
     Case(
         "Supabase's own grants the owner ruled exact platform exceptions",
         "PASS",
-        ACCEPTED
-        | {
-            ("platform", f"cluster/attributes/{role}")
-            for role in ("supabase_storage_admin", "supabase_etl_admin", "supabase_read_only_user")
-        },
+        ACCEPTED | SUPABASE_ROLE_ATTRIBUTES,
         cluster_sql=(*SUPABASE_ROLES, *SUPABASE_AUTHENTICATOR_SETTINGS),
         database_sql=SUPABASE_OWNER_GRANTS,
+    ),
+    Case(
+        "beside the ruled grants, a role holding a ruled role and Storage's role turning seals off",
+        "FAIL",
+        ACCEPTED
+        | SUPABASE_ROLE_ATTRIBUTES
+        | {("platform", "cluster/attributes/rehearsal_reach")}
+        | _app(
+            "cluster/memberships/supabase_read_only_user to rehearsal_reach admin=False "
+            "inherit=True set=True",
+            "cluster/settings/supabase_storage_admin in all databases",
+            "cluster/parameter_acl/session_replication_role",
+        ),
+        cluster_sql=(
+            *SUPABASE_ROLES,
+            *SUPABASE_AUTHENTICATOR_SETTINGS,
+            "CREATE ROLE rehearsal_reach LOGIN",
+            "GRANT supabase_read_only_user TO rehearsal_reach",
+            "ALTER ROLE supabase_storage_admin SET session_replication_role TO replica",
+            "GRANT SET ON PARAMETER session_replication_role TO supabase_storage_admin",
+        ),
+        database_sql=SUPABASE_OWNER_GRANTS,
+    ),
+    Case(
+        "a setting the restore refuses on Storage's role, which may act as an API role",
+        "FAIL",
+        SUPABASE_ROLE_ATTRIBUTES
+        | {item for item in ACCEPTED if item[1].startswith("cluster/memberships/")},
+        errors=frozenset({"fail"}),
+        cluster_sql=SUPABASE_ROLES,
+        edit=_append_role_line(
+            f"ALTER ROLE supabase_storage_admin SET session_replication_role TO '{REFUSED_VALUE}';"
+        ),
+        checks=("setting_value_never_reported",),
     ),
     Case(
         "near the ruled memberships: other options, a look-alike role, another predefined role",

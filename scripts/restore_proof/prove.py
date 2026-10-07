@@ -146,6 +146,9 @@ def _run(
     finally:
         shutil.rmtree(checked_copy, ignore_errors=True)
     api = catalog.api_roles(expected, roles, bootstrap)
+    # A role the owner's exceptions let act as an API role is held to an API role's rules for its
+    # refused settings too (catalog.exception_reach).
+    api = api | catalog.exception_reach(actual, api, roles)[0]
     classified = [
         _classify_error(error, statements, roles, expected_errors, api) for error in errors
     ]
