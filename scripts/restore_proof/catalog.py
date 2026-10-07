@@ -29,8 +29,8 @@ Each difference is classified:
   act as one of the app's roles (holding the owner, a migration role or an API role) or to reach
   every table (holding a predefined role that reads or writes every table or the server's files,
   or being a superuser); a parameter grant to an API role or a migration role. Any app difference
-  fails the proof, whoever made it: one the platform made is reported to the owner by name, never
-  reclassified.
+  fails the proof, whoever made it: one the platform made is reported to the owner by name and
+  stays app unless the owner rules it an exact exception (accepted, below).
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
@@ -41,12 +41,18 @@ Each difference is classified:
   role's timeouts and its other attributes; the owner's attributes, settings, memberships and
   parameter grants (the owner already owns every app object); the default privileges of any other
   role; other parameter grants. Reported, not failing.
+- **accepted**: an app difference that is exactly one of the owner's managed-platform exceptions
+  (PLATFORM_EXCEPTIONS, owner ruling DP-D-FINDINGS): at its path, production holds exactly the
+  reference's items and the ruled ones. Reported by name, not failing; anything else at that path,
+  or anywhere else, stays app.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -483,10 +489,115 @@ def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class Difference:
-    category: str  # "app", "operational" or "platform"
+    category: str  # "app", "operational", "platform" or "accepted" (PLATFORM_EXCEPTIONS)
     path: str
     reference: Any
     restored: Any
+
+
+@dataclass(frozen=True)
+class PlatformException:
+    """One exact managed-platform exception: the difference at ``path`` is accepted only when
+    production holds exactly the reference's items and ``added``: nothing removed, nothing else
+    added. ``source`` is where Supabase's own image writes it (github.com/supabase/postgres,
+    migrations/, branch develop)."""
+
+    path: str
+    added: frozenset[str]
+    source: str
+
+
+# Owner ruling DP-D-FINDINGS (2026-10-07): eight exact managed-platform exceptions, never blanket
+# allowances. Each pins one path and the exact items production adds there, as the owner's export
+# showed them (restore proof of 2026-10-07) and as Supabase's own image writes them (read
+# 2026-10-07). No other role, member, option, setting, value or grant inherits acceptance: anything
+# else at these paths, or anywhere else, stays an app difference, and a difference that also
+# removes what the reference declares is never accepted.
+_INITIAL_SCHEMA = "db/init-scripts/00000000000000-initial-schema.sql"
+PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
+    # C1: Supabase Storage's role may act as authenticator, and so as each API role authenticator
+    # holds (Supabase states no reason; supabase/storage's code switches to the request's role).
+    PlatformException(
+        "cluster/memberships/"
+        "authenticator to supabase_storage_admin admin=False inherit=False set=True",
+        frozenset({"authenticator to supabase_storage_admin admin=False inherit=False set=True"}),
+        "db/migrations/20231013070755_grant_authenticator_to_supabase_storage_admin.sql",
+    ),
+    # C2: the role Supabase Pipelines (ETL) replicates the database with reads every table.
+    PlatformException(
+        "cluster/memberships/"
+        "pg_read_all_data to supabase_etl_admin admin=False inherit=True set=True",
+        frozenset({"pg_read_all_data to supabase_etl_admin admin=False inherit=True set=True"}),
+        _INITIAL_SCHEMA,
+    ),
+    # C3: Supabase's Access Control docs (supabase.com/docs/guides/platform/access-control, read
+    # 2026-10-07) say the SQL snippets a Read-Only project member runs are run as
+    # supabase_read_only_user, which has pg_read_all_data. So assigning anyone Supabase Read-Only
+    # project access grants them broad read access to the database: a platform/admin-plane trust
+    # boundary, not UCPE's application intent.
+    PlatformException(
+        "cluster/memberships/"
+        "pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True",
+        frozenset(
+            {"pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True"}
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    # B: PostgREST's login role's three settings as Supabase's migrations set them (two timeouts
+    # and the libraries preloaded into every API session), pinned by name and by each value's
+    # digest, as the catalog keeps every setting.
+    PlatformException(
+        "cluster/settings/authenticator in all databases",
+        frozenset(
+            {
+                "lock_timeout sha256:"
+                "a5da9841fa3011b3c456f51181f7d7965ff96ee8a4f4c971920e2dce6d0cc0e1",
+                "session_preload_libraries sha256:"
+                "c010590ae41b57ca804a08839c5da5c2d4308c508296f9ceee3986a3b7da9240",
+                "statement_timeout sha256:"
+                "a5da9841fa3011b3c456f51181f7d7965ff96ee8a4f4c971920e2dce6d0cc0e1",
+            }
+        ),
+        "db/migrations/20221028101028_set_authenticator_timeout.sql, "
+        "20231130133139_set_lock_timeout_to_authenticator_role.sql, "
+        "20260413000000_fix-authenticator-session-preload-libraries.sql",
+    ),
+    # A: the owner's grants to itself. Supabase's initial schema, run as postgres, names postgres
+    # among the grantees of public's default privileges and of USAGE on public; the API roles'
+    # entries stay exactly the reference's.
+    PlatformException(
+        "default_privileges/<owner> S",
+        frozenset(
+            {f"<owner>:{privilege} by <owner>" for privilege in ("SELECT", "UPDATE", "USAGE")}
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    PlatformException(
+        "default_privileges/<owner> f", frozenset({"<owner>:EXECUTE by <owner>"}), _INITIAL_SCHEMA
+    ),
+    PlatformException(
+        "default_privileges/<owner> r",
+        frozenset(
+            {
+                f"<owner>:{privilege} by <owner>"
+                for privilege in (
+                    "DELETE",
+                    "INSERT",
+                    "MAINTAIN",
+                    "REFERENCES",
+                    "SELECT",
+                    "TRIGGER",
+                    "TRUNCATE",
+                    "UPDATE",
+                )
+            }
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    PlatformException(
+        "schema/acl", frozenset({"<owner>:USAGE by pg_database_owner"}), _INITIAL_SCHEMA
+    ),
+)
 
 
 # A role attribute that raises privilege: an API role gaining one is an app difference.
@@ -565,7 +676,38 @@ def compare(
         bootstrap,
         frozenset(superusers),
     )
-    return [_classify(difference, roles) for difference in differences]
+    classified = [_classify(difference, roles) for difference in differences]
+    # Only an app difference that is exactly one of the owner's exceptions is accepted.
+    return [
+        Difference("accepted", item.path, item.reference, item.restored)
+        if item.category == "app" and _accepted(item)
+        else item
+        for item in classified
+    ]
+
+
+def _accepted(difference: Difference) -> bool:
+    """Whether a difference is exactly one of PLATFORM_EXCEPTIONS: at its path, production holds
+    exactly the reference's items and the exception's, each once."""
+
+    reference, restored = _items(difference.reference), _items(difference.restored)
+    return any(
+        difference.path == exception.path and restored == reference + Counter(exception.added)
+        for exception in PLATFORM_EXCEPTIONS
+    )
+
+
+def _items(value: Any) -> Counter[str]:
+    """A difference's side as its items, counted: a list's own, a string's one, none for None;
+    anything else (an attribute map, say) as one opaque item no exception names."""
+
+    if value is None:
+        return Counter()
+    if isinstance(value, str):
+        return Counter([value])
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return Counter(value)
+    return Counter([json.dumps(value, sort_keys=True, default=str)])
 
 
 def _superuser_roles(fingerprint: dict[str, Any]) -> set[str]:

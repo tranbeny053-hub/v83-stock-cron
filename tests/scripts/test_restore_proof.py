@@ -15,6 +15,12 @@ What a database is not needed for, checked here:
   privilege path into the app (through an API role, the owner or a migration role) is app; the
   platform's own roles, settings, memberships and default privileges are platform; a setting's
   value is compared by its digest and never shown;
+- the owner's exact managed-platform exceptions (owner ruling DP-D-FINDINGS) are exactly the eight
+  ruled differences, each accepted only as ruled: the same membership with other options, a
+  look-alike or another role, another predefined role, one more, one fewer or another setting
+  value, the ruled settings elsewhere, the owner's grants with grant option, from another grantor,
+  beside another grantee or under another key, CREATE on the schema, an item removed or doubled:
+  each stays app and fails the proof;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
   own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
   repeated;
@@ -30,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -746,8 +753,9 @@ def test_a_platform_roles_default_privileges_are_platform_and_the_appss_are_app(
             "platform",
         ),
         (
+            # Any platform role but the one edge the owner ruled exact (DP-D-FINDINGS, C3).
             "memberships",
-            "pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True",
+            "pg_read_all_data to dashboard_user admin=False inherit=True set=True",
             None,
             "x",
             "app",
@@ -958,6 +966,387 @@ def test_the_migration_roles_come_from_the_migration_files() -> None:
         "ucpe_space_db",
         "ucpe_resolver",
     }
+
+
+# --------------------------------------------------------------------------- the owner's exceptions
+# Owner ruling DP-D-FINDINGS: the eight differences the owner's export showed, stated here on their
+# own so that any change to catalog.PLATFORM_EXCEPTIONS shows in review. Setting values are digests.
+EDGE_STORAGE = "authenticator to supabase_storage_admin admin=False inherit=False set=True"
+EDGE_ETL = "pg_read_all_data to supabase_etl_admin admin=False inherit=True set=True"
+EDGE_READ_ONLY = "pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True"
+TIMEOUT_DIGEST = "a5da9841fa3011b3c456f51181f7d7965ff96ee8a4f4c971920e2dce6d0cc0e1"
+LIBRARIES_DIGEST = "c010590ae41b57ca804a08839c5da5c2d4308c508296f9ceee3986a3b7da9240"
+OTHER_DIGEST = hashlib.sha256(b"another value").hexdigest()
+SETTINGS = "authenticator in all databases"
+TABLE_PRIVILEGES = (
+    "DELETE",
+    "INSERT",
+    "MAINTAIN",
+    "REFERENCES",
+    "SELECT",
+    "TRIGGER",
+    "TRUNCATE",
+    "UPDATE",
+)
+RULED = {
+    f"cluster/memberships/{EDGE_STORAGE}": {EDGE_STORAGE},
+    f"cluster/memberships/{EDGE_ETL}": {EDGE_ETL},
+    f"cluster/memberships/{EDGE_READ_ONLY}": {EDGE_READ_ONLY},
+    f"cluster/settings/{SETTINGS}": {
+        f"lock_timeout sha256:{TIMEOUT_DIGEST}",
+        f"session_preload_libraries sha256:{LIBRARIES_DIGEST}",
+        f"statement_timeout sha256:{TIMEOUT_DIGEST}",
+    },
+    "default_privileges/<owner> S": {
+        f"<owner>:{privilege} by <owner>" for privilege in ("SELECT", "UPDATE", "USAGE")
+    },
+    "default_privileges/<owner> f": {"<owner>:EXECUTE by <owner>"},
+    "default_privileges/<owner> r": {
+        f"<owner>:{privilege} by <owner>" for privilege in TABLE_PRIVILEGES
+    },
+    "schema/acl": {"<owner>:USAGE by pg_database_owner"},
+}
+API = ("anon", "authenticated", "service_role")
+
+
+def ruled_reference() -> dict:
+    """A reference as the migrations declare it where the eight ruled differences fall."""
+
+    reference = fingerprint()
+    reference["schema"] = {
+        "acl": sorted(
+            [
+                *(f"{role}:USAGE by pg_database_owner" for role in API),
+                "pg_database_owner:CREATE by pg_database_owner",
+                "pg_database_owner:USAGE by pg_database_owner",
+            ]
+        )
+    }
+    reference["default_privileges"] = {
+        "<owner> S": sorted(f"{role}:{p} by <owner>" for role in API for p in ("SELECT", "USAGE")),
+        "<owner> f": [f"{role}:EXECUTE by <owner>" for role in API],
+        "<owner> r": [f"{role}:SELECT by <owner>" for role in API],
+    }
+    return reference
+
+
+def ruled_production() -> dict:
+    """The reference with the eight ruled differences, exactly as the owner's export showed them."""
+
+    production = ruled_reference()
+    cluster = production["cluster"]
+    cluster["memberships"] = sorted(
+        [*cluster["memberships"], EDGE_STORAGE, EDGE_ETL, EDGE_READ_ONLY]
+    )
+    cluster["settings"][SETTINGS] = sorted(RULED[f"cluster/settings/{SETTINGS}"])
+    for key in ("<owner> S", "<owner> f", "<owner> r"):
+        production["default_privileges"][key] = sorted(
+            [*production["default_privileges"][key], *RULED[f"default_privileges/{key}"]]
+        )
+    production["schema"]["acl"] = sorted([*production["schema"]["acl"], *RULED["schema/acl"]])
+    return production
+
+
+def test_the_platform_exceptions_are_exactly_the_eight_the_owner_ruled() -> None:
+    exceptions = catalog.PLATFORM_EXCEPTIONS
+    assert {item.path: set(item.added) for item in exceptions} == RULED
+    assert len(exceptions) == len(RULED) == 8, "one exception per ruled difference"
+    assert all(item.source.endswith(".sql") for item in exceptions), "each cites Supabase's file"
+
+
+def test_the_eight_ruled_differences_are_accepted_and_nothing_else_is() -> None:
+    found = catalog.compare(ruled_reference(), ruled_production(), MIGRATION, "supabase_admin")
+    assert {(item.category, item.path) for item in found} == {("accepted", path) for path in RULED}
+    # Losing them is never accepted: a ruled difference is only ever what production adds.
+    lost = catalog.compare(ruled_production(), ruled_reference(), MIGRATION, "supabase_admin")
+    assert {item.category for item in lost} == {"app"}
+
+
+def _membership(old: str | None, new: str) -> Callable[[dict], None]:
+    def change(production: dict) -> None:
+        edges = [edge for edge in production["cluster"]["memberships"] if edge != old]
+        production["cluster"]["memberships"] = sorted([*edges, new])
+
+    return change
+
+
+def _settings(key: str, *items: str) -> Callable[[dict], None]:
+    def change(production: dict) -> None:
+        production["cluster"]["settings"][key] = sorted(items)
+
+    return change
+
+
+def _grants(section: str, key: str, *, add: tuple = (), drop: tuple = ()) -> Callable[[dict], None]:
+    def change(production: dict) -> None:
+        holder = production[section]
+        kept = [item for item in holder.get(key, []) if item not in drop]
+        holder[key] = sorted([*kept, *add])
+
+    return change
+
+
+RULED_SETTINGS = sorted(RULED[f"cluster/settings/{SETTINGS}"])
+NEAR_MISSES = [
+    (
+        _membership(EDGE_STORAGE, EDGE_STORAGE.replace("inherit=False", "inherit=True")),
+        "cluster/memberships/authenticator to supabase_storage_admin admin=False inherit=True "
+        "set=True",
+    ),
+    (
+        _membership(EDGE_STORAGE, EDGE_STORAGE.replace("admin=False", "admin=True")),
+        "cluster/memberships/authenticator to supabase_storage_admin admin=True inherit=False "
+        "set=True",
+    ),
+    (
+        _membership(EDGE_STORAGE, EDGE_STORAGE.replace("set=True", "set=False")),
+        "cluster/memberships/authenticator to supabase_storage_admin admin=False inherit=False "
+        "set=False",
+    ),
+    (
+        _membership(
+            None, "authenticator to supabase_auth_admin admin=False inherit=False set=True"
+        ),
+        "cluster/memberships/authenticator to supabase_auth_admin admin=False inherit=False "
+        "set=True",
+    ),
+    (
+        _membership(
+            None, "authenticator to supabase_storage_admin2 admin=False inherit=False set=True"
+        ),
+        "cluster/memberships/authenticator to supabase_storage_admin2 admin=False inherit=False "
+        "set=True",
+    ),
+    (
+        _membership(
+            None, "service_role to supabase_storage_admin admin=False inherit=False set=True"
+        ),
+        "cluster/memberships/service_role to supabase_storage_admin admin=False inherit=False "
+        "set=True",
+    ),
+    (
+        _membership(EDGE_ETL, EDGE_ETL.replace("admin=False", "admin=True")),
+        "cluster/memberships/pg_read_all_data to supabase_etl_admin admin=True inherit=True "
+        "set=True",
+    ),
+    (
+        _membership(
+            None, "pg_write_all_data to supabase_etl_admin admin=False inherit=True set=True"
+        ),
+        "cluster/memberships/pg_write_all_data to supabase_etl_admin admin=False inherit=True "
+        "set=True",
+    ),
+    (
+        _membership(
+            None, "pg_write_all_data to supabase_read_only_user admin=False inherit=True set=True"
+        ),
+        "cluster/memberships/pg_write_all_data to supabase_read_only_user admin=False inherit=True "
+        "set=True",
+    ),
+    (
+        _membership(
+            None,
+            "pg_read_server_files to supabase_read_only_user admin=False inherit=True set=True",
+        ),
+        "cluster/memberships/pg_read_server_files to supabase_read_only_user admin=False "
+        "inherit=True set=True",
+    ),
+    (
+        _membership(
+            None, "pg_read_all_data to supabase_read_only_usr admin=False inherit=True set=True"
+        ),
+        "cluster/memberships/pg_read_all_data to supabase_read_only_usr admin=False inherit=True "
+        "set=True",
+    ),
+    (
+        _membership(
+            None, "pg_read_all_data to supabase_storage_admin admin=False inherit=True set=True"
+        ),
+        "cluster/memberships/pg_read_all_data to supabase_storage_admin admin=False inherit=True "
+        "set=True",
+    ),
+    (
+        _settings(SETTINGS, *RULED_SETTINGS, f"session_replication_role sha256:{OTHER_DIGEST}"),
+        f"cluster/settings/{SETTINGS}",
+    ),
+    (
+        _settings(SETTINGS, *RULED_SETTINGS, f"idle_session_timeout sha256:{TIMEOUT_DIGEST}"),
+        f"cluster/settings/{SETTINGS}",
+    ),
+    (
+        _settings(
+            SETTINGS,
+            f"lock_timeout sha256:{TIMEOUT_DIGEST}",
+            f"session_preload_libraries sha256:{OTHER_DIGEST}",
+            f"statement_timeout sha256:{TIMEOUT_DIGEST}",
+        ),
+        f"cluster/settings/{SETTINGS}",
+    ),
+    (
+        _settings(
+            SETTINGS,
+            f"lock_timeout sha256:{OTHER_DIGEST}",
+            f"session_preload_libraries sha256:{LIBRARIES_DIGEST}",
+            f"statement_timeout sha256:{TIMEOUT_DIGEST}",
+        ),
+        f"cluster/settings/{SETTINGS}",
+    ),
+    (
+        _settings(
+            SETTINGS,
+            f"lock_timeout sha256:{TIMEOUT_DIGEST}",
+            f"session_preload_libraries sha256:{LIBRARIES_DIGEST}",
+        ),
+        f"cluster/settings/{SETTINGS}",
+    ),
+    (_settings("anon in all databases", *RULED_SETTINGS), "cluster/settings/anon in all databases"),
+    (
+        _settings("authenticator in this database", *RULED_SETTINGS),
+        "cluster/settings/authenticator in this database",
+    ),
+    (
+        _grants("default_privileges", "<owner> r", add=("<owner>:SELECT* by <owner>",)),
+        "default_privileges/<owner> r",
+    ),
+    (
+        _grants("default_privileges", "<owner> r", drop=("<owner>:MAINTAIN by <owner>",)),
+        "default_privileges/<owner> r",
+    ),
+    (
+        _grants("default_privileges", "<owner> r", add=("ucpe_resolver:SELECT by <owner>",)),
+        "default_privileges/<owner> r",
+    ),
+    (
+        _grants("default_privileges", "<owner> f", add=("PUBLIC:EXECUTE by <owner>",)),
+        "default_privileges/<owner> f",
+    ),
+    (
+        _grants(
+            "default_privileges",
+            "<owner> f",
+            add=("<owner>:EXECUTE by supabase_admin",),
+            drop=("<owner>:EXECUTE by <owner>",),
+        ),
+        "default_privileges/<owner> f",
+    ),
+    (
+        _grants("default_privileges", "<owner> r", drop=("anon:SELECT by <owner>",)),
+        "default_privileges/<owner> r",
+    ),
+    (
+        _grants("default_privileges", "<owner> T", add=("<owner>:USAGE by <owner>",)),
+        "default_privileges/<owner> T",
+    ),
+    (
+        _grants("default_privileges", "ucpe_bundle_owner f", add=("<owner>:EXECUTE by <owner>",)),
+        "default_privileges/ucpe_bundle_owner f",
+    ),
+    (
+        _grants("schema", "acl", add=("<owner>:CREATE by pg_database_owner",)),
+        "schema/acl",
+    ),
+    (
+        _grants(
+            "schema",
+            "acl",
+            add=("<owner>:USAGE* by pg_database_owner",),
+            drop=("<owner>:USAGE by pg_database_owner",),
+        ),
+        "schema/acl",
+    ),
+    (
+        _grants(
+            "schema",
+            "acl",
+            add=("<owner>:USAGE by supabase_admin",),
+            drop=("<owner>:USAGE by pg_database_owner",),
+        ),
+        "schema/acl",
+    ),
+    (
+        _grants("schema", "acl", add=("supabase_storage_admin:USAGE by pg_database_owner",)),
+        "schema/acl",
+    ),
+    (_grants("schema", "acl", drop=("anon:USAGE by pg_database_owner",)), "schema/acl"),
+    (_grants("schema", "acl", add=("<owner>:USAGE by pg_database_owner",)), "schema/acl"),
+]
+
+
+@pytest.mark.parametrize(
+    ("change", "path"),
+    NEAR_MISSES,
+    ids=[
+        "Storage's membership inheriting",
+        "Storage's membership with ADMIN",
+        "Storage's membership without SET",
+        "authenticator granted to another platform role",
+        "authenticator granted to a look-alike of Storage's role",
+        "another API role granted to Storage's role",
+        "the ETL role's membership with ADMIN",
+        "the ETL role writing every table",
+        "the read-only role writing every table",
+        "the read-only role reading the server's files",
+        "a look-alike of the read-only role reading every table",
+        "Storage's role reading every table",
+        "a setting beside the ruled ones that turns the seals off",
+        "a timeout beside the ruled ones",
+        "the preloaded libraries with another value",
+        "a ruled timeout with another value",
+        "a ruled setting missing",
+        "the ruled settings on another API role",
+        "the ruled settings in this database only",
+        "the owner's table grant with grant option",
+        "one ruled owner table grant missing",
+        "another grantee beside the owner's table grants",
+        "PUBLIC beside the owner's function grant",
+        "the owner's function grant from another grantor",
+        "an API role's table default dropped",
+        "the owner's grant for another kind of object",
+        "the owner's ruled grant under a migration role's defaults",
+        "CREATE on the schema beside the ruled USAGE",
+        "the ruled schema USAGE with grant option",
+        "the ruled schema USAGE from another grantor",
+        "schema USAGE to another role",
+        "an API role's schema USAGE revoked",
+        "the ruled schema USAGE twice",
+    ],
+)
+def test_near_a_ruled_difference_is_still_app(change: Callable[[dict], None], path: str) -> None:
+    """Owner ruling DP-D-FINDINGS: no other role, membership, setting, grant or value inherits
+    acceptance; whatever is not exactly a ruled difference stays app and fails the proof."""
+
+    production = ruled_production()
+    change(production)
+    found = {
+        (item.category, item.path)
+        for item in catalog.compare(ruled_reference(), production, MIGRATION, "supabase_admin")
+    }
+    assert ("app", path) in found, found
+    assert {path for category, path in found if category == "accepted"} <= set(RULED) - {path}
+
+
+def test_only_an_app_difference_is_ever_accepted() -> None:
+    """Where authenticator is no API role (it holds no migration role here), Storage's membership in
+    it is the platform's already: an exception relabels only what would fail."""
+
+    reference = ruled_reference()
+    reference["cluster"]["memberships"] = []
+    production = ruled_reference()
+    production["cluster"]["memberships"] = [EDGE_STORAGE]
+    found = catalog.compare(reference, production, MIGRATION, "supabase_admin")
+    assert [(item.category, item.path) for item in found] == [
+        ("platform", f"cluster/memberships/{EDGE_STORAGE}")
+    ]
+
+
+def test_a_whole_value_is_never_matched_as_an_item() -> None:
+    for value in (
+        {"<owner>:USAGE by pg_database_owner": True},
+        [["<owner>:USAGE by pg_database_owner"]],
+        ("<owner>:USAGE by pg_database_owner",),
+    ):
+        difference = catalog.Difference("app", "schema/acl", [], value)
+        assert not catalog._accepted(difference)  # noqa: SLF001
 
 
 # --------------------------------------------------------------------------- the proof

@@ -87,7 +87,7 @@ python scripts/restore_proof/prove.py --pg-bin <PostgreSQL 17.6 bin> --export ~/
    out of this repository and out of chat: Claude reports the verdict and the counts.
 
 `RESTORE_PROOF=PASS` means the structure restores into PostgreSQL 17.6, equals what the
-migrations declare, and opens no privilege path into the app that they do not declare. Two kinds
+migrations declare, and opens no privilege path into the app that they do not declare. Three kinds
 of difference are reported without failing:
 - **operational**: the documented credential steps, LOGIN on `ucpe_space_db`
   (`SPACE_DB_CUTOVER.md`) and on `ucpe_resolver` (`RESOLVER_CUTOVER.md`);
@@ -98,7 +98,21 @@ of difference are reported without failing:
   grants (it owns every app table already); LOGIN on `authenticator` (PostgREST logs in with it);
   the API roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes
   that raise no privilege; a platform role's own setting and a Realtime publication entry that
-  vanilla PostgreSQL refuses.
+  vanilla PostgreSQL refuses;
+- **accepted**: exactly the eight differences you ruled exact managed-platform exceptions on
+  2026-10-07 (DP-D-FINDINGS; `scripts/restore_proof/catalog.py` `PLATFORM_EXCEPTIONS` cites
+  Supabase's source for each): `postgres`'s own default privileges in `public` and its USAGE on
+  `public`; `authenticator`'s three settings, by name and value digest; `supabase_storage_admin`'s
+  membership in `authenticator`; and the memberships of `supabase_etl_admin` and
+  `supabase_read_only_user` in `pg_read_all_data`, each with its exact options. Each is listed by
+  name in the report. Anything else at those places, or near them (another option, role, setting,
+  value or grant), is still a finding.
+
+**Trust note (C3).** Supabase's Access Control docs say the SQL snippets a Read-Only project member
+runs are run as `supabase_read_only_user`, which has `pg_read_all_data`. So assigning anyone
+Supabase Read-Only access to the project grants them broad read access to the database. That is a
+platform/admin-plane trust boundary, not UCPE application intent: assign it only to someone you
+would let read every table.
 
 Any other difference is a finding and fails the proof: production's structure and the migrations
 disagree there. That includes every privilege path into the app the migrations do not declare,
@@ -106,12 +120,14 @@ whoever made it: an API role becoming a member of another role or gaining SUPERU
 the like; any setting on an API role but a timeout (one setting can turn the seals off for every
 API session); any role but Supabase's superuser and `postgres` able to act as `postgres`, an app
 role or an API role, or holding a predefined role that reads or writes every table or the
-server's files; any new superuser; and a parameter grant to an API or app role. **The first proof
-may say FAIL for privilege paths Supabase itself made** (for example one of its service roles able
-to act as an API role, a read-only role that reads every table, or a setting on PostgREST's
+server's files; any new superuser; and a parameter grant to an API or app role. **A proof may say
+FAIL for privilege paths Supabase itself made** (for example one of its service roles able to act
+as an API role, a read-only role that reads every table, or a setting on PostgREST's
 `authenticator`): each is a finding Claude reports to you by name, for you to decide on, not a
-broken restore. The report names every finding, and nothing is changed or reclassified to hide
-one.
+broken restore. The first proof (2026-10-07) found eight such paths, and you ruled them the exact
+exceptions above; any other one is a new finding. The report names every finding, and nothing is
+changed or reclassified to hide one: only your exact ruling turns one into `accepted`, and an
+accepted one is still listed.
 
 ## Stop rules
 

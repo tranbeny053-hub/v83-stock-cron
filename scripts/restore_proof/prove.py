@@ -19,7 +19,8 @@ RESTORE_PROOF=PASS needs: the export passed the gate, the restore raised no erro
 every such restore raises (the bootstrap superuser and the public schema already exist), a
 platform role's own setting (an API role's only when it is a timeout) and a platform publication
 entry, and no app difference (catalog.py says what is app). Operational and platform differences
-are reported, not failing.
+are reported, not failing; so are the owner's exact managed-platform exceptions (catalog.py
+PLATFORM_EXCEPTIONS, owner ruling DP-D-FINDINGS), counted as "accepted", and nothing else is.
 """
 
 from __future__ import annotations
@@ -164,7 +165,7 @@ def _run(
             "policies": sum(len(items) for items in actual["policies"].values()),
             "differences": {
                 category: sum(item.category == category for item in differences)
-                for category in ("app", "operational", "platform")
+                for category in ("app", "operational", "platform", "accepted")
             },
         },
         "verdict": "PASS" if not failing and not app else "FAIL",
@@ -269,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         f"RESTORE_PROOF={report['verdict']} refusals={len(report['gate_refusals'])} "
         f"restore_errors={len(report.get('restore_errors', []))} "
         f"app={counts.get('app', 0)} operational={counts.get('operational', 0)} "
-        f"platform={counts.get('platform', 0)}"
+        f"platform={counts.get('platform', 0)} accepted={counts.get('accepted', 0)}"
     )
     return 0 if report["verdict"] == "PASS" else 1
 

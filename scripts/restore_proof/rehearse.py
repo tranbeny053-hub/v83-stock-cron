@@ -33,6 +33,12 @@ what it sees:
   export with password verifiers (no --no-role-passwords, whose verifier never appears in the
   report), a psql meta-command (which never runs), a missing \\restrict, an export that would
   take superuser from the bootstrap role, and an escape string pg_dumpall does not write;
+- Supabase's own statements for the eight differences the owner ruled exact managed-platform
+  exceptions (owner ruling DP-D-FINDINGS, catalog.PLATFORM_EXCEPTIONS) PASS with each accepted at
+  its path and nothing else; next to them, the same membership with other options, a look-alike
+  role, another predefined role for the same role, an extra setting beside the ruled ones, the
+  ruled settings on another API role, the owner's grants with grant option and CREATE on the
+  schema all fail as app;
 - a role's comments and settings that pg_dumpall writes as escape strings (owner ruling
   DP-D-ESCAPE=A) PASS, and escape_string_differential holds psql 17 itself against the gate on a
   seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
@@ -63,7 +69,7 @@ from psycopg import sql as pgsql
 if __package__ in {None, ""}:  # run as a script: make the repository root importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.restore_proof import gate, prove, scratch  # noqa: E402
+from scripts.restore_proof import catalog, gate, prove, scratch  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 APP_DATABASE = "ucpe"
@@ -87,7 +93,8 @@ class Case:
     differences: frozenset[tuple[str, str]] = frozenset()
     refusals: frozenset[str] = frozenset()
     errors: frozenset[str] = frozenset()  # categories of restore errors beyond the two expected
-    database_sql: tuple[tuple[str, str], ...] = ()  # (role, SQL) in this case's database
+    # (role, SQL) in this case's database; with cluster_sql, in its own cluster's app database
+    database_sql: tuple[tuple[str, str], ...] = ()
     cluster_sql: tuple[str, ...] = ()  # as the superuser, on a fresh cluster of its own
     edit: Callable[[Path], None] | None = None  # applied to the export after the card's commands
     with_data: bool = False
@@ -98,6 +105,31 @@ class Case:
 
 def _app(*paths: str) -> frozenset[tuple[str, str]]:
     return frozenset(("app", path) for path in paths)
+
+
+# Supabase's own statements for the eight differences the owner ruled exact managed-platform
+# exceptions (DP-D-FINDINGS): its initial schema and migrations (github.com/supabase/postgres,
+# migrations/, branch develop; catalog.PLATFORM_EXCEPTIONS cites each file), as Supabase runs them.
+SUPABASE_ROLES = (
+    "CREATE ROLE supabase_storage_admin NOINHERIT CREATEROLE LOGIN",
+    "GRANT authenticator TO supabase_storage_admin",
+    "CREATE ROLE supabase_etl_admin LOGIN REPLICATION BYPASSRLS",
+    "GRANT pg_read_all_data TO supabase_etl_admin",
+    "CREATE ROLE supabase_read_only_user LOGIN BYPASSRLS",
+    "GRANT pg_read_all_data TO supabase_read_only_user",
+)
+SUPABASE_AUTHENTICATOR_SETTINGS = (
+    "ALTER ROLE authenticator SET statement_timeout TO '8s'",
+    "ALTER ROLE authenticator SET lock_timeout TO '8s'",
+    "ALTER ROLE authenticator SET session_preload_libraries TO supautils, safeupdate",
+)
+SUPABASE_OWNER_GRANTS = (  # run as the owner, as Supabase's initial schema is
+    (OWNER, f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{OWNER}"'),
+    (OWNER, f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO "{OWNER}"'),
+    (OWNER, f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO "{OWNER}"'),
+    (OWNER, f'GRANT USAGE ON SCHEMA public TO "{OWNER}"'),
+)
+ACCEPTED = frozenset(("accepted", exception.path) for exception in catalog.PLATFORM_EXCEPTIONS)
 
 
 def _append_role_line(line: str) -> Callable[[Path], None]:
@@ -532,6 +564,99 @@ CASES: tuple[Case, ...] = (
         checks=("setting_value_never_reported",),
     ),
     Case(
+        "Supabase's own grants the owner ruled exact platform exceptions",
+        "PASS",
+        ACCEPTED
+        | {
+            ("platform", f"cluster/attributes/{role}")
+            for role in ("supabase_storage_admin", "supabase_etl_admin", "supabase_read_only_user")
+        },
+        cluster_sql=(*SUPABASE_ROLES, *SUPABASE_AUTHENTICATOR_SETTINGS),
+        database_sql=SUPABASE_OWNER_GRANTS,
+    ),
+    Case(
+        "near the ruled memberships: other options, a look-alike role, another predefined role",
+        "FAIL",
+        frozenset(
+            {
+                *(
+                    ("platform", f"cluster/attributes/{role}")
+                    for role in (
+                        "supabase_storage_admin",
+                        "supabase_etl_admin",
+                        "supabase_read_only_user",
+                        "supabase_read_only_usr",
+                    )
+                ),
+                (
+                    "app",
+                    "cluster/memberships/authenticator to supabase_storage_admin admin=False "
+                    "inherit=True set=True",
+                ),
+                (
+                    "app",
+                    "cluster/memberships/pg_read_all_data to supabase_etl_admin admin=True "
+                    "inherit=True set=True",
+                ),
+                (
+                    "accepted",
+                    "cluster/memberships/pg_read_all_data to supabase_read_only_user admin=False "
+                    "inherit=True set=True",
+                ),
+                (
+                    "app",
+                    "cluster/memberships/pg_write_all_data to supabase_read_only_user admin=False "
+                    "inherit=True set=True",
+                ),
+                (
+                    "app",
+                    "cluster/memberships/pg_read_all_data to supabase_read_only_usr admin=False "
+                    "inherit=True set=True",
+                ),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE supabase_storage_admin CREATEROLE LOGIN",  # INHERIT: so is its grant
+            "GRANT authenticator TO supabase_storage_admin",
+            "CREATE ROLE supabase_etl_admin LOGIN REPLICATION BYPASSRLS",
+            "GRANT pg_read_all_data TO supabase_etl_admin WITH ADMIN OPTION",
+            "CREATE ROLE supabase_read_only_user LOGIN BYPASSRLS",
+            "GRANT pg_read_all_data TO supabase_read_only_user",
+            "GRANT pg_write_all_data TO supabase_read_only_user",
+            "CREATE ROLE supabase_read_only_usr LOGIN BYPASSRLS",
+            "GRANT pg_read_all_data TO supabase_read_only_usr",
+        ),
+    ),
+    Case(
+        "near the ruled settings: one more beside them, or them on another API role",
+        "FAIL",
+        _app(
+            "cluster/settings/authenticator in all databases",
+            "cluster/settings/anon in all databases",
+        ),
+        cluster_sql=(
+            *SUPABASE_AUTHENTICATOR_SETTINGS,
+            "ALTER ROLE authenticator SET session_replication_role TO replica",
+            *(
+                sql.replace("ROLE authenticator", "ROLE anon")
+                for sql in SUPABASE_AUTHENTICATOR_SETTINGS
+            ),
+        ),
+    ),
+    Case(
+        "near the owner's ruled grants: with grant option, and CREATE on the schema",
+        "FAIL",
+        _app("default_privileges/<owner> r", "schema/acl"),
+        database_sql=(
+            (
+                OWNER,
+                "ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+                f'GRANT ALL ON TABLES TO "{OWNER}" WITH GRANT OPTION',
+            ),
+            (OWNER, f'GRANT USAGE, CREATE ON SCHEMA public TO "{OWNER}"'),
+        ),
+    ),
+    Case(
         "a role's comment",
         "PASS",
         cluster_sql=("COMMENT ON ROLE anon IS 'a rehearsal comment'",),
@@ -879,6 +1004,8 @@ def _run_case(
             scratch.build_from_migrations(own, ROOT, APP_DATABASE)
             for sql in case.cluster_sql:
                 own.psql(command=sql.format(scratch_value=scratch_value))
+            for role, sql in case.database_sql:
+                own.psql(database=APP_DATABASE, user=role, command=sql)
             export_with_the_card(
                 own,
                 APP_DATABASE,
