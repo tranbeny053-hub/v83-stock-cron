@@ -48,6 +48,19 @@ SCHEMA_VERSION = "decision_view.v1"
 # (api/calibration_endpoint.py _ITEM_WARNING); and runs reopened from history, which carry no view.
 ACCEPTED_FORECAST_CLAIMS: frozenset[str] = frozenset()
 ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
+# Mandatory acceptance blockers (owner ruling RULING-RESIDUALS=A, 2026-10-07: DEFERRED, not
+# accepted). Neither registry may hold an entry while any blocker remains, so no forecast-quality
+# claim or directional permission can become reachable; tests/detail/test_decision_view.py
+# enforces it. A blocker leaves this tuple only in the change that resolves it, under the owner's
+# authorization.
+ACCEPTANCE_BLOCKERS: tuple[str, ...] = (
+    "BANNER: frontend/index.html's static banner calls every timeframe an uncalibrated heuristic, "
+    "not a validated forecast; its wording under an accepted claim is the owner's decision.",
+    "RELIABILITY_LABEL: frontend/app.js labels a row 'Why reliability is insufficient', which "
+    "contradicts an accepted claim once the backend reports measured reliability.",
+    "RENDER_TEST: tests/frontend/test_accepted_state_rendering.py does not pin today's whole "
+    "render, compare permission renders, or catch advisory wording on permission surfaces.",
+)
 
 STATE_COPY = {
     "INVALID_OR_UNAVAILABLE_DATA": (

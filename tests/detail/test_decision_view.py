@@ -2,7 +2,8 @@
 
 These tests prove that:
 - the precedence holds: unavailable data first, then no accepted claim; an accepted claim and a
-  directional permission are reachable only through their (empty) governed registries;
+  directional permission are reachable only through their (empty) governed registries, and no
+  registry may hold an entry while an acceptance blocker remains (RULING-RESIDUALS=A);
 - missing evidence never reads as a market signal;
 - the honest DEGRADED (DP-F) fires exactly when the configured primary venue was tried and failed,
   or the venues conflict, and only in the view: data_quality and provider_state are untouched;
@@ -192,6 +193,22 @@ def test_unavailable_data_comes_first(
 def test_nothing_is_accepted_today() -> None:
     assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
     assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
+
+
+def test_no_claim_is_reachable_while_an_acceptance_blocker_remains() -> None:
+    """Owner ruling RULING-RESIDUALS=A (2026-10-07): the accepted-state ruling's three residuals
+    are DEFERRED, not accepted. They are mandatory blockers: neither registry may hold an entry
+    while any remains, and a blocker leaves only in the change that resolves it."""
+
+    names = [blocker.split(":", 1)[0] for blocker in decision_view.ACCEPTANCE_BLOCKERS]
+    assert names == ["BANNER", "RELIABILITY_LABEL", "RENDER_TEST"]
+    if decision_view.ACCEPTANCE_BLOCKERS:
+        assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
+        assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
+    # Each blocker names a file that still exists, so it cannot go stale unnoticed.
+    for blocker in decision_view.ACCEPTANCE_BLOCKERS:
+        path = blocker.split(": ", 1)[1].split(" ", 1)[0].removesuffix("'s")
+        assert (ROOT / path).is_file(), blocker
 
 
 def test_accepted_states_are_reachable_only_through_their_registries(
