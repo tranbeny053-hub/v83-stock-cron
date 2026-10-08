@@ -28,9 +28,11 @@ Each difference is classified:
   the seals off for every API session); any role but the bootstrap superuser and the owner able to
   act as one of the app's roles (holding the owner, a migration role or an API role) or to reach
   every table (holding a predefined role that reads or writes every table or the server's files,
-  or being a superuser); a parameter grant to an API role or a migration role. Any app difference
-  fails the proof, whoever made it: one the platform made is reported to the owner by name, never
-  reclassified.
+  or being a superuser); a parameter grant to an API role or a migration role; any role whose name
+  is not a plain lowercase identifier (names are read back from text here, so one that could be
+  misread fails instead). Any app difference fails the proof, whoever made it: one the platform
+  made is reported to the owner by name and stays app unless the owner rules it an exact
+  exception (accepted, below).
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
@@ -41,12 +43,21 @@ Each difference is classified:
   role's timeouts and its other attributes; the owner's attributes, settings, memberships and
   parameter grants (the owner already owns every app object); the default privileges of any other
   role; other parameter grants. Reported, not failing.
+- **accepted**: an app difference that is exactly one of the owner's managed-platform exceptions
+  (PLATFORM_EXCEPTIONS, owner rulings DP-D-FINDINGS and DP-D-STORAGE-SETTINGS): at its path,
+  production holds exactly the reference's items and the ruled ones. Reported by name, not failing;
+  anything else at that path, or anywhere else, stays app. An accepted membership passes its reach
+  on (exception_reach): a member it lets act as an API role is held to an API role's rules for the
+  roles it gains, its settings and its parameter grants, and whoever holds a member it lets act as
+  an API role or read every table is app, as whoever holds what it grants would be.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +89,9 @@ TIMEOUT_SETTINGS = frozenset(
     }
 )
 _CREATE_ROLE = re.compile(r"^\s*CREATE\s+ROLE\s+([a-z_][a-z0-9_]*)\b", re.IGNORECASE | re.MULTILINE)
+# A role name the comparison reads back from text safely: a plain lowercase identifier (no "/",
+# space, ":", "*", "<owner>" or "PUBLIC" to be misread in a path, an edge or a grant).
+_PLAIN_ROLE = re.compile(r"[a-z_][a-z0-9_$]*")
 
 
 def migration_roles(migrations: Path) -> frozenset[str]:
@@ -93,6 +107,7 @@ def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
     """The structure of one database, normalized for comparison. Catalog reads only."""
 
     names = {oid: name for oid, name in _rows(conn, "SELECT oid, rolname FROM pg_roles")}
+    unsafe_names = unsafe_role_names(names.values())
 
     def named(name: str) -> str:
         return OWNER if name == owner else name
@@ -477,16 +492,148 @@ def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
             "settings": cluster_settings,
             "memberships": cluster_memberships,
             "parameter_acl": parameter_acl,
+            "unsafe_role_names": unsafe_names,
         },
     }
 
 
+def unsafe_role_names(names: Iterable[str]) -> list[str]:
+    """The role names that are not plain lowercase identifiers: each would be read back from text
+    ambiguously (a path, an edge, a grant), so its mere presence is an app difference."""
+
+    return sorted(name for name in names if not _PLAIN_ROLE.fullmatch(name))
+
+
 @dataclass(frozen=True)
 class Difference:
-    category: str  # "app", "operational" or "platform"
+    category: str  # "app", "operational", "platform" or "accepted" (PLATFORM_EXCEPTIONS)
     path: str
     reference: Any
     restored: Any
+
+
+@dataclass(frozen=True)
+class PlatformException:
+    """One exact managed-platform exception: the difference at ``path`` is accepted only when
+    production holds exactly the reference's items and ``added``: nothing removed, nothing else
+    added. ``source`` is where Supabase's own image writes it (github.com/supabase/postgres,
+    migrations/, branch develop)."""
+
+    path: str
+    added: frozenset[str]
+    source: str
+
+
+# Owner rulings DP-D-FINDINGS (2026-10-07: the first eight) and DP-D-STORAGE-SETTINGS (2026-10-08:
+# the ninth): exact managed-platform exceptions, never blanket allowances. Each pins one path and
+# the exact items production adds there, as the owner's export showed them (its restore proofs of
+# 2026-10-07 and 2026-10-08) and as Supabase's own image writes them (read on the same days). No
+# other role, member, option, setting, value, database or grant inherits acceptance: anything else
+# at these paths, or anywhere else, stays an app difference, and a difference that also removes what
+# the reference declares is never accepted.
+_INITIAL_SCHEMA = "db/init-scripts/00000000000000-initial-schema.sql"
+_MEMBERSHIPS = "cluster/memberships/"
+PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
+    # C1: Supabase Storage's role may act as authenticator, and so as each API role authenticator
+    # holds (Supabase states no reason; supabase/storage's code switches to the request's role).
+    PlatformException(
+        "cluster/memberships/"
+        "authenticator to supabase_storage_admin admin=False inherit=False set=True",
+        frozenset({"authenticator to supabase_storage_admin admin=False inherit=False set=True"}),
+        "db/migrations/20231013070755_grant_authenticator_to_supabase_storage_admin.sql",
+    ),
+    # C2: the role Supabase Pipelines (ETL) replicates the database with reads every table.
+    PlatformException(
+        "cluster/memberships/"
+        "pg_read_all_data to supabase_etl_admin admin=False inherit=True set=True",
+        frozenset({"pg_read_all_data to supabase_etl_admin admin=False inherit=True set=True"}),
+        _INITIAL_SCHEMA,
+    ),
+    # C3: Supabase's Access Control docs (supabase.com/docs/guides/platform/access-control, read
+    # 2026-10-07) say the SQL snippets a Read-Only project member runs are run as
+    # supabase_read_only_user, which has pg_read_all_data. So assigning anyone Supabase Read-Only
+    # project access grants them broad read access to the database: a platform/admin-plane trust
+    # boundary, not UCPE's application intent.
+    PlatformException(
+        "cluster/memberships/"
+        "pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True",
+        frozenset(
+            {"pg_read_all_data to supabase_read_only_user admin=False inherit=True set=True"}
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    # B: PostgREST's login role's three settings as Supabase's migrations set them (two timeouts
+    # and the libraries preloaded into every API session), pinned by name and by each value's
+    # digest, as the catalog keeps every setting.
+    PlatformException(
+        "cluster/settings/authenticator in all databases",
+        frozenset(
+            {
+                "lock_timeout sha256:"
+                "a5da9841fa3011b3c456f51181f7d7965ff96ee8a4f4c971920e2dce6d0cc0e1",
+                "session_preload_libraries sha256:"
+                "c010590ae41b57ca804a08839c5da5c2d4308c508296f9ceee3986a3b7da9240",
+                "statement_timeout sha256:"
+                "a5da9841fa3011b3c456f51181f7d7965ff96ee8a4f4c971920e2dce6d0cc0e1",
+            }
+        ),
+        "db/migrations/20221028101028_set_authenticator_timeout.sql, "
+        "20231130133139_set_lock_timeout_to_authenticator_role.sql, "
+        "20260413000000_fix-authenticator-session-preload-libraries.sql",
+    ),
+    # A: the owner's grants to itself. Supabase's initial schema, run as postgres, names postgres
+    # among the grantees of public's default privileges and of USAGE on public; the API roles'
+    # entries stay exactly the reference's.
+    PlatformException(
+        "default_privileges/<owner> S",
+        frozenset(
+            {f"<owner>:{privilege} by <owner>" for privilege in ("SELECT", "UPDATE", "USAGE")}
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    PlatformException(
+        "default_privileges/<owner> f", frozenset({"<owner>:EXECUTE by <owner>"}), _INITIAL_SCHEMA
+    ),
+    PlatformException(
+        "default_privileges/<owner> r",
+        frozenset(
+            {
+                f"<owner>:{privilege} by <owner>"
+                for privilege in (
+                    "DELETE",
+                    "INSERT",
+                    "MAINTAIN",
+                    "REFERENCES",
+                    "SELECT",
+                    "TRIGGER",
+                    "TRUNCATE",
+                    "UPDATE",
+                )
+            }
+        ),
+        _INITIAL_SCHEMA,
+    ),
+    PlatformException(
+        "schema/acl", frozenset({"<owner>:USAGE by pg_database_owner"}), _INITIAL_SCHEMA
+    ),
+    # D (DP-D-STORAGE-SETTINGS): Storage's role's own two settings as Supabase's scripts set them
+    # (its search path and its statement logging), pinned by name and by each value's digest, in all
+    # databases. C1 lets this role act as every API role, so its settings are held to an API role's
+    # rules (exception_reach): only these two, exactly, pass.
+    PlatformException(
+        "cluster/settings/supabase_storage_admin in all databases",
+        frozenset(
+            {
+                "log_statement sha256:"
+                "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+                "search_path sha256:"
+                "49a25f9feefaffecad0fcd30c50dc9331cff8b55ece53def6285c09e17e6f5d7",
+            }
+        ),
+        "db/init-scripts/00000000000002-storage-schema.sql, "
+        "db/migrations/20250205060043_disable_log_statement_on_internal_roles.sql",
+    ),
+)
 
 
 # A role attribute that raises privilege: an API role gaining one is an app difference.
@@ -559,13 +706,74 @@ def compare(
     superusers = _superuser_roles(reference) | _superuser_roles(restored)
     if bootstrap is not None:
         superusers = superusers | {bootstrap}
-    roles = _Roles(
-        migration_roles,
-        api_roles(reference, migration_roles, bootstrap),
-        bootstrap,
-        frozenset(superusers),
+    api = api_roles(reference, migration_roles, bootstrap)
+    acting, reaching = exception_reach(restored, api, migration_roles)
+    # A member an accepted membership lets act as an API role is one to the rules below for the
+    # roles it gains, its settings and its parameter grants. A role new to production has its
+    # attributes compared whole, so no per-attribute rule applies to it; none rides on the
+    # membership anyway (SET ROLE carries no attribute).
+    roles = _Roles(migration_roles, api | acting, bootstrap, frozenset(superusers), reaching)
+    classified = [_classify(difference, roles) for difference in differences]
+    # Only an app difference that is exactly one of the owner's exceptions is accepted.
+    return [
+        Difference("accepted", item.path, item.reference, item.restored)
+        if item.category == "app" and _accepted(item)
+        else item
+        for item in classified
+    ]
+
+
+def exception_reach(
+    restored: dict[str, Any], api: frozenset[str], migration: frozenset[str]
+) -> tuple[frozenset[str], frozenset[str]]:
+    """What the owner's membership exceptions let their members do, where production holds them:
+    the members that may act as one of the app's roles or an API role (Storage's role, through
+    authenticator), and those and the ones that may read every table. The comparison looks one
+    membership deep, so an accepted membership passes its reach on: a member that may act as an
+    API role is an API role to the comparison and to prove.py's restore errors (any role it gains,
+    any setting but a timeout, any parameter grant or refused setting is app), and whoever holds
+    any of them is app, as whoever holds what it grants would be. A member that may only read is
+    not an API role: no role, setting or parameter it gains gives it a write the comparison would
+    not see on its own (a write needs a grant, a write-all role or an API role, each app)."""
+
+    held = set(restored.get("cluster", {}).get("memberships", []))
+    edges = [
+        _membership(exception.path.removeprefix(_MEMBERSHIPS))
+        for exception in PLATFORM_EXCEPTIONS
+        if exception.path.startswith(_MEMBERSHIPS)
+        and exception.path.removeprefix(_MEMBERSHIPS) in held
+    ]
+    acting = frozenset(
+        member
+        for granted, member in edges
+        if granted in api or granted in migration or granted == OWNER
     )
-    return [_classify(difference, roles) for difference in differences]
+    reading = {member for granted, member in edges if granted in DATA_ROLES}
+    return acting, acting | reading
+
+
+def _accepted(difference: Difference) -> bool:
+    """Whether a difference is exactly one of PLATFORM_EXCEPTIONS: at its path, production holds
+    exactly the reference's items and the exception's, each once."""
+
+    reference, restored = _items(difference.reference), _items(difference.restored)
+    return any(
+        difference.path == exception.path and restored == reference + Counter(exception.added)
+        for exception in PLATFORM_EXCEPTIONS
+    )
+
+
+def _items(value: Any) -> Counter[str]:
+    """A difference's side as its items, counted: a list's own, a string's one, none for None;
+    anything else (an attribute map, say) as one opaque item no exception names."""
+
+    if value is None:
+        return Counter()
+    if isinstance(value, str):
+        return Counter([value])
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return Counter(value)
+    return Counter([json.dumps(value, sort_keys=True, default=str)])
 
 
 def _superuser_roles(fingerprint: dict[str, Any]) -> set[str]:
@@ -585,6 +793,7 @@ class _Roles:
     api: frozenset[str]
     bootstrap: str | None
     superusers: frozenset[str]
+    reaching: frozenset[str] = frozenset()  # exception_reach: may act as an API role or read all
 
 
 def _walk(path: str, left: Any, right: Any, out: list[Difference]) -> None:
@@ -655,8 +864,10 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
             or granted in roles.api
             or granted in roles.superusers
             or granted in DATA_ROLES
+            or granted in roles.reaching
         ):
-            # Another role able to act as an app role, as a superuser, or to reach every table.
+            # Another role able to act as an app role, as a superuser, or to reach every table
+            # (directly, or through an owner's exception: exception_reach).
             return difference
         return as_("platform")
     if section == "settings":
