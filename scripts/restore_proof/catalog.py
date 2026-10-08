@@ -619,7 +619,7 @@ PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
     # D (DP-D-STORAGE-SETTINGS): Storage's role's own two settings as Supabase's scripts set them
     # (its search path and its statement logging), pinned by name and by each value's digest, in all
     # databases. C1 lets this role act as every API role, so its settings are held to an API role's
-    # rules (exception_reach): only these two, exactly, pass.
+    # rules (exception_reach): only these two, exactly, are accepted.
     PlatformException(
         "cluster/settings/supabase_storage_admin in all databases",
         frozenset(

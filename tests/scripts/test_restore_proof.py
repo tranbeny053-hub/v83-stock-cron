@@ -23,8 +23,8 @@ What a database is not needed for, checked here:
   another grantor, beside another grantee or under another key, CREATE on the schema, an item
   removed or doubled: each stays app and fails the proof; and an accepted membership passes its
   reach on: whoever holds a ruled member is app, and Storage's role, which may act as an API role,
-  is one (any role it gains, any setting but a timeout or its two ruled ones, any parameter grant);
-  a role name that could be misread is app;
+  is one (any role it gains, any setting but timeouts alone or exactly its two ruled ones, any
+  parameter grant); a role name that could be misread is app;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
   own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
   repeated;
