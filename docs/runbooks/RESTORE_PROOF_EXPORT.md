@@ -99,17 +99,20 @@ of difference are reported without failing:
   the API roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes
   that raise no privilege; a platform role's own setting and a Realtime publication entry that
   vanilla PostgreSQL refuses;
-- **accepted**: exactly the eight differences you ruled exact managed-platform exceptions on
-  2026-10-07 (DP-D-FINDINGS; `scripts/restore_proof/catalog.py` `PLATFORM_EXCEPTIONS` cites
-  Supabase's source for each): `postgres`'s own default privileges in `public` and its USAGE on
-  `public`; `authenticator`'s three settings, by name and value digest; `supabase_storage_admin`'s
-  membership in `authenticator`; and the memberships of `supabase_etl_admin` and
-  `supabase_read_only_user` in `pg_read_all_data`, each with its exact options. Each is listed by
-  name in the report. Anything else at those places, or near them (another option, role, setting,
-  value or grant), is still a finding. So is any path through them: a role holding one of those
-  three roles; and, since its accepted membership lets `supabase_storage_admin` act as an API role,
-  anything that would be a finding for an API role is one for it too (a role it gains, a setting
-  but a timeout, a parameter grant).
+- **accepted**: exactly the nine differences you ruled exact managed-platform exceptions
+  (DP-D-FINDINGS on 2026-10-07, the first eight; DP-D-STORAGE-SETTINGS on 2026-10-08, the ninth;
+  `scripts/restore_proof/catalog.py` `PLATFORM_EXCEPTIONS` cites Supabase's source for each):
+  `postgres`'s own default privileges in `public` and its USAGE on `public`; `authenticator`'s three
+  settings, by name and value digest; `supabase_storage_admin`'s membership in `authenticator`; the
+  memberships of `supabase_etl_admin` and `supabase_read_only_user` in `pg_read_all_data`, each
+  with its exact options; and `supabase_storage_admin`'s two settings (`log_statement`,
+  `search_path`) in all databases, by name and value digest. Each is listed by name in the report.
+  Anything else at those places, or near them (another option, role, setting, value, database or
+  grant), is still a finding. So is any path through them: a role holding one of those three
+  roles; and, since its accepted membership lets `supabase_storage_admin` act as an API role, a
+  role it gains, any setting on it but a timeout or its two ruled ones, and a parameter grant to it.
+  A setting for one database only is not exported at all (see What this does not prove), so the
+  proof cannot see one.
 
 **Trust note (C3).** Supabase's Access Control docs say the SQL snippets a Read-Only project member
 runs are run as `supabase_read_only_user`, which has `pg_read_all_data`. So assigning anyone
@@ -120,19 +123,19 @@ would let read every table.
 Any other difference is a finding and fails the proof: production's structure and the migrations
 disagree there. That includes every privilege path into the app the migrations do not declare,
 whoever made it: an API role becoming a member of another role or gaining SUPERUSER, BYPASSRLS or
-the like; any setting on an API role but a timeout (one setting can turn the seals off for every
-API session); any role but Supabase's superuser and `postgres` able to act as `postgres`, an app
-role or an API role, or holding a predefined role that reads or writes every table or the
-server's files; any new superuser; a parameter grant to an API or app role; and any role whose name
-is not a plain lowercase identifier (the proof reads names back from text, so a name that could be
-misread fails instead). **A proof may say FAIL for privilege paths Supabase itself made** (for
-example one of its service roles able to act as an API role, a read-only role that reads every
-table, or a setting on PostgREST's `authenticator`): each is a finding Claude reports to you by
-name, for you to decide on, not a
-broken restore. The first proof (2026-10-07) found eight such paths, and you ruled them the exact
-exceptions above; any other one is a new finding. The report names every finding, and nothing is
-changed or reclassified to hide one: only your exact ruling turns one into `accepted`, and an
-accepted one is still listed.
+the like; any setting on an API role but a timeout (one setting can turn the seals off for every API
+session); any role but Supabase's superuser and `postgres` able to act as `postgres`, an app role or
+an API role, or holding a predefined role that reads or writes every table or the server's files;
+any new superuser; a parameter grant to an API or app role; and any role whose name is not a plain
+lowercase identifier (the proof reads names back from text, so a name that could be misread fails
+instead). **A proof may say FAIL for privilege paths Supabase itself made** (for example one of its
+service roles able to act as an API role, a read-only role that reads every table, or a setting on
+PostgREST's `authenticator`): each is a finding Claude reports to you by name, for you to decide on,
+not a broken restore. The first proof (2026-10-07) found eight such paths, and you ruled them exact
+exceptions. The rerun (2026-10-08) then held `supabase_storage_admin` to an API role's rules and
+found a ninth, its two settings, which you also ruled exact. Any other one is a new finding. The
+report names every finding, and nothing is changed or reclassified to hide one: only your exact
+ruling turns one into `accepted`, and an accepted one is still listed.
 
 ## Stop rules
 

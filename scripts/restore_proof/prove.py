@@ -20,7 +20,8 @@ every such restore raises (the bootstrap superuser and the public schema already
 platform role's own setting (an API role's only when it is a timeout) and a platform publication
 entry, and no app difference (catalog.py says what is app). Operational and platform differences
 are reported, not failing; so are the owner's exact managed-platform exceptions (catalog.py
-PLATFORM_EXCEPTIONS, owner ruling DP-D-FINDINGS), counted as "accepted", and nothing else is.
+PLATFORM_EXCEPTIONS, owner rulings DP-D-FINDINGS and DP-D-STORAGE-SETTINGS), counted as
+"accepted", and nothing else is.
 """
 
 from __future__ import annotations

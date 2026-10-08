@@ -33,16 +33,17 @@ what it sees:
   export with password verifiers (no --no-role-passwords, whose verifier never appears in the
   report), a psql meta-command (which never runs), a missing \\restrict, an export that would
   take superuser from the bootstrap role, and an escape string pg_dumpall does not write;
-- Supabase's own statements for the eight differences the owner ruled exact managed-platform
-  exceptions (owner ruling DP-D-FINDINGS, catalog.PLATFORM_EXCEPTIONS) PASS with each accepted at
-  its path and nothing else; next to them, the same membership with other options, a look-alike
-  role, another predefined role for the same role, an extra setting beside the ruled ones, the
-  ruled settings on another API role, the owner's grants with grant option and CREATE on the
-  schema all fail as app; so does what a ruled membership reaches: a role holding a ruled role,
-  a setting or parameter grant that turns the seals off on Storage's role, which the ruled
-  membership lets act as an API role, and a role it gains that may turn them off; a setting the
-  restore refuses on it fails; and a role name the comparison could misread (one that would be
-  read as the bootstrap superuser while it holds a ruled role) fails;
+- Supabase's own statements for the nine differences the owner ruled exact managed-platform
+  exceptions (owner rulings DP-D-FINDINGS and DP-D-STORAGE-SETTINGS, catalog.PLATFORM_EXCEPTIONS)
+  PASS with each accepted at its path and nothing else; next to them, the same membership with other
+  options, a look-alike role, another predefined role for the same role, an extra setting beside the
+  ruled ones, the ruled settings on another API role, the owner's grants with grant option and
+  CREATE on the schema all fail as app; so does what a ruled membership reaches: a role holding a
+  ruled role, a setting or parameter grant that turns the seals off on Storage's role, which the
+  ruled membership lets act as an API role, and a role it gains that may turn them off; a setting
+  the restore refuses on it fails; a role name the comparison could misread (one that would be read
+  as the bootstrap superuser while it holds a ruled role) fails; and Storage's role's ruled settings
+  with another value, or on an API role, fail;
 - a role's comments and settings that pg_dumpall writes as escape strings (owner ruling
   DP-D-ESCAPE=A) PASS, and escape_string_differential holds psql 17 itself against the gate on a
   seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
@@ -111,9 +112,10 @@ def _app(*paths: str) -> frozenset[tuple[str, str]]:
     return frozenset(("app", path) for path in paths)
 
 
-# Supabase's own statements for the eight differences the owner ruled exact managed-platform
-# exceptions (DP-D-FINDINGS): its initial schema and migrations (github.com/supabase/postgres,
-# migrations/, branch develop; catalog.PLATFORM_EXCEPTIONS cites each file), as Supabase runs them.
+# Supabase's own statements for the nine differences the owner ruled exact managed-platform
+# exceptions (DP-D-FINDINGS, DP-D-STORAGE-SETTINGS): its init scripts and migrations
+# (github.com/supabase/postgres, migrations/, branch develop; catalog.PLATFORM_EXCEPTIONS cites each
+# file), as Supabase runs them.
 SUPABASE_ROLES = (
     "CREATE ROLE supabase_storage_admin NOINHERIT CREATEROLE LOGIN",
     "GRANT authenticator TO supabase_storage_admin",
@@ -127,6 +129,10 @@ SUPABASE_AUTHENTICATOR_SETTINGS = (
     "ALTER ROLE authenticator SET lock_timeout TO '8s'",
     "ALTER ROLE authenticator SET session_preload_libraries TO supautils, safeupdate",
 )
+SUPABASE_STORAGE_SETTINGS = (
+    'ALTER USER supabase_storage_admin SET search_path = "storage"',
+    "alter role supabase_storage_admin set log_statement = none",
+)
 SUPABASE_OWNER_GRANTS = (  # run as the owner, as Supabase's initial schema is
     (OWNER, f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{OWNER}"'),
     (OWNER, f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO "{OWNER}"'),
@@ -134,6 +140,7 @@ SUPABASE_OWNER_GRANTS = (  # run as the owner, as Supabase's initial schema is
     (OWNER, f'GRANT USAGE ON SCHEMA public TO "{OWNER}"'),
 )
 ACCEPTED = frozenset(("accepted", exception.path) for exception in catalog.PLATFORM_EXCEPTIONS)
+STORAGE_SETTINGS = "cluster/settings/supabase_storage_admin in all databases"
 ACCEPTED_MEMBERSHIPS = frozenset(
     item for item in ACCEPTED if item[1].startswith("cluster/memberships/")
 )
@@ -578,24 +585,25 @@ CASES: tuple[Case, ...] = (
         "Supabase's own grants the owner ruled exact platform exceptions",
         "PASS",
         ACCEPTED | SUPABASE_ROLE_ATTRIBUTES,
-        cluster_sql=(*SUPABASE_ROLES, *SUPABASE_AUTHENTICATOR_SETTINGS),
+        cluster_sql=(*SUPABASE_ROLES, *SUPABASE_AUTHENTICATOR_SETTINGS, *SUPABASE_STORAGE_SETTINGS),
         database_sql=SUPABASE_OWNER_GRANTS,
     ),
     Case(
         "beside the ruled grants, a role holding a ruled role and Storage's role turning seals off",
         "FAIL",
-        ACCEPTED
+        (ACCEPTED - {("accepted", STORAGE_SETTINGS)})
         | SUPABASE_ROLE_ATTRIBUTES
         | {("platform", "cluster/attributes/rehearsal_reach")}
         | _app(
             "cluster/memberships/supabase_read_only_user to rehearsal_reach admin=False "
             "inherit=True set=True",
-            "cluster/settings/supabase_storage_admin in all databases",
+            STORAGE_SETTINGS,
             "cluster/parameter_acl/session_replication_role",
         ),
         cluster_sql=(
             *SUPABASE_ROLES,
             *SUPABASE_AUTHENTICATOR_SETTINGS,
+            *SUPABASE_STORAGE_SETTINGS,
             "CREATE ROLE rehearsal_reach LOGIN",
             "GRANT supabase_read_only_user TO rehearsal_reach",
             "ALTER ROLE supabase_storage_admin SET session_replication_role TO replica",
@@ -653,6 +661,19 @@ CASES: tuple[Case, ...] = (
             *SUPABASE_ROLES,
             'CREATE ROLE "supabase_admin admin=x" LOGIN',
             'GRANT supabase_etl_admin TO "supabase_admin admin=x"',
+        ),
+    ),
+    Case(
+        "near Storage's ruled settings: another search path, and the two on an API role",
+        "FAIL",
+        SUPABASE_ROLE_ATTRIBUTES
+        | ACCEPTED_MEMBERSHIPS
+        | _app(STORAGE_SETTINGS, "cluster/settings/anon in all databases"),
+        cluster_sql=(
+            *SUPABASE_ROLES,
+            'ALTER USER supabase_storage_admin SET search_path = "storage", public',
+            SUPABASE_STORAGE_SETTINGS[1],
+            *(sql.replace("supabase_storage_admin", "anon") for sql in SUPABASE_STORAGE_SETTINGS),
         ),
     ),
     Case(

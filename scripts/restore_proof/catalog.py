@@ -44,11 +44,12 @@ Each difference is classified:
   parameter grants (the owner already owns every app object); the default privileges of any other
   role; other parameter grants. Reported, not failing.
 - **accepted**: an app difference that is exactly one of the owner's managed-platform exceptions
-  (PLATFORM_EXCEPTIONS, owner ruling DP-D-FINDINGS): at its path, production holds exactly the
-  reference's items and the ruled ones. Reported by name, not failing; anything else at that path,
-  or anywhere else, stays app. An accepted membership passes its reach on (exception_reach): a
-  member it lets act as an API role is an API role to the comparison, and whoever holds a member it
-  lets read every table is app, as whoever holds what it grants would be.
+  (PLATFORM_EXCEPTIONS, owner rulings DP-D-FINDINGS and DP-D-STORAGE-SETTINGS): at its path,
+  production holds exactly the reference's items and the ruled ones. Reported by name, not failing;
+  anything else at that path, or anywhere else, stays app. An accepted membership passes its reach
+  on (exception_reach): a member it lets act as an API role is held to an API role's rules for the
+  roles it gains, its settings and its parameter grants, and whoever holds a member it lets act as
+  an API role or read every table is app, as whoever holds what it grants would be.
 """
 
 from __future__ import annotations
@@ -523,12 +524,13 @@ class PlatformException:
     source: str
 
 
-# Owner ruling DP-D-FINDINGS (2026-10-07): eight exact managed-platform exceptions, never blanket
-# allowances. Each pins one path and the exact items production adds there, as the owner's export
-# showed them (restore proof of 2026-10-07) and as Supabase's own image writes them (read
-# 2026-10-07). No other role, member, option, setting, value or grant inherits acceptance: anything
-# else at these paths, or anywhere else, stays an app difference, and a difference that also
-# removes what the reference declares is never accepted.
+# Owner rulings DP-D-FINDINGS (2026-10-07: the first eight) and DP-D-STORAGE-SETTINGS (2026-10-08:
+# the ninth): exact managed-platform exceptions, never blanket allowances. Each pins one path and
+# the exact items production adds there, as the owner's export showed them (its restore proofs of
+# 2026-10-07 and 2026-10-08) and as Supabase's own image writes them (read on the same days). No
+# other role, member, option, setting, value, database or grant inherits acceptance: anything else
+# at these paths, or anywhere else, stays an app difference, and a difference that also removes what
+# the reference declares is never accepted.
 _INITIAL_SCHEMA = "db/init-scripts/00000000000000-initial-schema.sql"
 _MEMBERSHIPS = "cluster/memberships/"
 PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
@@ -614,6 +616,23 @@ PLATFORM_EXCEPTIONS: tuple[PlatformException, ...] = (
     PlatformException(
         "schema/acl", frozenset({"<owner>:USAGE by pg_database_owner"}), _INITIAL_SCHEMA
     ),
+    # D (DP-D-STORAGE-SETTINGS): Storage's role's own two settings as Supabase's scripts set them
+    # (its search path and its statement logging), pinned by name and by each value's digest, in all
+    # databases. C1 lets this role act as every API role, so its settings are held to an API role's
+    # rules (exception_reach): only these two, exactly, pass.
+    PlatformException(
+        "cluster/settings/supabase_storage_admin in all databases",
+        frozenset(
+            {
+                "log_statement sha256:"
+                "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe",
+                "search_path sha256:"
+                "49a25f9feefaffecad0fcd30c50dc9331cff8b55ece53def6285c09e17e6f5d7",
+            }
+        ),
+        "db/init-scripts/00000000000002-storage-schema.sql, "
+        "db/migrations/20250205060043_disable_log_statement_on_internal_roles.sql",
+    ),
 )
 
 
@@ -689,7 +708,10 @@ def compare(
         superusers = superusers | {bootstrap}
     api = api_roles(reference, migration_roles, bootstrap)
     acting, reaching = exception_reach(restored, api, migration_roles)
-    # A member an accepted membership lets act as an API role is one, under every API role rule.
+    # A member an accepted membership lets act as an API role is one to the rules below for the
+    # roles it gains, its settings and its parameter grants. A role new to production has its
+    # attributes compared whole, so no per-attribute rule applies to it; none rides on the
+    # membership anyway (SET ROLE carries no attribute).
     roles = _Roles(migration_roles, api | acting, bootstrap, frozenset(superusers), reaching)
     classified = [_classify(difference, roles) for difference in differences]
     # Only an app difference that is exactly one of the owner's exceptions is accepted.
