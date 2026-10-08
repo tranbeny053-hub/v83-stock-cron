@@ -50,7 +50,9 @@ what it sees:
   unchanged, runs exactly the gate's meta-commands and sends the server exactly the gate's
   statements), while every other escape string is refused.
 - the hardening (owner ruling HARDENING=GO): an export hand-edited with a setting for every role or
-  for one database only is refused, and nothing is restored from it; the card's commands never
+  for one database only, in either file, or with any other ALTER ROLE form pg_dumpall never writes
+  (a role named in two words), or the database's own setting, is refused, and nothing is restored
+  from it; the card's commands never
   write such a setting, nor the database's own (each stays unseen, as documented: never proven); a
   parameter grant of ALTER SYSTEM fails whoever holds it, the owner included, while a SET grant to a
   platform role stays the platform's; and every_role_settings holds the fingerprint against
@@ -164,6 +166,17 @@ def _append_role_line(line: str) -> Callable[[Path], None]:
         closing = max(i for i, item in enumerate(lines) if item.startswith("\\unrestrict "))
         lines.insert(closing, line)
         roles.write_text("\n".join(lines), encoding="utf-8")
+
+    return edit
+
+
+def _append_schema_line(line: str) -> Callable[[Path], None]:
+    def edit(export: Path) -> None:
+        schema = export / "schema.sql"
+        lines = schema.read_text(encoding="utf-8").split("\n")
+        closing = max(i for i, item in enumerate(lines) if item.startswith("\\unrestrict "))
+        lines.insert(closing, line)
+        schema.write_text("\n".join(lines), encoding="utf-8")
 
     return edit
 
@@ -777,6 +790,30 @@ CASES: tuple[Case, ...] = (
         refusals=frozenset({"STATEMENT_ALTER_ROLE_IN_DATABASE"}),
         edit=_append_role_line(
             "ALTER ROLE anon IN DATABASE postgres SET session_replication_role TO replica;"
+        ),
+    ),
+    Case(
+        "an export hand-edited with a role named in two words, for one database",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"STATEMENT_ALTER_ROLE_FORM"}),
+        edit=_append_role_line(
+            "ALTER ROLE U&\"anon\" UESCAPE '!' IN DATABASE postgres SET work_mem TO '8MB';"
+        ),
+    ),
+    Case(
+        "a schema export hand-edited with a setting for one database only",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"STATEMENT_ALTER_ROLE"}),
+        edit=_append_schema_line(
+            "ALTER ROLE anon IN DATABASE postgres SET session_replication_role TO replica;"
+        ),
+    ),
+    Case(
+        "a schema export hand-edited with the database's own setting",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"STATEMENT_ALTER_DATABASE"}),
+        edit=_append_schema_line(
+            "ALTER DATABASE postgres SET session_replication_role TO replica;"
         ),
     ),
     Case(

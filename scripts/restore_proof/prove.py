@@ -218,15 +218,15 @@ def _classify_error(
     if (error.file, error.message) in expected:
         return {**item, "category": "expected"}
     lead = statements.get(error.file, {}).get(error.line, ())
-    # A platform role's own setting (ALTER ROLE r SET / IN DATABASE): never a migration role's, an
-    # API role's only when it is a timeout (catalog.TIMEOUT_SETTINGS), and never one for every role
-    # (ALTER ROLE ALL, which the gate refuses before any restore).
+    # A platform role's own setting (ALTER ROLE r SET): never a migration role's, an API role's only
+    # when it is a timeout (catalog.TIMEOUT_SETTINGS), and never one for every role or for one
+    # database (ALTER ROLE ALL, IN DATABASE: the gate refuses both before any restore).
     role = lead[2].lower() if len(lead) > 3 else ""
     timeout = lead[3:4] == ("SET",) and lead[4:5] in {(name.upper(),) for name in TIMEOUTS}
     if (
         error.file == "roles.sql"
         and lead[:2] == ("ALTER", "ROLE")
-        and lead[3:4] in {("SET",), ("IN",)}
+        and lead[3:4] == ("SET",)
         and role not in roles
         and role != "all"
         and (role not in api or timeout)

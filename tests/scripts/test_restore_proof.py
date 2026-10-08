@@ -28,10 +28,10 @@ What a database is not needed for, checked here:
 - the restore errors are classified: the two every restore raises are expected, a platform role's
   own setting (an API role's timeout) is platform, anything else fails (a setting for every role
   included), and a refused value is not repeated;
-- the hardening (owner ruling HARDENING=GO): the gate refuses an ALTER ROLE for every role or for
-  one database only, which the roles export never writes, while what pg_dumpall writes for one role
-  still passes; a parameter grant of ALTER SYSTEM is app whoever holds it, and a SET grant is
-  classified as before;
+- the hardening (owner ruling HARDENING=GO): the gate refuses an ALTER ROLE in any form but the two
+  pg_dumpall writes (for every role or one database only among them), and in schema.sql any ALTER
+  ROLE, USER, GROUP or DATABASE, while what the commands write still passes; a parameter grant of
+  ALTER SYSTEM is app whoever holds it, and a SET grant is classified as before;
 - the proof refuses before any server starts, and refuses an export that would take superuser from
   the bootstrap role or that names the owner as the bootstrap; it sees no PG* variable of the
   caller's, psql reads UTF-8, and a stopped cluster leaves no log;
@@ -175,6 +175,45 @@ def test_only_schema_ddl_is_allowed(line: str, kind: str) -> None:
     assert kinds(refusals) == [kind]
 
 
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("ALTER ROLE ALL SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE"),
+        ("ALTER ROLE anon IN DATABASE postgres SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE"),
+        ("ALTER ROLE anon SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE"),
+        ("ALTER DATABASE postgres SET work_mem TO '8MB';", "STATEMENT_ALTER_DATABASE"),
+        ("ALTER USER anon SET work_mem TO '8MB';", "STATEMENT_ALTER_USER"),
+        ("ALTER GROUP anon ADD USER authenticator;", "STATEMENT_ALTER_GROUP"),
+    ],
+    ids=["every role", "one database", "one role", "the database", "a user", "a group"],
+)
+def test_schema_sql_refuses_any_role_or_database_alter(line: str, kind: str) -> None:
+    """Review 1 of the hardening: pg_dump --schema-only writes no ALTER ROLE, USER, GROUP or
+    DATABASE, and one in schema.sql could set what the proof cannot compare."""
+
+    _, refusals = gate.check_schema_dump(
+        "schema.sql", schema_with("GRANT SELECT", f"{line}\nGRANT SELECT")
+    )
+    assert kinds(refusals) == [kind]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public "
+        "GRANT SELECT ON TABLES TO anon;",
+        "ALTER TABLE public.t OWNER TO postgres;",
+        "ALTER SCHEMA public OWNER TO pg_database_owner;",
+    ],
+    ids=["default privileges for a role", "an owner", "the schema's owner"],
+)
+def test_what_pg_dump_writes_with_alter_still_passes(line: str) -> None:
+    _, refusals = gate.check_schema_dump(
+        "schema.sql", schema_with("GRANT SELECT", f"{line}\nGRANT SELECT")
+    )
+    assert refusals == []
+
+
 def test_a_meta_command_is_refused_and_its_text_never_kept() -> None:
     raw = schema_with("SET statement_timeout", "\\! touch /tmp/pwned\nSET statement_timeout")
     _, refusals = gate.check_schema_dump("schema.sql", raw)
@@ -279,6 +318,14 @@ def test_the_roles_file_holds_role_ddl_only(line: str, kind: str) -> None:
             "ALTER ROLE database IN DATABASE postgres SET work_mem TO '8MB';",
             "STATEMENT_ALTER_ROLE_IN_DATABASE",
         ),
+        (
+            "ALTER ROLE U&\"rehearsal_plat\" UESCAPE '!' IN DATABASE postgres "
+            "SET work_mem TO '8MB';",
+            "STATEMENT_ALTER_ROLE_FORM",
+        ),
+        ("ALTER ROLE U&\"anon\" UESCAPE '!' SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE_FORM"),
+        ("ALTER ROLE anon RESET ALL;", "STATEMENT_ALTER_ROLE_FORM"),
+        ("ALTER ROLE anon RENAME TO anon2;", "STATEMENT_ALTER_ROLE_FORM"),
     ],
     ids=[
         "every role",
@@ -291,6 +338,10 @@ def test_the_roles_file_holds_role_ddl_only(line: str, kind: str) -> None:
         "one database, a quoted database",
         "one database, reset all",
         "one database, a role named database",
+        "one database, a role named in two words (review 1 of the hardening)",
+        "a setting, a role named in two words",
+        "a reset",
+        "a rename",
     ],
 )
 def test_an_alter_role_the_roles_export_never_writes_is_refused(line: str, kind: str) -> None:
@@ -1728,7 +1779,7 @@ def test_a_whole_value_is_never_matched_as_an_item() -> None:
         (["dashboard_user:ALTER SYSTEM by supabase_admin"], "app"),
         (["supabase_read_only_user:ALTER SYSTEM by supabase_admin"], "app"),
         (["<owner>:ALTER SYSTEM by supabase_admin"], "app"),
-        (["supabase_admin:ALTER SYSTEM by supabase_admin"], "app"),
+        (["supabase_admin:ALTER SYSTEM* by supabase_admin"], "app"),
         (["dashboard_user:ALTER SYSTEM* by supabase_admin"], "app"),
         (
             ["dashboard_user:SET by supabase_admin", "pgbouncer:ALTER SYSTEM by supabase_admin"],
@@ -1741,7 +1792,7 @@ def test_a_whole_value_is_never_matched_as_an_item() -> None:
         "ALTER SYSTEM to a platform role",
         "ALTER SYSTEM to a reader",
         "ALTER SYSTEM to the owner",
-        "ALTER SYSTEM to the bootstrap superuser",
+        "ALTER SYSTEM to the bootstrap superuser with grant option, which is no default",
         "ALTER SYSTEM with grant option",
         "ALTER SYSTEM beside a SET grant",
         "SET to a platform role, as before",
@@ -1801,7 +1852,7 @@ EXPECTED = {
             7,
             "invalid value",
             {7: ("ALTER", "ROLE", "DASHBOARD_USER", "IN")},
-            "platform",
+            "fail",
         ),
         ("roles.sql", 7, "invalid value", {7: ("ALTER", "ROLE", "UCPE_API_WRITER", "SET")}, "fail"),
         (
@@ -1841,7 +1892,7 @@ EXPECTED = {
         "public",
         "bootstrap",
         "platform set",
-        "platform in",
+        "platform in one database, which the gate refuses",
         "migration role",
         "an API role's timeout",
         "an API role's other setting",

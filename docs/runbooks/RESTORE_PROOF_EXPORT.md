@@ -71,13 +71,14 @@ python scripts/restore_proof/prove.py --pg-bin <PostgreSQL 17.6 bin> --export ~/
 ```
 
 1. It checks both digests against yours, then **refuses the export, and restores nothing**, unless
-   it is exactly what the two commands make: a data entry, a COPY block, a password clause or
-   hash, any psql meta-command but the `\restrict` pair, or anything psql would read differently
-   from the gate (an escape string in any form but the one pg_dumpall writes for a role's setting,
-   comment or security label, a psql variable, a changed string or encoding setting) is a refusal
-   (`gate.py`). So is a setting for every role (`ALTER ROLE ALL …`) or for one database only
-   (`ALTER ROLE … IN DATABASE …`): the commands never write either, and the proof could not
-   compare one.
+   it is exactly what the two commands make: a data entry, a COPY block, a password clause or hash,
+   any psql meta-command but the `\restrict` pair, or anything psql would read differently from the
+   gate (an escape string in any form but the one pg_dumpall writes for a role's setting, comment or
+   security label, a psql variable, a changed string or encoding setting) is a refusal (`gate.py`).
+   So is any `ALTER ROLE` but the two forms `pg_dumpall` writes (`ALTER ROLE r WITH …` and `ALTER
+   ROLE r SET …`), a setting for every role (`ALTER ROLE ALL …`) or for one database only (`… IN
+   DATABASE …`) among them, and in `schema.sql` any `ALTER ROLE`, `USER`, `GROUP` or `DATABASE`: the
+   commands never write these, and the proof could not compare what they set.
 2. It checks its own PostgreSQL is 17.6 or a later 17.x, then builds a scratch cluster from the
    migrations, as every migration rehearsal does, and restores a private copy of your two files
    (checked again against your digests, deleted once restored) into a second one. Both clusters
@@ -96,11 +97,11 @@ exceptions you ruled (accepted, below). Three kinds of difference are reported w
 - **platform**: Supabase's own: its other roles with their own attributes (row-security bypass and
   replication included: no app table is granted to everyone, so such a role reaches no app row by
   itself), their settings and their memberships in the other predefined roles; the default
-  privileges of its roles; the owner's (`postgres`) attributes, settings, memberships and parameter
-  grants (it owns every app table already); LOGIN on `authenticator` (PostgREST logs in with it);
-  the API roles' (anon, authenticated, service_role, authenticator) timeouts and their attributes
-  that raise no privilege; a platform role's own setting and a Realtime publication entry that
-  vanilla PostgreSQL refuses;
+  privileges of its roles; the owner's (`postgres`) attributes, settings, memberships and SET
+  parameter grants (it owns every app table already); LOGIN on `authenticator` (PostgREST logs in
+  with it); the API roles' (anon, authenticated, service_role, authenticator) timeouts and their
+  attributes that raise no privilege; a platform role's own setting and a Realtime publication entry
+  that vanilla PostgreSQL refuses;
 - **accepted**: exactly the nine differences you ruled exact managed-platform exceptions
   (DP-D-FINDINGS on 2026-10-07, the first eight; DP-D-STORAGE-SETTINGS on 2026-10-08, the ninth;
   `scripts/restore_proof/catalog.py` `PLATFORM_EXCEPTIONS` cites Supabase's source for each):
