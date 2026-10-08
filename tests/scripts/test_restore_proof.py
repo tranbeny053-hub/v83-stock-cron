@@ -26,8 +26,12 @@ What a database is not needed for, checked here:
   is one (any role it gains, any setting but timeouts alone or exactly its two ruled ones, any
   parameter grant); a role name that could be misread is app;
 - the restore errors are classified: the two every restore raises are expected, a platform role's
-  own setting (an API role's timeout) is platform, anything else fails, and a refused value is not
-  repeated;
+  own setting (an API role's timeout) is platform, anything else fails (a setting for every role
+  included), and a refused value is not repeated;
+- the hardening (owner ruling HARDENING=GO): the gate refuses an ALTER ROLE for every role or for
+  one database only, which the roles export never writes, while what pg_dumpall writes for one role
+  still passes; a parameter grant of ALTER SYSTEM is app whoever holds it, and a SET grant is
+  classified as before;
 - the proof refuses before any server starts, and refuses an export that would take superuser from
   the bootstrap role or that names the owner as the bootstrap; it sees no PG* variable of the
   caller's, psql reads UTF-8, and a stopped cluster leaves no log;
@@ -248,6 +252,83 @@ def test_the_roles_file_holds_role_ddl_only(line: str, kind: str) -> None:
         "roles.sql", roles_with("GRANT anon", f"{line}\nGRANT anon")
     )
     assert kinds(refusals) == [kind]
+
+
+@pytest.mark.parametrize(
+    ("line", "kind"),
+    [
+        ("ALTER ROLE ALL SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE_ALL"),
+        ("ALTER ROLE ALL RESET work_mem;", "STATEMENT_ALTER_ROLE_ALL"),
+        ("alter role all set session_replication_role to replica;", "STATEMENT_ALTER_ROLE_ALL"),
+        ("ALTER ROLE /* c */ ALL SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE_ALL"),
+        ("ALTER ROLE ALL IN DATABASE postgres SET work_mem TO '8MB';", "STATEMENT_ALTER_ROLE_ALL"),
+        (
+            "ALTER ROLE anon IN DATABASE postgres SET work_mem TO '8MB';",
+            "STATEMENT_ALTER_ROLE_IN_DATABASE",
+        ),
+        (
+            "ALTER ROLE \"Anon\" IN DATABASE postgres SET work_mem TO '8MB';",
+            "STATEMENT_ALTER_ROLE_IN_DATABASE",
+        ),
+        (
+            "ALTER ROLE anon IN DATABASE \"my db\" SET work_mem TO '8MB';",
+            "STATEMENT_ALTER_ROLE_IN_DATABASE",
+        ),
+        ("ALTER ROLE anon IN DATABASE postgres RESET ALL;", "STATEMENT_ALTER_ROLE_IN_DATABASE"),
+        (
+            "ALTER ROLE database IN DATABASE postgres SET work_mem TO '8MB';",
+            "STATEMENT_ALTER_ROLE_IN_DATABASE",
+        ),
+    ],
+    ids=[
+        "every role",
+        "every role, reset",
+        "every role, lower case",
+        "every role, a comment between",
+        "every role in one database",
+        "one database",
+        "one database, a quoted role",
+        "one database, a quoted database",
+        "one database, reset all",
+        "one database, a role named database",
+    ],
+)
+def test_an_alter_role_the_roles_export_never_writes_is_refused(line: str, kind: str) -> None:
+    """Owner ruling HARDENING=GO: pg_dumpall --roles-only never writes a setting for every role or
+    for one database only, and the proof could not compare one, so the gate refuses either."""
+
+    raw = roles_with("GRANT anon", f"{line}\nGRANT anon")
+    number = raw.decode().split("\n").index(line) + 1
+    _, refusals = gate.check_roles_dump("roles.sql", raw)
+    assert refusals == [gate.Refusal("roles.sql", number, kind)]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ALTER ROLE anon SET work_mem TO '8MB';",
+        "ALTER ROLE \"all\" SET work_mem TO '8MB';",
+        "ALTER ROLE \"in\" SET work_mem TO '8MB';",
+        "ALTER ROLE in_database SET work_mem TO '8MB';",
+        "ALTER ROLE database SET work_mem TO '8MB';",
+        "ALTER ROLE anon SET search_path TO 'in', 'database';",
+        "ALTER ROLE anon WITH NOSUPERUSER NOINHERIT NOLOGIN;",
+    ],
+    ids=[
+        "a setting",
+        "a role named all",
+        "a role named in",
+        "a role named in_database",
+        "a role named database",
+        "values that read like keywords",
+        "attributes",
+    ],
+)
+def test_what_pg_dumpall_writes_for_one_role_still_passes(line: str) -> None:
+    _, refusals = gate.check_roles_dump(
+        "roles.sql", roles_with("GRANT anon", f"{line}\nGRANT anon")
+    )
+    assert refusals == []
 
 
 @pytest.mark.parametrize(
@@ -1639,6 +1720,61 @@ def test_a_whole_value_is_never_matched_as_an_item() -> None:
     ):
         difference = catalog.Difference("app", "schema/acl", [], value)
         assert not catalog._accepted(difference)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("items", "category"),
+    [
+        (["dashboard_user:ALTER SYSTEM by supabase_admin"], "app"),
+        (["supabase_read_only_user:ALTER SYSTEM by supabase_admin"], "app"),
+        (["<owner>:ALTER SYSTEM by supabase_admin"], "app"),
+        (["supabase_admin:ALTER SYSTEM by supabase_admin"], "app"),
+        (["dashboard_user:ALTER SYSTEM* by supabase_admin"], "app"),
+        (
+            ["dashboard_user:SET by supabase_admin", "pgbouncer:ALTER SYSTEM by supabase_admin"],
+            "app",
+        ),
+        (["dashboard_user:SET by supabase_admin"], "platform"),
+        (["<owner>:SET by supabase_admin"], "platform"),
+    ],
+    ids=[
+        "ALTER SYSTEM to a platform role",
+        "ALTER SYSTEM to a reader",
+        "ALTER SYSTEM to the owner",
+        "ALTER SYSTEM to the bootstrap superuser",
+        "ALTER SYSTEM with grant option",
+        "ALTER SYSTEM beside a SET grant",
+        "SET to a platform role, as before",
+        "SET to the owner, as before",
+    ],
+)
+def test_an_alter_system_grant_is_app_whoever_holds_it(items: list, category: str) -> None:
+    """Owner ruling HARDENING=GO: once the server reloads, an ALTER SYSTEM grant's value holds for
+    every session, the app's included, so no such grant is the platform's without the owner's exact
+    exception; a SET grant reaches the grantee's own sessions only."""
+
+    reference, restored = fingerprint(), fingerprint()
+    restored["cluster"]["parameter_acl"]["session_replication_role"] = items
+    found = catalog.compare(reference, restored, MIGRATION, "supabase_admin")
+    assert [(item.category, item.path) for item in found] == [
+        (category, "cluster/parameter_acl/session_replication_role")
+    ]
+    # Gone from production, it is app too: the reference's parameter grants are the app's.
+    gone = catalog.compare(restored, reference, MIGRATION, "supabase_admin")
+    assert [item.category for item in gone] == [category]
+
+
+@pytest.mark.parametrize(
+    "lead",
+    [("ALTER", "ROLE", "ALL", "SET", "WORK_MEM"), ("ALTER", "ROLE", "ALL", "IN", "DATABASE")],
+    ids=["in all databases", "in one database"],
+)
+def test_a_refused_setting_for_every_role_fails(lead: tuple) -> None:
+    error = scratch.RestoreError("roles.sql", 7, "invalid value")
+    found = prove._classify_error(  # noqa: SLF001
+        error, {"roles.sql": {7: lead}}, MIGRATION, EXPECTED, frozenset({"anon"})
+    )
+    assert found["category"] == "fail"
 
 
 # --------------------------------------------------------------------------- the proof

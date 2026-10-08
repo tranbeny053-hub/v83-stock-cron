@@ -11,7 +11,9 @@ are what the export card's two commands make (docs/runbooks/RESTORE_PROOF_EXPORT
   bytes themselves.
 - roles.sql, from ``pg_dumpall --roles-only --no-role-passwords`` (pg_dumpall 17, which writes no
   version line, so only schema.sql's major is checked). Any password clause or password hash is
-  refused at its first sight, and its value is never printed.
+  refused at its first sight, and its value is never printed. So is an ALTER ROLE for every role
+  (ALTER ROLE ALL) or for one database only (IN DATABASE): --roles-only never writes either, and
+  the proof could not compare what it set (owner ruling HARDENING=GO, 2026-10-08).
 In both, the only psql meta-commands allowed are the ``\\restrict`` and ``\\unrestrict`` pair that
 pg_dump 17.6 writes, with one key, first and last: any other (``\\!`` runs a shell command) could
 act outside the scratch server, and ``\\restrict`` keeps psql from running any meta-command between
@@ -207,7 +209,23 @@ def check_roles_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]:
             refusals.append(Refusal(name, line, f"STATEMENT_COMMENT_{_kind(lead[2:])}"))
         elif lead[0] == "SECURITY" and lead[1:2] != ("LABEL",):
             refusals.append(Refusal(name, line, "STATEMENT_SECURITY"))
+        elif lead[:2] == ("ALTER", "ROLE") and (kind := _not_written_by_roles_only(lead)):
+            refusals.append(Refusal(name, line, kind))
     return described, refusals
+
+
+def _not_written_by_roles_only(lead: tuple[str, ...]) -> str | None:
+    """The refusal for an ALTER ROLE that pg_dumpall --roles-only never writes: one for every role
+    (ALTER ROLE ALL) or for one database only (IN DATABASE). A quoted role name is no lead word (the
+    scan skips it), so IN DATABASE comes first or second after ALTER ROLE, and a role named "all"
+    (which pg_dumpall quotes) is never read as ALL."""
+
+    rest = lead[2:]
+    if rest[:1] == ("ALL",):
+        return "STATEMENT_ALTER_ROLE_ALL"
+    if ("IN", "DATABASE") in {rest[:2], rest[1:3]}:
+        return "STATEMENT_ALTER_ROLE_IN_DATABASE"
+    return None
 
 
 def scan(

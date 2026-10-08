@@ -49,6 +49,13 @@ what it sees:
   seeded corpus of them (pg_dumpall writes them, the gate passes them, psql restores every value
   unchanged, runs exactly the gate's meta-commands and sends the server exactly the gate's
   statements), while every other escape string is refused.
+- the hardening (owner ruling HARDENING=GO): an export hand-edited with a setting for every role or
+  for one database only is refused, and nothing is restored from it; the card's commands never
+  write such a setting, nor the database's own (each stays unseen, as documented: never proven); a
+  parameter grant of ALTER SYSTEM fails whoever holds it, the owner included, while a SET grant to a
+  platform role stays the platform's; and every_role_settings holds the fingerprint against
+  PostgreSQL itself: a setting for every role, or the database's own, is read as PUBLIC's and fails
+  the comparison, and the card's commands export neither.
 Every server it makes listens on a private socket only and is deleted at the end.
 """
 
@@ -759,6 +766,63 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
+        "an export hand-edited with a setting for every role",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"STATEMENT_ALTER_ROLE_ALL"}),
+        edit=_append_role_line("ALTER ROLE ALL SET session_replication_role TO replica;"),
+    ),
+    Case(
+        "an export hand-edited with a setting for one database only",
+        "REFUSED_EXPORT",
+        refusals=frozenset({"STATEMENT_ALTER_ROLE_IN_DATABASE"}),
+        edit=_append_role_line(
+            "ALTER ROLE anon IN DATABASE postgres SET session_replication_role TO replica;"
+        ),
+    ),
+    Case(
+        "settings the card's commands never export stay unseen (documented, never proven)",
+        "PASS",
+        cluster_sql=(
+            "ALTER ROLE ALL SET application_name TO 'rehearsal-every-role'",
+            f"ALTER ROLE anon IN DATABASE {APP_DATABASE} SET application_name TO 'rehearsal-one'",
+            f"ALTER DATABASE {APP_DATABASE} SET application_name TO 'rehearsal-database'",
+        ),
+    ),
+    Case(
+        "an ALTER SYSTEM parameter grant to a platform role",
+        "FAIL",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_system"),
+                ("app", "cluster/parameter_acl/session_replication_role"),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_system NOLOGIN",
+            "GRANT ALTER SYSTEM ON PARAMETER session_replication_role TO rehearsal_system",
+        ),
+    ),
+    Case(
+        "an ALTER SYSTEM parameter grant to the owner",
+        "FAIL",
+        _app("cluster/parameter_acl/work_mem"),
+        cluster_sql=(f'GRANT ALTER SYSTEM ON PARAMETER work_mem TO "{OWNER}"',),
+    ),
+    Case(
+        "a SET parameter grant to a platform role stays the platform's",
+        "PASS",
+        frozenset(
+            {
+                ("platform", "cluster/attributes/rehearsal_set"),
+                ("platform", "cluster/parameter_acl/work_mem"),
+            }
+        ),
+        cluster_sql=(
+            "CREATE ROLE rehearsal_set NOLOGIN",
+            "GRANT SET ON PARAMETER work_mem TO rehearsal_set",
+        ),
+    ),
+    Case(
         "a role's comment",
         "PASS",
         cluster_sql=("COMMENT ON ROLE anon IS 'a rehearsal comment'",),
@@ -1061,6 +1125,49 @@ def _roles_file(statement: str) -> bytes:
     ).encode()
 
 
+def every_role_settings(pg_bin: Path, work: Path) -> dict[str, Any]:
+    """The fingerprint against PostgreSQL itself (owner ruling HARDENING=GO): a setting for every
+    role (ALTER ROLE ALL) and the database's own, which PostgreSQL stores alike, are read as
+    PUBLIC's, and each is an app difference; the card's commands export neither, so production's
+    stay unseen, as the card documents. The values are rehearsal markers, never shown."""
+
+    work.mkdir(parents=True)
+    cluster = scratch.start(pg_bin, work, "every-role", superuser=SUPER)
+    export = work / "export"
+    try:
+        scratch.build_from_migrations(cluster, ROOT, APP_DATABASE)
+        with psycopg.connect(cluster.url(APP_DATABASE), autocommit=True) as conn:
+            before = catalog.fingerprint(conn, owner=OWNER)
+        cluster.psql(command="ALTER ROLE ALL SET application_name TO 'rehearsal-every-role'")
+        cluster.psql(
+            command=f"ALTER DATABASE {APP_DATABASE} SET application_name TO 'rehearsal-database'"
+        )
+        with psycopg.connect(cluster.url(APP_DATABASE), autocommit=True) as conn:
+            after = catalog.fingerprint(conn, owner=OWNER)
+        export_with_the_card(cluster, APP_DATABASE, export)
+        exported = b"".join((export / name).read_bytes() for name in ("schema.sql", "roles.sql"))
+    finally:
+        scratch.stop(cluster)
+        shutil.rmtree(export, ignore_errors=True)
+    migration = catalog.migration_roles(ROOT / "migrations")
+    found = sorted(
+        (item.category, item.path) for item in catalog.compare(before, after, migration, SUPER)
+    )
+    expected = [
+        ("app", "cluster/settings/PUBLIC in all databases"),
+        ("app", "cluster/settings/PUBLIC in this database"),
+    ]
+    never_exported = not any(
+        marker in exported for marker in (b"rehearsal-every-role", b"rehearsal-database")
+    )
+    return {
+        "found": found,
+        "expected": expected,
+        "never_exported": never_exported,
+        "passed": found == expected and never_exported,
+    }
+
+
 def rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
     with scratch.clean_pg_environment():
         return _rehearse(pg_bin, work)
@@ -1080,11 +1187,17 @@ def _rehearse(pg_bin: Path, work: Path) -> dict[str, Any]:
     finally:
         scratch.stop(production)
     escape_strings = escape_string_differential(pg_bin, work / "escape-strings")
-    passed = all(result["passed"] for result in results) and escape_strings["passed"]
+    every_role = every_role_settings(pg_bin, work / "every-role-settings")
+    passed = (
+        all(result["passed"] for result in results)
+        and escape_strings["passed"]
+        and every_role["passed"]
+    )
     return {
         "schema_version": "ucpe.restore_proof_rehearsal.v1",
         "cases": results,
         "escape_strings": escape_strings,
+        "every_role_settings": every_role,
         "verdict": "PASS" if passed else "FAIL",
     }
 
@@ -1199,9 +1312,11 @@ def main(argv: list[str] | None = None) -> int:
     args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     passed = sum(case["passed"] for case in report["cases"])
     escapes = report["escape_strings"]
+    every_role = report["every_role_settings"]
     print(
         f"REHEARSAL={report['verdict']} cases={passed}/{len(report['cases'])} "
-        f"escape_strings={'PASS' if escapes['passed'] else 'FAIL'}"
+        f"escape_strings={'PASS' if escapes['passed'] else 'FAIL'} "
+        f"every_role_settings={'PASS' if every_role['passed'] else 'FAIL'}"
     )
     for case in report["cases"]:
         if not case["passed"]:

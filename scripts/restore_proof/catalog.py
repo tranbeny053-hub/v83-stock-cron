@@ -4,11 +4,12 @@ One function reads a database's structure from the system catalogs alone (never 
 public schema, its relations and columns, constraints, indexes, triggers (the seals among them),
 row-security policies, functions, sequences, types, comments, owners, every grant, column grants
 included, the schema's default privileges, and the cluster's roles: every role's attributes, every
-membership, every role setting and every parameter grant (what a roles export restores that can
-carry a privilege; a role's comment, security label and password expiry carry none and are not
-read). A setting's value is kept as a digest only, so no value is ever shown. Two fingerprints, one
-of a database built from the migrations and one of the restored export, are then compared item by
-item.
+membership, every role setting (one for every role, which ALTER ROLE ALL or a database's own setting
+stores, as PUBLIC's) and every parameter grant beyond a parameter's default access (what a roles
+export restores that can carry a privilege; a role's comment, security label and password expiry
+carry none and are not read). A setting's value is kept as a digest only, so no value is ever shown.
+Two fingerprints, one of a database built from the migrations and one of the restored export, are
+then compared item by item.
 
 Names are normalized so that only real differences remain:
 - the role that ran the migrations (a scratch login in the reference, the project's ``postgres`` in
@@ -28,11 +29,13 @@ Each difference is classified:
   the seals off for every API session); any role but the bootstrap superuser and the owner able to
   act as one of the app's roles (holding the owner, a migration role or an API role) or to reach
   every table (holding a predefined role that reads or writes every table or the server's files,
-  or being a superuser); a parameter grant to an API role or a migration role; any role whose name
-  is not a plain lowercase identifier (names are read back from text here, so one that could be
-  misread fails instead). Any app difference fails the proof, whoever made it: one the platform
-  made is reported to the owner by name and stays app unless the owner rules it an exact
-  exception (accepted, below).
+  or being a superuser); a parameter grant to an API role or a migration role; a parameter grant of
+  ALTER SYSTEM to any role (once the server reloads, it sets the value for every session, the
+  app's included; only the owner's exact exception accepts one); a setting for every role (PUBLIC);
+  any role whose name is not a plain lowercase identifier (names are read back from text here, so
+  one that could be misread fails instead). Any app difference fails the proof, whoever made it:
+  one the platform made is reported to the owner by name and stays app unless the owner rules it
+  an exact exception (accepted, below).
 - **operational**: exactly the documented owner credential steps, LOGIN on ucpe_space_db
   (docs/runbooks/SPACE_DB_CUTOVER.md) and on ucpe_resolver (docs/runbooks/RESOLVER_CUTOVER.md).
   Reported, not failing.
@@ -41,8 +44,8 @@ Each difference is classified:
   reaches app rows only through the paths above, and replication is the platform's machinery),
   their memberships among themselves and in the other predefined roles, and their settings; an API
   role's timeouts and its other attributes; the owner's attributes, settings, memberships and
-  parameter grants (the owner already owns every app object); the default privileges of any other
-  role; other parameter grants. Reported, not failing.
+  SET parameter grants (the owner already owns every app object); the default privileges of any
+  other role; other SET parameter grants. Reported, not failing.
 - **accepted**: an app difference that is exactly one of the owner's managed-platform exceptions
   (PLATFORM_EXCEPTIONS, owner rulings DP-D-FINDINGS and DP-D-STORAGE-SETTINGS): at its path,
   production holds exactly the reference's items and the ruled ones. Reported by name, not failing;
@@ -442,15 +445,16 @@ def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
             "WHERE rolname !~ '^pg_'",
         )
     }
+    # Role 0 is every role: ALTER ROLE ALL SET, or a database's own setting, read as PUBLIC's.
     cluster_settings = {
-        f"{named(name)} in {_database_scope(database, current)}": sorted(map(_setting, config))
-        for name, database, current, config in _rows(
+        f"{role(setrole)} in {_database_scope(database, current)}": sorted(map(_setting, config))
+        for setrole, database, current, config in _rows(
             conn,
             """
-            SELECT r.rolname, s.setdatabase,
+            SELECT s.setrole, s.setdatabase,
                    s.setdatabase = (SELECT oid FROM pg_database WHERE datname = current_database()),
                    s.setconfig
-            FROM pg_db_role_setting s JOIN pg_roles r ON r.oid = s.setrole
+            FROM pg_db_role_setting s
             """,
         )
     }
@@ -465,11 +469,21 @@ def fingerprint(conn: Any, *, owner: str) -> dict[str, Any]:
             """,
         )
     )
+    # A parameter's ACL, once any grant on it exists, also holds its default (acldefault): SET and
+    # ALTER SYSTEM for the bootstrap superuser (oid 10), who owns every parameter. That default is
+    # no grant (pg_dumpall writes none, and a restore writes it again), so only grants beyond it are
+    # compared.
     parameter_acl = acl(
         _rows(
             conn,
-            "SELECT p.parname, a.grantor, a.grantee, a.privilege_type, a.is_grantable "
-            "FROM pg_parameter_acl p, aclexplode(p.paracl) a",
+            """
+            SELECT p.parname, a.grantor, a.grantee, a.privilege_type, a.is_grantable
+            FROM pg_parameter_acl p, aclexplode(p.paracl) a
+            WHERE (a.grantor, a.grantee, a.privilege_type, a.is_grantable) NOT IN (
+                SELECT d.grantor, d.grantee, d.privilege_type, d.is_grantable
+                FROM aclexplode(acldefault('p', 10::oid)) d
+            )
+            """,
         )
     )
 
@@ -882,9 +896,12 @@ def _classify(difference: Difference, roles: _Roles) -> Difference:
     if section == "parameter_acl":
         changed = set(difference.reference or []) ^ set(difference.restored or [])
         grantees = {item.split(":", 1)[0] for item in changed}
-        # PUBLIC is every role, the app's included, so a grant to it is an app difference.
+        # PUBLIC is every role, the app's included, so a grant to it is an app difference. So is
+        # any grant of ALTER SYSTEM, whoever holds it: once the server reloads, the value it sets
+        # holds for every session, the app's included (only an exact owner exception accepts one).
         sensitive = roles.migration | roles.api | {PUBLIC}
-        return difference if grantees & sensitive else as_("platform")
+        system = any(_parameter_privilege(item) == "ALTER SYSTEM" for item in changed)
+        return difference if system or grantees & sensitive else as_("platform")
     return difference
 
 
@@ -896,6 +913,12 @@ def _became_superuser(difference: Difference, attribute: str | None) -> bool:
         and isinstance(difference.restored, dict)
         and difference.restored.get("rolsuper") is True
     )
+
+
+def _parameter_privilege(item: str) -> str:
+    """A parameter grant's privilege, SET or ALTER SYSTEM, without its grant option mark."""
+
+    return item.split(":", 1)[-1].split(" by ", 1)[0].rstrip("*")
 
 
 def _membership(item: str) -> tuple[str, str]:
