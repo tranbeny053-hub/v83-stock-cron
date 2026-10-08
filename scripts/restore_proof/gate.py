@@ -8,10 +8,15 @@ are what the export card's two commands make (docs/runbooks/RESTORE_PROOF_EXPORT
   kind pg_dump writes for schema DDL, so no row (and no probability from the section-5A window)
   can ever be loaded. The scan stops at the first data marker and never reads past it. The kinds
   are judged by their leading words, and a SET by its whole line; the owner's digests pin the
-  bytes themselves.
+  bytes themselves. An ALTER ROLE, USER, GROUP or DATABASE is refused too: pg_dump writes none,
+  and one could set what the proof cannot compare (owner ruling HARDENING=GO, 2026-10-08).
 - roles.sql, from ``pg_dumpall --roles-only --no-role-passwords`` (pg_dumpall 17, which writes no
   version line, so only schema.sql's major is checked). Any password clause or password hash is
-  refused at its first sight, and its value is never printed.
+  refused at its first sight, and its value is never printed. So is an ALTER ROLE in any form but
+  the two pg_dumpall writes (``ALTER ROLE r WITH …`` and ``ALTER ROLE r SET …``), one for every
+  role (ALTER ROLE ALL) or for one database only (IN DATABASE) among them: --roles-only never
+  writes those, and the proof could not compare what they set (owner ruling HARDENING=GO,
+  2026-10-08).
 In both, the only psql meta-commands allowed are the ``\\restrict`` and ``\\unrestrict`` pair that
 pg_dump 17.6 writes, with one key, first and last: any other (``\\!`` runs a shell command) could
 act outside the scratch server, and ``\\restrict`` keeps psql from running any meta-command between
@@ -87,6 +92,9 @@ _SCHEMA_STATEMENTS = frozenset(
     {"SET", "RESET", "CREATE", "ALTER", "COMMENT", "GRANT", "REVOKE", "SECURITY"}
 )
 _SEARCH_PATH = ("SELECT", "PG_CATALOG", "SET_CONFIG")
+# What pg_dump --schema-only never writes among its ALTERs: a role's or a database's (its settings
+# could reach every session, and the proof could not compare them).
+_ROLE_OR_DATABASE = frozenset({("ROLE",), ("USER",), ("GROUP",), ("DATABASE",)})
 # pg_dumpall's roles: CREATE/ALTER ROLE, GRANT (memberships), COMMENT ON ROLE, SECURITY LABEL.
 _ROLE_STATEMENTS = frozenset({"SET", "CREATE", "ALTER", "GRANT", "COMMENT", "SECURITY"})
 
@@ -166,6 +174,9 @@ def check_schema_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]
             continue
         if lead[:3] == _SEARCH_PATH and lines[line - 1] == _SEARCH_PATH_LINE:
             continue
+        if lead[:1] == ("ALTER",) and lead[1:2] in _ROLE_OR_DATABASE:
+            refusals.append(Refusal(name, line, f"STATEMENT_ALTER_{lead[1]}"))
+            continue
         if lead and lead[0] in _SCHEMA_STATEMENTS:
             continue
         refusals.append(Refusal(name, line, f"STATEMENT_{_kind(lead)}"))
@@ -207,7 +218,27 @@ def check_roles_dump(name: str, raw: bytes) -> tuple[ExportFile, list[Refusal]]:
             refusals.append(Refusal(name, line, f"STATEMENT_COMMENT_{_kind(lead[2:])}"))
         elif lead[0] == "SECURITY" and lead[1:2] != ("LABEL",):
             refusals.append(Refusal(name, line, "STATEMENT_SECURITY"))
+        elif lead[:2] == ("ALTER", "ROLE") and (kind := _not_written_by_roles_only(lead)):
+            refusals.append(Refusal(name, line, kind))
     return described, refusals
+
+
+def _not_written_by_roles_only(lead: tuple[str, ...]) -> str | None:
+    """The refusal for an ALTER ROLE that pg_dumpall --roles-only never writes. It writes two forms
+    only, ``ALTER ROLE r WITH …`` and ``ALTER ROLE r SET …``; anything else is refused, the two the
+    proof could not compare named: one for every role (ALTER ROLE ALL) and one for one database
+    only (IN DATABASE). A quoted role name is no lead word (the scan skips it), so WITH, SET or IN
+    DATABASE comes first or second after ALTER ROLE, and a role named "all" (which pg_dumpall
+    quotes) is never read as ALL. A name of two words (U&"…" UESCAPE '…') is another form."""
+
+    rest = lead[2:]
+    if rest[:1] == ("ALL",):
+        return "STATEMENT_ALTER_ROLE_ALL"
+    if ("IN", "DATABASE") in {rest[:2], rest[1:3]}:
+        return "STATEMENT_ALTER_ROLE_IN_DATABASE"
+    if not {"WITH", "SET"} & set(rest[:2]):
+        return "STATEMENT_ALTER_ROLE_FORM"
+    return None
 
 
 def scan(
