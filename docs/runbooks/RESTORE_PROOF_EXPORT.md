@@ -86,9 +86,9 @@ python scripts/restore_proof/prove.py --pg-bin <PostgreSQL 17.6 bin> --export ~/
    shown. The report reproduces structure text (defaults, comments, function lines), so it stays
    out of this repository and out of chat: Claude reports the verdict and the counts.
 
-`RESTORE_PROOF=PASS` means the structure restores into PostgreSQL 17.6, equals what the
-migrations declare, and opens no privilege path into the app that they do not declare. Three kinds
-of difference are reported without failing:
+`RESTORE_PROOF=PASS` means the structure restores into PostgreSQL 17.6, equals what the migrations
+declare, and opens no privilege path into the app that they do not declare, other than the
+exceptions you ruled (accepted, below). Three kinds of difference are reported without failing:
 - **operational**: the documented credential steps, LOGIN on `ucpe_space_db`
   (`SPACE_DB_CUTOVER.md`) and on `ucpe_resolver` (`RESOLVER_CUTOVER.md`);
 - **platform**: Supabase's own: its other roles with their own attributes (row-security bypass and
@@ -104,15 +104,16 @@ of difference are reported without failing:
   `scripts/restore_proof/catalog.py` `PLATFORM_EXCEPTIONS` cites Supabase's source for each):
   `postgres`'s own default privileges in `public` and its USAGE on `public`; `authenticator`'s three
   settings, by name and value digest; `supabase_storage_admin`'s membership in `authenticator`; the
-  memberships of `supabase_etl_admin` and `supabase_read_only_user` in `pg_read_all_data`, each
-  with its exact options; and `supabase_storage_admin`'s two settings (`log_statement`,
-  `search_path`) in all databases, by name and value digest. Each is listed by name in the report.
-  Anything else at those places, or near them (another option, role, setting, value, database or
-  grant), is still a finding. So is any path through them: a role holding one of those three
-  roles; and, since its accepted membership lets `supabase_storage_admin` act as an API role, a
-  role it gains, any setting on it but a timeout or its two ruled ones, and a parameter grant to it.
-  A setting for one database only is not exported at all (see What this does not prove), so the
-  proof cannot see one.
+  memberships of `supabase_etl_admin` and `supabase_read_only_user` in `pg_read_all_data`, each with
+  its exact options; and `supabase_storage_admin`'s two settings (`log_statement`, `search_path`) in
+  all databases, by name and value digest. Each is listed by name in the report. Anything else at
+  those places, or near them (another option, setting, value, database or grant, or the same on an
+  API, app or API-acting role), is still a finding; the same settings on another of Supabase's own
+  roles stay the platform's, as they always were. So is any path through them: a role holding one of
+  those three roles; and, since its accepted membership lets `supabase_storage_admin` act as an API
+  role, a role it gains, any setting on it but timeouts alone or exactly its two ruled ones, and a
+  parameter grant to it. A setting for one database only is not exported at all (see What this does
+  not prove), so the proof cannot see one.
 
 **Trust note (C3).** Supabase's Access Control docs say the SQL snippets a Read-Only project member
 runs are run as `supabase_read_only_user`, which has `pg_read_all_data`. So assigning anyone
