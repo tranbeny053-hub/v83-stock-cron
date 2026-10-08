@@ -1,21 +1,52 @@
 # STATE
 
-Updated: 2026-10-07 (**DP-D's GATE REPAIR IS PUBLISHED. ITS PROOF ON THE OWNER'S EXPORT IS FAIL: EIGHT PRIVILEGE-PATH
-FINDINGS, NONE RESOLVED. THE STRUCTURE ITSELF MATCHES THE MIGRATIONS.**
-- First run (tooling at main d4af6e68): REFUSED_EXPORT at roles.sql line 83 (ESCAPE_STRING); nothing restored.
-- The owner's one bounded exception (DP-D-ESCAPE=A): the gate lexes exactly the escape strings pg_dumpall writes.
-  - The fresh exact-final review passed.
-  - Published under the owner's T3 as #239 → main 3446265e: a merge commit on the exact head 7341c9d, with 5/5
-    checks green, including the PostgreSQL 17.6 rehearsal (50/50 plus the escape-string differential).
+Updated: 2026-10-08 (**DP-D IS CLOSED. THE RESTORE PROOF ON THE OWNER'S EXPORT IS PASS: EXACTLY THE NINE
+MANAGED-PLATFORM DIFFERENCES THE OWNER RULED ARE ACCEPTED, AND THERE IS NO APP FINDING. THE TOOLING IS PUBLISHED.**
+- The owner made two rulings, both verbatim below:
+  - DP-D-FINDINGS: the first eight findings are exact exceptions.
+  - DP-D-STORAGE-SETTINGS: a ninth, Storage's role's two settings, which run 3 found.
+- #241 → main fe01c980: a merge commit on the exact reviewed head 4735110.
+  - 5/5 checks green: test (6746), the PostgreSQL 17.6 rehearsal (59/59 plus escape_strings),
+    compare, build-a and build-b.
   - Main's push CI and reproducible build are green.
-- Second run, the exact files and digests: RESTORE_PROOF=FAIL refusals=0 restore_errors=2 (expected) app=8
-  operational=2 platform=41. 20 relations, 44 policies, 14 triggers and 6 functions compare equal.
-- DP-D-FINDINGS=A: the owner's security note on the eight findings is complete and private. The owner's ruling is
-  pending (OWNER_BOUNDARY: DP-D-FINDINGS).
-- Nothing was changed: no production privilege, migration or classification; no production contact; no new export.
-- Correction in place: #238 published the record that called itself LOCAL (d4af6e68).
-- This record is the batch's last publish. Before it: #238.)
+- Run 4 (tooling 4735110, the same files and digests): RESTORE_PROOF=PASS refusals=0 restore_errors=2 (expected)
+  app=0 operational=2 platform=40 accepted=9.
+  - The accepted paths are exactly the nine authorized ones.
+  - 20 relations, 44 policies, 14 triggers and 6 functions compare equal.
+- What PASS does not prove (runbook, kept explicit): the data; an independent copy; every schema but public;
+  ALTER ROLE ALL SET; settings for one database only; the database's own settings.
+- Trust notes:
+  - Supabase Read-Only project access gives broad read access to the database (C3, owner).
+  - Statements run by Storage's role are not written to the statement log (log_statement=none).
+- Nothing changed in production or the migrations; there was no new export and no production contact.
+- This record is the batch's last publish. Before it: #241. It is rebuilt from main and carries the history of the
+  local record 4c27ff2, which is not published verbatim.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-08), verbatim — DP-D-STORAGE-SETTINGS=A, and the T3 for the closure batch:**
+```text
+DP-D-STORAGE-SETTINGS=A. Accept exactly supabase_storage_admin's two observed settings, log_statement and search_path, by exact setting name + observed digest, all databases, as the ninth managed-platform exception. No other setting, value, role, database-specific setting or future change inherits acceptance.
+Fix only Review 3's inaccurate catalog.py comment if that is documentation-only and does not alter the security model. Keep the public-schema scope and ALTER ROLE ALL limitation explicitly documented; do not silently expand recovery scope or claim those are proven.
+Implement near-miss/adversarial tests proving any different digest, extra setting, different role, IN DATABASE variant, privilege-bearing setting or broader exception still FAILS. Run mutation tests where applicable, PG17.6+ rehearsal, full verify, then one fresh separate-context exact-final review.
+If review passes, rerun RESTORE_PROOF on the SAME immutable export files and SAME digests. No re-export and no production mutation. PASS is allowed only if accepted=9, app=0, the nine accepted paths are exactly the owner-authorized ones, structure remains identical, and there is no new security finding. Any new app finding stops at owner/security boundary.
+T3 AUTHORIZE the bounded closure batch if and only if that proof PASSes: publish the exact reviewed DP-D platform-exception head, verify exact diff + all CI, merge-commit only if green; then rebuild/refresh STATE from resulting main and publish STATE LAST. Do not publish the stale local STATE head verbatim after main moves.
+After DP-D closure, continue automatically through every genuinely dependency-safe reversible T0/T1/T2 Phase-7/8 action still available. Max 2 proven-independent lanes; shared recovery/security surfaces serial. Do not invent busywork.
+For the pre-existing review notes after closure: you may locally assess the ALTER ROLE ALL / ALTER SYSTEM-grant coverage gaps and prepare a bounded hardening design/tests if it requires no production read, scope expansion or new owner ruling; do not claim them proven and do not broaden beyond public-schema recovery scope. If safe implementation itself changes the just-closed proof contract, HOLD it for a separate reviewed lane instead of contaminating this closure.
+Keep Lane P local; preserve H2 hold, F3 KEEP_UNSPENT, Phase-4 INFEASIBLE and evidence-origin semantics. No deploy, DB mutation, secret operation, §5A access or accepted-claim activation.
+Do not return after implementation, review PASS, proof PASS, PR open, first merge or STATE preparation merely to report progress. Return only when the whole closure/publication batch and all remaining safe work are exhausted, or at one genuine red-CI/security/product/T4 boundary.
+```
+- **The owner (2026-10-07), verbatim — DP-D-FINDINGS ruled, and the T3 for the closure batch:**
+```text
+DP-D-FINDINGS owner ruling: A=ACCEPT-AS-PLATFORM, B=ACCEPT-AS-PLATFORM, C1=ACCEPT-AS-PLATFORM, C2=ACCEPT-AS-PLATFORM, C3=ACCEPT-AS-PLATFORM.
+These are exact managed-platform exceptions only, not blanket privilege allowances. Pin A to the exact observed owner-self/default/public grants; B to the exact observed setting names + digests; C1 to the exact supabase_storage_admin→authenticator edge; C2 to the exact supabase_etl_admin→pg_read_all_data edge; C3 to the exact supabase_read_only_user→pg_read_all_data edge. No future role, membership, setting, grant or value inherits acceptance automatically.
+C3 rationale update: current Supabase Access Control documentation explicitly states that Dashboard Read-Only SQL snippets execute as supabase_read_only_user and that this role has pg_read_all_data. Record the operational trust implication: assigning Supabase Read-Only project access grants broad database read capability; this is a platform/admin-plane trust boundary, not UCPE application intent.
+Do NOT FIX production and do NOT DECLARE these platform grants in UCPE migrations. Do not weaken the classifier generally. Implement only the minimum governed exact platform-model entries needed for these eight findings, with source/provenance comments and tests proving near-miss roles/settings/memberships still FAIL.
+Then run sibling/adversarial tests, mutation tests where applicable, PostgreSQL 17.6+ rehearsal, full ./verify.sh and a fresh separate-context exact-final review. If review finds a material widening or any accepted path broader than the owner's exact ruling, repair within the normal bound; if the same security class recurs beyond that bound, STOP.
+If review passes, rerun RESTORE_PROOF on the SAME immutable export files and SAME digests. No re-export and no production mutation.
+Acceptance: only if the eight ruled platform differences are classified exactly as authorized and there are no other app findings may DP-D structure proof become PASS. Any new app privilege finding remains FAIL and is a new owner/security boundary. Operational/platform notes do not erase genuine app findings.
+T3 AUTHORIZE one bounded DP-D closure publication batch after exact-final review + proof PASS: publish only the reviewed platform-model/tooling change, exact diff + required CI, merge-commit only if green; then refresh STATE onto resulting main and publish STATE LAST. Stop on unexpected files, SHA/diff drift, red CI, new proof finding, or broader exception.
+While CI/review runs, exhaust any genuinely independent safe T0/T1/T2 work, max 2 proven-independent lanes. Do not invent busywork. Keep Lane P local, H2 hold, F3 KEEP_UNSPENT, Phase-4 INFEASIBLE and evidence-origin semantics unchanged. No deploy, DB mutation, secret operation, §5A access or accepted-claim activation.
+Do not return after implementation, review PASS, proof PASS, PR open or first merge merely to report progress. Return only when this entire bounded closure batch is finished and all safe work is exhausted, or at one genuine red-CI/security/product/T4 boundary.
+```
 - **The owner (2026-10-07), verbatim — DP-D-FINDINGS=A and the T3 for the gate repair:**
 ```text
 DP-D-FINDINGS=A. Also T3 AUTHORIZE publication of the reviewed gate repair fix/p8d-escape-strings@7341c9d. Publish that exact reviewed head first, verify exact diff + all required CI, merge by merge commit only if green. Do NOT publish the stale STATE head 5ddaa78 verbatim after main moves; carry its history forward, refresh STATE onto resulting main, and publish STATE LAST.
@@ -2333,7 +2364,82 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=AT THE OWNER (2026-10-07): DP-D's gate repair is published; the proof on the owner's export is FAIL with
+LOOP_STATE=DP-D CLOSED (2026-10-08), under the owner's T3. The nine exact platform exceptions are published and the
+  proof on the owner's export is PASS. No production query, deploy, DB mutation, secret action, F3/§5A access, new
+  export or T4 happened; no export content was read or shown.
+  - DP-D-STORAGE-SETTINGS=A (verbatim above):
+    - The ninth exception is exactly supabase_storage_admin's two observed settings, by name and digest, in all
+      databases.
+    - Only review 3's comment was to be fixed, and the documented limits kept.
+  - 4735110 on fix/p8d-platform-exceptions:
+    - catalog D is pinned to the exact run-3 digests: sha256 of none and of storage.
+    - The comment fix is documentation only.
+    - The runbook lists the nine and keeps the limits.
+    - Tests: 11 near misses, and a property test that nothing failing without the exceptions passes with them, except
+      an exactly ruled difference.
+    - Mutation 16/16. Rehearsal 59/59: Supabase's own statements give accepted=9 and app=0. VERIFY=PASS 6746.
+  - Review 4 (fresh, exact-final): PASS.
+    - 60,000 fuzzed productions showed no loosening.
+    - The comment change leaves the AST identical.
+    - Four wording NOTEs, none about behavior; they are listed in OWNER_BOUNDARY.
+  - Run 4 (a clean checkout of 4735110, the same files and digests, 2026-10-08T02:21Z):
+    - Result: RESTORE_PROOF=PASS refusals=0 restore_errors=2 (both expected) app=0 operational=2 platform=40
+      accepted=9.
+    - The accepted paths are exactly the nine authorized ones, and the structure is equal.
+    - Operational is the documented LOGIN on ucpe_resolver and ucpe_space_db. There are no unsafe role names.
+  - Published under the T3 as #241, on the exact head 4735110.
+    - The PR diff equals the reviewed diff, and the trees are equal (1bef466d).
+    - 5/5 checks green: test (6746), the PostgreSQL 17.6 rehearsal (59/59 plus escape_strings),
+      compare, build-a and build-b.
+    - Merged by merge commit fe01c980.
+    - Main's push CI 37717995013 and reproducible build 37717995024 succeeded.
+  - This record is rebuilt from main fe01c980 and carries 4c27ff2's history.
+  - Evidence (private, never committed):
+    - ~/ucpe-restore-proof/2026-10-07: run3-platform-exceptions-15670be, run4-nine-exceptions-4735110, and the
+      note's addenda;
+    - .work/p7/LANE_RECORD.md.
+  Before it: AT THE OWNER (2026-10-08): DP-D-FINDINGS is implemented locally and reviewed. The proof accepts exactly
+  the eight and finds one new app finding, so the closure batch stopped before any publication. No production query,
+  deploy, DB mutation, secret action, F3/§5A access, new export or T4 happened; no export content was read or shown.
+  - The owner's ruling (verbatim above): A, B, C1, C2 and C3 are ACCEPT-AS-PLATFORM, as exact exceptions only. Do
+    not fix production, do not declare in the migrations, do not weaken the classifier. The T3 covers one closure
+    batch after review PASS and proof PASS. It stops on a new proof finding.
+  - fix/p8d-platform-exceptions (local; worktree scratchpad/wtX of session ba4955d3), on main 6208071e:
+    - 0ba7748: catalog.PLATFORM_EXCEPTIONS, eight entries citing Supabase's source.
+      - Each pins one path and exactly what production adds there, each item once and nothing removed.
+      - "accepted" relabels only an app difference.
+      - prove.py counts it and prints it. The runbook records it, with the C3 trust note.
+      - Tests: a pin, exact acceptance, 33 near misses. Mutation 14/14.
+    - Review 1 (fresh): one MATERIAL widening. The comparison looks one membership deep, so holders of the three
+      ruled members, and a seal-off setting or parameter grant on Storage's role, passed as platform.
+    - 2ed230f: catalog.exception_reach, applied only where production holds the ruled edge.
+    - Review 2 (fresh): the same class again. Storage's role gaining a role that may SET session_replication_role
+      passed. Crafted role names (pre-existing parsing) could hide a holder.
+    - 15670be, the consolidated second repair, which is the bound:
+      - A member that a ruled membership lets act as an API role IS one, under every API rule.
+      - Holders of the reader members are app.
+      - fingerprint() records every role name that is not a plain lowercase identifier, and that is app.
+      - Mutation 8/8 for each repair. The prove.py wiring and the fingerprint record are killed by the rehearsal.
+    - Review 3 (fresh): PASS. Both findings are closed; about 170 probes found no same-class path. It left three
+      NOTEs (OWNER_BOUNDARY).
+    - VERIFY=PASS 6691 on 15670be. The PostgreSQL 17.11 rehearsal is 58/58 plus escape strings:
+      - Supabase's own statements PASS with exactly the eight accepted;
+      - near misses, reach paths and a misreadable name FAIL.
+  - Run 3 (a clean checkout of 15670be; the same files and digests; 2026-10-08T00:22Z):
+    - Result: RESTORE_PROOF=FAIL refusals=0 restore_errors=2 (both expected) app=1 operational=2 platform=40
+      accepted=8.
+    - The accepted paths are exactly the ruled eight. 20 relations, 44 policies, 14 triggers and 6 functions compare
+      equal, with no function text difference.
+    - The app finding: cluster/settings/supabase_storage_admin in all databases.
+      - log_statement and search_path; their digests equal sha256("none") and sha256("storage").
+      - Supabase source, github.com/supabase/postgres (develop):
+        - init-scripts/00000000000002-storage-schema.sql line 6 (search_path);
+        - migrations/20250205060043_disable_log_statement_on_internal_roles.sql line 4 (commit 93e983ca).
+      - Neither grants a privilege. search_path cannot redirect a UCPE seal or RPC: three trigger functions do not
+        pin it, but they reference no relation and call no user function; the other three pin it.
+  - Evidence (private, never committed): ~/ucpe-restore-proof/2026-10-07 (run3-platform-exceptions-15670be, the
+    note's addenda 1 and 2) and .work/p7/LANE_RECORD.md.
+  Before it: AT THE OWNER (2026-10-07): DP-D's gate repair is published; the proof on the owner's export is FAIL with
   eight privilege-path findings, unresolved; the owner's security note is complete. No production query, deploy, DB
   mutation, secret action, F3/§5A access, new export or T4 happened; no export content was read or shown.
   - #238 (STATE) merged by merge commit d4af6e68 on the exact head 8a72e2c; main's push CI and reproducible build
@@ -4178,7 +4284,16 @@ LOOP_STATE=AT THE OWNER (2026-10-07): DP-D's gate repair is published; the proof
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-07):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-08):
+  - Lane R (#232, #236) and DP-D (#234, #239, #241) are published.
+  - DP-D's structure-first restore proof on the owner's export is PASS, with the owner's nine exact exceptions.
+  - Lane P, with the ruling, its acceptance blockers and the §23 card, is prepared and verified locally.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-08):
+  - Lane R (#232, #236), DP-D's tooling (#234) and its escape-string repair (#239) are published.
+  - DP-D-FINDINGS is ruled; its exact exceptions are implemented and reviewed locally. The proof accepts exactly the
+    eight and is FAIL on one new finding awaiting the owner (DP-D-STORAGE-SETTINGS). The structure is equal.
+  - Lane P, with the ruling, its acceptance blockers and the §23 card, is prepared and verified locally.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-07):
   - Lane R (#232, #236), DP-D's tooling (#234) and its escape-string repair (#239) are published.
   - DP-D's structure proof on the owner's export is FAIL on eight privilege paths awaiting the owner's ruling; the
     structure itself is equal.
@@ -4371,7 +4486,16 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-07):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-dpd-findings-note (this record, on main 3446265e). Local and unpublished:
+CURRENT_BRANCH=chore/state-dpd-closure (this record, on main fe01c980). Local and unpublished:
+  - feat/p7p-decisionview-ux1-degraded @ 8e26cac (worktree scratchpad/wtP of session ba4955d3);
+  - feat/p7p-ux-comprehension @ 1d9634d, on Lane P (scratchpad/wtU).
+  chore/state-dpd-storage-settings @ 4c27ff2 is superseded by this record and is not to be published.
+  Before it: chore/state-dpd-storage-settings (this record, LOCAL, on main 6208071e). Local and unpublished:
+  - fix/p8d-platform-exceptions @ 15670be, reviewed PASS with VERIFY PASS (worktree scratchpad/wtX; a clean checkout
+    at scratchpad/rp3 ran the proof);
+  - feat/p7p-decisionview-ux1-degraded @ 8e26cac (worktree scratchpad/wtP of session ba4955d3);
+  - feat/p7p-ux-comprehension @ 1d9634d, on Lane P (scratchpad/wtU).
+  Before it: chore/state-dpd-findings-note (this record, on main 3446265e). Local and unpublished:
   - feat/p7p-decisionview-ux1-degraded @ 8e26cac (worktree scratchpad/wtP of session ba4955d3);
   - feat/p7p-ux-comprehension @ 1d9634d, on Lane P (scratchpad/wtU).
   chore/state-dpd-proof-outcome @ 5ddaa78 is superseded by this record and is not to be published.
@@ -4526,7 +4650,11 @@ CURRENT_BRANCH=chore/state-dpd-findings-note (this record, on main 3446265e). Lo
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=3446265e (main, #239: DP-D's escape-string repair; its 5 PR checks, push CI and reproducible build
+LAST_GREEN_SHA=fe01c980 (main, #241: DP-D's nine exact exceptions; its 5 PR checks, push CI
+  37717995013 and reproducible build 37717995024 green). Before it 6208071e (#240).
+  Before it: 6208071e (main, #240: the STATE record; push CI 37638716083 and reproducible build 37638716225
+  succeeded). Before it 3446265e (#239).
+  Before it: 3446265e (main, #239: DP-D's escape-string repair; its 5 PR checks, push CI and reproducible build
   green). Before it d4af6e68 (#238).
   Before it: fa582248 (main, #237: the STATE record; its 4 PR checks, push CI and reproducible build green). Before
   it 4a99fdd8 (#236).
@@ -4769,7 +4897,19 @@ LAST_GREEN_SHA=3446265e (main, #239: DP-D's escape-string repair; its 5 PR check
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-07, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-08, scanners 3/3 each:
+  - #241's checks on 4735110: test (6746), the PostgreSQL 17.6 rehearsal (59/59 plus escape_strings),
+    compare, build-a and build-b.
+  - Locally: 4735110 6746, 15670be 6691, 2ed230f 6678, 0ba7748 6664.
+  - The PostgreSQL 17.11 rehearsal: 59/59 plus escape_strings.
+  - Mutation: every mutant killed, across four rounds.
+  Proof run 4: PASS (above). That is a proof run, not a code verify.
+  Before it: PASS 2026-10-08, scanners 3/3 each:
+  - fix/p8d-platform-exceptions: 15670be 6691; 2ed230f 6678; 0ba7748 6664.
+  - The PostgreSQL 17.11 rehearsal: 58/58 plus escape_strings on 15670be (56/56 on 2ed230f, 54/54 on 0ba7748).
+  - Mutation: 14, 8 and 8 mutants, all killed (two by the rehearsal).
+  Proof run 3: FAIL (above). That is a proof run, not a code verify.
+  Before it: PASS 2026-10-07, scanners 3/3 each:
   - #239's checks on 7341c9d: test, the PostgreSQL 17.6 rehearsal (50/50 + escape_strings), compare, build-a, build-b.
   - Locally on 7341c9d: VERIFY 6627 and the 17.11 rehearsal 50/50.
   - Lane P @ 8e26cac: 6446.
@@ -4987,7 +5127,13 @@ LAST_VERIFY=PASS 2026-10-07, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-07). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+CODEX_PENDING=NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); four fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model:
+  claude-opus-5-5.
+  Before it: NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); three fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model:
+  claude-opus-5-5.
+  Before it: NONE (2026-10-07). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-07). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); no paid fallback; no GPT consultation. Model: claude-opus-5-5.
@@ -5107,7 +5253,53 @@ CODEX_PENDING=NONE (2026-10-07). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-07):
+OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-08), nothing urgent:
+  - Optional, no decision needed now: review 4's four wording NOTEs. Claude prepares them locally as one docs-only
+    follow-up; publishing it needs a T3.
+    - N1: "near them … is still a finding" holds for API, app and API-acting roles. Supabase's other roles' own
+      settings stay platform.
+    - N2 and N3: the ninth is accepted only as the exact two settings; a timeout alone is platform.
+    - N4: the runbook's first PASS sentence should say "other than the exceptions you ruled".
+  - Optional: a hardening lane for gaps that predate this work.
+    - ALTER ROLE ALL SET is never compared (the settings read inner-joins pg_roles), and the gate accepts it.
+    - An ALTER SYSTEM parameter grant to a platform role stays platform.
+    - Claude assesses it and prepares it locally, HELD because it changes the proof contract, for your ruling.
+  - Unchanged:
+    - Lane P publication, after the UOR qualification episode closes or on your explicit authorization, and its UX
+      check;
+    - the mandatory acceptance blockers;
+    - the writer JWT renewal by 2026-10-30;
+    - the A4C review-5 follow-ups (optional);
+    - the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed.
+    - Full-data custody (DP-D option 3) is a later ruling.
+  Before it: AHEAD, each the owner's (2026-10-08):
+  - DP-D-STORAGE-SETTINGS (security; ONE decision): Supabase's two settings on supabase_storage_admin (log_statement,
+    search_path). It is the proof's only app finding once the eight are accepted.
+    - A = ACCEPT-AS-PLATFORM, exact: a ninth exception pinned to exactly these two names and digests, in all
+      databases. Then a fresh exact-final review and a rerun on the same files (expected PASS: 9 accepted, 0 app).
+      Then the closure batch under a renewed T3: the change, then STATE last.
+    - B = HOLD: the proof stays FAIL, and nothing is published.
+    - Recommended: A (private note, addendum 2):
+      - Supabase's own scripts set both settings.
+      - Neither grants a privilege.
+      - search_path cannot redirect any UCPE seal or RPC.
+      - log_statement=none only turns statement logging off for Storage's sessions, including what they do as an
+        API role. That is a trust note, not reach.
+    - The T3 of 2026-10-07 stopped at this finding, as its terms require. Publishing needs it renewed.
+  - Optional, no decision needed now: review 3's NOTEs and review 2's P2. None is about the eight, and none is found
+    in production.
+    - A catalog.py comment says Storage's role is an API role "under every API role rule". A role new to production
+      has its attributes compared whole, and none rides on C1. To be reworded in the next change.
+    - The export covers public only. A reader-owned view or definer function in another schema could re-expose its
+      read-all, and the proof cannot see it. A runbook line, in the next change.
+    - Pre-existing gaps, a different class: ALTER ROLE ALL SET is never compared (the settings read inner-joins
+      pg_roles), and the gate accepts it. An ALTER SYSTEM parameter grant to a platform role stays platform. A
+      separate hardening lane if you want one.
+  - Unchanged: Lane P publication (after the UOR qualification episode closes or on your explicit authorization) and
+    its UX check; the mandatory acceptance blockers; the writer JWT renewal by 2026-10-30; the A4C review-5
+    follow-ups (optional); the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE, D4 consumed. Full-data custody (DP-D
+    option 3) is a later ruling.
+  Before it: AHEAD, each the owner's (2026-10-07):
   - DP-D-FINDINGS (security; ONE decision covering the eight findings): rule per finding (or group) among
     ACCEPT-AS-PLATFORM, DECLARE-IN-MIGRATIONS, FIX-PRODUCTION and HOLD, on the private note's evidence and
     recommendations.
@@ -5837,7 +6029,15 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-07):
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: DP-D-FINDINGS, at your pace. Claude: passive reads only until then.
+NEXT_ACTION=The owner: the items above, at your pace. Claude: the docs follow-up and the hardening assessment, both
+  locally (the hardening HELD); then passive reads only.
+  Before it: The owner: DP-D-STORAGE-SETTINGS (A or B); on A, the renewed T3 for the closure batch. Claude on A:
+  - the ninth exact exception, with review 3's two wording notes;
+  - tests, rehearsal, VERIFY and a fresh exact-final review;
+  - the rerun on the same files (PASS only with 9 accepted and 0 app);
+  - then the batch under the T3.
+  Otherwise passive reads only.
+  Before it: The owner: DP-D-FINDINGS, at your pace. Claude: passive reads only until then.
   Before it: The owner: the items above at your pace. Claude: passive reads only until then.
   Before it: The owner: RULING-RESIDUALS (A or B), then the items above at your pace. Claude: passive reads only until
   then.
