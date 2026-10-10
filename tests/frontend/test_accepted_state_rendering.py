@@ -501,8 +501,10 @@ def run(cases: dict[str, dict]) -> dict[str, Any]:
             _RENDER,
         ]
     )
+    # The script holds the whole of app.js and every case: more than Linux takes in one argument
+    # (conftest.py). Node reads it on stdin.
     done = subprocess.run(  # noqa: S603 - node on a script built here
-        [NODE, "-e", script], capture_output=True, text=True, check=True, timeout=60
+        [NODE, "-"], input=script, capture_output=True, encoding="utf-8", check=True, timeout=60
     )
     return json.loads(done.stdout)
 
