@@ -52,7 +52,8 @@ ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
 # accepted). Neither registry may hold an entry while any blocker remains, so no forecast-quality
 # claim or directional permission can become reachable; tests/detail/test_decision_view.py
 # enforces it. A blocker leaves this tuple only in the change that resolves it, under the owner's
-# authorization.
+# authorization. BACKEND_COPY (composition review, 2026-10-10) makes the registries' note above a
+# blocker of its own: it was stated there and in STATE.md, and nothing enforced it.
 ACCEPTANCE_BLOCKERS: tuple[str, ...] = (
     "BANNER: frontend/index.html's static banner calls every timeframe an uncalibrated heuristic, "
     "not a validated forecast; its wording under an accepted claim is the owner's decision.",
@@ -60,6 +61,10 @@ ACCEPTANCE_BLOCKERS: tuple[str, ...] = (
     "contradicts an accepted claim once the backend reports measured reliability.",
     "RENDER_TEST: tests/frontend/test_accepted_state_rendering.py does not pin today's whole "
     "render, compare permission renders, or catch advisory wording on permission surfaces.",
+    "BACKEND_COPY: src/crypto_probability_engine/api/calibration_endpoint.py's item warning, the "
+    "live calibration state and the brief, synthesis and scenario-plan copy still describe an "
+    "unaccepted early diagnostic, and a run reopened from history carries no view; the backend's "
+    "own data and copy must agree with an acceptance in the same change.",
 )
 
 STATE_COPY = {

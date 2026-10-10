@@ -198,10 +198,12 @@ def test_nothing_is_accepted_today() -> None:
 def test_no_claim_is_reachable_while_an_acceptance_blocker_remains() -> None:
     """Owner ruling RULING-RESIDUALS=A (2026-10-07): the accepted-state ruling's three residuals
     are DEFERRED, not accepted. They are mandatory blockers: neither registry may hold an entry
-    while any remains, and a blocker leaves only in the change that resolves it."""
+    while any remains, and a blocker leaves only in the change that resolves it. BACKEND_COPY
+    (composition review, 2026-10-10) stands beside them: the backend's own data and copy must
+    agree with an acceptance too."""
 
     names = [blocker.split(":", 1)[0] for blocker in decision_view.ACCEPTANCE_BLOCKERS]
-    assert names == ["BANNER", "RELIABILITY_LABEL", "RENDER_TEST"]
+    assert names == ["BANNER", "RELIABILITY_LABEL", "RENDER_TEST", "BACKEND_COPY"]
     if decision_view.ACCEPTANCE_BLOCKERS:
         assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
         assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
