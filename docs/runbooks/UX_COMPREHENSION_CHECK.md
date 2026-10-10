@@ -171,5 +171,7 @@ The percentages carry an accepted forecast-quality claim for this model and time
     - the data-source line
   - The detail panel adds its own sections.
 - Question 4 reads the Storage row, which says when an analysis will not be kept. "Storage
-  available" is read before the analysis is saved: the product shows no per-analysis save
-  receipt (plan §14.2 item 4, left as recorded in Lane P's review 1).
+  available" is read before the analysis is saved. After an analysis is shown, the screen
+  asks the backend for that analysis's save receipt and, when the backend gives one, shows
+  its state in the Storage row. This card prints the row as it reads before that (plan §14.2
+  item 4).

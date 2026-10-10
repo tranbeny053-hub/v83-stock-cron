@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# The header badge is storage's status when it was last asked (owner ruling "relabel",
+# PROVISIONAL wording): a save receipt can say otherwise for one analysis.
+BADGE_PREFIX = "Storage, last checked: "
 
 
 def _extract_function(source: str, name: str) -> str:
@@ -135,7 +138,7 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
     ok, stateless, unavailable, unrecognised, missing = _rendered_states()
 
     assert ok == {
-        "text": "Persistence: Storage available",
+        "text": "Storage, last checked: Storage available",
         "rawStatus": "OK",
         "classes": ["status-badge", "status-ok"],
     }
@@ -143,16 +146,16 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
 
     assert stateless == {
         "text": (
-            "Persistence: No storage configured — analyses are not retained and will "
-            "not appear in Recent Analysis history"
+            "Storage, last checked: No storage configured — analyses are not retained "
+            "and will not appear in Recent Analysis history"
         ),
         "rawStatus": "STATELESS",
         "classes": ["status-badge", "status-warn"],
     }
     assert unavailable == {
         "text": (
-            "Persistence: Storage unavailable — this analysis is not being retained "
-            "and will not appear in Recent Analysis history"
+            "Storage, last checked: Storage unavailable — this analysis is not being "
+            "retained and will not appear in Recent Analysis history"
         ),
         "rawStatus": "UNAVAILABLE",
         "classes": ["status-badge", "status-warn"],
@@ -160,12 +163,12 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
     assert stateless["text"] != unavailable["text"]
 
     assert unrecognised == {
-        "text": "Persistence: Storage status unknown",
+        "text": "Storage, last checked: Storage status unknown",
         "rawStatus": "FUTURE_STATUS",
         "classes": ["status-badge", "status-unknown"],
     }
     assert missing == {
-        "text": "Persistence: Storage status unknown",
+        "text": "Storage, last checked: Storage status unknown",
         "rawStatus": "UNKNOWN",
         "classes": ["status-badge", "status-unknown"],
     }
@@ -181,9 +184,13 @@ def test_detail_uses_badge_persistence_wording_and_formats_live_data() -> None:
 
     for badge, overview in zip(badge_states[:4], detail_overviews[:4], strict=True):
         rows = dict(overview)
-        assert rows["Persistence"] == str(badge["text"]).removeprefix("Persistence: ")
+        # The Overview's row is storage's status at request time, and its label says so: the
+        # decision view's Storage row shows the save receipt, which can say otherwise.
+        assert str(badge["text"]).startswith(BADGE_PREFIX)
+        assert rows["Storage when requested"] == str(badge["text"]).removeprefix(BADGE_PREFIX)
+        assert "Persistence" not in rows and "Storage" not in rows
 
     assert dict(detail_overviews[0])["Live data"] == "yes"
     assert dict(detail_overviews[1])["Live data"] == "no"
     assert dict(detail_overviews[2])["Live data"] == "n/a"
-    assert "saved" not in dict(detail_overviews[0])["Persistence"].lower()
+    assert "saved" not in dict(detail_overviews[0])["Storage when requested"].lower()

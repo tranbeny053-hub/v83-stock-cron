@@ -214,7 +214,9 @@ function persistenceStatusText(status) {
 function updatePersistenceStatus(status) {
   const safeStatus = status || "UNKNOWN";
   const statusText = persistenceStatusText(safeStatus);
-  persistenceStatusBadge.textContent = `Persistence: ${statusText}`;
+  // What storage said when it was last asked, not whether any one analysis was saved: an
+  // analysis's save receipt (its Storage row) can say otherwise. PROVISIONAL wording.
+  persistenceStatusBadge.textContent = `Storage, last checked: ${statusText}`;
   persistenceStatusBadge.dataset.persistenceStatus = safeStatus;
   persistenceStatusBadge.classList.remove("status-ok", "status-warn", "status-unknown");
   if (safeStatus === "OK") {
@@ -571,6 +573,134 @@ function decisionViewRows(payload, view) {
   ];
 }
 
+// The save receipt (owner ruling D4; plan §14.2 item 4). Whether an analysis was saved is known
+// only after its response. So once a live analysis is shown, the backend is asked for that
+// analysis's receipt, and the state it gives replaces the request-time text of the analysis's
+// Storage row. Nothing is worked out here: the row shows the backend's state, or stays as it was.
+// PROVISIONAL wording, pending the owner's approval.
+const SAVE_RECEIPT_SCHEMA_VERSION = "save_receipt.v1";
+const SAVE_RECEIPT_TEXT = {
+  SAVED: "Saved to Recent Analysis history",
+  PENDING: "Saving… not yet confirmed",
+  // FAILED is every save the backend holds no acknowledgement of, among them one that may have
+  // committed unconfirmed and a partial one. So the sentence says "not confirmed", never "not
+  // saved".
+  FAILED:
+    "Save not confirmed: this analysis may be missing from Recent Analysis history after a " +
+    "restart",
+  NOT_RETAINED: "Not retained: no storage is configured",
+};
+// While the backend says PENDING: one further try after each of these delays, and no more.
+const SAVE_RECEIPT_RETRY_DELAYS_MS = [1000, 2000, 4000];
+// The label decisionViewRows gives the row that states storage.
+const STORAGE_ROW_LABEL = "Storage";
+// surface -> place -> watch. A surface is the element whose cards are replaced together. A place
+// is where one card sits in it (a timeframe, a run, the panel): it shows one analysis at a time.
+const saveReceiptWatches = new Map();
+
+// The text of a receipt the backend gave for this run, or null when the answer is not one this
+// screen can show: no answer, another schema version, another run's receipt, an unknown state.
+function saveReceiptText(receipt, runId) {
+  if (
+    !receipt ||
+    receipt.schema_version !== SAVE_RECEIPT_SCHEMA_VERSION ||
+    receipt.run_id !== runId ||
+    typeof receipt.state !== "string" ||
+    !Object.prototype.hasOwnProperty.call(SAVE_RECEIPT_TEXT, receipt.state)
+  ) {
+    return null;
+  }
+  return SAVE_RECEIPT_TEXT[receipt.state];
+}
+
+// The value cell of the Storage row among the decision-view rows rendered under a node, or null.
+function storageValueCell(container) {
+  for (const list of container.querySelectorAll("dl")) {
+    const labels = [...list.querySelectorAll("dt")];
+    const index = labels.findIndex((label) => label.textContent === STORAGE_ROW_LABEL);
+    if (index >= 0) {
+      return list.querySelectorAll("dd")[index] || null;
+    }
+  }
+  return null;
+}
+
+// Stops the receipt watches of what is being replaced, one place of a surface or all of it: no
+// timer outlives its card, and an answer still on its way is ignored.
+function cancelSaveReceipts(surface, place = null) {
+  const watches = saveReceiptWatches.get(surface);
+  for (const [watched, watch] of [...(watches || [])]) {
+    if (place !== null && watched !== place) {
+      continue;
+    }
+    watch.stopped = true;
+    if (watch.timer !== null) {
+      clearTimeout(watch.timer);
+    }
+    watches.delete(watched);
+  }
+}
+
+// The same for every surface, when the operator's data is cleared.
+function cancelAllSaveReceipts() {
+  for (const surface of saveReceiptWatches.keys()) {
+    cancelSaveReceipts(surface);
+  }
+}
+
+// The receipts of the analyses a surface now shows as cards: each card asks for its own.
+function watchSaveReceipts(surface, payloads) {
+  cancelSaveReceipts(surface);
+  for (const card of surface.querySelectorAll(".timeframe-card")) {
+    const payload = payloads.find((item) => item.run_id && item.run_id === card.dataset.runId);
+    if (payload) {
+      watchSaveReceipt(surface, payload.run_id, payload, card);
+    }
+  }
+}
+
+// Asks for the receipt of one analysis that is now shown, and shows its state in that analysis's
+// Storage row. Bounded: one request, and while the backend says PENDING one further try per entry
+// of SAVE_RECEIPT_RETRY_DELAYS_MS. Each try schedules at most the next; nothing polls. Without a
+// Storage row nothing is asked: a run reopened from history has no decision view, so no such row.
+function watchSaveReceipt(surface, place, payload, container) {
+  // Whatever this place showed before is replaced: its watch ends.
+  cancelSaveReceipts(surface, place);
+  const cell = payload.run_id ? storageValueCell(container) : null;
+  if (!cell) {
+    return;
+  }
+  const watch = { timer: null, stopped: false };
+  if (!saveReceiptWatches.has(surface)) {
+    saveReceiptWatches.set(surface, new Map());
+  }
+  saveReceiptWatches.get(surface).set(place, watch);
+  const ask = async (attempt) => {
+    watch.timer = null;
+    let receipt = null;
+    try {
+      receipt = await sessionApi(`/v1/analyze/receipt/${encodeURIComponent(payload.run_id)}`);
+    } catch {
+      // The request failed or the run is unknown (404): there is no receipt to show.
+      receipt = null;
+    }
+    if (watch.stopped) {
+      return;
+    }
+    const text = saveReceiptText(receipt, payload.run_id);
+    if (text !== null) {
+      cell.textContent = text;
+    }
+    const delay = SAVE_RECEIPT_RETRY_DELAYS_MS[attempt];
+    if (text === null || receipt.state !== "PENDING" || delay === undefined) {
+      saveReceiptWatches.get(surface).delete(place);
+      return;
+    }
+    watch.timer = setTimeout(() => void ask(attempt + 1), delay);
+  };
+  void ask(0);
+}
+
 function overviewCard(payload) {
   const node = overviewTemplate.content.firstElementChild.cloneNode(true);
   const display = payload.frontend_display;
@@ -580,6 +710,10 @@ function overviewCard(payload) {
   node.classList.add("timeframe-card");
   node.classList.add(heatBand.className);
   node.dataset.timeframeCard = timeframe;
+  if (payload.run_id) {
+    // Whose card this is, so its save receipt reaches its own Storage row.
+    node.dataset.runId = payload.run_id;
+  }
   node.style.setProperty("--heat-main", heatBand.mainColor);
   node.style.setProperty("--heat-border", heatBand.mainColor);
   node.querySelector("h2").textContent = `${payload.normalized_symbol} · ${
@@ -992,6 +1126,8 @@ function renderResults(target, payloads, errors = [], items) {
 }
 
 function replaceTimeframeCard(target, timeframe, node, groupKey) {
+  // The card this timeframe showed is replaced: its receipt watch ends with it.
+  cancelSaveReceipts(target, timeframe);
   const current = target.querySelector(`[data-timeframe-card="${timeframe}"]`);
   const group = target.querySelector(`[data-horizon-group="${groupKey}"]`);
   if (current && current.parentElement === group) {
@@ -1012,6 +1148,7 @@ function replaceTimeframeCard(target, timeframe, node, groupKey) {
 }
 
 function renderTimeframePlaceholders(target) {
+  cancelSaveReceipts(target);
   target.replaceChildren(...horizonGroups());
   hideDetail();
 }
@@ -1034,12 +1171,9 @@ async function runTimeframeSet({ symbol, analysisMode, target, loadingSelector, 
         });
         payloadStore.set(timeframe, payload);
         payloadStore.set(payload.run_id, payload);
-        replaceTimeframeCard(
-          target,
-          timeframe,
-          horizonCard(payload),
-          timeframeGroupFor(payload, timeframe),
-        );
+        const card = horizonCard(payload);
+        replaceTimeframeCard(target, timeframe, card, timeframeGroupFor(payload, timeframe));
+        watchSaveReceipt(target, timeframe, payload, card);
       } catch (error) {
         replaceTimeframeCard(
           target,
@@ -1079,6 +1213,8 @@ async function openDetail(payload) {
   if (!detailView && payload.detail_view && Object.keys(payload.detail_view).length > 0) {
     detailView = payload.detail_view;
   }
+  // Whatever the panel showed is replaced now: its receipt watch ends with it.
+  cancelSaveReceipts(detailPanel);
   if (!detailView) {
     renderDetailUnavailable(payload);
     return;
@@ -1262,6 +1398,7 @@ document.querySelector("#clearRecentFilters").addEventListener("click", () => {
 });
 
 function hideDetail() {
+  cancelSaveReceipts(detailPanel);
   detailPanel.replaceChildren();
   detailPanel.classList.add("hidden");
 }
@@ -1375,12 +1512,18 @@ function downloadJsonButton(payload) {
   return button;
 }
 
+// A saved run read back from the durable store can carry a mask in place of one of the gate
+// brief's lists (the store's export sanitizer withholds `key_reasons`). The mask is not a list:
+// it is said in one line, and neither it nor its characters are ever listed.
+const LIST_NOT_KEPT_TEXT = "Not kept in saved history.";
+
 function briefListGroup(title, items) {
   const group = document.createElement("div");
   group.className = "brief-list-group";
   const heading = document.createElement("h4");
   heading.textContent = title;
-  group.append(heading, listBlock(items));
+  const withheld = items !== null && items !== undefined && !Array.isArray(items);
+  group.append(heading, listBlock(withheld ? [LIST_NOT_KEPT_TEXT] : items));
   return group;
 }
 
@@ -2364,7 +2507,10 @@ function renderStructuredDetail(payload, detailView) {
         ["Data source", display.data_source],
         view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data],
         [
-          "Persistence",
+          // Storage's status when the analysis was requested. A live analysis's Storage row (the
+          // decision view's) shows its save receipt, which can say otherwise: so this label says
+          // which of the two it is.
+          "Storage when requested",
           persistenceStatusText(
             payload.debug?.persistence_status || details.debug_lite?.persistence_status,
           ),
@@ -2452,6 +2598,10 @@ function renderStructuredDetail(payload, detailView) {
     section("Debug / Raw JSON", [rawJson]),
   );
   detailPanel.classList.remove("hidden");
+  if (decisionSection) {
+    // A live analysis is shown: its Storage row is among the decision view's rows.
+    watchSaveReceipt(detailPanel, "detail", payload, decisionSection);
+  }
 }
 
 async function restoreSession() {
@@ -2491,6 +2641,7 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
 });
 
 function clearOperatorData() {
+  cancelAllSaveReceipts();
   hideDetail();
   singleResult.replaceChildren();
   renderTimeframePlaceholders(singleResult);
@@ -2572,6 +2723,8 @@ function batchRequestFromForm(form) {
 async function runBatchAnalysis(batchRequest) {
   hideDetail();
   const target = document.querySelector("#batchResult");
+  // The cards shown are about to be replaced, by results or by a failure.
+  cancelSaveReceipts(target);
   if (!Array.isArray(batchRequest?.symbols) || batchRequest.symbols.length === 0) {
     renderBatchFailure(target, "Enter at least one symbol to run batch analysis.");
     return;
@@ -2590,6 +2743,7 @@ async function runBatchAnalysis(batchRequest) {
       body: JSON.stringify({ requests }),
     });
     renderResults(target, payload.results, payload.errors, payload.items);
+    watchSaveReceipts(target, payload.results);
     updateStatusFromPayload(payload.results?.[0] || {});
     markRefreshed();
   } catch (error) {

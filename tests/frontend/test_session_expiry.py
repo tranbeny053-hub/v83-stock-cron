@@ -165,6 +165,7 @@ def test_api_call_sites_have_explicit_session_classification() -> None:
             ("sessionApi", "/v1/system_status"): 1,
             ("sessionApi", "/v1/analyze"): 1,
             ("sessionApi", "/v1/analyze/detail/${payload.run_id}"): 1,
+            ("sessionApi", "/v1/analyze/receipt/${encodeURIComponent(payload.run_id)}"): 1,
             ("sessionApi", "/v1/runs"): 2,
             ("sessionApi", "/v1/calibration"): 1,
             ("sessionApi", "/v1/analyze_batch"): 1,

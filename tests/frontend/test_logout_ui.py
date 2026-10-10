@@ -72,8 +72,10 @@ let analysisActive = true;
 let refreshReadyAt = 123;
 const calls = {{
   hideDetail: 0, placeholders: 0, panels: [], refresh: 0, persistence: [], dev: [],
+  allReceiptWatchesStopped: 0,
 }};
 function hideDetail() {{ calls.hideDetail += 1; }}
+function cancelAllSaveReceipts() {{ calls.allReceiptWatchesStopped += 1; }}
 function renderTimeframePlaceholders(target) {{
   calls.placeholders += 1;
   target.replaceChildren();
@@ -193,6 +195,8 @@ def test_reset_to_logged_out_clears_operator_ui_and_module_state() -> None:
     assert state["calibrationDiagnosticsRequest"] is None
     assert state["calls"]["persistence"] == ["UNKNOWN"]
     assert state["calls"]["dev"] == [{"enabled": False, "configured": False}]
+    # Each of the three clears of the operator's data stops every save-receipt watch.
+    assert state["calls"]["allReceiptWatchesStopped"] == 3
 
 
 def test_login_clear_removes_operator_data_rendered_after_logout() -> None:

@@ -954,6 +954,7 @@ const document = {{
 let apiCalls = 0;
 let lastBatchRequest = null;
 const hideDetail = () => {{}};
+const cancelSaveReceipts = () => {{}};
 const setLoading = () => {{}};
 const setAnalysisActive = () => {{}};
 const renderResults = () => {{}};
