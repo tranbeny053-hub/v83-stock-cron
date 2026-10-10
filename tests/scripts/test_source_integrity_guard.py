@@ -20,9 +20,14 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# UCPE-PROD-E2-20261004-A deployed main's own tree. Lane R (owner rulings DP-B and DP-C) changed
-# these since; they clear when a release carries them.
+# UCPE-PROD-E2-20261004-A deployed main's own tree. Since then Lane R (owner rulings DP-B and DP-C)
+# changed analysis_service.py and app.py, and Lane P (owner rulings DP-A and DP-F) changed app.js,
+# index.html, response.schema.json and analysis_service.py: UX-1 (plan §14.3: "In band", not
+# "Timeout") and the DecisionView (plan §14.1). They clear when a release carries them.
 CURRENT_DELTA_PATHS: list[str] = [
+    "frontend/app.js",
+    "frontend/index.html",
+    "schemas/response.schema.json",
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
 ]

@@ -54,8 +54,8 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=w4c1-ka1-20260828-a"' in html
-    assert 'src="/app.js?v=w4c1-ka1-20260828-a"' in html
+    assert 'href="/styles.css?v=p7p-20261005-a"' in html
+    assert 'src="/app.js?v=p7p-20261005-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
 
 
@@ -309,7 +309,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
         "Market Data Quality",
         "Provider State",
         "Market Data v2 / Provider Observability",
-        "Decision Brief",
+        "Gate brief (not a market call)",
         "Quant Signals",
         "News Add-on",
         "News Authority / Macro & Micro Context",
@@ -352,7 +352,9 @@ def test_final_decision_strength_is_qualified_by_backend_reliability_status() ->
     )[0]
 
     assert "const quality = synthesis.model_quality_summary || {};" in chunk
-    assert 'backendText(quality.reliability_status) || "Not measured yet"' in chunk
+    assert "backendText(quality.reliability_status) ||" in chunk
+    # A missing status is never "not measured" under an accepted claim (owner ruling 2026-10-06).
+    assert '(acceptedViewOf(payload) ? NOT_REPORTED_TEXT : "Not measured yet")' in chunk
     assert 'textBlock("p", `Reliability: ${reliabilityStatus}`, "muted")' in chunk
 
 
@@ -419,7 +421,7 @@ def test_frontend_contains_no_unsafe_decision_wording() -> None:
 
 def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() -> None:
     js = read_frontend("app.js")
-    assert "Decision synthesis unavailable for this run." in js
+    assert "No decision synthesis for this run; the existing gate brief is shown." in js
     assert "decisionBrief.action" in js
     assert "decisionBrief.state_summary" in js
     assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
@@ -721,7 +723,7 @@ def test_ui_d1_4b_calibration_render_is_non_blocking_and_diagnostic_only() -> No
     assert "calibrationDiagnosticsMount()" in model_quality_chunk
     assert "loadCalibrationDiagnostics()" in model_quality_chunk
     assert ".then((payload)" in model_quality_chunk
-    assert "renderCalibrationDiagnostics(payload)" in model_quality_chunk
+    assert "renderCalibrationDiagnostics(payload, accepted)" in model_quality_chunk
     assert "calibrationContent?.replaceChildren" in model_quality_chunk
     assert "await loadCalibrationDiagnostics()" not in model_quality_chunk
     assert "hydrateCalibrationDiagnostics" not in js
@@ -840,7 +842,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
     css = read_frontend("styles.css")
     assert "Uncalibrated heuristic" in html
     assert "not validated forecasts" in html
-    assert "Up/Down/Timeout are momentum-based estimates" in html
+    assert "Up/Down/In band are momentum-based estimates" in html
     assert "Open Detail for the full breakdown." in html
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
@@ -855,7 +857,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
 def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert html.count("Up/Down/Timeout are momentum-based estimates") == 1
+    assert html.count("Up/Down/In band are momentum-based estimates") == 1
     assert "probability-explainer compact" not in js
     assert "qualitativeCardLean" not in js
     assert "uncalibrated" + " — see Detail" not in js
@@ -868,7 +870,7 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     assert "prob_timeout_pct" in js
     assert "[\"Up\", formatPct(display.prob_up_pct)]" in overview_chunk
     assert "[\"Down\", formatPct(display.prob_down_pct)]" in overview_chunk
-    assert "[\"Timeout\", formatPct(display.prob_timeout_pct)]" in overview_chunk
+    assert "[\"In band\", formatPct(display.prob_timeout_pct)]" in overview_chunk
     assert "Probability" not in overview_chunk
     assert "Breakdown" not in overview_chunk
     assert "section(\"Probability\"" in js
@@ -1311,3 +1313,158 @@ def test_live_smoke_script_is_flag_gated() -> None:
     assert "UCPE_LIVE_SMOKE_ENABLED" in script
     assert "SKIP:" in script
     assert "data_mode=\"live\"" in script
+
+
+def test_ux1_in_band_is_the_terminal_band_outcome_never_a_timeout() -> None:
+    """Plan §14.3: the third outcome is the terminal return inside the decision band (the resolver's
+    _realized_label), so no label may imply a clock timeout or an unresolved direction."""
+
+    from crypto_probability_engine.detail.decision_brief import PROBABILITY_EXPLANATION
+
+    html = read_frontend("index.html")
+    js = read_frontend("app.js")
+    assert '"Timeout"' not in js and "/ TIMEOUT " not in js
+    assert js.count('["In band", ') == 4
+    assert "/ IN BAND ${formatCalibrationCount(distribution.TIMEOUT)}" in js
+    assert "inside the decision band" in html and "Timeout" not in html
+    assert "decision band" in PROBABILITY_EXPLANATION
+    assert "not a clock timeout" in PROBABILITY_EXPLANATION
+    assert "no decisive directional resolution" not in PROBABILITY_EXPLANATION
+
+
+def _function_text(js: str, name: str) -> str:
+    start = js.index(f"function {name}(")
+    end = js.index("\nfunction ", start + 1)
+    return js[start:end]
+
+
+def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
+    """Plan §14.1-§14.2 (owner rulings DP-A and DP-F): when the backend sends a DecisionView, the
+    card renders it first, in the plan's information order, and recomputes nothing."""
+
+    js = read_frontend("app.js")
+    rows = _function_text(js, "decisionViewRows")
+    order = [
+        '"Asset · venue"',
+        '"Reference close (UTC)"',
+        '"Horizon end (UTC)"',
+        '"Data"',
+        '"Storage"',
+        '"In band (inside the decision band)"',
+        '"Up (above the band)"',
+        '"Down (below the band)"',
+        '"Evidence level"',
+        '"Round-trip cost"',
+        '"Evidence"',
+        "dispositionLabel(view)",
+    ]
+    positions = [rows.index(label) for label in order]
+    assert positions == sorted(positions)
+    assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
+    card = _function_text(js, "overviewCard")
+    assert "const values = view ? [...decisionViewRows(payload, view), heatRow] : [" in card
+    assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
+    assert 'headline.dataset.decisionState = view.state;' in card
+    assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
+
+
+def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
+    js = read_frontend("app.js")
+    banner = _function_text(js, "decisionDataBanner")
+    assert 'if (data.state === "OK")' in banner
+    assert "DEGRADED DATA - " in banner
+    detail = _function_text(js, "renderStructuredDetail")
+    assert 'section("Decision view", [' in detail
+    assert "...(decisionSection ? [decisionSection] : [])," in detail
+
+
+def test_every_surface_defers_to_the_decision_view() -> None:
+    """Review 1 of lane P, finding 1: the Single and Watchlist card (horizonCard) and the detail
+    panel follow the view too, so no surface shows LIVE or a percentage the view does not."""
+
+    js = read_frontend("app.js")
+    horizon = _function_text(js, "horizonCard")
+    assert "const view = decisionViewOf(payload);\n  if (view) {\n" in horizon
+    assert "...decisionViewRows(payload, view)," in horizon
+    assert 'textBlock("p", dataBannerFor(payload), "demo-banner")' in horizon
+    assert "dataBannerText(display)" not in horizon
+    view_branch, legacy_branch = horizon.split("} else {", 1)
+    for legacy in ('"Interpretation"', '"Directional edge"', "matrixProbabilityBlock("):
+        assert legacy not in view_branch and legacy in legacy_branch
+    for directional in ("decisionLabelCopy", "matrixRawProbability(", "interpretation_label"):
+        assert directional not in view_branch
+    detail = _function_text(js, "renderStructuredDetail")
+    data_row = 'view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data]'
+    assert data_row in detail
+    assert "...legacyProbabilityRows(payload, [" in detail
+    assert '...(view ? [["Decision view", decisionDataText(view.data)]] : []),' in detail
+    assert "renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload)" in detail
+    interpretation = _function_text(js, "renderProbabilityInterpretation")
+    assert "legacyProbabilityRows(payload, probabilityValues(probability))" in interpretation
+    row = _function_text(js, "renderActionabilityRow")
+    assert 'item.key === "data_quality" && view && view.data?.state !== "OK"' in row
+    assert "Resolution probability" not in js, "§14.3: In band is never 'unresolved'"
+    outside = '["Up + Down (outside the band)", formatFractionPct(probability.resolution_'
+    assert outside + "probability)]" in js
+
+
+def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> None:
+    """Review 3 of lane P, finding 2 (3rd occurrence of the class; owner-authorized third repair):
+    missing evidence never reads as a negative call, including on a run reopened from history whose
+    detail payload carries no view. The legacy decision card, brief and the unavailable fallback
+    say they are the gates' disposition, not a market call, unconditionally."""
+
+    js = read_frontend("app.js")
+    card = _function_text(js, "renderFinalDecisionCard")
+    assert 'textBlock("p", dispositionLabel(view), "decision-eyebrow")' in card
+    assert "Backend final decision" not in card
+    assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
+    brief = _function_text(js, "renderDecisionBrief")
+    assert "section(gateBriefTitle(view), [" in brief
+    assert 'textBlock("p", gateFramingNote(view), "decision-safety-note"),' in brief
+    assert '["Gate disposition", brief.action],' in brief
+    assert '"Decision Brief"' not in brief and '"Action"' not in brief
+    synthesis = _function_text(js, "renderDecisionSynthesis")
+    assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
+    assert 'textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),' in (
+        synthesis
+    )
+    assert '["Gate disposition", decisionBrief.action],' in synthesis
+    assert "Existing brief action" not in synthesis and '"Decision synthesis unavailable' not in js
+    assert "renderFinalDecisionCard(synthesis, payload)," in synthesis
+    # The no-view note is true unconditionally: a gate outcome is never a forecast.
+    note = _function_text(js, "gateFramingNote")
+    assert "a gate outcome is not a forecast to act on" in note
+    detail = _function_text(js, "renderStructuredDetail")
+    assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail
+    # Without an accepted directional permission the labels never read as a market call.
+    for helper in ("dispositionLabel", "gateBriefTitle"):
+        assert "not a market call" in _function_text(js, helper), helper
+
+
+def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None:
+    """Owner ruling 2026-10-06: accepted forecast evidence shows its accepted state, and an
+    accepted directional permission is shown without "not a market call" while staying
+    explicitly non-advisory. test_decision_framing_rendering.py and
+    test_accepted_state_rendering.py render it; these pin the wiring."""
+
+    js = read_frontend("app.js")
+    frame = "(accepted directional permission; not financial advice)"
+    for helper, permission in (
+        ("dispositionLabel", f"Gate disposition {frame}"),
+        ("gateBriefTitle", f"Gate brief {frame}"),
+    ):
+        text = _function_text(js, helper)
+        assert "view && view.directional_permission" in text and permission in text, helper
+    note = _function_text(js, "gateFramingNote")
+    assert note.index("view.directional_permission") < note.index("view.accepted_claim")
+    assert "Not financial advice: it never tells you to trade" in note
+    assert "view && view.accepted_claim ? view : null" in _function_text(js, "acceptedViewOf")
+    assert "accepted ? accepted.headline : fallback" in _function_text(js, "readinessText")
+    assert "view.accepted_claim\n        ? view.headline" in _function_text(js, "decisionViewRows")
+    assert '["Model readiness", readinessText(payload, modelReadinessCopy)],' in _function_text(
+        js, "renderDecisionBrief"
+    )
+    assert "readinessText(payload, display.model_readiness_label || modelReadinessCopy)" in (
+        _function_text(js, "renderStructuredDetail")
+    )

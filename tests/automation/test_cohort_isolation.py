@@ -2,8 +2,9 @@
 
 Proven here, against the real analysis pipeline on fixture data:
 - AUTOMATED_RADAR is not, and cannot be validated as, a prediction origin;
-- the isolated analysis is byte-identical to the recorded one, yet builds no prediction row,
-  hands nothing to persistence and writes no run-store entry;
+- the isolated analysis is byte-identical to the recorded one but for the human route's
+  DecisionView, yet builds no prediction row, hands nothing to persistence and writes no
+  run-store entry;
 - a successful automated call touches no persistence method, no human run store, no
   skill-evidence refresh and no recent-runs listing;
 - the evidence carries no cohort origin and none of the withheld fields;
@@ -15,6 +16,7 @@ from __future__ import annotations
 import ast
 import inspect
 import json
+from copy import deepcopy
 from pathlib import Path
 from uuid import UUID
 
@@ -106,18 +108,38 @@ def test_the_core_refuses_a_mixed_recorded_and_isolated_call(
         )
 
 
-def test_isolated_and_recorded_analyses_are_byte_identical(
+def test_isolated_and_recorded_analyses_are_byte_identical_but_for_the_human_view(
     fixture_market, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The human route alone carries the DecisionView (owner rulings DP-A and DP-F, 2026-10-05):
+    the isolated payload has none, every other field is byte-identical, and the two
+    analysis_hash inputs differ by the view alone."""
+
     del fixture_market
     monkeypatch.setattr(analysis_service, "uuid4", lambda: UUID(int=1313))
+    hashed: list[dict] = []
+    real_hash = analysis_service.stable_hash
+
+    def capture(payload: dict) -> str:
+        hashed.append(deepcopy(payload))
+        return real_hash(payload)
+
+    monkeypatch.setattr(analysis_service, "stable_hash", capture)
     settings = Settings(data_mode="fixture")
     isolated = analysis_service.analyze_request_isolated(_request(), settings=settings)
     store = InMemoryRunStore()
     recorded = analysis_service.analyze_request(_request(), settings=settings, run_store=store)
     try:
-        assert json.dumps(isolated, sort_keys=True) == json.dumps(recorded, sort_keys=True)
-        assert isolated["analysis_hash"] == recorded["analysis_hash"]
+        isolated_input, recorded_input = hashed
+        assert "decision_view" not in isolated and "decision_view" not in isolated_input
+        assert recorded["decision_view"]["schema_version"] == "decision_view.v1"
+        assert recorded_input.pop("decision_view") == recorded["decision_view"]
+        assert recorded_input == isolated_input
+        assert real_hash(recorded_input) == isolated["analysis_hash"] != recorded["analysis_hash"]
+        human = {key: value for key, value in recorded.items() if key != "decision_view"}
+        assert json.dumps({**isolated, "analysis_hash": ""}, sort_keys=True) == json.dumps(
+            {**human, "analysis_hash": ""}, sort_keys=True
+        )
     finally:
         analysis_service._pop_prediction_persistence(recorded)  # noqa: SLF001 - clean up
 

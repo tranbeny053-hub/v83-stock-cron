@@ -65,6 +65,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/resolver_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/RESOLVER_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/source_integrity_guard.py` | ACTIVE_JOB | source-integrity-guard.yml | HF Space | Invoked by .github/workflows/source-integrity-guard.yml. |
 | `scripts/space_db_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/SPACE_DB_CUTOVER.md documents or exercises this opt-in owner CLI. |
+| `scripts/ux_comprehension/` | ACTIVE_OWNER_TOOL | owner-local | local | Generates docs/runbooks/UX_COMPREHENSION_CHECK.md from the real decision-view builder and frontend/app.js; tests/frontend/test_ux_comprehension_card.py keeps the card current. |
 | `scripts/validate_schemas.py` | ACTIVE_GATE | verify.sh | local | Invoked by verify.sh as an offline acceptance gate. |
 | `scripts/writer_signing_key.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/WRITER_CUTOVER.md documents or exercises this opt-in owner CLI. |
 
@@ -144,4 +145,5 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `docs/runbooks/RESTORE_PROOF_EXPORT.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | The owner's one-time schema-only and roles-only export for the DP-D restore proof (catalog reads, no row, no password); RUN ONCE by the owner on 2026-10-07 (the digests and the proof's outcome are in STATE.md). |
 | `docs/runbooks/ROLLBACK.md` | ACTIVE_RELEASE | owner-local | HF Space | Drives scripts/release.py rollback procedures. |
 | `docs/runbooks/SPACE_DB_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | production DB | Documents scripts/space_db_credential.py and the owner SQL/Space credential switch. |
+| `docs/runbooks/UX_COMPREHENSION_CHECK.md` | ACTIVE_OWNER_TOOL | owner-local | local | The owner's plan §23 UX comprehension check for the DecisionView, before Lane P's release; PREPARED, NOT RUN. |
 | `docs/runbooks/WRITER_CUTOVER.md` | ACTIVE_OWNER_TOOL | owner-local | Supabase API | Documents scripts/writer_signing_key.py and recurring 30-day writer-token replacement. |

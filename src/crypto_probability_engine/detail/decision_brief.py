@@ -5,9 +5,10 @@ from __future__ import annotations
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 
 PROBABILITY_EXPLANATION = (
-    "Up/Down/Timeout are uncalibrated heuristic estimates over the next ~6 bars "
-    "of this timeframe. Timeout means no decisive directional resolution. Not a "
-    "forecast, not expected return, and not a trade recommendation."
+    "Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars "
+    "ahead on this timeframe: Up ends above the decision band, Down below it, In band "
+    "inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected "
+    "return, and not a trade recommendation."
 )
 UNCALIBRATED_BANNER = (
     "⚠️ Uncalibrated heuristic — these percentages are momentum-based estimates "

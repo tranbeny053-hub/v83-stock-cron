@@ -53,6 +53,7 @@ from crypto_probability_engine.detail.decision_brief import (
     build_horizon_context,
 )
 from crypto_probability_engine.detail.decision_synthesis import build_decision_synthesis
+from crypto_probability_engine.detail.decision_view import build_decision_view
 from crypto_probability_engine.detail.frontend_display import build_frontend_display
 from crypto_probability_engine.gates.composite import apply_skill_gate
 from crypto_probability_engine.news.contract import build_news_blocks
@@ -194,11 +195,12 @@ def analyze_request_isolated(
 ) -> dict:
     """The isolated analysis of the automation domain (F1).
 
-    The same computation and the same response as ``analyze_request``, but with no prediction
-    origin at all: no shared-cohort prediction row, no feature or derivatives snapshot, nothing
-    handed to persistence and no run-store entry. It takes no origin, run store, OOS pair or
-    cadence identity by construction, so an automated run can never be labelled with a cohort
-    origin (USER_REQUESTED, CONTROLLED_SMOKE or SCHEDULED_SHADOW_EVIDENCE).
+    The same computation and the same response as ``analyze_request`` (less the human route's
+    DecisionView, which it never builds), but with no prediction origin at all: no shared-cohort
+    prediction row, no feature or derivatives snapshot, nothing handed to persistence and no
+    run-store entry. It takes no origin, run store, OOS pair or cadence identity by
+    construction, so an automated run can never be labelled with a cohort origin
+    (USER_REQUESTED, CONTROLLED_SMOKE or SCHEDULED_SHADOW_EVIDENCE).
     """
 
     # It waits on no other request for its provider data (DP-B's single-flight is the human routes'
@@ -470,6 +472,20 @@ def _analyze(
         },
         "analysis_hash": "",
     }
+    if record_prediction and arm_context is None:
+        # The one authoritative view (plan §14.1; owner rulings DP-A and DP-F), for every recorded
+        # analysis; never for the isolated automation analysis or an OOS arm.
+        response["decision_view"] = build_decision_view(
+            timeframe=request.timeframe,
+            methodology_version=methodology_version,
+            snapshot=snapshot,
+            data_quality=data_quality,
+            provider_state=provider_state,
+            quant_result=quant_result,
+            decision_brief=decision_brief,
+            skill_evidence=skill_evidence,
+            primary_venue=settings.provider_priority[0] if settings.provider_priority else None,
+        )
     response["analysis_hash"] = stable_hash(response)
     prediction_row = (
         _prediction_row(
@@ -509,6 +525,9 @@ def _analyze(
         build_feature_snapshot(prediction_row, response["quant_v2"]) if record_prediction else None
     )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
+    if "decision_view" not in response:
+        # No view, no key: the automation analysis and OOS arms carry no decision_view at all.
+        validated.pop("decision_view", None)
     derivatives_block = validated["derivatives_intelligence"]
     derivatives_snapshot_required = derivatives_block["block_status"] in {
         "ACTIVE",
