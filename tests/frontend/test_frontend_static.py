@@ -47,7 +47,7 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "DEGRADED DATA" in js
     assert "DATA UNAVAILABLE" in js
     assert "Watchlist persistence:" in js
-    assert "Persistence:" in html
+    assert "Storage, last checked: Storage status unknown" in html
 
 
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
