@@ -106,6 +106,8 @@ def test_the_committed_card_is_current_and_says_what_it_is() -> None:
     )
     assert "**Status: PREPARED, NOT RUN.**" in text
     assert "Analyses C, E are **SYNTHETIC**" in text
+    assert "Some analyses below are **SYNTHETIC**" in text
+    assert text.index("**SYNTHETIC**") < text.index("## Analysis A"), "said before any analysis"
     assert text.index("## Answer key") > text.index("## Analysis E"), "the key comes last"
 
 

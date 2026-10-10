@@ -257,6 +257,9 @@ product's own code; do not edit it by hand.
 Plan §23: UX is "PASS only when predefined owner-task scenarios distinguish: invalid data;
 unvalidated model; accepted forecast; directional permission; saved/unsaved state."
 
+Some analyses below are **SYNTHETIC**: they show states the product cannot show today, because
+no forecast claim or directional permission is accepted. The notes after the answer key say which.
+
 ## How to run it (about ten minutes)
 
 1. Read analyses A to E below as you would read them on screen. Do not look at the answer

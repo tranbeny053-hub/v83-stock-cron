@@ -125,6 +125,8 @@ def test_oos_frontend_display_omits_blocking_reasons(
         analysis_service._pop_prediction_persistence(payload)  # noqa: SLF001
 
     assert "blocking_reasons" not in payload["frontend_display"]
+    # An OOS arm carries no decision_view key at all (owner rulings DP-A and DP-F).
+    assert "decision_view" not in payload
     _response_validator().validate(payload)
     assert set(payload["frontend_display"]) == expected_key_sets[0]
 
@@ -145,6 +147,7 @@ def test_ordinary_frontend_display_keeps_blocking_reasons(monkeypatch) -> None:
     )
 
     assert "blocking_reasons" in payload["frontend_display"]
+    assert payload["decision_view"]["schema_version"] == "decision_view.v1"
 
 
 def test_blocking_reasons_flag_only_removes_that_key() -> None:
