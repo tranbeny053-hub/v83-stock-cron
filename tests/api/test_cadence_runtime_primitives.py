@@ -29,7 +29,7 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # added key moves it. The prior value was
 # sha256:70728d69dcc8a75cd3a1ca64b6904c71c042eabc5995e2f2eee4c38714600b08.
 # Nothing in the quant, gate, or probability path changed.
-# Moved 2026-10-05 (lane P, local only; owner rulings DP-A and DP-F): the UX-1 copy of
+# Moved 2026-10-05 (lane P; owner rulings DP-A and DP-F): the UX-1 copy of
 # `probability_explanation` ("In band", in `frontend_display` and `timeframes`) and the
 # added human-route `decision_view` key. The prior value was
 # sha256:3bed6a3498aef7b10ea213f63ce9f355e1014e46fd075b9c3cb32d254f90e7d4.

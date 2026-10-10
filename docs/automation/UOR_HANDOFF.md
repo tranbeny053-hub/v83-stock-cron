@@ -55,10 +55,11 @@
 
 ## 4. Schemas, versions and pinned files
 
-Revision 2026-10-05 (local only, not published; owner ruling DP-A=2): the MANIFEST and the two synthetic success
-examples below were regenerated because UX-1 changed the analysis payload's `probability_explanation` text, which
-moves each example's `analysis_hash` and `evidence_hash`. The schemas, the contract and every value's meaning are
-unchanged. Publication waits for the UOR qualification episode to close, or for the owner's word.
+Revision 2026-10-05 (owner ruling DP-A=2; held local until UOR qualification episode QUAL-EP-20261010-01 closed):
+the MANIFEST and the two synthetic success examples below were regenerated because UX-1 changed the analysis
+payload's `probability_explanation` text, which moves each example's `analysis_hash` and `evidence_hash`. The
+schemas, the contract and every value's meaning are unchanged. That episode closed with qualification BLOCKED /
+NOT_PROVEN: its closing released this revision, and nothing here reads it as a pass.
 
 | File | Role | sha256 |
 |---|---|---|

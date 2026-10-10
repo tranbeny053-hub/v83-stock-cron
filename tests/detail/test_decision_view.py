@@ -1,4 +1,4 @@
-"""DecisionView (plan §14.1-§14.3; owner rulings DP-A and DP-F, 2026-10-05, local only).
+"""DecisionView (plan §14.1-§14.3; owner rulings DP-A and DP-F, 2026-10-05).
 
 These tests prove that:
 - the precedence holds: unavailable data first, then no accepted claim; an accepted claim and a

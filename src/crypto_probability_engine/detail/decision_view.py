@@ -1,5 +1,5 @@
 """DecisionView: one authoritative, backend-built view of an analysis (governing plan §14.1-§14.3;
-owner rulings DP-A and DP-F, 2026-10-05, local only until the owner authorizes publication).
+owner rulings DP-A and DP-F, 2026-10-05; held local until the UOR qualification episode closed).
 
 It recomputes no probability and changes no other field of the analysis. It reads the analysis's
 own values and says what they may mean, in the plan's precedence:
