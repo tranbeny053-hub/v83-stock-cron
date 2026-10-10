@@ -19,7 +19,10 @@ real app.js through a fake fetch. The analyses are real: the backend builds them
 - the rows themselves (decisionViewRows) are still the request-time rows;
 - the receipt's text is set as text (textContent), never as markup;
 - the Overview's request-time row is labelled "Storage when requested", so it cannot be read as
-  contradicting the receipt above it.
+  contradicting the receipt above it;
+- the request-time status forecasts nothing a receipt can refute: with "Saved…" in the Storage
+  row after an UNAVAILABLE status, no line on screen says the analysis is not or will not be kept;
+- a receipt, in any state and on any surface, leaves the header badge untouched.
 The wording is PROVISIONAL, pending the owner's approval.
 """
 
@@ -54,14 +57,13 @@ TEXT = {
     "NOT_RETAINED": "Not retained: no storage is configured",
 }
 WHEN_REQUESTED = "Storage when requested"
+BADGE_PREFIX = "Storage, last checked: "
+# The request-time status sentences. They state what storage said when it was asked and never
+# forecast a save: the receipt can say "Saved…" after an UNAVAILABLE status.
 AVAILABLE = "Storage available"
-NO_STORAGE = (
-    "No storage configured — analyses are not retained and will not appear in Recent Analysis "
-    "history"
-)
+NO_STORAGE = "No storage configured — analyses are kept only until the server restarts"
 UNAVAILABLE = (
-    "Storage unavailable — this analysis is not being retained and will not appear in Recent "
-    "Analysis history"
+    "Storage unavailable when requested — this analysis may not be kept in Recent Analysis history"
 )
 EXPIRED = "Your session expired. Please sign in again."
 
@@ -119,6 +121,42 @@ Object.defineProperty(FakeElement.prototype, "innerHTML", {
     writtenAsMarkup.add(this);
     setAsMarkup.call(this, value);
   },
+});
+"""
+
+# Placed after app.js: a record of every write to the header badge (its text, its status, its
+# classes). It is kept on the element itself, so a write that leaves the same words is seen too.
+_BADGE_RECORD = r"""
+const badgeWrites = [];
+{
+  const text = Object.getOwnPropertyDescriptor(FakeElement.prototype, "textContent");
+  Object.defineProperty(persistenceStatusBadge, "textContent", {
+    get() { return text.get.call(this); },
+    set(value) {
+      badgeWrites.push("text");
+      text.set.call(this, value);
+    },
+  });
+  let classes = persistenceStatusBadge.className;
+  Object.defineProperty(persistenceStatusBadge, "className", {
+    get: () => classes,
+    set(value) {
+      badgeWrites.push("classes");
+      classes = value;
+    },
+  });
+  persistenceStatusBadge.dataset = new Proxy(persistenceStatusBadge.dataset, {
+    set(target, key, value) {
+      badgeWrites.push("status");
+      target[key] = value;
+      return true;
+    },
+  });
+}
+const badgeState = () => ({
+  text: persistenceStatusBadge.textContent,
+  status: persistenceStatusBadge.dataset.persistenceStatus,
+  classes: persistenceStatusBadge.className,
 });
 """
 
@@ -757,6 +795,120 @@ const scenarios = {
     return out;
   },
 
+  // An outage's cooldown: storage is UNAVAILABLE when the analysis is requested, and its save
+  // then succeeds. The real Batch flow, then the card's Detail panel.
+  async savedAfterAnOutage() {
+    reset();
+    const payload = data.stored.UNAVAILABLE;
+    const items = [{ index: 0, symbol: payload.symbol, status: "OK", run_id: payload.run_id }];
+    serve({ [payload.run_id]: ["SAVED"] }, (path) =>
+      path === `/v1/analyze/detail/${payload.run_id}`
+        ? { status: 200, body: payload.detail_view }
+        : batchOf([payload], items)(path),
+    );
+    updatePersistenceStatus("OK");
+    await runBatch();
+    await settle();
+    const card = {
+      rows: batchRows().map(([, text]) => text),
+      badge: badgeState(),
+      shown: visibleTexts(batchTarget(), skipped),
+    };
+    await openDetail(payload);
+    await settle();
+    return {
+      card,
+      storage: storageText(detailPanel),
+      badge: badgeState(),
+      shown: visibleTexts(detailPanel, skipped),
+    };
+  },
+
+  // A receipt is one analysis's. Whatever its state, and whatever the badge reads, the badge is
+  // not written to: its text, its status and its classes are as they were.
+  async badgeUntouched() {
+    const payload = data.stored.UNAVAILABLE;
+    const answers = {
+      SAVED: ["SAVED"],
+      PENDING: ["PENDING"],
+      FAILED: ["FAILED"],
+      NOT_RETAINED: ["NOT_RETAINED"],
+      savedOnTheThirdTry: ["PENDING", "PENDING", "SAVED"],
+      requestFails: ["NETWORK"],
+      unknownRun: [notFound],
+    };
+    reset();
+    badgeWrites.length = 0;
+    updatePersistenceStatus("OK");
+    const out = { recordSees: [...badgeWrites], detail: {} };
+    for (const lastChecked of ["OK", "UNAVAILABLE", "STATELESS"]) {
+      for (const [name, replies] of Object.entries(answers)) {
+        reset();
+        serve({ [payload.run_id]: [...replies] });
+        updatePersistenceStatus(lastChecked);
+        const before = badgeState();
+        badgeWrites.length = 0;
+        renderStructuredDetail(payload, payload.detail_view);
+        await settle();
+        await fireAll();
+        out.detail[`${lastChecked}:${name}`] = {
+          before,
+          after: badgeState(),
+          writes: [...badgeWrites],
+          storage: storageText(detailPanel),
+          asked: asked().length,
+        };
+      }
+    }
+    // Single and Batch. The analyses' own responses set the badge (api does that), so the
+    // receipts are held back until the cards are shown, and only what follows is recorded.
+    const four = ["1H", "4H", "1D", "1W"].map((name) => data.analyses[name]);
+    const items = four.map((item, index) => ({
+      index,
+      symbol: item.symbol,
+      status: "OK",
+      run_id: item.run_id,
+    }));
+    const states = Object.keys(SAVE_RECEIPT_TEXT);
+    for (const [surface, show, rows] of [
+      ["single", runSingle, () => Object.values(singleRows())],
+      ["batch", runBatch, () => batchRows().map(([, text]) => text)],
+    ]) {
+      reset();
+      let release;
+      const held = new Promise((resolve) => { release = resolve; });
+      let receipts = 0;
+      backend = async (path, options) => {
+        if (path.startsWith(RECEIPT)) {
+          const state = states[receipts % states.length];
+          receipts += 1;
+          await held;
+          const runId = decodeURIComponent(path.slice(RECEIPT.length));
+          return { status: 200, body: receiptBody(runId, state) };
+        }
+        const other = analyzeFrom(path, options) || batchOf(four, items)(path);
+        if (other === undefined) throw new Error("no backend behind the DOM stand-in");
+        return other;
+      };
+      updatePersistenceStatus("UNKNOWN");
+      await show();
+      await settle();
+      const before = badgeState();
+      const rowsBefore = rows();
+      badgeWrites.length = 0;
+      release();
+      await settle();
+      out[surface] = {
+        before,
+        after: badgeState(),
+        writes: [...badgeWrites],
+        rowsBefore,
+        rows: rows(),
+      };
+    }
+    return out;
+  },
+
   // The receipt is asked for with the session's own helper: a 401 ends the session. Run last:
   // it logs the stand-in out.
   async sessionExpired() {
@@ -853,6 +1005,7 @@ def run(data: dict[str, Any]) -> dict[str, Any]:
             harness._DOM_STAND_IN,
             _FAKES,
             (ROOT / "frontend" / "app.js").read_text(encoding="utf-8"),
+            _BADGE_RECORD,
             f"const data = {json.dumps(data, default=str)};",
             _SCENARIOS,
         ]
@@ -936,6 +1089,85 @@ def test_the_overviews_row_is_labelled_storage_when_requested(run: dict) -> None
     source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
     assert source.count(f'"{WHEN_REQUESTED}"') == 1, "the Overview's row, and no other"
     assert 'const STORAGE_ROW_LABEL = "Storage";' in source
+
+
+def test_a_saved_receipt_is_not_contradicted_by_the_request_time_status(run: dict) -> None:
+    """An outage's cooldown: storage is UNAVAILABLE when the analysis is requested, and its save
+    then succeeds. The Storage row says "Saved…" while the badge and the Overview's row still
+    give the request-time status. That status names its moment and states a possibility, so no
+    line on screen says the analysis is not, or will not be, kept (owner ruling "relabel")."""
+
+    outage = run["savedAfterAnOutage"]
+    card = outage["card"]
+    assert card["rows"] == [TEXT["SAVED"]] and outage["storage"] == TEXT["SAVED"]
+    # The analysis's own response set the badge, and neither receipt moved it.
+    assert outage["badge"] == card["badge"]
+    assert outage["badge"]["status"] == "UNAVAILABLE"
+    assert outage["badge"]["text"] == BADGE_PREFIX + UNAVAILABLE
+    assert harness._value(outage["shown"], "Overview", WHEN_REQUESTED) == UNAVAILABLE
+    on_screen = [*card["shown"], *outage["shown"], outage["badge"]["text"]]
+    about_history = {line for line in on_screen if "Recent Analysis history" in line}
+    assert about_history == {TEXT["SAVED"], UNAVAILABLE, BADGE_PREFIX + UNAVAILABLE}
+    for line in on_screen:
+        for refuted in ("will not", "not being", "not retained", "not appear"):
+            assert refuted not in line.lower(), line
+    assert UNAVAILABLE.startswith("Storage unavailable when requested — ")
+    assert "may not be kept" in UNAVAILABLE
+
+
+def test_no_request_time_sentence_forecasts_a_save(run: dict) -> None:
+    """The three request-time sentences, as the screen renders them, beside the four receipt
+    sentences. None of the three says that an analysis was saved, or that it is not or will not
+    be kept: so none can be refuted by the receipt shown beside it."""
+
+    for sentence in (AVAILABLE, NO_STORAGE, UNAVAILABLE):
+        for forecast in ("will not", "not being", "not retained", "not appear", "saved"):
+            assert forecast not in sentence.lower(), sentence
+    assert NO_STORAGE == run["single"]["first"]["rows"]["1W"], "as rendered, with no receipt"
+    assert UNAVAILABLE == run["backendStateOnly"]["UNAVAILABLE_SAVED"]["whenRequested"]
+    assert AVAILABLE == _storage(run["detailStates"]["unanswered"])
+    # Without storage the receipt and the status name the same cause.
+    assert "No storage configured" in NO_STORAGE
+    assert "no storage is configured" in TEXT["NOT_RETAINED"]
+
+
+def test_a_receipt_in_any_state_leaves_the_header_badge_untouched(run: dict) -> None:
+    """The badge is storage's status when it was last asked; a receipt is one analysis's. The
+    receipt's code writes that analysis's Storage row and nothing of the badge: not its text, not
+    its status, not its classes. In every state, on every surface, whatever the badge reads."""
+
+    badge = run["badgeUntouched"]
+    assert badge["recordSees"], "the record sees a badge write: the badge's own function's"
+    assert {"text", "status", "classes"} <= set(badge["recordSees"])
+    shown = {
+        "SAVED": TEXT["SAVED"],
+        "PENDING": TEXT["PENDING"],
+        "FAILED": TEXT["FAILED"],
+        "NOT_RETAINED": TEXT["NOT_RETAINED"],
+        "savedOnTheThirdTry": TEXT["SAVED"],
+        # No receipt this screen can show: the row keeps its request-time text.
+        "requestFails": UNAVAILABLE,
+        "unknownRun": UNAVAILABLE,
+    }
+    last_checked = {"OK": AVAILABLE, "UNAVAILABLE": UNAVAILABLE, "STATELESS": NO_STORAGE}
+    assert sorted(badge["detail"]) == sorted(f"{a}:{b}" for a in last_checked for b in shown)
+    for name, outcome in badge["detail"].items():
+        status, answer = name.split(":")
+        assert outcome["storage"] == shown[answer], f"{name}: the receipt was shown"
+        assert outcome["asked"] >= 1, name
+        assert outcome["writes"] == [], f"{name}: the badge was written to"
+        assert outcome["after"] == outcome["before"], name
+        assert outcome["before"]["status"] == status, name
+        assert outcome["before"]["text"] == BADGE_PREFIX + last_checked[status], name
+    assert badge["detail"]["OK:savedOnTheThirdTry"]["asked"] == 3
+    for surface, cards in (("single", 6), ("batch", 4)):
+        outcome = badge[surface]
+        # The analyses' responses had set the badge; the receipts then reached every card.
+        assert outcome["before"]["text"] == BADGE_PREFIX + NO_STORAGE, surface
+        assert outcome["rowsBefore"] == [NO_STORAGE] * cards, surface
+        assert len(outcome["rows"]) == cards and set(outcome["rows"]) == set(TEXT.values()), surface
+        assert outcome["writes"] == [], f"{surface}: the badge was written to"
+        assert outcome["after"] == outcome["before"], surface
 
 
 def test_a_single_run_shows_each_cards_own_receipt(run: dict, data: dict) -> None:

@@ -201,13 +201,15 @@ function updateStatusFromPayload(payload = {}) {
   }
 }
 
+// What storage said when it was asked: a status, never a forecast of whether one analysis is
+// saved. That is the analysis's save receipt, and it can say otherwise. PROVISIONAL wording.
 function persistenceStatusText(status) {
   return status === "OK"
       ? "Storage available"
       : status === "STATELESS"
-        ? "No storage configured — analyses are not retained and will not appear in Recent Analysis history"
+        ? "No storage configured — analyses are kept only until the server restarts"
         : status === "UNAVAILABLE"
-          ? "Storage unavailable — this analysis is not being retained and will not appear in Recent Analysis history"
+          ? "Storage unavailable when requested — this analysis may not be kept in Recent Analysis history"
           : "Storage status unknown";
 }
 
@@ -2797,9 +2799,11 @@ function watchlistFailureMessage(status) {
   return "The watchlist change could not be saved. Try again shortly.";
 }
 
+// A watchlist change the backend refused or that never reached it (a rejected symbol, a rate
+// limit, a network error). Such an answer carries no storage status, so the header badge is left
+// as it was: storage was not asked. An accepted change carries one (renderWatchlist shows it).
 function renderWatchlistMutationFailure(status) {
   const target = document.querySelector("#watchlistStatus");
-  updatePersistenceStatus("UNAVAILABLE");
   target.textContent = `Watchlist persistence: WRITE FAILED. ${watchlistFailureMessage(status)}`;
   target.title = "";
 }

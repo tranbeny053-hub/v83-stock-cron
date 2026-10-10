@@ -24,7 +24,7 @@ The four questions, for every analysis:
 1. Can the market data support an assessment here?
 2. Has a forecast-quality claim been accepted for it?
 3. Does it carry a directional permission?
-4. Does the screen say this analysis will NOT be kept in Recent Analysis history?
+4. Does the screen warn that this analysis may NOT be kept in Recent Analysis history?
 
 ## Analysis A
 
@@ -101,7 +101,7 @@ No forecast-quality claim has been accepted for this model and timeframe. The pe
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage unavailable — this analysis is not being retained and will not appear in Recent Analysis history |
+| Storage | Storage unavailable when requested — this analysis may not be kept in Recent Analysis history |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -170,8 +170,9 @@ The percentages carry an accepted forecast-quality claim for this model and time
     - a Signal heat row
     - the data-source line
   - The detail panel adds its own sections.
-- Question 4 reads the Storage row, which says when an analysis will not be kept. "Storage
-  available" is read before the analysis is saved. After an analysis is shown, the screen
+- Question 4 reads the Storage row. On this card that row is storage's status when the
+  analysis was requested: "Storage available", or a warning that the analysis may not be
+  kept. It is read before the analysis is saved. After an analysis is shown, the screen
   asks the backend for that analysis's save receipt and, when the backend gives one, shows
   its state in the Storage row. This card prints the row as it reads before that (plan §14.2
   item 4).

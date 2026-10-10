@@ -146,16 +146,16 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
 
     assert stateless == {
         "text": (
-            "Storage, last checked: No storage configured — analyses are not retained "
-            "and will not appear in Recent Analysis history"
+            "Storage, last checked: No storage configured — analyses are kept only until "
+            "the server restarts"
         ),
         "rawStatus": "STATELESS",
         "classes": ["status-badge", "status-warn"],
     }
     assert unavailable == {
         "text": (
-            "Storage, last checked: Storage unavailable — this analysis is not being "
-            "retained and will not appear in Recent Analysis history"
+            "Storage, last checked: Storage unavailable when requested — this analysis may "
+            "not be kept in Recent Analysis history"
         ),
         "rawStatus": "UNAVAILABLE",
         "classes": ["status-badge", "status-warn"],
@@ -176,6 +176,35 @@ def test_persistence_badge_explains_consequences_without_changing_identity() -> 
         text = str(unknown["text"]).lower()
         assert "retained" not in text
         assert "history" not in text
+
+
+def test_no_status_sentence_forecasts_what_a_save_receipt_can_refute() -> None:
+    """The status is what storage said when it was asked. Whether one analysis is saved is for
+    its save receipt to say, and that can be "Saved…" after an UNAVAILABLE status: an outage's
+    cooldown ends, and the save succeeds. So no status sentence says that an analysis is not
+    being kept, will not be kept, or was saved (owner ruling "relabel"; PROVISIONAL wording)."""
+
+    states = _rendered_states()
+    for state in states:
+        text = str(state["text"]).lower()
+        for forecast in ("will not", "not being", "not retained", "not appear", "saved"):
+            assert forecast not in text, (state["rawStatus"], forecast)
+    unavailable = str(states[2]["text"])
+    assert states[2]["rawStatus"] == "UNAVAILABLE"
+    # It names the moment it is true of, and states a possibility.
+    assert "Storage unavailable when requested" in unavailable
+    assert "may not be kept in Recent Analysis history" in unavailable
+
+
+def test_the_deployment_checklist_quotes_the_badge_as_the_screen_shows_it() -> None:
+    """DEPLOYMENT_CHECKLIST.md tells the operator what to do when the badge reads "unavailable"
+    on Hugging Face. It quotes the badge, so it quotes it as the screen shows it."""
+
+    unavailable = _rendered_states()[2]
+    assert unavailable["rawStatus"] == "UNAVAILABLE"
+    checklist = (ROOT / "DEPLOYMENT_CHECKLIST.md").read_text(encoding="utf-8")
+    assert f"- [ ] If `{unavailable['text']}` appears on Hugging Face with only" in checklist
+    assert "Persistence: UNAVAILABLE" not in checklist
 
 
 def test_detail_uses_badge_persistence_wording_and_formats_live_data() -> None:

@@ -123,7 +123,7 @@ does not perform it and does not enable a cadence collector.
 - [ ] For Hugging Face runtime, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Hugging Face Secrets so the backend uses HTTPS REST on port `443`.
 - [ ] Use `SUPABASE_DB_URL` only for local migration/admin or non-Hugging-Face direct Postgres runtime.
 - [ ] Leave all Supabase secrets absent to run in stateless mode; analysis should still work and the watchlist UI uses browser fallback.
-- [ ] If `Persistence: UNAVAILABLE` appears on Hugging Face with only `SUPABASE_DB_URL`, configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; Hugging Face may block outbound Postgres ports `5432`/`6543`.
+- [ ] If `Storage, last checked: Storage unavailable when requested — this analysis may not be kept in Recent Analysis history` appears on Hugging Face with only `SUPABASE_DB_URL`, configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; Hugging Face may block outbound Postgres ports `5432`/`6543`.
 - [ ] Do not enter Supabase values in the frontend, README, debug export, logs, or code.
 
 ## Smoke Tests

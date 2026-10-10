@@ -28,7 +28,10 @@ from scripts.ux_comprehension import card
 from tests.fixtures.market_data import make_snapshot
 
 STORAGE_KEPT = "Storage available"
-NOT_KEPT = "will not appear in Recent Analysis history"
+# The Storage row's warning (frontend/app.js persistenceStatusText). It is storage's status when
+# the analysis was requested, so it warns and never forecasts: a save receipt can say otherwise.
+MAY_NOT_BE_KEPT = "may not be kept in Recent Analysis history"
+QUESTION_4 = "Does the screen warn that this analysis may NOT be kept in Recent Analysis history?"
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +79,9 @@ def test_the_scenarios_distinguish_every_section_23_dimension(
     }
     assert differing == {"Storage"}
     assert screens["A"]["rows"]["Storage"] == STORAGE_KEPT
-    assert "not being retained" in screens["D"]["rows"]["Storage"]
+    assert screens["D"]["rows"]["Storage"] == (
+        f"Storage unavailable when requested — this analysis {MAY_NOT_BE_KEPT}"
+    )
     # Every pair of analyses can be told apart from what the screen shows.
     for left, right in combinations(sorted(screens), 2):
         assert (screens[left]["headline"], screens[left]["rows"]) != (
@@ -98,9 +103,38 @@ def test_the_answer_key_follows_from_each_built_view(
             yes_no(view["range"]["assessed"]),
             yes_no(view["accepted_claim"]),
             yes_no(view["directional_permission"]),
-            yes_no(NOT_KEPT in screen["rows"]["Storage"]),
+            yes_no(MAY_NOT_BE_KEPT in screen["rows"]["Storage"]),
         )
         assert card.answers(scenario) == derived, scenario.letter
+
+
+def test_question_4_asks_what_the_storage_row_can_truthfully_say(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """The Storage row is storage's status when the analysis was requested. It cannot say that an
+    analysis will not be kept: the save receipt can say "Saved…" afterwards. So question 4 asks
+    whether the screen WARNS, in the row's own words, and the card's note says what the row is."""
+
+    assert card.QUESTIONS[3] == QUESTION_4
+    assert MAY_NOT_BE_KEPT in QUESTION_4.replace("may NOT", "may not")
+    # Answer 4, read off each analysis's rendered Storage row and nothing else: only D warns.
+    warned = {
+        letter: MAY_NOT_BE_KEPT in screen["rows"]["Storage"] for letter, screen in screens.items()
+    }
+    assert warned == {"A": False, "B": False, "C": False, "D": True, "E": False}
+    text = card.card_markdown()
+    assert f"4. {QUESTION_4}\n" in text
+    for forecast in ("will NOT be kept", "will not be kept", "will not appear", "not being"):
+        assert forecast not in text, forecast
+    for letter, screen in screens.items():
+        assert f"| Storage | {screen['rows']['Storage']} |" in text, letter
+    note = " ".join(text[text.index("- Question 4 reads the Storage row.") :].split())
+    assert (
+        "On this card that row is storage's status when the analysis was requested: "
+        '"Storage available", or a warning that the analysis may not be kept.'
+    ) in note
+    assert "It is read before the analysis is saved." in note
+    assert "the screen asks the backend for that analysis's save receipt" in note
 
 
 def test_the_registries_stay_empty() -> None:

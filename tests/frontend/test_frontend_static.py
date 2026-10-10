@@ -1228,7 +1228,9 @@ const sessionApi = api;
     assert states == {
         "add": {"message": expected_message, "title": ""},
         "remove": {"message": expected_message, "title": ""},
-        "persistenceStates": ["UNAVAILABLE", "UNAVAILABLE"],
+        # A refused change carries no storage status: the header badge is not written to
+        # (tests/frontend/test_watchlist_failure_badge.py renders every such case).
+        "persistenceStates": [],
         "callCount": 2,
     }
     assert "persistence: OK" not in states["add"]["message"]

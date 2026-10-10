@@ -60,7 +60,7 @@ QUESTIONS = (
     "Can the market data support an assessment here?",
     "Has a forecast-quality claim been accepted for it?",
     "Does it carry a directional permission?",
-    "Does the screen say this analysis will NOT be kept in Recent Analysis history?",
+    "Does the screen warn that this analysis may NOT be kept in Recent Analysis history?",
 )
 # The frontend functions the view's rows are made of (frontend/app.js), and their constants.
 _FUNCTIONS = (
@@ -318,8 +318,9 @@ _LIMITS = """
   - On the Single Crypto Analysis screen, each timeframe also shows:
 {outside}
   - The detail panel adds its own sections.
-- Question 4 reads the Storage row, which says when an analysis will not be kept. "Storage
-  available" is read before the analysis is saved. After an analysis is shown, the screen
+- Question 4 reads the Storage row. On this card that row is storage's status when the
+  analysis was requested: "Storage available", or a warning that the analysis may not be
+  kept. It is read before the analysis is saved. After an analysis is shown, the screen
   asks the backend for that analysis's save receipt and, when the backend gives one, shows
   its state in the Storage row. This card prints the row as it reads before that (plan §14.2
   item 4).
