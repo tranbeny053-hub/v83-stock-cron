@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from crypto_probability_engine.adapters.http_client import close_pool
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
 from crypto_probability_engine.adapters.symbol_universe import resolve_symbol_availability
+from crypto_probability_engine.api import save_receipt
 from crypto_probability_engine.api.analysis_service import (
     analyze_request,
     current_persistence_status,
@@ -48,6 +49,7 @@ from crypto_probability_engine.api.schemas import (
 )
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
+from crypto_probability_engine.config.unit_discipline import utc_now
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
 from crypto_probability_engine.persistence import reader_identity
 from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
@@ -61,6 +63,9 @@ from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
 WATCHLIST_LIMIT = 20
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
+# How many times the run store is listed for a route's visibility check before a store that keeps
+# changing under the listing is reported as the error it is (_listed_as_user_requested).
+_RUN_LISTING_ATTEMPTS = 3
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -330,11 +335,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _session: dict = Depends(require_app_session),  # noqa: B008
     ) -> dict:
         payload = run_store.get(run_id)
-        if payload and not any(
-            row.get("run_id") == run_id
-            and row.get("prediction_origin") == PredictionOrigin.USER_REQUESTED.value
-            for row in run_store.list_runs()
-        ):
+        if payload and not _listed_as_user_requested(run_store, run_id):
             raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
         if not payload:
             durable = app.state.persistence_repository.get_run_detail(
@@ -345,6 +346,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
             return durable
         return payload["detail_view"]
+
+    @app.get("/v1/analyze/receipt/{run_id}")
+    def analyze_receipt(
+        run_id: str,
+        _session: dict = Depends(require_app_session),  # noqa: B008
+    ) -> dict:
+        # Whether THIS analysis was saved (api/save_receipt.py). It reads; it writes nothing.
+        # The detail route's visibility rule comes first: a run of another origin is not found.
+        payload = run_store.get(run_id)
+        if payload and not _listed_as_user_requested(run_store, run_id):
+            raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+        state = save_receipt.SAVE_RECEIPTS.get(run_id)
+        if state is None:
+            # No record of the save in this process (a restart, an evicted record): only the
+            # repository can answer, and only a durable one can say SAVED.
+            repository = app.state.persistence_repository
+            state = save_receipt.unrecorded_state(
+                stateless=current_persistence_status(repository) == "STATELESS",
+                held=bool(payload),
+                stored=_returns_user_requested_detail(repository, run_id),
+            )
+        if state is None:
+            raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
+        return save_receipt.receipt_payload(run_id, state, utc_now())
 
     @app.get("/v1/runs")
     def recent_runs(_session: dict = Depends(require_app_session)) -> dict:  # noqa: B008
@@ -496,6 +521,44 @@ def _normalize_watchlist_symbol(
                 message,
             )
     return symbol.display
+
+
+def _listed_as_user_requested(run_store, run_id: str) -> bool:
+    """Whether the run store lists the run under the USER_REQUESTED origin: the visibility rule of
+    the detail route and of the receipt route.
+
+    The store is listed while another request may be adding a run to it, and a store that changes
+    under its own listing raises RuntimeError. The listing is then made again: three attempts in
+    all, and the third failure is raised as it is.
+    """
+
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            return any(
+                row.get("run_id") == run_id
+                and row.get("prediction_origin") == PredictionOrigin.USER_REQUESTED.value
+                for row in run_store.list_runs()
+            )
+        except RuntimeError:
+            if attempt >= _RUN_LISTING_ATTEMPTS:
+                raise
+
+
+def _returns_user_requested_detail(repository, run_id: str) -> bool:
+    """Whether the repository returns the run's detail for the USER_REQUESTED origin, as the
+    detail route asks it. An unreadable store returns nothing: it proves no save."""
+
+    try:
+        return bool(
+            repository.get_run_detail(
+                run_id,
+                prediction_origin=PredictionOrigin.USER_REQUESTED.value,
+            )
+        )
+    except Exception:
+        return False
 
 
 def _persistence_diagnostic(repository) -> dict:

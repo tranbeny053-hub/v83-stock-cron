@@ -31,7 +31,9 @@ def test_every_human_route_refuses_machine_only_authentication(harness_factory):
             assert token() not in response.text + repr(dict(response.headers))
             checked.add((method, route.path))
     assert {("POST", "/v1/analyze"), ("GET", "/v1/auth/dev"), ("GET", "/v1/runs")} <= checked
-    assert len(checked) == 14
+    # 15 since the save receipt route (api/save_receipt.py): a human route like the others.
+    assert ("GET", "/v1/analyze/receipt/{run_id}") in checked
+    assert len(checked) == 15
 
 
 def test_automation_is_absent_from_openapi(harness_factory):
