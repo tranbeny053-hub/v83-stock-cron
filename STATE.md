@@ -1,27 +1,49 @@
 # STATE
 
-Updated: 2026-10-08 (**DP-D IS HARDENED. THE FOUR HELD GAPS ARE CLOSED, FAIL-CLOSED, AND THE PROOF ON THE OWNER'S
-EXPORT IS STILL PASS: EXACTLY THE NINE RULED EXCEPTIONS, NO APP FINDING. THE WORDING FOLLOW-UP IS PUBLISHED TOO.**
-- The owner (verbatim below) gave a T3 for the docs follow-up and HARDENING=GO, with a T3 on review PASS and proof
-  PASS.
-- #243, review 4's wording NOTEs (documentation only, with identical code ASTs) → main ea65dda4: merge commit; 5/5
-  checks; main's push CI 37723375564 and reproducible build 37723375583 green.
-- #244, the hardening → main 4b948d99: merge commit on the exact reviewed head 733b96e.
-  - 5/5 checks green: test, the PostgreSQL 17.6 rehearsal (68/68 + escape_strings + every_role_settings), compare,
-    build-a and build-b.
-  - Main's push CI and reproducible build are green.
-  - The gate's roles.sql passes only pg_dumpall's two ALTER ROLE forms; ALL and IN DATABASE are refused by name.
-    schema.sql refuses any role or database ALTER. The commands never write these.
-  - Settings for every role are read as PUBLIC's.
-  - A refused every-role setting fails.
-  - Every ALTER SYSTEM parameter grant is app, whoever holds it. A parameter's default ACL is compared as no grant.
-- Run 5 (tooling 733b96e, the same files and digests): RESTORE_PROOF=PASS refusals=0 restore_errors=2 app=0
-  operational=2 platform=40 accepted=9.
-- The public-schema scope is unchanged. The runbook keeps the limits explicit and never proven: production's settings
-  for every role, for one database or for the database itself are not exported.
-- Nothing changed in production or the migrations; there was no new export and no production contact.
-- This record is the batch's last publish. Before it: #244.)
+Updated: 2026-10-10 (**LANE P AND THE §23 UX CARD ARE PUBLISHED TO MAIN UNDER THE OWNER'S T3, WITH A FOURTH
+ACCEPTANCE BLOCKER (BLOCKER-4=A). NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS
+DEPLOYED, AND THE UX CHECK IS NOT RUN.**
+- The owner (three messages, verbatim below):
+  - UOR QUAL-EP-20261010-01 is CLOSED and its qualification is BLOCKED / NOT_PROVEN. UCPE's resume condition for
+    Lane P is met. That is a closing, not a pass, and nothing here reads it as one. No A4C reseal is requested.
+  - The T3, with BLOCKER-4=A: publish the exact reviewed head 09786a2, merge commit only if green, STATE last.
+  - The renewed T3, after that head's first CI run was red on a test harness defect: push the exact reviewed
+    repair 3b77890, merge commit only if all 14 checks are green.
+- #246 → main 5f1bbca2: a merge commit on the exact reviewed head 3b77890 (tree ad21a0c1).
+  - 20 commits on main 86f1d3e6; 29 files, +3904/-132: Lane P's 15 commits, the card, two wording-and-test
+    commits, the fourth blocker, and one tests-only repair of the first CI run.
+  - Checked before the merge: the pull request's head, tree, file list and every added and removed line equal the
+    reviewed local diff, and the repair is exactly three test files, +147/-1.
+  - 14 of 14 checks are green on 3b77890. CI / test ran 6875 passed, the local gate's count; the 9 tests that could
+    not start before ran and passed. The others: build-a, build-b and compare; the A4 Card-04 companion (PostgreSQL
+    17.6) and A4 ledger-audit rehearsals; migration 0014 to 0018; persistence; privilege (two jobs).
+  - Main's push CI 38041803837 and reproducible build 38041803846 are green on 5f1bbca2.
+- Preserved:
+  - the accepted-state ruling;
+  - BANNER, RELIABILITY_LABEL and RENDER_TEST, byte-identical to the head the owner ruled on;
+  - both registries empty, so the view can only say NO_ACCEPTED_CLAIM or INVALID_OR_UNAVAILABLE_DATA.
+- Added by the owner's BLOCKER-4=A: BACKEND_COPY, a fourth enforced blocker. The backend's own data and copy must
+  agree with an acceptance in the same change.
+- Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's, and the owner's UX
+  comprehension check (PREPARED, NOT RUN) comes before that release.
+- Nothing changed in production or the migrations: no deploy, no claim activation, no H2/F3/§5A change, no A4C
+  reseal.
+- This record is the batch's last publish. Before it: #246.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-10), verbatim — the renewed T3 for the repaired head on #246:**
+```text
+T3 AUTHORIZE: push exact reviewed head 3b778902f5225f5da9919dae65030091572640e2 to PR #246. Verify the updated PR head/diff is exactly the reviewed test-only repair; merge by merge commit only if ALL 14 checks are green. Then confirm main CI, rebuild STATE from resulting main and publish STATE last. Continue all safe T0/T1/T2 work; return only at the next genuine UX/T4/owner boundary.
+```
+- **The owner (2026-10-10), verbatim — the T3 for Lane P and the UX card, with BLOCKER-4=A:**
+```text
+CONTINUE CURRENT. T3 AUTHORIZE Lane P + UX publication with BLOCKER-4=A: publish exact reviewed head feat/p7p-backend-copy-blocker@09786a2d32f8c8a16f226cff4704b92ac5233bb3, verify exact diff + all 13 CI, merge-commit only if green; rebuild STATE from resulting main and publish STATE last. No deploy, UX check or claim activation; then exhaust all safe T0/T1/T2 work and return only at the next genuine owner/T4/UX boundary.
+```
+- **The owner (2026-10-10), verbatim — the UOR episode closed; prepare Lane P and the UX card for publication:**
+```text
+UOR QUAL-EP-20261010-01 is CLOSED but qualification is BLOCKED/NOT_PROVEN; UCPE's owner-established resume condition is satisfied. No A4C follow-up/reseal is requested.
+Prepare Lane P + UX card for publication from the existing local work, refreshed onto current main 86f1d3e6. Preserve the accepted-state ruling and all three mandatory acceptance blockers; publishing must not make any forecast-quality claim or directional permission reachable. Re-run full gates and fresh review after composition, and stop at the T3 publication boundary with the exact reviewed head/diff/CI plan.
+Continue all dependency-safe local T0/T1/T2 work in the same run; no deploy, claim activation, H2/F3/§5A change, A4C reseal, or interpretation of UOR as PASS.
+```
 - **The owner (2026-10-08), verbatim — the docs T3 and HARDENING=GO:**
 ```text
 CONTINUE CURRENT — Opus XHIGH. T3 publish docs/p8d-wording-followup@aac9e3f after refresh onto current main 47b73697, exact docs/comment-only diff + green CI, merge-commit only; if it overlaps hardening files, serialize it first.
@@ -2370,7 +2392,102 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=DP-D HARDENED (2026-10-08), under the owner's T3s. The docs follow-up and the four held gaps are
+LOOP_STATE=LANE P AND THE §23 UX CARD PUBLISHED (2026-10-10), under the owner's two T3s with BLOCKER-4=A. No deploy,
+  no UX check, no claim activation, no DB mutation, no secret action, no H2/F3/§5A change and no A4C reseal happened.
+  - The owner (verbatim above): UOR QUAL-EP-20261010-01 is CLOSED and its qualification is BLOCKED / NOT_PROVEN. The
+    resume condition DP-A set for Lane P ("until the UOR qualification episode closes") is met. A closing is not a
+    pass; nothing in the repository reads it as one.
+  - Published: #246 → main 5f1bbca2, a merge commit (parents 86f1d3e6 and 3b77890).
+    - The head is feat/p7p-backend-copy-blocker @ 3b778902f5225f5da9919dae65030091572640e2 (tree ad21a0c1), the
+      head the owner named in the renewed T3.
+    - Before the merge, against the reviewed local head: the same head and tree; the same 29 files; +3904/-132;
+      every added and removed line equal. The raw diff text differs only in hunk-header labels that GitHub adds.
+    - 14 of 14 checks green on that head, read before the merge:
+      - CI / test 38041491819: 6875 passed, the local gate's count. The 10 tests of
+        test_accepted_state_rendering.py and the 11 of test_linux_argument_limit.py ran and passed on Linux.
+      - Reproducible build 38041491779: build-a, build-b and compare.
+      - The A4 Card-04 companion rehearsal 38041491781 (PostgreSQL 17.6) and the A4 ledger-audit rehearsal
+        38041491810.
+      - Migration rehearsals: 0014 38041491859, 0015 38041491940, 0016 38041491868, 0017 38041491828, 0018
+        38041491811.
+      - The persistence rehearsal 38041491851 and the privilege rehearsal 38041491778 (two jobs).
+    - After the merge: main's push CI 38041803837 and reproducible build 38041803846 succeeded on 5f1bbca2. The
+      merge commit's parents are 86f1d3e6 and 3b77890, and its tree equals the reviewed head's tree (ad21a0c1).
+  - The first T3 and its red check (nothing was merged under it):
+    - The owner named feat/p7p-backend-copy-blocker @ 09786a2d32f8c8a16f226cff4704b92ac5233bb3 (tree 9a79a42e; 19
+      commits; 27 files, +3758/-132). It was pushed and #246 opened at exactly that head.
+    - 13 of 14 checks passed. CI / test (run 38037079117) FAILED: 6855 passed, 9 errors, all at the setup of the
+      module fixture `run` in tests/frontend/test_accepted_state_rendering.py: "Argument list too long" starting
+      node. The steps after pytest were skipped.
+    - Cause (the first causal failure): the fixture builds one script from the whole of app.js and 13 full
+      analyses, 536 KB, and passed it to node with -e. Linux refuses a single argument of 128 KiB or more; macOS
+      accepts it, so ./verify.sh passed there. Lane P was local until that push; it was its first CI run.
+    - It was a test harness defect. No product file was involved and no assertion failed.
+    - Sibling scan: no other harness is near the limit. The next longest node argument in the suite is 13.7 KB.
+    - The T3 named that head exactly and required green CI: no merge and no second push. The owner renewed the T3
+      for the repaired head.
+  - The one targeted repair, 3b77890: one commit on 09786a2, tests only, 3 files, +147/-1.
+    - The script goes to node on stdin. On the development machine node's output is byte-identical either way.
+    - tests/frontend/conftest.py applies Linux's limit to every frontend test on every platform, so the same
+      mistake now fails locally. It measures each argument, each environment string and a shell command.
+    - tests/frontend/test_linux_argument_limit.py tests it; 18 of 18 mutants are killed.
+    - Red was reproduced locally (the same 9 errors with the limit and the old call), then green.
+    - VERIFY=PASS 6875, scanners 3/3. A fresh separate-context review, three rounds, with no blocker or major
+      finding at any round; its four minor points on the new fixture are fixed, and the final state is PASS.
+  - What it carries:
+    - UX-1: the third outcome reads "In band", not "Timeout". Display only; the keys stay p_timeout and TIMEOUT.
+    - The DecisionView (decision_view.v1), built by the backend for every recorded analysis. The frontend defers
+      to it and recomputes nothing. The isolated automation analysis and the OOS arms carry no view.
+    - The accepted-state ruling, in code and tests, unreachable today.
+    - The §23 card: docs/runbooks/UX_COMPREHENSION_CHECK.md, generated by scripts/ux_comprehension/card.py.
+      PREPARED, NOT RUN. Its analyses C and E are SYNTHETIC.
+    - radar_evidence.v1 is unchanged but for the two synthetic examples' analysis_hash and evidence_hash.
+  - The refresh onto main 86f1d3e6 before the T3 (rebase; the reviewed heads are kept as local tags
+    backup/p7p-lane-p-8e26cac and backup/p7p-ux-card-1d9634d):
+    - Lane P 8e26cac → a3ea467, 15 commits. One conflict, at two commits:
+      tests/scripts/test_source_integrity_guard.py CURRENT_DELTA_PATHS.
+      - It is resolved as the sorted union of main's two paths (Lane R's analysis_service.py and app.py) and Lane
+        P's four: [frontend/app.js, frontend/index.html, schemas/response.schema.json, api/analysis_service.py,
+        api/app.py].
+      - The guard test runs against the pinned production commit 1caa8b08 (62 passed).
+    - The card 1d9634d → ab284b9, clean.
+    - Proof:
+      - Each rebased tree differs from `git merge-tree` of main and its reviewed head in that one file only.
+      - 20 of Lane P's 22 files and 3 of the card's 4 are byte-identical to the reviewed heads.
+      - analysis_service.py and TOOLING_INVENTORY.md carry the identical patch on main's newer file.
+  - Three commits on top of the refresh, before the repair:
+    - 2647092, wording only: six "local only / not published" notes say what is now true. UOR_HANDOFF.md names the
+      episode and its outcome as the owner gave it.
+    - a46c5fe, wording and tests, from the reviews' notes:
+      - The handoff says the closing "ended the hold on publishing". It does not say "released", which is a
+        governed word; nothing is deployed.
+      - The card says up front that some analyses are SYNTHETIC, with no count and no names.
+      - An OOS arm's missing decision_view, and an ordinary recorded analysis's decision_view.v1, are pinned by
+        test.
+    - 09786a2, the owner's BLOCKER-4=A: ACCEPTANCE_BLOCKERS gains BACKEND_COPY, and the guard test pins the four
+      names in order. No behaviour changes.
+  - Preserved, checked at 09786a2 and untouched by the repair:
+    - ACCEPTED_FORECAST_CLAIMS and ACCEPTED_DIRECTIONAL_PERMISSIONS are frozenset().
+    - BANNER, RELIABILITY_LABEL and RENDER_TEST are byte-identical to 8e26cac.
+    - test_no_claim_is_reachable_while_an_acceptance_blocker_remains holds.
+    - The accepted-state ruling's tests pass.
+  - Gates: VERIFY=PASS 6875 on 3b77890 (6864 on 09786a2 and on a46c5fe), scanners 3/3; 0 of 69 evaluator-pinned
+    files touched; the changed Python parses as Python 3.11, which is CI's version.
+  - Reviews (fresh, separate context), all PASS: the composition at 2647092; the delta at a46c5fe; the fourth
+    blocker at 09786a2; the repair at 3b77890.
+    - In the composition review, 108 recorded analyses all gave NO_ACCEPTED_CLAIM, and an injected decision_view
+      was refused with 422.
+  - Review notes that stand, none blocking:
+    - The blockers are enforced by test, in CI. build_decision_view itself does not read ACCEPTANCE_BLOCKERS.
+    - `.decision-headline` has no style rule of its own; the headline shows as plain paragraph text.
+    - Nine older commit subjects in #246 say "local". They are history and are not rewritten.
+  - The plan given at the first T3 said 13 checks. There are 14: the privilege rehearsal runs as two jobs.
+  - Lesson: the local gate runs on macOS and CI on Linux. A lane held local has never met CI, and its first run can
+    be red on a platform difference. The frontend tests now apply Linux's argument limit locally.
+  - Evidence: .work/p7/LANE_RECORD.md and .work/p7/LANE_P_PR_BODY_v2.md. The local records
+    chore/state-p7p-publication-ready @ 3944ae1 and chore/state-p7p-ci-red @ ccfafeb are superseded by this one
+    and are never published.
+  Before it: DP-D HARDENED (2026-10-08), under the owner's T3s. The docs follow-up and the four held gaps are
   published, and the proof on the owner's export is still PASS. No production query, deploy, DB mutation, secret
   action, F3/§5A access, new export or T4 happened; no export content was read or shown.
   - The docs follow-up: aac9e3f, refreshed onto main 47b73697 as 54a2724.
@@ -4323,7 +4440,12 @@ LOOP_STATE=DP-D HARDENED (2026-10-08), under the owner's T3s. The docs follow-up
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-08):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-10):
+  - Lane R (#232, #236), DP-D (#234, #239, #241, #243, #244) and Lane P with the §23 card (#246) are published.
+  - Lane P carries the accepted-state ruling and four acceptance blockers. No claim or permission is reachable.
+  - The UOR qualification episode is closed, with qualification BLOCKED / NOT_PROVEN.
+  - Lane P is NOT released: production is on D 1caa8b08.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-08):
   - Lane R (#232, #236) and DP-D (#234, #239, #241, #243 and the hardening) are published.
   - DP-D's restore proof on the owner's export is PASS, with the owner's nine exact exceptions and the four
     hardening gaps closed.
@@ -4530,7 +4652,13 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-08):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-dpd-hardening (this record, on main 4b948d99). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7p-published (this record, on main 5f1bbca2). Local and unpublished:
+  - chore/state-p7p-publication-ready @ 3944ae1 and chore/state-p7p-ci-red @ ccfafeb: superseded by this
+    record; never to be published.
+  - feat/p7p-ux-comprehension @ a46c5fe and feat/p7p-decisionview-ux1-degraded @ a3ea467: ancestors of the
+    published head.
+  - Tags backup/p7p-lane-p-8e26cac and backup/p7p-ux-card-1d9634d: the reviewed heads before the refresh.
+  Before it: chore/state-dpd-hardening (this record, on main 4b948d99). Local and unpublished:
   - feat/p7p-decisionview-ux1-degraded @ 8e26cac (worktree scratchpad/wtP of session ba4955d3);
   - feat/p7p-ux-comprehension @ 1d9634d, on Lane P (scratchpad/wtU).
   chore/state-dpd-storage-settings @ 4c27ff2 is superseded and is never to be published.
@@ -4698,7 +4826,10 @@ CURRENT_BRANCH=chore/state-dpd-hardening (this record, on main 4b948d99). Local 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=4b948d99 (main, #244: DP-D's hardening; its 5 PR checks, push CI
+LAST_GREEN_SHA=5f1bbca2 (main, #246: Lane P and the §23 card). Its 14 PR checks, push CI 38041803837 and reproducible
+  build 38041803846 succeeded.
+  Before it 86f1d3e6 (#245).
+  Before it: 4b948d99 (main, #244: DP-D's hardening; its 5 PR checks, push CI
   37728274835 and reproducible build 37728274769 green). Before it ea65dda4 (#243), then 47b73697 (#242).
   Before it: fe01c980 (main, #241: DP-D's nine exact exceptions; its 5 PR checks, push CI
   37717995013 and reproducible build 37717995024 green). Before it 6208071e (#240).
@@ -4947,7 +5078,15 @@ LAST_GREEN_SHA=4b948d99 (main, #244: DP-D's hardening; its 5 PR checks, push CI
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-08, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-10, scanners 3/3 each:
+  - chore/state-p7p-published (this record, on main 5f1bbca2): 6875. Main 5f1bbca2's tree is the reviewed
+    head's tree: 6875 locally and 6875 on CI.
+  - Before the merge: feat/p7p-backend-copy-blocker @ 3b77890 6875 and @ 09786a2 6864; feat/p7p-ux-comprehension
+    @ a46c5fe 6864; feat/p7p-decisionview-ux1-degraded @ a3ea467 6856.
+  - 09786a2 on CI (Linux): 6855 passed and 9 errors, the harness defect that 3b77890 repairs.
+  - CI on #246 is the proof for the persistence, privilege and migration rehearsals and for the A4 Card-04
+    companion's verdict on PostgreSQL 17.6. They cannot run on the development machine.
+  Before it: PASS 2026-10-08, scanners 3/3 each:
   - #244's checks on 733b96e: test, the PostgreSQL 17.6 rehearsal (68/68 + escape_strings + every_role_settings),
     compare, build-a and build-b.
   - Locally: 733b96e 6786; 54a2724 6746.
@@ -5184,7 +5323,9 @@ LAST_VERIFY=PASS 2026-10-08, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
+  Before it: NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); four fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model:
@@ -5312,7 +5453,23 @@ CODEX_PENDING=NONE (2026-10-08). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-08), nothing urgent:
+OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-10), nothing urgent:
+  - The UX comprehension check, before Lane P's release: you run docs/runbooks/UX_COMPREHENSION_CHECK.md, about
+    ten minutes. It is PREPARED, NOT RUN. Claude never runs it or answers it for you.
+  - T4, after that check and only on your word: release Lane P.
+    - It would carry main 5f1bbca2's frontend and API to production, which is on D 1caa8b08 today.
+    - UX-1's text moves analysis_hash on every path. Keys are frozen, and no evaluator reads it.
+    - The source-integrity guard's five CURRENT_DELTA_PATHS clear when a release carries them.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers (BANNER: your wording; RELIABILITY_LABEL; RENDER_TEST; BACKEND_COPY), each
+    resolved in the owner-authorized change.
+  - Standing:
+    - the writer JWT renewal by 2026-10-30;
+    - the A4C review-5 follow-ups (optional; none requested);
+    - the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed;
+    - full-data custody (DP-D option 3) is a later ruling;
+    - DP-D's export limits stay documented and never proven.
+  Before it: AHEAD, each the owner's (2026-10-08), nothing urgent:
   - Lane P publication, after the UOR qualification episode closes or on your explicit authorization, and its UX
     check.
   - The mandatory acceptance blockers.
@@ -6098,7 +6255,9 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-08), nothing urgent:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the items above, at your pace. Claude: passive reads only.
+NEXT_ACTION=The owner: the UX comprehension check, at your pace; then the T4 release decision. Claude: passive reads
+  only until then.
+  Before it: The owner: the items above, at your pace. Claude: passive reads only.
   Before it: The owner: the items above, at your pace. Claude: the docs follow-up and the hardening assessment, both
   locally (the hardening HELD); then passive reads only.
   Before it: The owner: DP-D-STORAGE-SETTINGS (A or B); on A, the renewed T3 for the closure batch. Claude on A:
