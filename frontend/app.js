@@ -111,7 +111,10 @@ async function loadBuildFingerprint() {
   }
 }
 
-async function api(path, options = {}) {
+// `storedRecord: true` is for an answer that is a stored record, not a report from storage now:
+// the storage status in it is from when the record was made. The header badge is what storage
+// said when it was last asked, so such an answer is returned to its caller and not read for it.
+async function api(path, options = {}, { storedRecord = false } = {}) {
   const response = await fetch(path, {
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -126,7 +129,7 @@ async function api(path, options = {}) {
     error.payload = null;
     throw error;
   }
-  if (response.ok) {
+  if (response.ok && !storedRecord) {
     updateStatusFromPayload(payload);
   }
   if (!response.ok) {
@@ -2753,7 +2756,10 @@ async function runBatchAnalysis(batchRequest) {
     });
     renderResults(target, payload.results, payload.errors, payload.items);
     watchSaveReceipts(target, payload.results);
-    updateStatusFromPayload(payload.results?.[0] || {});
+    // Each result carries storage's status from when its own analysis began, in the order they
+    // ran. The last one is the latest report, and the badge is storage's status when last asked.
+    const reported = Array.isArray(payload.results) ? payload.results : [];
+    updateStatusFromPayload(reported[reported.length - 1] || {});
     markRefreshed();
   } catch (error) {
     renderBatchFailure(target, batchFailureMessage(error?.status, error?.payload));
@@ -3101,7 +3107,8 @@ function devToolFailureMessage(action, status, payload) {
 
 async function exportDebugRun(run, target) {
   try {
-    const exported = await api(`/v1/debug/export/${run.run_id}`);
+    // A run's export carries the run's own storage status, from when the run was made.
+    const exported = await api(`/v1/debug/export/${run.run_id}`, {}, { storedRecord: true });
     target.textContent = JSON.stringify(exported, null, 2);
   } catch (error) {
     target.textContent = devToolFailureMessage(
