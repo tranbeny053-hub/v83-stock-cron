@@ -1,35 +1,88 @@
 # STATE
 
-Updated: 2026-10-10 (**LANE P AND THE §23 UX CARD ARE PUBLISHED TO MAIN UNDER THE OWNER'S T3, WITH A FOURTH
-ACCEPTANCE BLOCKER (BLOCKER-4=A). NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS
-DEPLOYED, AND THE UX CHECK IS NOT RUN.**
-- The owner (three messages, verbatim below):
-  - UOR QUAL-EP-20261010-01 is CLOSED and its qualification is BLOCKED / NOT_PROVEN. UCPE's resume condition for
-    Lane P is met. That is a closing, not a pass, and nothing here reads it as one. No A4C reseal is requested.
-  - The T3, with BLOCKER-4=A: publish the exact reviewed head 09786a2, merge commit only if green, STATE last.
-  - The renewed T3, after that head's first CI run was red on a test harness defect: push the exact reviewed
-    repair 3b77890, merge commit only if all 14 checks are green.
-- #246 → main 5f1bbca2: a merge commit on the exact reviewed head 3b77890 (tree ad21a0c1).
-  - 20 commits on main 86f1d3e6; 29 files, +3904/-132: Lane P's 15 commits, the card, two wording-and-test
-    commits, the fourth blocker, and one tests-only repair of the first CI run.
+Updated: 2026-10-11 (**THE INDEPENDENT CHANGES ARE PUBLISHED (#248): A SAVE RECEIPT FOR EACH ANALYSIS, STORAGE WORDING
+THAT NO LONGER FORECASTS, AND THE UX CARD CORRECTION. CLASS B IS ON HOLD: ITS WORK IS LOCAL AND UNPUBLISHED. THE
+REQUIRED UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOYED.**
+- The owner (verbatim below) authorized the T3 for the exact reviewed head.
+- #248 → main 6859ffdf: a merge commit on feat/p7p-lifted-independent @ 3ef4b43 (tree 3eb61890); five commits on
+  main 62bab5c9; 21 files, +4228/-67.
   - Checked before the merge: the pull request's head, tree, file list and every added and removed line equal the
-    reviewed local diff, and the repair is exactly three test files, +147/-1.
-  - 14 of 14 checks are green on 3b77890. CI / test ran 6875 passed, the local gate's count; the 9 tests that could
-    not start before ran and passed. The others: build-a, build-b and compare; the A4 Card-04 companion (PostgreSQL
-    17.6) and A4 ledger-audit rehearsals; migration 0014 to 0018; persistence; privilege (two jobs).
-  - Main's push CI 38041803837 and reproducible build 38041803846 are green on 5f1bbca2.
-- Preserved:
-  - the accepted-state ruling;
-  - BANNER, RELIABILITY_LABEL and RENDER_TEST, byte-identical to the head the owner ruled on;
-  - both registries empty, so the view can only say NO_ACCEPTED_CLAIM or INVALID_OR_UNAVAILABLE_DATA.
-- Added by the owner's BLOCKER-4=A: BACKEND_COPY, a fourth enforced blocker. The backend's own data and copy must
-  agree with an acceptance in the same change.
-- Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's, and the owner's UX
-  comprehension check (PREPARED, NOT RUN) comes before that release.
+    reviewed diff.
+  - 12 of 12 checks are green on 3ef4b43. CI / test ran 7040 passed, the local gate's count. The others: build-a,
+    build-b and compare; the migration 0014 to 0018 rehearsals; the persistence fault rehearsal; the privilege
+    rehearsal (two jobs).
+  - Main's push CI 38104767273 and reproducible build 38104767302 are green on 6859ffdf.
+- What it carries:
+  - A save receipt for each analysis: GET /v1/analyze/receipt/{run_id} answers SAVED, PENDING, FAILED (no save was
+    acknowledged) or NOT_RETAINED. The same session requirement and visibility rule as the detail route. The analyze
+    response is unchanged, so no pinned hash moved. The screen shows the receipt in the analysis's Storage row.
+  - Storage wording that no longer forecasts: the Overview row reads "Storage when requested", the badge "Storage,
+    last checked", and the two older sentences no longer say an analysis "will not appear" in history.
+  - A saved run's masked lists read "Not kept in saved history."
+  - The UX card says it shows the decision view alone and marks its invalid-data analysis SYNTHETIC; its question
+    4 asks about a warning. It is PREPARED, NOT RUN.
+  - A three-attempt retry of the visibility check on the detail and receipt routes; a request-events test fix.
+- What it does not carry: any of the gate-framing work, which is on HOLD and local (below); any change to gates,
+  the response schema, persistence, migrations, config or the export sanitizer.
+- The history since #247, all recorded below:
+  - CLAUDE_EXPERT_CHECK (2026-10-10), recorded separately from the owner's UX check: a blind walkthrough of the
+    card matched its key 20 of 20, and the audit of the real screens was FINDINGS. No text lets a model answer for
+    the owner, so the required UX check stays NOT_RUN.
+  - Class B (legacy decision surfaces read as a call) was found a fourth time. One source-level repair (5541cb5)
+    and one architectural change (one gate authority in the DecisionView, 716925f) were made locally. Each time a
+    fresh review still found the class in a narrow case, so by the owner's rule both are HELD and unpublished.
+  - Two independent local lanes (the save receipt; whole-screen regression pins) were built on the held change
+    and reviewed; the parts that do not depend on held code were lifted onto main and are what #248 publishes.
+- All new wording is PROVISIONAL by the owner's ruling H1.
+- Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
 - Nothing changed in production or the migrations: no deploy, no claim activation, no H2/F3/§5A change, no A4C
   reseal.
-- This record is the batch's last publish. Before it: #246.)
+- This record is the batch's last publish. Before it: #248.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-11), verbatim — the T3 for the lifted candidate; class B stays on HOLD:**
+```text
+CONTINUE CURRENT — Opus XHIGH. T3 AUTHORIZE publication of exact reviewed head feat/p7p-lifted-independent@3ef4b432f81b85f1611e6c704c7ca871a54085c1. Verify exact PR diff and all CI checks (12 expected); merge-commit only if all PASS, confirm main CI, then publish STATE last.
+
+Keep Class B HOLD and UX NOT_RUN. No T4/deploy/claim activation or H2/F3/§5A/A4C changes. Exhaust all remaining independent safe T0–T2 work; return only at a genuine owner boundary or failure.
+```
+- **The owner (2026-10-11), verbatim — H1 to H6; LIFT the independent changes; one batched T3 package:**
+```text
+H1=provisional approve; H2=relabel; H3=keep; H4=later; H5=later with risk assessment; H6=LIFT. Keep Class B HOLD.
+
+Separate only genuinely independent changes from 44ac3bc onto current main 62bab5c9; no held Class-B code. Verify receipt authorization/privacy, wording truth, exact diff, full gates, mutants and fresh review. Prepare one batched T3 package; do not publish without that authorization.
+
+Meanwhile exhaust independent safe T0/T1/T2 work, max 2 lanes. No T4/deploy, H2/F3/§5A or acceptance changes. Return only at a genuine owner/security/T3 boundary.
+```
+- **The owner (2026-10-11), verbatim — G1 to G6; class B stays on HOLD; two independent local lanes:**
+```text
+CONTINUE CURRENT — Opus XHIGH. G1=A: keep Class B HOLD; no more patches to 716925f. G2=missing data is not proven market risk; G3=preserve content pending parity review; G4=whole-screen tests; G5=defer hash acceptance to T4; G6=independent defects only.
+
+Use up to 2 independent local lanes to exhaust safe regression, save-receipt, Raw JSON and history robustness work with full tests/reviews. No T3/T4/deploy, no acceptance relaxation. Return only at one batched genuine owner boundary.
+```
+- **The owner (2026-10-10), verbatim — AD1 to AD6; one bounded local architectural change; HOLD on recurrence:**
+```text
+AD1=A; AD2=read-time; AD3=approve §6 as a provisional regression contract, NOT release acceptance; AD4=YES for ONE bounded LOCAL architectural change; AD5=keep 5541cb5; AD6=keep older sections only if full-screen assertions remain consistent.
+
+Implement matrix-first and one DecisionView gate authority across Single/Batch/Detail/History; test, mutate, review independently and regenerate the UX card. HOLD on recurring Class B; no iterative patches.
+
+Saved/unsaved receipt, conflicting legacy sections and visual UX remain release blockers. No T3/T4/deploy. Exhaust safe work and return one batched owner boundary.
+```
+- **The owner (2026-10-10), verbatim — the batch rulings; diagnostic only; class B stays on HOLD:**
+```text
+CLASS-B-4: D1=C (diagnostic only), D2=include, D3=separate risk wording, D4=backend receipt later, D5=defer, D6="not forced by a risk gate", D7=HOLD.
+
+Build a local full-screen regression matrix for detail/batch/history: evidence-only, actual/combined risk, invalid data, save success/failure/stateless, and synthetic acceptance; report root causes.
+
+Class B remains HOLD: no fifth repair, T3/T4/deploy or owner UX PASS. Return one reviewed architecture decision package; no Codex.
+```
+- **The owner (2026-10-10), verbatim — CLASS-B-4=A, the one bounded local repair, and the HOLD rule:**
+```text
+CLASS-B-4=A. I explicitly authorize ONE bounded LOCAL source-level root-cause repair as an exception to the exhausted Class-B limit; if the class recurs, HOLD—no further patches. Distinguish missing skill evidence from actual risk gates; preserve H2, NO_TRADE, all gate tokens and four acceptance blockers. Audit full-screen UX, saved/unsaved truth and card coverage; run tests, governed hash updates and fresh review. No T3/T4/deploy/A4C reseal. Batch remaining owner decisions.
+```
+- **The owner (2026-10-10), verbatim — the Claude expert check of the UX card and the DecisionView:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Use a fresh-context independent Claude reviewer to perform a blind UX walkthrough of A–E, answering all 20 questions before seeing the answer key; then compare results and critically audit DecisionView wording and semantics. Complete safe local fixes, tests and reviews if needed. Record CLAUDE_EXPERT_CHECK separately; only mark the required UX check PASS if the governing contract explicitly permits Claude substitution. No deploy/T4 or acceptance relaxation; return only at a genuine owner boundary.
+```
 - **The owner (2026-10-10), verbatim — the renewed T3 for the repaired head on #246:**
 ```text
 T3 AUTHORIZE: push exact reviewed head 3b778902f5225f5da9919dae65030091572640e2 to PR #246. Verify the updated PR head/diff is exactly the reviewed test-only repair; merge by merge commit only if ALL 14 checks are green. Then confirm main CI, rebuild STATE from resulting main and publish STATE last. Continue all safe T0/T1/T2 work; return only at the next genuine UX/T4/owner boundary.
@@ -2392,7 +2445,320 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=LANE P AND THE §23 UX CARD PUBLISHED (2026-10-10), under the owner's two T3s with BLOCKER-4=A. No deploy,
+LOOP_STATE=THE LIFTED CANDIDATE IS PUBLISHED (2026-10-11), under the owner's T3. Class B stays on HOLD and the UX
+  check NOT_RUN. No deploy, T4, claim activation, acceptance relaxation, H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): T3 AUTHORIZE publication of the exact reviewed head feat/p7p-lifted-independent @
+    3ef4b432f81b85f1611e6c704c7ca871a54085c1; verify the exact pull-request diff and all CI checks (12 expected);
+    merge commit only if all pass; confirm main's CI; then publish STATE last.
+  - Published: #248 → main 6859ffdf, a merge commit (parents 62bab5c9 and 3ef4b43).
+    - Before the merge, against the reviewed local head: the same head and tree (3eb61890); the same 21 files;
+      +4228/-67; every added and removed line equal.
+    - 12 of 12 checks green on that head, read before the merge:
+      - CI / test 38104451436: 7040 passed, the local gate's count.
+      - Reproducible build 38104451423: build-a, build-b and compare.
+      - Migration rehearsals: 0014 38104451392, 0015 38104451439, 0016 38104451411, 0017 38104451502, 0018
+        38104451407.
+      - The persistence fault rehearsal 38104451491 and the privilege rehearsal 38104451431 (two jobs).
+    - After the merge: main's push CI 38104767273 and reproducible build 38104767302 succeeded on 6859ffdf. The
+      merge commit's tree equals the reviewed head's tree (3eb61890). STATE.md was not touched by #248.
+  - The records below this one were written while that work was local. Where they say "LOCAL", "at the T3" or
+    "nothing is published", that was true when written; this record supersedes them for the lifted candidate.
+  - Still local and unpublished, all of it on HOLD or dependent on held code:
+    - fix/p7p-ux-card-honesty @ 345c681 is published as #248's first commit (3f407ad, the same tree change).
+    - feat/p7p-class-b-root-cause @ 5541cb5 and feat/p7p-gate-authority @ 716925f (with the matrix test fda9a38):
+      the two class-B changes, HELD.
+    - feat/p7p-independent-lanes @ 44ac3bc: the lanes as first built on the held change, with the whole-screen
+      goldens, which pin held screens. It needs a rebase onto the new main before any later use.
+  Before it: AT THE OWNER'S T3 (2026-10-11): the lifted candidate is ready and reviewed; nothing is pushed. Class B is
+  still on HOLD. No deploy, T4, claim activation, acceptance relaxation, H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): H1 provisional approve; H2 relabel; H3 keep; H4 later; H5 later with risk
+    assessment; H6 LIFT. Separate only genuinely independent changes from 44ac3bc onto current main 62bab5c9, no
+    held class-B code; verify receipt authorization and privacy, wording truth, exact diff, full gates, mutants and
+    a fresh review; one batched T3 package; do not publish without that authorization.
+  - The candidate: feat/p7p-lifted-independent @ 3ef4b432f81b85f1611e6c704c7ca871a54085c1 (tree 3eb61890), five
+    commits on main 62bab5c9, 21 files, +4228/-67:
+    - 3f407ad: the UX card correction (the card says it is the decision view alone; its invalid-data analysis is
+      SYNTHETIC).
+    - 68df837: the save receipt backend (GET /v1/analyze/receipt/{run_id}, save_receipt.v1; api/save_receipt.py);
+      a three-attempt retry of the visibility check on the receipt and detail routes; the request-events test fix.
+    - bcf7baa: the receipt on screen; the Overview label "Storage when requested"; a stored run's masked lists read
+      "Not kept in saved history."; the badge prefix "Storage, last checked: ".
+    - 6e1aa50: index.html's static badge placeholder.
+    - 3ef4b43: the two request-time status sentences no longer forecast (H2); a failed watchlist change no longer
+      sets the badge; the card's question 4 reworded; the deployment checklist line.
+  - Not in it (held): the gate view module, decision_view.gates, the schema change, any gate wording, the matrix
+    test and the whole-screen goldens. Checked by name and by diff: none is present.
+  - Gates: VERIFY=PASS 7040 on 3ef4b43, scanners 3/3. No forbidden path and no evaluator-pinned file is touched.
+    The pinned identity hashes are untouched.
+  - The fresh review (separate context), final at 3ef4b43: REVIEW=PASS; HELD_CODE_ABSENT=YES;
+    ANALYZE_RESPONSE_UNCHANGED=YES (23 frozen analyses and six HTTP bodies equal main);
+    RECEIPT_AUTHORIZATION=SOUND.
+    - Authorization, caller by caller against the detail route: 401 identical for no cookie, a forged cookie,
+      another signing key and a machine credential, for every id; 404 byte-identical for an unknown run and for
+      another origin's run, held or durable; other methods refused; no-store; telemetry carries the route template
+      only; the record holds a run id and a state, for USER_REQUESTED runs only, bounded at 500.
+    - Visible differences from main, the whole list: the Overview label; the no-storage and unavailable status
+      sentences; the badge prefix; a reopened run's Key Reasons line; the Storage row once a receipt answers; the
+      badge no longer changing after a failed watchlist change. No decision or gate line moves.
+    - Mutants: 107 of 108 on the port (one equivalent), 25 of 25 on the corrections; the reviewer's 70 of 72 and
+      16 of 16.
+  - The second lane, read-only, two assessments in .work/p7/:
+    - RUN_STORE_RISK_ASSESSMENT.md (H5): the in-memory run store has no lock. Forced, a listing or the add itself
+      can raise; in the browser's normal pattern, 0 failures in 36,000 analyses. Visibility never broke.
+      Recommended: a lock inside the store, a T2 change, later.
+    - LEGACY_SECTIONS_PARITY_REVIEW.md (G3): on main only the older sections name a risk gate or the kill switch,
+      so retiring them now would lose information; under the kill switch the view says ABORT and the Gate brief
+      NO_TRADE.
+  Before it: AT THE OWNER (2026-10-11): the two independent local lanes are done, integrated and reviewed. Class B is
+  still on HOLD and 716925f was not patched. No push, PR, deploy, T4, claim activation, acceptance relaxation,
+  H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): G1=A keep class B on HOLD, no more patches to 716925f; G2 missing data is not proven
+    market risk; G3 preserve content pending parity review; G4 whole-screen tests; G5 defer hash acceptance to T4;
+    G6 independent defects only. Up to two independent local lanes for regression, save-receipt, Raw JSON and
+    history robustness, with full tests and reviews.
+  - Lane B, backend (feat/p7p-save-receipt @ 9df1468, on 871efa3):
+    - GET /v1/analyze/receipt/{run_id} → save_receipt.v1 with a state: SAVED (the durable store acknowledged the
+      whole save, or returns the run when this process has no record), PENDING, FAILED (no save was acknowledged;
+      it may still have committed), NOT_RETAINED (no durable store). 404 as the detail route; the same session
+      dependency and visibility rule.
+    - api/save_receipt.py: a process-wide, lock-guarded, bounded (500) record of run id to state, for
+      USER_REQUESTED runs only; no payload is kept. Each OK item of /v1/analyze_batch has its own receipt.
+    - The analyze response is unchanged; the pinned hashes are untouched. Nothing under persistence/, config/,
+      schemas/ or migrations/ changed.
+    - attach_gate_view never raises on a malformed stored gate result.
+  - Lane R, frontend and tests (feat/p7p-whole-screen @ 63f965a):
+    - 39 whole-screen goldens (tests/frontend/goldens/fullscreen/; builder tests/frontend/fullscreen_goldens.py
+      with --write and --check): every line, in order, of every scenario and surface of the matrix. Normalized:
+      run ids, and decimals beyond 12 significant digits.
+    - Raw JSON and Download JSON are the backend's object verbatim; the read-time gate view reaches the renderers
+      only.
+    - A saved run's "Key Reasons" reads "Not kept in saved history." instead of one character per line. The
+      export sanitizer, which masks that field, is untouched.
+    - After a live analysis is shown the screen asks for its receipt and updates the Storage row; at most three
+      further tries while PENDING; a reopened run asks nothing.
+  - Integration (feat/p7p-independent-lanes): the merge bb3db87; c92f762 (a cross-lane contract test; a
+    request-events test that failed on a random id about once in three hundred runs); 44ac3bc (the corrections).
+  - The fresh review of the integrated lanes: no blocker; frozen wording unchanged; analyze response unchanged; no
+    security or privacy defect in the new route. Its findings, all corrected in 44ac3bc and confirmed PASS:
+    - The FAILED sentence said "not saved" for saves that may have committed. It now reads "Save not confirmed:
+      this analysis may be missing from Recent Analysis history after a restart".
+    - Detail could show the receipt above "Persistence: Storage available". That row is now labelled "Storage when
+      requested".
+    - attach_gate_view had stopped framing an absent or null block list that it framed before; restored.
+    - A rare race in the route's visibility check returned an error; it now retries three times.
+    - A stale test name; three test gaps (now covered, the record's lock included).
+  - VERIFY=PASS 7192 on 44ac3bc, scanners 3/3. Mutants: 41 of 41 (Lane B), 44 of 44 (Lane R), 32 of 32 (the
+    corrections); the reviewer's 81 and 21.
+  - Versus the held change 716925f, the only visible lines that changed: the saved run's Key Reasons, and the
+    label "Storage when requested".
+  - Frozen and NOT touched (class B, on HOLD): under the kill switch the screen says "not a reason to act or to
+    avoid acting" beside "Safety shutdown is active"; one screen carries two framing sentences; the earlier D1 and
+    D2.
+  Before it: AT THE OWNER (2026-10-10): the one bounded architectural change is done locally and HELD. The contract is
+  met; a fresh review still finds class B in one narrow case, so by the owner's rule nothing more was patched. No
+  push, PR, deploy, T4, claim activation, acceptance relaxation, H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): AD1=A; AD2=read time; AD3 approve section 6 as a provisional regression contract,
+    not release acceptance; AD4 yes for ONE bounded LOCAL architectural change; AD5 keep 5541cb5; AD6 keep the older
+    sections only if full-screen assertions remain consistent. Matrix-first; one DecisionView gate authority across
+    Single, Batch, Detail and History; test, mutate, review independently, regenerate the UX card. HOLD on recurring
+    class B; no iterative patches. Release blockers that remain: the saved/unsaved receipt, conflicting legacy
+    sections, visual UX.
+  - The branch: feat/p7p-gate-authority, two commits on the held repair 5541cb5:
+    - fda9a38: tests/frontend/test_fullscreen_matrix.py, written first and red there (5 failed, 48 errors).
+    - 716925faf3b15d7ee8c2c9fa2873fe82a81224b9: the change.
+      - detail/gate_kinds.py: build_gate_view (a pure function of the gate result: kinds, blocks, summary,
+        framing) and attach_gate_view (the read-time framing of a saved run from its stored gate result).
+      - detail/decision_view.py: the view carries `gates`; under a real risk gate its sentence drops "not a reason
+        to act or to avoid acting" (D3). schemas/response.schema.json: decisionView.gates, strict and required.
+      - api/app.py: the detail endpoint attaches the gate view on both read paths. Nothing new is stored.
+      - detail/decision_brief.py: the forced token reads "(not forced by a risk gate)" (D6).
+      - frontend/app.js: Single, Batch (D2) and Detail render the summary and framing from the authority; a
+        reopened run shows the read-time summary in place of its stored sentence; neutral headings; only the
+        conditions the backend marks relevant.
+      - The UX card: the view's gate lines, a real-risk analysis F and a fifth question.
+      - Governed hashes: the pinned identity hashes (analysis 2d44574e…, response e1e39119…), the two synthetic
+        radar examples with MANIFEST, the UOR handoff's digests and note.
+    - VERIFY=PASS 6982, scanners 3/3. 27 of 27 mutants killed against a verified baseline. gates/ untouched.
+  - The fresh review (separate context): REVIEW=FINDINGS; CONTRACT_SECTION_6=MET; CLASS_B_RECURS=YES, narrow.
+    - Met on every line read: 12 scenarios on Single, Batch and Detail; 7 on both history paths (after a restart
+      and in the same session) through the real endpoint. The read-time view equals the live one, also for a run
+      saved on main. The forced token is never shown alone.
+    - Preservation: 21 frozen analyses at main, at 5541cb5 and at the head have identical gate results, scores,
+      probabilities, labels and permissions. No evaluator-pinned file is touched. Nothing new is stored.
+    - D1, MAJOR, the recurrence: the risk framing ("This is a finding about market conditions or execution…") has
+      no subject. On Single it sits under the no-forecast sentence, away from the summary; on Batch and Detail it
+      follows "The evidence gate is active too…". Missing evidence can be read as the market finding. Only when a
+      real risk gate fires beside the evidence gate.
+    - D2, MAJOR: an unavailable order book makes the unchanged gates raise LIQUIDITY_NOT_VIABLE, and the authority
+      then says "a finding about market conditions or execution": missing data worded as a market finding.
+    - D3 to D6, minor: the frontend still words three framing sentences of its own; a live analysis's Raw JSON
+      shows a frontend-merged gate_view, so it is not the backend response verbatim; a malformed stored gate result
+      can contradict itself or fail the detail endpoint; the view gained a required field without a version bump.
+    - Legacy sections still contradict the authority ("No trade is supported…", "Wait for hard blockers…", "(not a
+      market call)" titles over the risk framing): the release blocker the owner already named.
+    - Test adequacy: the matrix scans every line but asserts patterns and membership, not whole screens; 38 of the
+      reviewer's 44 mutants died; reordering lines and adding an advisory line survive.
+    - The card: Single places the gate lines differently from the card's print; question 5 can be answered by
+      finding the phrase.
+  - HOLD: nothing above was patched.
+  Before it: AT THE OWNER (2026-10-10): the diagnostic matrix and ONE reviewed architecture decision package are
+  delivered. Class B is still on HOLD; nothing in the product or the held repair changed. No push, PR, deploy, T4.
+  - The owner's rulings (verbatim above): D1=C (diagnostic only); D2 include the batch card; D3 separate risk
+    wording; D4 backend receipt later; D5 defer; D6 "not forced by a risk gate"; D7 hold. No fifth repair; no owner
+    UX PASS; no Codex.
+  - An interrupted message meant for the UOR Episode-01 session arrived just before; it was not acted on here.
+  - The matrix (.work/p7/matrix/fullscreen_matrix.py; outputs for main 62bab5c9 and the held repair 5541cb56): the
+    real backend builds each analysis and the real app.js renders it; every surface's full text is recorded.
+    - Scenarios: evidence gate only; risk and evidence; risk only (SYNTHETIC); kill switch and evidence; the
+      invalid-data error path; storage OK, unavailable and stateless; accepted claim and permission (SYNTHETIC).
+    - Surfaces: the timeframe card, the batch card, the detail panel, and a stored run reopened after a restart.
+    - Every gate token is identical on both trees.
+  - Root causes (the package's RC1 to RC8), the chief ones:
+    - RC1: no single authority for "why is it blocked"; four places word the gate result and the DecisionView says
+      nothing about gates, so each surface must be repaired separately.
+    - RC2: the evidence gate reuses risk tokens and no named kind is published as data.
+    - RC3: the frontend prints the condition list unfiltered and adds risk headings of its own.
+    - RC4: history renders stored sentences; the gate facts are stored too, but nothing rebuilds framing from them.
+    - RC5: saved status is sampled before the save. RC6: two sentences do not know about risk (D3).
+  - The package's recommendation: option A, gate facts in the DecisionView with framing written at read time
+    ("store facts, never sentences"), staged behind an owner-approved acceptance table and the matrix landed as a
+    whole-screen regression test. Options B (frontend only), C (A plus retiring the older sections), D (hold).
+  - Review of the package (fresh context, two rounds): round 1 found one blocker (it had recommended storing the
+    view's sentences) and four major inaccuracies, all corrected; round 2 found no blocker or major and judged the
+    recommendation sound; its five minor corrections are applied (revision 3).
+  - D6 is NOT applied to the held repair: that would be a patch under the HOLD. It is in the acceptance table.
+  Before it: AT THE OWNER (2026-10-10): the one authorized class-B repair is done locally and HELD, because a fresh
+  review finds the class still present where the repair did not reach. No further patch was made. No push, PR,
+  deploy, T4, A4C reseal, claim activation, acceptance relaxation, DB mutation, secret action or H2/F3/§5A change.
+  - The owner (verbatim above): CLASS-B-4=A. ONE bounded LOCAL source-level root-cause repair as an exception to
+    the exhausted class-B limit; if the class recurs, HOLD, no further patches. Distinguish missing skill evidence
+    from actual risk gates; preserve H2, NO_TRADE, all gate tokens and four acceptance blockers. Audit full-screen
+    UX, saved/unsaved truth and card coverage; tests, governed hash updates, fresh review. Batch the decisions.
+  - Root cause, as repaired: gates/composite.py (the H2 skill guard) forces NO_TRADE and ELEVATED_RISK_AVOID for
+    the evidence block, and the detail layer wrote its sentences from that token. The gates are untouched.
+  - The repair: feat/p7p-class-b-root-cause @ 5541cb56b562a61a8673ed8a71d234fcb8dd65eb, one commit on the card
+    correction 345c681, 16 files.
+    - NEW detail/gate_kinds.py: risk gates, system or data gates, the evidence gate, from the gate result's own
+      fields.
+    - detail/decision_synthesis.py: the "Hard gates" check names each kind; the plan's disabled reason says
+      elevated risk only when a risk gate or the score itself produced it.
+    - detail/decision_brief.py: the state summary and the key reason keep the token and say the evidence gate
+      forced it ("It is not a risk finding").
+    - frontend/app.js: both cards show the view's sentence; where the view assesses nothing, no heat row and no
+      directional reading.
+    - Governed hash updates, text only: tests/api/test_cadence_runtime_primitives.py (analysis 0241e46a…, response
+      c8bb9c95…, prior values in its comments); the two synthetic radar examples' analysis_hash and evidence_hash
+      with MANIFEST; three digests and a revision note in docs/automation/UOR_HANDOFF.md.
+    - The UX card is regenerated; its note now says the sentence is on both cards.
+    - Tests: tests/detail/test_gate_kinds.py and tests/frontend/test_gate_kind_rendering.py (the real app.js over
+      real analyses: evidence-only, a tail-risk breach, the kill switch, a synthetic not-assessed view).
+    - VERIFY=PASS 6918, scanners 3/3. 17 of 17 mutants killed.
+  - Preservation, by the reviewer's payload diff of 19 frozen analyses at 345c681 and at 5541cb5 (10 human, 3
+    isolated, 6 OOS arms): only seven paths differ (analysis_hash; the brief's state_summary and key reason with
+    their detail copies; the hard-gates check's sentence; the plan's disabled reason). Every token is identical.
+    No file in gates/, decision_view.py, schemas/, migrations/, api/, quant/, config/, persistence/ changed.
+  - The fresh review (separate context): REVIEW=FINDINGS, CLASS_B_RECURS=YES. Verified on the rendered screens:
+    - MAJOR, the batch card: no gate-kind line. Evidence-only and a tail-risk breach render identical text; the
+      kill switch differs only in ABORT. The new test's docstring says "either card" and tests the timeframe card.
+    - MAJOR, R1: "What could change the decision" prints all seven conditions, among them "Re-evaluate if the
+      existing tail-risk state normalizes." and "Re-evaluate when provider and data-quality states improve.",
+      although the backend marks five of them currently_relevant false (frontend/app.js).
+    - R3: the detail panel's card headed "Risk summary" lists the evidence gate as its BLOCK row.
+    - MINOR, R2: a run saved before this change and reopened keeps its stored sentence "...backend disposition is
+      ELEVATED_RISK_AVOID." with no reason. Stored text is beyond any source repair.
+    - MINOR, the repair's own wording: "It is not a risk finding" overclaims when the score's own value would
+      also be ELEVATED_RISK_AVOID; "not forced by a risk gate" would always be true.
+    - The reviewer's line: preserved tokens and their plain forms (NO_TRADE, ABORT, "No trade", "Immediate action:
+      No", the BLOCK badge) are owner wording decisions, not recurrences.
+  - HOLD: under the owner's rule nothing above was patched, the repair's own minor included.
+  - Saved/unsaved truth (audit only):
+    - The Storage row is the repository's status read before the analysis and before the background save
+      (api/app.py). The save's receipt goes to telemetry only.
+    - So a failed save still reads "Storage available"; and with stateless storage the row says the analysis
+      "will not appear in Recent Analysis history" while the in-process run list still shows it.
+    - A user can know storage's state at request time, never whether this analysis was saved.
+  - Card coverage (audit only): the card proves the view block's wording for five states, three of them
+    synthetic. It cannot show what surrounds the view, the batch card, a reopened run, the real invalid-data
+    screen (an error card) or whether the Storage sentence is true, and no question asks "is this risk or missing
+    evidence?". It cannot detect class B.
+  - Also found, pre-existing and untouched: on a durably reopened run "Key Reasons" prints one character per
+    bullet (utils/sanitize.py redacts the key to a string; app.js iterates it).
+  - A correction to earlier numbers: the mutation scripts ran pytest with a stripped PATH where node was not
+    found, so mutants looked killed for the wrong reason. The scripts now check an unmutated baseline first. The
+    card commit's 17 of 17 was re-run in a valid environment and holds.
+  - Evidence: .work/p7/LANE_RECORD.md; the reviewer's scratch in scratchpad/rcrev_tmp/.
+  Before it: AT THE OWNER (2026-10-10): CLAUDE_EXPERT_CHECK is done and recorded separately. Lane P's class B
+  recurred and waits for the owner's ruling. No push, PR, deploy, T4, claim activation, acceptance relaxation, DB
+  mutation, secret action or H2/F3/§5A change happened.
+  - The owner (verbatim above): a fresh-context independent Claude reviewer walks the card A to E blind, answers all
+    20 questions before seeing the key, then audits the DecisionView's wording and semantics. Safe local fixes, tests
+    and reviews if needed. CLAUDE_EXPERT_CHECK is recorded separately. The required UX check is marked PASS only if
+    the governing contract explicitly permits Claude substitution.
+  - The contract, read for that question:
+    - Plan §23, UX: "PASS only when predefined owner-task scenarios distinguish: invalid data; unvalidated model;
+      accepted forecast; directional permission; saved/unsaved state."
+    - Plan §23: "`SKIPPED`, `WAIVED`, `NOT_RUN`, `BLOCKED` and `DOCUMENTED_EXCEPTION` are never PASS."
+    - The Phase-7/8 decision package (DP-A=2): "§23's UX PASS needs owner-task scenarios, so you run a short
+      comprehension check before the release."
+    - A search of the plan and of the owner's recorded messages found no text permitting a model to answer for the
+      owner. So: REQUIRED UX CHECK = NOT_RUN, unchanged; CLAUDE_EXPERT_CHECK is a different record.
+  - CLAUDE_EXPERT_CHECK, the reviewer: a fresh-context Claude (Opus, effort xhigh), no prior knowledge of the lane.
+  - Part 1, the blind walkthrough:
+    - It was given the card's header and analyses A to E, with the key and the notes withheld, and used no tools.
+    - Answers: A yes/no/no/no; B no/no/no/no; C yes/yes/yes/no; D yes/no/no/yes; E yes/yes/no/no. 20 of 20 match.
+    - Its own warning: every question echoes one headline or one row, so keyword matching passes; it was confused
+      at six points and still matched; A and D differ in one row of twelve under the same headline.
+  - Part 2, the audit, at main 62bab5c9. FINDINGS. Each was checked by the main session against the code, or against
+    the real app.js rendered over real analyses (ordinary, void, demo, kill switch, unsaved):
+    - F1, blocks a §14.1 pass: with tail risk OK and the only hard block SKILL_NOT_DEMONSTRATED, the detail panel
+      says "The elevated-risk disposition disables scenario planning." and "backend disposition is
+      ELEVATED_RISK_AVOID".
+    - F2, major: a kill-switch block and an evidence-only block differ on the cards only in ABORT versus NO_TRADE,
+      under the same "BLOCK · One or more hard gates are active."; no reason is shown.
+    - F3, major: NO_TRADE or ABORT, a BLOCK banner and "Immediate action: No · Chase: No" surround the view. The
+      sentence "not a reason to act or to avoid acting" is in the detail panel only; the cards show the headline
+      alone.
+    - F4, major: "Signal heat" on the cards, and "UP_LEAN", "leans upward" and "Directional edge" in the detail
+      panel, sit beside the view.
+    - F5, major: saved status is never shown. current_persistence_status is read before the background save
+      (api/app.py), so a failed save still reads "Storage available".
+    - F6 to F8, minor wording: the Evidence row's raw tokens and its twin "Evidence level"; "DEMO: Demo data: …";
+      band and cost are one number; two-decimal percentages.
+    - F9, major, the card itself: it showed the view alone and said "the screen's words"; it prints a sentence
+      that only the detail panel shows; its analysis B cannot occur; its gate dispositions were typed by hand.
+    - F10, major: the view's invalid-data state cannot occur today. The venue selection refuses missing or too
+      short data, and the user gets an error message, not "Data cannot support an assessment". So §23's
+      invalid-data scenario is, on today's product, an error message, which the card does not show.
+    - Accepted-state findings exist and are unreachable today; the four acceptance blockers guard that change.
+  - Classification:
+    - F1 to F4 are Lane P's class B: "legacy decision surfaces read as a call (§14.1)". Repairs 1 to 3 were
+      frontend-only. The owner ruled on 2026-10-05: if the class recurs, STOP, no fourth repair; and on 2026-10-07:
+      no fourth repair of the exhausted Lane-P classes. This is the fourth occurrence. No repair was made.
+    - F5 to F8 and F10 are wording or product decisions, on the same surfaces. They wait for the same ruling.
+  - Root cause of F1 to F4:
+    - gates/composite.py, the H2 skill guard: SKILL_NOT_DEMONSTRATED becomes a hard block that forces action
+      NO_TRADE and forced_score_disposition ELEVATED_RISK_AVOID.
+    - detail/decision_synthesis.py and detail/decision_brief.py write the backend's sentences from that
+      disposition, and the older surfaces render them faithfully.
+    - composite.py and decision_synthesis.py are byte-identical to the production pin 1caa8b08: production says the
+      same today. Lane P did not add it; it put a correct headline above it.
+  - The one local correction (F9), the card generator only: fix/p7p-ux-card-honesty @
+    345c681fae77472e11a9ea12c00ecd5b445241a4, one commit on main 62bab5c9, 3 files (card.py, its tests, the
+    regenerated card), no product file.
+    - It makes the card's own statements true; it does not make the card a test of the screens.
+    - The card says it shows the decision view alone and names what the Single Crypto Analysis screen adds
+      around it for each timeframe; a test holds each name to a literal of app.js's horizonCard.
+    - It says the sentence under each headline appears in the detail panel only.
+    - Analysis B is marked SYNTHETIC with its reason (F10); its rows are unchanged. Tests prove F10 on the real
+      selection and on the real service in demo mode, for every timeframe.
+    - The card says its gate dispositions are made-up examples. The plan's §23 list moved after the key.
+    - 17 of 17 mutants are killed, six of them product changes that would make a statement on the card false.
+    - VERIFY=PASS 6895 on 345c681, scanners 3/3.
+    - A fresh separate-context review, three rounds. Round 1 found the first version's own new claim false (its
+      replacement for B could not occur either) and two major gaps. Round 2 found three minor points. The final
+      state at 345c681 is PASS.
+  - Evidence: .work/p7/CLAUDE_EXPERT_CHECK.md (the separate record) and .work/p7/LANE_RECORD.md.
+  Before it: LANE P AND THE §23 UX CARD PUBLISHED (2026-10-10), under the owner's two T3s with BLOCKER-4=A. No deploy,
   no UX check, no claim activation, no DB mutation, no secret action, no H2/F3/§5A change and no A4C reseal happened.
   - The owner (verbatim above): UOR QUAL-EP-20261010-01 is CLOSED and its qualification is BLOCKED / NOT_PROVEN. The
     resume condition DP-A set for Lane P ("until the UOR qualification episode closes") is met. A closing is not a
@@ -4440,7 +4806,20 @@ LOOP_STATE=LANE P AND THE §23 UX CARD PUBLISHED (2026-10-10), under the owner's
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-10):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-11):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), and the independent changes (#248: the save receipt,
+    the storage wording, the card correction).
+  - Lane P is NOT released: production is on D 1caa8b08.
+  - Class B is on HOLD; its two changes are local. The required UX check is NOT_RUN.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-10):
+  - Lane P with the §23 card (#246) is published and NOT released.
+  - CLAUDE_EXPERT_CHECK is recorded. The one authorized class-B repair is local and HELD: class B recurs.
+  - The required UX check is NOT_RUN.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-10):
+  - Lane R, DP-D and Lane P with the §23 card (#246) are published. Lane P is NOT released.
+  - CLAUDE_EXPERT_CHECK is recorded: card answers 20 of 20; the audit of the real screens is FINDINGS.
+  - The required UX check is NOT_RUN. Lane P's class B is at the owner for the fourth time.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-10):
   - Lane R (#232, #236), DP-D (#234, #239, #241, #243, #244) and Lane P with the §23 card (#246) are published.
   - Lane P carries the accepted-state ruling and four acceptance blockers. No claim or permission is reachable.
   - The UOR qualification episode is closed, with qualification BLOCKED / NOT_PROVEN.
@@ -4652,7 +5031,26 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-10):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7p-published (this record, on main 5f1bbca2). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7p-lift-published (this record, on main 6859ffdf). Local and unpublished:
+  - feat/p7p-gate-authority @ 716925f (on fda9a38, on 5541cb5): class B, HELD.
+  - feat/p7p-independent-lanes @ 44ac3bc: on the held change; superseded for its independent parts by #248.
+  - chore/state-class-b-hold @ 71f58b9: the local record this one was rebuilt from; never published as it was.
+  Before it: chore/state-class-b-hold (this record, LOCAL, on main 62bab5c9). Local and unpublished:
+  - feat/p7p-lifted-independent @ 3ef4b43: THE T3 CANDIDATE, on main.
+  - The held stack: 345c681 → 5541cb5 → 716925f (class B, HELD) → feat/p7p-independent-lanes @ 44ac3bc.
+  Before it: chore/state-class-b-hold (this record, LOCAL, on main 62bab5c9). Local and unpublished, one stack:
+  - fix/p7p-ux-card-honesty @ 345c681 → feat/p7p-class-b-root-cause @ 5541cb5 → feat/p7p-gate-authority @ 716925f
+    (HELD) → feat/p7p-independent-lanes @ 44ac3bc (the two lanes and their corrections).
+  Before it: chore/state-class-b-hold (this record, LOCAL, on main 62bab5c9). Local and unpublished:
+  - feat/p7p-gate-authority @ 716925f: the HELD architectural change (on fda9a38, on 5541cb5, on 345c681).
+  Before it: chore/state-class-b-hold (this record, LOCAL, on main 62bab5c9). Local and unpublished:
+  - feat/p7p-class-b-root-cause @ 5541cb5: the HELD repair, on 345c681.
+  - fix/p7p-ux-card-honesty @ 345c681: the card correction (reviewed PASS).
+  - chore/state-claude-expert-check @ 7136b27: superseded by this record; never published.
+  Before it: chore/state-claude-expert-check (this record, LOCAL, on main 62bab5c9). Local and unpublished:
+  - fix/p7p-ux-card-honesty @ 345c681: the card correction, one commit on main.
+  - chore/state-p7p-publication-ready @ 3944ae1 and chore/state-p7p-ci-red @ ccfafeb: superseded; never published.
+  Before it: chore/state-p7p-published (this record, on main 5f1bbca2). Local and unpublished:
   - chore/state-p7p-publication-ready @ 3944ae1 and chore/state-p7p-ci-red @ ccfafeb: superseded by this
     record; never to be published.
   - feat/p7p-ux-comprehension @ a46c5fe and feat/p7p-decisionview-ux1-degraded @ a3ea467: ancestors of the
@@ -4826,7 +5224,12 @@ CURRENT_BRANCH=chore/state-p7p-published (this record, on main 5f1bbca2). Local 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=5f1bbca2 (main, #246: Lane P and the §23 card). Its 14 PR checks, push CI 38041803837 and reproducible
+LAST_GREEN_SHA=6859ffdf (main, #248: the lifted independent changes). Its 12 PR checks, push CI 38104767273
+  and reproducible build 38104767302 succeeded.
+  Before it 62bab5c9 (#247).
+  Before it: 62bab5c9 (main, #247: the STATE record for #246; its 4 PR checks, push CI 38043298831 and
+  reproducible build 38043298784 succeeded).
+  Before it: 5f1bbca2 (main, #246: Lane P and the §23 card). Its 14 PR checks, push CI 38041803837 and reproducible
   build 38041803846 succeeded.
   Before it 86f1d3e6 (#245).
   Before it: 4b948d99 (main, #244: DP-D's hardening; its 5 PR checks, push CI
@@ -5078,7 +5481,21 @@ LAST_GREEN_SHA=5f1bbca2 (main, #246: Lane P and the §23 card). Its 14 PR checks
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-10, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-11, scanners 3/3 each:
+  - chore/state-p7p-lift-published (this record, on main 6859ffdf): 7040. Main 6859ffdf's tree is the reviewed
+    head's tree: 7040 locally and 7040 on CI.
+  - Before the merge: feat/p7p-lifted-independent @ 3ef4b43: 7040.
+  Before it: PASS 2026-10-11, scanners 3/3: feat/p7p-lifted-independent @ 3ef4b43: 7040.
+  Before it: PASS 2026-10-11, scanners 3/3: feat/p7p-independent-lanes @ 44ac3bc: 7192.
+  Before it: PASS 2026-10-10, scanners 3/3: feat/p7p-gate-authority @ 716925f: 6982.
+  Before it: PASS 2026-10-10, scanners 3/3 each:
+  - feat/p7p-class-b-root-cause @ 5541cb5: 6918.
+  - fix/p7p-ux-card-honesty @ 345c681: 6895.
+  - This record: 6875.
+  Before it: PASS 2026-10-10, scanners 3/3 each:
+  - fix/p7p-ux-card-honesty @ 345c681: 6895.
+  - This record: 6875.
+  Before it: PASS 2026-10-10, scanners 3/3 each:
   - chore/state-p7p-published (this record, on main 5f1bbca2): 6875. Main 5f1bbca2's tree is the reviewed
     head's tree: 6875 locally and 6875 on CI.
   - Before the merge: feat/p7p-backend-copy-blocker @ 3b77890 6875 and @ 09786a2 6864; feat/p7p-ux-comprehension
@@ -5325,6 +5742,8 @@ LAST_VERIFY=PASS 2026-10-10, scanners 3/3 each:
     (verify_batch.output).
 CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
+  Before it: NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-08). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
@@ -5453,7 +5872,126 @@ CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-10), nothing urgent:
+OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-11), nothing urgent:
+  - Class B, on HOLD: the narrow risk-wording case (D1), the order-book case (D2) and the kill-switch wording. No
+    patch without the owner's word. The held changes are feat/p7p-class-b-root-cause @ 5541cb5 and
+    feat/p7p-gate-authority @ 716925f.
+  - The older decision sections: preserved pending the parity review (.work/p7/LEGACY_SECTIONS_PARITY_REVIEW.md,
+    delivered). On main only they name a risk gate or the kill switch.
+  - The run store's missing lock: assessed (.work/p7/RUN_STORE_RISK_ASSESSMENT.md); the fix is a T2 change, later.
+  - Wording, all PROVISIONAL (H1): the four receipt sentences; "Storage when requested"; "Storage, last checked";
+    the two request-time status sentences; "Not kept in saved history."
+  - Smaller open points: whether the card's question 4, now a warning, satisfies the plan's "saved/unsaved
+    state"; the badge after a failed watchlist load; a "Saving…" row that goes stale after four tries; a receipt
+    is not upgraded after reconciliation (H4, later); the export sanitizer keeps masking key_reasons (H3, kept).
+  - The UX comprehension check stays the owner's and NOT_RUN.
+  - T4, the release: only on the owner's word. It would carry main 6859ffdf to production. analysis_hash moves on
+    every path at release (UX-1); hash acceptance is deferred to T4 (G5).
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers.
+  - Standing: the writer JWT renewal by 2026-10-30; the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4
+    consumed; full-data custody (DP-D option 3); DP-D's export limits stay documented and never proven.
+  Before it: AHEAD, each the owner's (2026-10-11), one batch:
+  - T3: publish the lifted candidate.
+    - ONE pull request from feat/p7p-lifted-independent @ 3ef4b432f81b85f1611e6c704c7ca871a54085c1 into main
+      62bab5c9. Head, tree, the 21 files and every added and removed line are checked against the reviewed diff.
+    - 12 checks: CI test; build-a, build-b, compare; migration 0014 to 0018 rehearsals; the persistence fault
+      rehearsal; the privilege rehearsal (two jobs). Merge commit only if all are green; then main's CI.
+    - STATE is rebuilt from the resulting main and published last; this local record is never published verbatim.
+    - The local gate is macOS / Python 3.13; CI is ubuntu / Python 3.11 with other pins. A first run can be red
+      on that difference; then nothing is merged and it is reported.
+    - Publishing reaches no user: production stays on D 1caa8b08 until a T4.
+  - Decisions that can wait: whether the card's reworded question 4 (a warning) satisfies the plan's "saved/unsaved
+    state"; the badge after a failed watchlist LOAD; a PENDING row going stale after four asks; the run store's
+    lock (T2, later); the older sections' parity (G3).
+  - All new wording is PROVISIONAL by the owner's H1.
+  - Still on HOLD: class B. Still release blockers: conflicting older sections, visual UX. Hash acceptance at T4.
+  - The UX comprehension check stays the owner's and NOT_RUN.
+  Before it: AHEAD, each the owner's (2026-10-11), one batch:
+  - H1, wording to approve or edit (all provisional): the four receipt sentences; the label "Storage when
+    requested"; "Not kept in saved history."
+  - H2, the header badge "Persistence: …" and the request-time values ("will not appear in Recent Analysis
+    history") can still sit beside a receipt that says otherwise: relabel them, or leave.
+  - H3, the export sanitizer masks `key_reasons` because of the word "key" in its name: authorize an exact
+    allow-list change (security-sensitive), or keep "Not kept in saved history.".
+  - H4, what a receipt can prove: an unconfirmed write reads "not confirmed" and is not upgraded later; demo data
+    reads "not confirmed". Let reconciliation upgrade the record later, or leave.
+  - H5, the in-memory run store has no lock (a persistence file): the route's retry is a mitigation. A real fix
+    is a T2 change.
+  - H6, what to publish, and when: the whole stack sits on the held change 716925f. Keep all of it local; or have
+    the parts that do not depend on the held screens (the receipt backend, the two test fixes, the card
+    correction) lifted onto main for a T3 of their own.
+  - Still on HOLD: class B (D1, D2 and the frozen observations). Still release blockers: conflicting older
+    sections (their parity review, G3), visual UX. Hash acceptance waits for T4 (G5).
+  - The UX comprehension check stays the owner's and NOT_RUN. No T3 is requested.
+  Before it: AHEAD, each the owner's (2026-10-10), one batch:
+  - G1, class B after the architecture: the review's narrow recurrence D1. Hold it as class B; or rule it a wording
+    defect inside the one authority and allow one correction there (the risk framing names the risk gate and stays
+    bound to its summary on every surface, pinned by adjacency); or discard the change.
+  - G2, an unavailable order book: may it read as a risk finding? If not, the authority must claim less for that
+    block (the gates stay unchanged).
+  - G3, the older decision sections: retire them from the default screen (the package's option C) before any UX
+    check; or keep them as a named release blocker.
+  - G4, the matrix: pin whole screens (reordering and added lines then fail), or keep patterns and membership.
+  - G5, release consequence: analysis_hash moves on every path, automation and OOS arms included.
+  - G6, the minor defects D3 to D6 and the card's two gaps: correct them with G1, or leave them recorded.
+  - Still release blockers by the owner's word: the saved/unsaved receipt, conflicting legacy sections, visual UX.
+  - The UX comprehension check stays the owner's and NOT_RUN. No T3 is requested.
+  Before it: AHEAD, each the owner's (2026-10-10): the architecture decisions of the package.
+  - AD1 architecture: A (recommended), B, C or D.
+  - AD2 history: framing at read time from the stored gate result (recommended); or stored sentences; or leave.
+  - AD3 the acceptance table (the package's section 6): approve or edit.
+  - AD4 lifting the HOLD for the matrix as a regression test, one change implementing A, and the rebuilt card.
+  - AD5 the held repair 5541cb5: keep as the base of A (recommended), or discard.
+  - AD6 the older decision sections: keep below the view now; decide on retiring them once the matrix is green.
+  - Ruled already: D2 include the batch card; D3 separate risk wording; D4 backend receipt later; D5 defer; D6 "not
+    forced by a risk gate"; D7 hold.
+  - The UX comprehension check stays the owner's and NOT_RUN. T4 only after it, on the owner's word.
+  Before it: AHEAD, each the owner's (2026-10-10), batched:
+  - D1, CLASS B AFTER THE HOLD. The repair is held local. Options:
+    - A: keep it held and record the remaining items; Lane P stays unreleased.
+    - B: rule the remaining items wording, not class B, and publish the repair as an improvement (a T3).
+    - C, recommended: keep it held, and first build the full-screen check locally (the timeframe card, the batch
+      card and the detail panel as the real frontend renders real analyses, with the question "is any market risk
+      reported?"), so that closing class B is a test. Then one final change against that test.
+  - D2, the batch card: show the gate kind there too (part of D1), or accept that it shows none.
+  - D3, wording under a REAL risk gate: today the screen still says the disposition "is no reason to act or to
+    avoid acting". Keep it, or give risk gates their own wording.
+  - D4, saved status: (a) wording only, "storage at request time", dropping the false Recent-history clause;
+    (b) a frontend check of the run list; (c) a backend receipt per analysis. Recommended: (a) now, (c) later.
+  - D5, display: NO_TRADE and ABORT as raw tokens, "Immediate action: No", Signal heat and lean beside "No accepted
+    forecast", raw evidence tokens, two-decimal percentages. Keep, or one wording pass after D1's check exists.
+  - D6, the repair's own sentence: "It is not a risk finding" or "not forced by a risk gate". Recommended: the
+    second; it is always true.
+  - D7, optional T3: publish the card correction 345c681 alone, with this record rebuilt from main.
+  - The UX comprehension check stays the owner's and NOT_RUN; recommended after D1.
+  - T4, the release of Lane P: after the UX check, and only on the owner's word. A release moves analysis_hash on
+    every path (UX-1, and this repair if published); a cadence retry across the release is refused as a conflict.
+  - Mandatory before any claim or permission can become reachable (no decision now): the four acceptance blockers.
+  - Standing: the writer JWT renewal by 2026-10-30; the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4
+    consumed; full-data custody (DP-D option 3); DP-D's export limits stay documented and never proven.
+  Before it: AHEAD, each the owner's (2026-10-10):
+  - CLASS-B-4, a ruling: Lane P's class B recurred a fourth time (F1 to F4 above). Options:
+    - A, recommended: one source-level change. The backend's own sentences name the real reason ("directional skill
+      has not been demonstrated") when no risk gate has tripped; the gate mechanism, the H2 hold and every token
+      stay. The cards then show the view's sentence and the gate reasons, and hide directional readings where the
+      view says "not assessed". Analysis text changes, so analysis_hash moves and the two synthetic radar examples
+      are regenerated (hashes only), as with UX-1.
+    - B: a frontend-only change. The same visible result where a view exists; the backend text keeps saying
+      "elevated-risk", so a run reopened from history still shows it. No hash moves.
+    - C: accept as recorded, and run the UX check on the corrected card knowing it covers the view alone.
+    - D: hold Lane P's release for a later lane.
+  - WORDING, with A or B: how NO_TRADE and ABORT are shown; the storage wording; the Evidence rows' labels; whole
+    or two-decimal percentages; whether demo data stays under "No accepted forecast".
+  - T3, optional now: publish fix/p7p-ux-card-honesty @ 345c681 and this record rebuilt from main.
+  - The UX comprehension check stays the owner's and NOT_RUN. Recommended: after CLASS-B-4, on a card rebuilt to
+    show the real card surface. A pass on today's card would not show that the real screens meet §23.
+  - T4, the release of Lane P: after the UX check, and only on the owner's word.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers.
+  - Standing: the writer JWT renewal by 2026-10-30; the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4
+    consumed; full-data custody (DP-D option 3); DP-D's export limits stay documented and never proven.
+  Before it: AHEAD, each the owner's (2026-10-10), nothing urgent:
   - The UX comprehension check, before Lane P's release: you run docs/runbooks/UX_COMPREHENSION_CHECK.md, about
     ten minutes. It is PREPARED, NOT RUN. Claude never runs it or answers it for you.
   - T4, after that check and only on your word: release Lane P.
@@ -6255,7 +6793,18 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-10), nothing urgent:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the UX comprehension check, at your pace; then the T4 release decision. Claude: passive reads
+NEXT_ACTION=The owner: the items above, at your pace. Claude: passive reads only; no patch to class B without the
+  owner's word.
+  Before it: The owner: the T3 for the lifted candidate. Claude on the T3: push, one pull request, exact head and
+  diff checks, the 12 checks, merge commit if green, main's CI, then STATE rebuilt from main and published last.
+  Until then passive reads only.
+  Before it: The owner: H1 to H6. Claude: passive reads only; no patch to class B without the owner's word.
+  Before it: The owner: G1 to G6. Claude: passive reads only; no patch without the owner's word.
+  Before it: The owner: AD1 to AD6. Claude: passive reads only; no patch to class B without the owner's word.
+  Before it: The owner: D1 to D7 above. Claude: passive reads only; no patch to class B without the owner's word.
+  Before it: The owner: the CLASS-B-4 ruling (A, B, C or D), with any wording choices. Claude on that ruling: one
+  consolidated local change with render-level tests and a fresh review, then the T3. Until then passive reads only.
+  Before it: The owner: the UX comprehension check, at your pace; then the T4 release decision. Claude: passive reads
   only until then.
   Before it: The owner: the items above, at your pace. Claude: passive reads only.
   Before it: The owner: the items above, at your pace. Claude: the docs follow-up and the hardening assessment, both
