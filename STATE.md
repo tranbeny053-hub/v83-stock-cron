@@ -1,38 +1,41 @@
 # STATE
 
-Updated: 2026-10-11 (**THE FOLLOW-UP CHANGES ARE PUBLISHED (#250): THE STORAGE BADGE IS WRITTEN IN ONE PLACE, AND
-WHOLE-SCREEN REGRESSION PINS OF MAIN'S SCREENS. CLASS B IS ON HOLD: ITS WORK IS LOCAL AND UNPUBLISHED. THE REQUIRED
-UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOYED.**
+Updated: 2026-10-11 (**THE SECOND FOLLOW-UP CHANGES ARE PUBLISHED (#252): THE STORAGE BADGE IS NOT SET FROM A STORED
+RUN'S STATUS, AND AFTER A BATCH IT SHOWS THE LATEST STATUS. CLASS B IS ON HOLD: ITS WORK IS LOCAL AND UNPUBLISHED.
+THE REQUIRED UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS
+DEPLOYED.**
 - The owner (verbatim below) authorized the T3 for the exact reviewed head.
-- #250 → main 76ac0209: a merge commit on feat/p7p-followups-on-249 @ 72a1d16 (tree a964c607); three commits on
-  main 3fd18cd8; 35 files, +8452/-73.
+- #252 → main a94fa490: a merge commit on fix/p7p-badge-stored-and-batch @ b69601d (tree d870ddb2); two commits on
+  main f90c89ea; 3 files, +665/-4.
   - Checked before the merge: the pull request's head, tree, commits, file list and every added and removed
     line equal the reviewed diff.
-  - 4 of 4 checks are green on 72a1d16. CI / test ran 7090 passed, the local gate's count, on Linux and Python 3.11
-    with the pinned packages: the whole-screen pins' first run there. The others: build-a, build-b and compare.
-  - Main's push runs on 76ac0209 are green: CI 38112593810 and reproducible build 38112593741.
+  - 4 of 4 checks are green on b69601d. CI / test ran 7118 passed, the local gate's count. The others: build-a,
+    build-b and compare.
+  - Main's push runs on a94fa490 are green: CI 38134768772 and reproducible build 38134768835.
 - What it carries:
-  - The header's storage badge is written in one place, and only from an answer that names a storage status.
-    Before, the watchlist's own line wrote it too: a failed watchlist load, or a watchlist change answered
-    without a status, set it to "unavailable" although nothing had been reported about storage; and when the
-    watchlist was drawn a second time it could put an older status over a newer one.
-  - The watchlist line no longer keeps an earlier failed load's error as its tooltip after a later answer.
-  - The two route lists (IMPLEMENTATION_SPEC.md, AI/02_ARCHITECTURE.md) name the save-receipt route.
-  - Whole-screen regression pins of main's screens: every line a user can read on Single, Batch, Detail and
-    History, for eight scenarios (28 files, tests only). They are regression detectors, not approval of any
-    wording; they pin the screens as they are, class-B sentences included.
+  - In Dev Mode, exporting a run no longer sets the storage badge from that run's own, older status. Before,
+    with storage down and the badge saying so, exporting a run made earlier turned the badge back to
+    "available" (and the other way round). Opening a stored run's detail never touched the badge; that is now
+    pinned by a test.
+  - After a batch, the badge shows the latest storage status the batch reported. Before, it showed the first
+    result's, the oldest: when storage went down part-way through a batch the badge still said "available".
 - What it does not carry: any sentence added to or changed on the screen; any of the gate-framing work, which is
   on HOLD and local; anything under src/ (no gate, schema, persistence, migration, config, sanitizer or auth
   change).
-- Before it, the same day and under the owner's earlier T3: #248 → main 6859ffdf (a save receipt for each
-  analysis; storage wording that no longer forecasts; the UX card correction) and its STATE record #249 → main
-  3fd18cd8.
+- Before it, the same day and under the owner's earlier T3s: #248 → main 6859ffdf, #250 → main 76ac0209, and
+  their STATE records #249 and #251.
 - All of #248's new wording is PROVISIONAL by the owner's ruling H1.
 - Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
 - Nothing changed in production or the migrations: no deploy, no claim activation, no H2/F3/§5A change, no A4C
   reseal.
-- This record is the batch's last publish. Before it: #250.)
+- This record is the batch's last publish. Before it: #252.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-11), verbatim — the T3 for the second follow-up candidate; one batched decision next:**
+```text
+CONTINUE CURRENT — Opus XHIGH. T3 AUTHORIZE exact reviewed fix/p7p-badge-stored-and-batch@b69601d85a55514ba2eddc71823b7763bb43cda2. Verify exact head/diff and all CI checks; merge-commit only if green, confirm main CI/build, then publish STATE last.
+
+Keep Class B HOLD, UX NOT_RUN; no T4/deploy or acceptance changes. Exhaust genuinely safe independent work; if none remains, return ONE batched owner decision covering remaining release blockers.
+```
 - **The owner (2026-10-11), verbatim — the T3 for the follow-up candidate; class B stays on HOLD:**
 ```text
 CONTINUE CURRENT — Opus XHIGH. T3 AUTHORIZE exact reviewed feat/p7p-followups-on-249@72a1d16f517cb77307562ba49115755d3865f461. Verify exact head/diff and all CI checks; merge-commit only if green, confirm main CI, then publish STATE last.
@@ -2445,7 +2448,56 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE FOLLOW-UP CANDIDATE IS PUBLISHED (2026-10-11), under the owner's T3. Class B stays on HOLD and the UX
+LOOP_STATE=THE SECOND FOLLOW-UP CANDIDATE IS PUBLISHED (2026-10-11), under the owner's T3. Class B stays on HOLD and
+  the UX check NOT_RUN. No deploy, T4, claim activation, acceptance change, H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): T3 AUTHORIZE the exact reviewed head fix/p7p-badge-stored-and-batch @
+    b69601d85a55514ba2eddc71823b7763bb43cda2; verify the exact head and diff and all CI checks; merge commit only
+    if green; confirm main's CI and build; then publish STATE last. Then: exhaust genuinely safe independent
+    work; if none remains, return ONE batched owner decision covering the remaining release blockers.
+  - Published: #252 → main a94fa490, a merge commit (parents f90c89ea and b69601d).
+    - Before the merge, against the reviewed local head: the same head, tree (d870ddb2) and two commits; the
+      same 3 files; +665/-4; every added and removed line equal.
+    - 4 of 4 checks green on b69601d: CI / test 38134453332 (7118 passed, the local count); reproducible build
+      38134453297 (build-a, build-b, compare).
+    - Main's push runs on a94fa490: CI 38134768772 and reproducible build 38134768835, both green.
+  - The record below this one was written while that work was local. Where it says "LOCAL", "at the owner's T3"
+    or "nothing pushed", that was true when written; this record supersedes it.
+  - No genuinely safe independent work remains in this area. What is left needs the owner's word; it goes to the
+    owner as one batched decision on the remaining release blockers (see OWNER_BOUNDARY).
+  - Still local and unpublished, all of it on HOLD or dependent on held code:
+    - feat/p7p-class-b-root-cause @ 5541cb5 and feat/p7p-gate-authority @ 716925f (with the matrix test fda9a38):
+      the two class-B changes, HELD.
+    - feat/p7p-independent-lanes @ 44ac3bc: the lanes as first built on the held change. Its whole-screen
+      goldens pin held screens; main's pin main's. It needs a rebase onto the new main before any later use.
+  Before it: THE T3 BATCH IS COMPLETE; A SECOND FOLLOW-UP CANDIDATE IS LOCAL, AT THE OWNER'S T3 (2026-10-11). Class B
+  stays on HOLD and the UX check NOT_RUN. No deploy, T4, claim activation, acceptance relaxation, H2/F3/§5A
+  change or A4C reseal.
+  - The batch: #250 → main 76ac0209, then the STATE record #251 → main f90c89ea (4 of 4 checks green on 4be0240;
+    parents 76ac0209 and 4be0240; tree 562124b3). Main's push runs on f90c89ea: CI 38114527207, reproducible build
+    38114527236, both green.
+  - The owner (verbatim above): "Continue all safe independent T0–T2 work without intermediate stops; return
+    only at a genuine owner boundary or failure."
+  - Done locally, nothing pushed: fix/p7p-badge-stored-and-batch @
+    b69601d85a55514ba2eddc71823b7763bb43cda2 — two commits on main f90c89ea:
+    - eed9e4f: api takes a mark for an answer that is a stored record ({ storedRecord: true }); such an answer is
+      not read for the badge. The Dev Mode export is the one caller. Opening a stored run's detail is pinned as
+      leaving the badge alone. 10 of 10 mutants killed.
+    - b69601d: after a batch the last result's status is read, not the first's. 10 of 10 mutants killed.
+  - The local gate on b69601d: PASS — ruff ok, 7118 passed, schemas and smoke ok, scanners 3/3. The whole-screen
+    pins and the UX card both check current.
+  - A fresh independent review of each commit, final verdict PASS for the exact head b69601d: no blocker or major in
+    any round; each commit green on its own; its own mutants; the real backend's answers checked for both claims.
+    Its minor findings (a test for a stored run's detail; a batch with some items refused; one wrong label in a
+    commit message) were corrected before this head.
+  - Checked on the diff against main f90c89ea: 3 files, +665/-4 (frontend/app.js +11/-4; two new test files); 0 of
+    the 69 evaluator-pinned files; nothing under src/, migrations, schemas, ops, scripts or the workflows, and
+    not STATE.md; no held identifier in an added line; no sentence on the screen added or changed.
+  - Left as they are (judgment calls for the owner, not defects with one right answer): a failed
+    system-status request sets the badge to "unknown"; a 200 whose body is JSON null fails inside api.
+  - A T3 for it would be: push the exact head, open a pull request, check its diff against the reviewed one,
+    4 checks (CI / test; build-a, build-b, compare), merge commit only if all pass, main's CI, then a STATE record
+    rebuilt from the resulting main, last.
+  Before it: THE FOLLOW-UP CANDIDATE IS PUBLISHED (2026-10-11), under the owner's T3. Class B stays on HOLD and the UX
   check NOT_RUN. No deploy, T4, claim activation, acceptance relaxation, H2/F3/§5A change or A4C reseal.
   - The owner (verbatim above): T3 AUTHORIZE the exact reviewed head feat/p7p-followups-on-249 @
     72a1d16f517cb77307562ba49115755d3865f461; verify the exact head and diff and all CI checks; merge commit only
@@ -4866,6 +4918,19 @@ LOOP_STATE=THE FOLLOW-UP CANDIDATE IS PUBLISHED (2026-10-11), under the owner's 
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-11):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up
+    changes (#250) and the second follow-up changes (#252: the Dev Mode export and the batch's latest status).
+  - Lane P is NOT released: production is on D 1caa8b08.
+  - Class B is on HOLD; its two changes are local. The required UX check is NOT_RUN.
+  - Next: one batched owner decision on the remaining release blockers.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-11):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up
+    changes (#250) and their STATE record (#251).
+  - Local, at the owner's T3: the second follow-up candidate (the Dev Mode export and the batch's latest
+    status).
+  - Lane P is NOT released: production is on D 1caa8b08.
+  - Class B is on HOLD; its two changes are local. The required UX check is NOT_RUN.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-11):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248) and the follow-up
     changes (#250: the storage badge written in one place; whole-screen pins of main).
   - Lane P is NOT released: production is on D 1caa8b08.
@@ -5102,7 +5167,18 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-11):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7p-followups-published (this record, on main 76ac0209). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7p-badge-published (this record, on main a94fa490). Local and unpublished:
+  - feat/p7p-gate-authority @ 716925f (on fda9a38, on 5541cb5): class B, HELD.
+  - feat/p7p-independent-lanes @ 44ac3bc: on the held change; superseded for its independent parts by #248 and
+    #250.
+  - chore/state-p7p-badge-candidate @ f87823b: the local record this one was rebuilt from; never published as it
+    was.
+  Before it: chore/state-p7p-badge-candidate (this LOCAL record, on main f90c89ea). Local and unpublished:
+  - fix/p7p-badge-stored-and-batch @ b69601d: the second follow-up candidate, at the owner's T3.
+  - feat/p7p-gate-authority @ 716925f (on fda9a38, on 5541cb5): class B, HELD.
+  - feat/p7p-independent-lanes @ 44ac3bc: on the held change; superseded for its independent parts by #248 and
+    #250.
+  Before it: chore/state-p7p-followups-published (this record, on main 76ac0209). Local and unpublished:
   - feat/p7p-gate-authority @ 716925f (on fda9a38, on 5541cb5): class B, HELD.
   - feat/p7p-independent-lanes @ 44ac3bc: on the held change; superseded for its independent parts by #248 and
     #250.
@@ -5306,7 +5382,11 @@ CURRENT_BRANCH=chore/state-p7p-followups-published (this record, on main 76ac020
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=76ac0209 (main, #250: the follow-up changes).
+LAST_GREEN_SHA=a94fa490 (main, #252: the second follow-up changes).
+  Its 4 PR checks, push CI 38134768772 and reproducible build 38134768835 are green. Before it f90c89ea (#251).
+  Before it: f90c89ea (main, #251: the STATE record after #250). Its 4 PR checks, push CI 38114527207 and
+  reproducible build 38114527236 are green. Before it 76ac0209 (#250).
+  Before it: 76ac0209 (main, #250: the follow-up changes).
   Its 4 PR checks, push CI 38112593810 and reproducible build 38112593741 are green. Before it 3fd18cd8 (#249).
   Before it: 3fd18cd8 (main, #249: the STATE record after #248). Its 4 PR checks, push CI 38108193750 and
   reproducible build 38108193699 are green. Before it 6859ffdf (#248).
@@ -5568,6 +5648,11 @@ LAST_GREEN_SHA=76ac0209 (main, #250: the follow-up changes).
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS 2026-10-11, scanners 3/3 each:
+  - chore/state-p7p-badge-published's tree (main a94fa490 and this record): 7118.
+  - Before the merge: fix/p7p-badge-stored-and-batch @ b69601d: 7118.
+  Before it: PASS 2026-10-11, scanners 3/3 each:
+  - fix/p7p-badge-stored-and-batch @ b69601d (the second follow-up candidate, on main f90c89ea): 7118.
+  Before it: PASS 2026-10-11, scanners 3/3 each:
   - chore/state-p7p-followups-published's tree (main 76ac0209 and this record): 7090.
   - Before the merge: feat/p7p-followups-on-249 @ 72a1d16: 7090.
   Before it: PASS 2026-10-11, scanners 3/3 each:
@@ -5964,7 +6049,70 @@ CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-11), nothing urgent:
+OWNER_BOUNDARY=ONE BATCHED DECISION ON THE REMAINING RELEASE BLOCKERS IS AT THE OWNER (2026-10-11): R1 to R6. Nothing
+  is urgent; production is unchanged and safe as it is. The owner named three release blockers (2026-10-10,
+  verbatim above): the saved/unsaved receipt, conflicting legacy sections, visual UX.
+  - R1, conflicting legacy sections (class B, on HOLD). On main every screen shows the Decision view saying "not
+    a market signal" above older sections that still read as a call ("Risk summary", "elevated-risk
+    disposition"). The held work (feat/p7p-class-b-root-cause @ 5541cb5, feat/p7p-gate-authority @ 716925f) fixes
+    the Decision view's side but was reviewed as still recurring in two narrow cases (D1, D2), and its older
+    sections still give instructions from missing evidence.
+    - A (Claude's recommendation): lift the HOLD for one planned lane in three reviewed steps, each local until
+      its own T3: (1) the two known corrections to the gate wording (the risk sentence names its gate; a missing
+      order book is not called a market finding); (2) move what only the older sections say into the Decision
+      view (each gate's detail, a view for reopened runs, the Single card's gate summary); (3) retire the older
+      sections in the order of the parity review (.work/p7/LEGACY_SECTIONS_PARITY_REVIEW.md). The stop rule
+      stays: if a fresh review finds the class again after step 1, stop and report.
+    - B: release main as it is and accept the contradiction for now (the owner waives this blocker).
+    - C: keep holding; nothing is released.
+  - R2, which older sections stay (only with R1 = A). Recommended: the parity review's order; keep Model
+    Quality, Overview, Gates and the raw data sections.
+  - R3, visual UX: the owner's UX comprehension check (docs/runbooks/UX_COMPREHENSION_CHECK.md), NOT_RUN. The
+    card says to run it once, before Lane P's release. Recommended: once, after R1's lane is published and the
+    card is regenerated; run today it would have to be run again.
+  - R4, the saved/unsaved receipt: built and published (#248). Recommended: rule the blocker cleared, and leave
+    three small points as follow-ups that do not block: whether the card's question 4, now a warning, satisfies
+    the plan's "saved/unsaved state"; a "Saving…" row that goes stale after four tries; a receipt is not
+    upgraded after reconciliation (H4).
+  - R5, wording, all PROVISIONAL (H1): the four receipt sentences; "Storage when requested"; "Storage, last
+    checked"; the two request-time status sentences; "Not kept in saved history." Recommended: settle it in one
+    pass at the UX check, not now.
+  - R6, the run store's missing lock (H5; .work/p7/RUN_STORE_RISK_ASSESSMENT.md: no failure in 36,000 simulated
+    analyses): a T2 change. Recommended: after the release, not a blocker.
+  - No decision now: hash acceptance is deferred to T4 (G5; analysis_hash moves on every path at release); the
+    export sanitizer keeps masking key_reasons (H3, kept); two badge questions with no single right answer (a
+    failed system-status request reads "unknown"; Single's six parallel analyses end the badge on whichever
+    answer arrives last).
+  - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - T4, the release: only on the owner's word. It would carry main a94fa490 to production.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers.
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
+    3); DP-D's export limits stay documented and never proven.
+  Before it: ONE T3 IS OFFERED (2026-10-11); everything else is unchanged and not urgent:
+  - T3, the second follow-up candidate: publish the exact head fix/p7p-badge-stored-and-batch @
+    b69601d85a55514ba2eddc71823b7763bb43cda2. It changes no user-visible sentence and carries no held code. Not
+    publishing it costs nothing but the two fixes.
+  - Class B, on HOLD: the narrow risk-wording case (D1), the order-book case (D2) and the kill-switch wording. No
+    patch without the owner's word. The held changes are feat/p7p-class-b-root-cause @ 5541cb5 and
+    feat/p7p-gate-authority @ 716925f.
+  - The older decision sections: preserved pending the parity review (.work/p7/LEGACY_SECTIONS_PARITY_REVIEW.md,
+    delivered). On main only they name a risk gate or the kill switch.
+  - The run store's missing lock: assessed (.work/p7/RUN_STORE_RISK_ASSESSMENT.md); the fix is a T2 change, later.
+  - Wording, all PROVISIONAL (H1): the four receipt sentences; "Storage when requested"; "Storage, last checked";
+    the two request-time status sentences; "Not kept in saved history."
+  - Smaller open points: whether the card's question 4, now a warning, satisfies the plan's "saved/unsaved
+    state"; a "Saving…" row that goes stale after four tries; a receipt is not upgraded after reconciliation
+    (H4, later); the export sanitizer keeps masking key_reasons (H3, kept); whether a failed system-status
+    request should leave the badge as it was instead of "unknown".
+  - The UX comprehension check stays the owner's and NOT_RUN.
+  - T4, the release: only on the owner's word. It would carry main to production. analysis_hash moves on every
+    path at release (UX-1); hash acceptance is deferred to T4 (G5).
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers.
+  - Standing: the writer JWT renewal by 2026-10-30; the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4
+    consumed; full-data custody (DP-D option 3); DP-D's export limits stay documented and never proven.
+  Before it: AHEAD, each the owner's (2026-10-11), nothing urgent:
   - Class B, on HOLD: the narrow risk-wording case (D1), the order-book case (D2) and the kill-switch wording. No
     patch without the owner's word. The held changes are feat/p7p-class-b-root-cause @ 5541cb5 and
     feat/p7p-gate-authority @ 716925f.
@@ -6928,7 +7076,11 @@ OWNER_BOUNDARY=AHEAD, each the owner's (2026-10-11), nothing urgent:
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the items above, at your pace. Claude: finish the local Dev Mode export fix (review, full
+NEXT_ACTION=The owner: the one batched decision, R1 to R6 (and the dated JWT renewal). Claude: passive reads only;
+  no push without a T3; no patch to class B without the owner's word.
+  Before it: The owner: the T3 for the second follow-up candidate, or leave it; the other items at your pace.
+  Claude: no push without that T3; no patch to class B without the owner's word.
+  Before it: The owner: the items above, at your pace. Claude: finish the local Dev Mode export fix (review, full
   gate), record it, and offer it for a T3; safe independent T0-T2 work only; no push without a T3; no patch to
   class B without the owner's word.
   Before it: The owner: the T3 for the follow-up candidate, or leave it; the other items at your pace. Claude: no
