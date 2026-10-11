@@ -3,6 +3,7 @@ regime context
 BTC/USDT
 Detail
 Accepted forecast with directional permission
+The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
 1W is interpreted as regime context; it does not change the underlying probability values.
 Immediate action
 No

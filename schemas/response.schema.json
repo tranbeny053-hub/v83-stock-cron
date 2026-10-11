@@ -184,7 +184,8 @@
         "time",
         "range",
         "cost",
-        "evidence"
+        "evidence",
+        "gates"
       ],
       "properties": {
         "schema_version": { "const": "decision_view.v1" },
@@ -307,6 +308,44 @@
             "directional_evidence_hold": { "type": "boolean" },
             "profitability_claim": { "const": false },
             "limitations": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "blocked",
+            "kinds",
+            "blocks",
+            "risk_gate_active",
+            "summary",
+            "framing"
+          ],
+          "properties": {
+            "schema_version": { "const": "gate_view.v1" },
+            "blocked": { "type": "boolean" },
+            "kinds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"] }
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["block", "kind", "headline"],
+                "properties": {
+                  "block": { "type": "string", "minLength": 1 },
+                  "kind": { "enum": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"] },
+                  "headline": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "risk_gate_active": { "type": "boolean" },
+            "summary": { "type": "string", "minLength": 1 },
+            "framing": { "type": "string", "minLength": 1 }
           }
         }
       }

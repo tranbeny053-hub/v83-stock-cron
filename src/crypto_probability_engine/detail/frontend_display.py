@@ -35,6 +35,15 @@ _BLOCKING_REASON_COPY = {
     ),
 }
 
+
+
+def blocking_headline(code: str) -> str:
+    """The headline of a hard block other than the evidence gate; an unknown code reads as
+    itself."""
+
+    return _BLOCKING_REASON_COPY.get(code, (code, ""))[0]
+
+
 _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional evidence under review"
 _DIRECTIONAL_EVIDENCE_HOLD_DETAIL = (
     "Directional candidates are paused while evidence is being corrected. Diagnostic "

@@ -21,10 +21,12 @@ Surfaces:
 - batch: the card of a batch analysis (overviewCard);
 - detail: the detail panel of a live analysis (renderStructuredDetail), once its requests settled;
 - history: the detail panel of a saved run read back, from the row the recent list holds and the
-  stored detail (sanitize_for_export of the detail view, which is what is saved).
+  stored detail as the detail route returns it (sanitize_for_export of the detail view, which is
+  what is saved, with the gate framing the route builds when it reads it: attach_gate_view).
 
 Scenarios (SCENARIOS): every one is an analysis of the real service on the fixture candles. The
-ones named SYNTHETIC cannot occur today: nothing is accepted in the governed registries.
+ones named SYNTHETIC cannot occur today: nothing is accepted in the governed registries, and the
+evidence gate is active on every analysis (it is lifted for those builds only).
 
 The screens are pinned as first rendered. The DOM stand-in has no backend, so the two requests the
 detail panel makes get no answer: the Storage row stays what storage said at request time (no save
@@ -59,6 +61,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from decimal import ROUND_HALF_EVEN, Context
 from pathlib import Path
@@ -69,11 +72,12 @@ import pytest
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.detail.gate_kinds import attach_gate_view
 from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant import pipeline
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
-from tests.fixtures.market_data import FIXED_NOW
+from tests.fixtures.market_data import FIXED_NOW, make_order_book
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:  # the harness is imported by module name, as under pytest
@@ -98,11 +102,47 @@ STORAGE_STATUSES = ("OK", "UNAVAILABLE", "STATELESS")
 LOCALE_MARK = "<TEXT FORMATTED FOR THE MACHINE'S LOCALE>"
 
 
-def _analysis(*, tail: bool = False, kill: bool = False, storage: str | None = None) -> dict:
+# What a run saved before the gate framing existed stores as its brief's summary: the forced token
+# alone. Its gate result is stored too, and the framing is built from that when it is read.
+OLD_STORED_SUMMARY = (
+    "BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated "
+    "heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID."
+)
+# The order book of an analysis: the fixture's own, none at all (the venue gave no book, so
+# liquidity could not be measured), or a book whose spread is measured and too wide.
+ORDER_BOOKS = ("fixture", "missing", "wide")
+
+
+def _select_with(book: str) -> Callable[..., Any]:
+    """The harness's market-data selection, with the order book the scenario names."""
+
+    def select(symbol: Any, timeframe: str, *, settings: Any) -> Any:
+        chosen = harness._select(symbol, timeframe, settings=settings)
+        if book == "missing":
+            return replace(chosen, snapshot=replace(chosen.snapshot, order_book=None))
+        if book == "wide":
+            wide = make_order_book(bid=100.0, ask=110.0)
+            return replace(chosen, snapshot=replace(chosen.snapshot, order_book=wide))
+        return chosen
+
+    return select
+
+
+def _analysis(
+    *,
+    tail: bool = False,
+    kill: bool = False,
+    lifted: bool = False,
+    book: str = "fixture",
+    storage: str | None = None,
+) -> dict:
     """One real analysis of BTC/USDT 1H under the evidence gate, as it is served today. `tail` adds
     a tail-risk breach (the fixture candles have none, so the measured loss is set to twice its
-    threshold), `kill` the kill switch, `storage` what storage said when the analysis was asked."""
+    threshold), `kill` the kill switch, `book` the order book (ORDER_BOOKS), `storage` what storage
+    said when the analysis was asked. `lifted` lifts the evidence gate for this build only: a
+    SYNTHETIC state, the product's hold is untouched."""
 
+    assert book in ORDER_BOOKS, book
     real_tail = pipeline.compute_tail_cvar
 
     def breached(candles: Any, *, timeframe: str) -> dict:
@@ -110,10 +150,11 @@ def _analysis(*, tail: bool = False, kill: bool = False, storage: str | None = N
         return {**state, "cvar_loss": float(state["cvar_breach_threshold"]) * 2}
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(analysis_service, "select_market_data", harness._select)
-        patch.setattr(
-            analysis_service, "get_cached_skill_evidence", lambda _tf: dict(harness.NO_SKILL)
-        )
+        patch.setattr(analysis_service, "select_market_data", _select_with(book))
+        evidence = harness.SKILL if lifted else harness.NO_SKILL
+        patch.setattr(analysis_service, "get_cached_skill_evidence", lambda _tf: dict(evidence))
+        if lifted:
+            patch.setattr(analysis_service, "evidence_for_gate", lambda found: (found, None))
         if tail:
             patch.setattr(pipeline, "compute_tail_cvar", breached)
         if kill:
@@ -128,48 +169,85 @@ def _analysis(*, tail: bool = False, kill: bool = False, storage: str | None = N
         )
 
 
+def _first_check_blocks() -> dict:
+    """SYNTHETIC: the evidence-only analysis with another check of its stack blocking first, with a
+    sentence of its own. No analysis of the service reads so today."""
+
+    payload = _analysis()
+    payload["decision_synthesis"]["actionability_stack"][0].update(
+        status="BLOCK", plain_english="A sentence of the first check."
+    )
+    return payload
+
+
 # Every scenario, in the order the files are listed; each is one analysis of the real service.
 SCENARIOS: dict[str, Callable[[], dict]] = {
     # Today's normal analysis: the evidence gate is the only hard block.
     "evidence_only": lambda: _analysis(),
+    # A real risk gate beside it: a measured tail-risk breach; a measured spread that is too wide.
     "risk_and_evidence": lambda: _analysis(tail=True),
+    "wide_spread_and_evidence": lambda: _analysis(book="wide"),
+    # A gate fired by missing data: the venue gave no order book (owner ruling G2).
+    "missing_order_book_and_evidence": lambda: _analysis(book="missing"),
+    # A system gate beside it.
     "kill_switch_and_evidence": lambda: _analysis(kill=True),
     # The same analysis, for each thing storage can say when it is asked.
     **{
         f"storage_{status}": (lambda status=status: _analysis(storage=status))
         for status in STORAGE_STATUSES
     },
+    # SYNTHETIC: each kind of gate alone (the evidence gate lifted for the build).
+    "risk_only_SYNTHETIC": lambda: _analysis(tail=True, lifted=True),
+    "missing_order_book_only_SYNTHETIC": lambda: _analysis(book="missing", lifted=True),
+    "system_only_SYNTHETIC": lambda: _analysis(kill=True, lifted=True),
+    "first_check_blocks_SYNTHETIC": _first_check_blocks,
     # SYNTHETIC, as test_accepted_state_rendering.py builds them: an accepted forecast claim, and
     # a directional permission (1W; its evidence gate is lifted, so no gate blocks).
     "accepted_claim_SYNTHETIC": lambda: harness._analysis("1H", claim=True),
     "permission_SYNTHETIC": lambda: harness._analysis("1W", permission=True),
 }
 # The scenarios also pinned as a saved run read back. storage_OK is the one that is saved today.
-HISTORY = ("evidence_only", "risk_and_evidence", "kill_switch_and_evidence", "storage_OK")
+HISTORY = (
+    "evidence_only",
+    "risk_and_evidence",
+    "wide_spread_and_evidence",
+    "missing_order_book_and_evidence",
+    "kill_switch_and_evidence",
+    "storage_OK",
+    "risk_only_SYNTHETIC",
+    "missing_order_book_only_SYNTHETIC",
+    "system_only_SYNTHETIC",
+)
+# Pinned as a saved run only: the evidence-only analysis as a run saved before the gate framing
+# existed stores it (OLD_STORED_SUMMARY).
+SAVED_BEFORE = "saved_before_this_change"
 
 
 def build_cases() -> dict[str, dict]:
     return {name: analysis() for name, analysis in SCENARIOS.items()}
 
 
-def _reopened(payload: dict) -> dict:
+def _reopened(payload: dict, *, saved_before: bool = False) -> dict:
     """A saved run as it is read back: the row the recent list holds for it (the run store's own
-    listing, and `detail_available` as GET /v1/runs adds it) and the stored detail (what
-    analysis_service saves: sanitize_for_export of the detail view). No decision view: a stored
-    run has none."""
+    listing, and `detail_available` as GET /v1/runs adds it) and the stored detail as the detail
+    route returns it (what analysis_service saves, sanitize_for_export of the detail view, with
+    the gate framing the route builds when it reads it). No decision view: a stored run has none.
+    `saved_before` is a run stored before the gate framing existed."""
 
     origin = PredictionOrigin.USER_REQUESTED.value
     store = InMemoryRunStore(limit=1)
     store.put(payload["run_id"], payload, prediction_origin=origin)
     (row,) = store.list_runs()
-    return {
-        "row": {**row, "detail_available": True},
-        "detail": sanitize_for_export(copy.deepcopy(payload["detail_view"])),
-    }
+    stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
+    if saved_before:
+        stored["decision_brief"]["state_summary"] = OLD_STORED_SUMMARY
+    return {"row": {**row, "detail_available": True}, "detail": attach_gate_view(stored)}
 
 
 def build_reopened(cases: dict[str, dict]) -> dict[str, dict]:
-    return {name: _reopened(cases[name]) for name in HISTORY}
+    reopened = {name: _reopened(cases[name]) for name in HISTORY}
+    reopened[SAVED_BEFORE] = _reopened(cases["evidence_only"], saved_before=True)
+    return reopened
 
 
 def expected_names() -> list[str]:
@@ -177,7 +255,7 @@ def expected_names() -> list[str]:
 
     return sorted(
         [f"{scenario}.{surface}.txt" for scenario in SCENARIOS for surface in SURFACES]
-        + [f"{scenario}.history.txt" for scenario in HISTORY]
+        + [f"{scenario}.history.txt" for scenario in (*HISTORY, SAVED_BEFORE)]
     )
 
 
@@ -233,8 +311,8 @@ _RENDER = """
   }
   for (const [name, item] of Object.entries(reopened)) {
     const history = await panel(item.row, item.detail);
-    screens[name].history = history.texts;
-    rawJson[name].history = history.raw;
+    screens[name] = { ...(screens[name] || {}), history: history.texts };
+    rawJson[name] = { ...(rawJson[name] || {}), history: history.raw };
   }
   // A pipe is written asynchronously: exit only once the whole result is flushed.
   process.stdout.write(JSON.stringify({ screens, raw_json: rawJson }), () => process.exit(0));

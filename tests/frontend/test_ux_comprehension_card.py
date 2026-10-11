@@ -51,6 +51,7 @@ def test_each_scenario_shows_its_own_state(screens: dict[str, dict[str, object]]
         "C": "DIRECTIONAL_PERMISSION",
         "D": "NO_ACCEPTED_CLAIM",
         "E": "ACCEPTED_FORECAST_CLAIM",
+        "F": "NO_ACCEPTED_CLAIM",
     }
     for letter, state in expected.items():
         view = screens[letter]["view"]
@@ -84,10 +85,13 @@ def test_the_scenarios_distinguish_every_section_23_dimension(
     )
     # Every pair of analyses can be told apart from what the screen shows.
     for left, right in combinations(sorted(screens), 2):
-        assert (screens[left]["headline"], screens[left]["rows"]) != (
-            screens[right]["headline"],
-            screens[right]["rows"],
-        ), (left, right)
+
+        def shown(letter: str) -> tuple[object, ...]:
+            view = screens[letter]["view"]
+            gate_summary = view["gates"]["summary"]
+            return (view["headline"], view["detail"], gate_summary, screens[letter]["rows"])
+
+        assert shown(left) != shown(right), (left, right)
 
 
 def test_the_answer_key_follows_from_each_built_view(
@@ -104,6 +108,7 @@ def test_the_answer_key_follows_from_each_built_view(
             yes_no(view["accepted_claim"]),
             yes_no(view["directional_permission"]),
             yes_no(MAY_NOT_BE_KEPT in screen["rows"]["Storage"]),
+            yes_no(view["gates"]["risk_gate_active"]),
         )
         assert card.answers(scenario) == derived, scenario.letter
 
@@ -121,7 +126,7 @@ def test_question_4_asks_what_the_storage_row_can_truthfully_say(
     warned = {
         letter: MAY_NOT_BE_KEPT in screen["rows"]["Storage"] for letter, screen in screens.items()
     }
-    assert warned == {"A": False, "B": False, "C": False, "D": True, "E": False}
+    assert warned == {"A": False, "B": False, "C": False, "D": True, "E": False, "F": False}
     text = card.card_markdown()
     assert f"4. {QUESTION_4}\n" in text
     for forecast in ("will NOT be kept", "will not be kept", "will not appear", "not being"):
@@ -174,8 +179,8 @@ def _view_branch_and_the_rest(function_source: str) -> tuple[str, str]:
 def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> None:
     """CLAUDE_EXPERT_CHECK 2026-10-10: the card is the decision view's headline, sentence and rows.
     Each thing it names around the view is rendered by app.js's timeframe card when a view is
-    present (in its view branch, or outside both branches), and the sentence is in the detail
-    panel alone."""
+    present (in its view branch, or outside both branches). The sentence is shown by both cards
+    and the detail panel (owner ruling CLASS-B-4=A)."""
 
     text = card.card_markdown()
     assert "This card shows the decision view only" in text
@@ -193,12 +198,12 @@ def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> 
     action_row = card._extract(source, "renderPermissionRow")
     for label in ("Immediate action", "Plan", "Chase"):
         assert f'["{label}",' in action_row, label
-    # The sentence (view.detail) is rendered by the detail panel and by neither card.
+    # The sentence (view.detail) is rendered by both cards and by the detail panel.
     detail_panel = card._extract(source, "renderStructuredDetail")
     assert "view.detail" in detail_panel and detail_panel.count("section(") > 1
-    assert "view.detail" not in timeframe_card
-    assert "view.detail" not in card._extract(source, "overviewCard")
-    assert "appears in the detail panel only" in text
+    assert "view.detail" in view_branch
+    assert "view.detail" in card._extract(source, "overviewCard")
+    assert "Batch Crypto Analysis screens and the detail\n  panel show them." in text
     # The two screens the card names are the product's own tab names.
     index_html = (card.ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     for screen in ("Single Crypto Analysis", "Batch Crypto Analysis"):
@@ -210,7 +215,7 @@ def test_analysis_b_is_marked_synthetic() -> None:
     assert "Analysis B is **SYNTHETIC** too, for a different reason." in text
     assert "the product shows an error message and no analysis" in text
     flags = {scenario.letter: scenario.synthetic for scenario in card.SCENARIOS}
-    assert flags == {"A": False, "B": True, "C": True, "D": False, "E": True}
+    assert flags == {"A": False, "B": True, "C": True, "D": False, "E": True, "F": False}
 
 
 class _Venue:
@@ -323,3 +328,31 @@ def test_each_synthetic_analysis_reads_as_coherent_evidence(
     )
     for letter in ("A", "B", "D"):
         assert screens[letter]["rows"]["Evidence"].startswith("INSUFFICIENT_EVIDENCE · 0 "), letter
+
+
+def test_the_card_shows_the_views_gate_lines_and_asks_about_risk(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """Owner rulings AD1=A and D3: the view is the one gate authority, so the card prints its gate
+    lines as app.js shows them, and a fifth question asks whether a risk gate is reported."""
+
+    text = card.card_markdown()
+    assert len(card.QUESTIONS) == 5 and "risk gate" in card.QUESTIONS[4]
+    answers = {scenario.letter: card.answers(scenario)[4] for scenario in card.SCENARIOS}
+    assert answers == {"A": "no", "B": "no", "C": "no", "D": "no", "E": "no", "F": "yes"}
+    blocks = {
+        letter: text.split(f"## Analysis {letter}\n")[1].split("| Row |")[0] for letter in "ABCDEF"
+    }
+    for letter in "ABCDEF":
+        view = screens[letter]["view"]
+        gates = view["gates"]
+        if gates["blocked"]:
+            assert f"\n{gates['summary']}\n" in blocks[letter], letter
+        shown = gates["blocked"] and not view["accepted_claim"]
+        assert (f"\n{gates['framing']}\n" in blocks[letter]) is shown, letter
+    assert "A risk gate is active: Extreme-move risk is too high." in blocks["F"]
+    assert "reason to act or to avoid acting" not in blocks["F"]
+    for letter in "AD":
+        assert "No risk gate is active." in blocks[letter]
+        assert "not a reason to act or to avoid acting" in blocks[letter]
+    assert "risk gate is active" not in blocks["C"]

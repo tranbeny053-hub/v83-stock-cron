@@ -2,6 +2,7 @@ BTC/USDT · 1W setup / ~6W horizon
 Detail
 LIVE DATA - OKX_PUBLIC
 Accepted forecast with directional permission
+The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

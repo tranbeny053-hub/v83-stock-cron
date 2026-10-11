@@ -1,6 +1,8 @@
 Decision view
 No accepted forecast
-No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -35,7 +37,7 @@ Gate disposition (not a market call)
 No trade
 Reliability: INSUFFICIENT_SAMPLE
 LOW
-The gates' disposition, not a market call: with no accepted forecast it is no reason to act or to avoid acting.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
 No trade is supported by the current backend state.
 Immediate action
 No
@@ -44,15 +46,15 @@ Observe only
 Chase
 No
 Primary reason
-One or more hard gates are active.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Next action
 Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
 Candidate labels are planning context only and do not grant entry permission.
-Risk summary
+Gate checks
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 BLOCK
 Tail risk
@@ -102,7 +104,7 @@ Evidence: epistemic_sufficiency_state.sufficiency_level
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 BLOCK
 Tail risk
@@ -158,10 +160,6 @@ The payload does not report measured reliability from sufficient resolved sample
 What could change the decision
 Re-evaluate after every active hard gate clears.
 Re-evaluate if the existing tail-risk state normalizes.
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate when provider and data-quality states improve.
-A future validated acceptable zone could support planning; none exists here.
-Re-evaluate if existing higher-timeframe context becomes aligned.
 Interpretation can strengthen only after the in-payload sample gate improves.
 Scenario plan
 Disabled
@@ -255,7 +253,7 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-The gates' disposition, not a market call: with no accepted forecast it is no reason to act or to avoid acting.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Gate disposition
 NO_TRADE
 Horizon
@@ -272,7 +270,7 @@ State summary
 BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
-Risk note
+Gate note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Disclaimer
 Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
@@ -302,7 +300,7 @@ Model readiness
 Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
 Explanation
 Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
-Risk / Gates
+Gates
 Gate action
 NO_TRADE
 Hard blocks

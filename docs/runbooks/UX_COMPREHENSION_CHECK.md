@@ -11,26 +11,31 @@ after the answer key say which, and why.
 
 ## How to run it (about ten minutes)
 
-1. Read analyses A to E below as you would read them on screen. Do not look at the answer
+1. Read analyses A to F below as you would read them on screen. Do not look at the answer
    key first.
-2. For each analysis, answer the four questions, yes or no, on paper.
+2. For each analysis, answer the five questions, yes or no, on paper.
 3. Then compare your answers with the key at the end.
 
 **PASS:** every answer matches the key. **Any mismatch:** the UX does not PASS. Send Claude
 the analysis letter and the question number only; the screen's wording is then what changes.
 
-The four questions, for every analysis:
+The five questions, for every analysis:
 
 1. Can the market data support an assessment here?
 2. Has a forecast-quality claim been accepted for it?
 3. Does it carry a directional permission?
 4. Does the screen warn that this analysis may NOT be kept in Recent Analysis history?
+5. Does the screen report a risk gate: a finding about market conditions or execution?
 
 ## Analysis A
 
 **No accepted forecast**
 
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
 | Row | Shown |
 | --- | --- |
@@ -52,6 +57,10 @@ No forecast-quality claim has been accepted for this model and timeframe. The pe
 **Data cannot support an assessment**
 
 The market data for this analysis are unavailable or insufficient, so nothing here is an assessment of the market.
+
+A system or data gate is active: A required data provider is degraded.
+
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
 | Row | Shown |
 | --- | --- |
@@ -95,6 +104,10 @@ The percentages carry an accepted forecast-quality claim and a separately accept
 
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
 
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
@@ -116,6 +129,8 @@ No forecast-quality claim has been accepted for this model and timeframe. The pe
 
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
 
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
@@ -131,15 +146,41 @@ The percentages carry an accepted forecast-quality claim for this model and time
 | Evidence | NO_DEMONSTRATED_SKILL · 400 resolved outcomes · MEASURED |
 | Gate disposition (not a market call) | NO_TRADE |
 
+## Analysis F
+
+**No accepted forecast**
+
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
+
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
+
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
+
+| Row | Shown |
+| --- | --- |
+| Asset · venue | BTC/USDT · binance |
+| Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (UTC) | 2026-10-05T18:00:00Z |
+| Data | OK: Live data. Latest candle 5s old. |
+| Storage | Storage available |
+| In band (inside the decision band) | 42.00% (band ±0.21%) |
+| Up (above the band) | 31.00% |
+| Down (below the band) | 27.00% |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Round-trip cost | 0.21% |
+| Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
+| Gate disposition (not a market call) | NO_TRADE |
+
 ## Answer key (read it only after answering)
 
-| Analysis | 1 | 2 | 3 | 4 |
-| --- | --- | --- | --- | --- |
-| A | yes | no | no | no |
-| B | no | no | no | no |
-| C | yes | yes | yes | no |
-| D | yes | no | no | yes |
-| E | yes | yes | no | no |
+| Analysis | 1 | 2 | 3 | 4 | 5 |
+| --- | --- | --- | --- | --- | --- |
+| A | yes | no | no | no | no |
+| B | no | no | no | no | no |
+| C | yes | yes | yes | no | no |
+| D | yes | no | no | yes | no |
+| E | yes | yes | no | no | no |
+| F | yes | no | no | no | yes |
 
 ## What this check covers, and what it does not
 
@@ -156,10 +197,11 @@ The percentages carry an accepted forecast-quality claim for this model and time
   shows this state. The product's own code built it for this card only.
 - Every number is a made-up example, not market data. The Gate disposition value is made up
   too: on a real analysis the gates decide it.
-- This card shows the decision view only: its headline, the sentence under it and its rows.
-  It shows no layout or colours.
-- The sentence under the headline appears in the detail panel only. The Single Crypto
-  Analysis and Batch Crypto Analysis screens show the headline and the rows without it.
+- This card shows the decision view only: its headline, the sentence under it, its gate lines
+  and its rows, as the Single Crypto Analysis and Batch Crypto Analysis screens and the detail
+  panel show them. It shows no layout or colours.
+- Analysis F is a real risk gate together with the evidence gate. That is the only way a risk
+  gate can appear today, because the evidence gate is always active.
 - The screens show more than the view, and none of the following is on this card, so a PASS
   here says nothing about it:
   - On the Single Crypto Analysis screen, each timeframe also shows:

@@ -48,7 +48,7 @@ Reliability status is INSUFFICIENT_SAMPLE.
 Next action
 Observe only; current entry, chase, and numeric planning are disabled. A wider directional edge could change a watch state, subject to all gates.
 Candidate labels are planning context only and do not grant entry permission.
-Risk summary
+Gate checks
 PASS
 Tail risk
 #5
@@ -148,11 +148,7 @@ Why timeframe matters
 Why reliability is insufficient
 The payload does not report measured reliability from sufficient resolved samples.
 What could change the decision
-Re-evaluate after every active hard gate clears.
-Re-evaluate if the existing tail-risk state normalizes.
 A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate when provider and data-quality states improve.
-A future validated acceptable zone could support planning; none exists here.
 Re-evaluate if existing higher-timeframe context becomes aligned.
 Interpretation can strengthen only after the in-payload sample gate improves.
 Scenario plan
@@ -264,7 +260,7 @@ State summary
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
-Risk note
+Gate note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Disclaimer
 Not financial advice: it never tells you to trade. No profitability claim.
@@ -293,7 +289,7 @@ Model readiness
 Accepted forecast with directional permission
 Explanation
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
-Risk / Gates
+Gates
 Gate action
 WATCH
 Hard blocks

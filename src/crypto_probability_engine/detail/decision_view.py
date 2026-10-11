@@ -38,6 +38,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
+from crypto_probability_engine.detail.gate_kinds import build_gate_view
 
 SCHEMA_VERSION = "decision_view.v1"
 # Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
@@ -90,6 +91,12 @@ STATE_COPY = {
         "directional permission for this model and timeframe.",
     ),
 }
+# Under a real risk gate the view does not call the outcome "no reason to act or to avoid acting"
+# (owner ruling D3, 2026-10-10): the gate framing says what the risk gate found.
+NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE = (
+    "No forecast-quality claim has been accepted for this model and timeframe. The percentages "
+    "are uncalibrated reference context: not a forecast and not a market signal."
+)
 DATA_COPY = {
     "OK": "Live data.",
     "DEMO": "Demo data: not a live market view.",
@@ -142,6 +149,10 @@ def build_decision_view(
     else:
         state = "ACCEPTED_FORECAST_CLAIM"
     headline, detail = STATE_COPY[state]
+    # The one gate authority (owner ruling AD1=A): every surface takes its gate framing from here.
+    gates = build_gate_view(gate)
+    if state == "NO_ACCEPTED_CLAIM" and gates["risk_gate_active"]:
+        detail = NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE
     horizon = (quant_result.get("probability_state") or {}).get("horizons", {}).get("H_primary", {})
     execution = quant_result.get("execution_realism") or {}
     hold = gate.get("directional_evidence_hold")
@@ -182,6 +193,7 @@ def build_decision_view(
             "profitability_claim": False,
             "limitations": _limitations(state, _hold_active(hold)),
         },
+        "gates": gates,
     }
 
 

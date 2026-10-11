@@ -582,7 +582,7 @@ def test_the_accepted_state_is_shown_on_every_surface(rendered: dict, cases: dic
         for surface, texts in rendered[name].items():
             assert view["headline"] in texts, (name, surface)
         detail = rendered[name]["detail"]
-        probability = _between(detail, "Probability", "Risk / Gates")
+        probability = _between(detail, "Probability", "Gates")
         # The Model readiness row states the accepted state; no Type row repeats it.
         assert "Type" not in probability, name
         assert _value(probability, "Model readiness") == view["headline"], name

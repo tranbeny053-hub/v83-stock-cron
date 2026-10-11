@@ -430,7 +430,7 @@ const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 // The gates' legacy decision is framed as what it is, always: with a view (live analysis) or
 // without one (a run reopened from history, whose detail payload carries no view). A gate outcome
 // is never a market call, so the no-view note says exactly that and claims nothing it cannot know.
-function gateFramingNote(view) {
+function gateFramingNote(view, gates = null) {
   if (view && view.directional_permission) {
     return (
       "The gates' disposition, with an accepted directional permission for this model and " +
@@ -441,6 +441,8 @@ function gateFramingNote(view) {
   if (view && view.accepted_claim) {
     return "The gates' disposition: hard gates outrank everything shown.";
   }
+  // Under a real risk gate the backend's gate framing replaces this note (owner ruling D3).
+  if (gates && gates.risk_gate_active) return gates.framing;
   if (view) {
     return (
       "The gates' disposition, not a market call: with no accepted forecast it is no reason " +
@@ -491,6 +493,23 @@ function readinessText(payload, fallback) {
 function decisionViewOf(payload) {
   const view = payload?.decision_view;
   return view && view.schema_version === "decision_view.v1" ? view : null;
+}
+
+// The one gate authority (owner ruling AD1=A): the view's gates for a live analysis, or the gate
+// framing the backend built when a saved run was read back. This only renders it.
+function gateViewOf(payload) {
+  const gates = decisionViewOf(payload)?.gates || payload?.gate_view;
+  return gates && gates.schema_version === "gate_view.v1" ? gates : null;
+}
+
+// Under an accepted claim the accepted state's own note frames the gates (owner ruling
+// 2026-10-06), so only the summary is shown there.
+function gateFramingBlocks(gates, view = null) {
+  if (!gates || !gates.blocked) return [];
+  const summary = textBlock("p", gates.summary, "decision-gates");
+  return view && view.accepted_claim
+    ? [summary]
+    : [summary, textBlock("p", gates.framing, "decision-gate-framing")];
 }
 
 function decisionDataBanner(data = {}) {
@@ -741,9 +760,19 @@ function overviewCard(payload) {
     headline.dataset.decisionState = view.state;
     headline.textContent = view.headline;
     node.insertBefore(headline, node.querySelector("dl"));
+    // The view's own sentence says what its state means (owner ruling CLASS-B-4=A).
+    const sentence = document.createElement("p");
+    sentence.className = "decision-detail";
+    sentence.textContent = view.detail;
+    node.insertBefore(sentence, node.querySelector("dl"));
+    for (const line of gateFramingBlocks(gateViewOf(payload), view)) {
+      node.insertBefore(line, node.querySelector("dl"));
+    }
   }
   const heatRow = ["Signal heat (not risk)", heatBand.level];
-  const values = view ? [...decisionViewRows(payload, view), heatRow] : [
+  // The heat is a reading of the percentages: none is shown where the view assesses none.
+  const viewHeat = notAssessedByView(payload) ? [] : [heatRow];
+  const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [
     ["Disposition", display.disposition],
     ["Score", display.total_score],
     ["Setup", display.timeframe_label || timeframe],
@@ -911,7 +940,10 @@ function horizonCard(payload) {
     blockBanner.append(
       textBlock(
         "span",
-        backendText(blocking.plain_english) || backendText(blocking.label) || "Blocked",
+        (gateViewOf(payload)?.blocked && backendText(gateViewOf(payload).summary)) ||
+          backendText(blocking.plain_english) ||
+          backendText(blocking.label) ||
+          "Blocked",
       ),
     );
     node.append(blockBanner);
@@ -931,11 +963,16 @@ function horizonCard(payload) {
 
   const view = decisionViewOf(payload);
   if (view) {
-    // The one authoritative view leads (plan §14.1-§14.2): its state, then its rows. No
-    // directional reading or raw probability is shown beside it.
+    // The one authoritative view leads (plan §14.1-§14.2): its state, its sentence, then its
+    // rows. No raw probability is shown beside it.
     const headline = textBlock("p", view.headline, "decision-headline");
     headline.dataset.decisionState = view.state;
     node.append(headline);
+    node.append(textBlock("p", view.detail, "decision-detail"));
+    const gates = gateViewOf(payload);
+    if (gates && gates.blocked && !view.accepted_claim) {
+      node.append(textBlock("p", gates.framing, "decision-gate-framing"));
+    }
     node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));
     const permissions = renderPermissionRow(permission);
     permissions.classList.add("matrix-permissions");
@@ -943,7 +980,8 @@ function horizonCard(payload) {
     node.append(
       keyValueTable([
         ...decisionViewRows(payload, view),
-        ["Signal heat (not risk)", heatBand.level],
+        // The heat is a reading of the percentages: none is shown where the view assesses none.
+        ...(notAssessedByView(payload) ? [] : [["Signal heat (not risk)", heatBand.level]]),
       ]),
     );
   } else {
@@ -1666,7 +1704,7 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   );
   card.append(header);
 
-  card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));
+  card.append(textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"));
   if (backendText(decision.plain_english)) {
     card.append(textBlock("p", decision.plain_english, "decision-lead"));
   }
@@ -1777,12 +1815,14 @@ function renderProbabilityInterpretation(probability = {}, timeframeRole = {}, p
     heading.append(decisionBadge("Informational only", "warn"));
   }
   card.append(heading);
-  if (backendText(probability.interpretation_label)) {
+  // Where the view assesses nothing, no directional reading is shown beside it.
+  const assessed = !notAssessedByView(payload);
+  if (assessed && backendText(probability.interpretation_label)) {
     card.append(decisionBadge(probability.interpretation_label, "info"));
   }
   if (accepted) {
     card.append(textBlock("p", accepted.detail, "decision-context-copy"));
-  } else if (backendText(probability.plain_english)) {
+  } else if (assessed && backendText(probability.plain_english)) {
     card.append(textBlock("p", probability.plain_english, "decision-context-copy"));
   }
 
@@ -1818,7 +1858,7 @@ function renderProbabilityInterpretation(probability = {}, timeframeRole = {}, p
 function renderRiskSummary(items) {
   const card = document.createElement("article");
   card.className = "decision-context-card decision-risk-summary";
-  card.append(textBlock("h4", "Risk summary"));
+  card.append(textBlock("h4", "Gate checks"));
   const stack = orderedActionability(items);
   const risks = stack.filter(
     (item) => item.key === "tail_risk" || (item.key === "hard_gates" && item.status === "BLOCK"),
@@ -1850,8 +1890,12 @@ function renderAdvisorExplanations(explanations = {}, changes = [], accepted = n
     wrapper.append(textBlock("p", "Advisor explanation unavailable.", "muted"));
   }
 
+  // Only what the backend marks as relevant now: a condition that does not apply is not shown.
   const backendChanges = Array.isArray(changes)
-    ? changes.map((item) => backendText(item?.plain_english)).filter(Boolean)
+    ? changes
+        .filter((item) => item?.currently_relevant === true)
+        .map((item) => backendText(item?.plain_english))
+        .filter(Boolean)
     : [];
   if (backendChanges.length) {
     const group = document.createElement("div");
@@ -2380,6 +2424,13 @@ function renderFutureQuantHooks(hooks = {}) {
   return advanced;
 }
 
+// A reopened run stores its brief's sentence as it was written when saved. Its gate framing is
+// built when it is read, so that is what is shown; a live analysis shows its own brief.
+function gateSummaryFor(payload, brief = {}) {
+  const gates = gateViewOf(payload);
+  return !decisionViewOf(payload) && gates ? gates.summary : brief.state_summary;
+}
+
 function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
   const available =
     synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
@@ -2391,11 +2442,15 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
         "No decision synthesis for this run; the existing gate brief is shown.",
         "decision-warning",
       ),
-      textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),
+      textBlock(
+        "p",
+        gateFramingNote(decisionViewOf(payload), gateViewOf(payload)),
+        "decision-safety-note",
+      ),
       keyValueTable([
         ["Gate disposition", decisionBrief.action],
-        ["Gate brief summary", accepted ? accepted.detail : decisionBrief.state_summary],
-        ["Gate brief risk note", decisionBrief.risk_note],
+        ["Gate brief summary", accepted ? accepted.detail : gateSummaryFor(payload, decisionBrief)],
+        ["Gate brief note", decisionBrief.risk_note],
       ]),
       renderTradePlanSkeleton({}),
     ]);
@@ -2445,7 +2500,7 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
         .filter(Boolean)
     : [];
   return section(gateBriefTitle(view), [
-    textBlock("p", gateFramingNote(view), "decision-safety-note"),
+    textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"),
     keyValueTable([
       ["Gate disposition", brief.action],
       ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
@@ -2453,9 +2508,9 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
       ["Calibration", brief.calibration_status],
       ["Reliability", brief.reliability_status],
       ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
-      ["State summary", accepted ? accepted.detail : brief.state_summary],
+      ["State summary", accepted ? accepted.detail : gateSummaryFor(payload, brief)],
       ["Volatility reference", brief.volatility_reference?.note],
-      ["Risk note", brief.risk_note],
+      ["Gate note", brief.risk_note],
       ["Disclaimer", accepted ? ACCEPTED_DISCLAIMER : brief.disclaimer],
     ]),
     briefListGroup(
@@ -2469,6 +2524,14 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
 }
 
 function renderStructuredDetail(payload, detailView) {
+  // Raw JSON and Download JSON are the backend's response exactly as it was returned: nothing
+  // the renderers need is ever added to it.
+  const backendResponse = payload;
+  // A saved run has no view; the backend built its gate framing when it was read back. The
+  // renderers below read it from a copy.
+  if (!payload.gate_view && detailView?.gate_view) {
+    payload = { ...payload, gate_view: detailView.gate_view };
+  }
   const display = payload.frontend_display || {};
   const dataQuality = payload.data_quality || {};
   const providerState = payload.provider_state || {};
@@ -2485,7 +2548,7 @@ function renderStructuredDetail(payload, detailView) {
   const summary = document.createElement("summary");
   summary.textContent = "Debug / Raw JSON";
   const pre = document.createElement("pre");
-  pre.textContent = JSON.stringify(payload, null, 2);
+  pre.textContent = JSON.stringify(backendResponse, null, 2);
   rawJson.append(summary, pre);
 
   const view = decisionViewOf(payload);
@@ -2494,6 +2557,7 @@ function renderStructuredDetail(payload, detailView) {
     ? section("Decision view", [
         textBlock("p", view.headline, "decision-headline"),
         textBlock("p", view.detail),
+        ...gateFramingBlocks(gateViewOf(payload), view),
         keyValueTable(decisionViewRows(payload, view)),
         textBlock("p", view.range?.meaning || "", "muted"),
         textBlock("p", view.cost?.label || "", "muted"),
@@ -2506,7 +2570,7 @@ function renderStructuredDetail(payload, detailView) {
     renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload),
     renderModelQualitySection(payload.decision_synthesis || {}, accepted),
     section("Overview", [
-      downloadJsonButton(payload),
+      downloadJsonButton(backendResponse),
       keyValueTable([
         ["Symbol", payload.normalized_symbol || payload.symbol || details.symbol],
         ["Timeframe", payload.timeframes?.timeframe_label || payload.timeframes?.primary],
@@ -2546,7 +2610,7 @@ function renderStructuredDetail(payload, detailView) {
         ["Explanation", accepted ? accepted.detail : display.probability_explanation],
       ]),
     ]),
-    section("Risk / Gates", [
+    section("Gates", [
       keyValueTable([
         ["Gate action", gate.action],
         ["Hard blocks", gate.hard_blocks],

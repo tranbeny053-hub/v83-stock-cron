@@ -59,6 +59,8 @@ def _render(payloads: list[dict[str, object]]) -> list[dict[str, object]]:
             "NOT_REPORTED_TEXT",
             "ACCEPTED_DISCLAIMER",
             "gateFramingNote",
+            "gateViewOf",
+            "gateSummaryFor",
             "dispositionLabel",
             "gateBriefTitle",
             "readinessText",

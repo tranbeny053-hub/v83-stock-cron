@@ -15,9 +15,9 @@ own code, so the card cannot drift from what the DecisionView shows:
   decisionViewRows and the helpers it calls) under node;
 - the numbers and the gate disposition are illustrative fixtures, never market data, and nothing
   here reads a database.
-The card is the view alone (headline, sentence, rows). What each timeframe's card shows around
-the view, and the detail panel's sections, are not on it; and only the detail panel shows the
-sentence (CLAUDE_EXPERT_CHECK, 2026-10-10). The card says so.
+The card is the view alone (headline, sentence, rows), as both cards and the detail panel show
+it. What each timeframe's card shows around the view, and the detail panel's sections, are not on
+it (CLAUDE_EXPERT_CHECK, 2026-10-10). The card says so.
 
     python scripts/ux_comprehension/card.py --write   # regenerate the card
     python scripts/ux_comprehension/card.py --check   # exit 1 if the committed card differs
@@ -61,6 +61,7 @@ QUESTIONS = (
     "Has a forecast-quality claim been accepted for it?",
     "Does it carry a directional permission?",
     "Does the screen warn that this analysis may NOT be kept in Recent Analysis history?",
+    "Does the screen report a risk gate: a finding about market conditions or execution?",
 )
 # The frontend functions the view's rows are made of (frontend/app.js), and their constants.
 _FUNCTIONS = (
@@ -86,9 +87,10 @@ class Scenario:
     permission: bool
     retained: bool
     disposition: str  # the gates' disposition the product would show for these gates
+    risk: bool = False  # a real risk gate (a tail-risk breach) beside the evidence gate
 
 
-# A fixed, non-obvious order: the owner reads A to E without knowing which is which.
+# A fixed, non-obvious order: the owner reads A to F without knowing which is which.
 SCENARIOS = (
     Scenario("A", "unvalidated model, kept", False, True, False, False, True, "NO_TRADE"),
     Scenario("B", "invalid data", True, False, False, False, True, "ABORT"),
@@ -104,11 +106,22 @@ SCENARIOS = (
     ),
     Scenario("D", "unvalidated model, not kept", False, True, False, False, False, "NO_TRADE"),
     Scenario("E", "accepted forecast", True, True, True, False, True, "NO_TRADE"),
+    Scenario(
+        "F",
+        "risk gate with the evidence gate",
+        False,
+        True,
+        False,
+        False,
+        True,
+        "NO_TRADE",
+        risk=True,
+    ),
 )
 
 
-def answers(scenario: Scenario) -> tuple[str, str, str, str]:
-    """The key: what a correct reading of each scenario's screen answers to the four questions."""
+def answers(scenario: Scenario) -> tuple[str, str, str, str, str]:
+    """The key: what a correct reading of each scenario's screen answers to the five questions."""
 
     def yes_no(value: bool) -> str:
         return "yes" if value else "no"
@@ -118,6 +131,7 @@ def answers(scenario: Scenario) -> tuple[str, str, str, str]:
         yes_no(scenario.accepted),
         yes_no(scenario.permission),
         yes_no(not scenario.retained),
+        yes_no(scenario.risk),
     )
 
 
@@ -164,10 +178,12 @@ def build(scenario: Scenario) -> tuple[dict[str, Any], dict[str, Any]]:
         hard_blocks = ["PROVIDER_DEGRADED"]
     elif scenario.permission:
         hard_blocks = []
+    elif scenario.risk:
+        hard_blocks = ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"]
     else:
         hard_blocks = ["SKILL_NOT_DEMONSTRATED"]
     quant_result = {
-        "gate_result": {"hard_blocks": hard_blocks},
+        "gate_result": {"hard_blocks": hard_blocks, "risk_guard_applied": scenario.risk},
         "probability_state": {
             "horizons": {
                 "H_primary": {"p_up_frac": 0.31, "p_down_frac": 0.27, "p_timeout_frac": 0.42}
@@ -270,15 +286,15 @@ after the answer key say which, and why.
 
 ## How to run it (about ten minutes)
 
-1. Read analyses A to E below as you would read them on screen. Do not look at the answer
+1. Read analyses A to F below as you would read them on screen. Do not look at the answer
    key first.
-2. For each analysis, answer the four questions, yes or no, on paper.
+2. For each analysis, answer the five questions, yes or no, on paper.
 3. Then compare your answers with the key at the end.
 
 **PASS:** every answer matches the key. **Any mismatch:** the UX does not PASS. Send Claude
 the analysis letter and the question number only; the screen's wording is then what changes.
 
-The four questions, for every analysis:
+The five questions, for every analysis:
 """
 
 # What the Single Crypto Analysis screen shows around the view, for each timeframe (frontend/app.js
@@ -309,10 +325,11 @@ _LIMITS = """
   shows this state. The product's own code built it for this card only.
 - Every number is a made-up example, not market data. The Gate disposition value is made up
   too: on a real analysis the gates decide it.
-- This card shows the decision view only: its headline, the sentence under it and its rows.
-  It shows no layout or colours.
-- The sentence under the headline appears in the detail panel only. The Single Crypto
-  Analysis and Batch Crypto Analysis screens show the headline and the rows without it.
+- This card shows the decision view only: its headline, the sentence under it, its gate lines
+  and its rows, as the Single Crypto Analysis and Batch Crypto Analysis screens and the detail
+  panel show them. It shows no layout or colours.
+- Analysis F is a real risk gate together with the evidence gate. That is the only way a risk
+  gate can appear today, because the evidence gate is always active.
 - The screens show more than the view, and none of the following is on this card, so a PASS
   here says nothing about it:
   - On the Single Crypto Analysis screen, each timeframe also shows:
@@ -334,14 +351,22 @@ def card_markdown() -> str:
     lines += [f"{number}. {question}" for number, question in enumerate(QUESTIONS, start=1)]
     for scenario, (_, view), rows in zip(SCENARIOS, built, rendered, strict=True):
         lines += ["", f"## Analysis {scenario.letter}", "", f"**{view['headline']}**", ""]
-        lines += [view["detail"], "", "| Row | Shown |", "| --- | --- |"]
+        lines += [view["detail"], ""]
+        # The view's gate framing, as app.js shows it (gateFramingBlocks): the summary when a gate
+        # blocks, and the framing sentence unless an accepted claim frames the gates itself.
+        gates = view["gates"]
+        if gates["blocked"]:
+            lines += [gates["summary"], ""]
+            if not view["accepted_claim"]:
+                lines += [gates["framing"], ""]
+        lines += ["| Row | Shown |", "| --- | --- |"]
         lines += [f"| {label} | {value} |" for label, value in rows]
     lines += [
         "",
         "## Answer key (read it only after answering)",
         "",
-        "| Analysis | 1 | 2 | 3 | 4 |",
-        "| --- | --- | --- | --- | --- |",
+        "| Analysis | 1 | 2 | 3 | 4 | 5 |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     lines += [f"| {s.letter} | {' | '.join(answers(s))} |" for s in SCENARIOS]
     accepted = ", ".join(s.letter for s in SCENARIOS if s.synthetic and s.accepted)

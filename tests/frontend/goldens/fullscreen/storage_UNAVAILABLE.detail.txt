@@ -1,6 +1,8 @@
 Decision view
 No accepted forecast
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -44,15 +46,15 @@ Observe only
 Chase
 No
 Primary reason
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Next action
 Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
 Candidate labels are planning context only and do not grant entry permission.
-Risk summary
+Gate checks
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -102,7 +104,7 @@ Evidence: epistemic_sufficiency_state.sufficiency_level
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -157,11 +159,6 @@ Why reliability is insufficient
 The payload does not report measured reliability from sufficient resolved samples.
 What could change the decision
 Re-evaluate after every active hard gate clears.
-Re-evaluate if the existing tail-risk state normalizes.
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate when provider and data-quality states improve.
-A future validated acceptable zone could support planning; none exists here.
-Re-evaluate if existing higher-timeframe context becomes aligned.
 Interpretation can strengthen only after the in-payload sample gate improves.
 Scenario plan
 Disabled
@@ -177,7 +174,7 @@ No
 Chase move
 No
 Why this is limited
-The elevated-risk disposition disables scenario planning.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Wait for confirmation
 All active hard gates and blocking conditions must clear.
 Data, provider, liquidity, and execution states must be sufficient.
@@ -268,10 +265,10 @@ INSUFFICIENT_SAMPLE
 Profitability claim
 false
 State summary
-BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
+BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID (not forced by a risk gate).
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
-Risk note
+Gate note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Disclaimer
 Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
@@ -298,7 +295,7 @@ Model readiness
 Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
 Explanation
 Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
-Risk / Gates
+Gates
 Gate action
 NO_TRADE
 Hard blocks

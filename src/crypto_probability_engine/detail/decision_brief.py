@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
+from crypto_probability_engine.detail.gate_kinds import (
+    NOT_FORCED_BY_A_RISK_GATE,
+    elevated_risk_forced_by_evidence,
+)
 
 PROBABILITY_EXPLANATION = (
     "Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars "
@@ -144,7 +148,9 @@ def _key_reasons(
         reasons.append(f"Hard gate blockers present: {', '.join(hard_blockers[:3])}.")
     else:
         reasons.append(f"Gate action: {gate.get('action', 'UNKNOWN')}.")
-    reasons.append(f"Backend disposition: {score.get('disposition', 'UNKNOWN')}.")
+    by_evidence = elevated_risk_forced_by_evidence(gate, score)
+    forced = f" ({NOT_FORCED_BY_A_RISK_GATE})" if by_evidence else ""
+    reasons.append(f"Backend disposition: {score.get('disposition', 'UNKNOWN')}{forced}.")
     if score.get("total_score") is not None:
         reasons.append(f"Heuristic signal heat score: {score.get('total_score')}.")
     data_source = data_quality.get("data_source")
@@ -185,8 +191,12 @@ def _state_summary(
     gate: dict,
     score: dict,
 ) -> str:
-    return (
+    summary = (
         f"{normalized_symbol} is classified as {action} for {horizon['horizon_approx_label']} "
         f"using an uncalibrated heuristic. Gate action is {gate.get('action', 'UNKNOWN')} "
-        f"and backend disposition is {score.get('disposition', 'UNKNOWN')}."
+        f"and backend disposition is {score.get('disposition', 'UNKNOWN')}"
     )
+    if elevated_risk_forced_by_evidence(gate, score):
+        # The token stays; the sentence says no risk gate produced it (detail/gate_kinds.py).
+        return f"{summary} ({NOT_FORCED_BY_A_RISK_GATE})."
+    return f"{summary}."

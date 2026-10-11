@@ -50,6 +50,7 @@ from crypto_probability_engine.api.schemas import (
 from crypto_probability_engine.config.build_info import build_info_payload
 from crypto_probability_engine.config.settings import Settings, get_settings
 from crypto_probability_engine.config.unit_discipline import utc_now
+from crypto_probability_engine.detail.gate_kinds import attach_gate_view
 from crypto_probability_engine.normalizers.symbols import SymbolNormalizationError, normalize_symbol
 from crypto_probability_engine.persistence import reader_identity
 from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
@@ -344,8 +345,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             if not durable:
                 raise api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.")
-            return durable
-        return payload["detail_view"]
+            # The gate framing is built now from the gate result the run stores, never stored
+            # (owner ruling AD2): an old run and a new one read the same.
+            return attach_gate_view(durable)
+        return attach_gate_view(payload["detail_view"])
 
     @app.get("/v1/analyze/receipt/{run_id}")
     def analyze_receipt(

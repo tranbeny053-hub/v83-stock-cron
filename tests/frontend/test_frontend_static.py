@@ -305,7 +305,7 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
     for heading in (
         "Overview",
         "Probability",
-        "Risk / Gates",
+        'section("Gates", [',
         "Market Data Quality",
         "Provider State",
         "Market Data v2 / Provider Observability",
@@ -423,7 +423,8 @@ def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() ->
     js = read_frontend("app.js")
     assert "No decision synthesis for this run; the existing gate brief is shown." in js
     assert "decisionBrief.action" in js
-    assert "decisionBrief.state_summary" in js
+    assert "gateSummaryFor(payload, decisionBrief)" in js
+    assert "!decisionViewOf(payload) && gates ? gates.summary : brief.state_summary" in js
     assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
     assert "Numeric entry, stop, target, and risk/reward are disabled for now." in js
     assert "renderTradePlanSkeleton" in js
@@ -1372,7 +1373,11 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
     assert positions == sorted(positions)
     assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
     card = _function_text(js, "overviewCard")
-    assert "const values = view ? [...decisionViewRows(payload, view), heatRow] : [" in card
+    assert "const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [" in card
+    assert "const viewHeat = notAssessedByView(payload) ? [] : [heatRow];" in card
+    # Owner ruling CLASS-B-4=A: each card carries the view's own sentence under its headline.
+    assert "sentence.textContent = view.detail;" in card
+    assert 'textBlock("p", view.detail, "decision-detail")' in _function_text(js, "horizonCard")
     assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
     assert 'headline.dataset.decisionState = view.state;' in card
     assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
@@ -1428,15 +1433,21 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
     card = _function_text(js, "renderFinalDecisionCard")
     assert 'textBlock("p", dispositionLabel(view), "decision-eyebrow")' in card
     assert "Backend final decision" not in card
-    assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
+    assert (
+        'card.append(textBlock("p", gateFramingNote(view, gateViewOf(payload)), '
+        '"decision-safety-note"));'
+    ) in card
     brief = _function_text(js, "renderDecisionBrief")
     assert "section(gateBriefTitle(view), [" in brief
-    assert 'textBlock("p", gateFramingNote(view), "decision-safety-note"),' in brief
+    assert (
+        'textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"),'
+        in brief
+    )
     assert '["Gate disposition", brief.action],' in brief
     assert '"Decision Brief"' not in brief and '"Action"' not in brief
     synthesis = _function_text(js, "renderDecisionSynthesis")
     assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
-    assert 'textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),' in (
+    assert "gateFramingNote(decisionViewOf(payload), gateViewOf(payload))," in (
         synthesis
     )
     assert '["Gate disposition", decisionBrief.action],' in synthesis

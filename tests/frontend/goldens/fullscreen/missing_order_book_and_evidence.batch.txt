@@ -1,0 +1,34 @@
+BTC/USDT · 1H setup / ~6H horizon
+Detail
+LIVE DATA - OKX_PUBLIC
+No accepted forecast
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
+A risk gate is active: Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
+Asset · venue
+BTC/USDT · okx
+Reference close (UTC)
+2026-06-06T12:00:00Z
+Horizon end (UTC)
+2026-06-06T18:00:00Z
+Data
+OK: Live data. Latest candle 0s old.
+Storage
+No storage configured — analyses are kept only until the server restarts
+In band (inside the decision band)
+20.04% (band ±0.20%)
+Up (above the band)
+41.47%
+Down (below the band)
+38.49%
+Evidence level
+Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Round-trip cost
+0.20%
+Evidence
+INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
+Gate disposition (not a market call)
+NO_TRADE
+Signal heat (not risk)
+Warm
+News disabled in METRICS_ONLY.

@@ -1,6 +1,7 @@
 Decision view
 Accepted forecast-quality claim
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -43,15 +44,15 @@ Observe only
 Chase
 No
 Primary reason
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Next action
 Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
 Candidate labels are planning context only and do not grant entry permission.
-Risk summary
+Gate checks
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -99,7 +100,7 @@ Evidence: epistemic_sufficiency_state.sufficiency_level
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -152,11 +153,6 @@ Why reliability is insufficient
 The payload does not report measured reliability from sufficient resolved samples.
 What could change the decision
 Re-evaluate after every active hard gate clears.
-Re-evaluate if the existing tail-risk state normalizes.
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate when provider and data-quality states improve.
-A future validated acceptable zone could support planning; none exists here.
-Re-evaluate if existing higher-timeframe context becomes aligned.
 Interpretation can strengthen only after the in-payload sample gate improves.
 Scenario plan
 Disabled
@@ -172,7 +168,7 @@ No
 Chase move
 No
 Why this is limited
-The elevated-risk disposition disables scenario planning.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Wait for confirmation
 All active hard gates and blocking conditions must clear.
 Data, provider, liquidity, and execution states must be sufficient.
@@ -265,7 +261,7 @@ State summary
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
-Risk note
+Gate note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Disclaimer
 Not financial advice: it never tells you to trade. No profitability claim.
@@ -290,7 +286,7 @@ Model readiness
 Accepted forecast-quality claim
 Explanation
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
-Risk / Gates
+Gates
 Gate action
 NO_TRADE
 Hard blocks

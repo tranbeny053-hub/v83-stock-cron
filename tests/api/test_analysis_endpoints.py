@@ -566,6 +566,39 @@ def test_detail_lookup_returns_detail_view() -> None:
     detail = client.get(f"/v1/analyze/detail/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run_id"] == run_id
+    # Owner ruling AD2: a reopened run's gate framing is built when it is read, from the gate
+    # result it stores, and equals the live analysis's own gate authority.
+    assert detail.json()["gate_view"] == analyze.json()["decision_view"]["gates"]
+    assert detail.json()["gate_view"]["schema_version"] == "gate_view.v1"
+    assert "gate_view" not in analyze.json()["detail_view"], "the framing is never stored"
+
+
+def test_a_durable_detail_gets_its_gate_framing_when_it_is_read() -> None:
+    stored_gate = {
+        "action": "NO_TRADE",
+        "hard_gate_passed": False,
+        "hard_blocks": ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"],
+        "risk_guard_applied": True,
+    }
+    stored = {"run_id": "durable-run", "invalidation_detail": stored_gate}
+
+    class DurableDetailRepository:
+        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
+            return dict(stored) if run_id == "durable-run" else None
+
+    client = make_client()
+    client.app.state.persistence_repository = DurableDetailRepository()
+    login(client)
+
+    restored = client.get("/v1/analyze/detail/durable-run").json()
+
+    assert restored["invalidation_detail"] == stored_gate
+    assert restored["gate_view"]["risk_gate_active"] is True
+    assert restored["gate_view"]["summary"] == (
+        "A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: "
+        "directional skill is not established for this model and timeframe."
+    )
+    assert "gate_view" not in stored
 
 
 @pytest.mark.parametrize(

@@ -1,10 +1,11 @@
 BLOCK
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 tactical swing bridge
 1H
 BTC/USDT
 Detail
 Accepted forecast-quality claim
+The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
 1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
 Immediate action
 No

@@ -37,37 +37,67 @@ ROOT = Path(__file__).resolve().parents[2]
 harness = goldens.harness
 
 # scenario -> (gate action, hard blocks, decision-view state, storage at request time)
+_EVIDENCE = "SKILL_NOT_DEMONSTRATED"
 SCENARIOS = {
-    "evidence_only": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"], "NO_ACCEPTED_CLAIM", "STATELESS"),
+    "evidence_only": ("NO_TRADE", [_EVIDENCE], "NO_ACCEPTED_CLAIM", "STATELESS"),
     "risk_and_evidence": (
         "NO_TRADE",
-        ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"],
+        ["TAIL_RISK_BREACH", _EVIDENCE],
+        "NO_ACCEPTED_CLAIM",
+        "STATELESS",
+    ),
+    "wide_spread_and_evidence": (
+        "NO_TRADE",
+        ["EXECUTION_COST_TOO_HIGH", "LIQUIDITY_NOT_VIABLE", _EVIDENCE],
+        "NO_ACCEPTED_CLAIM",
+        "STATELESS",
+    ),
+    "missing_order_book_and_evidence": (
+        "NO_TRADE",
+        ["LIQUIDITY_NOT_VIABLE", _EVIDENCE],
         "NO_ACCEPTED_CLAIM",
         "STATELESS",
     ),
     "kill_switch_and_evidence": (
         "ABORT",
-        ["KILL_SWITCH", "SKILL_NOT_DEMONSTRATED"],
+        ["KILL_SWITCH", _EVIDENCE],
         "NO_ACCEPTED_CLAIM",
         "STATELESS",
     ),
-    "storage_OK": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"], "NO_ACCEPTED_CLAIM", "OK"),
-    "storage_UNAVAILABLE": (
+    "storage_OK": ("NO_TRADE", [_EVIDENCE], "NO_ACCEPTED_CLAIM", "OK"),
+    "storage_UNAVAILABLE": ("NO_TRADE", [_EVIDENCE], "NO_ACCEPTED_CLAIM", "UNAVAILABLE"),
+    "storage_STATELESS": ("NO_TRADE", [_EVIDENCE], "NO_ACCEPTED_CLAIM", "STATELESS"),
+    "risk_only_SYNTHETIC": ("NO_TRADE", ["TAIL_RISK_BREACH"], "NO_ACCEPTED_CLAIM", "STATELESS"),
+    "missing_order_book_only_SYNTHETIC": (
         "NO_TRADE",
-        ["SKILL_NOT_DEMONSTRATED"],
+        ["LIQUIDITY_NOT_VIABLE"],
         "NO_ACCEPTED_CLAIM",
-        "UNAVAILABLE",
+        "STATELESS",
     ),
-    "storage_STATELESS": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"], "NO_ACCEPTED_CLAIM", "STATELESS"),
+    "system_only_SYNTHETIC": ("ABORT", ["KILL_SWITCH"], "NO_ACCEPTED_CLAIM", "STATELESS"),
+    "first_check_blocks_SYNTHETIC": ("NO_TRADE", [_EVIDENCE], "NO_ACCEPTED_CLAIM", "STATELESS"),
     "accepted_claim_SYNTHETIC": (
         "NO_TRADE",
-        ["SKILL_NOT_DEMONSTRATED"],
+        [_EVIDENCE],
         "ACCEPTED_FORECAST_CLAIM",
         "STATELESS",
     ),
     "permission_SYNTHETIC": ("WATCH", [], "DIRECTIONAL_PERMISSION", "STATELESS"),
 }
-HISTORY = ("evidence_only", "risk_and_evidence", "kill_switch_and_evidence", "storage_OK")
+HISTORY = (
+    "evidence_only",
+    "risk_and_evidence",
+    "wide_spread_and_evidence",
+    "missing_order_book_and_evidence",
+    "kill_switch_and_evidence",
+    "storage_OK",
+    "risk_only_SYNTHETIC",
+    "missing_order_book_only_SYNTHETIC",
+    "system_only_SYNTHETIC",
+)
+# Pinned as a saved run only (the evidence-only analysis as an older run stores it).
+SAVED_BEFORE = "saved_before_this_change"
+FILES = len(SCENARIOS) * 3 + len(HISTORY) + 1
 
 
 def _explain(found: list[str]) -> str:
@@ -143,16 +173,18 @@ def test_every_scenario_and_surface_has_a_golden_and_no_file_is_stray(raw: dict)
     assert list(goldens.SCENARIOS) == list(SCENARIOS)
     assert goldens.HISTORY == HISTORY
     assert goldens.SURFACES == ("single", "batch", "detail")
+    assert goldens.SAVED_BEFORE == SAVED_BEFORE
     expected = goldens.expected_names()
-    # 8 scenarios on 3 surfaces, and 4 of them as a saved run read back.
-    assert len(expected) == len(set(expected)) == 8 * 3 + 4 == 28
+    # 14 scenarios on 3 surfaces, 9 of them as a saved run read back, and one older saved run.
+    assert len(expected) == len(set(expected)) == 14 * 3 + 9 + 1 == FILES == 52
     for scenario in SCENARIOS:
         surfaces = (*goldens.SURFACES, *(("history",) if scenario in HISTORY else ()))
         assert list(raw[scenario]) == list(surfaces), scenario
         for surface in surfaces:
             assert f"{scenario}.{surface}.txt" in expected, (scenario, surface)
             assert raw[scenario][surface], f"{scenario}.{surface}: an empty screen"
-    assert sorted(raw) == sorted(SCENARIOS), "the builder renders exactly these scenarios"
+    assert list(raw[SAVED_BEFORE]) == ["history"] and raw[SAVED_BEFORE]["history"]
+    assert sorted(raw) == sorted([*SCENARIOS, SAVED_BEFORE]), "exactly these scenarios"
     present = sorted(path.name for path in goldens.GOLDENS.iterdir())
     missing, stray = sorted(set(expected) - set(present)), sorted(set(present) - set(expected))
     assert not missing and not stray, _explain(
@@ -161,6 +193,7 @@ def test_every_scenario_and_surface_has_a_golden_and_no_file_is_stray(raw: dict)
 
 
 def test_the_scenarios_are_what_their_names_say(cases: dict[str, dict]) -> None:
+    assert list(cases) == list(SCENARIOS)
     for name, (action, blocks, state, storage) in SCENARIOS.items():
         payload = cases[name]
         assert payload["gate_result"]["action"] == action, name
@@ -171,9 +204,23 @@ def test_the_scenarios_are_what_their_names_say(cases: dict[str, dict]) -> None:
         timeframe = "1W" if name == "permission_SYNTHETIC" else "1H"
         assert payload["timeframes"]["primary"] == timeframe, name
         assert payload["normalized_symbol"] == "BTC/USDT", name
-    # SYNTHETIC means what it says: the registries the harness patched are empty again.
+    # The order book each scenario names: none at all, or one whose spread is measured.
+    for name in SCENARIOS:
+        liquidity = cases[name]["liquidity_state"]
+        if name.startswith("missing_order_book"):
+            assert liquidity["status"] == "DEGRADED" and liquidity["spread_frac"] is None, name
+            assert liquidity["warning"] == "Order book unavailable.", name
+        else:
+            assert liquidity["status"] == "OK", name
+            wide = liquidity["spread_frac"] > 0.01
+            assert wide is (name == "wide_spread_and_evidence"), name
+    # SYNTHETIC means what it says: the registries the harness patched are empty again, and the
+    # evidence gate blocks every analysis that is not named SYNTHETIC.
     assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
     assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
+    assert len(decision_view.ACCEPTANCE_BLOCKERS) == 4
+    for name, (_, blocks, _, _) in SCENARIOS.items():
+        assert name.endswith("_SYNTHETIC") or _EVIDENCE in blocks, name
 
 
 def test_two_builds_in_a_row_are_identical(raw: dict, built: dict) -> None:
@@ -183,6 +230,12 @@ def test_two_builds_in_a_row_are_identical(raw: dict, built: dict) -> None:
     again = goldens.render_screens(clock=FIXED_NOW + timedelta(days=366), zone="Pacific/Kiritimati")
     assert again != raw, "every build draws new run ids: without normalizing, no two are equal"
     assert goldens.golden_files(again) == built
+
+
+def _case(cases: dict[str, dict], scenario: str) -> dict:
+    """The analysis a scenario's screens show: the older saved run is the evidence-only one."""
+
+    return cases["evidence_only" if scenario == SAVED_BEFORE else scenario]
 
 
 def _run_ids(payloads: dict[str, dict]) -> set[str]:
@@ -231,7 +284,7 @@ def test_only_run_ids_and_long_decimals_are_normalized(cases: dict, raw: dict) -
         for surface in set(surfaces) & {"detail", "history"}:
             texts = [goldens.normalize(text) for text in surfaces[surface]]
             assert texts.count(goldens.RUN_ID_PLACEHOLDER) == 1, (scenario, surface)
-            assert cases[scenario]["run_id"] in surfaces[surface], (scenario, surface)
+            assert _case(cases, scenario)["run_id"] in surfaces[surface], (scenario, surface)
 
 
 def test_normalizing_is_exactly_these_two_rules() -> None:
@@ -326,16 +379,17 @@ def test_every_time_on_a_screen_is_the_fixtures_and_no_screen_prints_a_hash(
 ) -> None:
     fixed = FIXED_NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
     for scenario, surfaces in raw.items():
-        time = cases[scenario]["decision_view"]["time"]
+        case = _case(cases, scenario)
+        time = case["decision_view"]["time"]
         assert time["as_of_utc"] == time["reference_close_utc"] == fixed, scenario
-        assert cases[scenario]["as_of_utc"] == fixed, scenario
+        assert case["as_of_utc"] == fixed, scenario
         allowed = {fixed, time["horizon_end_utc"]}
         for surface, texts in surfaces.items():
             shown = {found for text in texts for found in _TIME.findall(text)}
             assert shown and shown <= allowed, (scenario, surface, shown - allowed)
             for text in texts:
                 assert not _HASH.search(goldens.RUN_ID.sub("", text)), (scenario, surface, text)
-                assert cases[scenario]["analysis_hash"] not in text, (scenario, surface)
+                assert case["analysis_hash"] not in text, (scenario, surface)
 
 
 def test_app_js_is_told_the_time_and_locale_text_cannot_reach_a_golden(cases: dict) -> None:
@@ -416,7 +470,7 @@ def test_the_one_block_the_goldens_leave_out_is_the_payload_verbatim(
             assert json.loads(body) == given, (scenario, surface)
             assert body not in rendered["screens"][scenario][surface], (scenario, surface)
             blocks += 1
-    assert blocks == len(SCENARIOS) + len(HISTORY)
+    assert blocks == len(SCENARIOS) + len(HISTORY) + 1
 
 
 def test_a_golden_file_reads_back_as_the_screen(raw: dict) -> None:
@@ -501,7 +555,7 @@ def test_the_check_command_fails_on_a_stale_golden_and_names_the_regenerate_comm
         assert goldens.REGENERATE in failed.err
         assert goldens.main(["--write"], directory=directory) == 0
         assert goldens.main(["--check"], directory=directory) == 0
-        assert "is current (28 files)" in capsys.readouterr().out
+        assert f"is current ({FILES} files)" in capsys.readouterr().out
     assert goldens.committed(directory) == built
     with pytest.raises(SystemExit):
         goldens.main([])  # neither --write nor --check: nothing is built, nothing is written
@@ -519,4 +573,4 @@ def test_the_documented_check_command_passes_on_this_tree() -> None:
         check=False,
     )
     assert done.returncode == 0, _explain([done.stdout, done.stderr])
-    assert "is current (28 files)" in done.stdout
+    assert f"is current ({FILES} files)" in done.stdout

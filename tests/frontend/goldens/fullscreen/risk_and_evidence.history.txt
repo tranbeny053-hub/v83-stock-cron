@@ -1,11 +1,11 @@
 Gate brief (not a market call)
 No decision synthesis for this run; the existing gate brief is shown.
-The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Gate disposition
 NO_TRADE
 Gate brief summary
-BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
-Gate brief risk note
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
+Gate brief note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Scenario plan
 Scenario plan unavailable. Keep using the Decision summary and hard gates.
@@ -64,7 +64,7 @@ n/a
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Gate disposition
 NO_TRADE
 Horizon
@@ -78,10 +78,10 @@ INSUFFICIENT_SAMPLE
 Profitability claim
 false
 State summary
-BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
-Risk note
+Gate note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Disclaimer
 Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
@@ -110,7 +110,7 @@ Model readiness
 Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.
 Explanation
 n/a
-Risk / Gates
+Gates
 Gate action
 n/a
 Hard blocks
