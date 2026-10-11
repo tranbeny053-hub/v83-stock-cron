@@ -383,6 +383,64 @@ def test_every_raw_gate_token_on_a_screen_stands_under_a_label_that_says_what_it
         ], "the rows keep their order"
 
 
+# Stored gate results that do not say whether the gates passed (the re-review's minor 1; the same
+# shapes as tests/detail/test_saved_run_view.py UNDECIDED_GATES): no gate writes them.
+UNDECIDED_GATES = {
+    "gate_empty": {},
+    "gate_blocks_empty_alone": {"hard_blocks": []},
+    "gate_blocks_none_alone": {"hard_blocks": None},
+    "gate_action_alone": {"action": "NO_TRADE"},
+    "gate_forced_token_alone": {"forced_score_disposition": "ELEVATED_RISK_AVOID"},
+    "gate_skill_guard_and_action": {"skill_guard_applied": True, "action": "NO_TRADE"},
+    "gate_flag_none": {"hard_gate_passed": None, "hard_blocks": []},
+}
+GATES_NOT_READABLE = (
+    "No gate result can be read from this saved analysis, so no gate framing is shown."
+)
+
+
+def test_a_gate_result_that_does_not_say_it_passed_never_reads_as_passed_on_the_screen(
+    cases: dict, reopened: dict
+) -> None:
+    """The re-review's minor 1, on the screen. A reopened run whose stored gate result is empty,
+    or carries no flag and no block, showed "No hard gate is active." over "Gate disposition (not
+    a market call) / ELEVATED_RISK_AVOID", and with a stored action a second, different token in
+    Gates. The screen now says that no gate result can be read: no claim that the gates passed,
+    no forced token, no disposition row made up, and one answer in every place a token stood."""
+
+    def stored(gate: dict) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases["evidence_only"]["detail_view"]))
+        assert detail["score_detail"]["disposition"] == "ELEVATED_RISK_AVOID"
+        detail["invalidation_detail"] = copy.deepcopy(gate)
+        return {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    rendered = goldens.render({}, {name: stored(gate) for name, gate in UNDECIDED_GATES.items()})
+    whole = reopened["evidence_only"]["detail"]["saved_run_view"]
+    for name, surfaces in rendered["screens"].items():
+        texts = surfaces["history"]
+        block = harness._between(texts, "Saved analysis", "Model Quality")
+        assert "No hard gate is active." not in " ".join(texts), name
+        assert not any("ELEVATED_RISK_AVOID" in text for text in texts), name
+        assert not any(_is_raw_gate_token(text) for text in texts), f"{name}: a token is shown"
+        # The block says what it cannot read, in the place the gate summary has.
+        assert texts.count(GATES_NOT_READABLE) == 1 and GATES_NOT_READABLE in block[:3], name
+        assert not any(text.startswith("Gate disposition") for text in block), name
+        assert gate_kinds.NOT_A_MARKET_CALL not in texts, "no framing of a result that is not read"
+        # Outside the block the three rows keep their labels, and none holds a value.
+        overview = harness._between(texts, "Overview", "Gates")
+        gates = harness._between(texts, "Gates", "Market Data Quality")
+        assert harness._value(overview, "Gate disposition (not a market call)") == "n/a", name
+        assert harness._value(gates, GATE_ACTION) == "n/a", name
+        assert harness._value(gates, HARD_BLOCKS) == "n/a", name
+        # Everything else the record holds is on the screen as on the whole record's.
+        assert harness._value(block, "Up (above the band)") == "39.38%", name
+        assert harness._value(block, "Asset · venue") == "BTC/USDT · okx", name
+    assert whole["gates"]["summary"].startswith("Evidence gate: "), "the whole record is framed"
+
+
 def test_a_card_without_a_view_labels_its_disposition_too(cases: dict) -> None:
     """Owner ruling S3, on the one screen no golden holds: a response without a decision view
     (an older one) still shows its disposition on the batch card, and under the same label."""

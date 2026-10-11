@@ -18,7 +18,9 @@ not changed.
 It never raises. Reading a saved run must not fail on what an old or damaged row holds (review
 finding D5): a value that is not what the builder writes reads as not kept, and a gate result that
 is not what the gates write is not framed at all, because a framing built from it could contradict
-the record. The view then says that no gate result can be read.
+the record. The view then says that no gate result can be read. A stored gate result that does not
+say whether the gates passed (an empty one, one without its flag and without a block) is such a
+result: it is not a gate result that passed, so it is never read as "no hard gate is active".
 """
 
 from __future__ import annotations
@@ -129,14 +131,24 @@ def attach_saved_run_view(detail: Any) -> Any:
 
 def _readable_gate(gate: Any) -> Mapping[str, Any] | None:
     """The stored gate result when it is what the gates write: a mapping whose `hard_blocks` is a
-    list of block names, or is absent or None, which reads as no blocks. Anything else is None."""
+    list of block names, or is absent or None (no blocks), AND which says whether the gates
+    passed. Anything else is None.
+
+    The gates always write `hard_gate_passed`. A result says a hard gate is active by a block, by
+    that flag being False or by an ABORT action; it says the gates passed only by the flag being
+    True. One that says neither (empty, or an action or a note alone) does not say whether the
+    gates passed: reading it as passed would claim "no hard gate is active" for a record that
+    never said so."""
 
     if not isinstance(gate, Mapping):
         return None
     blocks = gate.get("hard_blocks")
-    if blocks is None:
-        return gate
-    if isinstance(blocks, list) and all(isinstance(block, str) for block in blocks):
+    named = blocks is None or (
+        isinstance(blocks, list) and all(isinstance(block, str) for block in blocks)
+    )
+    if not named:
+        return None
+    if hard_gate_active(gate) or gate.get("hard_gate_passed") is True:
         return gate
     return None
 
@@ -169,16 +181,20 @@ def _token(token: str | None, gate: Mapping[str, Any], liquidity: Any) -> str | 
 def _disposition(
     gate: Mapping[str, Any] | None, score: Mapping[str, Any], liquidity: Any
 ) -> str | None:
-    """The gates' disposition of a saved run: the gate action while a hard gate is active, else the
-    score's disposition. Whether one is active is read from the whole stored gate result (its
-    blocks, its flag, its action), never from `hard_gate_passed` alone: a record whose flag says
-    passed beside a stored block is not shown the score's forced token as if no gate stood."""
+    """The gates' disposition of a saved run: the gate action while a hard gate is active; the
+    score's disposition only when the stored result says the gates passed. Whether a gate is
+    active is read from the whole stored gate result (its blocks, its flag, its action), never
+    from `hard_gate_passed` alone: a record whose flag says passed beside a stored block is not
+    shown the score's forced token as if no gate stood. A result that says neither is not read
+    at all (`_readable_gate`), and has no disposition here either."""
 
     if gate is None:
         return None
     if hard_gate_active(gate):
         return _token(_text(gate.get("action")), gate, liquidity)
-    return _token(_text(score.get("disposition")), gate, liquidity)
+    if gate.get("hard_gate_passed") is True:
+        return _token(_text(score.get("disposition")), gate, liquidity)
+    return None
 
 
 def _hold_active(gate: Mapping[str, Any]) -> bool:

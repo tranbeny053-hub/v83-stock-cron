@@ -212,6 +212,26 @@ def _view_of(name: str) -> dict:
     return saved_run_view.build_saved_run_view(_damaged(DAMAGED_RECORDS[name]))
 
 
+# A gate result that does not say whether the gates passed: no block, no ABORT, and no flag that
+# is True or False. The gates write no such result (the re-review's minor 1 and its siblings).
+UNDECIDED_GATES = {
+    "gate_empty": {},
+    "gate_blocks_empty_alone": {"hard_blocks": []},
+    "gate_blocks_none_alone": {"hard_blocks": None},
+    "gate_action_alone": {"action": "NO_TRADE"},
+    "gate_forced_token_alone": {"forced_score_disposition": "ELEVATED_RISK_AVOID"},
+    "gate_risk_guard_alone": {"hard_blocks": None, "risk_guard_applied": True},
+    "gate_skill_guard_and_action": {"skill_guard_applied": True, "action": "NO_TRADE"},
+    "gate_none_values_and_extra_keys": {
+        "action": None,
+        "forced_score_disposition": None,
+        "added_later": {"deep": [None, 1.5]},
+    },
+    "gate_flag_none": {"hard_gate_passed": None, "hard_blocks": []},
+    "gate_flag_a_string": {"hard_gate_passed": "true", "action": "ALLOW"},
+    "gate_flag_a_number": {"hard_gate_passed": 1},
+}
+UNDECIDED_GATE_RESULTS = [pytest.param(gate, id=name) for name, gate in UNDECIDED_GATES.items()]
 # Stored records that are old, damaged or odd (the reviewer's cases, and their siblings): each
 # is read back without an error and without a line that contradicts the record.
 DAMAGED_RECORDS = {
@@ -234,6 +254,12 @@ DAMAGED_RECORDS = {
     "probability_absent": lambda d: d.pop("probability_detail"),
     "brief_absent": lambda d: d.pop("decision_brief"),
     "gate_absent": lambda d: d.pop("invalidation_detail"),
+    # A stored gate result that does not say whether the gates passed (the re-review's minor 1):
+    # the rest of the record, its score detail among it, is intact.
+    **{
+        name: (lambda d, gate=gate: d.__setitem__("invalidation_detail", deepcopy(gate)))
+        for name, gate in UNDECIDED_GATES.items()
+    },
 }
 
 
@@ -324,6 +350,10 @@ def test_the_detail_route_answers_200_for_every_damaged_record(name: str) -> Non
     assert saved == saved_run_view.build_saved_run_view(stored)
     for token in (saved["disposition"], saved["gate_action"]):
         assert token != "ELEVATED_RISK_AVOID", f"{name}: the forced token alone"
+    if name in UNDECIDED_GATES:
+        assert saved["gates"] is None and saved["disposition"] is None, name
+        assert saved["gates_note"] == saved_run_view.GATES_NOT_READABLE, name
+        assert "No hard gate is active." not in response.text, name
 
 
 def test_a_saved_run_shows_no_percentage_the_live_view_withheld(
@@ -473,19 +503,14 @@ MALFORMED_GATE_RESULTS = [
         id="an-action-and-extra-keys",
     ),
 ]
-# A gate result with no `hard_blocks`, or with None there: no blocks.
+# A gate result with no `hard_blocks`, or with None or an empty list there, that still says
+# whether the gates passed (its flag, or an ABORT action): no blocks.
 NO_BLOCKS_GATE_RESULTS = [
-    pytest.param({}, id="an-empty-gate-result"),
-    pytest.param({"hard_blocks": None}, id="hard-blocks-none"),
     pytest.param({"hard_gate_passed": True, "action": "ALLOW"}, id="absent-and-passed"),
+    pytest.param({"hard_blocks": [], "hard_gate_passed": True}, id="empty-and-passed"),
     pytest.param({"hard_gate_passed": False}, id="absent-and-not-passed"),
     pytest.param({"hard_blocks": None, "hard_gate_passed": False}, id="none-and-not-passed"),
     pytest.param({"action": "ABORT"}, id="absent-and-aborted"),
-    pytest.param({"hard_blocks": None, "risk_guard_applied": True}, id="none-and-a-risk-guard"),
-    pytest.param(
-        {"action": None, "forced_score_disposition": None, "added_later": {"deep": [None, 1.5]}},
-        id="absent-with-none-values-and-extra-keys",
-    ),
 ]
 
 
@@ -529,6 +554,39 @@ def test_an_absent_or_none_hard_blocks_is_framed_as_no_blocks(
     assert view["blocked"] is blocked
     assert view["summary"] == (gate_kinds.UNNAMED_HARD_GATE if blocked else gate_kinds.NO_HARD_GATE)
     assert saved["gates_note"] is None
+
+
+@pytest.mark.parametrize("gate", UNDECIDED_GATE_RESULTS)
+def test_a_gate_result_that_does_not_say_whether_the_gates_passed_is_not_read_as_passed(
+    gate: dict,
+) -> None:
+    """The re-review's minor 1 (a regression of the correction before). A stored gate result that
+    is empty, or carries no flag and no block, showed "No hard gate is active." and the score's
+    forced token alone. It is not a gate result that passed: it is not framed at all, the view
+    says no gate result can be read, and no disposition, action or block is made of it. The
+    score detail is intact here, and its forced token is on no field of the view."""
+
+    stored = _stored(_analysis())
+    assert stored["score_detail"]["disposition"] == "ELEVATED_RISK_AVOID"
+    stored["invalidation_detail"] = gate
+    saved = saved_run_view.attach_saved_run_view(stored)["saved_run_view"]
+    assert saved["gates"] is None
+    assert saved["gates_note"] == saved_run_view.GATES_NOT_READABLE
+    assert saved["disposition"] is None, "what the record does not hold is not made up"
+    assert saved["gate_action"] is None and saved["hard_blocks"] is None
+    assert saved["evidence"]["directional_evidence_hold"] is None
+    written = json.dumps(saved)
+    assert gate_kinds.NO_HARD_GATE not in written and "ELEVATED_RISK_AVOID" not in written
+    assert "NO_TRADE" not in written, "no second disposition beside the one that is not kept"
+    # Everything else the record holds is still shown.
+    assert saved["range"]["up_frac"] is not None and saved["venue"] == "okx"
+    # The same result with its flag reads as the gates wrote it.
+    flagged = {**gate, "hard_gate_passed": True, "hard_blocks": []}
+    passed = saved_run_view.build_saved_run_view({**stored, "invalidation_detail": flagged})
+    assert passed["gates"]["summary"] == gate_kinds.NO_HARD_GATE
+    flagged = {**gate, "hard_gate_passed": False}
+    blocked = saved_run_view.build_saved_run_view({**stored, "invalidation_detail": flagged})
+    assert blocked["gates"]["blocked"] is True
 
 
 def test_a_tuple_of_blocks_is_not_a_stored_list_of_blocks() -> None:
@@ -648,7 +706,9 @@ class _Durable:
         return json.loads(json.dumps(self.stored)) if run_id == "durable-run" else None
 
 
-@pytest.mark.parametrize("gate", [*MALFORMED_GATE_RESULTS, *NO_BLOCKS_GATE_RESULTS])
+@pytest.mark.parametrize(
+    "gate", [*MALFORMED_GATE_RESULTS, *NO_BLOCKS_GATE_RESULTS, *UNDECIDED_GATE_RESULTS]
+)
 def test_the_detail_route_answers_200_for_whatever_gate_result_a_stored_run_holds(
     gate: object,
 ) -> None:
