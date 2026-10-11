@@ -54,9 +54,16 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=p7p-20261005-a"' in html
-    assert 'src="/app.js?v=p7p-20261005-a"' in html
+    assert 'href="/styles.css?v=p7p-20261011-a"' in html
+    assert 'src="/app.js?v=p7p-20261011-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
+    # The token moves with the view's version (review finding 3). A browser that kept the script
+    # served under the token before would draw a decision_view.v1 screen over a v2 payload: the
+    # script that renders v2 is never served under that older token.
+    assert 'view.schema_version === "decision_view.v2"' in js
+    assert "p7p-20261005-a" not in html
+    tokens = set(re.findall(r"\?v=([\w.-]+)", html))
+    assert tokens == {"p7p-20261011-a"}, "one token, on the script and the stylesheet alike"
 
 
 def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
@@ -280,7 +287,6 @@ def test_ui_d1_3_matrix_has_no_permission_label_or_zone_inference() -> None:
     assert "canEnterNow = true" not in js
     assert "> probability.p_" not in js
     assert "> display.prob_" not in js
-    assert "decisionLabelCopy[decision.label]" in js
     matrix_chunk = js.split("function overviewCard", maxsplit=1)[1].split(
         "function errorCard", maxsplit=1
     )[0]
@@ -304,12 +310,13 @@ def test_single_cards_and_detail_view_have_polished_layout_hooks() -> None:
     assert "renderStructuredDetail" in js
     for heading in (
         "Overview",
-        "Probability",
-        "Risk / Gates",
+        'section("Decision view", [',
+        'section("Saved analysis", [',
+        'section("Decision", [',
+        'section("Gates", [',
         "Market Data Quality",
         "Provider State",
         "Market Data v2 / Provider Observability",
-        "Gate brief (not a market call)",
         "Quant Signals",
         "News Add-on",
         "News Authority / Macro & Micro Context",
@@ -325,37 +332,31 @@ def test_decision_section_reads_backend_contract_and_renders_first() -> None:
     html = read_frontend("index.html")
     for marker in (
         "decision_synthesis",
-        "action_permission",
         "actionability_stack",
         "model_quality_summary",
-        "trade_plan_skeleton",
-        "advisor_explanations",
         "probability_interpretation",
     ):
         assert marker in js
+    # The parts of the synthesis the retired sections read are no longer read at all.
+    for retired in ("action_permission", "trade_plan_skeleton", "advisor_explanations"):
+        assert retired not in js, retired
     detail_chunk = js.split("function renderStructuredDetail", maxsplit=1)[1]
+    assert "renderDecisionSynthesis(payload.decision_synthesis, payload)" in detail_chunk
     replacement = detail_chunk.split("detailPanel.replaceChildren(", maxsplit=1)[1]
-    assert replacement.index("renderDecisionSynthesis") < replacement.index('section("Overview"')
-    assert replacement.index("renderDecisionSynthesis") < replacement.index(
-        "renderModelQualitySection"
-    )
+    # The decision view (or a reopened run's own block) leads; the kept checks follow it.
+    order = [
+        replacement.index("...(decisionSection ? [decisionSection] : []),"),
+        replacement.index("...(savedSection ? [savedSection] : []),"),
+        replacement.index("...(checksSection ? [checksSection] : []),"),
+        replacement.index("renderModelQualitySection"),
+        replacement.index('section("Overview"'),
+        replacement.index('section("Gates"'),
+    ]
+    assert order == sorted(order)
     assert replacement.index("renderModelQualitySection") < replacement.index(
         'section("Overview"'
     )
     assert 'data-tab="decision"' not in html
-
-
-def test_final_decision_strength_is_qualified_by_backend_reliability_status() -> None:
-    js = read_frontend("app.js")
-    chunk = js.split("function renderFinalDecisionCard", maxsplit=1)[1].split(
-        "function renderActionabilityRow", maxsplit=1
-    )[0]
-
-    assert "const quality = synthesis.model_quality_summary || {};" in chunk
-    assert "backendText(quality.reliability_status) ||" in chunk
-    # A missing status is never "not measured" under an accepted claim (owner ruling 2026-10-06).
-    assert '(acceptedViewOf(payload) ? NOT_REPORTED_TEXT : "Not measured yet")' in chunk
-    assert 'textBlock("p", `Reliability: ${reliabilityStatus}`, "muted")' in chunk
 
 
 def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> None:
@@ -367,9 +368,7 @@ def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> No
         r"label\s*=\s*['\"](?:LONG|SHORT)['\"]",
     )
     assert not any(re.search(pattern, js, flags=re.IGNORECASE) for pattern in inference_patterns)
-    scenario_chunk = js.split("const scenarioPlanTextFields", maxsplit=1)[1].split(
-        "function renderFutureQuantHooks", maxsplit=1
-    )[0]
+    # The scenario plan is retired from the default screen: no zone field is read any more.
     for zone_field in (
         "preferred_entry_zone",
         "acceptable_entry_zone",
@@ -380,21 +379,18 @@ def test_decision_renderer_has_no_client_side_decision_or_zone_inference() -> No
         "take_profit_plan",
         "risk_reward_summary",
     ):
-        assert js.count(zone_field) == 1
-        assert zone_field in scenario_chunk
-    assert "backendText(plan[key])" in scenario_chunk
+        assert zone_field not in js, zone_field
 
 
 def test_decision_renderer_uses_safe_candidate_and_probability_copy() -> None:
     js = read_frontend("app.js")
-    assert "Long candidate (plan only)" in js
-    assert "Short candidate (plan only)" in js
-    assert "Candidate plan only — not a trade command." in js
     assert "Informational only" in js
     assert "probability.informational_only" in js
-    candidate_copy = js.split("const decisionLabelCopy", maxsplit=1)[1].split("};", maxsplit=1)[0]
-    assert '"Buy"' not in candidate_copy
-    assert '"Sell"' not in candidate_copy
+    # The decision card's labels are retired with it: app.js holds no candidate or call label.
+    labels = ("decisionLabelCopy", "candidate (", '"No trade"', '"Avoid"', '"Wait"', '"Watch"')
+    for label in labels:
+        assert label not in js, label
+    assert '"Buy"' not in js and '"Sell"' not in js
 
 
 def test_frontend_contains_no_unsafe_decision_wording() -> None:
@@ -419,141 +415,6 @@ def test_frontend_contains_no_unsafe_decision_wording() -> None:
     assert not any(phrase in combined for phrase in forbidden)
 
 
-def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() -> None:
-    js = read_frontend("app.js")
-    assert "No decision synthesis for this run; the existing gate brief is shown." in js
-    assert "decisionBrief.action" in js
-    assert "decisionBrief.state_summary" in js
-    assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
-    assert "Numeric entry, stop, target, and risk/reward are disabled for now." in js
-    assert "renderTradePlanSkeleton" in js
-    assert "formatValue(null)" not in js
-
-
-def test_ui_d1_5b_scenario_plan_renders_backend_contract_with_qa_hook() -> None:
-    js = read_frontend("app.js")
-    for marker in (
-        "data-trade-plan-skeleton",
-        "Scenario plan",
-        "Plan status",
-        "Direction context",
-        "Immediate action",
-        "Chase move",
-        "Why this is limited",
-        "Wait for confirmation",
-        "What would change the plan",
-        "Safety notes",
-    ):
-        assert marker in js
-    for field in (
-        "plan.mode",
-        "plan.plan_status",
-        "plan.setup_direction",
-        "plan.can_enter_now",
-        "plan.can_chase",
-        "plan.disabled_reason",
-        "plan.confirmation_required",
-        "plan.chase_warning",
-        "plan.what_would_change_plan",
-        "plan.safety_copy",
-    ):
-        assert field in js
-
-
-def test_ui_d1_5b_scenario_plan_has_safe_display_copy_and_fallbacks() -> None:
-    js = read_frontend("app.js")
-    for copy in (
-        "No action now",
-        "Missed move — do not chase",
-        "Conditional candidate",
-        "Long context",
-        "Short context",
-        "Candidate plan only — not a trade command.",
-        "Not financial advice.",
-        "Numeric entry, stop, and target are disabled until calibration is measured.",
-        "No actionable plan is available from the current evidence.",
-        "No confirmation path is available yet.",
-        "No plan-changing condition is available yet.",
-    ):
-        assert copy in js
-
-
-def test_ui_d1_5b_scenario_plan_does_not_invent_numeric_values_or_call_api() -> None:
-    js = read_frontend("app.js")
-    chunk = js.split("const scenarioModeCopy", maxsplit=1)[1].split(
-        "function renderFutureQuantHooks", maxsplit=1
-    )[0]
-    zone_fields = (
-        "preferred_entry_zone",
-        "acceptable_entry_zone",
-        "chase_zone",
-        "breakout_trigger",
-        "pullback_trigger",
-        "stop_invalidation",
-        "take_profit_plan",
-        "risk_reward_summary",
-    )
-    for field in zone_fields:
-        assert f'"{field}"' in chunk
-    assert "backendText(plan[key])" in chunk
-    for calculation_helper in ("formatNumber(", "formatPct(", "parseFloat(", "Number("):
-        assert calculation_helper not in chunk
-    assert not re.search(
-        r"(?:preferred_entry_zone|stop_invalidation|take_profit_plan|risk_reward_summary)"
-        r"[^\n]*(?:\+|-|\*|/)",
-        chunk,
-    )
-    assert "api(" not in chunk
-    assert "fetch(" not in chunk
-
-
-def test_ui_d1_5b_scenario_plan_is_isolated_from_decision_logic() -> None:
-    js = read_frontend("app.js")
-    chunk = js.split("function renderTradePlanSkeleton", maxsplit=1)[1].split(
-        "function renderFutureQuantHooks", maxsplit=1
-    )[0]
-    assert "plan = {}" in chunk
-    for foreign_source in (
-        "decision_label",
-        "probability_interpretation",
-        "actionability_stack",
-        "gate_result",
-        "model_quality_summary",
-        "action_permission",
-    ):
-        assert foreign_source not in chunk
-    assert "can_enter_now = true" not in chunk
-    assert "can_chase = true" not in chunk
-
-
-def test_ui_d1_5b_scenario_plan_avoids_actionable_wording() -> None:
-    js = read_frontend("app.js")
-    chunk = js.split("const scenarioModeCopy", maxsplit=1)[1].split(
-        "function renderFutureQuantHooks", maxsplit=1
-    )[0].lower()
-    forbidden = (
-        "buy " + "now",
-        "sell " + "now",
-        "enter " + "now",
-        "guaran" + "teed",
-        "safe " + "trade",
-        "sure " + "long",
-        "sure " + "short",
-        "will " + "pump",
-        "will " + "dump",
-        "profit" + "able",
-        "win " + "rate",
-        "high " + "confidence",
-        "accu" + "racy",
-        "trade " + "ev",
-        "lever" + "age",
-        "position " + "size",
-        "place " + "order",
-        "execute " + "trade",
-    )
-    assert not any(phrase in chunk for phrase in forbidden)
-
-
 def test_ui_d1_5b_scenario_plan_styles_preserve_containment_and_priority() -> None:
     css = read_frontend("styles.css")
     chunk = css.split(".scenario-plan {", maxsplit=1)[1].split(
@@ -575,15 +436,12 @@ def test_ui_d1_5b_scenario_plan_styles_preserve_containment_and_priority() -> No
 def test_decision_renderer_prioritizes_backend_blocks_and_advanced_context() -> None:
     js = read_frontend("app.js")
     css = read_frontend("styles.css")
-    assert 'stack.find((item) => item.status === "BLOCK")' in js
-    assert 'stack.find((item) => item.status === "WARN")' in js
-    assert 'item.key === "hard_gates" && item.status === "BLOCK"' in js
-    assert 'item.key === "tail_risk"' in js
+    assert 'shownChecks(stack).find((item) => item.status === "BLOCK")' in js
     assert "raw_probability_hidden_by_default" in js
     assert "decision-advanced-probability" in js
-    assert "future_quant_v2_hooks" in js
-    assert "influence_mode" in js
-    assert "decision_influence_frac" in js
+    # The gate checks card and the future-quant block are retired from the default screen.
+    for retired in ('item.key === "tail_risk"', "future_quant_v2_hooks", "decision_influence_frac"):
+        assert retired not in js, retired
     assert ".actionability-block" in css
     assert "grid-column: 1 / -1" in css
 
@@ -847,7 +705,6 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
     assert "application/json" in js
-    assert "decision_brief" in js
     assert "model readiness" in js.lower()
     assert "horizon_approx_label" in js
     assert ".honesty-banner" in css
@@ -873,7 +730,9 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     assert "[\"In band\", formatPct(display.prob_timeout_pct)]" in overview_chunk
     assert "Probability" not in overview_chunk
     assert "Breakdown" not in overview_chunk
-    assert "section(\"Probability\"" in js
+    # The older Probability section is retired: the decision view carries its sentence.
+    assert "section(\"Probability\"" not in js
+    assert "view.range.explanation" in js
 
 
 def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:
@@ -1334,7 +1193,7 @@ def test_ux1_in_band_is_the_terminal_band_outcome_never_a_timeout() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     assert '"Timeout"' not in js and "/ TIMEOUT " not in js
-    assert js.count('["In band", ') == 4
+    assert js.count('["In band", ') == 3
     assert "/ IN BAND ${formatCalibrationCount(distribution.TIMEOUT)}" in js
     assert "inside the decision band" in html and "Timeout" not in html
     assert "decision band" in PROBABILITY_EXPLANATION
@@ -1372,10 +1231,14 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
     assert positions == sorted(positions)
     assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
     card = _function_text(js, "overviewCard")
-    assert "const values = view ? [...decisionViewRows(payload, view), heatRow] : [" in card
+    assert "const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [" in card
+    assert "const viewHeat = notAssessedByView(payload) ? [] : [heatRow];" in card
+    # Owner ruling CLASS-B-4=A: each card carries the view's own sentence under its headline.
+    assert "sentence.textContent = view.detail;" in card
+    assert 'textBlock("p", view.detail, "decision-detail")' in _function_text(js, "horizonCard")
     assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
     assert 'headline.dataset.decisionState = view.state;' in card
-    assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
+    assert 'view.schema_version === "decision_view.v2"' in _function_text(js, "decisionViewOf")
 
 
 def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
@@ -1384,7 +1247,8 @@ def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
     assert 'if (data.state === "OK")' in banner
     assert "DEGRADED DATA - " in banner
     detail = _function_text(js, "renderStructuredDetail")
-    assert 'section("Decision view", [' in detail
+    assert 'section("Decision view", [' in _function_text(js, "renderDecisionViewSection")
+    assert "view ? renderDecisionViewSection(payload, view) : null;" in detail
     assert "...(decisionSection ? [decisionSection] : [])," in detail
 
 
@@ -1404,11 +1268,11 @@ def test_every_surface_defers_to_the_decision_view() -> None:
     for directional in ("decisionLabelCopy", "matrixRawProbability(", "interpretation_label"):
         assert directional not in view_branch
     detail = _function_text(js, "renderStructuredDetail")
-    data_row = 'view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data]'
-    assert data_row in detail
-    assert "...legacyProbabilityRows(payload, [" in detail
+    assert 'view\n          ? ["Data", decisionDataText(view.data)]' in detail
+    assert ': ["Live data", display.is_live_data ?? kept.data?.is_live_data],' in detail
+    assert "...legacyProbabilityRows(payload, [" not in detail
     assert '...(view ? [["Decision view", decisionDataText(view.data)]] : []),' in detail
-    assert "renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload)" in detail
+    assert "renderDecisionSynthesis(payload.decision_synthesis, payload)" in detail
     interpretation = _function_text(js, "renderProbabilityInterpretation")
     assert "legacyProbabilityRows(payload, probabilityValues(probability))" in interpretation
     row = _function_text(js, "renderActionabilityRow")
@@ -1418,63 +1282,111 @@ def test_every_surface_defers_to_the_decision_view() -> None:
     assert outside + "probability)]" in js
 
 
-def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> None:
-    """Review 3 of lane P, finding 2 (3rd occurrence of the class; owner-authorized third repair):
-    missing evidence never reads as a negative call, including on a run reopened from history whose
-    detail payload carries no view. The legacy decision card, brief and the unavailable fallback
-    say they are the gates' disposition, not a market call, unconditionally."""
+def test_the_older_decision_sections_are_retired_from_the_default_screen() -> None:
+    """The Class-B redesign, step 3 (the parity review's order): the gate checks card, the older
+    Probability section, the advisor explanation with its conditions, the scenario plan, the
+    future-quant block, every permission row, the decision card and the gate brief with its four
+    lists are not rendered on any surface. app.js holds none of their renderers, labels or
+    sentences, and words no framing of its own: the decision view carries the gate authority."""
 
     js = read_frontend("app.js")
-    card = _function_text(js, "renderFinalDecisionCard")
-    assert 'textBlock("p", dispositionLabel(view), "decision-eyebrow")' in card
-    assert "Backend final decision" not in card
-    assert 'card.append(textBlock("p", gateFramingNote(view), "decision-safety-note"));' in card
-    brief = _function_text(js, "renderDecisionBrief")
-    assert "section(gateBriefTitle(view), [" in brief
-    assert 'textBlock("p", gateFramingNote(view), "decision-safety-note"),' in brief
-    assert '["Gate disposition", brief.action],' in brief
-    assert '"Decision Brief"' not in brief and '"Action"' not in brief
+    for renderer in (
+        "renderFinalDecisionCard",
+        "renderRiskSummary",
+        "renderAdvisorExplanations",
+        "renderTradePlanSkeleton",
+        "renderFutureQuantHooks",
+        "renderDecisionBrief",
+        "renderPermissionRow",
+        "permissionPlan",
+        "permissionNo",
+        "primaryDecisionReason",
+        "briefListGroup",
+        "gateBriefTitle",
+        "gateFramingNote",
+        "gateSummaryFor",
+        "readinessText",
+        "matrixConcernItem",
+        "decisionLabelTone",
+    ):
+        assert renderer not in js, renderer
+    for text in (
+        "Gate checks",
+        "Risk summary",
+        "Risk / Gates",
+        "Risk note",
+        "Gate note",
+        "Gate brief",
+        "Advisor explanation",
+        "What could change the decision",
+        "Scenario plan",
+        "Future Quant V2",
+        "Immediate action",
+        "Observe only",
+        "Plan only",
+        "Chase",
+        "Primary reason",
+        "Next action",
+        "Key Reasons",
+        "Hard Blockers",
+        "Watchlist Triggers",
+        "Invalidation Conditions",
+        "State summary",
+        "Disclaimer",
+        "Why this is limited",
+        "Wait for confirmation",
+        "Safety notes",
+        "Candidate",
+        "No decision synthesis for this run",
+        "Keep using the Decision summary",
+        "\"The gates' disposition",
+        "no reason to act",
+    ):
+        assert text not in js, text
+    # What the kept sections still read from the synthesis, and nothing of the retired ones.
     synthesis = _function_text(js, "renderDecisionSynthesis")
-    assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
-    assert 'textBlock("p", gateFramingNote(decisionViewOf(payload)), "decision-safety-note"),' in (
-        synthesis
-    )
-    assert '["Gate disposition", decisionBrief.action],' in synthesis
-    assert "Existing brief action" not in synthesis and '"Decision synthesis unavailable' not in js
-    assert "renderFinalDecisionCard(synthesis, payload)," in synthesis
-    # The no-view note is true unconditionally: a gate outcome is never a forecast.
-    note = _function_text(js, "gateFramingNote")
-    assert "a gate outcome is not a forecast to act on" in note
-    detail = _function_text(js, "renderStructuredDetail")
-    assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail
-    # Without an accepted directional permission the labels never read as a market call.
-    for helper in ("dispositionLabel", "gateBriefTitle"):
-        assert "not a market call" in _function_text(js, helper), helper
+    assert 'return section("Decision", [' in synthesis
+    assert "renderProbabilityInterpretation(" in synthesis
+    assert "renderActionabilityStack(synthesis.actionability_stack, payload)," in synthesis
+    assert "return null;" in synthesis, "a run without a synthesis has no such section"
+    for field in (
+        "synthesis.decision_synthesis",
+        "what_would_change_decision",
+        "risk_note",
+        "state_summary",
+        "watchlist_triggers",
+        "invalidation_conditions",
+        "hard_blockers",
+        "brief.disclaimer",
+    ):
+        assert field not in js, field
+    # The stack's copy of the decision card's label is not listed, and raises no banner.
+    assert 'const RETIRED_CHECKS = ["final_decision"];' in js
+    assert "const ordered = shownChecks(items);" in _function_text(js, "renderActionabilityStack")
+    assert "shownChecks(stack).find(" in _function_text(js, "matrixBlockingItem")
+    # The timeframe card: no permission row beside the view, and none without one.
+    horizon = _function_text(js, "horizonCard")
+    assert "permission" not in horizon.lower() and "decision.label" not in horizon
+    # The gate authority is displayed, never worded: one place reads its two sentences.
+    blocks = _function_text(js, "gateFramingBlocks")
+    assert "if (!hasGateFraming(gates)) return [];" in blocks
+    assert blocks.index("gates.summary") < blocks.index("gates.framing")
+    assert js.count("gates.framing") == 2 and js.count("gates.summary") == 2
+    # Without an accepted directional permission the disposition never reads as a market call.
+    assert "not a market call" in _function_text(js, "dispositionLabel")
+    assert 'section("Gates", [' in _function_text(js, "renderStructuredDetail")
 
 
 def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None:
     """Owner ruling 2026-10-06: accepted forecast evidence shows its accepted state, and an
     accepted directional permission is shown without "not a market call" while staying
-    explicitly non-advisory. test_decision_framing_rendering.py and
-    test_accepted_state_rendering.py render it; these pin the wiring."""
+    explicitly non-advisory. test_accepted_state_rendering.py renders it; these pin the wiring."""
 
     js = read_frontend("app.js")
     frame = "(accepted directional permission; not financial advice)"
-    for helper, permission in (
-        ("dispositionLabel", f"Gate disposition {frame}"),
-        ("gateBriefTitle", f"Gate brief {frame}"),
-    ):
-        text = _function_text(js, helper)
-        assert "view && view.directional_permission" in text and permission in text, helper
-    note = _function_text(js, "gateFramingNote")
-    assert note.index("view.directional_permission") < note.index("view.accepted_claim")
-    assert "Not financial advice: it never tells you to trade" in note
+    text = _function_text(js, "dispositionLabel")
+    assert "view && view.directional_permission" in text and f"Gate disposition {frame}" in text
+    # The sentence that frames the gates under an accepted state is the backend's own.
+    assert "Not financial advice: it never tells you to trade, and hard gates" not in js
     assert "view && view.accepted_claim ? view : null" in _function_text(js, "acceptedViewOf")
-    assert "accepted ? accepted.headline : fallback" in _function_text(js, "readinessText")
     assert "view.accepted_claim\n        ? view.headline" in _function_text(js, "decisionViewRows")
-    assert '["Model readiness", readinessText(payload, modelReadinessCopy)],' in _function_text(
-        js, "renderDecisionBrief"
-    )
-    assert "readinessText(payload, display.model_readiness_label || modelReadinessCopy)" in (
-        _function_text(js, "renderStructuredDetail")
-    )

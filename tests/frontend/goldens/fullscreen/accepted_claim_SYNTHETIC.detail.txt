@@ -1,6 +1,9 @@
 Decision view
 Accepted forecast-quality claim
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+The gates' disposition: hard gates outrank everything shown.
+Evidence gate: Directional skill is not established for this model and timeframe.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -30,34 +33,6 @@ Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notion
 Accepted forecast-quality claim for this model and timeframe.
 No profitability claim.
 Decision
-Gate disposition (not a market call)
-No trade
-Reliability: INSUFFICIENT_SAMPLE
-LOW
-The gates' disposition: hard gates outrank everything shown.
-No trade is supported by the current backend state.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
-Primary reason
-One or more hard gates are active.
-Next action
-Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
-Candidate labels are planning context only and do not grant entry permission.
-Risk summary
-BLOCK
-Hard gates
-#4
-One or more hard gates are active.
-Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
-PASS
-Tail risk
-#5
-Tail-risk status is OK.
-Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
 Probability interpretation
 UP_LEAN
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
@@ -99,7 +74,7 @@ Evidence: epistemic_sufficiency_state.sufficiency_level
 BLOCK
 Hard gates
 #4
-One or more hard gates are active.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -136,61 +111,6 @@ Calibration reliability
 #11
 Reliability status is INSUFFICIENT_SAMPLE.
 Evidence: calibration_state.reliability_status
-BLOCK
-Final decision
-#12
-Decision synthesis label is NO_TRADE.
-Evidence: decision_synthesis.decision_synthesis.label
-Advisor explanation
-Why this decision
-No trade is supported by the current backend state.
-Why immediate action is unavailable
-UI-D1.1 has no validated numeric entry, invalidation, or target geometry.
-Why timeframe matters
-1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Why reliability is insufficient
-The payload does not report measured reliability from sufficient resolved samples.
-What could change the decision
-Re-evaluate after every active hard gate clears.
-Re-evaluate if the existing tail-risk state normalizes.
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate when provider and data-quality states improve.
-A future validated acceptable zone could support planning; none exists here.
-Re-evaluate if existing higher-timeframe context becomes aligned.
-Interpretation can strengthen only after the in-payload sample gate improves.
-Scenario plan
-Disabled
-Display only
-Scenario
-No action now
-Plan status
-Disabled
-Direction context
-Neutral
-Immediate action
-No
-Chase move
-No
-Why this is limited
-The elevated-risk disposition disables scenario planning.
-Wait for confirmation
-All active hard gates and blocking conditions must clear.
-Data, provider, liquidity, and execution states must be sufficient.
-What would change the plan
-Re-evaluate after every active hard gate clears.
-Interpretation can strengthen only after the in-payload sample gate improves.
-Blocking conditions must clear before a conditional scenario is available.
-Numeric entry, stop, target, and risk/reward are disabled for now.
-Safety notes
-Candidate plan only — not a trade command.
-Not financial advice.
-Numeric entry/stop/target disabled until calibration is measured.
-Advanced context · Future Quant V2
-Influence mode
-SHADOW_ONLY
-Decision influence
-0.00%
-Future quant hooks are shadow-only and do not affect this result.
 Model Quality
 Current status
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
@@ -233,7 +153,7 @@ Horizon
 ~6H horizon
 Analysis mode
 METRICS_ONLY
-Disposition
+Gate disposition (not a market call)
 NO_TRADE
 Score
 50
@@ -247,53 +167,10 @@ Data
 OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
-Gate brief (not a market call)
-The gates' disposition: hard gates outrank everything shown.
-Gate disposition
+Gates
+Gate action (internal gate token, not a market call)
 NO_TRADE
-Horizon
-1H setup / ~6H horizon
-Model readiness
-Accepted forecast-quality claim
-Calibration
-DEFAULT_PHASE1A
-Reliability
-INSUFFICIENT_SAMPLE
-Profitability claim
-false
-State summary
-The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
-Volatility reference
-Volatility reference only — not a stop/target recommendation.
-Risk note
-Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
-Disclaimer
-Not financial advice: it never tells you to trade. No profitability claim.
-Key Reasons
-Directional skill has not been evaluated: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
-Hard Blockers
-SKILL_NOT_DEMONSTRATED
-Watchlist Triggers
-Wait for hard blockers or degraded data conditions to clear.
-Re-check only with fresh backend data over the stated multi-bar horizon.
-Monitor whether backend hard gates remain clear.
-Invalidation Conditions
-Hard blocker persists: SKILL_NOT_DEMONSTRATED.
-Probability
-Up
-39.38%
-Down
-38.50%
-In band
-22.12%
-Model readiness
-Accepted forecast-quality claim
-Explanation
-The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
-Risk / Gates
-Gate action
-NO_TRADE
-Hard blocks
+Hard blocks (internal gate tokens, not a market call)
 SKILL_NOT_DEMONSTRATED
 Warnings
 none

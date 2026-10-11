@@ -33,13 +33,22 @@ closed candle, the horizon is close-anchored, and "In band" means the terminal c
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
+from crypto_probability_engine.detail.decision_brief import (
+    PROBABILITY_EXPLANATION,
+    PROBABILITY_TYPE,
+)
+from crypto_probability_engine.detail.gate_kinds import build_gate_view
 
-SCHEMA_VERSION = "decision_view.v1"
+# v2: the view carries the one gate authority (`gates`, detail/gate_kinds.py) and, beside what its
+# range means, what its percentages are (`range.explanation`). A required field makes a new
+# version: a reader that knows only v1 does not know the gates are in the view.
+SCHEMA_VERSION = "decision_view.v2"
 # Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
 # Empty: nothing is accepted. An entry alone does not make the screen agree with it: the UI defers
 # its evidence-level copy to this view, but the backend's own data and copy must be made to agree
@@ -90,6 +99,12 @@ STATE_COPY = {
         "directional permission for this model and timeframe.",
     ),
 }
+# Under a real risk gate the view does not call the outcome "no reason to act or to avoid acting"
+# (owner ruling D3, 2026-10-10): the gate framing says what the risk gate found.
+NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE = (
+    "No forecast-quality claim has been accepted for this model and timeframe. The percentages "
+    "are uncalibrated reference context: not a forecast and not a market signal."
+)
 DATA_COPY = {
     "OK": "Live data.",
     "DEMO": "Demo data: not a live market view.",
@@ -106,6 +121,13 @@ NOT_ASSESSED = (
 COST_LABEL = (
     "Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; "
     "it is also the decision band around the reference close."
+)
+# When the execution model could estimate no slippage (no order book, or one the liquidity measure
+# refuses), its round-trip cost is the two taker fees alone, and so is the decision band that cost
+# sets. The view says so beside the cost (the re-review's minor 2). PROVISIONAL wording.
+COST_FEES_ONLY = (
+    "This cost is fees only, and so is the decision band it sets: slippage could not be "
+    "estimated from the order book."
 )
 REASON_COPY = {
     "PRIMARY_VENUE_ABSENT": "The configured primary venue failed; another venue served this data.",
@@ -142,12 +164,23 @@ def build_decision_view(
     else:
         state = "ACCEPTED_FORECAST_CLAIM"
     headline, detail = STATE_COPY[state]
+    # The one gate authority (owner ruling AD1=A): every surface takes its gate framing from here.
+    # The liquidity state says whether the liquidity gate measured anything (owner ruling G2).
+    gates = build_gate_view(gate, liquidity=quant_result.get("liquidity_state"), state=state)
+    if state == "NO_ACCEPTED_CLAIM" and gates["risk_gate_active"]:
+        detail = NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE
     horizon = (quant_result.get("probability_state") or {}).get("horizons", {}).get("H_primary", {})
     execution = quant_result.get("execution_realism") or {}
     hold = gate.get("directional_evidence_hold")
     evidence = skill_evidence if isinstance(skill_evidence, Mapping) else {}
     # Precedence 1: data that cannot support an assessment shows no range or probability at all.
     assessed = state != "INVALID_OR_UNAVAILABLE_DATA"
+    # What the percentages are (the horizon in bars, a terminal outcome, not expected return): the
+    # backend's own sentence, which only the older Probability section showed. It describes the
+    # uncalibrated heuristic, so an accepted state, whose own sentence says what the percentages
+    # carry, has none.
+    heuristic = decision_brief.get("probability_type") == PROBABILITY_TYPE
+    explained = state == "NO_ACCEPTED_CLAIM" and heuristic
     return {
         "schema_version": SCHEMA_VERSION,
         "state": state,
@@ -165,12 +198,14 @@ def build_decision_view(
             "down_frac": _fraction(horizon.get("p_down_frac")) if assessed else None,
             "evidence_level": decision_brief.get("probability_type"),
             "meaning": RANGE_MEANING if assessed else NOT_ASSESSED,
+            "explanation": PROBABILITY_EXPLANATION if explained else None,
         },
         "cost": {
             "round_trip_cost_frac": _fraction(execution.get("round_trip_cost_frac")),
             "taker_fee_frac": _fraction(execution.get("taker_fee_frac")),
             "slippage_frac": _fraction(execution.get("slippage_frac")),
             "label": COST_LABEL,
+            "caveat": cost_caveat(execution),
         },
         "evidence": {
             "model_readiness": decision_brief.get("model_readiness"),
@@ -182,7 +217,25 @@ def build_decision_view(
             "profitability_claim": False,
             "limitations": _limitations(state, _hold_active(hold)),
         },
+        "gates": gates,
     }
+
+
+def cost_caveat(execution: Any) -> str | None:
+    """The sentence that a round-trip cost is fees only, when the execution state itself says so,
+    else None. Read from that state's own facts and from nothing else: it reports that it could
+    estimate no slippage (its status is DEGRADED), it counts none (its slippage is 0), and its
+    cost is exactly its two taker fees. A state that does not hold all of that supports no such
+    sentence: a live view and a saved run's view say nothing they cannot know."""
+
+    if not isinstance(execution, Mapping) or execution.get("status") != "DEGRADED":
+        return None
+    cost = _fraction(execution.get("round_trip_cost_frac"))
+    fee = _fraction(execution.get("taker_fee_frac"))
+    slippage = _fraction(execution.get("slippage_frac"))
+    if cost is None or fee is None or slippage != 0.0:
+        return None
+    return COST_FEES_ONLY if math.isclose(cost, 2.0 * fee, rel_tol=1e-9, abs_tol=1e-12) else None
 
 
 def _data_state(

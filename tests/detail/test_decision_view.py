@@ -41,7 +41,7 @@ from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail import decision_view, frontend_display
 from crypto_probability_engine.detail.decision_view import STATE_COPY, build_decision_view
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
-from tests.fixtures.market_data import make_snapshot
+from tests.fixtures.market_data import make_order_book, make_snapshot
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
@@ -484,7 +484,7 @@ def test_the_view_and_the_card_agree_on_the_hold(active: object) -> None:
     }
     legacy = {"verdict": "SKILL_DEMONSTRATED", "n": 150, "observed_directional_rate": 0.58}
     view = view_for(quant_result={"gate_result": gate}, skill_evidence=legacy)
-    (reason,) = frontend_display._blocking_reasons(gate, legacy)  # noqa: SLF001
+    (reason,) = frontend_display._blocking_reasons(gate, legacy, None)  # noqa: SLF001
     card_holds = reason["headline"] == frontend_display._DIRECTIONAL_EVIDENCE_HOLD_HEADLINE  # noqa: SLF001
     assert view["evidence"]["directional_evidence_hold"] is card_holds
     assert (view["evidence"]["skill_verdict"] is None) is card_holds
@@ -503,6 +503,103 @@ def test_the_human_payload_validates_against_the_schema(live) -> None:
     Draft202012Validator(schema, resolver=RefResolver.from_schema(schema, store=store)).validate(
         payload
     )
+
+
+# ------------------------------------------------------------------ the fees-only cost's caveat
+def _execution_for(book: object) -> dict:
+    """The execution state the product computes for an order book (the real two functions)."""
+
+    from crypto_probability_engine.execution_realism.realism import compute_execution_realism
+    from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
+
+    return compute_execution_realism(compute_liquidity_depth(book))
+
+
+@pytest.mark.parametrize(
+    ("book", "fees_only"),
+    [
+        pytest.param(make_order_book(), False, id="a-usable-book"),
+        pytest.param(make_order_book(bid=100.0, ask=110.0), False, id="a-wide-measured-spread"),
+        pytest.param(make_order_book(bid=100.0, ask=100.0), False, id="a-measured-spread-of-zero"),
+        pytest.param(None, True, id="no-order-book"),
+        pytest.param(make_order_book(bid=100.0, ask=400.0), True, id="a-book-the-measure-refuses"),
+    ],
+)
+def test_a_cost_that_is_fees_only_says_so_and_no_other_cost_does(
+    book: object, fees_only: bool
+) -> None:
+    """The re-review's minor 2. With no slippage estimate the execution model's round-trip cost
+    is its two taker fees alone, and so is the decision band. The view says so in one backend
+    sentence, read from the execution state's own facts; a cost with a slippage estimate, a
+    measured spread of zero among them, carries no caveat. No number is changed."""
+
+    execution = _execution_for(book)
+    view = view_for(
+        quant_result={
+            "gate_result": {"hard_blocks": ["SKILL_NOT_DEMONSTRATED"]},
+            "execution_realism": execution,
+        }
+    )
+    cost = view["cost"]
+    assert cost["round_trip_cost_frac"] == execution["round_trip_cost_frac"]
+    assert view["range"]["decision_band_frac"] == execution["round_trip_cost_frac"]
+    assert cost["caveat"] == (decision_view.COST_FEES_ONLY if fees_only else None)
+    assert (execution["status"] == "DEGRADED") is fees_only
+    if fees_only:
+        assert cost["round_trip_cost_frac"] == 2 * cost["taker_fee_frac"]
+        assert cost["slippage_frac"] == 0.0
+    assert decision_view.COST_FEES_ONLY == (
+        "This cost is fees only, and so is the decision band it sets: slippage could not be "
+        "estimated from the order book."
+    )
+
+
+def test_the_caveat_is_never_said_of_a_state_that_does_not_support_it() -> None:
+    """The caveat claims three things: no slippage could be estimated, none is counted, and the
+    cost is the two fees. A state that does not hold all three (a damaged stored record) gets no
+    caveat: nothing is said that the state cannot support."""
+
+    fees_only = _execution_for(None)
+    assert decision_view.cost_caveat(fees_only) == decision_view.COST_FEES_ONLY
+    unsupported = {
+        "the model estimated slippage": {**fees_only, "status": "OK"},
+        "no status": {key: value for key, value in fees_only.items() if key != "status"},
+        "a status that is not a status": {**fees_only, "status": True},
+        "slippage is counted": {**fees_only, "slippage_frac": 0.001},
+        "no slippage figure": {**fees_only, "slippage_frac": None},
+        "a slippage that is not a number": {**fees_only, "slippage_frac": False},
+        "no fee": {key: value for key, value in fees_only.items() if key != "taker_fee_frac"},
+        "no cost": {**fees_only, "round_trip_cost_frac": None},
+        "a cost that is not the two fees": {**fees_only, "round_trip_cost_frac": 0.0031},
+        "a cost that is one fee": {**fees_only, "round_trip_cost_frac": 0.001},
+    }
+    for name, state in unsupported.items():
+        assert decision_view.cost_caveat(state) is None, name
+    for state in (None, 5, "DEGRADED", [], [fees_only], {}):
+        assert decision_view.cost_caveat(state) is None, state
+    # The last digit of a float does not decide it.
+    close = {**fees_only, "round_trip_cost_frac": fees_only["round_trip_cost_frac"] * (1 + 1e-12)}
+    assert close["round_trip_cost_frac"] != fees_only["round_trip_cost_frac"]
+    assert decision_view.cost_caveat(close) == decision_view.COST_FEES_ONLY
+
+
+def test_the_caveat_is_a_field_of_the_view_in_the_schema() -> None:
+    """decision_view.v2 was never published: the field is added to v2 itself. It is required, a
+    sentence or null, and the cost object still admits no other field."""
+
+    schema = json.loads((ROOT / "schemas" / "response.schema.json").read_text(encoding="utf-8"))
+    cost = schema["$defs"]["decisionView"]["properties"]["cost"]
+    assert cost["additionalProperties"] is False
+    assert cost["required"][-1] == "caveat" and len(cost["required"]) == 5
+    assert cost["properties"]["caveat"] == {"type": ["string", "null"]}
+    validator = Draft202012Validator(cost)
+    for execution in (_execution_for(None), _execution_for(make_order_book())):
+        built = view_for(quant_result={"gate_result": {}, "execution_realism": execution})["cost"]
+        assert not list(validator.iter_errors(built)), built
+        without = {key: value for key, value in built.items() if key != "caveat"}
+        assert list(validator.iter_errors(without)), "the view without the field is refused"
+        assert list(validator.iter_errors({**built, "caveat": 5}))
+        assert list(validator.iter_errors({**built, "note": "x"}))
 
 
 # --------------------------------------------------------------------------- review 2 of lane P

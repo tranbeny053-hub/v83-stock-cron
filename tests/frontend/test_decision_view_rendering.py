@@ -40,8 +40,8 @@ FUNCTIONS = (
     "legacyProbabilityRows",
     "decisionEvidenceText",
     "decisionViewRows",
+    "costCaveatRows",
     "dispositionLabel",
-    "gateFramingNote",
 )
 CONSTANTS = ("NOT_ASSESSED_TEXT", "VENUE_LABELS")
 
@@ -159,16 +159,19 @@ def _node(body: str, **values: Any) -> Any:
 
 def _render(view: dict) -> tuple[str, list[list[str]], bool]:
     """The banner and the rows app.js renders for a view, and whether it refuses the same view
-    under an unknown schema version."""
+    under another schema version: the one before (a v1 view carries no gate authority, so it is
+    never rendered as if it did) and one it does not know yet."""
 
     rendered = _node(
         """
 const view = decisionViewOf(payload);
-const unknown = {...payload, decision_view: {...view, schema_version: "decision_view.v2"}};
+const stamped = (version) => ({...payload, decision_view: {...view, schema_version: version}});
 console.log(JSON.stringify({
   banner: decisionDataBanner(view.data),
   rows: decisionViewRows(payload, view),
-  refusesUnknown: decisionViewOf(unknown) === null,
+  refusesUnknown: ["decision_view.v1", "decision_view.v3", "", null].every(
+    (version) => decisionViewOf(stamped(version)) === null,
+  ),
 }));
 """,
         payload=_payload(view),
@@ -261,13 +264,32 @@ def test_legacy_probability_rows_defer_to_the_view() -> None:
     assert assessed == rows and legacy == rows
 
 
-def test_the_gate_framing_says_what_the_view_allows() -> None:
-    notes = _node(
-        "console.log(JSON.stringify(views.map((view) => gateFramingNote(view))));",
-        views=[{"accepted_claim": False}, {"accepted_claim": True}],
+def test_the_gate_framing_is_the_backends_sentence_for_what_the_view_allows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review finding D3: app.js worded the gate framing of each state itself. The view words it
+    now (detail/gate_kinds.py), for every state, and app.js has no such sentence left."""
+
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    assert "function gateFramingNote" not in source
+    for sentence in ("\"The gates' disposition", "no reason to act or to avoid acting"):
+        assert sentence not in source, sentence
+    key = f"{_view()['range']['evidence_level']}:{METHODOLOGY_VERSION}:1H"
+    blocked = ("SKILL_NOT_DEMONSTRATED",)
+    assert _view(blocked)["gates"]["framing"] == (
+        "The gates' disposition, not a market call: a gate outcome is not a forecast to act on."
     )
-    assert "not a market call" in notes[0] and "no reason to act or to avoid acting" in notes[0]
-    assert notes[1] == "The gates' disposition: hard gates outrank everything shown."
+    monkeypatch.setattr(decision_view, "ACCEPTED_FORECAST_CLAIMS", frozenset({key}))
+    assert _view(blocked)["gates"]["framing"] == (
+        "The gates' disposition: hard gates outrank everything shown."
+    )
+    monkeypatch.setattr(decision_view, "ACCEPTED_DIRECTIONAL_PERMISSIONS", frozenset({key}))
+    permitted = _view(())
+    assert permitted["state"] == "DIRECTIONAL_PERMISSION"
+    assert permitted["gates"]["framing"].startswith(
+        "The gates' disposition, with an accepted directional permission"
+    )
+    assert "Not financial advice" in permitted["gates"]["framing"]
 
 
 @pytest.mark.parametrize(

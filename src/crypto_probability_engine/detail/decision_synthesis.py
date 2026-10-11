@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from crypto_probability_engine.detail.gate_kinds import (
+    elevated_risk_is_a_risk_finding,
+    hard_gate_summary,
+    named_blocks,
+)
+
 SCHEMA_VERSION = "1.0"
 DECISION_LABELS = frozenset(
     {
@@ -206,7 +212,11 @@ def _trade_plan_skeleton(
     )
     disabled_reason = _plan_disabled_reason(
         plan_status=plan_status,
-        elevated_risk=elevated_risk,
+        # The evidence gate, and the liquidity gate on missing data, force the same token without
+        # a risk finding (detail/gate_kinds.py): then the reason is the blocking check's own
+        # sentence, which names the gate.
+        elevated_risk=elevated_risk
+        and elevated_risk_is_a_risk_finding(gate, score, quant_result.get("liquidity_state")),
         insufficient_history=insufficient_history,
         dominant_block=dominant_block,
     )
@@ -565,6 +575,16 @@ def _actionability_stack(
         else f"Tail-risk status is {tail.get('status', 'UNKNOWN')}."
     )
     execution_blocks = {"LIQUIDITY_NOT_VIABLE", "EXECUTION_COST_TOO_HIGH"} & hard_blocks
+    # When this check blocks on those gates, its sentence is the gate authority's own headlines
+    # for them (detail/gate_kinds.py). The two states' status words cannot say it: a measured
+    # spread that is too wide leaves both "OK", and an order book that was never measured reads
+    # "DEGRADED", which is no finding.
+    liquidity_sentence = (
+        f"{named_blocks(gate, liquidity, execution_blocks)}."
+        if execution_blocks
+        else f"Liquidity is {liquidity.get('status', 'UNKNOWN')}; execution realism is "
+        f"{execution.get('status', 'UNKNOWN')}."
+    )
     if execution_blocks:
         liquidity_check = "BLOCK"
     elif liquidity.get("status") == "OK" and execution.get("status") == "OK":
@@ -615,7 +635,7 @@ def _actionability_stack(
             "hard_gates",
             "BLOCK" if _hard_gate_active(gate) else "PASS",
             "Hard gates",
-            "One or more hard gates are active."
+            hard_gate_summary(gate, liquidity)
             if _hard_gate_active(gate)
             else "Hard gates are clear.",
             ["gate_result.hard_gate_passed", "gate_result.hard_blocks"],
@@ -633,10 +653,7 @@ def _actionability_stack(
             "liquidity_execution",
             liquidity_check,
             "Liquidity and execution",
-            (
-                f"Liquidity is {liquidity.get('status', 'UNKNOWN')}; execution realism is "
-                f"{execution.get('status', 'UNKNOWN')}."
-            ),
+            liquidity_sentence,
             ["liquidity_state.status", "execution_realism.status"],
         ),
         _check(

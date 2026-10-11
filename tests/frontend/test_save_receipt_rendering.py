@@ -40,6 +40,7 @@ import test_accepted_state_rendering as harness
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.detail.saved_run_view import attach_saved_run_view
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
@@ -471,7 +472,7 @@ const scenarios = {
     out.reopenedFromHistory = {
       ...watchState(),
       details: requests.filter((item) => item.path.startsWith("/v1/analyze/detail/")).length,
-      shown: visibleTexts(detailPanel, skipped).includes("Gate brief (not a market call)"),
+      shown: visibleTexts(detailPanel, skipped).includes("Saved analysis"),
     };
 
     await showDetail(data.legacy, {});
@@ -961,7 +962,8 @@ def _requested_with(storage: str) -> dict:
 
 
 def _reopened(payload: dict) -> dict:
-    """A saved run as it is read back: a history row, and the detail as the store exports it."""
+    """A saved run as it is read back: a history row, and the detail as the detail route returns
+    it (what the store exports, with the view the route builds from it when it reads it)."""
 
     row = {
         "run_id": payload["run_id"],
@@ -976,7 +978,8 @@ def _reopened(payload: dict) -> dict:
         "data_source": payload["data_quality"]["data_source"],
         "is_live_data": True,
     }
-    return {"row": row, "detail": sanitize_for_export(copy.deepcopy(payload["detail_view"]))}
+    stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
+    return {"row": row, "detail": attach_saved_run_view(stored)}
 
 
 @pytest.fixture(scope="module")
@@ -1031,7 +1034,7 @@ def test_the_analyses_are_live_and_say_what_storage_was_at_request_time(data: di
     run_ids = {payload["run_id"] for payload in data["analyses"].values()}
     assert len(run_ids) == len(TIMEFRAMES)
     for payload in (*data["analyses"].values(), *data["stored"].values()):
-        assert payload["decision_view"]["schema_version"] == "decision_view.v1"
+        assert payload["decision_view"]["schema_version"] == "decision_view.v2"
         assert "save_receipt" not in payload, "the response carries no receipt (owner ruling D4)"
     assert data["stored"]["OK"]["debug"]["persistence_status"] == "OK"
     assert data["stored"]["UNAVAILABLE"]["debug"]["persistence_status"] == "UNAVAILABLE"
@@ -1451,12 +1454,22 @@ def test_the_wording_is_named_constants_in_one_place() -> None:
 
 
 def test_the_ux_cards_note_says_what_the_screen_does(run: dict) -> None:
-    """The owner's UX card prints the request-time Storage row (scripts/ux_comprehension/card.py).
-    Its note says the screen then asks for a receipt: true of app.js, and proven above."""
+    """The owner's UX card prints the Storage row as the save receipt leaves it
+    (scripts/ux_comprehension/card.py). Its note says the screen asks the backend whether the
+    analysis was saved and shows the state it gives, and that the row reads storage's status at
+    request time until then: true of app.js, and proven above."""
 
     card = (ROOT / "docs" / "runbooks" / "UX_COMPREHENSION_CHECK.md").read_text(encoding="utf-8")
-    note = card[card.index("- Question 4 reads the Storage row") :]
+    note = " ".join(card[card.index("- The three storage lines.") :].split())
     assert "shows no per-analysis save" not in card
-    assert "asks the backend for that analysis's save receipt" in " ".join(note.split())
-    assert "This card prints the row as it reads before that" in " ".join(note.split())
+    assert "the screen asks the backend whether that analysis was saved" in note
+    assert "and shows the state the backend gives" in note
+    assert "Until a receipt answers, that row shows storage's status when the analysis was" in note
+    assert f'One more exists and is not on this card ("{TEXT["PENDING"]}")' in note
     assert run["detailStates"]["SAVED"]["shown"] != run["detailStates"]["unanswered"]
+    # The three rows the card shows are the rows the screen shows for those receipt states.
+    at = run["detailStates"]["unanswered"].index("Storage") + 1
+    for state in ("SAVED", "FAILED", "NOT_RETAINED"):
+        text = run["detailStates"][state]["shown"][at]
+        assert text == TEXT[state] and f"| Storage | {text} |" in card, state
+    assert f"| Storage | {TEXT['PENDING']} |" not in card

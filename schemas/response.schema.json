@@ -184,10 +184,11 @@
         "time",
         "range",
         "cost",
-        "evidence"
+        "evidence",
+        "gates"
       ],
       "properties": {
-        "schema_version": { "const": "decision_view.v1" },
+        "schema_version": { "const": "decision_view.v2" },
         "state": {
           "enum": [
             "INVALID_OR_UNAVAILABLE_DATA",
@@ -262,7 +263,8 @@
             "up_frac",
             "down_frac",
             "evidence_level",
-            "meaning"
+            "meaning",
+            "explanation"
           ],
           "properties": {
             "assessed": { "type": "boolean" },
@@ -271,18 +273,26 @@
             "up_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "down_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "evidence_level": { "type": ["string", "null"] },
-            "meaning": { "type": "string" }
+            "meaning": { "type": "string" },
+            "explanation": { "type": ["string", "null"], "minLength": 1 }
           }
         },
         "cost": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["round_trip_cost_frac", "taker_fee_frac", "slippage_frac", "label"],
+          "required": [
+            "round_trip_cost_frac",
+            "taker_fee_frac",
+            "slippage_frac",
+            "label",
+            "caveat"
+          ],
           "properties": {
             "round_trip_cost_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "taker_fee_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "slippage_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-            "label": { "type": "string" }
+            "label": { "type": "string" },
+            "caveat": { "type": ["string", "null"] }
           }
         },
         "evidence": {
@@ -307,6 +317,45 @@
             "directional_evidence_hold": { "type": "boolean" },
             "profitability_claim": { "const": false },
             "limitations": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "gates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "blocked",
+            "kinds",
+            "blocks",
+            "risk_gate_active",
+            "summary",
+            "framing"
+          ],
+          "properties": {
+            "schema_version": { "const": "gate_view.v1" },
+            "blocked": { "type": "boolean" },
+            "kinds": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": { "enum": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"] }
+            },
+            "blocks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["block", "kind", "headline", "detail"],
+                "properties": {
+                  "block": { "type": "string", "minLength": 1 },
+                  "kind": { "enum": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"] },
+                  "headline": { "type": "string", "minLength": 1 },
+                  "detail": { "type": "string", "minLength": 1 }
+                }
+              }
+            },
+            "risk_gate_active": { "type": "boolean" },
+            "summary": { "type": "string", "minLength": 1 },
+            "framing": { "type": "string", "minLength": 1 }
           }
         }
       }

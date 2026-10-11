@@ -1,0 +1,476 @@
+Decision view
+No accepted forecast
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+Liquidity could not be measured: Analysis is blocked because the order book that was served has a spread outside the range the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, not a finding about the market.
+Evidence gate: Directional skill is not established for this model and timeframe.
+Asset · venue
+BTC/USDT · okx
+Reference close (UTC)
+2026-06-06T12:00:00Z
+Horizon end (UTC)
+2026-06-06T18:00:00Z
+Data
+OK: Live data. Latest candle 0s old.
+Storage
+No storage configured — analyses are kept only until the server restarts
+In band (inside the decision band)
+20.04% (band ±0.20%)
+Up (above the band)
+41.47%
+Down (below the band)
+38.49%
+Evidence level
+Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Round-trip cost
+0.20%
+Cost note
+This cost is fees only, and so is the decision band it sets: slippage could not be estimated from the order book.
+Evidence
+INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
+Gate disposition (not a market call)
+NO_TRADE
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+No forecast-quality claim is accepted for this model and timeframe.
+Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
+No profitability claim.
+Decision
+Probability interpretation
+Informational only
+UP_LEAN
+The heuristic probability leans upward, but it is context rather than an action.
+Up
+41.47%
+Down
+38.49%
+In band
+20.04%
+Directional edge
+2.98%
+Up + Down (outside the band)
+79.96%
+Directional balance
+51.87%
+Reliability is not measured from sufficient resolved samples; treat probability as informational only.
+1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
+Timeframe role
+TACTICAL_SWING_BRIDGE
+Tactical
+yes
+Raw probability secondary
+no
+Actionability stack
+PASS
+Data quality
+#1
+Data quality status is OK.
+Evidence: data_quality.status, data_quality.warnings
+UNKNOWN
+Provider coherence
+#2
+Provider status is OK; cross-provider state is UNAVAILABLE.
+Evidence: provider_state.status, data_quality.cross_provider_state
+PASS
+Sufficient history
+#3
+History sufficiency is SUFFICIENT.
+Evidence: epistemic_sufficiency_state.sufficiency_level
+BLOCK
+Hard gates
+#4
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
+Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
+PASS
+Tail risk
+#5
+Tail-risk status is OK.
+Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
+BLOCK
+Liquidity and execution
+#6
+Liquidity could not be measured.
+Evidence: liquidity_state.status, execution_realism.status
+INFO
+Directional edge
+#7
+Directional edge is 0.029825 from existing probability values.
+Evidence: probability_state.horizons.H_primary
+INFO
+Multi-timeframe alignment
+#8
+Existing trend label is UP.
+Evidence: market_features.trend_mtf
+INFO
+Regime context
+#9
+Existing regime is NORMAL_VARIANCE.
+Evidence: market_features.regime_2state
+UNKNOWN
+Entry quality
+#10
+Numeric entry quality is disabled in UI-D1.1.
+Evidence: trade_plan_skeleton.disabled_reason
+WARN
+Calibration reliability
+#11
+Reliability status is INSUFFICIENT_SAMPLE.
+Evidence: calibration_state.reliability_status
+Model Quality
+Current status
+Probabilities remain heuristic until enough resolved samples exist; they do not establish realized outcomes or profitability evidence.
+Calibration status
+DEFAULT_PHASE1A
+Reliability status
+INSUFFICIENT_SAMPLE
+Reliability available
+no
+Historical outcome-rate metric: Not established.
+Reliability is not measured from sufficient resolved samples; treat probability as informational only.
+Resolved-sample metrics are not surfaced in this view yet.
+Keep collecting samples; this is not reliability evidence and not profitability evidence.
+Live calibration diagnostics
+Read-only diagnostic
+Calibration diagnostics unavailable. Keep using heuristic status.
+How to read model quality
+Heuristic probability
+An early estimate produced before measured calibration is established.
+Insufficient sample
+Too few resolved outcomes are available for a stable quality assessment.
+Measured calibration
+A comparison between forecast probabilities and resolved outcomes after the sample gate is met.
+Brier score
+Average squared probability error; interpret only with a comparable resolved sample.
+Log loss
+A probability error measure that weighs confidently wrong forecasts more heavily.
+Top-label hit rate
+How often the highest-probability label matched the resolved outcome; it is not a complete quality measure.
+Why correctness alone is incomplete
+Probability quality also depends on calibration, sample size, outcome mix, and evaluation context.
+Why this is not profitability evidence
+Forecast diagnostics do not include execution costs, sizing, or realized returns.
+Overview
+Download JSON
+Symbol
+BTC/USDT
+Timeframe
+1H setup
+Horizon
+~6H horizon
+Analysis mode
+METRICS_ONLY
+Gate disposition (not a market call)
+NO_TRADE
+Score
+51
+As of UTC
+2026-06-06T12:00:00Z
+Run ID
+run_<RUN_ID>
+Data source
+OKX_PUBLIC
+Data
+OK: Live data. Latest candle 0s old.
+Storage when requested
+No storage configured — analyses are kept only until the server restarts
+Gates
+Gate action (internal gate token, not a market call)
+NO_TRADE
+Hard blocks (internal gate tokens, not a market call)
+LIQUIDITY_NOT_VIABLE, SKILL_NOT_DEMONSTRATED
+Warnings
+none
+risk arbiter
+View
+{
+  |   "status": "OK",
+  |   "risk_arbiter_version": "risk_arbiter_v1",
+  |   "w_alpha": 1,
+  |   "w_omega": 1,
+  |   "w_sigma": 1.5,
+  |   "alpha_signal": 0.00498545907769…,
+  |   "net_signal": 0.00298545907769…,
+  |   "risk_pressure": 0.0000746066122481…,
+  |   "arbiter_value": 0.00291085246544…
+  | }
+tail risk
+View
+{
+  |   "status": "OK",
+  |   "tail_method": "HISTORICAL_CVAR",
+  |   "tail_confidence_frac": 0.99,
+  |   "cvar_loss": 0,
+  |   "cvar_breach_threshold": 0.025,
+  |   "threshold_method": "TIMEFRAME_SQRT_DURATION_SCALE",
+  |   "timeframe": "1H",
+  |   "evt_status": "DISABLED_PHASE1A"
+  | }
+Market Data Quality
+Decision view
+OK: Live data. Latest candle 0s old.
+Status
+OK
+Latest age seconds
+0
+Warnings
+none
+Failures
+{}
+Data source
+OKX_PUBLIC
+Live data
+yes
+Provider State
+Active provider
+okx
+Status
+OK
+Cross-provider state
+UNAVAILABLE
+Fallback to single provider
+n/a
+Disagreement bps
+n/a
+Reason
+n/a
+okx
+View
+{
+  |   "status": "OK"
+  | }
+Market Data v2 / Provider Observability
+Symbol availability
+n/a
+Cross-provider state
+UNAVAILABLE
+Fallback to single provider
+n/a
+Disagreement bps
+n/a
+provider resources
+View
+{}
+derived market metrics
+View
+{}
+symbol availability
+n/a
+cross provider state
+UNAVAILABLE
+fallback to single provider
+n/a
+disagreement bps
+n/a
+warnings
+0 items
+[]
+Quant Signals
+market features
+View
+{
+  |   "trend_mtf": {
+  |     "status": "OK",
+  |     "trend_timeframes": [
+  |       "1H",
+  |       "4H",
+  |       "1D"
+  |     ],
+  |     "primary_return": 0.00498545907769…,
+  |     "extended_return": 0.0202446225221…,
+  |     "label": "UP"
+  |   },
+  |   "volatility": {
+  |     "status": "OK",
+  |     "realized_vol": 0.0000497377414987…,
+  |     "method": "PER_BAR_LOG_RETURN_PSTDEV",
+  |     "sample_size": 209
+  |   },
+  |   "liquidity_depth": {
+  |     "status": "DEGRADED",
+  |     "best_bid": 100,
+  |     "best_ask": 400,
+  |     "spread_frac": null,
+  |     "top_depth_quote": 0,
+  |     "warning": "Order-book spread is outside bounded fraction range."
+  |   },
+  |   "volume_anomaly": {
+  |     "status": "OK",
+  |     "volume_ratio": 1.00876095119…
+  |   },
+  |   "btc_eth_context": {
+  |     "status": "DEGRADED",
+  |     "reason": "Cross-asset context is a safe placeholder in Sprint 1.",
+  |     "influence_frac": 0
+  |   },
+  |   "correlation_beta": {
+  |     "status": "DEGRADED",
+  |     "reason": "Correlation/beta requires verified cross-asset history.",
+  |     "beta": null,
+  |     "influence_frac": 0
+  |   },
+  |   "memory_features": {
+  |     "status": "DEGRADED",
+  |     "reason": "Durable memory is optional and not configured by default.",
+  |     "influence_frac": 0
+  |   },
+  |   "regime_2state": {
+  |     "status": "OK",
+  |     "regime": "NORMAL_VARIANCE",
+  |     "deterministic_proxy": true
+  |   }
+  | }
+trend summary
+View
+{
+  |   "label": "UP",
+  |   "magnitude_pct": 0.498545907769…
+  | }
+liquidity state
+View
+{
+  |   "status": "DEGRADED",
+  |   "best_bid": 100,
+  |   "best_ask": 400,
+  |   "spread_frac": null,
+  |   "top_depth_quote": 0,
+  |   "warning": "Order-book spread is outside bounded fraction range."
+  | }
+execution realism
+View
+{
+  |   "status": "DEGRADED",
+  |   "taker_fee_frac": 0.001,
+  |   "maker_fee_frac": 0.001,
+  |   "slippage_model": "DEPTH_AWARE_PHASE1A",
+  |   "slippage_frac": 0,
+  |   "round_trip_cost_frac": 0.002,
+  |   "net_of_cost_binding": true,
+  |   "warnings": [
+  |     "Depth-aware slippage unavailable without order book."
+  |   ]
+  | }
+News Add-on
+State
+News analysis disabled for this run.
+Mode
+METRICS_ONLY
+Warnings
+none
+news addon state
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "symbol": "BTC/USDT",
+  |   "configured_source_count": 0,
+  |   "fetch_attempted": false,
+  |   "provider_status": [],
+  |   "warnings": [],
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_evidence_frac": 0,
+  |   "news_influence_frac": 0,
+  |   "failure_is_non_blocking": true,
+  |   "authority_limits": {
+  |     "can_force_constructive": false,
+  |     "can_override_hard_gates": false,
+  |     "sentiment_only_action": "FORBIDDEN"
+  |   }
+  | }
+micro news context
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "items": [],
+  |   "warnings": [],
+  |   "full_article_bodies_stored": false,
+  |   "sentiment_only_action": "FORBIDDEN",
+  |   "message": "News analysis disabled for this run."
+  | }
+macro context
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "items": [],
+  |   "warnings": [],
+  |   "full_article_bodies_stored": false,
+  |   "sentiment_only_action": "FORBIDDEN",
+  |   "message": "News analysis disabled for this run."
+  | }
+news evidence
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_influence_frac": 0,
+  |   "clusters": [],
+  |   "links": []
+  | }
+provider status
+0 items
+[]
+news influence
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_influence_frac": 0,
+  |   "can_force_constructive": false,
+  |   "can_override_hard_gates": false,
+  |   "sentiment_only_action": "FORBIDDEN"
+  | }
+News Authority / Macro & Micro Context
+Influence mode
+ADVISORY_DISPLAY_ONLY
+Influence
+0.0 advisory display only
+Provider status
+none
+status
+DISABLED_METRICS_ONLY
+influence mode
+ADVISORY_DISPLAY_ONLY
+news influence frac
+0
+clusters
+0 items
+[]
+links
+0 items
+[]
+status
+DISABLED_METRICS_ONLY
+mode
+METRICS_ONLY
+items
+0 items
+[]
+warnings
+0 items
+[]
+full article bodies stored
+no
+sentiment only action
+FORBIDDEN
+message
+News analysis disabled for this run.
+status
+DISABLED_METRICS_ONLY
+mode
+METRICS_ONLY
+items
+0 items
+[]
+warnings
+0 items
+[]
+full article bodies stored
+no
+sentiment only action
+FORBIDDEN
+message
+News analysis disabled for this run.
+Debug / Raw JSON

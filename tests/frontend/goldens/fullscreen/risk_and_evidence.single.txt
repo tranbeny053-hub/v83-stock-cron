@@ -1,17 +1,14 @@
 BLOCK
-One or more hard gates are active.
+Hard gates
 tactical swing bridge
 1H
 BTC/USDT
 Detail
 No accepted forecast
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
+A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
+The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

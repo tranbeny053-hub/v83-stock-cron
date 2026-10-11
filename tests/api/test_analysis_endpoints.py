@@ -566,6 +566,45 @@ def test_detail_lookup_returns_detail_view() -> None:
     detail = client.get(f"/v1/analyze/detail/{run_id}")
     assert detail.status_code == 200
     assert detail.json()["run_id"] == run_id
+    # Owner ruling AD2: a reopened run's view, with its gate framing, is built when it is read,
+    # from the facts it stores, and its gate authority equals the live analysis's own.
+    read = detail.json()["saved_run_view"]
+    assert read["schema_version"] == "saved_run_view.v1"
+    assert read["gates"] == analyze.json()["decision_view"]["gates"]
+    assert read["gates"]["schema_version"] == "gate_view.v1"
+    assert "saved_run_view" not in analyze.json()["detail_view"], "the view is never stored"
+    assert "gate_view" not in detail.json()
+
+
+def test_a_durable_detail_gets_its_gate_framing_when_it_is_read() -> None:
+    stored_gate = {
+        "action": "NO_TRADE",
+        "hard_gate_passed": False,
+        "hard_blocks": ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"],
+        "risk_guard_applied": True,
+    }
+    stored = {"run_id": "durable-run", "invalidation_detail": stored_gate}
+
+    class DurableDetailRepository:
+        def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
+            return dict(stored) if run_id == "durable-run" else None
+
+    client = make_client()
+    client.app.state.persistence_repository = DurableDetailRepository()
+    login(client)
+
+    restored = client.get("/v1/analyze/detail/durable-run").json()
+
+    assert restored["invalidation_detail"] == stored_gate
+    gates = restored["saved_run_view"]["gates"]
+    assert gates["risk_gate_active"] is True
+    assert gates["summary"] == (
+        "A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: "
+        "directional skill is not established for this model and timeframe."
+    )
+    assert gates["framing"].startswith("The risk gate (Extreme-move risk is too high) is a finding")
+    assert restored["saved_run_view"]["disposition"] == "NO_TRADE"
+    assert "saved_run_view" not in stored
 
 
 @pytest.mark.parametrize(
@@ -661,10 +700,16 @@ def test_detail_lookup_uses_durable_user_requested_detail_after_restart() -> Non
     missing = client.get("/v1/analyze/detail/missing-run")
 
     assert restored.status_code == 200
-    assert restored.json() == {
+    # The stored detail, whole, and the view built from it when it was read: this one stores no
+    # gate result, and the view says so.
+    answer = restored.json()
+    read = answer.pop("saved_run_view")
+    assert answer == {
         "run_id": "durable-run",
         "sections": {"score": "restored"},
     }
+    assert read["schema_version"] == "saved_run_view.v1"
+    assert read["gates"] is None and read["gates_note"].startswith("No gate result can be read")
     assert missing.status_code == 404
 
 

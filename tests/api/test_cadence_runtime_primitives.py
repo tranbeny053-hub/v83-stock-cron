@@ -34,8 +34,22 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # added human-route `decision_view` key. The prior value was
 # sha256:3bed6a3498aef7b10ea213f63ce9f355e1014e46fd075b9c3cb32d254f90e7d4.
 # Nothing in the quant, gate, or probability path changed.
+# Moved 2026-10-10 (owner rulings CLASS-B-4=A and AD1=A): the backend's own sentences say which
+# kind of hard gate is active (`decision_synthesis`, `decision_brief`, detail/gate_kinds.py), so
+# the evidence gate is no longer described as elevated risk, and the human-route `decision_view`
+# carries one `gates` block. The prior published value was
+# sha256:0cc13a7e6897865238d8a4744848181b4bd2e1519989a0fe37be0f20cadbffc1.
+# Nothing in the quant, gate, or probability path changed; every gate token is what it was.
+# Moved 2026-10-11 (the Class-B redesign, step 1; owner ruling R1=A): the human-route
+# `decision_view` is stamped `decision_view.v2`, because its required `gates` block made a new
+# version of it. The value before, never published, was
+# sha256:2d44574e9090efe273a3bce7fc60f8699ef1c941ba03088420ad08c6452e5cdb.
+# Moved again the same day (step 2): the view's gate block lists each active gate's detail
+# sentence, and its range carries the backend's own explanation of the percentages. The value
+# before, never published, was
+# sha256:4ca98d13a36062f9c8b922cd38228d16a85e398221640cc58fd4df81c0571349.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:0cc13a7e6897865238d8a4744848181b4bd2e1519989a0fe37be0f20cadbffc1"
+    "sha256:890fb0c084329e81831ac80917964fc7628eba54a8d0fd1177d4bfc2ce06800f"
 )
 # Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
 # a SHA-256 over the canonical JSON of the whole response, so the added
@@ -43,8 +57,14 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # af0b3d03edd25fa66a7658e148e87975fb43a291700fea3a157d77694b17d82c.
 # Moved 2026-10-05 for the same reasons as EXPECTED_DEFAULT_ANALYSIS_HASH above. Prior
 # value was 38fff6098e0888427c64e02537f0ef3e09229e30ddf0d65915c582ac2db595bc.
+# Moved 2026-10-10 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above. Prior value
+# was 3941f194067ec1b2313e4f5c0c53bf3fb7d46f31d6bd7e219fe22954dfe3bf2c.
+# Moved 2026-10-11 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above. The value
+# before, never published, was e1e3911951c1c99588c13a1b429cc37b18336ba8e81b4a172493dc356e1ed421.
+# Moved again the same day (step 2) for the same reason as the analysis hash above. The value
+# before, never published, was b1549b05723e63f571193e832a4bc581cd6742f9a2e401efb69bf30d59c8d23e.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "3941f194067ec1b2313e4f5c0c53bf3fb7d46f31d6bd7e219fe22954dfe3bf2c"
+    "03cd7d9d36f441e155dea276b2273928af9e484177f2f1a3247ce8d1af75c572"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

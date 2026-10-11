@@ -1,0 +1,38 @@
+BLOCK
+Hard gates
+tactical swing bridge
+1H
+BTC/USDT
+Detail
+No accepted forecast
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
+A risk gate is active: Execution cost is too high; Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
+The risk gates (Execution cost is too high; Liquidity is not viable) are findings about market conditions or execution. They are analysis only, not an instruction.
+1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
+Asset · venue
+BTC/USDT · okx
+Reference close (UTC)
+2026-06-06T12:00:00Z
+Horizon end (UTC)
+2026-06-06T18:00:00Z
+Data
+OK: Live data. Latest candle 0s old.
+Storage
+No storage configured — analyses are kept only until the server restarts
+In band (inside the decision band)
+40.04% (band ±4.96%)
+Up (above the band)
+29.98%
+Down (below the band)
+29.98%
+Evidence level
+Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Round-trip cost
+4.96%
+Evidence
+INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
+Gate disposition (not a market call)
+NO_TRADE
+Signal heat (not risk)
+Low
+LIVE DATA - OKX_PUBLIC

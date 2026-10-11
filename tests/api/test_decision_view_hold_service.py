@@ -78,7 +78,7 @@ def test_the_view_withholds_a_legacy_pass_under_the_hold(monkeypatch) -> None:
     assert payload["skill_evidence"]["n"] == 50
 
     view = payload["decision_view"]
-    assert view["schema_version"] == "decision_view.v1"
+    assert view["schema_version"] == "decision_view.v2"
     evidence = view["evidence"]
     assert evidence["directional_evidence_hold"] is True
     assert evidence["skill_verdict"] is None, "the view hides the legacy verdict under the hold"

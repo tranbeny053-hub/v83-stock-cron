@@ -1,17 +1,10 @@
-BLOCK
-One or more hard gates are active.
-tactical swing bridge
-1H
-BTC/USDT
+BTC/USDT · 1H setup / ~6H horizon
 Detail
+LIVE DATA - OKX_PUBLIC
 No accepted forecast
-1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+A system or data gate is active: Safety shutdown is active.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -33,9 +26,9 @@ Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
 Round-trip cost
 0.41%
 Evidence
-INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
+SKILL_DEMONSTRATED · 400 resolved outcomes · INSUFFICIENT_SAMPLE
 Gate disposition (not a market call)
 ABORT
 Signal heat (not risk)
 Warm
-LIVE DATA - OKX_PUBLIC
+News disabled in METRICS_ONLY.
