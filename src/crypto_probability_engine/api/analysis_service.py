@@ -19,6 +19,7 @@ from crypto_probability_engine.adapters.provider_selection import (
     select_market_data,
 )
 from crypto_probability_engine.api import commit_reconciliation as _reconciliation
+from crypto_probability_engine.api import save_receipt as _save_receipt
 from crypto_probability_engine.api.errors import api_error
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
@@ -743,12 +744,13 @@ def schedule_best_effort_persist(
     from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
     status = current_persistence_status(repository)
+    user_requested = prediction_origin == PredictionOrigin.USER_REQUESTED.value
     if repository is None:
+        if user_requested:
+            _open_save_receipt(payload, status)
         return status
     work = _persistence_work(payload, status)
-    if prediction_origin == PredictionOrigin.USER_REQUESTED.value and callable(
-        getattr(repository, "save_run_detail", None)
-    ):
+    if user_requested and callable(getattr(repository, "save_run_detail", None)):
         work = replace(
             work,
             run_detail_row={
@@ -757,14 +759,45 @@ def schedule_best_effort_persist(
                 "detail_payload": sanitize_for_export(payload["detail_view"]),
             },
         )
+    if user_requested:
+        _open_save_receipt(payload, status)
     background_tasks.add_task(_submit_persistence_work, repository, work)
     return status
+
+
+def _open_save_receipt(payload: dict, status: str) -> None:
+    """Open a USER_REQUESTED run's save receipt as its save is scheduled (api/save_receipt.py).
+
+    Without a durable store nothing will be retained, and that is known now. Never raises;
+    changes no status.
+    """
+
+    try:
+        run_id = payload.get("run_id")
+        if isinstance(run_id, str) and run_id:
+            _save_receipt.SAVE_RECEIPTS.open(
+                run_id,
+                _save_receipt.NOT_RETAINED if status == "STATELESS" else _save_receipt.PENDING,
+            )
+    except Exception:
+        return
+
+
+def _settle_save_receipt(work: PersistenceWork, state: str) -> None:
+    """Settle the run's save receipt, if one is open. Never raises; changes no status."""
+
+    try:
+        _save_receipt.SAVE_RECEIPTS.settle(work.run_summary.get("run_id"), state)
+    except Exception:
+        return
 
 
 def _submit_persistence_work(repository: PersistenceRepository, work: PersistenceWork) -> None:
     admission = _PERSISTENCE_ADMISSION
     if not admission.acquire(blocking=False):
         _mark_repository_unavailable(repository)
+        # Never sent: the save queue is full.
+        _settle_save_receipt(work, _save_receipt.FAILED)
         _emit_persistence_event("persistence_admission_refused", work, repository)
         return
     try:
@@ -777,6 +810,7 @@ def _submit_persistence_work(repository: PersistenceRepository, work: Persistenc
     except Exception as exc:
         admission.release()
         _mark_repository_unavailable(repository)
+        _settle_save_receipt(work, _save_receipt.FAILED)
         _emit_persistence_event(
             "persistence_submit_failed", work, repository, error_class=type(exc).__name__
         )
@@ -801,10 +835,17 @@ def _best_effort_persist(
     try:
         confirmation = _persist_work_confirmed(work, repository)
     except Exception as exc:
+        _settle_save_receipt(work, _save_receipt.FAILED)
         _emit_persistence_receipt(work, repository, started, None, type(exc).__name__)
         if work.prediction_rows:
             _reconcile_unknown_commits(work, repository, RECEIPT_COMMIT_UNKNOWN)
         raise
+    # SAVED only for plan §8.1's SAVED receipt: the whole core, acknowledged. NOT_SAVED,
+    # COMMIT_UNKNOWN and an analysis with no forecast bundle all read FAILED.
+    _settle_save_receipt(
+        work,
+        _save_receipt.SAVED if confirmation.receipt == RECEIPT_SAVED else _save_receipt.FAILED,
+    )
     _emit_persistence_receipt(work, repository, started, confirmation, None)
     _reconcile_unknown_commits(work, repository, confirmation.receipt)
     return confirmation.background_status

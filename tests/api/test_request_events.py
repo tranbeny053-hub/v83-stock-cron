@@ -69,7 +69,9 @@ def _small_app(tmp_path: Path) -> tuple[TestClient, TelemetrySink]:
 def test_a_request_is_one_event_with_the_route_template_and_nothing_private(tmp_path: Path) -> None:
     client, sink = _small_app(tmp_path)
     client.cookies.set("ucpe", "cookie-value")
-    response = client.get("/v1/items/private-looking?token=abc",
+    # The secret-looking value is not hexadecimal: the event's own random request id is, and a
+    # hex needle such as "abc" turned up inside it about once in three hundred runs.
+    response = client.get("/v1/items/private-looking?token=q7zq7z",
                           headers={"Authorization": "Bearer xyz"})
     assert response.status_code == 200
     (event,) = sink.events
@@ -78,7 +80,7 @@ def test_a_request_is_one_event_with_the_route_template_and_nothing_private(tmp_
     assert event["release_id"] == RELEASE_ID and len(str(event["request_id"])) == 16
     assert event["error_class"] is None and isinstance(event["duration_ms"], float)
     text = repr(event)
-    leaks = ("private-looking", "token", "abc", "Bearer", "xyz", "cookie-value", "testclient")
+    leaks = ("private-looking", "token", "q7zq7z", "Bearer", "xyz", "cookie-value", "testclient")
     for leaked in leaks:
         assert leaked not in text, leaked
 

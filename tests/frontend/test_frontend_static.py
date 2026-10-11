@@ -47,7 +47,7 @@ def test_heat_legend_and_metrics_only_news_copy_present() -> None:
     assert "DEGRADED DATA" in js
     assert "DATA UNAVAILABLE" in js
     assert "Watchlist persistence:" in js
-    assert "Persistence:" in html
+    assert "Storage, last checked: Storage status unknown" in html
 
 
 def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
@@ -954,6 +954,7 @@ const document = {{
 let apiCalls = 0;
 let lastBatchRequest = null;
 const hideDetail = () => {{}};
+const cancelSaveReceipts = () => {{}};
 const setLoading = () => {{}};
 const setAnalysisActive = () => {{}};
 const renderResults = () => {{}};
@@ -1227,7 +1228,9 @@ const sessionApi = api;
     assert states == {
         "add": {"message": expected_message, "title": ""},
         "remove": {"message": expected_message, "title": ""},
-        "persistenceStates": ["UNAVAILABLE", "UNAVAILABLE"],
+        # A refused change carries no storage status: the header badge is not written to
+        # (tests/frontend/test_watchlist_failure_badge.py renders every such case).
+        "persistenceStates": [],
         "callCount": 2,
     }
     assert "persistence: OK" not in states["add"]["message"]

@@ -13,12 +13,25 @@ from itertools import combinations
 
 import pytest
 
+from crypto_probability_engine.adapters import provider_selection
+from crypto_probability_engine.adapters.symbol_universe import ProviderSymbolUniverse
+from crypto_probability_engine.api import analysis_service
+from crypto_probability_engine.api.schemas import AnalysisRequest
+from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, min_history_for
+from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail import decision_view
 from crypto_probability_engine.detail.decision_view import STATE_COPY
+from crypto_probability_engine.normalizers.symbols import normalize_symbol
+from crypto_probability_engine.persistence.run_store import InMemoryRunStore
+from crypto_probability_engine.quant.epistemic_sufficiency import assess_epistemic_sufficiency
 from scripts.ux_comprehension import card
+from tests.fixtures.market_data import make_snapshot
 
 STORAGE_KEPT = "Storage available"
-NOT_KEPT = "will not appear in Recent Analysis history"
+# The Storage row's warning (frontend/app.js persistenceStatusText). It is storage's status when
+# the analysis was requested, so it warns and never forecasts: a save receipt can say otherwise.
+MAY_NOT_BE_KEPT = "may not be kept in Recent Analysis history"
+QUESTION_4 = "Does the screen warn that this analysis may NOT be kept in Recent Analysis history?"
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +79,9 @@ def test_the_scenarios_distinguish_every_section_23_dimension(
     }
     assert differing == {"Storage"}
     assert screens["A"]["rows"]["Storage"] == STORAGE_KEPT
-    assert "not being retained" in screens["D"]["rows"]["Storage"]
+    assert screens["D"]["rows"]["Storage"] == (
+        f"Storage unavailable when requested — this analysis {MAY_NOT_BE_KEPT}"
+    )
     # Every pair of analyses can be told apart from what the screen shows.
     for left, right in combinations(sorted(screens), 2):
         assert (screens[left]["headline"], screens[left]["rows"]) != (
@@ -88,9 +103,38 @@ def test_the_answer_key_follows_from_each_built_view(
             yes_no(view["range"]["assessed"]),
             yes_no(view["accepted_claim"]),
             yes_no(view["directional_permission"]),
-            yes_no(NOT_KEPT in screen["rows"]["Storage"]),
+            yes_no(MAY_NOT_BE_KEPT in screen["rows"]["Storage"]),
         )
         assert card.answers(scenario) == derived, scenario.letter
+
+
+def test_question_4_asks_what_the_storage_row_can_truthfully_say(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """The Storage row is storage's status when the analysis was requested. It cannot say that an
+    analysis will not be kept: the save receipt can say "Saved…" afterwards. So question 4 asks
+    whether the screen WARNS, in the row's own words, and the card's note says what the row is."""
+
+    assert card.QUESTIONS[3] == QUESTION_4
+    assert MAY_NOT_BE_KEPT in QUESTION_4.replace("may NOT", "may not")
+    # Answer 4, read off each analysis's rendered Storage row and nothing else: only D warns.
+    warned = {
+        letter: MAY_NOT_BE_KEPT in screen["rows"]["Storage"] for letter, screen in screens.items()
+    }
+    assert warned == {"A": False, "B": False, "C": False, "D": True, "E": False}
+    text = card.card_markdown()
+    assert f"4. {QUESTION_4}\n" in text
+    for forecast in ("will NOT be kept", "will not be kept", "will not appear", "not being"):
+        assert forecast not in text, forecast
+    for letter, screen in screens.items():
+        assert f"| Storage | {screen['rows']['Storage']} |" in text, letter
+    note = " ".join(text[text.index("- Question 4 reads the Storage row.") :].split())
+    assert (
+        "On this card that row is storage's status when the analysis was requested: "
+        '"Storage available", or a warning that the analysis may not be kept.'
+    ) in note
+    assert "It is read before the analysis is saved." in note
+    assert "the screen asks the backend for that analysis's save receipt" in note
 
 
 def test_the_registries_stay_empty() -> None:
@@ -109,6 +153,126 @@ def test_the_committed_card_is_current_and_says_what_it_is() -> None:
     assert "Some analyses below are **SYNTHETIC**" in text
     assert text.index("**SYNTHETIC**") < text.index("## Analysis A"), "said before any analysis"
     assert text.index("## Answer key") > text.index("## Analysis E"), "the key comes last"
+    # The plan's list maps one-to-one onto A to E, so it is quoted only after the key.
+    assert text.index("owner-task scenarios distinguish") > text.index("## Answer key")
+
+
+def _view_branch_and_the_rest(function_source: str) -> tuple[str, str]:
+    """(horizonCard's `if (view) {…}` branch, horizonCard without that branch and its `else`)."""
+
+    start = function_source.index("if (view) {")
+    middle = function_source.index("} else {", start)
+    depth = 0
+    for position in range(function_source.index("{", middle), len(function_source)):
+        depth += {"{": 1, "}": -1}.get(function_source[position], 0)
+        if depth == 0:
+            rest = function_source[:start] + function_source[position + 1 :]
+            return function_source[start:middle], rest
+    raise AssertionError("horizonCard's else branch does not close")
+
+
+def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> None:
+    """CLAUDE_EXPERT_CHECK 2026-10-10: the card is the decision view's headline, sentence and rows.
+    Each thing it names around the view is rendered by app.js's timeframe card when a view is
+    present (in its view branch, or outside both branches), and the sentence is in the detail
+    panel alone."""
+
+    text = card.card_markdown()
+    assert "This card shows the decision view only" in text
+    assert "none of the following is on this card, so a PASS\n  here says nothing about it" in text
+    assert "The Gate disposition value is made up" in text
+    source = card.APP_JS.read_text(encoding="utf-8")
+    timeframe_card = card._extract(source, "horizonCard")
+    view_branch, rest = _view_branch_and_the_rest(timeframe_card)
+    assert "decisionViewRows(payload, view)" in view_branch
+    assert len(card.OUTSIDE_THE_VIEW) == 6
+    for name, literal, in_view_branch in card.OUTSIDE_THE_VIEW:
+        assert f"    - {name}\n" in text, name
+        where = view_branch if in_view_branch else rest
+        assert literal in where, f"{name}: horizonCard no longer shows {literal} with a view"
+    action_row = card._extract(source, "renderPermissionRow")
+    for label in ("Immediate action", "Plan", "Chase"):
+        assert f'["{label}",' in action_row, label
+    # The sentence (view.detail) is rendered by the detail panel and by neither card.
+    detail_panel = card._extract(source, "renderStructuredDetail")
+    assert "view.detail" in detail_panel and detail_panel.count("section(") > 1
+    assert "view.detail" not in timeframe_card
+    assert "view.detail" not in card._extract(source, "overviewCard")
+    assert "appears in the detail panel only" in text
+    # The two screens the card names are the product's own tab names.
+    index_html = (card.ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    for screen in ("Single Crypto Analysis", "Batch Crypto Analysis"):
+        assert screen in text and f">{screen}</button>" in index_html, screen
+
+
+def test_analysis_b_is_marked_synthetic() -> None:
+    text = card.card_markdown()
+    assert "Analysis B is **SYNTHETIC** too, for a different reason." in text
+    assert "the product shows an error message and no analysis" in text
+    flags = {scenario.letter: scenario.synthetic for scenario in card.SCENARIOS}
+    assert flags == {"A": False, "B": True, "C": True, "D": False, "E": True}
+
+
+class _Venue:
+    """A venue that serves one prepared snapshot (no network)."""
+
+    def __init__(self, name: str, timeframe: str, count: int) -> None:
+        self.name = name
+        self._snapshot = make_snapshot(provider=name, timeframe=timeframe, count=count)
+
+    def fetch_market_snapshot(self, symbol: object, timeframe: str) -> object:
+        return self._snapshot
+
+    def fetch_symbol_universe(self) -> ProviderSymbolUniverse:
+        return ProviderSymbolUniverse(provider=self.name, symbols=frozenset({"BTC/USDT"}))
+
+
+def _select(timeframe: str, venues: list[_Venue]) -> object:
+    settings = Settings(
+        data_mode="live",
+        provider_priority=tuple(venue.name for venue in venues),
+        candle_cache_ttl_seconds=0,
+    )
+    try:
+        provider_selection.clear_provider_cache()
+        return provider_selection.select_market_data(
+            normalize_symbol("BTC"), timeframe, settings=settings, providers=venues
+        )
+    finally:
+        provider_selection.clear_provider_cache()
+
+
+@pytest.mark.parametrize("timeframe", DEFAULT_PHASE1A.timeframes)
+@pytest.mark.parametrize("venues", [("binance",), ("binance", "okx")])
+def test_on_live_data_invalid_data_ends_in_an_error_and_never_in_the_view(
+    timeframe: str, venues: tuple[str, ...]
+) -> None:
+    """Why the card calls B SYNTHETIC, on live data. The venue selection refuses a history shorter
+    than the one the epistemic check needs, and what it serves is OK or DEGRADED, so neither block
+    that makes the view say "Data cannot support an assessment" can reach it."""
+
+    needed = min_history_for(timeframe)
+    with pytest.raises(provider_selection.ProviderSelectionError):
+        _select(timeframe, [_Venue(name, timeframe, needed - 1) for name in venues])
+    served = _select(timeframe, [_Venue(name, timeframe, needed) for name in venues])
+    assert served.provider_state["status"] in {"OK", "DEGRADED"}
+    assert assess_epistemic_sufficiency(served.snapshot)["action"] == "ALLOW"
+
+
+@pytest.mark.parametrize("timeframe", DEFAULT_PHASE1A.timeframes)
+def test_on_demo_data_the_view_is_never_the_invalid_data_state(timeframe: str) -> None:
+    """The same, for the built-in demo data: the real service's view is the demo state."""
+
+    payload = analysis_service.analyze_request(
+        AnalysisRequest(symbol="BTC", timeframe=timeframe),
+        settings=Settings(data_mode="fixture"),
+        run_store=InMemoryRunStore(),
+        prediction_origin="USER_REQUESTED",
+    )
+    view = payload["decision_view"]
+    assert view["state"] == "NO_ACCEPTED_CLAIM"
+    assert view["data"]["state"] == "DEMO"
+    assert view["range"]["assessed"] is True
 
 
 def test_the_generator_reads_no_database_and_sends_nothing() -> None:
