@@ -4,29 +4,34 @@ Plan §23: UX is "PASS only when predefined owner-task scenarios distinguish: in
 unvalidated model; accepted forecast; directional permission; saved/unsaved state." This builds
 those scenarios and the owner's card (docs/runbooks/UX_COMPREHENSION_CHECK.md) from the product's
 own code, so the card cannot drift from what the default screen shows:
-- each scenario's gate result is the real gates' (gates/composite.py) and its view the real
-  builder's (detail/decision_view.py), from controlled inputs. The two accepted states are
-  unreachable today (both acceptance registries are empty), so they are built with the registries
-  filled for that build only, restored at once, and the card marks them SYNTHETIC. The
-  invalid-data state is unreachable today as well: on live data the venue selection refuses what
-  the view would call invalid, and the analysis ends in an error (the venue selection); the
-  built-in demo data are always long enough. The card marks it SYNTHETIC too;
+- each scenario's gate result is the real gates' (gates/composite.py), its view the real builder's
+  (detail/decision_view.py) and its synthesis the real one's (detail/decision_synthesis.py), from
+  controlled inputs. The two accepted states are unreachable today (both acceptance registries
+  are empty), so they are built with the registries filled for that build only, restored at once,
+  and the card marks them SYNTHETIC. The invalid-data state is unreachable today as well: on
+  live data the venue selection refuses what the view would call invalid, and the analysis ends
+  in an error (the venue selection). The card marks it SYNTHETIC too;
 - each scenario's block is the Decision view exactly as the detail panel shows it: the real
   frontend's own function (frontend/app.js renderDecisionViewSection, and everything it calls)
   runs under node and its output is printed in order, nothing added and nothing left out;
-- each scenario's Storage row is shown as it reads once the screen holds the analysis's save
-  receipt: the receipt is the backend's own (api/save_receipt.py) and its text the frontend's own
-  (saveReceiptText), put in the row as the screen puts it;
+- the three places the screen speaks of storage are shown as the screen shows them: the badge at
+  the top of the page (updatePersistenceStatus), the Decision view's Storage row once the screen
+  holds the analysis's save receipt (the backend's own receipt, api/save_receipt.py, in the
+  frontend's own words, saveReceiptText), and Overview's "Storage when requested" row;
 - the numbers are illustrative fixtures, never market data, and nothing here reads a database.
-What the cards add around the view, and the detail panel's other sections, are not on the card.
-The card says so.
+
+The questions ask what a screen MEANS, in words the screen does not use: none can be answered by
+finding its words on the card (a test refuses a question whose distinctive words are on an
+analysis). The answer key is computed from each analysis's payload and receipt (`answers`), never
+typed: a scenario below holds inputs only. Two tempting misreadings are answerable and wrong on
+every analysis: taking the gates' disposition for a market call, and taking the badge or the
+request-time row for the save receipt (the tests model both readers).
 
     python scripts/ux_comprehension/card.py --write   # regenerate the card
     python scripts/ux_comprehension/card.py --check   # exit 1 if the committed card differs
 
-tests/frontend/test_ux_comprehension_card.py checks that the scenarios distinguish every §23
-dimension, that the answer key follows from each screen, that each block is what the real detail
-panel renders, and that the committed card is current.
+tests/frontend/test_ux_comprehension_card.py checks all of the above, that each block is what the
+real detail panel renders, and that the committed card is current. The card is never marked run.
 """
 
 from __future__ import annotations
@@ -54,6 +59,15 @@ from crypto_probability_engine.detail.decision_brief import (  # noqa: E402
     MODEL_READINESS_COPY,
     PROBABILITY_TYPE,
 )
+from crypto_probability_engine.detail.decision_synthesis import (  # noqa: E402
+    build_decision_synthesis,
+)
+from crypto_probability_engine.execution_realism.realism import (  # noqa: E402
+    compute_execution_realism,
+)
+from crypto_probability_engine.features.liquidity_depth import (  # noqa: E402
+    compute_liquidity_depth,
+)
 from crypto_probability_engine.gates.composite import apply_composite_gates  # noqa: E402
 
 CARD = ROOT / "docs" / "runbooks" / "UX_COMPREHENSION_CHECK.md"
@@ -61,12 +75,48 @@ APP_JS = ROOT / "frontend" / "app.js"
 METHODOLOGY = "heuristic-v1-wave4b0"
 TIMEFRAME = "1H"
 CLAIM_KEY = f"{PROBABILITY_TYPE}:{METHODOLOGY}:{TIMEFRAME}"
+YES_NO = (("yes", "Yes."), ("no", "No."))
+# Each question: what it asks, and its fixed choices (what a reader writes down, what it means).
+# The words are deliberately not the screen's: tests refuse a question that can be answered by
+# finding its words on an analysis.
 QUESTIONS = (
-    "Can the market data support an assessment here?",
-    "Has a forecast-quality claim been accepted for it?",
-    "Does it carry a directional permission?",
-    "Does the screen say this analysis is saved in Recent Analysis history?",
-    "Does the screen report a risk gate: a finding about market conditions or execution?",
+    (
+        "Is this one held up by something that was actually observed about prices, or about "
+        "what dealing would set you back?",
+        YES_NO,
+    ),
+    (
+        "Is this one held up because nobody has yet proved that the method can pick a rise from "
+        "a fall?",
+        YES_NO,
+    ),
+    (
+        "Is this one held up by an input that was absent or unfit for use, or by a safeguard "
+        "somebody switched on?",
+        YES_NO,
+    ),
+    (
+        "How far may you lean on the figures here?",
+        (
+            ("a", "Not at all: nobody has vouched for them."),
+            ("b", "They are formally vouched for, but no side (rise or fall) is cleared."),
+            ("c", "They are formally vouched for, and a side is cleared."),
+            ("d", "There are none to lean on: what came in was not good enough."),
+        ),
+    ),
+    (
+        "Taken as a whole, what does this one say to somebody about to buy or sell?",
+        (("a", "Stay out."), ("b", "Proceed."), ("c", "Neither: what to do is left to you.")),
+    ),
+    (
+        "If the machine behind all this were started afresh tonight, would you bet on seeing "
+        "this one among the earlier runs tomorrow?",
+        (
+            ("a", "Yes."),
+            ("b", "No: it was never going to outlive a fresh start."),
+            ("c", "It might go either way."),
+        ),
+    ),
 )
 # The frontend functions the detail panel's Decision view is made of (frontend/app.js), and their
 # constants: everything renderDecisionViewSection calls, and the save receipt's text.
@@ -89,6 +139,7 @@ _FUNCTIONS = (
     "gateDetailList",
     "saveReceiptText",
     "renderDecisionViewSection",
+    "updatePersistenceStatus",
 )
 _CONSTANTS = (
     "NOT_ASSESSED_TEXT",
@@ -99,8 +150,12 @@ _CONSTANTS = (
 )
 # The page's DOM builders, standing in as recorders: each keeps what a user would read, in the
 # order the section holds it. The Storage row then takes the receipt's text, as the screen does
-# it (watchSaveReceipt): only where the backend's receipt is one this screen can show.
+# it (watchSaveReceipt): only where the backend's receipt is one this screen can show. The badge
+# is written by the page's own function, and Overview's row is the page's own text for the
+# status the analysis carries.
 _RECORD = """
+const noClasses = { add() {}, remove() {} };
+const persistenceStatusBadge = { textContent: "", dataset: {}, classList: noClasses };
 function textBlock(tagName, text) { return { kind: "text", text: String(text) }; }
 function keyValueTable(values) {
   return { kind: "rows", rows: values.map(([label, value]) => [label, formatValue(value)]) };
@@ -110,7 +165,7 @@ function listBlock(items = []) {
   return { kind: "list", items: shown.length ? shown : ["none"], classList: { add() {} } };
 }
 function section(title, children) { return { title, blocks: children }; }
-const shown = cases.map(([payload, receipt]) => {
+const shown = cases.map(([payload, receipt, badge]) => {
   const drawn = renderDecisionViewSection(payload, decisionViewOf(payload));
   const text = saveReceiptText(receipt, payload.run_id);
   for (const block of drawn.blocks) {
@@ -118,47 +173,101 @@ const shown = cases.map(([payload, receipt]) => {
       if (row[0] === STORAGE_ROW_LABEL && text !== null) row[1] = text;
     }
   }
-  return drawn;
+  updatePersistenceStatus(badge);
+  return {
+    ...drawn,
+    badge: persistenceStatusBadge.textContent,
+    requested: persistenceStatusText(payload.debug.persistence_status),
+  };
 });
 process.stdout.write(JSON.stringify(shown));
 """
+# Overview's label for storage's status when the analysis was requested (renderStructuredDetail).
+REQUESTED_ROW_LABEL = "Storage when requested"
 
 
 @dataclass(frozen=True)
 class Scenario:
+    """The inputs of one analysis. No field states an answer: the key is computed from the
+    payload and the receipt these inputs lead to (`answers`)."""
+
     letter: str
     name: str  # never shown before the answer key
     synthetic: bool
-    data_ok: bool
-    accepted: bool
-    permission: bool
-    saved: bool  # the save receipt's state: SAVED, or FAILED (the save was not confirmed)
-    risk: bool = False  # a real risk gate (a tail-risk breach) beside the evidence gate
+    accepted: bool = False
+    permission: bool = False
+    data_ok: bool = True  # False: no venue served data (SYNTHETIC)
+    tail: bool = False  # a measured tail-risk breach
+    usable_book: bool = True  # False: a book was served whose spread the measure refuses
+    kill: bool = False  # the kill switch
+    requested: str = "OK"  # storage's status when the analysis was requested
+    badge: str = "OK"  # storage's status when it was last asked (the badge at the top)
+    receipt: str = save_receipt.SAVED  # the save receipt's state for this analysis
 
 
-# A fixed, non-obvious order: the owner reads A to F without knowing which is which.
+# A fixed, non-obvious order: the owner reads A to I without knowing which is which. The three
+# storage lines of an analysis never all agree: the receipt is the one that speaks of THIS
+# analysis, and each example is a combination the product can show.
 SCENARIOS = (
-    Scenario("A", "unvalidated model, saved", False, True, False, False, True),
-    Scenario("B", "invalid data", True, False, False, False, True),
-    Scenario("C", "directional permission", True, True, True, True, True),
-    Scenario("D", "unvalidated model, save not confirmed", False, True, False, False, False),
-    Scenario("E", "accepted forecast", True, True, True, False, True),
-    Scenario("F", "risk gate with the evidence gate", False, True, False, False, True, risk=True),
+    Scenario("A", "unproven model only", False, requested="UNAVAILABLE", badge="UNAVAILABLE"),
+    Scenario(
+        "B", "invalid data (a degraded provider)", True, data_ok=False, receipt=save_receipt.FAILED
+    ),
+    Scenario(
+        "C", "directional permission", True, accepted=True, permission=True, badge="UNAVAILABLE"
+    ),
+    Scenario("D", "unproven model, save not confirmed", False, receipt=save_receipt.FAILED),
+    Scenario("E", "accepted forecast", True, accepted=True, requested="UNAVAILABLE"),
+    Scenario(
+        "F", "a risk gate with the unproven model", False, tail=True, requested="UNAVAILABLE",
+        badge="UNAVAILABLE",
+    ),
+    Scenario(
+        "G", "an unusable order book (a data gate)", False, usable_book=False,
+        receipt=save_receipt.FAILED,
+    ),
+    Scenario("H", "the kill switch (a system gate)", False, kill=True, requested="UNAVAILABLE"),
+    Scenario(
+        "I", "unproven model, storage not configured", False, requested="STATELESS",
+        badge="UNKNOWN", receipt=save_receipt.NOT_RETAINED,
+    ),
 )
 
 
-def answers(scenario: Scenario) -> tuple[str, str, str, str, str]:
-    """The key: what a correct reading of each scenario's screen answers to the five questions."""
+def answers(payload: dict[str, Any], receipt: dict[str, Any]) -> tuple[str, ...]:
+    """The key of one analysis, computed from the product's own facts: the view's gate authority
+    and state, the synthesis's permission, and the save receipt. Nothing here is typed per
+    analysis, and nothing is read from a scenario."""
+
+    view = payload["decision_view"]
+    gates = view["gates"]
+    permission = payload["decision_synthesis"]["action_permission"]
 
     def yes_no(value: bool) -> str:
         return "yes" if value else "no"
 
+    standing = {
+        "NO_ACCEPTED_CLAIM": "a",
+        "ACCEPTED_FORECAST_CLAIM": "b",
+        "DIRECTIONAL_PERMISSION": "c",
+        "INVALID_OR_UNAVAILABLE_DATA": "d",
+    }[view["state"]]
+    kept = {
+        save_receipt.SAVED: "a",
+        save_receipt.NOT_RETAINED: "b",
+        save_receipt.FAILED: "c",
+        save_receipt.PENDING: "c",
+    }[receipt["state"]]
     return (
-        yes_no(scenario.data_ok),
-        yes_no(scenario.accepted),
-        yes_no(scenario.permission),
-        yes_no(scenario.saved),
-        yes_no(scenario.risk),
+        # A risk gate reports a measured finding about the market or its execution.
+        yes_no(gates["risk_gate_active"] is True),
+        yes_no("EVIDENCE" in gates["kinds"]),
+        yes_no("SYSTEM_OR_DATA" in gates["kinds"]),
+        standing,
+        # The product never tells anybody to stay out or to proceed: its own permission to
+        # enter is the one fact that could make this "b", and no fact of the payload says "a".
+        "b" if permission["can_enter_now"] is True else "c",
+        kept,
     )
 
 
@@ -184,12 +293,11 @@ def run_id(scenario: Scenario) -> str:
 
 
 def receipt(scenario: Scenario) -> dict[str, str]:
-    """The save receipt the backend gives for this analysis (api/save_receipt.py): its whole save
-    was acknowledged, or it was not confirmed."""
+    """The save receipt the backend gives for this analysis (api/save_receipt.py), in the state
+    the scenario names: saved, not confirmed, or not retained."""
 
-    state = save_receipt.SAVED if scenario.saved else save_receipt.FAILED
     checked = datetime(2026, 10, 5, 12, 0, 9, tzinfo=UTC)
-    return save_receipt.receipt_payload(run_id(scenario), state, checked)
+    return save_receipt.receipt_payload(run_id(scenario), scenario.receipt, checked)
 
 
 def build(scenario: Scenario) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -224,30 +332,33 @@ def build(scenario: Scenario) -> tuple[dict[str, Any], dict[str, Any]]:
         skill_evidence = {"verdict": "NO_DEMONSTRATED_SKILL", "n": 400}
     else:
         skill_evidence = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0}
-    liquidity = {"status": "OK", "spread_frac": 0.0001, "top_depth_quote": 5_000.0}
-    execution = {
-        "status": "OK",
-        "round_trip_cost_frac": 0.0021,
-        "taker_fee_frac": 0.001,
-        "slippage_frac": 0.00005,
-    }
+    # The liquidity and execution states are the real features' own, for a book that is served:
+    # a tight one, or one whose ask is more than three times its bid (the measure refuses it).
+    bid, ask = (120.0, 120.012) if scenario.usable_book else (100.0, 400.0)
+    book = SimpleNamespace(
+        bids=(SimpleNamespace(price=bid, size=50.0),),
+        asks=(SimpleNamespace(price=ask, size=50.0),),
+    )
+    liquidity = compute_liquidity_depth(book)
+    execution = compute_execution_realism(liquidity)
     score = {"disposition": "CONSTRUCTIVE_CAUTIOUS"}
+    tail = {"cvar_loss": 0.09 if scenario.tail else 0.0, "cvar_breach_threshold": 0.05}
     # The gates' own result for these states: nothing about it is typed by hand.
     gate = apply_composite_gates(
         epistemic_state={"action": "ALLOW"},
         provider_state=provider_state,
         score_state=score,
         liquidity_state=liquidity,
-        tail_risk_state={
-            "cvar_loss": 0.09 if scenario.risk else 0.0,
-            "cvar_breach_threshold": 0.05,
-        },
+        tail_risk_state=tail,
         execution_state=execution,
         skill_state=skill_evidence,
+        kill_switch=scenario.kill,
     )
     quant_result = {
         "gate_result": gate,
+        "score_stack": score,
         "liquidity_state": liquidity,
+        "tail_risk_state": tail,
         "probability_state": {
             "horizons": {
                 "H_primary": {"p_up_frac": 0.31, "p_down_frac": 0.27, "p_timeout_frac": 0.42}
@@ -273,6 +384,13 @@ def build(scenario: Scenario) -> tuple[dict[str, Any], dict[str, Any]]:
             skill_evidence=skill_evidence,
             primary_venue="binance",
         )
+    synthesis = build_decision_synthesis(
+        timeframe=TIMEFRAME,
+        quant_result=quant_result,
+        data_quality=data_quality,
+        provider_state=provider_state,
+        decision_brief=decision_brief,
+    )
     payload = {
         "run_id": run_id(scenario),
         "normalized_symbol": "BTC/USDT",
@@ -284,10 +402,11 @@ def build(scenario: Scenario) -> tuple[dict[str, Any], dict[str, Any]]:
             # gate did not pass, else the score's disposition.
             "disposition": score["disposition"] if gate["hard_gate_passed"] else gate["action"],
         },
-        # Storage answered when each analysis was requested; whether the analysis was then saved
-        # is the receipt's to say.
-        "debug": {"persistence_status": "OK"},
+        # What storage said when the analysis was requested; whether the analysis was then
+        # saved is the receipt's to say.
+        "debug": {"persistence_status": scenario.requested},
         "decision_view": view,
+        "decision_synthesis": synthesis,
     }
     return payload, view
 
@@ -318,9 +437,10 @@ def _extract(source: str, name: str) -> str:
     raise ValueError(name)
 
 
-def render(cases: list[tuple[dict[str, Any], dict[str, Any]]]) -> list[dict[str, Any]]:
-    """The Decision view section the real frontend draws for each (payload, receipt): its title and
-    its blocks in order, each a text, a table of rows or a list."""
+def render(cases: list[tuple[dict[str, Any], Any, str]]) -> list[dict[str, Any]]:
+    """What the real frontend draws for each (payload, receipt, badge status): the Decision view
+    section (its title and its blocks in order, each a text, a table of rows or a list), the
+    badge at the top of the page, and Overview's request-time storage text."""
 
     source = APP_JS.read_text(encoding="utf-8")
     code = "\n".join(_extract(source, name) for name in (*_CONSTANTS, *_FUNCTIONS))
@@ -336,7 +456,12 @@ def screens() -> list[dict[str, Any]]:
 
     built = [build(scenario) for scenario in SCENARIOS]
     receipts = [receipt(scenario) for scenario in SCENARIOS]
-    drawn = render([(payload, given) for (payload, _), given in zip(built, receipts, strict=True)])
+    drawn = render(
+        [
+            (payload, given, scenario.badge)
+            for scenario, (payload, _), given in zip(SCENARIOS, built, receipts, strict=True)
+        ]
+    )
     return [
         {"scenario": scenario, "payload": payload, "view": view, "receipt": given, **section}
         for scenario, (payload, view), given, section in zip(
@@ -356,20 +481,22 @@ The governing plan's §23 requires this check. Its criterion is quoted after the
 Some analyses below are **SYNTHETIC**: they show states the product cannot show today. The notes
 after the answer key say which, and why.
 
-Each analysis below is the **Decision view** as the detail panel shows it: its headline, its
-sentence, the gate summary with its framing, the active gates, its rows and its notes.
+Each analysis below is one screen, as the product draws it: the storage badge at the top of the
+page, the **Decision view** as the detail panel shows it, and one row from the Overview section
+further down the same panel.
 
-## How to run it (about ten minutes)
+## How to run it (about twenty minutes)
 
-1. Read analyses A to F below as you would read them on screen. Do not look at the answer
+1. Read analyses A to I below as you would read them on screen. Do not look at the answer
    key first.
-2. For each analysis, answer the five questions, yes or no, on paper.
+2. For each analysis, answer the six questions on paper, each with one of its listed answers.
+   The questions ask what the screen means; their words are not the screen's, on purpose.
 3. Then compare your answers with the key at the end.
 
 **PASS:** every answer matches the key. **Any mismatch:** the UX does not PASS. Send Claude
 the analysis letter and the question number only; the screen's wording is then what changes.
 
-The five questions, for every analysis:
+The six questions, for every analysis:
 """
 
 # What the Single Crypto Analysis screen shows around the view, for each timeframe (frontend/app.js
@@ -386,7 +513,7 @@ OUTSIDE_THE_VIEW = (
 UNDER_THE_VIEW = (
     "Decision (Probability interpretation and the Actionability stack)",
     "Model Quality",
-    "Overview",
+    "Overview (one of its rows is on this card)",
     "Gates",
     "the data, provider, quant and news sections, and Raw JSON",
 )
@@ -408,28 +535,35 @@ _LIMITS = """
 - Every number is a made-up example, not market data. The gates are the product's own: each
   analysis's gate result, and so its Gate disposition, is what the real gates return for its
   made-up inputs.
-- Each analysis is the Decision view as the detail panel shows it, line for line: the
-  product's own screen code drew it for this card. The cards of the Single Crypto Analysis
-  and Batch Crypto Analysis screens show the same headline, sentence, gate summary, framing
-  and rows; they leave out the list of active gates and the notes under the rows. This card
-  shows no layout or colours.
-- Analysis F is a real risk gate together with the evidence gate. That is the only way a risk
-  gate can appear today, because the evidence gate is always active.
-- The screens show more than the Decision view, and none of the following is on this card, so
-  a PASS here says nothing about it:
+- The answer key is computed from each analysis's own data (the response the product builds
+  and its save receipt), not typed in: questions 1 to 3 from the kinds of gate the view
+  names, question 4 from the view's state, question 5 from the product's own permission to
+  enter (never given), question 6 from the save receipt.
+- What the questions are for. Questions 1 to 3 and 5 are answered wrongly by a reader who
+  takes BLOCK or the Gate disposition for a call on the market. Question 6 is answered
+  wrongly by a reader who takes the badge at the top, or the "Storage when requested" row,
+  for the word on this one analysis: on every analysis here at least one of those two says
+  something else than the Decision view's Storage row, which is the save receipt.
+- Each analysis's Decision view is what the detail panel shows, line for line: the product's
+  own screen code drew it for this card, and the badge and the Overview row with it. The
+  cards of the Single Crypto Analysis and Batch Crypto Analysis screens show the same
+  headline, sentence, gate summary, framing and rows; they leave out the list of active
+  gates and the notes under the rows. This card shows no layout or colours.
+- The screens show more than this, and none of the following is on this card, so a PASS
+  here says nothing about it:
   - On the Single Crypto Analysis screen, each timeframe also shows:
 {outside}
   - Under the Decision view, the detail panel also shows:
 {under}
-- Question 4 reads the Storage row. On this card that row is the save receipt of the
-  analysis: after an analysis is shown, the screen asks the backend whether that analysis
-  was saved and shows the state the backend gives. {saved} show a save the backend
-  acknowledged; {unsaved} shows a save the backend could not confirm. The receipt states
-  are examples for this card, and each is one the product can give today. Until a receipt
-  answers, the row shows storage's status when the analysis was requested instead
-  ("Storage available"); two more receipt states exist and are not on this card ("Saving…
-  not yet confirmed", "Not retained: no storage is configured").
-- The save receipt is built, and whether its wording is understood is what question 4
+- The three storage lines. The badge is what storage said when it was last asked, by any
+  request. "Storage when requested" is what it said when this analysis was requested. The
+  Decision view's Storage row is this analysis's save receipt: after an analysis is shown,
+  the screen asks the backend whether that analysis was saved and shows the state the
+  backend gives. Until a receipt answers, that row shows storage's status when the analysis
+  was requested instead. The states on this card are examples, each one the product can
+  give today: saved ({saved}), not confirmed ({unconfirmed}) and not retained
+  ({unretained}). One more exists and is not on this card ("Saving… not yet confirmed").
+- The save receipt is built, and whether its wording is understood is what question 6
   tests: its UX acceptance is open until this check is run.
 """
 
@@ -444,32 +578,60 @@ def _markdown(block: dict[str, Any], *, headline: bool) -> list[str]:
 
 
 def _letters(letters: list[str]) -> str:
-    """"Analysis D", or "Analyses A, B and C"."""
+    """ "D", or "A, B and C"."""
 
     if len(letters) == 1:
-        return f"Analysis {letters[0]}"
-    return f"Analyses {', '.join(letters[:-1])} and {letters[-1]}"
+        return letters[0]
+    return f"{', '.join(letters[:-1])} and {letters[-1]}"
+
+
+def shown_lines(screen: dict[str, Any]) -> list[str]:
+    """Every line of the screen an analysis shows on the card, in order: the badge, the Decision
+    view's blocks, and Overview's request-time row. What a reader can read, and nothing else."""
+
+    lines = [screen["badge"], screen["title"]]
+    for block in screen["blocks"]:
+        if block["kind"] == "rows":
+            lines += [text for row in block["rows"] for text in row]
+        elif block["kind"] == "list":
+            lines += block["items"]
+        elif block["text"].strip():
+            lines.append(block["text"])
+    return [*lines, REQUESTED_ROW_LABEL, screen["requested"]]
 
 
 def card_markdown() -> str:
     lines = _HEADER.split("\n")
-    lines += [f"{number}. {question}" for number, question in enumerate(QUESTIONS, start=1)]
-    for screen in screens():
+    for number, (question, choices) in enumerate(QUESTIONS, start=1):
+        lines += [f"{number}. {question}"]
+        lines += [f"   - **{answer}** — {meaning}" for answer, meaning in choices]
+    drawn = screens()
+    for screen in drawn:
         lines += ["", f"## Analysis {screen['scenario'].letter}", ""]
+        lines += [f"At the top of the page: {screen['badge']}", "", "### Decision view", ""]
         # The section's own blocks, in its own order: the first is the view's headline. A text
         # that is empty is not on the screen either.
         blocks = [block for block in screen["blocks"] if block.get("text", "x").strip()]
         for position, block in enumerate(blocks):
             lines += _markdown(block, headline=position == 0)
-        lines.pop()
+        lines += ["Further down the same panel, in Overview:", ""]
+        lines += ["| Row | Shown |", "| --- | --- |"]
+        lines += [f"| {REQUESTED_ROW_LABEL} | {screen['requested']} |"]
+    numbers = " | ".join(str(number) for number in range(1, len(QUESTIONS) + 1))
     lines += [
         "",
         "## Answer key (read it only after answering)",
         "",
-        "| Analysis | 1 | 2 | 3 | 4 | 5 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        f"| Analysis | {numbers} |",
+        f"| --- | {' | '.join('---' for _ in QUESTIONS)} |",
     ]
-    lines += [f"| {s.letter} | {' | '.join(answers(s))} |" for s in SCENARIOS]
+    for screen in drawn:
+        key = answers(screen["payload"], screen["receipt"])
+        lines += [f"| {screen['scenario'].letter} | {' | '.join(key)} |"]
+
+    def by_state(state: str) -> str:
+        return _letters([s.letter for s in SCENARIOS if s.receipt == state])
+
     accepted = ", ".join(s.letter for s in SCENARIOS if s.synthetic and s.accepted)
     invalid = ", ".join(s.letter for s in SCENARIOS if s.synthetic and not s.accepted)
     lines += _LIMITS.format(
@@ -477,8 +639,9 @@ def card_markdown() -> str:
         invalid=invalid,
         outside="\n".join(f"    - {name}" for name, _, _ in OUTSIDE_THE_VIEW),
         under="\n".join(f"    - {name}" for name in UNDER_THE_VIEW),
-        saved=_letters([s.letter for s in SCENARIOS if s.saved]),
-        unsaved=_letters([s.letter for s in SCENARIOS if not s.saved]),
+        saved=by_state(save_receipt.SAVED),
+        unconfirmed=by_state(save_receipt.FAILED),
+        unretained=by_state(save_receipt.NOT_RETAINED),
     ).split("\n")
     return "\n".join(lines)
 

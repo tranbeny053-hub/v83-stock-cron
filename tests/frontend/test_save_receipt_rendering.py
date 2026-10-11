@@ -1460,14 +1460,16 @@ def test_the_ux_cards_note_says_what_the_screen_does(run: dict) -> None:
     request time until then: true of app.js, and proven above."""
 
     card = (ROOT / "docs" / "runbooks" / "UX_COMPREHENSION_CHECK.md").read_text(encoding="utf-8")
-    note = " ".join(card[card.index("- Question 4 reads the Storage row") :].split())
+    note = " ".join(card[card.index("- The three storage lines.") :].split())
     assert "shows no per-analysis save" not in card
     assert "the screen asks the backend whether that analysis was saved" in note
     assert "and shows the state the backend gives" in note
-    assert "Until a receipt answers, the row shows storage's status when the analysis was" in note
+    assert "Until a receipt answers, that row shows storage's status when the analysis was" in note
+    assert f'One more exists and is not on this card ("{TEXT["PENDING"]}")' in note
     assert run["detailStates"]["SAVED"]["shown"] != run["detailStates"]["unanswered"]
-    # The two rows the card shows are the rows the screen shows for those receipt states.
-    for state in ("SAVED", "FAILED"):
-        row = run["detailStates"][state]["shown"]
-        (text,) = [line for line in row if line in card and line.startswith(("Saved", "Save "))]
-        assert f"| Storage | {text} |" in card, state
+    # The three rows the card shows are the rows the screen shows for those receipt states.
+    at = run["detailStates"]["unanswered"].index("Storage") + 1
+    for state in ("SAVED", "FAILED", "NOT_RETAINED"):
+        text = run["detailStates"][state]["shown"][at]
+        assert text == TEXT[state] and f"| Storage | {text} |" in card, state
+    assert f"| Storage | {TEXT['PENDING']} |" not in card

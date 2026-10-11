@@ -814,7 +814,8 @@ def test_a_view_with_the_gate_block_is_a_new_version_of_the_view() -> None:
     assert view["additionalProperties"] is False
     from scripts.ux_comprehension import card
 
-    _, built = card.build(card.SCENARIOS[0])
+    payload, _ = card.build(card.SCENARIOS[0])
+    built = payload["decision_view"]
     assert built["schema_version"] == "decision_view.v2" and "gates" in built
     validator = jsonschema.Draft202012Validator(view)
     assert not list(validator.iter_errors(built))
@@ -833,8 +834,9 @@ def test_an_accepted_claim_keeps_its_own_sentence_under_a_risk_gate() -> None:
     from crypto_probability_engine.detail.decision_view import STATE_COPY
     from scripts.ux_comprehension import card
 
-    accepted = card.Scenario("X", "accepted", True, True, True, False, True, risk=True)
-    _, view = card.build(accepted)
+    accepted = card.Scenario("X", "accepted", True, accepted=True, tail=True)
+    payload, _ = card.build(accepted)
+    view = payload["decision_view"]
     assert view["state"] == "ACCEPTED_FORECAST_CLAIM"
     assert view["gates"]["risk_gate_active"] is True
     assert view["detail"] == STATE_COPY["ACCEPTED_FORECAST_CLAIM"][1]
