@@ -2756,7 +2756,10 @@ async function runBatchAnalysis(batchRequest) {
     });
     renderResults(target, payload.results, payload.errors, payload.items);
     watchSaveReceipts(target, payload.results);
-    updateStatusFromPayload(payload.results?.[0] || {});
+    // Each result carries storage's status from when its own analysis began, in the order they
+    // ran. The last one is the latest report, and the badge is storage's status when last asked.
+    const reported = Array.isArray(payload.results) ? payload.results : [];
+    updateStatusFromPayload(reported[reported.length - 1] || {});
     markRefreshed();
   } catch (error) {
     renderBatchFailure(target, batchFailureMessage(error?.status, error?.payload));
