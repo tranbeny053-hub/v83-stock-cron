@@ -627,6 +627,21 @@ def test_a_gate_result_that_does_not_say_whether_the_gates_passed_is_not_read_as
     assert blocked["gates"]["blocked"] is True
 
 
+def test_the_disposition_itself_is_the_scores_only_for_a_result_that_says_it_passed() -> None:
+    """The reviewer's own smallest fix, kept beside the rule above: whatever reaches it, the
+    disposition is the score's token only when the stored flag is True, the gate action while a
+    gate is active, and nothing for a result that says neither."""
+
+    score = {"disposition": "CONSTRUCTIVE"}
+    disposition = saved_run_view._disposition
+    for gate in UNDECIDED_GATES.values():
+        assert disposition(gate, score, None) is None, gate
+    assert disposition({"hard_gate_passed": True}, score, None) == "CONSTRUCTIVE"
+    assert disposition({"hard_gate_passed": False, "action": "NO_TRADE"}, score, None) == "NO_TRADE"
+    assert disposition({"hard_gate_passed": True, "action": "ABORT"}, score, None) == "ABORT"
+    assert disposition(None, score, None) is None
+
+
 def test_a_tuple_of_blocks_is_not_a_stored_list_of_blocks() -> None:
     for blocks in (("TAIL_RISK_BREACH",), ()):
         stored = {"invalidation_detail": {"hard_blocks": blocks}}

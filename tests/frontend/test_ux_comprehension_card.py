@@ -135,6 +135,15 @@ def test_the_analyses_cover_what_the_check_must_tell_apart(
         assert scenario.synthetic is cannot_occur_today, scenario.letter
     flags = {scenario.letter: scenario.synthetic for scenario in card.SCENARIOS}
     assert flags == {**dict.fromkeys("ADFGI", False), **dict.fromkeys("BCEH", True)}
+    # Each marked analysis is named on the card with its own reason, and no other is.
+    notes = " ".join(card.card_markdown().split("## What this check covers")[1].split())
+    assert "Analyses C, E are **SYNTHETIC**. No forecast claim or directional permission" in notes
+    assert "Analysis B is **SYNTHETIC** too, for a different reason." in notes
+    assert (
+        "Analysis H is **SYNTHETIC** as well. The safety shutdown it shows is switched off in "
+        "today's product, and no setting turns it on, so no screen shows this state."
+    ) in notes
+    assert notes.count("**SYNTHETIC**") == 3
     # No two analyses have the same answers: the questions tell all nine apart.
     assert len({screen["key"] for screen in screens.values()}) == len(screens) == 9
 
@@ -349,15 +358,17 @@ def test_a_reader_who_matches_words_does_no_better_than_one_who_always_answers_t
 
 
 def _quotable(screen: dict) -> list[str]:
-    """What a question must not quote from one analysis: each headline, each label of two words
-    or more, and each sentence of the view (its detail, gate summary, framing, gate entries and
-    the notes under the rows), with the badge and the request-time row."""
+    """What a question must not quote from one analysis: each headline, and each label of two
+    words or more, whole or up to its bracket ("Gate disposition (not a market call)" is quoted
+    by "gate disposition" too). Its sentences are covered by the four-words-in-a-row rule."""
 
     view = screen["view"]
     gates = view["gates"]
-    labels = [label for label in screen["rows"] if len(_WORD.findall(label.lower())) >= 2]
+    names = [*screen["rows"], card.REQUESTED_ROW_LABEL, "Decision view"]
+    names += [name.split("(")[0] for name in names if "(" in name]
+    labels = [name for name in names if len(_WORD.findall(name.lower())) >= 2]
     headlines = [view["headline"], *(entry["headline"] for entry in gates["blocks"])]
-    return [*headlines, *labels, card.REQUESTED_ROW_LABEL, "Decision view"]
+    return [*headlines, *labels]
 
 
 def test_no_question_quotes_a_headline_a_label_or_a_framing_sentence(
