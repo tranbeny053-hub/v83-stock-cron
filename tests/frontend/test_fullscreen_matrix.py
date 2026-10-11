@@ -673,6 +673,27 @@ def test_a_reopened_run_whose_gate_result_cannot_be_read_says_so_and_frames_noth
             assert "gate is active" not in text and "risk gate" not in text.lower(), text
 
 
+def test_a_gate_view_of_a_version_this_screen_does_not_know_is_not_rendered(cases: dict) -> None:
+    """The screen renders the gate view it knows (gate_view.v1). One stamped with another version
+    is not read as if it were known: no summary, framing or gate list is drawn from it, on any
+    surface, and the rest of the view is unchanged."""
+
+    other = copy.deepcopy(cases["risk_and_evidence"])
+    gates = other["decision_view"]["gates"]
+    gates["schema_version"] = "gate_view.v2"
+    known = goldens.render({"case": cases["risk_and_evidence"]}, {})["screens"]["case"]
+    unknown = goldens.render({"case": other}, {})["screens"]["case"]
+    lines = [gates["summary"], gates["framing"], *_gate_lines(other)]
+    for surface in ("single", "batch", "detail"):
+        shown = [text for text in unknown[surface] if text in lines]
+        # The kept "Hard gates" check still states its own finding (the stack's sentence).
+        assert shown == ([gates["summary"]] if surface == "detail" else []), surface
+        assert [text for text in known[surface] if text not in lines] == [
+            text for text in unknown[surface] if text not in lines
+        ], surface
+        assert gates["framing"] in known[surface], surface
+
+
 def test_the_storage_row_is_storage_at_request_time(screens: dict) -> None:
     rows = {
         name: harness._value(screens[name]["single"], "Storage")

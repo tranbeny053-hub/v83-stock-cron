@@ -16,6 +16,7 @@ from dataclasses import replace
 import pytest
 
 from crypto_probability_engine.adapters.provider_selection import ProviderSelectionResult
+from crypto_probability_engine.adapters.types import OrderBookLevel, OrderBookSnapshot
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
@@ -28,7 +29,7 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant import pipeline
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 from tests.api.test_analysis_endpoints import login, make_client
-from tests.fixtures.market_data import make_snapshot
+from tests.fixtures.market_data import FIXED_NOW, make_snapshot
 
 NO_SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
 SKILL = {"verdict": "SKILL_DEMONSTRATED", "n": 400, "observed_directional_rate": 0.6}
@@ -38,6 +39,7 @@ EVIDENCE_GATE = {"hard_blocks": ["SKILL_NOT_DEMONSTRATED"], "hard_gate_passed": 
 def _analysis(
     *,
     book: bool = True,
+    thin: bool = False,
     kill: bool = False,
     lifted: bool = False,
     provider_status: str = "OK",
@@ -47,6 +49,15 @@ def _analysis(
     def select(symbol, timeframe, *, settings):
         del settings
         snapshot = make_snapshot(provider="okx", symbol=symbol.display, timeframe=timeframe)
+        if thin:
+            # A book that is measured, with a fine spread and too little depth: the liquidity
+            # gate alone reports a finding (the execution cost stays under its threshold).
+            levels = (
+                (OrderBookLevel(price=120.0, size=0.1),),
+                (OrderBookLevel(price=120.5, size=0.1),),
+            )
+            measured = OrderBookSnapshot(bids=levels[0], asks=levels[1], as_of_utc=FIXED_NOW)
+            snapshot = replace(snapshot, order_book=measured)
         return ProviderSelectionResult(
             snapshot=snapshot if book else replace(snapshot, order_book=None),
             provider_state={
@@ -206,6 +217,76 @@ def test_a_saved_run_shows_no_percentage_the_live_view_withheld(
         stored = _stored(_analysis())
         stored["invalidation_detail"] = {"hard_blocks": [block], "hard_gate_passed": False}
         assert saved_run_view.build_saved_run_view(stored)["range"]["assessed"] is False, block
+    # The provider's own stored status withholds it too, whatever the stored gate result says
+    # or fails to say (the live view reads both: decision_view._data_state).
+    for status in ("UNAVAILABLE", "QUARANTINED", None, 5):
+        for gate in ({"hard_blocks": [], "hard_gate_passed": True}, "not a gate result"):
+            stored = _stored(_analysis())
+            stored["data_quality_detail"]["provider_state"]["status"] = status
+            stored["invalidation_detail"] = gate
+            withheld = saved_run_view.build_saved_run_view(stored)["range"]
+            assert withheld["assessed"] is False and withheld["up_frac"] is None, (status, gate)
+    for status in ("OK", "DEGRADED"):
+        stored = _stored(_analysis())
+        stored["data_quality_detail"]["provider_state"]["status"] = status
+        assert saved_run_view.build_saved_run_view(stored)["range"]["assessed"] is True, status
+
+
+def test_every_sentence_of_the_analysis_reads_the_liquidity_state_the_gate_judged() -> None:
+    """Owner ruling G2, through the real service. The same block, LIQUIDITY_NOT_VIABLE, beside
+    the evidence gate: measured (too little depth) it is a risk gate in the view, the stack, the
+    blocking reasons, the plan's reason and the forced token's note; on a missing order book it is
+    a data gate in each of them, and none calls it a finding. A saved run reads the same."""
+
+    thin, missing = _analysis(thin=True), _analysis(book=False)
+    blocks = ["LIQUIDITY_NOT_VIABLE", "SKILL_NOT_DEMONSTRATED"]
+    for payload in (thin, missing):
+        assert payload["gate_result"]["hard_blocks"] == blocks
+        assert payload["gate_result"]["risk_guard_applied"] is True
+        assert payload["score_stack"]["disposition"] == "ELEVATED_RISK_AVOID"
+    assert (
+        thin["liquidity_state"]["status"] == "OK" and missing["liquidity_state"]["status"] != "OK"
+    )
+
+    def sentences(payload: dict) -> dict[str, object]:
+        synthesis = payload["decision_synthesis"]
+        return {
+            "risk": payload["decision_view"]["gates"]["risk_gate_active"],
+            "summary": payload["decision_view"]["gates"]["summary"],
+            "check": synthesis["actionability_stack"][3]["plain_english"],
+            "reason": payload["frontend_display"]["blocking_reasons"][0]["headline"],
+            "plan": synthesis["trade_plan_skeleton"]["disabled_reason"],
+            "brief": payload["decision_brief"]["state_summary"].rsplit(" is ", 1)[1],
+            "key": payload["decision_brief"]["key_reasons"][1],
+            "saved": _read(payload)["gates"]["summary"],
+        }
+
+    measured = "A risk gate is active: Liquidity is not viable. The evidence gate is active too: "
+    unmeasured = (
+        "A system or data gate is active: Liquidity could not be measured. The evidence gate is "
+        "active too: "
+    )
+    evidence = "directional skill is not established for this model and timeframe."
+    assert sentences(thin) == {
+        "risk": True,
+        "summary": measured + evidence,
+        "check": measured + evidence,
+        "reason": "Liquidity is not viable",
+        "plan": "The elevated-risk disposition disables scenario planning.",
+        "brief": "ELEVATED_RISK_AVOID.",
+        "key": "Backend disposition: ELEVATED_RISK_AVOID.",
+        "saved": measured + evidence,
+    }
+    assert sentences(missing) == {
+        "risk": False,
+        "summary": unmeasured + evidence,
+        "check": unmeasured + evidence,
+        "reason": "Liquidity could not be measured",
+        "plan": unmeasured + evidence,
+        "brief": "ELEVATED_RISK_AVOID (not forced by a risk gate).",
+        "key": "Backend disposition: ELEVATED_RISK_AVOID (not forced by a risk gate).",
+        "saved": unmeasured + evidence,
+    }
 
 
 def test_the_sentences_are_built_from_stored_facts_never_from_stored_sentences(
