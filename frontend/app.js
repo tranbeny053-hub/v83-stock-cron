@@ -2774,12 +2774,18 @@ function writeLocalWatchlist(symbols) {
   localStorage.setItem(watchlistStorageKey, JSON.stringify([...new Set(symbols)].slice(0, 20)));
 }
 
+// `status` is null when a watchlist load brought no storage status back (it failed, or it was
+// answered without one). The header badge is then left as it was: no status was reported. The
+// watchlist's own line reads as it always did for a list drawn from the browser: UNAVAILABLE.
 function setWatchlistStatus(status) {
   const target = document.querySelector("#watchlistStatus");
-  updatePersistenceStatus(status);
+  if (status !== null) {
+    updatePersistenceStatus(status);
+  }
+  const shown = status === null ? "UNAVAILABLE" : status;
   const browserFallback = status !== "OK";
   target.textContent = browserFallback
-    ? `Watchlist persistence: ${status}. Browser fallback is active.`
+    ? `Watchlist persistence: ${shown}. Browser fallback is active.`
     : "Watchlist persistence: OK";
 }
 
@@ -2909,14 +2915,16 @@ async function loadWatchlist() {
       symbols = localSymbols.length ? localSymbols : symbols;
       writeLocalWatchlist(symbols);
     }
-    const status = payload.persistence_status || "UNAVAILABLE";
+    // An answer without a storage status reports none (null): the badge is not written to.
+    const status = payload.persistence_status || null;
     renderWatchlist(symbols, status);
     const runs = await historyRequest;
     if (runs !== null) {
       renderWatchlist(symbols, status, runs);
     }
   } catch (error) {
-    renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
+    // The load failed (a network error, a refusal, a server error): no storage status came back.
+    renderWatchlist(readLocalWatchlist(), null);
     document.querySelector("#watchlistStatus").title = error.message || "Watchlist unavailable";
   }
 }

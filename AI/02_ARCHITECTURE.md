@@ -31,6 +31,7 @@ GET  /v1/system_status
 POST /v1/analyze
 POST /v1/analyze_batch
 GET  /v1/analyze/detail/{run_id}
+GET  /v1/analyze/receipt/{run_id}
 GET  /v1/debug/runs
 GET  /v1/debug/runs/{run_id}
 GET  /v1/debug/export/{run_id}

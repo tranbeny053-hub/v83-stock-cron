@@ -1,4 +1,4 @@
-"""A watchlist change that fails leaves the header badge as it was.
+"""A watchlist change or load that fails leaves the header badge as it was.
 
 The header badge is storage's status when it was last asked. A watchlist change the backend
 refuses (a rejected symbol, a full list, a malformed request, a rate limit, a server error), or
@@ -12,11 +12,17 @@ repository's `persistence_status`, and the badge shows that one. (A 401 ends the
 the session's own reset puts the badge back to "unknown" with everything else.)
 
 The whole of app.js runs under Node on the DOM stand-in. Every answer is the real backend's own
-(the app, through its test client), except the two it cannot give: its watchlist route has no rate
-limit of its own, so the 429s are scripted, and so is the network error. The watchlist's own
-status line and its messages are asserted as they were: only the badge's behaviour changed.
+(the app, through its test client), except those it cannot give: its watchlist route has no rate
+limit of its own, so the 429s are scripted, and so are the network error and, for a load, a 200
+that is not JSON and a 200 without a status. The watchlist's own status line and its messages
+are asserted as they were: only the badge's behaviour changed.
 
-Loading the watchlist is not a change and is left alone; the last test asserts it reads as it did.
+Loading the watchlist follows the same rule. (The first round left it alone, and a failed load
+still set the badge to UNAVAILABLE.) A load that fails (a network error, a server error, a rate
+limit, an answer that cannot be read), or that is answered without a storage status, leaves the
+badge as it was. An answered load shows the status it carries, and UNAVAILABLE is then the
+backend's own word: with its store down the route still answers 200, from its fallback. A 401 ends
+the session, as it does for a change. The watchlist's own line, tooltip and list read as before.
 """
 
 from __future__ import annotations
@@ -36,7 +42,11 @@ from crypto_probability_engine.api.auth import dev_limiter, hash_code, session_l
 from crypto_probability_engine.api.errors import error_payload
 from crypto_probability_engine.api.schemas import ErrorCode
 from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
+from crypto_probability_engine.persistence.repository import (
+    InMemoryPersistenceRepository,
+    PersistenceRepository,
+    SupabasePersistenceRepository,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 ACCESS_CODE = "operator-test-code"
@@ -66,6 +76,17 @@ CLASSES = {
     "STATELESS": "status-warn",
     "UNKNOWN": "status-unknown",
 }
+# The watchlist's own line for a list drawn from the browser, and the tooltip a failed load leaves
+# on it (the error's message): both as before the load's change.
+FALLBACK = "Watchlist persistence: UNAVAILABLE. Browser fallback is active."
+NOT_JSON = "Response was not valid JSON."
+LOAD_TITLES = {
+    "networkError": "Failed to fetch",
+    "serverError": "Request failed",
+    "rateLimit": "Too many attempts.",
+    "rateLimitWithoutABody": NOT_JSON,
+    "unreadableAnswer": NOT_JSON,
+}
 
 _SCENARIOS = r"""
 const settle = async () => {
@@ -78,13 +99,14 @@ const changes = {
   remove: () => removeWatchlistSymbol("BTC/USDT"),
   load: () => loadWatchlist(),
 };
+const noRuns = { status: 200, body: { runs: [] } };
 // One change (or one load), from a badge that reads `lastChecked`, answered by `reply`.
-const attempt = async (lastChecked, reply, change) => {
+const attempt = async (lastChecked, reply, change, history = noRuns) => {
   backend = async (path) => {
-    // A load also asks for the history: it answers, with no runs.
-    if (path === "/v1/runs") return { status: 200, body: { runs: [] } };
-    if (reply === "NETWORK") throw new TypeError("Failed to fetch");
-    return reply;
+    // A load also asks for the history: it answers, with no runs unless the scenario says.
+    const answer = path === "/v1/runs" ? history : reply;
+    if (answer === "NETWORK") throw new TypeError("Failed to fetch");
+    return answer;
   };
   requests.length = 0;
   updatePersistenceStatus(lastChecked);
@@ -126,17 +148,45 @@ const attempt = async (lastChecked, reply, change) => {
     }
   }
   // Loading the watchlist, with one symbol in the browser's own list.
-  out.loaded = {};
-  for (const [name, { from, reply }] of Object.entries(data.loaded)) {
+  const load = (lastChecked, reply, history) => {
     writeLocalWatchlist(["ETH/USDT"]);
-    out.loaded[name] = await attempt(from, reply, "load");
+    return attempt(lastChecked, reply, "load", history);
+  };
+  out.loaded = {};
+  out.loadedWithoutItsHistory = {};
+  for (const [name, { from, reply }] of Object.entries(data.loaded)) {
+    out.loaded[name] = await load(from, reply);
+    // The same load when its history request fails: the watchlist is drawn once, without it.
+    out.loadedWithoutItsHistory[name] = await load(from, reply, "NETWORK");
   }
-  // Last: a 401 ends the session, and the stand-in is logged out.
+  out.loadedWithoutAStatus = {};
+  for (const lastChecked of ["OK", "UNAVAILABLE", "STATELESS", "UNKNOWN"]) {
+    for (const [name, reply] of Object.entries(data.failedLoads)) {
+      out.loadedWithoutAStatus[`${lastChecked}:${name}`] = await load(lastChecked, reply);
+    }
+  }
+  // The watchlist's status line on its own, as its callers call it: a status, or null for none.
+  out.line = {};
+  for (const status of ["OK", "UNAVAILABLE", "STATELESS", null]) {
+    updatePersistenceStatus("UNKNOWN");
+    badgeWrites.length = 0;
+    setWatchlistStatus(status);
+    out.line[String(status)] = {
+      after: badgeState(),
+      writes: [...badgeWrites],
+      message: statusTarget.textContent,
+    };
+  }
+  // Last: a 401 ends the session, and the stand-in is logged out. A signed-out load is refused
+  // twice: its history request too.
   out.sessionExpired = {};
   for (const [change, reply] of Object.entries(data.sessionExpired)) {
     workspace.classList.remove("hidden");
+    const outcome = await (change === "load"
+      ? load("OK", reply, data.signedOutHistory)
+      : attempt("OK", reply, change));
     out.sessionExpired[change] = {
-      ...(await attempt("OK", reply, change)),
+      ...outcome,
       login: loginStatus.textContent,
       workspaceHidden: workspace.classList.contains("hidden"),
     };
@@ -170,7 +220,24 @@ class _Broken(InMemoryPersistenceRepository):
         raise RuntimeError("the watchlist write failed")
 
 
-def _client(repository: InMemoryPersistenceRepository | None = None) -> TestClient:
+class _BrokenRead(InMemoryPersistenceRepository):
+    """A repository whose watchlist read raises: the backend answers 500."""
+
+    def list_watchlist(self, operator_id: str = "operator") -> list[str]:
+        raise RuntimeError("the watchlist read failed")
+
+
+def _store_down() -> SupabasePersistenceRepository:
+    """The durable repository with its store down: no connection can be opened. Nothing is
+    dialled: the pool cannot be made."""
+
+    def no_pool() -> Any:
+        raise OSError("the store is down")
+
+    return SupabasePersistenceRepository("postgresql://example.invalid/db", pool_factory=no_pool)
+
+
+def _client(repository: PersistenceRepository | None = None) -> TestClient:
     session_limiter.reset()
     dev_limiter.reset()
     settings = Settings(
@@ -185,7 +252,7 @@ def _client(repository: InMemoryPersistenceRepository | None = None) -> TestClie
     return client
 
 
-def _signed_in(repository: InMemoryPersistenceRepository | None = None) -> TestClient:
+def _signed_in(repository: PersistenceRepository | None = None) -> TestClient:
     client = _client(repository)
     assert client.post("/v1/auth/login", json={"code": ACCESS_CODE}).status_code == 200
     return client
@@ -233,15 +300,27 @@ def data() -> dict[str, Any]:
                 "remove": _reply(stored.delete("/v1/watchlist/BTC/USDT")),
             },
         }
+    # A load the backend answers. UNAVAILABLE is the durable repository's own answer with its
+    # store down; STATELESS is the default repository's (no store configured).
     loaded = {
-        status: {
-            "from": shown_before,
-            "reply": _reply(_signed_in(_Repository(status)).get("/v1/watchlist")),
-        }
-        for status, shown_before in (("OK", "UNAVAILABLE"), ("UNAVAILABLE", "OK"))
+        status: {"from": shown_before, "reply": _reply(_signed_in(stored).get("/v1/watchlist"))}
+        for status, shown_before, stored in (
+            ("OK", "UNAVAILABLE", _Repository("OK")),
+            ("UNAVAILABLE", "OK", _store_down()),
+            ("STATELESS", "OK", None),
+        )
     }
-    loaded["networkError"] = {"from": "OK", "reply": "NETWORK"}
-    loaded["rateLimit"] = {"from": "OK", "reply": limited}
+    # A load that brings no storage status back. The backend gives the 500; the rest are scripted:
+    # the network error, the 429s (the route has no rate limit of its own), a 200 that is not
+    # JSON, and a 200 without a status (the backend's 200 always carries one).
+    failed_loads = {
+        "networkError": "NETWORK",
+        "serverError": _reply(_signed_in(_BrokenRead()).get("/v1/watchlist")),
+        "rateLimit": limited,
+        "rateLimitWithoutABody": {"status": 429},
+        "unreadableAnswer": {"status": 200},
+        "answerWithoutAStatus": {"status": 200, "body": {"symbols": ["BTC/USDT"]}},
+    }
     signed_out = _client()
     return {
         "refused": {
@@ -255,10 +334,13 @@ def data() -> dict[str, Any]:
         },
         "accepted": accepted,
         "loaded": loaded,
+        "failedLoads": failed_loads,
         "sessionExpired": {
             "add": _reply(signed_out.post("/v1/watchlist", json={"symbol": "BTC"})),
             "remove": _reply(signed_out.delete("/v1/watchlist/BTC/USDT")),
+            "load": _reply(signed_out.get("/v1/watchlist")),
         },
+        "signedOutHistory": _reply(signed_out.get("/v1/runs")),
     }
 
 
@@ -428,37 +510,157 @@ def test_the_failure_handler_names_no_storage_status() -> None:
         assert "updatePersistenceStatus" not in body, change
 
 
-def test_loading_the_watchlist_reads_as_it_did(run: dict, data: dict) -> None:
-    """Loading the watchlist is not a change, and this round leaves it alone: asserted, so that
-    it stays apart. An answered load shows the storage status it carries. A load that fails still
-    falls back to the browser's own list and sets the badge to UNAVAILABLE, as it did before.
-    Whether a failed load should leave the badge as it was, like a failed change, is not ruled."""
+def _reads(status: str) -> dict[str, str]:
+    """The badge, reading `status`."""
 
-    fallback = "Watchlist persistence: UNAVAILABLE. Browser fallback is active."
-    loaded = run["loaded"]
-    assert sorted(loaded) == sorted(data["loaded"])
-    for status, message, shown in (
-        ("OK", "Watchlist persistence: OK", ["No symbols yet."]),
-        # The browser's own list, and under its one symbol the history's answer: no runs.
-        ("UNAVAILABLE", fallback, ["ETH/USDT", "Remove", "No recent analysis found."]),
+    return {
+        "text": receipts.BADGE_PREFIX + SENTENCES[status],
+        "status": status,
+        "classes": CLASSES[status],
+    }
+
+
+def test_a_watchlist_load_carries_a_storage_status_only_when_the_backend_answers_200(
+    data: dict,
+) -> None:
+    """What each load's answer says of storage. The backend's 200 always carries its repository's
+    status, UNAVAILABLE included: with its store down it answers from its fallback and says so.
+    Its 500 and its 401 carry none, and neither does a scripted answer."""
+
+    assert sorted(data["loaded"]) == ["OK", "STATELESS", "UNAVAILABLE"]
+    for status, answer in data["loaded"].items():
+        assert answer["reply"]["status"] == 200, status
+        assert answer["reply"]["body"]["persistence_status"] == status, status
+        assert answer["from"] != status, f"{status}: the badge starts on another status"
+    failed = data["failedLoads"]
+    assert sorted(failed) == sorted([*LOAD_TITLES, "answerWithoutAStatus"])
+    assert failed["networkError"] == "NETWORK", "no answer at all"
+    answered = {name: reply for name, reply in failed.items() if name != "networkError"}
+    assert {name: reply["status"] for name, reply in answered.items()} == {
+        "serverError": 500,
+        "rateLimit": 429,
+        "rateLimitWithoutABody": 429,
+        "unreadableAnswer": 200,
+        "answerWithoutAStatus": 200,
+    }
+    for name, reply in answered.items():
+        assert "persistence_status" not in _keys(reply.get("body")), name
+    envelope = _envelope(failed["serverError"]["body"])
+    assert envelope is not None and envelope["code"] == "BACKEND_TIMEOUT"
+    assert envelope["system_status_snapshot"] == {}
+    assert data["sessionExpired"]["load"]["status"] == data["signedOutHistory"]["status"] == 401
+    assert "persistence_status" not in _keys(data["signedOutHistory"]["body"])
+
+
+@pytest.mark.parametrize("status", ["OK", "UNAVAILABLE", "STATELESS"])
+def test_an_answered_watchlist_load_shows_the_storage_status_it_carries(
+    run: dict, data: dict, status: str
+) -> None:
+    """An answered load sets the badge: the backend said what storage is. UNAVAILABLE is its own
+    word here (its store is down), and the badge shows it, as before."""
+
+    assert sorted(run["loaded"]) == sorted(run["loadedWithoutItsHistory"]) == sorted(data["loaded"])
+    # With the history answered (no runs), and with the history request failing.
+    for history, outcome in (
+        (["No recent analysis found."], run["loaded"][status]),
+        ([], run["loadedWithoutItsHistory"][status]),
     ):
-        outcome = loaded[status]
-        assert data["loaded"][status]["reply"]["body"]["persistence_status"] == status
-        assert outcome["before"]["status"] == data["loaded"][status]["from"] != status
-        assert outcome["after"]["status"] == status
-        assert outcome["after"]["text"] == receipts.BADGE_PREFIX + SENTENCES[status]
-        assert outcome["message"] == message and outcome["list"] == shown, status
-    for failure, title in (
-        ("networkError", "Failed to fetch"),
-        ("rateLimit", "Too many attempts."),
-    ):
-        outcome = loaded[failure]
-        assert outcome["before"]["status"] == "OK"
-        assert outcome["after"] == {
-            "text": receipts.BADGE_PREFIX + SENTENCES["UNAVAILABLE"],
-            "status": "UNAVAILABLE",
-            "classes": CLASSES["UNAVAILABLE"],
-        }, failure
-        assert outcome["message"] == fallback and outcome["title"] == title, failure
-        assert outcome["list"] == ["ETH/USDT", "Remove"], failure
-        assert outcome["asked"] == ["GET /v1/runs", "GET /v1/watchlist"], failure
+        assert outcome["before"] == _reads(data["loaded"][status]["from"])
+        assert outcome["writes"], "the badge was set"
+        assert outcome["after"] == _reads(status)
+        if status == "OK":
+            # The backend's list (empty here), not the browser's.
+            assert outcome["message"] == "Watchlist persistence: OK"
+            assert outcome["list"] == ["No symbols yet."]
+        else:
+            # The browser's own list, and under its one symbol what the history answered.
+            assert outcome["message"] == (
+                f"Watchlist persistence: {status}. Browser fallback is active."
+            )
+            assert outcome["list"] == ["ETH/USDT", "Remove", *history]
+        assert outcome["asked"] == ["GET /v1/runs", "GET /v1/watchlist"]
+
+
+@pytest.mark.parametrize("failure", sorted(LOAD_TITLES))
+def test_a_failed_watchlist_load_leaves_the_badge_as_it_was(run: dict, failure: str) -> None:
+    """A load that fails brings no storage status back, whatever the reason, so the badge reads
+    what it read before. Earlier every such load set it to UNAVAILABLE. The watchlist's own line,
+    its tooltip and the browser's list are what they were before this change."""
+
+    outcomes = {
+        name: got
+        for name, got in run["loadedWithoutAStatus"].items()
+        if name.split(":")[1] == failure
+    }
+    assert {name.split(":")[0] for name in outcomes} == set(SENTENCES)
+    for name, outcome in outcomes.items():
+        last_checked = name.split(":")[0]
+        assert outcome["writes"] == [], f"{name}: the badge was written to"
+        assert outcome["after"] == outcome["before"] == _reads(last_checked), name
+        assert outcome["message"] == FALLBACK, name
+        assert outcome["title"] == LOAD_TITLES[failure], name
+        # The browser's own list. The history is not drawn under it after a failed load.
+        assert outcome["list"] == ["ETH/USDT", "Remove"], name
+        assert outcome["asked"] == ["GET /v1/runs", "GET /v1/watchlist"], f"{name}: asked once"
+
+
+def test_a_watchlist_load_answered_without_a_status_leaves_the_badge_as_it_was(run: dict) -> None:
+    """A 200 that names no storage status reports none, so the badge is not written to: showing
+    UNAVAILABLE would be a status nobody gave. (The backend's own 200 always carries one; this is
+    an answer altered on its way.) The watchlist reads as it did for such an answer: its own line
+    says UNAVAILABLE, and the browser's list is drawn with the history under it."""
+
+    for last_checked in SENTENCES:
+        outcome = run["loadedWithoutAStatus"][f"{last_checked}:answerWithoutAStatus"]
+        assert outcome["writes"] == [], f"{last_checked}: the badge was written to"
+        assert outcome["after"] == outcome["before"] == _reads(last_checked)
+        assert outcome["message"] == FALLBACK, last_checked
+        assert outcome["list"] == ["ETH/USDT", "Remove", "No recent analysis found."]
+        assert outcome["asked"] == ["GET /v1/runs", "GET /v1/watchlist"], last_checked
+
+
+def test_a_401_on_a_watchlist_load_ends_the_session_and_the_load_adds_nothing(run: dict) -> None:
+    """A signed-out load is refused twice (its history, its watchlist). The session-expiry code,
+    unchanged, resets the screen once, and that reset sets the badge to "unknown". The failed load
+    then adds nothing: earlier it turned the signed-out badge to UNAVAILABLE."""
+
+    outcome = run["sessionExpired"]["load"]
+    assert outcome["login"] == receipts.EXPIRED and outcome["workspaceHidden"] is True
+    assert outcome["before"] == _reads("OK")
+    assert outcome["writes"] == run["recordSees"], "one badge update, the reset's"
+    assert outcome["after"] == _reads("UNKNOWN")
+    assert outcome["message"] == FALLBACK and outcome["title"] == "Valid session is required."
+    assert outcome["asked"] == ["GET /v1/runs", "GET /v1/watchlist"]
+
+
+def test_the_watchlist_line_sets_the_badge_only_from_a_status(run: dict) -> None:
+    """The watchlist's status line on its own. Given a status, it sets the badge to it, once.
+    Given none, it leaves the badge alone and its own words are the ones it has for a list drawn
+    from the browser."""
+
+    assert sorted(run["line"]) == ["OK", "STATELESS", "UNAVAILABLE", "null"]
+    for status in ("OK", "UNAVAILABLE", "STATELESS"):
+        line = run["line"][status]
+        assert line["writes"] == run["recordSees"], f"{status}: one badge update"
+        assert line["after"] == _reads(status)
+        assert line["message"] == (
+            "Watchlist persistence: OK"
+            if status == "OK"
+            else f"Watchlist persistence: {status}. Browser fallback is active."
+        )
+    none = run["line"]["null"]
+    assert none["writes"] == [] and none["after"] == _reads("UNKNOWN")
+    assert none["message"] == FALLBACK
+
+
+def test_the_load_names_no_storage_status() -> None:
+    """loadWatchlist hands on the status its answer carried, or none. It never makes one up, and
+    it does not write to the badge itself."""
+
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    begin = source.index("async function loadWatchlist() {")
+    body = source[begin : source.index("\n}\n", begin)]
+    assert '"UNAVAILABLE"' not in body and "updatePersistenceStatus" not in body
+    assert "persistenceStatusBadge" not in body
+    assert body.count("const status = payload.persistence_status || null;") == 1
+    assert body.count("renderWatchlist(readLocalWatchlist(), null);") == 1

@@ -94,6 +94,7 @@ Required endpoints:
 | POST | `/v1/analyze` | one-symbol analysis, mode-aware | session |
 | POST | `/v1/analyze_batch` | up to 5 symbols, mode-aware | session |
 | GET | `/v1/analyze/detail/{run_id}` | drill-down detail view | session |
+| GET | `/v1/analyze/receipt/{run_id}` | save receipt: whether that analysis was saved (`SAVED`, `PENDING`, `FAILED` or `NOT_RETAINED`) | session |
 | GET | `/v1/debug/runs` | recent run summaries | Dev Mode re-auth |
 | GET | `/v1/debug/runs/{run_id}` | one run sanitized detail | Dev Mode re-auth |
 | GET | `/v1/debug/export/{run_id}` | sanitized debug pack | Dev Mode re-auth |
