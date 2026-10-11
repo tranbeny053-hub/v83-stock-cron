@@ -1,0 +1,41 @@
+BLOCK
+One or more hard gates are active.
+tactical swing bridge
+1H
+BTC/USDT
+Detail
+No accepted forecast
+1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
+Immediate action
+No
+Plan
+Observe only
+Chase
+No
+Asset · venue
+BTC/USDT · okx
+Reference close (UTC)
+2026-06-06T12:00:00Z
+Horizon end (UTC)
+2026-06-06T18:00:00Z
+Data
+OK: Live data. Latest candle 0s old.
+Storage
+No storage configured — analyses are kept only until the server restarts
+In band (inside the decision band)
+22.12% (band ±0.41%)
+Up (above the band)
+39.38%
+Down (below the band)
+38.50%
+Evidence level
+Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Round-trip cost
+0.41%
+Evidence
+INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
+Gate disposition (not a market call)
+ABORT
+Signal heat (not risk)
+Warm
+LIVE DATA - OKX_PUBLIC
