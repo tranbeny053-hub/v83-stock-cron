@@ -271,6 +271,20 @@ def test_the_disposition_of_a_saved_run_is_read_from_its_whole_gate_result() -> 
         )
     )
     assert saved_run_view.build_saved_run_view(risk)["disposition"] == token
+
+    # The liquidity gate behind the token is read with the liquidity state the record stores: a
+    # measured spread makes it a risk finding (the token stands), an unmeasured book does not.
+    def under_the_liquidity_gate(state: dict) -> str:
+        record = _damaged(
+            lambda d: (
+                d["invalidation_detail"].update(action=token, hard_blocks=["LIQUIDITY_NOT_VIABLE"]),
+                d["liquidity_execution_detail"].update(liquidity_state=state),
+            )
+        )
+        return saved_run_view.build_saved_run_view(record)["disposition"]
+
+    assert under_the_liquidity_gate({"status": "OK", "spread_frac": 0.09}) == token
+    assert under_the_liquidity_gate({"status": "DEGRADED", "spread_frac": None}) == note
     # Without a score, a passed gate has no disposition to show; without an action, a blocked one.
     for name in ("passed_true_no_blocks_no_score", "action_missing"):
         assert _view_of(name)["disposition"] is None, name

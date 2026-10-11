@@ -383,6 +383,18 @@ def test_every_raw_gate_token_on_a_screen_stands_under_a_label_that_says_what_it
         ], "the rows keep their order"
 
 
+def test_a_card_without_a_view_labels_its_disposition_too(cases: dict) -> None:
+    """Owner ruling S3, on the one screen no golden holds: a response without a decision view
+    (an older one) still shows its disposition on the batch card, and under the same label."""
+
+    payload = {key: kept for key, kept in cases["evidence_only"].items() if key != "decision_view"}
+    texts = goldens.render({"no_view": payload}, {})["screens"]["no_view"]["batch"]
+    shown = payload["frontend_display"]["disposition"]
+    assert shown == "NO_TRADE" and texts.count(shown) == 1
+    assert harness._value(texts, "Gate disposition (not a market call)") == shown
+    assert "Disposition" not in texts
+
+
 # --- the older decision sections are retired from the default screen -------------------------
 
 # The headings, labels and fixed lines of the retired sections, in the parity review's order:
