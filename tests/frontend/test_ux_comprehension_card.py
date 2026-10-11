@@ -4,11 +4,13 @@ Plan §23: UX is PASS only when predefined owner-task scenarios distinguish inva
 unvalidated model, an accepted forecast, a directional permission and saved/unsaved state. These
 tests prove that the generated scenarios do so on the real gates, the real backend builders and
 the real frontend; that each analysis on the card is what the real detail panel renders; that the
-answer key is computed from each analysis's payload and receipt, never typed; that no question
-can be answered by finding its words on the card; that the two tempting misreadings (the gates'
-disposition as a market call; the badge or the request-time row as the save receipt) are wrong
-on every analysis; that the acceptance registries are left empty; and that the committed card is
-current and never marked run.
+answer key is computed from each analysis's payload and receipt, never typed; that the questions
+are plain and quote no headline, label or framing sentence; that three adversaries run against
+the generated card do badly (a reader who answers by finding a question's words on the analysis,
+one who takes the gates' disposition for a call on the market, one who takes the badge or the
+request-time row for the save receipt); that every state the product cannot show today is marked
+SYNTHETIC and no other; that the acceptance registries are left empty; and that the committed
+card is current and never marked run.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import inspect
 import json
 import re
 import subprocess
+from collections import Counter
 
 import fullscreen_goldens as goldens
 import pytest
@@ -30,6 +33,7 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, min_histo
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail import decision_view
 from crypto_probability_engine.detail.decision_view import STATE_COPY
+from crypto_probability_engine.global_risk.state import global_risk_state
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.epistemic_sufficiency import assess_epistemic_sufficiency
@@ -122,8 +126,17 @@ def test_the_analyses_cover_what_the_check_must_tell_apart(
         **dict.fromkeys("BDG", "FAILED"),
         "I": "NOT_RETAINED",
     }
+    # The re-review's minor 3: an analysis is marked SYNTHETIC exactly when today's product
+    # cannot show it. Nothing is accepted today; with no valid market data the product answers
+    # with an error and no view; and the kill switch is a constant False with no setting.
+    assert global_risk_state()["kill_switch"] is False
+    for scenario in card.SCENARIOS:
+        cannot_occur_today = scenario.accepted or not scenario.data_ok or scenario.kill
+        assert scenario.synthetic is cannot_occur_today, scenario.letter
     flags = {scenario.letter: scenario.synthetic for scenario in card.SCENARIOS}
-    assert flags == {**dict.fromkeys("ADFGHI", False), **dict.fromkeys("BCE", True)}
+    assert flags == {**dict.fromkeys("ADFGI", False), **dict.fromkeys("BCEH", True)}
+    # No two analyses have the same answers: the questions tell all nine apart.
+    assert len({screen["key"] for screen in screens.values()}) == len(screens) == 9
 
 
 def _expected_key(payload: dict, receipt: dict) -> tuple[str, ...]:
@@ -138,8 +151,8 @@ def _expected_key(payload: dict, receipt: dict) -> tuple[str, ...]:
     assert (state == "INVALID_OR_UNAVAILABLE_DATA") is (standing == "d")
     return (
         "yes" if "RISK" in kinds else "no",
-        "yes" if "EVIDENCE" in kinds else "no",
         "yes" if "SYSTEM_OR_DATA" in kinds else "no",
+        "yes" if "EVIDENCE" in kinds else "no",
         standing,
         "b" if payload["decision_synthesis"]["action_permission"]["can_enter_now"] else "c",
         {"SAVED": "a", "NOT_RETAINED": "b", "FAILED": "c", "PENDING": "c"}[receipt["state"]],
@@ -191,84 +204,232 @@ def test_the_answer_key_is_computed_from_the_payload_and_the_receipt_never_typed
 
     gates = ("decision_view", "gates")
     assert changed((*gates, "risk_gate_active"), True) == ("yes", *base[1:])
-    assert changed((*gates, "kinds"), ["SYSTEM_OR_DATA"]) == (base[0], "no", "yes", *base[3:])
+    assert base[:3] == ("no", "no", "yes"), "A: the evidence gate alone"
+    assert changed((*gates, "kinds"), ["SYSTEM_OR_DATA"]) == ("no", "yes", "no", *base[3:])
+    assert changed((*gates, "kinds"), ["EVIDENCE", "RISK"])[:3] == base[:3], "the flag decides 1"
     assert changed(("decision_view", "state"), "ACCEPTED_FORECAST_CLAIM")[3] == "b"
     assert changed(("decision_synthesis", "action_permission", "can_enter_now"), True)[4] == "b"
     for state, answer in (("NOT_RETAINED", "b"), ("FAILED", "c"), ("PENDING", "c")):
         assert card.answers(payload, {**receipt, "state": state}) == (*base[:5], answer)
     # Every choice of every question is the key of some analysis, except the two no screen of
-    # this product can say: "stay out" and "proceed".
+    # this product can say: "stay out" and "go ahead". That question's answer is therefore the
+    # same on every analysis, and the card says so after the key instead of disguising it.
     for position, (_, choices) in enumerate(card.QUESTIONS):
         used = {screen["key"][position] for screen in screens.values()}
         unused = {choice for choice, _ in choices} - used
         assert unused == ({"a", "b"} if position == 4 else set()), (position, unused)
+    note = " ".join(text[text.index("## Answer key") :].split())
+    assert (
+        "Question 5 has the same answer on every analysis: c. The product is analysis only: it "
+        "never tells anyone to buy, to sell or to stay out."
+    ) in note
+    assert "The other questions are the ones whose answers differ between the analyses." in note
+    assert note.count("has the same answer on every analysis") == 1
+    assert card._constant_note([("a", "x"), ("b", "x")]).startswith("- Question 2 has the same")
+    assert card._constant_note([("a", "x"), ("b", "y")]) == ""
 
 
-# The only words of four letters or more a question may share with a screen: function words,
-# which carry no answer. Every other such word of a question or of a choice must be absent.
-_COMMON = {
-    *("this", "that", "what", "does", "would", "were", "there", "here", "them", "they"),
-    *("about", "because", "from", "never", "with"),
-}
 _WORD = re.compile(r"[a-z]+")
+# The reviewer's own strategy (scratchpad revC/card_match.py), kept word for word in its rules:
+# a word counts when it has four letters or more and is not one of these, and a final "s" is cut.
+_STOP = set(
+    "this that with from have been were what does about your here they them there would could "
+    "might which when into than then also only very some somebody nobody something anything "
+    "whole taken thing things".split()
+)
 
 
-def _stem(word: str) -> str:
-    for ending in ("ing", "ed", "es", "s"):
-        if word.endswith(ending) and len(word) - len(ending) >= 4:
-            return word[: -len(ending)]
-    return word
+def _words(text: str) -> set[str]:
+    found = set()
+    for word in _WORD.findall(text.lower()):
+        if len(word) >= 4 and word not in _STOP:
+            found.add(word[:-1] if word.endswith("s") and len(word) > 4 else word)
+    return found
 
 
-def _distinctive(text: str) -> set[str]:
-    """The words of a question or a choice that could be looked up on a screen."""
+def _printed(letter: str) -> str:
+    """Everything the card prints for one analysis: the product's lines and the card's own."""
 
-    words = _WORD.findall(text.lower())
-    return {_stem(word) for word in words if len(word) >= 4 and word not in _COMMON}
+    return card.card_markdown().split(f"## Analysis {letter}\n")[1].split("\n## ")[0]
 
 
-def test_no_question_can_be_answered_by_finding_its_words_on_the_card(
+def _lettered(choices: tuple, on_the_analysis: set[str]) -> str:
+    """The choice with more of its words on the analysis than any other; none in a tie."""
+
+    scores = [(len(_words(meaning) & on_the_analysis), choice) for choice, meaning in choices]
+    best = max(score for score, _ in scores)
+    top = [choice for score, choice in scores if score == best]
+    return top[0] if best > 0 and len(top) == 1 else "?"
+
+
+def _phrase_matcher(letters: list[str]) -> dict[str, list[str]]:
+    """Adversary (a), the reviewer's strategy: answer "yes" when two or more of a question's
+    words are on the analysis, and pick the lettered choice with the most words on it."""
+
+    answers = {}
+    for letter in letters:
+        on_the_analysis = _words(_printed(letter))
+        answers[letter] = [
+            ("yes" if len(_words(question) & on_the_analysis) >= 2 else "no")
+            if choices == card.YES_NO
+            else _lettered(choices, on_the_analysis)
+            for question, choices in card.QUESTIONS
+        ]
+    return answers
+
+
+def _relative_matcher(letters: list[str]) -> dict[str, list[str]]:
+    """A sharper matcher than the reviewer's: it answers "yes" on the analyses that carry more
+    of a question's words than the middle one does, so words that every analysis carries tell it
+    nothing."""
+
+    on = {letter: _words(_printed(letter)) for letter in letters}
+    answers: dict[str, list[str]] = {letter: [] for letter in letters}
+    for question, choices in card.QUESTIONS:
+        counts = {letter: len(_words(question) & on[letter]) for letter in letters}
+        middle = sorted(counts.values())[len(counts) // 2]
+        for letter in letters:
+            if choices == card.YES_NO:
+                answers[letter].append("yes" if counts[letter] > middle else "no")
+            else:
+                answers[letter].append(_lettered(choices, on[letter]))
+    return answers
+
+
+def _right(answers: dict[str, list[str]], screens: dict) -> list[int]:
+    """How many analyses each question is answered rightly on."""
+
+    keys = {letter: screen["key"] for letter, screen in screens.items()}
+    return [
+        sum(answers[letter][position] == key[position] for letter, key in keys.items())
+        for position in range(len(card.QUESTIONS))
+    ]
+
+
+def test_a_reader_who_matches_words_does_no_better_than_one_who_always_answers_the_same(
     screens: dict[str, dict[str, object]],
 ) -> None:
-    """Owner ruling S5: the reviewer answered the card before this one 30 of 30 by matching a
-    phrase of each question to a line on the card. No distinctive word of any question or of any
-    of its choices is on any analysis now (compared without their endings), and no three words
-    in a row are either: the questions ask what a screen means, in other words than its own."""
+    """Owner ruling U3, item 5, adversary (a). The card before the last one was answered 30 of 30
+    by matching a phrase of each question to a line of the card. The questions may now share
+    ordinary words with a screen, so the proof is no longer a word ban: the matcher is run.
 
-    asked: dict[str, str] = {}
-    for number, (question, choices) in enumerate(card.QUESTIONS, start=1):
-        asked[f"question {number}"] = question
-        for choice, meaning in choices:
-            asked[f"question {number}, answer {choice}"] = meaning
-    assert sum(len(_distinctive(text)) for text in asked.values()) > 50, "the guard reads words"
-    text = card.card_markdown()
+    - The reviewer's own strategy is right on no more analyses, on ANY question, than a reader
+      who gives one fixed answer to that question every time; and it is wrong on at least 36 of
+      the 54 cells (two in three).
+    - A sharper matcher, which ignores the words every analysis carries, does no better in total
+      than the fixed-answer reader and is wrong on at least 27 cells (half). On one question it
+      does beat that reader (question 2): the analyses a data gate or the safety switch blocks
+      print a longer gate text, and it counts words. It answers question 1 the same way, and is
+      wrong there on every one of them."""
+
+    letters = sorted(screens)
+    cells = len(letters) * len(card.QUESTIONS)
+    assert cells == 54
+    fixed = [
+        max(Counter(screen["key"][position] for screen in screens.values()).values())
+        for position in range(len(card.QUESTIONS))
+    ]
+    assert fixed == [8, 6, 8, 6, 9, 5]
+    matched = _right(_phrase_matcher(letters), screens)
+    for position, (got, guessed) in enumerate(zip(matched, fixed, strict=True), start=1):
+        assert got <= guessed, f"question {position}: matching words beats a fixed answer"
+    assert cells - sum(matched) >= 36, matched
+    assert matched == [1, 4, 8, 0, 0, 0], "the measured result, so that a change is seen"
+    sharper = _right(_relative_matcher(letters), screens)
+    assert sum(sharper) <= sum(fixed) and cells - sum(sharper) >= 27, sharper
+    assert sharper == [6, 8, 1, 0, 0, 0], "the measured result, so that a change is seen"
+    relative = _relative_matcher(letters)
+    assert [relative[letter][0] for letter in "BGH"] == ["yes"] * 3, "and wrong: no finding there"
+    # The matchers are real ones. A question of the card before the last, asked in the screen's
+    # own words, has more of its words on the one analysis it is true of than on any other.
+    old = "Does the screen report a risk gate: a finding about market conditions or execution?"
+    found = {letter: len(_words(old) & _words(_printed(letter))) for letter in letters}
+    others = [found[letter] for letter in letters if letter != "F"]
+    assert found["F"] >= 6 and found["F"] > max(others)
+
+
+def _quotable(screen: dict) -> list[str]:
+    """What a question must not quote from one analysis: each headline, each label of two words
+    or more, and each sentence of the view (its detail, gate summary, framing, gate entries and
+    the notes under the rows), with the badge and the request-time row."""
+
+    view = screen["view"]
+    gates = view["gates"]
+    labels = [label for label in screen["rows"] if len(_WORD.findall(label.lower())) >= 2]
+    headlines = [view["headline"], *(entry["headline"] for entry in gates["blocks"])]
+    return [*headlines, *labels, card.REQUESTED_ROW_LABEL, "Decision view"]
+
+
+def test_no_question_quotes_a_headline_a_label_or_a_framing_sentence(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """Owner ruling U3, item 5: a question may share ordinary words with the screen; it may not
+    quote it. No question and no choice contains a headline or a label of an analysis (of two
+    words or more), and none repeats four words in a row of anything an analysis prints."""
+
+    asked = [
+        text for question, choices in card.QUESTIONS for text in (question, *dict(choices).values())
+    ]
+    assert len(asked) == 6 + 2 * 3 + 4 + 3 + 3
     for letter, screen in screens.items():
-        # Everything printed for this analysis: the product's lines and the card's own around
-        # them. Every line the screen code drew is among them.
-        printed = text.split(f"## Analysis {letter}\n")[1].split("\n## ")[0].lower()
+        printed = " ".join(_WORD.findall(_printed(letter).lower()))
         for line in screen["texts"]:
-            assert line.lower() in printed, (letter, line)
-        on_screen = {_stem(word) for word in _WORD.findall(printed)}
-        joined = " ".join(_WORD.findall(printed))
-        for where, sentence in asked.items():
-            shared = _distinctive(sentence) & on_screen
-            assert shared == set(), f"analysis {letter}, {where}: {sorted(shared)} is printed"
-            words = _WORD.findall(sentence.lower())
-            for at in range(len(words) - 2):
-                run = " ".join(words[at : at + 3])
-                assert run not in joined, f"analysis {letter}, {where}: {run!r} is printed"
-    # The guard has teeth: the questions of the card before this one fail it.
-    old = "Does the screen say this analysis is saved in Recent Analysis history?"
-    saved_line = {_stem(word) for word in _WORD.findall(RECEIPT_TEXT["SAVED"].lower())}
-    assert _distinctive(old) & saved_line >= {"saved", "recent", "history"}
-    old_risk = "Does the screen report a risk gate: a finding about market conditions or execution?"
-    f_words = {_stem(w) for line in screens["F"]["texts"] for w in _WORD.findall(line.lower())}
-    assert len(_distinctive(old_risk) & f_words) >= 5
+            assert " ".join(_WORD.findall(line.lower())) in printed, (letter, line)
+        for text in asked:
+            said = _WORD.findall(text.lower())
+            for quoted in _quotable(screen):
+                phrase = " ".join(_WORD.findall(quoted.lower()))
+                assert f" {phrase} " not in f" {' '.join(said)} ", (letter, text, quoted)
+            for at in range(len(said) - 3):
+                run = " ".join(said[at : at + 4])
+                assert f" {run} " not in f" {printed} ", f"{letter}: {text!r} quotes {run!r}"
+    # The rule has teeth: a question in the screen's own words fails both halves of it.
+    printed = " ".join(_WORD.findall(_printed("A").lower()))
+    assert " no forecast quality claim " in f" {printed} "
+    assert "no accepted forecast" in " ".join(_WORD.findall(_quotable(screens["A"])[0].lower()))
+
+
+def test_the_questions_are_plain_and_the_choices_of_each_are_parallel() -> None:
+    """Owner ruling U3, item 5. The questions are asked as a colleague would ask them: each is
+    one sentence that ends in a question mark, asks about the analysis or the screen, and never
+    "does the screen say". The choices of one question are parallel in form and length: the same
+    number of clauses, and no choice carries an explanation the others lack. The three causes of
+    a block are three separate yes/no questions, in the order market, data, model."""
+
+    assert len(card.QUESTIONS) == 6
+    for number, (question, choices) in enumerate(card.QUESTIONS, start=1):
+        assert question.endswith("?") and question.count("?") == 1, number
+        lowered = question.lower()
+        for stiff in ("does the screen say", "does the screen report", "does it say"):
+            assert stiff not in lowered, number
+        meanings = [meaning for _, meaning in choices]
+        assert all(meaning.endswith(".") and meaning.count(".") == 1 for meaning in meanings)
+        clauses = {len(re.split(r"[:,]", meaning)) for meaning in meanings}
+        assert len(clauses) == 1, f"question {number}: one choice explains more than another"
+        lengths = [len(meaning.split()) for meaning in meanings]
+        assert max(lengths) - min(lengths) <= 3, f"question {number}: {lengths}"
+        assert [choice for choice, _ in choices] in (["yes", "no"], list("abcd"), list("abc"))
+    assert [choices == card.YES_NO for _, choices in card.QUESTIONS] == [True] * 3 + [False] * 3
+    market, data, model = (question.lower() for question, _ in card.QUESTIONS[:3])
+    assert "measured in the market" in market and "model" not in market and "data" not in market
+    assert "market data" in data and "safety switch" in data and "model" not in data
+    assert "model" in model and "data" not in model and "market" not in model
+    # Each asks for ONE of the reasons: an analysis blocked by two gates has one answer to each.
+    assert all(text.startswith("is one of the reasons ") for text in (market, data, model))
+    assert "missing or could not be used" in data, "missing or unusable data, in plain words"
+    # The words the last card needed to dodge its own ban are gone.
+    stiff = ("set you back", "pick a rise", "started afresh", "vouched", "lean on the figures")
+    everything = " ".join(
+        text for question, choices in card.QUESTIONS for text in (question, *dict(choices).values())
+    ).lower()
+    for phrase in stiff:
+        assert phrase not in everything, phrase
 
 
 def _market_call_reader(screen: dict) -> tuple[str, ...]:
-    """A reader who takes BLOCK and the Gate disposition for a call on the market: whatever holds
-    an analysis up is about the market, and the disposition says what to do."""
+    """Adversary (b): a reader who takes BLOCK and the Gate disposition for a call on the market.
+    Whatever blocks an analysis is about the market (so not about the data or the model), and the
+    disposition says what to do."""
 
     key = screen["key"]
     disposition = screen["payload"]["frontend_display"]["disposition"]
@@ -278,8 +439,8 @@ def _market_call_reader(screen: dict) -> tuple[str, ...]:
 
 
 def _storage_readers(screen: dict) -> list[str]:
-    """What a reader answers to the storage question who takes the badge at the top, or the
-    "Storage when requested" row, for the word on this one analysis."""
+    """Adversary (c): what a reader answers to the save question who takes the badge at the top,
+    or the "Storage when requested" row, for the word on this one analysis."""
 
     by_status = {"OK": "a", "STATELESS": "b", "UNAVAILABLE": "c", "UNKNOWN": "c"}
     scenario = screen["scenario"]
@@ -289,9 +450,11 @@ def _storage_readers(screen: dict) -> list[str]:
 def test_the_two_tempting_misreadings_are_wrong_on_every_analysis(
     screens: dict[str, dict[str, object]],
 ) -> None:
-    """Owner ruling S5. On every analysis at least one question is answered wrongly by a reader
-    who takes BLOCK / NO_TRADE as a market call, and at least one by a reader who takes the
-    storage badge or the request-time row for the save receipt."""
+    """Owner rulings S5 and U3 (item 5), adversaries (b) and (c). On every analysis at least one
+    question is answered wrongly by a reader who takes BLOCK / NO_TRADE as a market call. A
+    reader who takes the storage badge, or the request-time row, for the save receipt is wrong
+    on the save question wherever that line says something else than the receipt, and each of
+    the two lines does so on at least one analysis."""
 
     for letter, screen in screens.items():
         key = screen["key"]
@@ -311,13 +474,34 @@ def test_the_two_tempting_misreadings_are_wrong_on_every_analysis(
     # analysis that is held up without a risk gate.
     for letter in "ABDEGHI":
         assert _market_call_reader(screens[letter])[0] != screens[letter]["key"][0], letter
-    # The badge reader is wrong on every analysis; the request-time reader on all but two, where
-    # that row and the receipt cannot honestly disagree (C: both say kept; I: no storage at all).
-    readers = {letter: _storage_readers(screen) for letter, screen in screens.items()}
-    badge_wrong = [at for at, read in readers.items() if read[0] != screens[at]["key"][5]]
-    requested_wrong = [at for at, read in readers.items() if read[1] != screens[at]["key"][5]]
+    # Adversary (c), read off the screen's own lines: what each of the three storage lines of an
+    # analysis means for the save question. The key is the receipt's meaning, on every analysis.
+    means = {
+        STATUS_TEXT["OK"]: "a",
+        STATUS_TEXT["STATELESS"]: "b",
+        STATUS_TEXT["UNAVAILABLE"]: "c",
+        STATUS_TEXT["UNKNOWN"]: "c",
+        RECEIPT_TEXT["SAVED"]: "a",
+        RECEIPT_TEXT["NOT_RETAINED"]: "b",
+        RECEIPT_TEXT["FAILED"]: "c",
+    }
+    badge_wrong, requested_wrong = [], []
+    for letter, screen in screens.items():
+        receipt_says = means[screen["rows"]["Storage"]]
+        assert screen["key"][5] == receipt_says, letter
+        badge_says = means[screen["badge"].removeprefix("Storage, last checked: ")]
+        requested_says = means[screen["requested"]]
+        assert [badge_says, requested_says] == _storage_readers(screen), letter
+        if badge_says != receipt_says:
+            badge_wrong.append(letter)
+        if requested_says != receipt_says:
+            requested_wrong.append(letter)
+    # The badge says something else than the receipt on seven analyses, the request-time row on
+    # seven; the two analyses each agrees on are ones where it cannot honestly differ here
+    # (C and I for the row: both say kept, and no storage at all).
     assert badge_wrong == ["A", "B", "C", "D", "F", "G", "I"], badge_wrong
     assert requested_wrong == ["A", "B", "D", "E", "F", "G", "H"], requested_wrong
+    assert {screen["key"][5] for screen in screens.values()} == {"a", "b", "c"}, "all three states"
 
 
 def test_the_save_receipt_on_the_card_is_the_backends_in_the_screens_words(
@@ -481,6 +665,10 @@ def test_the_committed_card_is_current_says_what_it_is_and_is_never_marked_run()
         assert marked not in text, marked
     assert "Analyses C, E are **SYNTHETIC**" in text
     assert "Analysis B is **SYNTHETIC** too, for a different reason." in text
+    assert "Analysis H is **SYNTHETIC** as well. The safety shutdown it shows is switched" in text
+    assert "## How to run it (about thirty minutes)" in text
+    together = "Questions 1 to 3 go together: an analysis can be blocked\nfor more than one reason"
+    assert together in text and text.index(together) < text.index("\n1. Is one of the reasons")
     assert "the product shows an error message and no analysis" in text
     assert "Some analyses below are **SYNTHETIC**" in text
     assert text.index("**SYNTHETIC**") < text.index("## Analysis A"), "said before any analysis"

@@ -13,41 +13,43 @@ Each analysis below is one screen, as the product draws it: the storage badge at
 page, the **Decision view** as the detail panel shows it, and one row from the Overview section
 further down the same panel.
 
-## How to run it (about twenty minutes)
+## How to run it (about thirty minutes)
 
 1. Read analyses A to I below as you would read them on screen. Do not look at the answer
    key first.
 2. For each analysis, answer the six questions on paper, each with one of its listed answers.
-   The questions ask what the screen means; their words are not the screen's, on purpose.
+   They ask what the screen means for you, not which words are on it.
 3. Then compare your answers with the key at the end.
 
 **PASS:** every answer matches the key. **Any mismatch:** the UX does not PASS. Send Claude
 the analysis letter and the question number only; the screen's wording is then what changes.
 
-The six questions, for every analysis:
+The six questions, for every analysis. Questions 1 to 3 go together: an analysis can be blocked
+for more than one reason, so more than one of them can be yes. If it is not blocked at all, all
+three are no.
 
-1. Is this one held up by something that was actually observed about prices, or about what dealing would set you back?
+1. Is one of the reasons this analysis is blocked something the system actually measured in the market, such as extreme price moves or trading costs that are too high?
    - **yes** — Yes.
    - **no** — No.
-2. Is this one held up because nobody has yet proved that the method can pick a rise from a fall?
+2. Is one of the reasons that market data the system needed today (prices, the order book) was missing or could not be used, or that a safety switch was on?
    - **yes** — Yes.
    - **no** — No.
-3. Is this one held up by an input that was absent or unfit for use, or by a safeguard somebody switched on?
+3. Is one of the reasons that the model has not yet shown it can predict direction?
    - **yes** — Yes.
    - **no** — No.
-4. How far may you lean on the figures here?
-   - **a** — Not at all: nobody has vouched for them.
-   - **b** — They are formally vouched for, but no side (rise or fall) is cleared.
-   - **c** — They are formally vouched for, and a side is cleared.
-   - **d** — There are none to lean on: what came in was not good enough.
-5. Taken as a whole, what does this one say to somebody about to buy or sell?
-   - **a** — Stay out.
-   - **b** — Proceed.
-   - **c** — Neither: what to do is left to you.
-6. If the machine behind all this were started afresh tonight, would you bet on seeing this one among the earlier runs tomorrow?
-   - **a** — Yes.
-   - **b** — No: it was never going to outlive a fresh start.
-   - **c** — It might go either way.
+4. How much can you rely on the percentages on this screen as a forecast?
+   - **a** — Only as rough background: nobody has signed off on their accuracy.
+   - **b** — As a signed-off forecast, but with no direction approved.
+   - **c** — As a signed-off forecast, and with a direction approved.
+   - **d** — Not at all: the data was too poor to show any.
+5. What does this screen tell you to do about a trade?
+   - **a** — It tells me to stay out.
+   - **b** — It tells me to go ahead.
+   - **c** — It tells me neither.
+6. If the server were restarted tonight, would this analysis still be in Recent Analysis tomorrow?
+   - **a** — Yes, it will still be there.
+   - **b** — No, it will be gone.
+   - **c** — Maybe, it could go either way.
 
 ## Analysis A
 
@@ -472,15 +474,15 @@ Further down the same panel, in Overview:
 
 | Analysis | 1 | 2 | 3 | 4 | 5 | 6 |
 | --- | --- | --- | --- | --- | --- | --- |
-| A | no | yes | no | a | c | a |
+| A | no | no | yes | a | c | a |
 | B | no | yes | yes | d | c | c |
 | C | no | no | no | c | c | a |
-| D | no | yes | no | a | c | c |
-| E | no | yes | no | b | c | a |
-| F | yes | yes | no | a | c | a |
+| D | no | no | yes | a | c | c |
+| E | no | no | yes | b | c | a |
+| F | yes | no | yes | a | c | a |
 | G | no | yes | yes | a | c | c |
 | H | no | yes | yes | a | c | a |
-| I | no | yes | no | a | c | b |
+| I | no | no | yes | a | c | b |
 
 ## What this check covers, and what it does not
 
@@ -495,18 +497,29 @@ Further down the same panel, in Overview:
 - Analysis B is **SYNTHETIC** too, for a different reason. Today, when the market data
   are missing or too short, the product shows an error message and no analysis, so no screen
   shows this state. The product's own code built it for this card only.
+- Analysis H is **SYNTHETIC** as well. The safety shutdown it shows is switched off in
+  today's product, and no setting turns it on, so no screen shows this state. The product's
+  own gates built it for this card only, with the switch set.
 - Every number is a made-up example, not market data. The gates are the product's own: each
   analysis's gate result, and so its Gate disposition, is what the real gates return for its
   made-up inputs.
 - The answer key is computed from each analysis's own data (the response the product builds
-  and its save receipt), not typed in: questions 1 to 3 from the kinds of gate the view
-  names, question 4 from the view's state, question 5 from the product's own permission to
-  enter (never given), question 6 from the save receipt.
-- What the questions are for. Questions 1 to 3 and 5 are answered wrongly by a reader who
-  takes BLOCK or the Gate disposition for a call on the market. Question 6 is answered
-  wrongly by a reader who takes the badge at the top, or the "Storage when requested" row,
-  for the word on this one analysis: on every analysis here at least one of those two says
-  something else than the Decision view's Storage row, which is the save receipt.
+  and its save receipt), not typed in. Questions 1 to 3 are the three kinds of gate the view
+  can name: a risk gate (a measured finding about the market), a system or data gate (data
+  that was missing or unusable, or the safety shutdown) and the evidence gate (a model that
+  is not yet proven). Question 4 is the view's state, question 5 the product's own
+  permission to enter, and question 6 the save receipt.
+- Question 5 has the same answer on every analysis: c. The product is
+  analysis only: it never tells anyone to buy, to sell or to stay out. The question is
+  asked each time all the same, because it is the one a reader gets wrong who takes
+  BLOCK or the Gate disposition for a call on the market. The other questions are the
+  ones whose answers differ between the analyses.
+- What the questions are for. Question 5, and question 1 wherever something other than a
+  measured finding blocks, are answered wrongly by a reader who takes BLOCK or the Gate
+  disposition for a call on the market. Question 6 is answered wrongly by a reader who takes
+  the badge at the top, or the "Storage when requested" row, for the word on this one
+  analysis: on every analysis here at least one of those two says something else than the
+  Decision view's Storage row, which is the save receipt.
 - Each analysis's Decision view is what the detail panel shows, line for line: the product's
   own screen code drew it for this card, and the badge and the Overview row with it. The
   cards of the Single Crypto Analysis and Batch Crypto Analysis screens show the same

@@ -77,44 +77,51 @@ TIMEFRAME = "1H"
 CLAIM_KEY = f"{PROBABILITY_TYPE}:{METHODOLOGY}:{TIMEFRAME}"
 YES_NO = (("yes", "Yes."), ("no", "No."))
 # Each question: what it asks, and its fixed choices (what a reader writes down, what it means).
-# The words are deliberately not the screen's: tests refuse a question that can be answered by
-# finding its words on an analysis.
+# They are written as a colleague would ask them, and they ask what a screen MEANS for its reader.
+# A question may share ordinary words with a screen; it quotes no headline, label or framing
+# sentence, and the tests run three adversaries against the generated card: a reader who answers
+# by finding a question's words on the analysis, one who takes the gates' disposition for a call
+# on the market, and one who takes the storage badge or the request-time row for the receipt.
+# The choices of one question are parallel in form and length.
 QUESTIONS = (
     (
-        "Is this one held up by something that was actually observed about prices, or about "
-        "what dealing would set you back?",
+        "Is one of the reasons this analysis is blocked something the system actually measured "
+        "in the market, such as extreme price moves or trading costs that are too high?",
         YES_NO,
     ),
     (
-        "Is this one held up because nobody has yet proved that the method can pick a rise from "
-        "a fall?",
+        "Is one of the reasons that market data the system needed today (prices, the order "
+        "book) was missing or could not be used, or that a safety switch was on?",
         YES_NO,
     ),
     (
-        "Is this one held up by an input that was absent or unfit for use, or by a safeguard "
-        "somebody switched on?",
+        "Is one of the reasons that the model has not yet shown it can predict direction?",
         YES_NO,
     ),
     (
-        "How far may you lean on the figures here?",
+        "How much can you rely on the percentages on this screen as a forecast?",
         (
-            ("a", "Not at all: nobody has vouched for them."),
-            ("b", "They are formally vouched for, but no side (rise or fall) is cleared."),
-            ("c", "They are formally vouched for, and a side is cleared."),
-            ("d", "There are none to lean on: what came in was not good enough."),
+            ("a", "Only as rough background: nobody has signed off on their accuracy."),
+            ("b", "As a signed-off forecast, but with no direction approved."),
+            ("c", "As a signed-off forecast, and with a direction approved."),
+            ("d", "Not at all: the data was too poor to show any."),
         ),
     ),
     (
-        "Taken as a whole, what does this one say to somebody about to buy or sell?",
-        (("a", "Stay out."), ("b", "Proceed."), ("c", "Neither: what to do is left to you.")),
+        "What does this screen tell you to do about a trade?",
+        (
+            ("a", "It tells me to stay out."),
+            ("b", "It tells me to go ahead."),
+            ("c", "It tells me neither."),
+        ),
     ),
     (
-        "If the machine behind all this were started afresh tonight, would you bet on seeing "
-        "this one among the earlier runs tomorrow?",
+        "If the server were restarted tonight, would this analysis still be in Recent Analysis "
+        "tomorrow?",
         (
-            ("a", "Yes."),
-            ("b", "No: it was never going to outlive a fresh start."),
-            ("c", "It might go either way."),
+            ("a", "Yes, it will still be there."),
+            ("b", "No, it will be gone."),
+            ("c", "Maybe, it could go either way."),
         ),
     ),
 )
@@ -200,7 +207,7 @@ class Scenario:
     data_ok: bool = True  # False: no venue served data (SYNTHETIC)
     tail: bool = False  # a measured tail-risk breach
     usable_book: bool = True  # False: a book was served whose spread the measure refuses
-    kill: bool = False  # the kill switch
+    kill: bool = False  # the kill switch (SYNTHETIC: a constant False in the product today)
     requested: str = "OK"  # storage's status when the analysis was requested
     badge: str = "OK"  # storage's status when it was last asked (the badge at the top)
     receipt: str = save_receipt.SAVED  # the save receipt's state for this analysis
@@ -227,7 +234,7 @@ SCENARIOS = (
         "G", "an unusable order book (a data gate)", False, usable_book=False,
         receipt=save_receipt.FAILED,
     ),
-    Scenario("H", "the kill switch (a system gate)", False, kill=True, requested="UNAVAILABLE"),
+    Scenario("H", "the kill switch (a system gate)", True, kill=True, requested="UNAVAILABLE"),
     Scenario(
         "I", "unproven model, storage not configured", False, requested="STATELESS",
         badge="UNKNOWN", receipt=save_receipt.NOT_RETAINED,
@@ -260,12 +267,14 @@ def answers(payload: dict[str, Any], receipt: dict[str, Any]) -> tuple[str, ...]
         save_receipt.PENDING: "c",
     }[receipt["state"]]
     return (
-        # A risk gate reports a measured finding about the market or its execution.
+        # The three causes a gate can report, kept apart: a risk gate reports a measured finding
+        # about the market or its execution; a system or data gate reports missing or unusable
+        # data, or a safety switch; the evidence gate reports an unproven model.
         yes_no(gates["risk_gate_active"] is True),
-        yes_no("EVIDENCE" in gates["kinds"]),
         yes_no("SYSTEM_OR_DATA" in gates["kinds"]),
+        yes_no("EVIDENCE" in gates["kinds"]),
         standing,
-        # The product never tells anybody to stay out or to proceed: its own permission to
+        # The product never tells anybody to stay out or to go ahead: its own permission to
         # enter is the one fact that could make this "b", and no fact of the payload says "a".
         "b" if permission["can_enter_now"] is True else "c",
         kept,
@@ -486,18 +495,20 @@ Each analysis below is one screen, as the product draws it: the storage badge at
 page, the **Decision view** as the detail panel shows it, and one row from the Overview section
 further down the same panel.
 
-## How to run it (about twenty minutes)
+## How to run it (about thirty minutes)
 
 1. Read analyses A to I below as you would read them on screen. Do not look at the answer
    key first.
 2. For each analysis, answer the six questions on paper, each with one of its listed answers.
-   The questions ask what the screen means; their words are not the screen's, on purpose.
+   They ask what the screen means for you, not which words are on it.
 3. Then compare your answers with the key at the end.
 
 **PASS:** every answer matches the key. **Any mismatch:** the UX does not PASS. Send Claude
 the analysis letter and the question number only; the screen's wording is then what changes.
 
-The six questions, for every analysis:
+The six questions, for every analysis. Questions 1 to 3 go together: an analysis can be blocked
+for more than one reason, so more than one of them can be yes. If it is not blocked at all, all
+three are no.
 """
 
 # What the Single Crypto Analysis screen shows around the view, for each timeframe (frontend/app.js
@@ -533,18 +544,25 @@ _LIMITS = """
 - Analysis {invalid} is **SYNTHETIC** too, for a different reason. Today, when the market data
   are missing or too short, the product shows an error message and no analysis, so no screen
   shows this state. The product's own code built it for this card only.
+- Analysis {system} is **SYNTHETIC** as well. The safety shutdown it shows is switched off in
+  today's product, and no setting turns it on, so no screen shows this state. The product's
+  own gates built it for this card only, with the switch set.
 - Every number is a made-up example, not market data. The gates are the product's own: each
   analysis's gate result, and so its Gate disposition, is what the real gates return for its
   made-up inputs.
 - The answer key is computed from each analysis's own data (the response the product builds
-  and its save receipt), not typed in: questions 1 to 3 from the kinds of gate the view
-  names, question 4 from the view's state, question 5 from the product's own permission to
-  enter (never given), question 6 from the save receipt.
-- What the questions are for. Questions 1 to 3 and 5 are answered wrongly by a reader who
-  takes BLOCK or the Gate disposition for a call on the market. Question 6 is answered
-  wrongly by a reader who takes the badge at the top, or the "Storage when requested" row,
-  for the word on this one analysis: on every analysis here at least one of those two says
-  something else than the Decision view's Storage row, which is the save receipt.
+  and its save receipt), not typed in. Questions 1 to 3 are the three kinds of gate the view
+  can name: a risk gate (a measured finding about the market), a system or data gate (data
+  that was missing or unusable, or the safety shutdown) and the evidence gate (a model that
+  is not yet proven). Question 4 is the view's state, question 5 the product's own
+  permission to enter, and question 6 the save receipt.
+{constant}
+- What the questions are for. Question 5, and question 1 wherever something other than a
+  measured finding blocks, are answered wrongly by a reader who takes BLOCK or the Gate
+  disposition for a call on the market. Question 6 is answered wrongly by a reader who takes
+  the badge at the top, or the "Storage when requested" row, for the word on this one
+  analysis: on every analysis here at least one of those two says something else than the
+  Decision view's Storage row, which is the save receipt.
 - Each analysis's Decision view is what the detail panel shows, line for line: the product's
   own screen code drew it for this card, and the badge and the Overview row with it. The
   cards of the Single Crypto Analysis and Batch Crypto Analysis screens show the same
@@ -576,6 +594,24 @@ def _markdown(block: dict[str, Any], *, headline: bool) -> list[str]:
     if block["kind"] == "list":
         return [*(f"- {item}" for item in block["items"]), ""]
     return [f"**{block['text']}**" if headline else block["text"], ""]
+
+
+def _constant_note(keys: list[tuple[str, ...]]) -> str:
+    """The note on every question whose answer is the same on every analysis, said as it is. It
+    is computed from the key: a question that tells the analyses apart is not named here."""
+
+    notes = []
+    for position, column in enumerate(zip(*keys, strict=True), start=1):
+        if len(set(column)) == 1:
+            notes.append(
+                f"- Question {position} has the same answer on every analysis: {column[0]}. The "
+                "product is\n  analysis only: it never tells anyone to buy, to sell or to stay "
+                "out. The question is\n  asked each time all the same, because it is the one a "
+                "reader gets wrong who takes\n  BLOCK or the Gate disposition for a call on the "
+                "market. The other questions are the\n  ones whose answers differ between the "
+                "analyses."
+            )
+    return "\n".join(notes)
 
 
 def _letters(letters: list[str]) -> str:
@@ -634,10 +670,14 @@ def card_markdown() -> str:
         return _letters([s.letter for s in SCENARIOS if s.receipt == state])
 
     accepted = ", ".join(s.letter for s in SCENARIOS if s.synthetic and s.accepted)
-    invalid = ", ".join(s.letter for s in SCENARIOS if s.synthetic and not s.accepted)
+    invalid = ", ".join(s.letter for s in SCENARIOS if s.synthetic and not s.data_ok)
+    system = ", ".join(s.letter for s in SCENARIOS if s.synthetic and s.kill)
+    keys = [answers(screen["payload"], screen["receipt"]) for screen in drawn]
     lines += _LIMITS.format(
         accepted=accepted,
         invalid=invalid,
+        system=system,
+        constant=_constant_note(keys),
         outside="\n".join(f"    - {name}" for name, _, _ in OUTSIDE_THE_VIEW),
         under="\n".join(f"    - {name}" for name in UNDER_THE_VIEW),
         saved=by_state(save_receipt.SAVED),
