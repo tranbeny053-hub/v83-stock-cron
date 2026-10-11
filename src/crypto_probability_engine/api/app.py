@@ -63,8 +63,8 @@ from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
 WATCHLIST_LIMIT = 20
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
-# How many times the run store is listed for a route's visibility check before a store that keeps
-# changing under the listing is reported as the error it is (_listed_as_user_requested).
+# How many times the run store is listed for a route's visibility check before a listing that
+# keeps raising is reported as the error it is (_listed_as_user_requested).
 _RUN_LISTING_ATTEMPTS = 3
 
 
@@ -527,9 +527,10 @@ def _listed_as_user_requested(run_store, run_id: str) -> bool:
     """Whether the run store lists the run under the USER_REQUESTED origin: the visibility rule of
     the detail route and of the receipt route.
 
-    The store is listed while another request may be adding a run to it, and a store that changes
-    under its own listing raises RuntimeError. The listing is then made again: three attempts in
-    all, and the third failure is raised as it is.
+    The store is listed while another request may be adding a run to it. The store takes a lock for
+    that (persistence/run_store.py), so its listing no longer raises. The attempts stay as a second
+    guard: a listing that raises RuntimeError is made again, three attempts in all, and the third
+    failure is raised as it is.
     """
 
     attempt = 0
