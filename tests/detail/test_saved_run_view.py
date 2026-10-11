@@ -120,8 +120,11 @@ def test_a_saved_run_shows_what_its_record_holds_and_none_for_what_it_does_not(
         "gates",
         "gates_note",
         "disposition",
+        "gate_action",
+        "hard_blocks",
         "venue",
-        "horizon",
+        "timeframe_label",
+        "horizon_label",
         "time",
         "data",
         "range",
@@ -131,7 +134,10 @@ def test_a_saved_run_shows_what_its_record_holds_and_none_for_what_it_does_not(
     # Held by the record, and equal to what the live view showed for the same analysis.
     assert saved["disposition"] == payload["frontend_display"]["disposition"] == "NO_TRADE"
     assert saved["venue"] == view["data"]["venue"] == "okx"
-    assert saved["horizon"] == "1H setup / ~6H horizon"
+    assert saved["gate_action"] == payload["gate_result"]["action"] == "NO_TRADE"
+    assert saved["hard_blocks"] == payload["gate_result"]["hard_blocks"]
+    assert saved["timeframe_label"] == payload["timeframes"]["timeframe_label"] == "1H setup"
+    assert saved["horizon_label"] == payload["timeframes"]["horizon_label"] == "~6H horizon"
     assert saved["data"] == {"data_source": "OKX_PUBLIC", "is_live_data": True}
     for name in ("assessed", "decision_band_frac", "in_band_frac", "up_frac", "down_frac"):
         assert saved["range"][name] == view["range"][name], name
@@ -170,13 +176,16 @@ def test_the_disposition_is_the_one_the_live_analysis_showed(
     kill = _analysis(kill=True)
     assert kill["decision_brief"]["action"] == "NO_TRADE"
     assert _read(kill)["disposition"] == kill["frontend_display"]["disposition"] == "ABORT"
+    assert _read(kill)["gate_action"] == "ABORT"
+    assert _read(kill)["hard_blocks"] == ["KILL_SWITCH", "SKILL_NOT_DEMONSTRATED"]
     # A gate that passed (SYNTHETIC: the evidence gate lifted): the score's disposition.
     clear = _analysis(lifted=True)
     assert clear["gate_result"]["hard_gate_passed"] is True
     saved = _read(clear)
     assert saved["disposition"] == clear["frontend_display"]["disposition"]
     assert saved["disposition"] == clear["score_stack"]["disposition"]
-    assert saved["gates"]["blocked"] is False
+    assert saved["gates"]["blocked"] is False and saved["hard_blocks"] == []
+    assert saved["gate_action"] == clear["gate_result"]["action"]
     assert saved["gates"]["summary"] == gate_kinds.NO_HARD_GATE
 
 
@@ -287,6 +296,7 @@ def test_a_malformed_stored_gate_result_is_never_framed_and_the_view_says_so(
     assert stored == before and "saved_run_view" not in stored, "the stored detail is not changed"
     saved = read["saved_run_view"]
     assert saved["gates"] is None and saved["disposition"] is None
+    assert saved["gate_action"] is None and saved["hard_blocks"] is None
     assert saved["gates_note"] == (
         "No gate result can be read from this saved analysis, so no gate framing is shown."
     )
@@ -378,7 +388,9 @@ def test_a_value_of_the_wrong_type_reads_as_not_kept() -> None:
         "decision_brief": {"timeframe_label": "1H setup", "calibration_status": 0},
     }
     saved = saved_run_view.build_saved_run_view(stored)
-    assert saved["disposition"] is None and saved["venue"] is None and saved["horizon"] is None
+    assert saved["disposition"] is None and saved["venue"] is None
+    assert saved["gate_action"] is None and saved["hard_blocks"] == ["SKILL_NOT_DEMONSTRATED"]
+    assert saved["timeframe_label"] == "1H setup" and saved["horizon_label"] is None
     assert saved["data"] == {"data_source": None, "is_live_data": None}
     assert saved["range"]["up_frac"] is None and saved["range"]["down_frac"] is None
     assert saved["range"]["in_band_frac"] is None and saved["cost"]["round_trip_cost_frac"] is None

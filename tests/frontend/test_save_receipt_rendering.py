@@ -40,6 +40,7 @@ import test_accepted_state_rendering as harness
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.detail.saved_run_view import attach_saved_run_view
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 
@@ -471,7 +472,7 @@ const scenarios = {
     out.reopenedFromHistory = {
       ...watchState(),
       details: requests.filter((item) => item.path.startsWith("/v1/analyze/detail/")).length,
-      shown: visibleTexts(detailPanel, skipped).includes("Gate brief (not a market call)"),
+      shown: visibleTexts(detailPanel, skipped).includes("Saved analysis"),
     };
 
     await showDetail(data.legacy, {});
@@ -961,7 +962,8 @@ def _requested_with(storage: str) -> dict:
 
 
 def _reopened(payload: dict) -> dict:
-    """A saved run as it is read back: a history row, and the detail as the store exports it."""
+    """A saved run as it is read back: a history row, and the detail as the detail route returns
+    it (what the store exports, with the view the route builds from it when it reads it)."""
 
     row = {
         "run_id": payload["run_id"],
@@ -976,7 +978,8 @@ def _reopened(payload: dict) -> dict:
         "data_source": payload["data_quality"]["data_source"],
         "is_live_data": True,
     }
-    return {"row": row, "detail": sanitize_for_export(copy.deepcopy(payload["detail_view"]))}
+    stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
+    return {"row": row, "detail": attach_saved_run_view(stored)}
 
 
 @pytest.fixture(scope="module")

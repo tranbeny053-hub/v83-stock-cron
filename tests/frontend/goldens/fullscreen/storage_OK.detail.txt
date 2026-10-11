@@ -35,33 +35,6 @@ No forecast-quality claim is accepted for this model and timeframe.
 Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
 No profitability claim.
 Decision
-Gate disposition (not a market call)
-No trade
-Reliability: INSUFFICIENT_SAMPLE
-LOW
-No trade is supported by the current backend state.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
-Primary reason
-Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
-Next action
-Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
-Candidate labels are planning context only and do not grant entry permission.
-Gate checks
-BLOCK
-Hard gates
-#4
-Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
-Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
-PASS
-Tail risk
-#5
-Tail-risk status is OK.
-Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
 Probability interpretation
 Informational only
 UP_LEAN
@@ -142,58 +115,6 @@ Calibration reliability
 #11
 Reliability status is INSUFFICIENT_SAMPLE.
 Evidence: calibration_state.reliability_status
-BLOCK
-Final decision
-#12
-Decision synthesis label is NO_TRADE.
-Evidence: decision_synthesis.decision_synthesis.label
-Advisor explanation
-Why this decision
-No trade is supported by the current backend state.
-Why immediate action is unavailable
-UI-D1.1 has no validated numeric entry, invalidation, or target geometry.
-Why probability is muted
-Probability is muted because a hard gate is active.
-Why timeframe matters
-1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Why reliability is insufficient
-The payload does not report measured reliability from sufficient resolved samples.
-What could change the decision
-Re-evaluate after every active hard gate clears.
-Interpretation can strengthen only after the in-payload sample gate improves.
-Scenario plan
-Disabled
-Display only
-Scenario
-No action now
-Plan status
-Disabled
-Direction context
-Neutral
-Immediate action
-No
-Chase move
-No
-Why this is limited
-Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
-Wait for confirmation
-All active hard gates and blocking conditions must clear.
-Data, provider, liquidity, and execution states must be sufficient.
-What would change the plan
-Re-evaluate after every active hard gate clears.
-Interpretation can strengthen only after the in-payload sample gate improves.
-Blocking conditions must clear before a conditional scenario is available.
-Numeric entry, stop, target, and risk/reward are disabled for now.
-Safety notes
-Candidate plan only — not a trade command.
-Not financial advice.
-Numeric entry/stop/target disabled until calibration is measured.
-Advanced context · Future Quant V2
-Influence mode
-SHADOW_ONLY
-Decision influence
-0.00%
-Future quant hooks are shadow-only and do not affect this result.
 Model Quality
 Current status
 Probabilities remain heuristic until enough resolved samples exist; they do not establish realized outcomes or profitability evidence.
@@ -251,50 +172,6 @@ Data
 OK: Live data. Latest candle 0s old.
 Storage when requested
 Storage available
-Gate brief (not a market call)
-Gate disposition
-NO_TRADE
-Horizon
-1H setup / ~6H horizon
-Model readiness
-Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.
-Calibration
-DEFAULT_PHASE1A
-Reliability
-INSUFFICIENT_SAMPLE
-Profitability claim
-false
-State summary
-BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID (not forced by a risk gate).
-Volatility reference
-Volatility reference only — not a stop/target recommendation.
-Gate note
-Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
-Disclaimer
-Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
-Key Reasons
-Directional skill has not been evaluated: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
-Hard Blockers
-SKILL_NOT_DEMONSTRATED
-Watchlist Triggers
-Wait for hard blockers or degraded data conditions to clear.
-Re-check only with fresh backend data over the stated multi-bar horizon.
-Monitor whether backend hard gates remain clear.
-Invalidation Conditions
-Hard blocker persists: SKILL_NOT_DEMONSTRATED.
-Probability
-Type
-UNCALIBRATED_HEURISTIC_6BAR_OUTCOME
-Up
-39.38%
-Down
-38.50%
-In band
-22.12%
-Model readiness
-Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
-Explanation
-Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 Gates
 Gate action
 NO_TRADE

@@ -41,6 +41,7 @@ from crypto_probability_engine.detail.decision_brief import (
     PROBABILITY_EXPLANATION,
     PROBABILITY_TYPE,
 )
+from crypto_probability_engine.detail.gate_kinds import ACCEPTED_CLAIM_FRAMING
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from tests.fixtures.market_data import make_snapshot
 
@@ -49,17 +50,14 @@ NODE = shutil.which("node")
 METHODOLOGY = analysis_service.METHODOLOGY_VERSION
 NO_SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
 SKILL = {"verdict": "SKILL_DEMONSTRATED", "n": 400, "observed_directional_rate": 0.6}
-ACCEPTED_DISCLAIMER = "Not financial advice: it never tells you to trade. No profitability claim."
 ACCEPTED_DIAGNOSTICS = "Diagnostic only — not profitability evidence, not trade EV."
-# The UI's own texts under an accepted claim (frontend/app.js), beside the view's.
+# The UI's own texts under an accepted claim (frontend/app.js), beside the view's. The sentence
+# that frames the gates under a claim is the view's own (its gate authority), not the UI's.
 ACCEPTED_UI_TEXTS = {
-    ACCEPTED_DISCLAIMER,
     ACCEPTED_DIAGNOSTICS,
     "Not reported",
-    "Reliability: Not reported",
     "Advanced probability",
     "Calibration diagnostics unavailable.",
-    "The gates' disposition: hard gates outrank everything shown.",
 }
 
 # What would read as the uncalibrated heuristic under an accepted claim (owner ruling 2026-10-06).
@@ -93,7 +91,6 @@ STATE_INDEPENDENT_UI_TEXTS = {
     *("Calibration", "Calibration status", "Reliability", "Reliability status"),
     *("Reliability available", "Evidence", "Evidence level", "Why reliability is insufficient"),
     *("Live calibration diagnostics", "Read-only diagnostic", "news evidence"),
-    "Invalidation Conditions",
     "Per-timeframe calibration diagnostics",
     "Resolved-sample metrics are not surfaced in this view yet.",
     *("Heuristic probability", "Insufficient sample", "Measured calibration"),
@@ -107,7 +104,7 @@ STATE_INDEPENDENT_UI_TEXTS = {
     "Probability quality also depends on calibration, sample size, outcome mix, and evaluation "
     "context.",
     "Forecast diagnostics do not include execution costs, sizing, or realized returns.",
-    *("Gate brief (not a market call)", "Gate disposition (not a market call)"),
+    "Gate disposition (not a market call)",
 }
 
 
@@ -585,17 +582,15 @@ def test_the_accepted_state_is_shown_on_every_surface(rendered: dict, cases: dic
         for surface, texts in rendered[name].items():
             assert view["headline"] in texts, (name, surface)
         detail = rendered[name]["detail"]
-        probability = _between(detail, "Probability", "Gates")
-        # The Model readiness row states the accepted state; no Type row repeats it.
-        assert "Type" not in probability, name
-        assert _value(probability, "Model readiness") == view["headline"], name
-        assert _value(probability, "Explanation") == view["detail"], name
-        assert _value(detail, "State summary") == view["detail"], name
-        assert _value(detail, "Disclaimer") == ACCEPTED_DISCLAIMER, name
+        # The decision view states the accepted state: its headline, its sentence, and the
+        # Evidence level row. The view's sentence says what the percentages carry, so the view
+        # carries no explanation of the uncalibrated heuristic beside it.
+        assert detail[:3] == ["Decision view", view["headline"], view["detail"]], name
+        assert _value(detail, "Evidence level") == view["headline"], name
+        assert view["range"]["explanation"] is None and PROBABILITY_EXPLANATION not in detail
         assert "Calibration diagnostics unavailable." in detail, name
         assert ACCEPTED_DIAGNOSTICS in rendered[name]["detail_diagnostics"], name
         if name.endswith("_no_synthesis"):
-            assert _value(detail, "Gate brief summary") == view["detail"], name
             continue
         interpretation = _between(detail, "Probability interpretation", "Actionability stack")
         assert view["detail"] in interpretation, name
@@ -625,8 +620,10 @@ def test_the_legacy_evidence_copy_never_survives_an_accepted_claim(
             view["headline"],
             view["detail"],
             *view["evidence"]["limitations"],
+            view["gates"]["framing"],
             *ACCEPTED_UI_TEXTS,
         }
+        assert view["gates"]["framing"] == ACCEPTED_CLAIM_FRAMING
         run_ids = {payload["run_id"], cases[today]["run_id"]}
         for surface, texts in rendered[claim].items():
             shown, before = set(texts) - run_ids, set(rendered[today][surface]) - run_ids
@@ -664,12 +661,11 @@ def test_no_accepted_card_is_muted_as_informational(styled: dict) -> None:
 def test_a_missing_status_is_reported_as_missing_under_an_accepted_claim(rendered: dict) -> None:
     for name in ("claim_no_status", "permission_no_status"):
         detail = rendered[name]["detail"]
-        assert "Reliability: Not reported" in detail, name
         assert _value(detail, "Current status", "Calibration status") == "Not reported", name
         assert _value(detail, "Current status", "Reliability status") == "Not reported", name
     detail = rendered["today_no_status"]["detail"]
-    assert "Reliability: Not measured yet" in detail
     assert _value(detail, "Current status", "Calibration status") == "Not measured yet"
+    assert _value(detail, "Current status", "Reliability status") == "Not measured yet"
 
 
 def test_a_permission_is_shown_without_a_market_call_and_stays_non_advisory(
@@ -692,17 +688,28 @@ def test_without_an_accepted_claim_every_surface_reads_as_before(
     for name in WITHOUT_CLAIM:
         detail = rendered[name]["detail"]
         brief = cases[name]["decision_brief"]
-        assert _value(detail, "Probability", "Type") == PROBABILITY_TYPE, name
-        assert _value(detail, "Probability", "Explanation") == PROBABILITY_EXPLANATION, name
-        assert _value(detail, "State summary") == brief["state_summary"], name
-        assert _value(detail, "Disclaimer") == DISCLAIMER, name
+        if name == "history":
+            # A payload with no view and no saved-run view (none is served): no decision block.
+            assert "Decision view" not in detail and "Saved analysis" not in detail
+        else:
+            # The view carries the Probability section's own sentence, after what its range means.
+            view = cases[name]["decision_view"]
+            assert view["range"]["explanation"] == PROBABILITY_EXPLANATION, name
+            at = detail.index(view["range"]["meaning"])
+            assert detail[at + 1] == PROBABILITY_EXPLANATION, name
+            assert _value(detail, "Evidence level") == (
+                cases[name]["frontend_display"]["model_readiness_label"]
+            ), name
+        # The older gate brief is retired: neither its stored sentences nor its raw type row.
+        for retired in (brief["state_summary"], DISCLAIMER, PROBABILITY_TYPE, "State summary"):
+            assert retired not in detail, (name, retired)
         assert "Calibration diagnostics unavailable. Keep using heuristic status." in detail, name
         assert (
             "Early diagnostic only — not accuracy, not profitability evidence, not trade EV."
             in rendered[name]["detail_diagnostics"]
         ), name
         if name.endswith("_no_synthesis"):
-            assert _value(detail, "Gate brief summary") == brief["state_summary"], name
+            assert "Gate brief summary" not in detail and "Decision" not in detail, name
             assert "Model quality: not measured yet." in detail, name
             assert "Probabilities are heuristic until enough resolved samples exist." in detail
             continue
@@ -719,7 +726,7 @@ def test_without_an_accepted_claim_every_surface_reads_as_before(
             "Keep collecting samples; this is not reliability evidence and not profitability "
             "evidence."
         ), name
-        assert "Why probability is muted" in detail, name
+        assert "Why probability is muted" not in detail, "the advisor explanation is retired"
     assert "Advanced heuristic probability" in rendered["today_1W"]["detail"]
 
 
@@ -732,8 +739,7 @@ def test_the_backend_data_is_shown_as_the_backend_states_it(rendered: dict) -> N
         detail = rendered[name]["detail"]
         assert _value(detail, "Current status", "Calibration status") == "DEFAULT_PHASE1A", name
         assert _value(detail, "Current status", "Reliability status") == "INSUFFICIENT_SAMPLE"
-        assert "Reliability: INSUFFICIENT_SAMPLE" in detail, name
-        safety = _between(detail, "Safety notes", "Advanced context · Future Quant V2")
-        assert safety == _between(
-            rendered["today"]["detail"], "Safety notes", "Advanced context · Future Quant V2"
-        ), name
+    # The checks are the backend's own, the same with or without a claim (the gates are the same).
+    assert _between(
+        rendered["claim"]["detail"], "Actionability stack", "Model Quality"
+    ) == _between(rendered["today"]["detail"], "Actionability stack", "Model Quality")

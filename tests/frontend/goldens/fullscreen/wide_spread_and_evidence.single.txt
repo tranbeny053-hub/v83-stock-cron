@@ -9,12 +9,6 @@ No forecast-quality claim has been accepted for this model and timeframe. The pe
 A risk gate is active: Execution cost is too high; Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The risk gates (Execution cost is too high; Liquidity is not viable) are findings about market conditions or execution. They are analysis only, not an instruction.
 1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

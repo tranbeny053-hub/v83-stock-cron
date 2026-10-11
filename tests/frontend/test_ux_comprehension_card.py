@@ -190,14 +190,13 @@ def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> 
     timeframe_card = card._extract(source, "horizonCard")
     view_branch, rest = _view_branch_and_the_rest(timeframe_card)
     assert "decisionViewRows(payload, view)" in view_branch
-    assert len(card.OUTSIDE_THE_VIEW) == 6
+    assert len(card.OUTSIDE_THE_VIEW) == 5
     for name, literal, in_view_branch in card.OUTSIDE_THE_VIEW:
         assert f"    - {name}\n" in text, name
         where = view_branch if in_view_branch else rest
         assert literal in where, f"{name}: horizonCard no longer shows {literal} with a view"
-    action_row = card._extract(source, "renderPermissionRow")
-    for label in ("Immediate action", "Plan", "Chase"):
-        assert f'["{label}",' in action_row, label
+    # The action row (Immediate action, Plan, Chase) is retired from the screen, so not named.
+    assert "renderPermissionRow" not in source and "Immediate action" not in text
     # The sentence (view.detail) is rendered by both cards and by the detail panel.
     detail_panel = card._extract(source, "renderStructuredDetail")
     assert "view.detail" in detail_panel and detail_panel.count("section(") > 1

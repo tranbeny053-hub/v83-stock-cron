@@ -33,28 +33,6 @@ Accepted forecast-quality claim for this model and timeframe.
 No profitability claim.
 The directional permission is not financial advice: it never tells you to trade.
 Decision
-Gate disposition (accepted directional permission; not financial advice)
-Watch
-Reliability: INSUFFICIENT_SAMPLE
-MODERATE
-Watch only; the current output does not support a directional candidate.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
-Primary reason
-Reliability status is INSUFFICIENT_SAMPLE.
-Next action
-Observe only; current entry, chase, and numeric planning are disabled. A wider directional edge could change a watch state, subject to all gates.
-Candidate labels are planning context only and do not grant entry permission.
-Gate checks
-PASS
-Tail risk
-#5
-Tail-risk status is OK.
-Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
 Probability interpretation
 UP_LEAN
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
@@ -134,59 +112,6 @@ Calibration reliability
 #11
 Reliability status is INSUFFICIENT_SAMPLE.
 Evidence: calibration_state.reliability_status
-INFO
-Final decision
-#12
-Decision synthesis label is WATCH.
-Evidence: decision_synthesis.decision_synthesis.label
-Advisor explanation
-Why this decision
-Watch only; the current output does not support a directional candidate.
-Why immediate action is unavailable
-UI-D1.1 has no validated numeric entry, invalidation, or target geometry.
-Why timeframe matters
-1W is interpreted as regime context; it does not change the underlying probability values.
-Why reliability is insufficient
-The payload does not report measured reliability from sufficient resolved samples.
-What could change the decision
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate if existing higher-timeframe context becomes aligned.
-Interpretation can strengthen only after the in-payload sample gate improves.
-Scenario plan
-Observe only
-Display only
-Scenario
-No action now
-Plan status
-Observe only
-Direction context
-Neutral
-Immediate action
-No
-Chase move
-No
-Why this is limited
-Observe-only state; backend confirmation is insufficient for a conditional scenario.
-Wait for confirmation
-A directional candidate must be established by the backend.
-Data and provider states must remain sufficient.
-All hard gates must remain clear.
-What would change the plan
-A wider directional edge could change a watch state, subject to all gates.
-Re-evaluate if existing higher-timeframe context becomes aligned.
-Interpretation can strengthen only after the in-payload sample gate improves.
-A backend directional candidate with sufficient confirmation would change this plan.
-Numeric entry, stop, target, and risk/reward are disabled for now.
-Safety notes
-Candidate plan only — not a trade command.
-Not financial advice.
-Numeric entry/stop/target disabled until calibration is measured.
-Advanced context · Future Quant V2
-Influence mode
-SHADOW_ONLY
-Decision influence
-0.00%
-Future quant hooks are shadow-only and do not affect this result.
 Model Quality
 Current status
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
@@ -243,52 +168,6 @@ Data
 OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
-Gate brief (accepted directional permission; not financial advice)
-Gate disposition
-WATCHLIST
-Horizon
-1W setup / ~6W horizon
-Model readiness
-Accepted forecast with directional permission
-Calibration
-DEFAULT_PHASE1A
-Reliability
-INSUFFICIENT_SAMPLE
-Profitability claim
-false
-State summary
-The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
-Volatility reference
-Volatility reference only — not a stop/target recommendation.
-Gate note
-Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
-Disclaimer
-Not financial advice: it never tells you to trade. No profitability claim.
-Key Reasons
-Gate action: WATCH.
-Backend disposition: WATCH.
-Heuristic signal heat score: 50.
-Data source: OKX_PUBLIC.
-Hard Blockers
-none
-Watchlist Triggers
-Re-check only with fresh backend data over the stated multi-bar horizon.
-Monitor whether backend hard gates remain clear.
-Invalidation Conditions
-Provider/data quality degradation appears.
-Any hard gate fails.
-The run becomes stale relative to its timeframe horizon.
-Probability
-Up
-39.40%
-Down
-38.52%
-In band
-22.08%
-Model readiness
-Accepted forecast with directional permission
-Explanation
-The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
 Gates
 Gate action
 WATCH

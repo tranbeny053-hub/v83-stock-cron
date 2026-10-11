@@ -214,7 +214,6 @@ The risk gate (Extreme-move risk is too high) is a finding about market conditio
     - a gate banner
     - a role label
     - a role sentence
-    - an action row (Immediate action, Plan, Chase)
     - a Signal heat row
     - the data-source line
   - The detail panel adds its own sections.

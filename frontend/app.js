@@ -50,14 +50,6 @@ const fallbackTimeframeRoles = {
     rawProbabilityHidden: true,
   },
 };
-const decisionLabelCopy = {
-  AVOID: "Avoid",
-  NO_TRADE: "No trade",
-  WAIT: "Wait",
-  WATCH: "Watch",
-  LONG_CANDIDATE: "Long candidate (plan only)",
-  SHORT_CANDIDATE: "Short candidate (plan only)",
-};
 const singlePayloads = new Map();
 const watchlistPayloads = new Map();
 const refreshCooldownMs = 15000;
@@ -427,19 +419,13 @@ function firstReason(payload) {
 const NOT_ASSESSED_TEXT = "Not assessed (the data cannot support an assessment)";
 const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 
-// The gates' disposition and brief, labelled by what the view allows (owner ruling 2026-10-06):
-// never a market call without an accepted directional permission; with one, the permission is
-// shown, and the label stays explicitly non-advisory.
+// The gates' disposition, labelled by what the view allows (owner ruling 2026-10-06): never a
+// market call without an accepted directional permission; with one, the permission is shown, and
+// the label stays explicitly non-advisory.
 function dispositionLabel(view) {
   return view && view.directional_permission
     ? "Gate disposition (accepted directional permission; not financial advice)"
     : "Gate disposition (not a market call)";
-}
-
-function gateBriefTitle(view) {
-  return view && view.directional_permission
-    ? "Gate brief (accepted directional permission; not financial advice)"
-    : "Gate brief (not a market call)";
 }
 
 // Under an accepted claim the view states the evidence level, as it states the data's health
@@ -455,15 +441,6 @@ function acceptedViewOf(payload) {
 
 // A status the payload does not carry, under an accepted claim: missing, never "not measured".
 const NOT_REPORTED_TEXT = "Not reported";
-// The gate brief's disclaimer under an accepted claim: non-advisory, without denying the claim.
-const ACCEPTED_DISCLAIMER =
-  "Not financial advice: it never tells you to trade. No profitability claim.";
-
-// Model readiness as the evidence stands (owner ruling 2026-10-06).
-function readinessText(payload, fallback) {
-  const accepted = acceptedViewOf(payload);
-  return accepted ? accepted.headline : fallback;
-}
 
 function decisionViewOf(payload) {
   const view = payload?.decision_view;
@@ -478,7 +455,7 @@ function gateView(gates) {
 }
 
 function gateViewOf(payload) {
-  return gateView(decisionViewOf(payload)?.gates || payload?.gate_view);
+  return gateView(decisionViewOf(payload)?.gates);
 }
 
 // The view of a saved run (detail/saved_run_view.py): the backend builds it from what the run
@@ -617,7 +594,6 @@ function savedValue(value, format = (kept) => kept) {
 // The rows of a reopened run, under the labels a live analysis uses for the same values.
 function savedRunRows(payload, saved) {
   const time = saved.time || {};
-  const data = saved.data || {};
   const range = saved.range || {};
   const evidence = saved.evidence || {};
   const notAssessed = range.assessed === false;
@@ -627,9 +603,6 @@ function savedRunRows(payload, saved) {
     ["Asset · venue", `${payload.normalized_symbol || payload.symbol} · ${venue}`],
     ["Reference close (UTC)", savedValue(time.reference_close_utc)],
     ["Horizon end (UTC)", savedValue(time.horizon_end_utc)],
-    ["Horizon", savedValue(saved.horizon)],
-    ["Data source", savedValue(data.data_source)],
-    ["Live data", savedValue(data.is_live_data)],
     [
       "In band (inside the decision band)",
       notAssessed
@@ -935,16 +908,7 @@ function displayRole(role) {
 }
 
 function matrixBlockingItem(stack) {
-  return orderedActionability(stack).find((item) => item.status === "BLOCK") || null;
-}
-
-function matrixConcernItem(stack) {
-  const ordered = orderedActionability(stack);
-  return (
-    ordered.find((item) => item.status === "BLOCK") ||
-    ordered.find((item) => item.status === "WARN") ||
-    null
-  );
+  return shownChecks(stack).find((item) => item.status === "BLOCK") || null;
 }
 
 function matrixRawProbability(probability = {}) {
@@ -989,13 +953,10 @@ function horizonCard(payload) {
   const display = payload.frontend_display || {};
   const timeframe = payload.timeframes?.primary || "n/a";
   const synthesis = payload.decision_synthesis || {};
-  const decision = synthesis.decision_synthesis || {};
-  const permission = synthesis.action_permission || {};
   const probability = synthesis.probability_interpretation || {};
   const quality = synthesis.model_quality_summary || {};
   const role = timeframeRoleFor(payload, timeframe);
   const blocking = matrixBlockingItem(synthesis.actionability_stack);
-  const concern = matrixConcernItem(synthesis.actionability_stack);
   const heatBand = getScoreHeatBand(display.total_score);
 
   node.className = `result-card timeframe-card horizon-card ${
@@ -1045,9 +1006,6 @@ function horizonCard(payload) {
     node.append(textBlock("p", view.detail, "decision-detail"));
     node.append(...gateFramingBlocks(gateViewOf(payload)));
     node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));
-    const permissions = renderPermissionRow(permission);
-    permissions.classList.add("matrix-permissions");
-    node.append(permissions);
     node.append(
       keyValueTable([
         ...decisionViewRows(payload, view),
@@ -1056,22 +1014,8 @@ function horizonCard(payload) {
       ]),
     );
   } else {
-    node.append(
-      textBlock(
-        "p",
-        decisionLabelCopy[decision.label] || "Decision unavailable",
-        `matrix-decision-label matrix-decision-${decisionLabelTone(decision.label)}`,
-      ),
-    );
+    // A payload without a view (none is served today): its readings, and no older decision.
     node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));
-
-    const permissions = renderPermissionRow(permission);
-    permissions.classList.add("matrix-permissions");
-    node.append(permissions);
-
-    if (concern && !blocking && backendText(concern.plain_english)) {
-      node.append(textBlock("p", concern.plain_english, "matrix-concern-note"));
-    }
     node.append(
       keyValueTable([
         ["Interpretation", probability.interpretation_label],
@@ -1633,20 +1577,8 @@ function downloadJsonButton(payload) {
   return button;
 }
 
-// A saved run read back from the durable store can carry a mask in place of one of the gate
-// brief's lists (the store's export sanitizer withholds `key_reasons`). The mask is not a list:
-// it is said in one line, and neither it nor its characters are ever listed.
+// What a reopened run shows for a value its stored record does not hold (savedValue).
 const LIST_NOT_KEPT_TEXT = "Not kept in saved history.";
-
-function briefListGroup(title, items) {
-  const group = document.createElement("div");
-  group.className = "brief-list-group";
-  const heading = document.createElement("h4");
-  heading.textContent = title;
-  const withheld = items !== null && items !== undefined && !Array.isArray(items);
-  group.append(heading, listBlock(withheld ? [LIST_NOT_KEPT_TEXT] : items));
-  return group;
-}
 
 function backendText(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -1679,6 +1611,15 @@ function orderedActionability(items) {
     });
 }
 
+// The checks the screen lists. The backend's last check restates the label of the older
+// decision card ("Final decision"), which is retired from the default screen: it is not listed,
+// and it never puts up the card's BLOCK banner by itself.
+const RETIRED_CHECKS = ["final_decision"];
+
+function shownChecks(items) {
+  return orderedActionability(items).filter((item) => !RETIRED_CHECKS.includes(item.key));
+}
+
 function decisionStatusTone(status) {
   return {
     BLOCK: "block",
@@ -1687,130 +1628,6 @@ function decisionStatusTone(status) {
     INFO: "info",
     UNKNOWN: "unknown",
   }[status] || "unknown";
-}
-
-function decisionLabelTone(label) {
-  return {
-    AVOID: "block",
-    NO_TRADE: "block",
-    WAIT: "warn",
-    WATCH: "info",
-    LONG_CANDIDATE: "candidate",
-    SHORT_CANDIDATE: "candidate",
-  }[label] || "unknown";
-}
-
-function permissionNo(value) {
-  return value === false ? "No" : "Unavailable";
-}
-
-function permissionPlan(permission = {}) {
-  if (permission.can_plan_trade === true) {
-    return "Plan only";
-  }
-  if (permission.observe_only === true) {
-    return "Observe only";
-  }
-  return "Unavailable";
-}
-
-function renderPermissionRow(permission = {}) {
-  const row = document.createElement("div");
-  row.className = "decision-permissions";
-  for (const [label, value] of [
-    ["Immediate action", permissionNo(permission.can_enter_now)],
-    ["Plan", permissionPlan(permission)],
-    ["Chase", permissionNo(permission.can_chase)],
-  ]) {
-    const item = document.createElement("div");
-    item.className = "decision-permission";
-    item.append(textBlock("span", label, "decision-permission-label"));
-    item.append(textBlock("strong", value));
-    row.append(item);
-  }
-  return row;
-}
-
-function primaryDecisionReason(stack, decision = {}) {
-  const blocking = stack.find((item) => item.status === "BLOCK");
-  const warning = stack.find((item) => item.status === "WARN");
-  return (
-    backendText(blocking?.plain_english) ||
-    backendText(warning?.plain_english) ||
-    backendText(decision.source_gate_action) ||
-    backendText(decision.source_disposition) ||
-    "Reason unavailable"
-  );
-}
-
-function renderFinalDecisionCard(synthesis = {}, payload = {}) {
-  const decision = synthesis.decision_synthesis || {};
-  const permission = synthesis.action_permission || {};
-  const quality = synthesis.model_quality_summary || {};
-  const stack = orderedActionability(synthesis.actionability_stack);
-  const changes = Array.isArray(synthesis.what_would_change_decision)
-    ? synthesis.what_would_change_decision
-    : [];
-  const labelText = decisionLabelCopy[decision.label] || "Decision unavailable";
-  const card = document.createElement("article");
-  card.className = `final-decision-card final-decision-${decisionLabelTone(decision.label)}`;
-
-  const header = document.createElement("header");
-  const headingGroup = document.createElement("div");
-  const view = decisionViewOf(payload);
-  headingGroup.append(
-    textBlock("p", dispositionLabel(view), "decision-eyebrow"),
-  );
-  headingGroup.append(textBlock("h4", labelText, "decision-title"));
-  const reliabilityStatus =
-    backendText(quality.reliability_status) ||
-    (acceptedViewOf(payload) ? NOT_REPORTED_TEXT : "Not measured yet");
-  headingGroup.append(textBlock("p", `Reliability: ${reliabilityStatus}`, "muted"));
-  header.append(headingGroup);
-  header.append(
-    decisionBadge(
-      backendText(decision.decision_strength) || "Strength unavailable",
-      decisionLabelTone(decision.label),
-    ),
-  );
-  card.append(header);
-
-  if (backendText(decision.plain_english)) {
-    card.append(textBlock("p", decision.plain_english, "decision-lead"));
-  }
-  card.append(renderPermissionRow(permission));
-
-  const reasonGrid = document.createElement("div");
-  reasonGrid.className = "decision-reason-grid";
-  const reason = document.createElement("div");
-  reason.append(textBlock("span", "Primary reason", "decision-field-label"));
-  reason.append(textBlock("p", primaryDecisionReason(stack, decision)));
-  const nextAction = document.createElement("div");
-  nextAction.append(textBlock("span", "Next action", "decision-field-label"));
-  const relevantChange =
-    changes.find(
-      (item) => item?.currently_relevant === true && backendText(item?.plain_english),
-    ) || changes.find((item) => backendText(item?.plain_english));
-  const nextActionParts = [
-    backendText(permission.plain_english),
-    backendText(relevantChange?.plain_english),
-  ].filter(Boolean);
-  nextAction.append(
-    textBlock("p", nextActionParts.length ? nextActionParts.join(" ") : "Next action unavailable"),
-  );
-  reasonGrid.append(reason, nextAction);
-  card.append(reasonGrid);
-
-  if (decision.candidate_is_not_entry_permission === true) {
-    card.append(
-      textBlock(
-        "p",
-        "Candidate labels are planning context only and do not grant entry permission.",
-        "decision-safety-note",
-      ),
-    );
-  }
-  return card;
 }
 
 function renderActionabilityRow(item = {}, payload = {}) {
@@ -1847,7 +1664,7 @@ function renderActionabilityStack(items, payload = {}) {
   wrapper.append(textBlock("h4", "Actionability stack"));
   const stack = document.createElement("div");
   stack.className = "actionability-stack";
-  const ordered = orderedActionability(items);
+  const ordered = shownChecks(items);
   for (const item of ordered) {
     stack.append(renderActionabilityRow(item, payload));
   }
@@ -1923,58 +1740,6 @@ function renderProbabilityInterpretation(probability = {}, timeframeRole = {}, p
     ]),
   );
   return card;
-}
-
-function renderRiskSummary(items) {
-  const card = document.createElement("article");
-  card.className = "decision-context-card decision-risk-summary";
-  card.append(textBlock("h4", "Gate checks"));
-  const stack = orderedActionability(items);
-  const risks = stack.filter(
-    (item) => item.key === "tail_risk" || (item.key === "hard_gates" && item.status === "BLOCK"),
-  );
-  for (const item of risks) {
-    card.append(renderActionabilityRow(item));
-  }
-  if (!risks.length) {
-    card.append(textBlock("p", "Risk detail unavailable.", "muted"));
-  }
-  return card;
-}
-
-function renderAdvisorExplanations(explanations = {}, changes = [], accepted = null) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "decision-subsection";
-  wrapper.append(textBlock("h4", "Advisor explanation"));
-  const items = [
-    ["Why this decision", explanations.why_this_decision],
-    ["Why immediate action is unavailable", explanations.why_not_enter_now],
-    // Under an accepted claim the view states the probabilities' standing, not this reading.
-    ["Why probability is muted", accepted ? null : explanations.why_probability_is_muted],
-    ["Why timeframe matters", explanations.why_timeframe_matters],
-    ["Why reliability is insufficient", explanations.why_reliability_is_insufficient],
-  ].filter(([, value]) => backendText(value));
-  if (items.length) {
-    wrapper.append(keyValueTable(items));
-  } else {
-    wrapper.append(textBlock("p", "Advisor explanation unavailable.", "muted"));
-  }
-
-  // Only what the backend marks as relevant now: a condition that does not apply is not shown.
-  const backendChanges = Array.isArray(changes)
-    ? changes
-        .filter((item) => item?.currently_relevant === true)
-        .map((item) => backendText(item?.plain_english))
-        .filter(Boolean)
-    : [];
-  if (backendChanges.length) {
-    const group = document.createElement("div");
-    group.className = "decision-change-list";
-    group.append(textBlock("h5", "What could change the decision"));
-    group.append(listBlock(backendChanges));
-    wrapper.append(group);
-  }
-  return wrapper;
 }
 
 function hasPayloadValue(value) {
@@ -2326,271 +2091,24 @@ function renderModelQualitySection(synthesis = {}, accepted = null) {
   ]);
 }
 
-const scenarioModeCopy = {
-  NO_ENTRY_NOW: "No action now",
-  PULLBACK_PATH: "Pullback path",
-  BREAKOUT_PATH: "Breakout path",
-  MISSED_MOVE_DO_NOT_CHASE: "Missed move — do not chase",
-};
-
-const scenarioPlanStatusCopy = {
-  DISABLED: "Disabled",
-  OBSERVE_ONLY: "Observe only",
-  CONDITIONAL_CANDIDATE: "Conditional candidate",
-};
-
-const scenarioDirectionCopy = {
-  LONG: "Long context",
-  SHORT: "Short context",
-  NEUTRAL: "Neutral",
-};
-
-const scenarioSafetyFallback = [
-  "Candidate plan only — not a trade command.",
-  "Not financial advice.",
-  "Numeric entry, stop, and target are disabled until calibration is measured.",
-];
-
-const scenarioPlanTextFields = [
-  ["Preferred entry zone", "preferred_entry_zone"],
-  ["Acceptable entry zone", "acceptable_entry_zone"],
-  ["Chase zone", "chase_zone"],
-  ["Breakout trigger", "breakout_trigger"],
-  ["Pullback trigger", "pullback_trigger"],
-  ["Stop invalidation", "stop_invalidation"],
-  ["Take-profit plan", "take_profit_plan"],
-  ["Risk/reward summary", "risk_reward_summary"],
-];
-
-function backendStringList(value, fallback) {
-  const items = Array.isArray(value) ? value.map(backendText).filter(Boolean) : [];
-  return items.length ? items : Array.isArray(fallback) ? fallback : [fallback];
-}
-
-function renderScenarioList(label, values, fallback, className = "") {
-  const group = document.createElement("div");
-  group.className = `scenario-plan-list ${className}`.trim();
-  group.append(textBlock("h5", label));
-  group.append(listBlock(backendStringList(values, fallback)));
-  return group;
-}
-
-function renderTradePlanSkeleton(plan = {}) {
-  const card = document.createElement("article");
-  card.className = "decision-context-card decision-trade-plan scenario-plan";
-  card.setAttribute("data-trade-plan-skeleton", "");
-  card.append(textBlock("h4", "Scenario plan"));
-
-  const available = plan && typeof plan === "object" && Object.keys(plan).length > 0;
-  if (!available) {
-    card.classList.add("scenario-plan-unavailable");
-    card.append(
-      textBlock(
-        "p",
-        "Scenario plan unavailable. Keep using the Decision summary and hard gates.",
-        "decision-warning",
-      ),
-    );
-    return card;
-  }
-
-  const planStatus = scenarioPlanStatusCopy[plan.plan_status] || "Unavailable";
-  const summary = document.createElement("div");
-  summary.className = "scenario-plan-summary";
-  summary.append(
-    decisionBadge(
-      planStatus,
-      plan.plan_status === "DISABLED" ? "warn" : "neutral",
-    ),
-    textBlock("span", "Display only", "scenario-plan-display-only"),
-  );
-  card.append(
-    summary,
-    keyValueTable([
-      ["Scenario", scenarioModeCopy[plan.mode] || "No action now"],
-      ["Plan status", planStatus],
-      ["Direction context", scenarioDirectionCopy[plan.setup_direction] || "Neutral"],
-      ["Immediate action", permissionNo(plan.can_enter_now)],
-      ["Chase move", permissionNo(plan.can_chase)],
-    ]),
-  );
-
-  const reason =
-    backendText(plan.disabled_reason) ||
-    "No actionable plan is available from the current evidence.";
-  const reasonBlock = document.createElement("div");
-  reasonBlock.className = "scenario-plan-reason";
-  reasonBlock.append(textBlock("h5", "Why this is limited"));
-  reasonBlock.append(textBlock("p", reason, "decision-context-copy"));
-  card.append(reasonBlock);
-
-  card.append(
-    renderScenarioList(
-      "Wait for confirmation",
-      plan.confirmation_required,
-      "No confirmation path is available yet.",
-    ),
-  );
-
-  if (backendText(plan.chase_warning)) {
-    const warning = document.createElement("div");
-    warning.className = "scenario-plan-warning";
-    warning.append(textBlock("h5", "Chase warning"));
-    warning.append(textBlock("p", plan.chase_warning));
-    card.append(warning);
-  }
-
-  card.append(
-    renderScenarioList(
-      "What would change the plan",
-      plan.what_would_change_plan,
-      "No plan-changing condition is available yet.",
-    ),
-  );
-
-  const surfacedPlanText = scenarioPlanTextFields
-    .map(([label, key]) => [label, backendText(plan[key])])
-    .filter(([, value]) => value);
-  if (surfacedPlanText.length) {
-    const backendPlan = document.createElement("div");
-    backendPlan.className = "scenario-plan-backend-text";
-    backendPlan.append(textBlock("h5", "Backend plan context"));
-    backendPlan.append(keyValueTable(surfacedPlanText));
-    card.append(backendPlan);
-  } else {
-    card.append(
-      textBlock(
-        "p",
-        "Numeric entry, stop, target, and risk/reward are disabled for now.",
-        "decision-warning",
-      ),
-    );
-  }
-
-  card.append(
-    renderScenarioList(
-      "Safety notes",
-      plan.safety_copy,
-      scenarioSafetyFallback,
-      "scenario-plan-safety",
-    ),
-  );
-  return card;
-}
-
-function renderFutureQuantHooks(hooks = {}) {
-  const advanced = document.createElement("details");
-  advanced.className = "decision-future-hooks";
-  advanced.append(textBlock("summary", "Advanced context · Future Quant V2"));
-  advanced.append(
-    keyValueTable([
-      ["Influence mode", hooks.influence_mode],
-      ["Decision influence", formatFractionPct(hooks.decision_influence_frac)],
-    ]),
-  );
-  if (backendText(hooks.plain_english)) {
-    advanced.append(textBlock("p", hooks.plain_english, "muted"));
-  }
-  return advanced;
-}
-
-// A reopened run has no view: its gate summary and framing are in its own block, built by the
-// backend when the run was read. A live analysis shows them in its decision view.
-function reopenedGates(payload) {
-  return decisionViewOf(payload) ? null : gateViewOf(payload);
-}
-
-// A reopened run stores its brief's sentence as it was written when saved. Where the backend
-// built its gate framing at read time, that is shown in its place and the stored sentence is
-// not; a live analysis shows its own brief.
-function briefSummaryRows(label, payload, brief = {}, accepted = null) {
-  if (hasGateFraming(reopenedGates(payload))) return [];
-  return [[label, accepted ? accepted.detail : brief.state_summary]];
-}
-
-function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
+// The kept checks of a live analysis: how its percentages read, and the checks in order. The
+// older decision card, gate checks card, advisor explanation, scenario plan and future-quant block
+// are retired from the default screen (the parity review, 2026-10-11): the decision view above
+// carries the gate authority, and nothing here restates it in words of its own. A run without a
+// decision synthesis (a reopened run) has no such section.
+function renderDecisionSynthesis(synthesis, payload = {}) {
   const available =
     synthesis && typeof synthesis === "object" && Object.keys(synthesis).length > 0;
   if (!available) {
-    const accepted = acceptedViewOf(payload);
-    return section(gateBriefTitle(decisionViewOf(payload)), [
-      textBlock(
-        "p",
-        "No decision synthesis for this run; the existing gate brief is shown.",
-        "decision-warning",
-      ),
-      keyValueTable([
-        ["Gate disposition", decisionBrief.action],
-        ...briefSummaryRows("Gate brief summary", payload, decisionBrief, accepted),
-        ["Gate brief note", decisionBrief.risk_note],
-      ]),
-      renderTradePlanSkeleton({}),
-    ]);
+    return null;
   }
-
-  const decision = synthesis.decision_synthesis || {};
-  const permission = synthesis.action_permission || {};
-  const contextGrid = document.createElement("div");
-  contextGrid.className = "decision-context-grid";
-  contextGrid.append(
-    renderRiskSummary(synthesis.actionability_stack),
+  return section("Decision", [
     renderProbabilityInterpretation(
       synthesis.probability_interpretation || {},
       synthesis.timeframe_role || {},
       payload,
     ),
-  );
-
-  const supportGrid = document.createElement("div");
-  supportGrid.className = "decision-context-grid";
-  supportGrid.append(renderTradePlanSkeleton(synthesis.trade_plan_skeleton || {}));
-
-  return section("Decision", [
-    renderFinalDecisionCard(synthesis, payload),
-    contextGrid,
     renderActionabilityStack(synthesis.actionability_stack, payload),
-    renderAdvisorExplanations(
-      synthesis.advisor_explanations || {},
-      synthesis.what_would_change_decision,
-      acceptedViewOf(payload),
-    ),
-    supportGrid,
-    renderFutureQuantHooks(synthesis.future_quant_v2_hooks || {}),
-  ]);
-}
-
-function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
-  const view = decisionViewOf(payload);
-  const accepted = acceptedViewOf(payload);
-  const readableBlockingReasons = Array.isArray(blockingReasons)
-    ? blockingReasons
-        .map((reason) => {
-          const headline = typeof reason?.headline === "string" ? reason.headline : "";
-          const detail = typeof reason?.detail === "string" ? reason.detail : "";
-          return [headline, detail].filter(Boolean).join(": ");
-        })
-        .filter(Boolean)
-    : [];
-  return section(gateBriefTitle(view), [
-    keyValueTable([
-      ["Gate disposition", brief.action],
-      ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
-      ["Model readiness", readinessText(payload, modelReadinessCopy)],
-      ["Calibration", brief.calibration_status],
-      ["Reliability", brief.reliability_status],
-      ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
-      ...briefSummaryRows("State summary", payload, brief, accepted),
-      ["Volatility reference", brief.volatility_reference?.note],
-      ["Gate note", brief.risk_note],
-      ["Disclaimer", accepted ? ACCEPTED_DISCLAIMER : brief.disclaimer],
-    ]),
-    briefListGroup(
-      "Key Reasons",
-      readableBlockingReasons.length ? readableBlockingReasons : brief.key_reasons,
-    ),
-    briefListGroup("Hard Blockers", brief.hard_blockers),
-    briefListGroup("Watchlist Triggers", brief.watchlist_triggers),
-    briefListGroup("Invalidation Conditions", brief.invalidation_conditions),
   ]);
 }
 
@@ -2599,17 +2117,17 @@ function renderStructuredDetail(payload, detailView) {
   // the renderers need is ever added to it.
   const backendResponse = payload;
   // A saved run has no view; the backend built one from what the run stores when it was read
-  // back. The older sections below read its gate view from a copy.
+  // back, and the run's own block shows it.
   const saved = decisionViewOf(payload) ? null : savedRunViewOf(detailView);
-  if (saved && gateView(saved.gates)) {
-    payload = { ...payload, gate_view: saved.gates };
-  }
   const display = payload.frontend_display || {};
   const dataQuality = payload.data_quality || {};
   const providerState = payload.provider_state || {};
   const gate = payload.gate_result || {};
   const details = detailView || {};
-  const decisionBrief = payload.decision_brief || details.decision_brief || {};
+  // A reopened run's history row carries none of these rows' values. Where the view built from
+  // its stored record holds one, the Overview and Gates rows show it, as the run's own block
+  // does: one row never reads "n/a" for a value another row shows.
+  const kept = saved || {};
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
@@ -2643,25 +2161,31 @@ function renderStructuredDetail(payload, detailView) {
     : null;
   // A reopened run leads with its own block instead.
   const savedSection = saved ? renderSavedRun(backendResponse, saved) : null;
+  const checksSection = renderDecisionSynthesis(payload.decision_synthesis, payload);
 
   detailPanel.replaceChildren(
     ...(decisionSection ? [decisionSection] : []),
     ...(savedSection ? [savedSection] : []),
-    renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload),
+    ...(checksSection ? [checksSection] : []),
     renderModelQualitySection(payload.decision_synthesis || {}, accepted),
     section("Overview", [
       downloadJsonButton(backendResponse),
       keyValueTable([
         ["Symbol", payload.normalized_symbol || payload.symbol || details.symbol],
-        ["Timeframe", payload.timeframes?.timeframe_label || payload.timeframes?.primary],
-        ["Horizon", payload.timeframes?.horizon_label],
+        [
+          "Timeframe",
+          payload.timeframes?.timeframe_label || payload.timeframes?.primary || kept.timeframe_label,
+        ],
+        ["Horizon", payload.timeframes?.horizon_label || kept.horizon_label],
         ["Analysis mode", payload.analysis_mode],
-        ["Disposition", display.disposition],
+        ["Disposition", display.disposition ?? kept.disposition],
         ["Score", display.total_score],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
-        ["Data source", display.data_source],
-        view ? ["Data", decisionDataText(view.data)] : ["Live data", display.is_live_data],
+        ["Data source", display.data_source ?? kept.data?.data_source],
+        view
+          ? ["Data", decisionDataText(view.data)]
+          : ["Live data", display.is_live_data ?? kept.data?.is_live_data],
         [
           // Storage's status when the analysis was requested. A live analysis's Storage row (the
           // decision view's) shows its save receipt, which can say otherwise: so this label says
@@ -2673,27 +2197,10 @@ function renderStructuredDetail(payload, detailView) {
         ],
       ]),
     ]),
-    renderDecisionBrief(decisionBrief, display.blocking_reasons, payload),
-    section("Probability", [
-      keyValueTable([
-        // Under an accepted claim the Model readiness row below states it; no Type row repeats it.
-        ...(accepted ? [] : [["Type", decisionBrief.probability_type]]),
-        ...legacyProbabilityRows(payload, [
-          ["Up", formatPct(display.prob_up_pct)],
-          ["Down", formatPct(display.prob_down_pct)],
-          ["In band", formatPct(display.prob_timeout_pct)],
-        ]),
-        [
-          "Model readiness",
-          readinessText(payload, display.model_readiness_label || modelReadinessCopy),
-        ],
-        ["Explanation", accepted ? accepted.detail : display.probability_explanation],
-      ]),
-    ]),
     section("Gates", [
       keyValueTable([
-        ["Gate action", gate.action],
-        ["Hard blocks", gate.hard_blocks],
+        ["Gate action", gate.action ?? kept.gate_action],
+        ["Hard blocks", gate.hard_blocks ?? kept.hard_blocks],
         ["Warnings", dataQuality.warnings],
       ]),
       objectTable(details.risk_detail),
@@ -2755,7 +2262,8 @@ function renderStructuredDetail(payload, detailView) {
   );
   detailPanel.classList.remove("hidden");
   if (decisionSection) {
-    // A live analysis is shown: its Storage row is among the decision view's rows.
+    // A live analysis is shown: its Storage row is among the decision view's rows. (A reopened
+    // run's block has no such row: it is read back from history, so nothing is asked.)
     watchSaveReceipt(detailPanel, "detail", payload, decisionSection);
   }
 }

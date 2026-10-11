@@ -9,12 +9,6 @@ The percentages carry an accepted forecast-quality claim for this model and time
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition: hard gates outrank everything shown.
 1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
-Immediate action
-No
-Plan
-Observe only
-Chase
-No
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

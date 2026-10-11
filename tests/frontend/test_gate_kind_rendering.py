@@ -138,31 +138,38 @@ def test_the_analyses_are_the_gates_they_claim_and_every_token_is_unchanged(
     assert len(decision_view.ACCEPTANCE_BLOCKERS) == 4
 
 
-def test_the_evidence_gate_is_never_shown_as_elevated_risk(rendered: dict) -> None:
+def test_the_evidence_gate_is_never_shown_as_elevated_risk(cases: dict, rendered: dict) -> None:
+    """On no surface, and nowhere is the forced token shown at all: the older sections that
+    printed it are retired. The backend's own sentences still carry it in the payload, with the
+    note that no risk gate forced it."""
+
     for surface in SURFACES:
         for text in rendered["evidence"][surface]:
-            if ELEVATED_RISK_WORDS.search(text.replace("ELEVATED_RISK_AVOID", "")):
+            if ELEVATED_RISK_WORDS.search(text):
                 raise AssertionError(f"{surface}: {text}")
-            if "ELEVATED_RISK_AVOID" in text:
-                assert NOT_A_RISK_FINDING in text, f"{surface}: the token without its reason"
-    detail = rendered["evidence"]["detail"]
-    assert harness._value(detail, "Why this is limited") == EVIDENCE_SENTENCE
-    assert any(
-        text.endswith("backend disposition is ELEVATED_RISK_AVOID (not forced by a risk gate).")
-        for text in detail
+            assert "ELEVATED_RISK_AVOID" not in text, f"{surface}: {text}"
+    payload = cases["evidence"]
+    plan = payload["decision_synthesis"]["trade_plan_skeleton"]
+    assert plan["disabled_reason"] == EVIDENCE_SENTENCE
+    assert payload["decision_brief"]["state_summary"].endswith(
+        "backend disposition is ELEVATED_RISK_AVOID (not forced by a risk gate)."
     )
 
 
-def test_a_real_risk_gate_is_shown_as_one(rendered: dict) -> None:
-    detail = rendered["risk"]["detail"]
-    assert harness._value(detail, "Why this is limited") == (
-        "The elevated-risk disposition disables scenario planning."
+def test_a_real_risk_gate_is_shown_as_one(cases: dict, rendered: dict) -> None:
+    payload = cases["risk"]
+    plan = payload["decision_synthesis"]["trade_plan_skeleton"]
+    assert plan["disabled_reason"] == "The elevated-risk disposition disables scenario planning."
+    assert payload["decision_brief"]["state_summary"].endswith(
+        "backend disposition is ELEVATED_RISK_AVOID."
     )
-    assert any(text.endswith("backend disposition is ELEVATED_RISK_AVOID.") for text in detail)
     for surface in SURFACES:
         texts = rendered["risk"][surface]
+        assert RISK_SENTENCE in texts, surface
         assert not any(NOT_A_RISK_FINDING in text for text in texts), surface
         assert not any("No risk gate is active" in text for text in texts), surface
+        # The retired sections' own sentence about the plan is on no screen either.
+        assert plan["disabled_reason"] not in texts, surface
 
 
 @pytest.mark.parametrize(

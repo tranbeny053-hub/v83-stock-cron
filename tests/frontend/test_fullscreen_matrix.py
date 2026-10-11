@@ -194,14 +194,19 @@ def test_the_summary_and_its_framing_are_adjacent_and_in_that_order_on_every_sur
 ) -> None:
     """Review finding D1, pinned: the framing is the line directly under the summary, wherever
     the authority is shown, and it is shown nowhere else. On the cards and on a reopened run
-    the summary is shown once. On the detail panel of a live analysis the older sections still
-    repeat the summary alone (they are retired in a later step); the first one leads."""
+    the summary is shown once. The detail panel of a live analysis shows it once more, as the
+    finding of the kept "Hard gates" check (#4 of the Actionability stack), which states the
+    same fact as a check's result and words nothing of its own."""
 
     summary, framing = SCENARIOS[name]
     texts = screens[name][surface]
     assert texts[texts.index(summary) + 1] == framing, f"{name}/{surface}"
     assert texts.count(framing) == 1, f"{name}/{surface}: the framing away from its summary"
-    if surface != "detail":
+    if surface == "detail":
+        check = texts.index("Hard gates")
+        assert texts[check - 1 : check + 3] == ["BLOCK", "Hard gates", "#4", summary]
+        assert texts.count(summary) == 2, f"{name}/{surface}"
+    else:
         assert texts.count(summary) == 1, f"{name}/{surface}"
     if surface != "history":  # a reopened run has no view, only its gate framing
         risk = name in WITH_A_RISK_GATE
@@ -305,18 +310,140 @@ def test_the_single_cards_banner_names_the_check_that_blocks(screens: dict) -> N
     assert EVIDENCE in screens["first_check_blocks_SYNTHETIC"]["single"]
 
 
-def test_only_currently_relevant_conditions_are_listed(cases: dict, screens: dict) -> None:
+# --- the older decision sections are retired from the default screen -------------------------
+
+# The headings, labels and fixed lines of the retired sections, in the parity review's order:
+# the gate checks card (row 2); the Probability section (row 11); the advisor explanation, its
+# conditions, the scenario plan, the future-quant block and every permission row (rows 5-6); the
+# decision card (row 1); the gate brief and its four lists (rows 9-10).
+RETIRED_LINES = (
+    *("Gate checks", "Risk summary"),
+    *("Probability", "Type", "Explanation"),
+    *("Advisor explanation", "Why this decision", "Why immediate action is unavailable"),
+    *("Why probability is muted", "Why timeframe matters", "Why reliability is insufficient"),
+    *("What could change the decision", "Scenario plan", "Display only", "Plan status"),
+    *("Direction context", "Chase move", "Why this is limited", "Wait for confirmation"),
+    *("What would change the plan", "Safety notes", "Advanced context · Future Quant V2"),
+    *("Influence mode: SHADOW_ONLY", "Decision influence"),
+    *("Immediate action", "Plan", "Chase", "Observe only", "Plan only"),
+    *("Primary reason", "Next action", "No trade", "Avoid", "LOW", "MODERATE", "HIGH"),
+    *("Gate brief (not a market call)", "Gate brief summary", "Gate brief note", "Gate note"),
+    *("State summary", "Volatility reference", "Disclaimer", "Profitability claim"),
+    *("Key Reasons", "Hard Blockers", "Watchlist Triggers", "Invalidation Conditions"),
+    "No decision synthesis for this run; the existing gate brief is shown.",
+    "Scenario plan unavailable. Keep using the Decision summary and hard gates.",
+    "Candidate labels are planning context only and do not grant entry permission.",
+)
+
+
+def _backend_sentences_no_longer_rendered(payload: dict) -> list[str]:
+    """The backend's own sentences that only the retired sections showed. They stay in the
+    payload (nothing is deleted from it in this pass) and are listed for the owner."""
+
+    synthesis = payload["decision_synthesis"]
+    plan = synthesis["trade_plan_skeleton"]
+    brief = payload["decision_brief"]
+    return [
+        synthesis["decision_synthesis"]["plain_english"],
+        synthesis["action_permission"]["plain_english"],
+        *(item["plain_english"] for item in synthesis["what_would_change_decision"]),
+        synthesis["advisor_explanations"]["why_not_enter_now"],
+        synthesis["advisor_explanations"]["why_probability_is_muted"],
+        synthesis["advisor_explanations"]["why_reliability_is_insufficient"],
+        *plan["confirmation_required"],
+        *plan["what_would_change_plan"],
+        *plan["safety_copy"],
+        synthesis["future_quant_v2_hooks"]["plain_english"],
+        f"Decision synthesis label is {synthesis['decision_synthesis']['label']}.",
+        brief["state_summary"],
+        brief["risk_note"],
+        brief["disclaimer"],
+        brief["volatility_reference"]["note"],
+        *brief["key_reasons"],
+        *brief["watchlist_triggers"],
+        *brief["invalidation_conditions"],
+    ]
+
+
+@pytest.mark.parametrize("name", [*goldens.SCENARIOS, SAVED_BEFORE])
+def test_no_surface_renders_an_older_decision_section(
+    cases: dict, screens: dict, name: str
+) -> None:
+    """Step 3 of the redesign, on every scenario and surface: no heading, label or fixed line of
+    a retired section is on screen, and neither is a backend sentence only they showed."""
+
+    payload = cases["evidence_only" if name == SAVED_BEFORE else name]
+    sentences = _backend_sentences_no_longer_rendered(payload)
+    assert len(sentences) > 20 and all(isinstance(text, str) and text for text in sentences)
+    for surface, texts in screens[name].items():
+        for line in RETIRED_LINES:
+            assert line not in texts, f"{name}/{surface}: {line!r}"
+        for sentence in sentences:
+            assert sentence not in texts, f"{name}/{surface}: {sentence!r}"
+        # The stack's copy of the retired decision card's label is not listed.
+        assert "Final decision" not in texts and "#12" not in texts, f"{name}/{surface}"
+    # The kept checks are listed, in order, on the detail panel of a live analysis.
+    if name != SAVED_BEFORE:
+        detail = screens[name]["detail"]
+        stack = harness._between(detail, "Actionability stack", "Model Quality")
+        numbers = [text for text in stack if text.startswith("#")]
+        assert numbers == [f"#{number}" for number in range(1, 12)], name
+        checks = payload["decision_synthesis"]["actionability_stack"]
+        assert [check["key"] for check in checks][-1] == "final_decision"
+        for check in checks[:-1]:
+            assert check["label"] in stack and check["plain_english"] in stack, name
+
+
+def test_the_sections_kept_on_the_detail_panel_and_their_order(screens: dict) -> None:
+    """What the parity review keeps (rows 3, 4, 7, 8, 12, 13), under the decision view, in this
+    order; a reopened run has its own block and no checks (it stores no decision synthesis)."""
+
+    headings = (
+        "Decision view",
+        "Decision",
+        "Probability interpretation",
+        "Actionability stack",
+        "Model Quality",
+        "Overview",
+        "Gates",
+        "Market Data Quality",
+        "Provider State",
+        "Market Data v2 / Provider Observability",
+        "Quant Signals",
+        "News Add-on",
+        "News Authority / Macro & Micro Context",
+        "Debug / Raw JSON",
+    )
     for name in SCENARIOS:
-        conditions = cases[name]["decision_synthesis"]["what_would_change_decision"]
-        relevant = [item["plain_english"] for item in conditions if item["currently_relevant"]]
-        hidden = [item["plain_english"] for item in conditions if not item["currently_relevant"]]
-        assert relevant and hidden, name
-        texts = screens[name]["detail"]
-        for sentence in relevant:
-            assert sentence in texts, f"{name}: {sentence}"
-        listed = harness._between(texts, "What could change the decision", "Scenario plan")
-        for sentence in hidden:
-            assert sentence not in listed, f"{name}: not relevant now: {sentence}"
+        detail = screens[name]["detail"]
+        found = [detail.index(heading) for heading in headings]
+        assert found == sorted(found) and found[0] == 0, name
+        history = screens[name]["history"]
+        kept = ("Saved analysis", *headings[4:])
+        found = [history.index(heading) for heading in kept]
+        assert found == sorted(found) and found[0] == 0, name
+        for heading in headings[:4]:
+            assert heading not in history, (name, heading)
+    # No heading of a kept section is a risk heading, whatever gate is active.
+    for name, surfaces in screens.items():
+        for surface, texts in surfaces.items():
+            for heading in RISK_HEADINGS:
+                assert heading not in texts, (name, surface, heading)
+
+
+def test_the_kill_switch_reads_one_disposition_on_every_surface(cases: dict, screens: dict) -> None:
+    """The parity review's C5: under the kill switch one label read ABORT in the view and "No
+    trade" or NO_TRADE in the older sections. They are retired, and every surface, a reopened
+    run too, reads the gates' own disposition and no other."""
+
+    name = "kill_switch_and_evidence"
+    assert cases[name]["gate_result"]["action"] == "ABORT"
+    assert cases[name]["decision_brief"]["action"] == "NO_TRADE"
+    for surface, texts in screens[name].items():
+        at = texts.index("Gate disposition (not a market call)")
+        assert texts[at + 1] == "ABORT", surface
+        assert texts.count("Gate disposition (not a market call)") == 1, surface
+        assert not any("NO_TRADE" in text or text == "No trade" for text in texts), surface
 
 
 @pytest.mark.parametrize("name", ["accepted_claim_SYNTHETIC", "permission_SYNTHETIC"])
@@ -364,9 +491,6 @@ SAVED_ROWS = (
     "Asset · venue",
     "Reference close (UTC)",
     "Horizon end (UTC)",
-    "Horizon",
-    "Data source",
-    "Live data",
     "In band (inside the decision band)",
     "Up (above the band)",
     "Down (below the band)",
@@ -455,7 +579,7 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     live = cases["evidence_only" if name == SAVED_BEFORE else name]
     saved = reopened[name]["detail"]["saved_run_view"]
     texts = screens[name]["history"]
-    block = harness._between(texts, "Saved analysis", "Gate brief (not a market call)")
+    block = harness._between(texts, "Saved analysis", "Model Quality")
     meaning, cost = saved["range"]["meaning"], saved["cost"]["label"]
     assert block[-2:] == [meaning, cost], name
     rows = block[2 + 2 + len(saved["gates"]["blocks"]) : -2]
@@ -468,8 +592,6 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     live_shown = dict(zip(live_rows[0::2], live_rows[1::2], strict=True))
     for label in SAME_AS_LIVE:
         assert shown[label] == live_shown[label], (name, label)
-    assert shown["Horizon"] == "1H setup / ~6H horizon"
-    assert shown["Data source"] == "OKX_PUBLIC" and shown["Live data"] == "yes"
     assert shown["Calibration"] == "DEFAULT_PHASE1A"
     assert shown["Reliability"] == "INSUFFICIENT_SAMPLE"
     # What it does not hold: the live analysis had these, and the saved run says they are not kept.
@@ -478,6 +600,28 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     assert block.count(NOT_KEPT) == 3, name
     # The disposition is the gates' own (ABORT under the kill switch), not the brief's action.
     assert shown["Gate disposition (not a market call)"] == live["gate_result"]["action"]
+    # The Overview and Gates rows of a reopened run show what its record holds, as the live
+    # analysis's own rows read: no row reads "n/a" for a value another row of the screen shows.
+    live_texts = screens[scenario]["detail"]
+    for section, end, labels in (
+        ("Overview", "Gates", ("Timeframe", "Horizon", "Disposition", "Data source")),
+        ("Gates", "Market Data Quality", ("Gate action", "Hard blocks")),
+    ):
+        mine = harness._between(texts, section, end)
+        theirs = harness._between(live_texts, section, end)
+        for label in labels:
+            assert harness._value(mine, label) == harness._value(theirs, label) != "n/a", (
+                name,
+                section,
+                label,
+            )
+    overview = harness._between(texts, "Overview", "Gates")
+    assert harness._value(overview, "Live data") == "yes"
+    assert harness._value(overview, "Disposition") == shown["Gate disposition (not a market call)"]
+    # No label of the run's own block is used again on the screen with another value.
+    for label, value in shown.items():
+        again = [texts[at + 1] for at, text in enumerate(texts) if text == label]
+        assert set(again) == {value}, (name, label, again)
 
 
 def test_a_run_reopened_in_the_same_session_reads_as_its_stored_copy_does(
@@ -497,7 +641,7 @@ def test_a_run_reopened_in_the_same_session_reads_as_its_stored_copy_does(
         assert held[name]["detail"]["decision_brief"] != reopened[name]["detail"]["decision_brief"]
     same_session = goldens.render({}, held)["screens"]
     for name in SCENARIOS:
-        end = "Gate brief (not a market call)"
+        end = "Model Quality"
         assert harness._between(same_session[name]["history"], "Saved analysis", end) == (
             harness._between(screens[name]["history"], "Saved analysis", end)
         ), name
@@ -551,47 +695,3 @@ def test_the_analyze_response_carries_no_save_receipt_by_design(
     assert "save_receipt" not in payload
     assert "saved" not in payload["decision_view"]
     assert payload["debug"]["persistence_status"] == "OK"
-
-
-def test_a_stored_run_says_its_key_reasons_are_not_kept_and_a_live_analysis_lists_them(
-    cases: dict, reopened: dict, screens: dict
-) -> None:
-    """utils/sanitize.py masks the stored `key_reasons` to one string (the name of its key reads
-    as a credential's). The detail panel says so in one line: never the mask, and never its
-    characters one a line, which was a release blocker. A live analysis lists its reasons as
-    sentences, as before."""
-
-    not_kept = "Not kept in saved history."
-    for name in (*SCENARIOS, SAVED_BEFORE):
-        mask = reopened[name]["detail"]["decision_brief"]["key_reasons"]
-        assert isinstance(mask, str) and len(mask) > 3, f"{name}: the stored value is a mask"
-        texts = screens[name]["history"]
-        assert harness._between(texts, "Key Reasons", "Hard Blockers") == [
-            "Key Reasons",
-            not_kept,
-        ], name
-        assert (
-            harness._between(texts, "Hard Blockers", "Invalidation Conditions").count(not_kept) == 0
-        ), f"{name}: the other lists are kept, and listed"
-        assert not any(mask in text for text in texts), f"{name}: the mask itself"
-        letters = list(mask.replace(" ", ""))
-        windows = (texts[at : at + len(letters)] for at in range(len(texts)))
-        assert letters not in windows, f"{name}: the mask, one character a line"
-    for name in SCENARIOS:
-        reasons = [
-            f"{reason['headline']}: {reason['detail']}"
-            for reason in cases[name]["frontend_display"]["blocking_reasons"]
-        ]
-        texts = screens[name]["detail"]
-        assert reasons and all(len(reason) > 40 for reason in reasons), name
-        assert harness._between(texts, "Key Reasons", "Hard Blockers") == [
-            "Key Reasons",
-            *reasons,
-        ], name
-        assert not_kept not in texts, name
-    # Without a blocking reason the brief's own list is shown: sentences too.
-    brief = cases["permission_SYNTHETIC"]["decision_brief"]
-    assert len(brief["key_reasons"]) > 1 and brief["hard_blockers"] == []
-    assert harness._between(
-        screens["permission_SYNTHETIC"]["detail"], "Key Reasons", "Hard Blockers"
-    ) == ["Key Reasons", *brief["key_reasons"]]

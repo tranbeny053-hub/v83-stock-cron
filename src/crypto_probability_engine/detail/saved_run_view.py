@@ -63,7 +63,6 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
     assessed = _assessed(gate, provider_state)
     heuristic = brief.get("probability_type") == PROBABILITY_TYPE
     band = _fraction(execution.get("round_trip_cost_frac"))
-    labels = [_text(brief.get("timeframe_label")), _text(brief.get("horizon_label"))]
     return {
         "schema_version": SCHEMA_VERSION,
         "gates": None
@@ -71,8 +70,12 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
         else build_gate_view(gate, liquidity=liquidity_execution.get("liquidity_state")),
         "gates_note": GATES_NOT_READABLE if gate is None else None,
         "disposition": _disposition(gate, _mapping(detail.get("score_detail"))),
+        # The stored gate result's own action and blocks, as the gates wrote them (raw tokens).
+        "gate_action": None if gate is None else _text(gate.get("action")),
+        "hard_blocks": None if gate is None else list(gate.get("hard_blocks") or []),
         "venue": _text(provider_state.get("active_provider")),
-        "horizon": " / ".join(labels) if all(labels) else None,
+        "timeframe_label": _text(brief.get("timeframe_label")),
+        "horizon_label": _text(brief.get("horizon_label")),
         # The target contract's times are computed from the candles, which a run does not store.
         "time": {"reference_close_utc": None, "horizon_end_utc": None},
         "data": {

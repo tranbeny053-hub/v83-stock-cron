@@ -79,9 +79,7 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "savedRunViewOf",
             "decisionDataText",
             "notAssessedByView",
-            "legacyProbabilityRows",
             "acceptedViewOf",
-            "readinessText",
             "renderStructuredDetail",
         )
     )
@@ -104,10 +102,7 @@ const section = () => element();
 const downloadJsonButton = () => element();
 const renderDecisionSynthesis = () => element();
 const renderModelQualitySection = () => element();
-const renderDecisionBrief = () => element();
 const objectTable = () => element();
-const formatPct = (value) => value;
-const modelReadinessCopy = "";
 const cases = [
   {{ status: "OK", live: true, includeLive: true }},
   {{ status: "STATELESS", live: false, includeLive: true }},

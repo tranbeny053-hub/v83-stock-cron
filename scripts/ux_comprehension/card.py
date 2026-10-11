@@ -304,7 +304,6 @@ OUTSIDE_THE_VIEW = (
     ("a gate banner", '"matrix-block-banner"', False),
     ("a role label", "displayRole(role.role)", False),
     ("a role sentence", "role.plainEnglish", True),
-    ("an action row (Immediate action, Plan, Chase)", "renderPermissionRow(permission)", True),
     ("a Signal heat row", '"Signal heat (not risk)"', True),
     ("the data-source line", "dataBannerFor(payload)", False),
 )
