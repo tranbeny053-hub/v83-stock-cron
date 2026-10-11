@@ -1,46 +1,59 @@
 # STATE
 
-Updated: 2026-10-11 (**THE RUN-STORE LOCK IS PUBLISHED (#254). THE CLASS-B REDESIGN IS LOCAL: ITS FRESH REVIEW FOUND
-THE CLASS STILL THERE IN ONE NARROW PLACE, AND THE OWNER AUTHORIZED ONE FINAL BOUNDED LOCAL CORRECTION, WHICH IS IN
-PROGRESS. THE REQUIRED UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING
-IS DEPLOYED.**
-- The owner (verbatim below) ruled S1 to S5 and authorized the T3 for the exact reviewed lock.
-- #254 → main b68f10bb: a merge commit on fix/p7p-run-store-lock @ 780ad16 (tree 2cbeafdb); two commits on main
-  24b47a85; 5 files, +589/-58.
-  - Checked before the merge: the pull request's head, tree, commits, file list and every added and removed
-    line equal the reviewed diff.
-  - 12 of 12 checks are green on 780ad16. CI / test ran 7126 passed, the local gate's count: the lock's stress
-    tests' first run on Linux and Python 3.11. The others: build-a, build-b and compare; the migration 0014 to 0018
-    rehearsals; the persistence fault rehearsal; the privilege rehearsal's two jobs.
-  - Main's push runs on b68f10bb are green: CI 38148382434 and reproducible build 38148382432.
-  - What it carries: one lock inside the in-memory run store (the server's list of the last 100 analyses). A
-    listing made while another request added a run could raise, and that request answered HTTP 500. put, with its
-    eviction, and get now run whole under the lock; a listing copies under it and builds its rows after. No value,
-    screen or hash changes. persistence/run_store.py is not one of the 69 pinned files (§2.6 not involved).
-- The class-B redesign, LOCAL, nothing pushed: feat/p7p-class-b-redesign, reviewed at 4949d63 (six commits on main
-  24b47a85, 89 files, gate PASS 7469).
-  - What it does: one gate authority in the Decision view (decision_view.v2, `gates`); what only the older
-    sections said moved into the view; a view of its own for a reopened run, built when it is read; the older
-    decision sections retired from the default screen; 52 whole-screen pins; the UX card rebuilt from the real
-    screen (PREPARED, NOT RUN).
-  - The fresh review of 4949d63: FAIL, class B remains narrowly. On the Detail panel of the missing-order-book
-    case the kept actionability stack's check 6 reads "BLOCK / Liquidity and execution / Liquidity is DEGRADED;
-    execution realism is DEGRADED." beside "This is missing data, not a finding about the market." It is main's
-    own sentence. That case cannot reach a live screen today; the same sentence contradicts in the too-wide-spread
-    case, which can. Everything else read CLEAN, including today's everyday analysis on all four surfaces.
-  - By the owner's first rule it was put on HOLD and nothing was patched. The owner then ruled S1: ONE final
-    bounded local correction of the four reviewed findings; if class B recurs, HOLD without another patch.
-  - The correction is in progress locally when this record is written: its implementer is at work on top of 4949d63,
-    and nothing of it is pushed. It will be reviewed by re-reading every changed screen; if class B is found again
-    it is on HOLD with no further patch.
-- S3: internal gate tokens outside the Decision view get a label. S4: the wording is frozen by the owner only after
-  the review of the correction. S5: the UX card's questions test meaning, the save receipt included.
-- All new wording is PROVISIONAL until the owner freezes it.
+Updated: 2026-10-12 (**THE CLASS-B REDESIGN IS PUBLISHED (#256): NO DEFAULT SCREEN READS MISSING EVIDENCE OR MISSING
+DATA AS A MARKET SIGNAL. IT IS NOT RELEASED. FIVE MINORS ARE OPEN, THE WORDING IS PROVISIONAL, AND THE REQUIRED UX
+CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOYED.**
+- The owner (verbatim below) authorized the T3 for the exact reviewed head.
+- #256 → main eb70f7f4: a merge commit on feat/p7p-class-b-redesign @ 4398a01 (tree 1b80fb47); 16 commits on main
+  a208192b; 94 files, +12837/-3137.
+  - Checked before the merge: the pull request's head, tree, commits and file list, and every added and removed
+    line of its 18,604-line diff, equal the reviewed diff.
+  - 6 of 6 checks are green on 4398a01. CI / test ran 7583 passed, the local gate's count. The others: build-a,
+    build-b and compare; the A4 ledger audit rehearsal; the A4 Card-04 companion rehearsal, on its required
+    PostgreSQL 17.6.
+  - Main's push runs on eb70f7f4 are green: CI 38160707620 and reproducible build 38160707585.
+- What it carries:
+  - One gate authority in the Decision view (decision_view.v2, `gates`): the kinds of gate active (evidence;
+    risk, a measured market or execution finding; system or data, which includes missing or unusable data and is
+    never a market finding), one summary, one framing sentence, and each active gate with its headline and detail.
+    The frontend displays these sentences and words none of its own.
+  - What only the older decision sections said is in the view; a reopened run has a view of its own, built when
+    it is read from what the run stores.
+  - The older decision sections are retired from the default screen. Raw gate tokens that remain carry a label.
+  - The view says beside the cost when it is fees only. A new asset token (p7p-20261011-a) is served with the new
+    view version.
+  - 56 whole-screen pins; a whole-screen "must not say" test; the UX card rebuilt from the real screen with six
+    plain-language questions about what a screen means, the save receipt included. The card is PREPARED, NOT RUN.
+- Reviewed before publication by a new reviewer with no prior context: PASS_WITH_MINORS; CLASS_B_REMAINS = NO.
+- OPEN by the owner's word, none of them patched:
+  - m1: a stored record corrupted in three fields at once (a shape no version of the gates has written) shows the
+    forced token without its note;
+  - m2: a reopened run whose stored liquidity state is missing or partial is worded as missing data;
+  - m3: a reopened run's data sections read "n/a" for values its own view shows above;
+  - m4: the evidence gate's threshold ("fewer than 100 resolved outcomes") is on no default screen;
+  - m5: two test mutants survive (a version guard; a reopened unavailable-data run's rows).
+  - The retired sentences remain in the response payload (Raw JSON, Download JSON); they are no longer rendered.
+- Governed hashes moved and are pinned: every analysis_hash moves at release, the two synthetic radar examples'
+  hashes with it. The radar schemas and every value's meaning are unchanged; the automation analysis carries no
+  decision view. Hash acceptance is the owner's, at T4 (G5).
+- All new wording is PROVISIONAL (U2): .work/p7/redesign/WORDING_TABLE.md. It is not frozen.
 - Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
-- Nothing changed in production or the migrations: no deploy, no claim activation, no H2/F3/§5A change, no A4C
-  reseal.
-- This record is the batch's last publish. Before it: #254.)
+- Nothing changed in production or the migrations: no deploy, no claim activation, no acceptance change, no
+  H2/F3/§5A change, no A4C reseal.
+- This record is the batch's last publish. Before it: #256.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-12), verbatim — the T3 for the exact-final redesign; then one release-readiness boundary:**
+```text
+CONTINUE CURRENT — Opus XHIGH. T3 AUTHORIZE exact reviewed feat/p7p-class-b-redesign@4398a010858e0159bc425fc85685448b4ef31e01. Verify exact diff and all required CI, including both A4 rehearsals; merge-commit only if ALL PASS, confirm main CI/build, then publish refreshed STATE last.
+
+Keep five minors OPEN, wording provisional and owner UX NOT_RUN. No patch, T4/deploy or acceptance waiver. After publication, exhaust safe checks and return one consolidated release-readiness boundary.
+```
+- **The owner (2026-10-11), verbatim — U1 to U4: ONE bounded LOCAL finishing pass; one exact-final T3 package:**
+```text
+CONTINUE CURRENT — Opus XHIGH. U1=defer T3; U2=provisional wording approval, not final freeze; U3=authorize ONE bounded LOCAL finishing pass on feat/p7p-class-b-redesign@38009537 for the 3 minors, ambiguous G1 and unnatural UX questions; U4=owner UX after final publication.
+
+Run full gates, screen/hash/A4 checks and fresh review. If Class B recurs, HOLD without further patches. No push/T4/deploy. Return ONE exact-final T3 package; checkpoint Git/STATE/.work for successor handoff.
+```
 - **The owner (2026-10-11), verbatim — S1 to S5: one FINAL bounded correction; the T3 for the run-store lock:**
 ```text
 CONTINUE CURRENT — Opus XHIGH. S1=ONE final bounded local correction of the four reviewed findings on 4949d63; if Class B recurs, HOLD without another patch. S2=T3 publish exact reviewed run-store-lock@780ad161bbb328d7014666bda0e177085934fd7b, exact diff/all CI PASS, merge-commit, main CI, STATE last.
@@ -2473,7 +2486,62 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE RUN-STORE LOCK IS PUBLISHED (2026-10-11), under the owner's T3. THE REDESIGN'S ONE FINAL BOUNDED LOCAL
+LOOP_STATE=THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
+  OPEN, the wording PROVISIONAL, the UX check NOT_RUN. No patch, deploy, T4, claim activation, acceptance change or
+  waiver, H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): T3 AUTHORIZE the exact reviewed head feat/p7p-class-b-redesign @
+    4398a010858e0159bc425fc85685448b4ef31e01; verify the exact diff and all required CI, both A4
+    rehearsals included; merge commit only if all pass; confirm main's CI and build; publish the refreshed STATE
+    last. After publication, exhaust safe checks and return one consolidated release-readiness boundary.
+  - Published: #256 → main eb70f7f4, a merge commit (parents a208192b and 4398a01).
+    - Before the merge, against the saved reviewed diff (.work/p7/redesign/handoff/redesign_reviewed_4398a01.diff):
+      the same head, tree (1b80fb47) and 16 commits; the same 94 files; +12837/-3137; every added and removed line
+      equal, in order.
+    - 6 of 6 checks green on 4398a01: CI / test 38160306682 (7583 passed, the local count); reproducible build
+      38160306676 (build-a, build-b, compare); A4 ledger audit rehearsal 38160306672; A4 Card-04 companion rehearsal
+      38160306660 (PostgreSQL 17.6). Both A4 rehearsals met the changed examples here for the first time, and
+      passed.
+    - Main's push runs on eb70f7f4: CI 38160707620 and reproducible build 38160707585, both green.
+  - The record below this one was written while that work was local. Where it says "LOCAL", "at the owner" or
+    "nothing is pushed", that was true when written; this record supersedes it.
+  - Safe checks after publication (Claude's; none is the owner's UX check): the local gate on main eb70f7f4 PASS,
+    with the 56 whole-screen pins and the UX card current; the release registry marks no migration unapplied and
+    records the live release as UCPE-PROD-E2-20261004-A at 1caa8b08; the runtime source-integrity guard's last four
+    scheduled runs are success; a first look at the real screens in a browser, on a local fixture copy of main: no
+    retired section on Single, Detail or a reopened run, and no horizontal overflow.
+  - FOR A SUCCESSOR: .work/p7/redesign/HANDOFF.md, then .work/p7/LANE_RECORD.md; generators and the owner's texts
+    are in .work/p7/redesign/handoff/.
+  Before it: THE REDESIGN IS FINISHED LOCALLY AND REVIEWED; ONE EXACT-FINAL T3 PACKAGE IS AT THE OWNER (2026-10-12).
+  Nothing of it is pushed. The UX check stays NOT_RUN. No deploy, T4, claim activation, acceptance change,
+  H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): U1 defer the T3; U2 provisional wording approval, not the final freeze; U3 ONE
+    bounded LOCAL finishing pass on feat/p7p-class-b-redesign @ 38009537 for the three minors, the ambiguous card
+    answer G1 and the unnatural UX questions; U4 the owner's UX check after the final publication. Full gates,
+    screen, hash and A4 checks and a fresh review. If class B recurs, HOLD without further patches. Return ONE
+    exact-final T3 package; checkpoint Git, STATE and .work.
+  - The finishing pass, by the redesign's implementer, on top of 3800953: 57cc558 (an undecided stored gate
+    result), b5c0eb5 (the fees-only caveat: decision_view.cost.caveat), c5e847d (the kill-switch golden renamed
+    SYNTHETIC), 9b6f44e (the card: H marked SYNTHETIC, G1 resolved, six plain questions, adversary tests), 4398a01
+    (tests). Brief: .work/p7/redesign/TASK_FINISHING_PASS.md.
+  - The exact head: feat/p7p-class-b-redesign @
+    4398a010858e0159bc425fc85685448b4ef31e01; tree 1b80fb47; 16 commits on main a208192b.
+  - Claude's checks on 4398a01: gate PASS 7583; 56 whole-screen pins and the card current; examples_builder
+    --write leaves the tree clean; 0 of 69 pinned; no forbidden path; the T2 schema diff read (cost.caveat in the
+    unpublished v2); the backend diff read.
+  - A4, local (scratch PostgreSQL 17.11): ledger audit A4_REHEARSAL=PASS on the candidate and on main, reports
+    byte-identical; Card-04 companion 39 of 39 cases PASS on both, reports byte-identical, the script's overall
+    line FAIL on both only for its 17.6 version pin.
+  - The exact-final review (a new reviewer; brief TASK_REVIEW_FINAL.md; scripts in scratchpad/revF): VERDICT =
+    PASS_WITH_MINORS; CLASS_B_REMAINS = NO. 78 mutants, 76 killed. Card: blind 54 of 54; a tuned phrase-matcher
+    46 of 54 (it fails three cells); a BLOCK-as-market-call reader 0 of 9 on question 5; badge- and request-row-
+    as-receipt readers 2 of 9 on question 6.
+  - Its minors m1 to m5 are recorded in .work/p7/LANE_RECORD.md with reproductions and smallest fixes. Not fixed.
+  - A pull request would run 6 checks: CI / test; build-a, build-b, compare; the A4 Card-04 companion rehearsal;
+    the A4 ledger audit rehearsal. The reviewed diff is saved (.work/p7/redesign/handoff/
+    redesign_reviewed_4398a01.diff) for the line-by-line check at the T3.
+  - FOR A SUCCESSOR: .work/p7/redesign/HANDOFF.md, then .work/p7/LANE_RECORD.md; generators and the owner's texts
+    are in .work/p7/redesign/handoff/.
+  Before it: THE RUN-STORE LOCK IS PUBLISHED (2026-10-11), under the owner's T3. THE REDESIGN'S ONE FINAL BOUNDED LOCAL
   CORRECTION IS IN PROGRESS. The UX check stays NOT_RUN. No deploy, T4, claim activation, acceptance change,
   H2/F3/§5A change or A4C reseal.
   - The owner (verbatim above): S1 ONE final bounded local correction of the four reviewed findings on 4949d63; if
@@ -5006,7 +5074,18 @@ LOOP_STATE=THE RUN-STORE LOCK IS PUBLISHED (2026-10-11), under the owner's T3. T
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-11):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-12):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
+    (#250, #252), the run-store lock (#254), the class-B redesign (#256).
+  - NOT released: production is on D 1caa8b08. The required UX check is NOT_RUN; the wording is PROVISIONAL; five
+    minors are OPEN.
+  - Next: the owner's release-readiness decisions.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-12):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
+    (#250, #252), the run-store lock (#254).
+  - Local, at the owner as one exact-final T3 package: the class-B redesign (reviewed; class B does not remain).
+  - Lane P is NOT released: production is on D 1caa8b08. The required UX check is NOT_RUN.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-11):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
     (#250, #252), the run-store lock (#254).
   - Local: the class-B redesign and its one final bounded correction (in progress), then its review.
@@ -5266,7 +5345,16 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-11):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7p-lock-published (this record, on main b68f10bb). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7p-redesign-published (this record, on main eb70f7f4). Local and unpublished:
+  - chore/state-p7p-redesign-final @ 309f843: the local record this one was rebuilt from; never published as it
+    was.
+  - feat/p7p-gate-authority @ 716925f, feat/p7p-class-b-root-cause @ 5541cb5, feat/p7p-independent-lanes @ 44ac3bc:
+    the earlier held work; #256 carries it. They can be deleted on the owner's word.
+  Before it: chore/state-p7p-redesign-final (this LOCAL record, on main a208192b). Local and unpublished:
+  - feat/p7p-class-b-redesign @ 4398a01: the exact-final T3 package.
+  - feat/p7p-gate-authority @ 716925f and feat/p7p-independent-lanes @ 44ac3bc: the earlier held work, carried
+    onto main by the redesign's first commit.
+  Before it: chore/state-p7p-lock-published (this record, on main b68f10bb). Local and unpublished:
   - feat/p7p-class-b-redesign: reviewed at 4949d63 (FAIL, narrow); the final correction is being added on top.
   - chore/state-p7p-redesign-hold @ cb99548: the local record this one was rebuilt from; never published as it was.
   - feat/p7p-gate-authority @ 716925f and feat/p7p-independent-lanes @ 44ac3bc: the earlier held work, carried
@@ -5491,7 +5579,11 @@ CURRENT_BRANCH=chore/state-p7p-lock-published (this record, on main b68f10bb). L
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=b68f10bb (main, #254: the run-store lock).
+LAST_GREEN_SHA=eb70f7f4 (main, #256: the class-B redesign).
+  Its 6 PR checks, push CI 38160707620 and reproducible build 38160707585 are green. Before it a208192b (#255).
+  Before it: a208192b (main, #255: the STATE record after #254). Its 4 PR checks, push CI 38150358132 and
+  reproducible build 38150358133 are green.
+  Before it: b68f10bb (main, #254: the run-store lock).
   Its 12 PR checks, push CI 38148382434 and reproducible build 38148382432 are green. Before it 24b47a85 (#253).
   Before it: 24b47a85 (main, #253: the STATE record after #252). Its 4 PR checks, push CI 38135633088 and
   reproducible build 38135633110 are green.
@@ -5760,7 +5852,13 @@ LAST_GREEN_SHA=b68f10bb (main, #254: the run-store lock).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-11, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-12, scanners 3/3 each:
+  - main eb70f7f4, locally, and chore/state-p7p-redesign-published's tree (that main and this record): 7583.
+  - Before the merge: feat/p7p-class-b-redesign @ 4398a01: 7583.
+  Before it: PASS 2026-10-11, scanners 3/3 each:
+  - feat/p7p-class-b-redesign @ 4398a01 (on main a208192b): 7583.
+  - main a208192b, locally: 7126.
+  Before it: PASS 2026-10-11, scanners 3/3 each:
   - chore/state-p7p-lock-published's tree (main b68f10bb and this record): 7126.
   - Before the merge: fix/p7p-run-store-lock @ 780ad16: 7126.
   Before it: PASS 2026-10-11, scanners 3/3 each:
@@ -6168,7 +6266,51 @@ CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=NOTHING IS ASKED OF THE OWNER NOW (2026-10-11). The next boundary comes with the review of
+OWNER_BOUNDARY=ONE CONSOLIDATED RELEASE-READINESS BOUNDARY IS AT THE OWNER (2026-10-12). Nothing is urgent; production
+  is unchanged and safe as it is. Main eb70f7f4 is NOT released.
+  - What a T4 would carry to production: Lane P's Decision view (#246), the save receipt and storage wording
+    (#248), the badge fixes (#250, #252), the run-store lock (#254) and the class-B redesign (#256).
+  - Open before a release, each the owner's:
+    1. The UX comprehension check (plan §23; docs/runbooks/UX_COMPREHENSION_CHECK.md): the owner's, NOT_RUN. PASS
+       is every answer matching the key. R4, the save receipt's UX acceptance, is decided there.
+    2. The wording freeze: all of it is PROVISIONAL (.work/p7/redesign/WORDING_TABLE.md, parts 1 to 7).
+    3. The five minors m1 to m5: fix in one bounded lane before the release; or release with them recorded.
+    4. The retired sentences still in the response payload (Raw JSON, Download JSON, any API reader): remove them
+       at the source (analysis_hash moves again); or leave.
+    5. Hash acceptance at T4 (G5): every analysis_hash moves, the two synthetic radar examples' hashes with it;
+       the UOR handoff note is updated (docs/automation/UOR_HANDOFF.md) and the UOR side must be told.
+    6. A look at the real screens in a browser: colour and layout have been checked by no reviewer (text only).
+  - Found by the safe checks, for the same decisions: in a real browser the new gate lines are one dense block with
+    no spacing or hierarchy of their own (they have no CSS rule), and a red "BLOCK / Hard gates" banner leads every
+    card although the evidence gate is no market finding; CHANGELOG.md was last updated 2026-06-22 and the
+    deployment checklist asks for it; the UOR handoff's revision note still says "local until the owner's T3"; the
+    release chain itself (docs/runbooks/RELEASE.md: the identity pull request, the guard, the preflight, the T4
+    deploy, settle, the re-pin) has not been started.
+  - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - T4, the release: only on the owner's word. The rollback target is recorded at the top of this file.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers. Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
+    3); DP-D's export limits stay documented and never proven.
+  Before it: ONE EXACT-FINAL T3 PACKAGE IS AT THE OWNER (2026-10-12). Nothing is urgent; production is unchanged.
+  - The T3: publish the exact reviewed head feat/p7p-class-b-redesign @
+    4398a010858e0159bc425fc85685448b4ef31e01. Verify the exact diff; 6 checks, all green (the two A4
+    rehearsals have never met this change in CI); merge commit only; main's CI and build; STATE last. A red
+    check means stop without merging.
+  - After it, each the owner's:
+    - the wording freeze (U2 is provisional): .work/p7/redesign/WORDING_TABLE.md;
+    - the UX check (U4), on the published card (docs/runbooks/UX_COMPREHENSION_CHECK.md): it is the owner's, and
+      a Claude walkthrough never stands in for it. R4 (the receipt's UX acceptance) is decided there;
+    - the review's five minors (m1 to m5) and whether the retired sentences should leave the response payload:
+      fix in a later bounded lane, or leave recorded;
+    - T4, the release, only on the owner's word. Hash acceptance is deferred to T4 (G5); every analysis_hash
+      moves, the two synthetic radar examples' hashes with it.
+  - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers. Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
+    3); DP-D's export limits stay documented and never proven.
+  Before it: NOTHING IS ASKED OF THE OWNER NOW (2026-10-11). The next boundary comes with the review of
   the correction:
   - If the correction reads clean: the wording freeze (S4; .work/p7/redesign/WORDING_TABLE.md), a T3 for the
     redesign, then the owner's UX check on the final card (R3), then the T4 decision.
@@ -7237,7 +7379,11 @@ OWNER_BOUNDARY=NOTHING IS ASKED OF THE OWNER NOW (2026-10-11). The next boundary
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: finish the correction lane (its report, the T2 diff read, the refresh onto main, the gate), have
+NEXT_ACTION=The owner: the release-readiness decisions above, at your pace (and the dated JWT renewal). Claude:
+  passive reads only; no patch, no push without a T3, no T4.
+  Before it: The owner: the T3 for the exact-final package (and the dated JWT renewal). Claude: passive reads only; no
+  push without that T3; no further patch to the redesign without the owner's word.
+  Before it: Claude: finish the correction lane (its report, the T2 diff read, the refresh onto main, the gate), have
   the same class-B reviewer re-read the changed screens, then return to the owner at that boundary. No push
   without a T3; no further patch if class B recurs.
   Before it: The owner: S1 to S5 (and the dated JWT renewal). Claude: passive reads only; no push without a T3; no
