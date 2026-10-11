@@ -211,9 +211,11 @@ def _trade_plan_skeleton(
     )
     disabled_reason = _plan_disabled_reason(
         plan_status=plan_status,
-        # The evidence gate forces the same token without a risk finding (detail/gate_kinds.py):
-        # then the reason is the blocking check's own sentence, which names the evidence gate.
-        elevated_risk=elevated_risk and elevated_risk_is_a_risk_finding(gate, score),
+        # The evidence gate, and the liquidity gate on missing data, force the same token without
+        # a risk finding (detail/gate_kinds.py): then the reason is the blocking check's own
+        # sentence, which names the gate.
+        elevated_risk=elevated_risk
+        and elevated_risk_is_a_risk_finding(gate, score, quant_result.get("liquidity_state")),
         insufficient_history=insufficient_history,
         dominant_block=dominant_block,
     )
@@ -622,7 +624,9 @@ def _actionability_stack(
             "hard_gates",
             "BLOCK" if _hard_gate_active(gate) else "PASS",
             "Hard gates",
-            hard_gate_summary(gate) if _hard_gate_active(gate) else "Hard gates are clear.",
+            hard_gate_summary(gate, liquidity)
+            if _hard_gate_active(gate)
+            else "Hard gates are clear.",
             ["gate_result.hard_gate_passed", "gate_result.hard_blocks"],
         ),
         _check(

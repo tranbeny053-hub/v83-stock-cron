@@ -2,7 +2,7 @@ Decision view
 No accepted forecast
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
 A risk gate is active: Execution cost is too high; Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
+The risk gates (Execution cost is too high; Liquidity is not viable) are findings about market conditions or execution. They are analysis only, not an instruction.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -37,7 +37,6 @@ Gate disposition (not a market call)
 No trade
 Reliability: INSUFFICIENT_SAMPLE
 LOW
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
 No trade is supported by the current backend state.
 Immediate action
 No
@@ -251,7 +250,6 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Gate disposition
 NO_TRADE
 Horizon

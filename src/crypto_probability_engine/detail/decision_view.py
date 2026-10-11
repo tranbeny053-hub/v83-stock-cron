@@ -40,7 +40,9 @@ from typing import Any
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
 from crypto_probability_engine.detail.gate_kinds import build_gate_view
 
-SCHEMA_VERSION = "decision_view.v1"
+# v2: the view carries the one gate authority (`gates`, detail/gate_kinds.py). A required field
+# makes a new version: a reader that knows only v1 does not know the gates are in the view.
+SCHEMA_VERSION = "decision_view.v2"
 # Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
 # Empty: nothing is accepted. An entry alone does not make the screen agree with it: the UI defers
 # its evidence-level copy to this view, but the backend's own data and copy must be made to agree
@@ -150,7 +152,8 @@ def build_decision_view(
         state = "ACCEPTED_FORECAST_CLAIM"
     headline, detail = STATE_COPY[state]
     # The one gate authority (owner ruling AD1=A): every surface takes its gate framing from here.
-    gates = build_gate_view(gate)
+    # The liquidity state says whether the liquidity gate measured anything (owner ruling G2).
+    gates = build_gate_view(gate, liquidity=quant_result.get("liquidity_state"), state=state)
     if state == "NO_ACCEPTED_CLAIM" and gates["risk_gate_active"]:
         detail = NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE
     horizon = (quant_result.get("probability_state") or {}).get("horizons", {}).get("H_primary", {})

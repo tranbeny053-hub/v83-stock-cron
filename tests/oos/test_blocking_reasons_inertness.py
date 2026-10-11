@@ -147,7 +147,7 @@ def test_ordinary_frontend_display_keeps_blocking_reasons(monkeypatch) -> None:
     )
 
     assert "blocking_reasons" in payload["frontend_display"]
-    assert payload["decision_view"]["schema_version"] == "decision_view.v1"
+    assert payload["decision_view"]["schema_version"] == "decision_view.v2"
 
 
 def test_blocking_reasons_flag_only_removes_that_key() -> None:

@@ -37,7 +37,6 @@ Gate disposition (not a market call)
 Avoid
 Reliability: INSUFFICIENT_SAMPLE
 LOW
-The gates' disposition, not a market call: with no accepted forecast it is no reason to act or to avoid acting.
 Avoid this setup while a hard gate remains active.
 Immediate action
 No
@@ -251,7 +250,6 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-The gates' disposition, not a market call: with no accepted forecast it is no reason to act or to avoid acting.
 Gate disposition
 NO_TRADE
 Horizon

@@ -188,7 +188,7 @@
         "gates"
       ],
       "properties": {
-        "schema_version": { "const": "decision_view.v1" },
+        "schema_version": { "const": "decision_view.v2" },
         "state": {
           "enum": [
             "INVALID_OR_UNAVAILABLE_DATA",

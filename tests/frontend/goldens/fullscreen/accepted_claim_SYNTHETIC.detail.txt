@@ -2,6 +2,7 @@ Decision view
 Accepted forecast-quality claim
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
+The gates' disposition: hard gates outrank everything shown.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -35,7 +36,6 @@ Gate disposition (not a market call)
 No trade
 Reliability: INSUFFICIENT_SAMPLE
 LOW
-The gates' disposition: hard gates outrank everything shown.
 No trade is supported by the current backend state.
 Immediate action
 No
@@ -244,7 +244,6 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-The gates' disposition: hard gates outrank everything shown.
 Gate disposition
 NO_TRADE
 Horizon

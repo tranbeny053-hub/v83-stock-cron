@@ -40,8 +40,12 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # carries one `gates` block. The prior published value was
 # sha256:0cc13a7e6897865238d8a4744848181b4bd2e1519989a0fe37be0f20cadbffc1.
 # Nothing in the quant, gate, or probability path changed; every gate token is what it was.
+# Moved 2026-10-11 (the Class-B redesign, step 1; owner ruling R1=A): the human-route
+# `decision_view` is stamped `decision_view.v2`, because its required `gates` block made a new
+# version of it. The value before, never published, was
+# sha256:2d44574e9090efe273a3bce7fc60f8699ef1c941ba03088420ad08c6452e5cdb.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:2d44574e9090efe273a3bce7fc60f8699ef1c941ba03088420ad08c6452e5cdb"
+    "sha256:4ca98d13a36062f9c8b922cd38228d16a85e398221640cc58fd4df81c0571349"
 )
 # Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
 # a SHA-256 over the canonical JSON of the whole response, so the added
@@ -51,8 +55,10 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # value was 38fff6098e0888427c64e02537f0ef3e09229e30ddf0d65915c582ac2db595bc.
 # Moved 2026-10-10 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above. Prior value
 # was 3941f194067ec1b2313e4f5c0c53bf3fb7d46f31d6bd7e219fe22954dfe3bf2c.
+# Moved 2026-10-11 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above. The value
+# before, never published, was e1e3911951c1c99588c13a1b429cc37b18336ba8e81b4a172493dc356e1ed421.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "e1e3911951c1c99588c13a1b429cc37b18336ba8e81b4a172493dc356e1ed421"
+    "b1549b05723e63f571193e832a4bc581cd6742f9a2e401efb69bf30d59c8d23e"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

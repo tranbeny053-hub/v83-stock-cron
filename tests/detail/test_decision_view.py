@@ -484,7 +484,7 @@ def test_the_view_and_the_card_agree_on_the_hold(active: object) -> None:
     }
     legacy = {"verdict": "SKILL_DEMONSTRATED", "n": 150, "observed_directional_rate": 0.58}
     view = view_for(quant_result={"gate_result": gate}, skill_evidence=legacy)
-    (reason,) = frontend_display._blocking_reasons(gate, legacy)  # noqa: SLF001
+    (reason,) = frontend_display._blocking_reasons(gate, legacy, None)  # noqa: SLF001
     card_holds = reason["headline"] == frontend_display._DIRECTIONAL_EVIDENCE_HOLD_HEADLINE  # noqa: SLF001
     assert view["evidence"]["directional_evidence_hold"] is card_holds
     assert (view["evidence"]["skill_verdict"] is None) is card_holds

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from crypto_probability_engine.config.defaults import MIN_DIRECTIONAL_SAMPLES
 
 _BLOCKING_REASON_COPY = {
@@ -35,13 +38,42 @@ _BLOCKING_REASON_COPY = {
     ),
 }
 
+_UNDESCRIBED_BLOCK_DETAIL = "This is a hard gate, but its description is unavailable."
+_LIQUIDITY_BLOCK = "LIQUIDITY_NOT_VIABLE"
+# The liquidity gate also blocks when the order book is missing or unusable. Nothing was measured
+# then, and missing data is not a proven market risk (owner ruling G2, 2026-10-10): its copy says
+# that data are missing and claims no finding about the market.
+_LIQUIDITY_UNMEASURED_COPY = (
+    "Liquidity could not be measured",
+    "Analysis is blocked because the order-book data needed to measure liquidity are "
+    "unavailable or unusable. This is missing data, not a finding about the market.",
+)
 
 
-def blocking_headline(code: str) -> str:
-    """The headline of a hard block other than the evidence gate; an unknown code reads as
-    itself."""
+def liquidity_was_measured(liquidity: Any) -> bool:
+    """Whether the liquidity gate judged a measured order book.
 
-    return _BLOCKING_REASON_COPY.get(code, (code, ""))[0]
+    The gate blocks when the liquidity state is not OK, when it has no spread, when the spread is
+    too wide, or when the depth is too thin (gates/composite.py). Only the last two are findings:
+    without a usable order book the state is not OK and has no spread (features/liquidity_depth.py),
+    and the block says that data are missing. A liquidity state that is absent or unreadable proves
+    no measurement either.
+    """
+
+    if not isinstance(liquidity, Mapping):
+        return False
+    spread = liquidity.get("spread_frac")
+    measured = isinstance(spread, int | float) and not isinstance(spread, bool)
+    return liquidity.get("status") == "OK" and measured
+
+
+def blocking_reason(code: str, liquidity: Any) -> tuple[str, str]:
+    """The headline and the detail of a hard block other than the evidence gate, for the liquidity
+    state its liquidity gate judged; an unknown code reads as itself."""
+
+    if code == _LIQUIDITY_BLOCK and not liquidity_was_measured(liquidity):
+        return _LIQUIDITY_UNMEASURED_COPY
+    return _BLOCKING_REASON_COPY.get(code, (code, _UNDESCRIBED_BLOCK_DETAIL))
 
 
 _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE = "Directional evidence under review"
@@ -85,7 +117,9 @@ def _skill_blocking_reason(skill_evidence: dict | None) -> tuple[str, str]:
     )
 
 
-def _blocking_reasons(gate: dict, skill_evidence: dict | None) -> list[dict[str, str]]:
+def _blocking_reasons(
+    gate: dict, skill_evidence: dict | None, liquidity: Any
+) -> list[dict[str, str]]:
     reasons = []
     for raw_code in gate.get("hard_blocks", []):
         code = str(raw_code)
@@ -97,13 +131,7 @@ def _blocking_reasons(gate: dict, skill_evidence: dict | None) -> list[dict[str,
             else:
                 headline, detail = _skill_blocking_reason(skill_evidence)
         else:
-            headline, detail = _BLOCKING_REASON_COPY.get(
-                code,
-                (
-                    code,
-                    "This is a hard gate, but its description is unavailable.",
-                ),
-            )
+            headline, detail = blocking_reason(code, liquidity)
         reasons.append({"code": code, "headline": headline, "detail": detail})
     return reasons
 
@@ -133,7 +161,9 @@ def build_frontend_display(
         "detail_available": True,
         "key_reasons": list(gate.get("hard_blocks", [])),
         "invalidation_conditions": list(gate.get("hard_blocks", [])),
-        "blocking_reasons": _blocking_reasons(gate, skill_evidence),
+        "blocking_reasons": _blocking_reasons(
+            gate, skill_evidence, quant_result.get("liquidity_state")
+        ),
         "data_quality_warnings": list(data_quality.get("warnings", [])),
         "execution_warnings": list(quant_result["execution_realism"].get("warnings", [])),
         "news_warnings": list(news_blocks["news_addon_state"].get("warnings", [])),

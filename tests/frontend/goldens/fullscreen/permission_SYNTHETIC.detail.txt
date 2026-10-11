@@ -1,6 +1,8 @@
 Decision view
 Accepted forecast with directional permission
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
+No hard gate is active.
+The gates' disposition, with an accepted directional permission for this model and timeframe. Not financial advice: it never tells you to trade, and hard gates outrank everything shown.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -35,7 +37,6 @@ Gate disposition (accepted directional permission; not financial advice)
 Watch
 Reliability: INSUFFICIENT_SAMPLE
 MODERATE
-The gates' disposition, with an accepted directional permission for this model and timeframe. Not financial advice: it never tells you to trade, and hard gates outrank everything shown.
 Watch only; the current output does not support a directional candidate.
 Immediate action
 No
@@ -243,7 +244,6 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (accepted directional permission; not financial advice)
-The gates' disposition, with an accepted directional permission for this model and timeframe. Not financial advice: it never tells you to trade, and hard gates outrank everything shown.
 Gate disposition
 WATCHLIST
 Horizon

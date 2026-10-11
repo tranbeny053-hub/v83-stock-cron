@@ -5,7 +5,7 @@ from __future__ import annotations
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
 from crypto_probability_engine.detail.gate_kinds import (
     NOT_FORCED_BY_A_RISK_GATE,
-    elevated_risk_forced_by_evidence,
+    elevated_risk_not_forced_by_a_risk_gate,
 )
 
 PROBABILITY_EXPLANATION = (
@@ -67,6 +67,10 @@ def build_decision_brief(
     score = quant_result.get("score_stack", {})
     calibration = quant_result.get("calibration_state", {})
     volatility = quant_result.get("market_features", {}).get("volatility", {})
+    # The forced token keeps its note unless a risk gate with a measured finding forced it.
+    not_forced = elevated_risk_not_forced_by_a_risk_gate(
+        gate, score, quant_result.get("liquidity_state")
+    )
     action = _decision_action(gate, score)
     hard_blockers = list(gate.get("hard_blocks") or [])
     reliability = calibration.get("reliability_status", DEFAULT_PHASE1A.reliability_status)
@@ -77,6 +81,7 @@ def build_decision_brief(
         score=score,
         data_quality=data_quality,
         hard_blockers=hard_blockers,
+        not_forced_by_a_risk_gate=not_forced,
     )
     return {
         "action": action,
@@ -96,6 +101,7 @@ def build_decision_brief(
             horizon=horizon,
             gate=gate,
             score=score,
+            not_forced_by_a_risk_gate=not_forced,
         ),
         "key_reasons": key_reasons,
         "hard_blockers": hard_blockers,
@@ -142,14 +148,14 @@ def _key_reasons(
     score: dict,
     data_quality: dict,
     hard_blockers: list[str],
+    not_forced_by_a_risk_gate: bool,
 ) -> list[str]:
     reasons: list[str] = []
     if hard_blockers:
         reasons.append(f"Hard gate blockers present: {', '.join(hard_blockers[:3])}.")
     else:
         reasons.append(f"Gate action: {gate.get('action', 'UNKNOWN')}.")
-    by_evidence = elevated_risk_forced_by_evidence(gate, score)
-    forced = f" ({NOT_FORCED_BY_A_RISK_GATE})" if by_evidence else ""
+    forced = f" ({NOT_FORCED_BY_A_RISK_GATE})" if not_forced_by_a_risk_gate else ""
     reasons.append(f"Backend disposition: {score.get('disposition', 'UNKNOWN')}{forced}.")
     if score.get("total_score") is not None:
         reasons.append(f"Heuristic signal heat score: {score.get('total_score')}.")
@@ -190,13 +196,14 @@ def _state_summary(
     horizon: dict,
     gate: dict,
     score: dict,
+    not_forced_by_a_risk_gate: bool,
 ) -> str:
     summary = (
         f"{normalized_symbol} is classified as {action} for {horizon['horizon_approx_label']} "
         f"using an uncalibrated heuristic. Gate action is {gate.get('action', 'UNKNOWN')} "
         f"and backend disposition is {score.get('disposition', 'UNKNOWN')}"
     )
-    if elevated_risk_forced_by_evidence(gate, score):
+    if not_forced_by_a_risk_gate:
         # The token stays; the sentence says no risk gate produced it (detail/gate_kinds.py).
         return f"{summary} ({NOT_FORCED_BY_A_RISK_GATE})."
     return f"{summary}."

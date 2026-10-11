@@ -19,7 +19,9 @@ start with CONTINUATION.
 Surfaces:
 - single: the timeframe card of a single analysis (horizonCard);
 - batch: the card of a batch analysis (overviewCard);
-- detail: the detail panel of a live analysis (renderStructuredDetail), once its requests settled;
+- detail: the detail panel of a live analysis (renderStructuredDetail) over the detail the detail
+  route returns for it (the run's own detail view with the read-time gate framing, as for a saved
+  run), once its requests settled;
 - history: the detail panel of a saved run read back, from the row the recent list holds and the
   stored detail as the detail route returns it (sanitize_for_export of the detail view, which is
   what is saved, with the gate framing the route builds when it reads it: attach_gate_view).
@@ -244,6 +246,13 @@ def _reopened(payload: dict, *, saved_before: bool = False) -> dict:
     return {"row": {**row, "detail_available": True}, "detail": attach_gate_view(stored)}
 
 
+def live_details(cases: dict[str, dict]) -> dict[str, Any]:
+    """What GET /v1/analyze/detail/{run_id} answers for a live analysis while the server holds it:
+    the run's own detail view, with the gate framing the route builds when it reads it."""
+
+    return {name: attach_gate_view(payload["detail_view"]) for name, payload in cases.items()}
+
+
 def build_reopened(cases: dict[str, dict]) -> dict[str, dict]:
     reopened = {name: _reopened(cases[name]) for name in HISTORY}
     reopened[SAVED_BEFORE] = _reopened(cases["evidence_only"], saved_before=True)
@@ -301,7 +310,7 @@ _RENDER = """
   const screens = {};
   const rawJson = {};
   for (const [name, payload] of Object.entries(cases)) {
-    const detail = await panel(payload, payload.detail_view);
+    const detail = await panel(payload, details[name]);
     screens[name] = {
       single: visibleTexts(fakeElement("div", "", [horizonCard(payload)])),
       batch: visibleTexts(fakeElement("div", "", [overviewCard(payload)])),
@@ -352,6 +361,7 @@ def render(
             harness._DOM_STAND_IN,
             (harness.ROOT / "frontend" / "app.js").read_text(encoding="utf-8"),
             f"const cases = {_js(cases)};",
+            f"const details = {_js(live_details(cases))};",
             f"const reopened = {_js(reopened)};",
             _RENDER,
         ]

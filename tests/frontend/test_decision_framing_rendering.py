@@ -3,6 +3,9 @@ third repair): the legacy decision surfaces are rendered with the real app.js ov
 matrix (a view that is OK, DEGRADED or UNAVAILABLE, no view at all, and an accepted-claim hold),
 and the exact visible framing rows are asserted. Review 2 pinned these only by source substring;
 this renders them, so a later edit that reintroduces a market-call framing is caught.
+
+The framing sentence itself is the backend's (detail/gate_kinds.py; review finding D3): these
+surfaces word none, and print the backend's gate summary and framing together or not at all.
 """
 
 from __future__ import annotations
@@ -58,9 +61,12 @@ def _render(payloads: list[dict[str, object]]) -> list[dict[str, object]]:
             "acceptedViewOf",
             "NOT_REPORTED_TEXT",
             "ACCEPTED_DISCLAIMER",
-            "gateFramingNote",
             "gateViewOf",
-            "gateSummaryFor",
+            "hasGateFraming",
+            "gateFramingBlocks",
+            "reopenedGates",
+            "reopenedGateBlocks",
+            "briefSummaryRows",
             "dispositionLabel",
             "gateBriefTitle",
             "readinessText",
@@ -128,32 +134,32 @@ console.log(JSON.stringify(rendered));
 
 
 _VIEW_OK = {
-    "schema_version": "decision_view.v1",
+    "schema_version": "decision_view.v2",
     "state": "NO_ACCEPTED_CLAIM",
     "accepted_claim": False,
     "data": {"state": "OK"},
 }
 _VIEW_DEGRADED = {
-    "schema_version": "decision_view.v1",
+    "schema_version": "decision_view.v2",
     "state": "NO_ACCEPTED_CLAIM",
     "accepted_claim": False,
     "data": {"state": "DEGRADED"},
 }
 _VIEW_UNAVAILABLE = {
-    "schema_version": "decision_view.v1",
+    "schema_version": "decision_view.v2",
     "state": "INVALID_OR_UNAVAILABLE_DATA",
     "accepted_claim": False,
     "data": {"state": "UNAVAILABLE"},
 }
 _VIEW_HOLD = {
-    "schema_version": "decision_view.v1",
+    "schema_version": "decision_view.v2",
     "state": "ACCEPTED_FORECAST_CLAIM",
     "headline": "Accepted forecast-quality claim",
     "accepted_claim": True,
     "data": {"state": "OK"},
 }
 _VIEW_PERMISSION = {
-    "schema_version": "decision_view.v1",
+    "schema_version": "decision_view.v2",
     "state": "DIRECTIONAL_PERMISSION",
     "headline": "Accepted forecast with directional permission",
     "accepted_claim": True,
@@ -167,6 +173,15 @@ CASES = {
     "view_degraded": {"decision_view": _VIEW_DEGRADED},
     "view_unavailable": {"decision_view": _VIEW_UNAVAILABLE},
     "no_view": {},  # a run reopened from history: the detail payload carries no view
+    # ... and the same run with the gate framing the backend built when it read it back.
+    "reopened": {
+        "gate_view": {
+            "schema_version": "gate_view.v1",
+            "blocked": True,
+            "summary": "BACKEND-SUMMARY",
+            "framing": "BACKEND-FRAMING",
+        }
+    },
     "accepted_hold": {"decision_view": _VIEW_HOLD},
     "accepted_permission": {"decision_view": _VIEW_PERMISSION},
 }
@@ -185,7 +200,6 @@ def test_the_final_decision_card_is_always_the_gates_disposition() -> None:
         texts = {cls: text for cls, text in output["card"]["texts"]}
         if name in WITHOUT_PERMISSION:
             assert texts["decision-eyebrow"] == "Gate disposition (not a market call)", name
-        assert "decision-safety-note" in texts, name
         assert "Backend final decision" not in texts.values(), name
 
 
@@ -195,8 +209,6 @@ def test_the_decision_brief_is_always_the_gate_brief() -> None:
             assert output["brief"]["sections"][0] == "Gate brief (not a market call)", name
         assert output["brief"]["tables"][0][0] == "Gate disposition", name
         assert "Action" not in output["brief"]["tables"][0], name
-        classes = {cls for cls, _ in output["brief"]["texts"]}
-        assert "decision-safety-note" in classes, name
 
 
 def test_the_no_synthesis_fallback_is_the_gate_brief_not_a_call() -> None:
@@ -209,21 +221,34 @@ def test_the_no_synthesis_fallback_is_the_gate_brief_not_a_call() -> None:
             assert "Existing brief" not in label, name
         notes = dict((cls, text) for cls, text in fallback["texts"])
         assert not any("Decision synthesis unavailable" in text for text in notes.values()), name
-        # Framed as the gates' disposition, whatever the view allows; never as a market call.
-        assert notes["decision-safety-note"].startswith("The gates' disposition"), name
 
 
-def test_the_framing_note_matches_what_the_view_allows() -> None:
+def test_no_legacy_surface_words_a_framing_of_its_own() -> None:
+    """Review finding D3: the frontend composed three framing sentences. It composes none now:
+    no legacy surface prints a sentence about the gates' disposition, whatever the view allows.
+    A reopened run prints the backend's summary and, directly under it, the backend's framing,
+    once, in its first block; its stored summary sentence is then not shown."""
+
     cases = _rendered_cases()
-    note = dict(cases["no_view"]["card"]["texts"])["decision-safety-note"]
-    assert (
-        note
-        == "The gates' disposition, not a market call: a gate outcome is not a forecast to act on."
-    )
-    hold = dict(cases["accepted_hold"]["card"]["texts"])["decision-safety-note"]
-    assert hold == "The gates' disposition: hard gates outrank everything shown."
-    ok = dict(cases["view_ok"]["card"]["texts"])["decision-safety-note"]
-    assert "no reason to act or to avoid acting" in ok
+    for name, output in cases.items():
+        for surface in ("card", "brief", "fallback"):
+            texts = [text for _, text in output[surface]["texts"]]
+            assert not any("gates' disposition" in str(text) for text in texts), (name, surface)
+            assert not any("reason to act" in str(text) for text in texts), (name, surface)
+            shown = [text for text in texts if str(text).startswith("BACKEND-")]
+            authority = ["BACKEND-SUMMARY", "BACKEND-FRAMING"]
+            leads = name == "reopened" and surface == "fallback"
+            assert shown == (authority if leads else []), (name, surface)
+    reopened, bare = cases["reopened"], cases["no_view"]
+    assert [cls for cls, text in reopened["fallback"]["texts"] if text.startswith("BACKEND-")] == [
+        "decision-gates",
+        "decision-gate-framing",
+    ]
+    # The stored summary sentence gives way to the read-time framing, and only to it.
+    assert "Gate brief summary" not in reopened["fallback"]["tables"][0]
+    assert "State summary" not in reopened["brief"]["tables"][0]
+    assert "Gate brief summary" in bare["fallback"]["tables"][0]
+    assert "State summary" in bare["brief"]["tables"][0]
 
 
 def test_an_accepted_permission_is_shown_and_stays_non_advisory() -> None:
@@ -245,9 +270,10 @@ def test_an_accepted_permission_is_shown_and_stays_non_advisory() -> None:
         *output["fallback"]["sections"],
     ]
     assert not any("not a market call" in text for text in everything)
-    non_advisory = "Not financial advice: it never tells you to trade"
-    for surface in (card, dict(output["brief"]["texts"]), dict(output["fallback"]["texts"])):
-        assert non_advisory in surface["decision-safety-note"]
+    # Each title and label says it is not financial advice; the sentence that frames the gates
+    # under a permission is the backend's (gate_kinds.DIRECTIONAL_PERMISSION_FRAMING).
+    for label in (card["decision-eyebrow"], output["brief"]["sections"][0]):
+        assert "not financial advice" in label
 
 
 def test_accepted_evidence_shows_its_accepted_state() -> None:
@@ -258,5 +284,5 @@ def test_accepted_evidence_shows_its_accepted_state() -> None:
     for name, view in (("accepted_hold", _VIEW_HOLD), ("accepted_permission", _VIEW_PERMISSION)):
         readiness = dict(cases[name]["brief"]["values"][0])["Model readiness"]
         assert readiness == view["headline"], name
-    for name in ("view_ok", "view_degraded", "view_unavailable", "no_view"):
+    for name in ("view_ok", "view_degraded", "view_unavailable", "no_view", "reopened"):
         assert dict(cases[name]["brief"]["values"][0])["Model readiness"] == "HEURISTIC-COPY", name

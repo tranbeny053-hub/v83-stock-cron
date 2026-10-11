@@ -44,10 +44,16 @@ EVIDENCE_TOO = (
     "timeframe."
 )
 RISK = "A risk gate is active: Extreme-move risk is too high."
+WIDE = "A risk gate is active: Execution cost is too high; Liquidity is not viable."
 SYSTEM = "A system or data gate is active: Safety shutdown is active."
+UNMEASURED = "A system or data gate is active: Liquidity could not be measured."
 RISK_FRAMING = (
-    "This is a finding about market conditions or execution. It is analysis only, not an "
-    "instruction."
+    "The risk gate (Extreme-move risk is too high) is a finding about market conditions or "
+    "execution. It is analysis only, not an instruction."
+)
+WIDE_FRAMING = (
+    "The risk gates (Execution cost is too high; Liquidity is not viable) are findings about "
+    "market conditions or execution. They are analysis only, not an instruction."
 )
 NOT_A_MARKET_CALL = (
     "The gates' disposition, not a market call: a gate outcome is not a forecast to act on."
@@ -60,19 +66,29 @@ RISK_SENTENCE = (
 NO_REASON = "reason to act or to avoid acting"
 FORCED_NOTE = "ELEVATED_RISK_AVOID (not forced by a risk gate)"
 OLD_STORED_SUMMARY = goldens.OLD_STORED_SUMMARY
-# What no screen may say over an analysis whose only hard block is the evidence gate.
-RISK_WORDING = re.compile(r"elevated[- ]risk|risk gate is active|tail-risk state normalizes", re.I)
+# What no screen may say over an analysis on which no risk gate reports a measured finding.
+RISK_WORDING = re.compile(
+    r"elevated[- ]risk|risk gates? (is|are) active|risk gates? \(|tail-risk state normalizes"
+    r"|finding about market|is not viable",
+    re.I,
+)
 RISK_HEADINGS = {"Risk summary", "Risk / Gates", "Risk note", "Gate brief risk note"}
 SURFACES = ("single", "batch", "detail", "history")
 
-# scenario -> (the gate summary, whether a risk gate is active)
-SCENARIOS: dict[str, tuple[str, bool]] = {
-    "evidence_only": (EVIDENCE, False),
-    "risk_and_evidence": (f"{RISK} {EVIDENCE_TOO}", True),
-    "risk_only_SYNTHETIC": (RISK, True),
-    "kill_switch_and_evidence": (f"{SYSTEM} {EVIDENCE_TOO}", False),
-    "system_only_SYNTHETIC": (SYSTEM, False),
+# scenario -> (the gate summary, the framing directly under it)
+SCENARIOS: dict[str, tuple[str, str]] = {
+    "evidence_only": (EVIDENCE, NOT_A_MARKET_CALL),
+    "risk_and_evidence": (f"{RISK} {EVIDENCE_TOO}", RISK_FRAMING),
+    "wide_spread_and_evidence": (f"{WIDE} {EVIDENCE_TOO}", WIDE_FRAMING),
+    "missing_order_book_and_evidence": (f"{UNMEASURED} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
+    "kill_switch_and_evidence": (f"{SYSTEM} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
+    "risk_only_SYNTHETIC": (RISK, RISK_FRAMING),
+    "missing_order_book_only_SYNTHETIC": (UNMEASURED, NOT_A_MARKET_CALL),
+    "system_only_SYNTHETIC": (SYSTEM, NOT_A_MARKET_CALL),
 }
+# The scenarios on which a risk gate reports a measured finding, and the others.
+WITH_A_RISK_GATE = [name for name, (_, framing) in SCENARIOS.items() if "risk gate" in framing]
+WITHOUT_A_RISK_GATE = [name for name in SCENARIOS if name not in WITH_A_RISK_GATE]
 SAVED_BEFORE = goldens.SAVED_BEFORE
 
 
@@ -104,6 +120,7 @@ def test_the_matrix_reads_the_goldens_own_scenarios(reopened: dict) -> None:
 
 
 def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
+    liquidity = ["LIQUIDITY_NOT_VIABLE", "SKILL_NOT_DEMONSTRATED"]
     expected = {
         "evidence_only": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"], "NO_TRADE"),
         "risk_and_evidence": (
@@ -111,14 +128,22 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
             ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"],
             "NO_TRADE",
         ),
-        "risk_only_SYNTHETIC": ("NO_TRADE", ["TAIL_RISK_BREACH"], "NO_TRADE"),
+        "wide_spread_and_evidence": (
+            "NO_TRADE",
+            ["EXECUTION_COST_TOO_HIGH", *liquidity],
+            "NO_TRADE",
+        ),
+        "missing_order_book_and_evidence": ("NO_TRADE", liquidity, "NO_TRADE"),
         "kill_switch_and_evidence": (
             "ABORT",
             ["KILL_SWITCH", "SKILL_NOT_DEMONSTRATED"],
             "NO_TRADE",
         ),
+        "risk_only_SYNTHETIC": ("NO_TRADE", ["TAIL_RISK_BREACH"], "NO_TRADE"),
+        "missing_order_book_only_SYNTHETIC": ("NO_TRADE", ["LIQUIDITY_NOT_VIABLE"], "NO_TRADE"),
         "system_only_SYNTHETIC": ("ABORT", ["KILL_SWITCH"], "AVOID"),
     }
+    assert set(expected) == set(SCENARIOS)
     for name, (action, blocks, label) in expected.items():
         payload = cases[name]
         assert payload["gate_result"]["action"] == action, name
@@ -126,9 +151,14 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
         assert payload["decision_synthesis"]["decision_synthesis"]["label"] == label, name
         assert payload["frontend_display"]["disposition"] == action, name
         assert payload["decision_view"]["state"] == "NO_ACCEPTED_CLAIM", name
-    for name in ("evidence_only", "risk_and_evidence", "kill_switch_and_evidence"):
-        assert cases[name]["score_stack"]["disposition"] == "ELEVATED_RISK_AVOID", name
-        assert cases[name]["gate_result"]["forced_score_disposition"] == "ELEVATED_RISK_AVOID", name
+    for name in SCENARIOS:
+        forced = name != "system_only_SYNTHETIC"
+        token = "ELEVATED_RISK_AVOID" if forced else None
+        assert cases[name]["gate_result"]["forced_score_disposition"] == token, name
+        assert (cases[name]["score_stack"]["disposition"] == "ELEVATED_RISK_AVOID") is forced
+    # The gates' own flag does not tell a measured finding from a missing order book.
+    for name in ("wide_spread_and_evidence", "missing_order_book_and_evidence"):
+        assert cases[name]["gate_result"]["risk_guard_applied"] is True, name
     assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
     assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
     assert len(decision_view.ACCEPTANCE_BLOCKERS) == 4
@@ -136,15 +166,18 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
 
 @pytest.mark.parametrize("name", SCENARIOS)
 def test_the_view_is_the_one_gate_authority(cases: dict[str, dict], name: str) -> None:
-    summary, risk = SCENARIOS[name]
+    summary, framing = SCENARIOS[name]
     payload = cases[name]
-    gates = payload["decision_view"]["gates"]
-    assert gates == gate_kinds.build_gate_view(payload["gate_result"])
-    assert gates["summary"] == summary
-    assert gates["framing"] == (RISK_FRAMING if risk else NOT_A_MARKET_CALL)
+    view = payload["decision_view"]
+    gates = view["gates"]
+    assert gates == gate_kinds.build_gate_view(
+        payload["gate_result"], liquidity=payload["liquidity_state"], state=view["state"]
+    )
+    assert gates["summary"] == summary and gates["framing"] == framing
+    risk = name in WITH_A_RISK_GATE
     assert gates["risk_gate_active"] is risk and gates["blocked"] is True
     assert [entry["block"] for entry in gates["blocks"]] == payload["gate_result"]["hard_blocks"]
-    assert payload["decision_view"]["detail"] == (RISK_SENTENCE if risk else SENTENCE)
+    assert view["detail"] == (RISK_SENTENCE if risk else SENTENCE)
     # What a saved run stores is enough to build the same framing when it is read back.
     stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
     assert "gate_view" not in stored, "the framing is never stored"
@@ -153,21 +186,40 @@ def test_the_view_is_the_one_gate_authority(cases: dict[str, dict], name: str) -
 
 @pytest.mark.parametrize("name", SCENARIOS)
 @pytest.mark.parametrize("surface", SURFACES)
-def test_every_surface_carries_the_same_gate_framing(
+def test_the_summary_and_its_framing_are_adjacent_and_in_that_order_on_every_surface(
     screens: dict, name: str, surface: str
 ) -> None:
-    summary, risk = SCENARIOS[name]
+    """Review finding D1, pinned: the framing is the line directly under the summary, wherever
+    the authority is shown, and it is shown nowhere else. On the cards and on a reopened run
+    the summary is shown once. On the detail panel of a live analysis the older sections still
+    repeat the summary alone (they are retired in a later step); the first one leads."""
+
+    summary, framing = SCENARIOS[name]
     texts = screens[name][surface]
-    assert summary in texts, f"{name}/{surface}: the gate summary"
-    assert (RISK_FRAMING if risk else NOT_A_MARKET_CALL) in texts, f"{name}/{surface}: the framing"
+    assert texts[texts.index(summary) + 1] == framing, f"{name}/{surface}"
+    assert texts.count(framing) == 1, f"{name}/{surface}: the framing away from its summary"
+    if surface != "detail":
+        assert texts.count(summary) == 1, f"{name}/{surface}"
     if surface != "history":  # a reopened run has no view, only its gate framing
-        assert texts[texts.index(HEADLINE) + 1] == (RISK_SENTENCE if risk else SENTENCE)
+        risk = name in WITH_A_RISK_GATE
+        at = texts.index(HEADLINE)
+        assert texts[at + 1 : at + 4] == [RISK_SENTENCE if risk else SENTENCE, summary, framing]
     assert "One or more hard gates are active." not in texts, f"{name}/{surface}"
 
 
-@pytest.mark.parametrize(
-    "name", ["evidence_only", "kill_switch_and_evidence", "system_only_SYNTHETIC"]
-)
+@pytest.mark.parametrize("name", WITH_A_RISK_GATE)
+def test_the_risk_framing_names_the_gate_it_is_about(cases: dict, name: str) -> None:
+    gates = cases[name]["decision_view"]["gates"]
+    named = [entry["headline"] for entry in gates["blocks"] if entry["kind"] == "RISK"]
+    assert named and gates["framing"].startswith(("The risk gate (", "The risk gates ("))
+    assert f"({'; '.join(named)})" in gates["framing"]
+    assert "This is a finding" not in gates["framing"], "a framing without a subject"
+    for entry in gates["blocks"]:
+        if entry["kind"] != "RISK":
+            assert entry["headline"] not in gates["framing"], "only the risk gates are named"
+
+
+@pytest.mark.parametrize("name", WITHOUT_A_RISK_GATE)
 @pytest.mark.parametrize("surface", SURFACES)
 def test_without_a_risk_gate_no_screen_words_risk(screens: dict, name: str, surface: str) -> None:
     for text in screens[name][surface]:
@@ -176,10 +228,38 @@ def test_without_a_risk_gate_no_screen_words_risk(screens: dict, name: str, surf
         assert text not in RISK_HEADINGS, f"{name}/{surface}: the heading {text!r}"
         if "ELEVATED_RISK_AVOID" in text:
             assert FORCED_NOTE in text, f"{name}/{surface}: the token alone in {text!r}"
-        assert RISK_FRAMING != text, f"{name}/{surface}: risk framing without a risk gate"
 
 
-@pytest.mark.parametrize("name", ["risk_and_evidence", "risk_only_SYNTHETIC"])
+@pytest.mark.parametrize("name", ["missing_order_book_and_evidence", "saved"])
+def test_a_gate_fired_by_missing_data_is_a_data_gate_on_every_surface(
+    cases: dict, reopened: dict, screens: dict, name: str
+) -> None:
+    """Review finding D2 (owner ruling G2: missing data is not proven market risk). The venue
+    gave no order book, so the liquidity gate fired on missing data: the same block and the same
+    forced token as a measured finding, and no screen calls it one. A saved run reads the same."""
+
+    scenario = "missing_order_book_and_evidence"
+    payload = cases[scenario]
+    assert payload["liquidity_state"]["warning"] == "Order book unavailable."
+    assert "LIQUIDITY_NOT_VIABLE" in payload["gate_result"]["hard_blocks"]
+    surfaces = ("history",) if name == "saved" else ("single", "batch", "detail")
+    if name == "saved":
+        stored = reopened[scenario]["detail"]
+        assert stored["gate_view"] == payload["decision_view"]["gates"]
+        assert stored["liquidity_execution_detail"]["liquidity_state"] == payload["liquidity_state"]
+    for surface in surfaces:
+        texts = screens[scenario][surface]
+        assert f"{UNMEASURED} {EVIDENCE_TOO}" in texts, surface
+        for text in texts:
+            assert "A risk gate is active" not in text, f"{surface}: {text}"
+            assert "finding about market conditions" not in text, f"{surface}: {text}"
+    # The measured counterpart is a risk gate, on the same block.
+    wide = cases["wide_spread_and_evidence"]
+    assert "LIQUIDITY_NOT_VIABLE" in wide["gate_result"]["hard_blocks"]
+    assert wide["decision_view"]["gates"]["risk_gate_active"] is True
+
+
+@pytest.mark.parametrize("name", WITH_A_RISK_GATE)
 @pytest.mark.parametrize("surface", SURFACES)
 def test_under_a_real_risk_gate_no_screen_says_no_reason_to_act(
     screens: dict, name: str, surface: str
@@ -203,19 +283,23 @@ def test_a_run_saved_before_this_change_is_framed_from_its_stored_gate_result(
     screens: dict,
 ) -> None:
     texts = screens[SAVED_BEFORE]["history"]
-    assert EVIDENCE in texts and NOT_A_MARKET_CALL in texts
+    assert texts[texts.index(EVIDENCE) + 1] == NOT_A_MARKET_CALL
     assert OLD_STORED_SUMMARY not in texts, "the stored summary shows the token alone"
     for text in texts:
         if "ELEVATED_RISK_AVOID" in text:
             assert FORCED_NOTE in text, text
         assert not RISK_WORDING.search(text.replace("No risk gate is active.", "")), text
+    # An older run and a new one of the same analysis read the same, line for line.
+    assert texts == screens["evidence_only"]["history"]
 
 
-def test_the_single_cards_banner_is_the_gate_summary_whatever_check_blocks_first(
-    screens: dict,
-) -> None:
-    assert screens["first_check_blocks_SYNTHETIC"]["single"][:2] == ["BLOCK", EVIDENCE]
-    assert screens["evidence_only"]["single"][:2] == ["BLOCK", EVIDENCE]
+def test_the_single_cards_banner_names_the_check_that_blocks(screens: dict) -> None:
+    """The gate summary is in the view, with its framing: the banner does not repeat it."""
+
+    assert screens["evidence_only"]["single"][:2] == ["BLOCK", "Hard gates"]
+    assert screens["kill_switch_and_evidence"]["single"][:2] == ["BLOCK", "Hard gates"]
+    assert screens["first_check_blocks_SYNTHETIC"]["single"][:2] == ["BLOCK", "Data quality"]
+    assert EVIDENCE in screens["first_check_blocks_SYNTHETIC"]["single"]
 
 
 def test_only_currently_relevant_conditions_are_listed(cases: dict, screens: dict) -> None:
@@ -236,16 +320,31 @@ def test_only_currently_relevant_conditions_are_listed(cases: dict, screens: dic
 def test_the_accepted_states_keep_their_ruling_and_gain_the_gate_authority(
     cases: dict, screens: dict, name: str
 ) -> None:
-    gates = cases[name]["decision_view"]["gates"]
-    assert gates == gate_kinds.build_gate_view(cases[name]["gate_result"])
+    payload = cases[name]
+    view = payload["decision_view"]
+    gates = view["gates"]
+    assert gates == gate_kinds.build_gate_view(
+        payload["gate_result"], liquidity=payload["liquidity_state"], state=view["state"]
+    )
+    framing = {
+        "accepted_claim_SYNTHETIC": gate_kinds.ACCEPTED_CLAIM_FRAMING,
+        "permission_SYNTHETIC": gate_kinds.DIRECTIONAL_PERMISSION_FRAMING,
+    }[name]
+    assert gates["framing"] == framing
+    assert gates["blocked"] is (name == "accepted_claim_SYNTHETIC")
     for surface in ("single", "batch", "detail"):
         texts = screens[name][surface]
-        assert cases[name]["decision_view"]["headline"] in texts, surface
+        assert view["headline"] in texts, surface
         assert not any(
             RISK_WORDING.search(text.replace("No risk gate is active.", "")) for text in texts
         )
-        if gates["blocked"]:
-            assert gates["summary"] in texts, surface
+        # The gate authority is shown whether a gate blocks or not, with the state's framing.
+        assert texts[texts.index(gates["summary"]) + 1] == framing, surface
+        assert texts.count(framing) == 1, surface
+    assert screens["permission_SYNTHETIC"]["single"][0] != "BLOCK"
+    assert cases["permission_SYNTHETIC"]["decision_view"]["gates"]["summary"] == (
+        "No hard gate is active."
+    )
 
 
 def test_the_storage_row_is_storage_at_request_time(screens: dict) -> None:

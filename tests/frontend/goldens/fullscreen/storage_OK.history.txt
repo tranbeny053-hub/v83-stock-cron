@@ -1,10 +1,9 @@
 Gate brief (not a market call)
 No decision synthesis for this run; the existing gate brief is shown.
+Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Gate disposition
 NO_TRADE
-Gate brief summary
-Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Gate brief note
 Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
 Scenario plan
@@ -64,7 +63,6 @@ n/a
 Storage when requested
 Storage available
 Gate brief (not a market call)
-The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Gate disposition
 NO_TRADE
 Horizon
@@ -77,8 +75,6 @@ Reliability
 INSUFFICIENT_SAMPLE
 Profitability claim
 false
-State summary
-Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
 Gate note

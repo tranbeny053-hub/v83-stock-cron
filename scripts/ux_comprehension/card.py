@@ -352,13 +352,10 @@ def card_markdown() -> str:
     for scenario, (_, view), rows in zip(SCENARIOS, built, rendered, strict=True):
         lines += ["", f"## Analysis {scenario.letter}", "", f"**{view['headline']}**", ""]
         lines += [view["detail"], ""]
-        # The view's gate framing, as app.js shows it (gateFramingBlocks): the summary when a gate
-        # blocks, and the framing sentence unless an accepted claim frames the gates itself.
+        # The view's gate authority, as app.js shows it (gateFramingBlocks): the backend's gate
+        # summary, and directly under it the backend's framing of that summary.
         gates = view["gates"]
-        if gates["blocked"]:
-            lines += [gates["summary"], ""]
-            if not view["accepted_claim"]:
-                lines += [gates["framing"], ""]
+        lines += [gates["summary"], "", gates["framing"], ""]
         lines += ["| Row | Shown |", "| --- | --- |"]
         lines += [f"| {label} | {value} |" for label, value in rows]
     lines += [

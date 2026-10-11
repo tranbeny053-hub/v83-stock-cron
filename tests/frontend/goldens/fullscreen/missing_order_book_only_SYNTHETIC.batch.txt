@@ -2,9 +2,9 @@ BTC/USDT · 1H setup / ~6H horizon
 Detail
 LIVE DATA - OKX_PUBLIC
 No accepted forecast
-No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
-A risk gate is active: Liquidity is not viable.
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+A system or data gate is active: Liquidity could not be measured.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

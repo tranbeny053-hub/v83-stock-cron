@@ -1031,7 +1031,7 @@ def test_the_analyses_are_live_and_say_what_storage_was_at_request_time(data: di
     run_ids = {payload["run_id"] for payload in data["analyses"].values()}
     assert len(run_ids) == len(TIMEFRAMES)
     for payload in (*data["analyses"].values(), *data["stored"].values()):
-        assert payload["decision_view"]["schema_version"] == "decision_view.v1"
+        assert payload["decision_view"]["schema_version"] == "decision_view.v2"
         assert "save_receipt" not in payload, "the response carries no receipt (owner ruling D4)"
     assert data["stored"]["OK"]["debug"]["persistence_status"] == "OK"
     assert data["stored"]["UNAVAILABLE"]["debug"]["persistence_status"] == "UNAVAILABLE"

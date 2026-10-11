@@ -423,8 +423,8 @@ def test_decision_renderer_has_safe_missing_contract_and_null_plan_behavior() ->
     js = read_frontend("app.js")
     assert "No decision synthesis for this run; the existing gate brief is shown." in js
     assert "decisionBrief.action" in js
-    assert "gateSummaryFor(payload, decisionBrief)" in js
-    assert "!decisionViewOf(payload) && gates ? gates.summary : brief.state_summary" in js
+    assert '...briefSummaryRows("Gate brief summary", payload, decisionBrief, accepted),' in js
+    assert "if (hasGateFraming(reopenedGates(payload))) return [];" in js
     assert "Scenario plan unavailable. Keep using the Decision summary and hard gates." in js
     assert "Numeric entry, stop, target, and risk/reward are disabled for now." in js
     assert "renderTradePlanSkeleton" in js
@@ -1380,7 +1380,7 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
     assert 'textBlock("p", view.detail, "decision-detail")' in _function_text(js, "horizonCard")
     assert "view ? decisionDataBanner(view.data) : dataBannerText(display)" in card
     assert 'headline.dataset.decisionState = view.state;' in card
-    assert 'view.schema_version === "decision_view.v1"' in _function_text(js, "decisionViewOf")
+    assert 'view.schema_version === "decision_view.v2"' in _function_text(js, "decisionViewOf")
 
 
 def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
@@ -1433,29 +1433,27 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
     card = _function_text(js, "renderFinalDecisionCard")
     assert 'textBlock("p", dispositionLabel(view), "decision-eyebrow")' in card
     assert "Backend final decision" not in card
-    assert (
-        'card.append(textBlock("p", gateFramingNote(view, gateViewOf(payload)), '
-        '"decision-safety-note"));'
-    ) in card
     brief = _function_text(js, "renderDecisionBrief")
     assert "section(gateBriefTitle(view), [" in brief
-    assert (
-        'textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"),'
-        in brief
-    )
     assert '["Gate disposition", brief.action],' in brief
     assert '"Decision Brief"' not in brief and '"Action"' not in brief
     synthesis = _function_text(js, "renderDecisionSynthesis")
     assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
-    assert "gateFramingNote(decisionViewOf(payload), gateViewOf(payload))," in (
-        synthesis
-    )
+    assert "...reopenedGateBlocks(payload)," in synthesis
     assert '["Gate disposition", decisionBrief.action],' in synthesis
     assert "Existing brief action" not in synthesis and '"Decision synthesis unavailable' not in js
     assert "renderFinalDecisionCard(synthesis, payload)," in synthesis
-    # The no-view note is true unconditionally: a gate outcome is never a forecast.
-    note = _function_text(js, "gateFramingNote")
-    assert "a gate outcome is not a forecast to act on" in note
+    # The framing sentence is the backend's (review finding D3): no surface words one, and the
+    # summary and its framing are only ever shown together.
+    assert "function gateFramingNote" not in js and "decision-safety-note\"));" not in card
+    for surface in (card, brief, synthesis):
+        assert "gates.framing" not in surface and "gates.summary" not in surface
+    blocks = _function_text(js, "gateFramingBlocks")
+    assert "if (!hasGateFraming(gates)) return [];" in blocks
+    assert blocks.index("gates.summary") < blocks.index("gates.framing")
+    assert js.count("gates.framing") == 2 and js.count("gates.summary") == 2, (
+        "the two sentences are read in one place: the test for both, and the pair of blocks"
+    )
     detail = _function_text(js, "renderStructuredDetail")
     assert "renderDecisionBrief(decisionBrief, display.blocking_reasons, payload)," in detail
     # Without an accepted directional permission the labels never read as a market call.
@@ -1477,9 +1475,8 @@ def test_an_accepted_permission_and_accepted_evidence_show_their_state() -> None
     ):
         text = _function_text(js, helper)
         assert "view && view.directional_permission" in text and permission in text, helper
-    note = _function_text(js, "gateFramingNote")
-    assert note.index("view.directional_permission") < note.index("view.accepted_claim")
-    assert "Not financial advice: it never tells you to trade" in note
+    # The sentence that frames the gates under an accepted state is the backend's own.
+    assert "Not financial advice: it never tells you to trade, and hard gates" not in js
     assert "view && view.accepted_claim ? view : null" in _function_text(js, "acceptedViewOf")
     assert "accepted ? accepted.headline : fallback" in _function_text(js, "readinessText")
     assert "view.accepted_claim\n        ? view.headline" in _function_text(js, "decisionViewRows")

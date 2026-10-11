@@ -4,6 +4,8 @@ BTC/USDT
 Detail
 Accepted forecast with directional permission
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
+No hard gate is active.
+The gates' disposition, with an accepted directional permission for this model and timeframe. Not financial advice: it never tells you to trade, and hard gates outrank everything shown.
 1W is interpreted as regime context; it does not change the underlying probability values.
 Immediate action
 No

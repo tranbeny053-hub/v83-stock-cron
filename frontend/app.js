@@ -427,31 +427,6 @@ function firstReason(payload) {
 const NOT_ASSESSED_TEXT = "Not assessed (the data cannot support an assessment)";
 const VENUE_LABELS = { cross_provider: "cross-checked venues" };
 
-// The gates' legacy decision is framed as what it is, always: with a view (live analysis) or
-// without one (a run reopened from history, whose detail payload carries no view). A gate outcome
-// is never a market call, so the no-view note says exactly that and claims nothing it cannot know.
-function gateFramingNote(view, gates = null) {
-  if (view && view.directional_permission) {
-    return (
-      "The gates' disposition, with an accepted directional permission for this model and " +
-      "timeframe. Not financial advice: it never tells you to trade, and hard gates outrank " +
-      "everything shown."
-    );
-  }
-  if (view && view.accepted_claim) {
-    return "The gates' disposition: hard gates outrank everything shown.";
-  }
-  // Under a real risk gate the backend's gate framing replaces this note (owner ruling D3).
-  if (gates && gates.risk_gate_active) return gates.framing;
-  if (view) {
-    return (
-      "The gates' disposition, not a market call: with no accepted forecast it is no reason " +
-      "to act or to avoid acting."
-    );
-  }
-  return "The gates' disposition, not a market call: a gate outcome is not a forecast to act on.";
-}
-
 // The gates' disposition and brief, labelled by what the view allows (owner ruling 2026-10-06):
 // never a market call without an accepted directional permission; with one, the permission is
 // shown, and the label stays explicitly non-advisory.
@@ -492,7 +467,7 @@ function readinessText(payload, fallback) {
 
 function decisionViewOf(payload) {
   const view = payload?.decision_view;
-  return view && view.schema_version === "decision_view.v1" ? view : null;
+  return view && view.schema_version === "decision_view.v2" ? view : null;
 }
 
 // The one gate authority (owner ruling AD1=A): the view's gates for a live analysis, or the gate
@@ -502,14 +477,19 @@ function gateViewOf(payload) {
   return gates && gates.schema_version === "gate_view.v1" ? gates : null;
 }
 
-// Under an accepted claim the accepted state's own note frames the gates (owner ruling
-// 2026-10-06), so only the summary is shown there.
-function gateFramingBlocks(gates, view = null) {
-  if (!gates || !gates.blocked) return [];
-  const summary = textBlock("p", gates.summary, "decision-gates");
-  return view && view.accepted_claim
-    ? [summary]
-    : [summary, textBlock("p", gates.framing, "decision-gate-framing")];
+// The gate authority as every surface shows it: the backend's summary, and directly under it the
+// backend's framing of that summary. Both sentences are the backend's own, for every state
+// (detail/gate_kinds.py); nothing here words a framing, and the two are never shown apart.
+function hasGateFraming(gates) {
+  return Boolean(gates && backendText(gates.summary) && backendText(gates.framing));
+}
+
+function gateFramingBlocks(gates) {
+  if (!hasGateFraming(gates)) return [];
+  return [
+    textBlock("p", gates.summary, "decision-gates"),
+    textBlock("p", gates.framing, "decision-gate-framing"),
+  ];
 }
 
 function decisionDataBanner(data = {}) {
@@ -765,7 +745,7 @@ function overviewCard(payload) {
     sentence.className = "decision-detail";
     sentence.textContent = view.detail;
     node.insertBefore(sentence, node.querySelector("dl"));
-    for (const line of gateFramingBlocks(gateViewOf(payload), view)) {
+    for (const line of gateFramingBlocks(gateViewOf(payload))) {
       node.insertBefore(line, node.querySelector("dl"));
     }
   }
@@ -937,11 +917,13 @@ function horizonCard(payload) {
     const blockBanner = document.createElement("div");
     blockBanner.className = "matrix-block-banner";
     blockBanner.append(decisionBadge("BLOCK", "block"));
+    // With a view, the banner names the check that blocks, and the view below it carries the
+    // gate summary with its framing: the summary is never shown apart from its framing.
+    const viewLeads = Boolean(decisionViewOf(payload));
     blockBanner.append(
       textBlock(
         "span",
-        (gateViewOf(payload)?.blocked && backendText(gateViewOf(payload).summary)) ||
-          backendText(blocking.plain_english) ||
+        (viewLeads ? null : backendText(blocking.plain_english)) ||
           backendText(blocking.label) ||
           "Blocked",
       ),
@@ -969,10 +951,7 @@ function horizonCard(payload) {
     headline.dataset.decisionState = view.state;
     node.append(headline);
     node.append(textBlock("p", view.detail, "decision-detail"));
-    const gates = gateViewOf(payload);
-    if (gates && gates.blocked && !view.accepted_claim) {
-      node.append(textBlock("p", gates.framing, "decision-gate-framing"));
-    }
+    node.append(...gateFramingBlocks(gateViewOf(payload)));
     node.append(textBlock("p", role.plainEnglish, "matrix-role-description"));
     const permissions = renderPermissionRow(permission);
     permissions.classList.add("matrix-permissions");
@@ -1704,7 +1683,6 @@ function renderFinalDecisionCard(synthesis = {}, payload = {}) {
   );
   card.append(header);
 
-  card.append(textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"));
   if (backendText(decision.plain_english)) {
     card.append(textBlock("p", decision.plain_english, "decision-lead"));
   }
@@ -2424,11 +2402,22 @@ function renderFutureQuantHooks(hooks = {}) {
   return advanced;
 }
 
-// A reopened run stores its brief's sentence as it was written when saved. Its gate framing is
-// built when it is read, so that is what is shown; a live analysis shows its own brief.
-function gateSummaryFor(payload, brief = {}) {
-  const gates = gateViewOf(payload);
-  return !decisionViewOf(payload) && gates ? gates.summary : brief.state_summary;
+// A reopened run has no view, so its gate summary and framing lead its gate brief instead (the
+// backend built them when the run was read). A live analysis shows them in its decision view.
+function reopenedGates(payload) {
+  return decisionViewOf(payload) ? null : gateViewOf(payload);
+}
+
+function reopenedGateBlocks(payload) {
+  return gateFramingBlocks(reopenedGates(payload));
+}
+
+// A reopened run stores its brief's sentence as it was written when saved. Where the backend
+// built its gate framing at read time, that is shown above in its place and the stored sentence
+// is not; a live analysis shows its own brief.
+function briefSummaryRows(label, payload, brief = {}, accepted = null) {
+  if (hasGateFraming(reopenedGates(payload))) return [];
+  return [[label, accepted ? accepted.detail : brief.state_summary]];
 }
 
 function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
@@ -2442,14 +2431,10 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
         "No decision synthesis for this run; the existing gate brief is shown.",
         "decision-warning",
       ),
-      textBlock(
-        "p",
-        gateFramingNote(decisionViewOf(payload), gateViewOf(payload)),
-        "decision-safety-note",
-      ),
+      ...reopenedGateBlocks(payload),
       keyValueTable([
         ["Gate disposition", decisionBrief.action],
-        ["Gate brief summary", accepted ? accepted.detail : gateSummaryFor(payload, decisionBrief)],
+        ...briefSummaryRows("Gate brief summary", payload, decisionBrief, accepted),
         ["Gate brief note", decisionBrief.risk_note],
       ]),
       renderTradePlanSkeleton({}),
@@ -2500,7 +2485,6 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
         .filter(Boolean)
     : [];
   return section(gateBriefTitle(view), [
-    textBlock("p", gateFramingNote(view, gateViewOf(payload)), "decision-safety-note"),
     keyValueTable([
       ["Gate disposition", brief.action],
       ["Horizon", `${brief.timeframe_label || "setup"} / ${brief.horizon_label || "horizon"}`],
@@ -2508,7 +2492,7 @@ function renderDecisionBrief(brief = {}, blockingReasons = [], payload = {}) {
       ["Calibration", brief.calibration_status],
       ["Reliability", brief.reliability_status],
       ["Profitability claim", brief.profitability_claim ? "yes" : "false"],
-      ["State summary", accepted ? accepted.detail : gateSummaryFor(payload, brief)],
+      ...briefSummaryRows("State summary", payload, brief, accepted),
       ["Volatility reference", brief.volatility_reference?.note],
       ["Gate note", brief.risk_note],
       ["Disclaimer", accepted ? ACCEPTED_DISCLAIMER : brief.disclaimer],
@@ -2557,7 +2541,7 @@ function renderStructuredDetail(payload, detailView) {
     ? section("Decision view", [
         textBlock("p", view.headline, "decision-headline"),
         textBlock("p", view.detail),
-        ...gateFramingBlocks(gateViewOf(payload), view),
+        ...gateFramingBlocks(gateViewOf(payload)),
         keyValueTable(decisionViewRows(payload, view)),
         textBlock("p", view.range?.meaning || "", "muted"),
         textBlock("p", view.cost?.label || "", "muted"),

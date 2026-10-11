@@ -132,7 +132,7 @@ def test_isolated_and_recorded_analyses_are_byte_identical_but_for_the_human_vie
     try:
         isolated_input, recorded_input = hashed
         assert "decision_view" not in isolated and "decision_view" not in isolated_input
-        assert recorded["decision_view"]["schema_version"] == "decision_view.v1"
+        assert recorded["decision_view"]["schema_version"] == "decision_view.v2"
         assert recorded_input.pop("decision_view") == recorded["decision_view"]
         assert recorded_input == isolated_input
         assert real_hash(recorded_input) == isolated["analysis_hash"] != recorded["analysis_hash"]

@@ -169,22 +169,33 @@ def test_a_real_risk_gate_is_shown_as_one(rendered: dict) -> None:
     ("name", "sentence"),
     [("evidence", EVIDENCE_SENTENCE), ("risk", RISK_SENTENCE), ("kill", KILL_SENTENCE)],
 )
-def test_the_timeframe_card_says_which_kind_of_gate_blocks(
-    rendered: dict, name: str, sentence: str
+def test_each_card_says_which_kind_of_gate_blocks_with_its_framing_directly_under_it(
+    cases: dict, rendered: dict, name: str, sentence: str
 ) -> None:
-    card = rendered[name]["matrix"]
-    assert card[:2] == ["BLOCK", sentence]
-    assert sentence in rendered[name]["detail"]
+    """Review finding D1: the gate summary sat in the timeframe card's banner, away from its
+    framing. It now sits in the view, on both cards as in the detail panel, and the framing is
+    the line under it. The banner names the check that blocks."""
+
+    framing = cases[name]["decision_view"]["gates"]["framing"]
+    assert cases[name]["decision_view"]["gates"]["summary"] == sentence
+    for surface in SURFACES:
+        texts = rendered[name][surface]
+        assert texts[texts.index(sentence) + 1] == framing, (name, surface)
+        assert texts.count(framing) == 1, (name, surface)
+    for surface in ("matrix", "overview"):
+        assert rendered[name][surface].count(sentence) == 1, (name, surface)
+    assert rendered[name]["matrix"][:2] == ["BLOCK", "Hard gates"]
 
 
-def test_missing_evidence_and_a_real_block_cannot_be_confused_on_the_timeframe_card(
+def test_missing_evidence_and_a_real_block_cannot_be_confused_on_either_card(
     rendered: dict,
 ) -> None:
-    banners = {name: rendered[name]["matrix"][1] for name in ("evidence", "risk", "kill")}
-    assert len(set(banners.values())) == 3
-    assert "No risk gate is active." in banners["evidence"]
-    assert banners["risk"].startswith("A risk gate is active")
-    assert banners["kill"].startswith("A system or data gate is active")
+    for surface in ("matrix", "overview"):
+        cards = {name: tuple(rendered[name][surface]) for name in ("evidence", "risk", "kill")}
+        assert len(set(cards.values())) == 3, surface
+        assert EVIDENCE_SENTENCE in cards["evidence"], surface
+        assert RISK_SENTENCE in cards["risk"] and KILL_SENTENCE in cards["kill"], surface
+        assert not any("No risk gate is active" in text for text in cards["risk"]), surface
 
 
 @pytest.mark.parametrize("surface", ["matrix", "overview"])

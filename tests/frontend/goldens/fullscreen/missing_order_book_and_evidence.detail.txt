@@ -1,8 +1,8 @@
 Decision view
 No accepted forecast
-No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast and not a market signal.
-A risk gate is active: Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
+No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -37,7 +37,6 @@ Gate disposition (not a market call)
 No trade
 Reliability: INSUFFICIENT_SAMPLE
 LOW
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
 No trade is supported by the current backend state.
 Immediate action
 No
@@ -46,7 +45,7 @@ Observe only
 Chase
 No
 Primary reason
-A risk gate is active: Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Next action
 Observe only; current entry, chase, and numeric planning are disabled. Re-evaluate after every active hard gate clears.
 Candidate labels are planning context only and do not grant entry permission.
@@ -54,7 +53,7 @@ Gate checks
 BLOCK
 Hard gates
 #4
-A risk gate is active: Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -104,7 +103,7 @@ Evidence: epistemic_sufficiency_state.sufficiency_level
 BLOCK
 Hard gates
 #4
-A risk gate is active: Liquidity is not viable. The evidence gate is active too: directional skill is not established for this model and timeframe.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Evidence: gate_result.hard_gate_passed, gate_result.hard_blocks
 PASS
 Tail risk
@@ -174,7 +173,7 @@ No
 Chase move
 No
 Why this is limited
-The elevated-risk disposition disables scenario planning.
+A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
 Wait for confirmation
 All active hard gates and blocking conditions must clear.
 Data, provider, liquidity, and execution states must be sufficient.
@@ -251,7 +250,6 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gate brief (not a market call)
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
 Gate disposition
 NO_TRADE
 Horizon
@@ -265,7 +263,7 @@ INSUFFICIENT_SAMPLE
 Profitability claim
 false
 State summary
-BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
+BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID (not forced by a risk gate).
 Volatility reference
 Volatility reference only — not a stop/target recommendation.
 Gate note
@@ -273,7 +271,7 @@ Hard gates, provider/data quality, liquidity, tail risk, and execution realism r
 Disclaimer
 Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
 Key Reasons
-Liquidity is not viable: Analysis is blocked because current liquidity does not meet the required bar.
+Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable or unusable. This is missing data, not a finding about the market.
 Directional skill has not been evaluated: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 Hard Blockers
 LIQUIDITY_NOT_VIABLE

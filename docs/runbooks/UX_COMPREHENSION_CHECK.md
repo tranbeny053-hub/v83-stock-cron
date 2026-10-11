@@ -83,6 +83,10 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 
 The percentages carry an accepted forecast-quality claim and a separately accepted directional permission for this model and timeframe.
 
+No hard gate is active.
+
+The gates' disposition, with an accepted directional permission for this model and timeframe. Not financial advice: it never tells you to trade, and hard gates outrank everything shown.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
@@ -131,6 +135,8 @@ The percentages carry an accepted forecast-quality claim for this model and time
 
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 
+The gates' disposition: hard gates outrank everything shown.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
@@ -154,7 +160,7 @@ No forecast-quality claim has been accepted for this model and timeframe. The pe
 
 A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 
-This is a finding about market conditions or execution. It is analysis only, not an instruction.
+The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 
 | Row | Shown |
 | --- | --- |

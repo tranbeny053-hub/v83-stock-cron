@@ -344,13 +344,11 @@ def test_the_card_shows_the_views_gate_lines_and_asks_about_risk(
         letter: text.split(f"## Analysis {letter}\n")[1].split("| Row |")[0] for letter in "ABCDEF"
     }
     for letter in "ABCDEF":
-        view = screens[letter]["view"]
-        gates = view["gates"]
-        if gates["blocked"]:
-            assert f"\n{gates['summary']}\n" in blocks[letter], letter
-        shown = gates["blocked"] and not view["accepted_claim"]
-        assert (f"\n{gates['framing']}\n" in blocks[letter]) is shown, letter
+        gates = screens[letter]["view"]["gates"]
+        # The summary, and directly under it the framing: both the backend's, in every state.
+        assert f"\n{gates['summary']}\n\n{gates['framing']}\n" in blocks[letter], letter
     assert "A risk gate is active: Extreme-move risk is too high." in blocks["F"]
+    assert "The risk gate (Extreme-move risk is too high) is a finding" in blocks["F"]
     assert "reason to act or to avoid acting" not in blocks["F"]
     for letter in "AD":
         assert "No risk gate is active." in blocks[letter]
