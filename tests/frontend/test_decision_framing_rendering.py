@@ -61,11 +61,11 @@ def _render(payloads: list[dict[str, object]]) -> list[dict[str, object]]:
             "acceptedViewOf",
             "NOT_REPORTED_TEXT",
             "ACCEPTED_DISCLAIMER",
+            "gateView",
             "gateViewOf",
             "hasGateFraming",
             "gateFramingBlocks",
             "reopenedGates",
-            "reopenedGateBlocks",
             "briefSummaryRows",
             "dispositionLabel",
             "gateBriefTitle",
@@ -173,7 +173,8 @@ CASES = {
     "view_degraded": {"decision_view": _VIEW_DEGRADED},
     "view_unavailable": {"decision_view": _VIEW_UNAVAILABLE},
     "no_view": {},  # a run reopened from history: the detail payload carries no view
-    # ... and the same run with the gate framing the backend built when it read it back.
+    # ... and the same run with the gate view the backend built when it read it back (the detail
+    # panel hands it to these surfaces on a copy of the history row).
     "reopened": {
         "gate_view": {
             "schema_version": "gate_view.v1",
@@ -226,8 +227,9 @@ def test_the_no_synthesis_fallback_is_the_gate_brief_not_a_call() -> None:
 def test_no_legacy_surface_words_a_framing_of_its_own() -> None:
     """Review finding D3: the frontend composed three framing sentences. It composes none now:
     no legacy surface prints a sentence about the gates' disposition, whatever the view allows.
-    A reopened run prints the backend's summary and, directly under it, the backend's framing,
-    once, in its first block; its stored summary sentence is then not shown."""
+    Nor does one print the gate authority: a live analysis shows it in its decision view, and a
+    reopened run in its own block. Where a reopened run has that block, its stored summary
+    sentence is not shown."""
 
     cases = _rendered_cases()
     for name, output in cases.items():
@@ -235,15 +237,8 @@ def test_no_legacy_surface_words_a_framing_of_its_own() -> None:
             texts = [text for _, text in output[surface]["texts"]]
             assert not any("gates' disposition" in str(text) for text in texts), (name, surface)
             assert not any("reason to act" in str(text) for text in texts), (name, surface)
-            shown = [text for text in texts if str(text).startswith("BACKEND-")]
-            authority = ["BACKEND-SUMMARY", "BACKEND-FRAMING"]
-            leads = name == "reopened" and surface == "fallback"
-            assert shown == (authority if leads else []), (name, surface)
+            assert not any(str(text).startswith("BACKEND-") for text in texts), (name, surface)
     reopened, bare = cases["reopened"], cases["no_view"]
-    assert [cls for cls, text in reopened["fallback"]["texts"] if text.startswith("BACKEND-")] == [
-        "decision-gates",
-        "decision-gate-framing",
-    ]
     # The stored summary sentence gives way to the read-time framing, and only to it.
     assert "Gate brief summary" not in reopened["fallback"]["tables"][0]
     assert "State summary" not in reopened["brief"]["tables"][0]

@@ -1,7 +1,43 @@
-Gate brief (not a market call)
-No decision synthesis for this run; the existing gate brief is shown.
+Saved analysis
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
+Extreme-move risk is too high: Analysis is blocked because extreme-move risk exceeds the permitted level.
+Evidence gate: Directional skill is not established for this model and timeframe.
+Asset · venue
+BTC/USDT · okx
+Reference close (UTC)
+Not kept in saved history.
+Horizon end (UTC)
+Not kept in saved history.
+Horizon
+1H setup / ~6H horizon
+Data source
+OKX_PUBLIC
+Live data
+yes
+In band (inside the decision band)
+22.12% (band ±0.41%)
+Up (above the band)
+39.38%
+Down (below the band)
+38.50%
+Evidence level
+Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Round-trip cost
+0.41%
+Evidence
+Not kept in saved history.
+Calibration
+DEFAULT_PHASE1A
+Reliability
+INSUFFICIENT_SAMPLE
+Gate disposition (not a market call)
+NO_TRADE
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+Gate brief (not a market call)
+No decision synthesis for this run; the existing gate brief is shown.
 Gate disposition
 NO_TRADE
 Gate brief note

@@ -20,11 +20,11 @@ Surfaces:
 - single: the timeframe card of a single analysis (horizonCard);
 - batch: the card of a batch analysis (overviewCard);
 - detail: the detail panel of a live analysis (renderStructuredDetail) over the detail the detail
-  route returns for it (the run's own detail view with the read-time gate framing, as for a saved
-  run), once its requests settled;
+  route returns for it (the run's own detail view with the read-time view of a saved run, which
+  a live analysis does not show: it has its decision view), once its requests settled;
 - history: the detail panel of a saved run read back, from the row the recent list holds and the
   stored detail as the detail route returns it (sanitize_for_export of the detail view, which is
-  what is saved, with the gate framing the route builds when it reads it: attach_gate_view).
+  what is saved, with the view the route builds from it when it reads it: attach_saved_run_view).
 
 Scenarios (SCENARIOS): every one is an analysis of the real service on the fixture candles. The
 ones named SYNTHETIC cannot occur today: nothing is accepted in the governed registries, and the
@@ -74,7 +74,7 @@ import pytest
 from crypto_probability_engine.api import analysis_service
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
-from crypto_probability_engine.detail.gate_kinds import attach_gate_view
+from crypto_probability_engine.detail.saved_run_view import attach_saved_run_view
 from crypto_probability_engine.persistence.prediction_origin import PredictionOrigin
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant import pipeline
@@ -233,7 +233,7 @@ def _reopened(payload: dict, *, saved_before: bool = False) -> dict:
     """A saved run as it is read back: the row the recent list holds for it (the run store's own
     listing, and `detail_available` as GET /v1/runs adds it) and the stored detail as the detail
     route returns it (what analysis_service saves, sanitize_for_export of the detail view, with
-    the gate framing the route builds when it reads it). No decision view: a stored run has none.
+    the view the route builds from it when it reads it). No decision view: a stored run has none.
     `saved_before` is a run stored before the gate framing existed."""
 
     origin = PredictionOrigin.USER_REQUESTED.value
@@ -243,14 +243,16 @@ def _reopened(payload: dict, *, saved_before: bool = False) -> dict:
     stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
     if saved_before:
         stored["decision_brief"]["state_summary"] = OLD_STORED_SUMMARY
-    return {"row": {**row, "detail_available": True}, "detail": attach_gate_view(stored)}
+    return {"row": {**row, "detail_available": True}, "detail": attach_saved_run_view(stored)}
 
 
 def live_details(cases: dict[str, dict]) -> dict[str, Any]:
     """What GET /v1/analyze/detail/{run_id} answers for a live analysis while the server holds it:
-    the run's own detail view, with the gate framing the route builds when it reads it."""
+    the run's own detail view, with the view the route builds from it when it reads it."""
 
-    return {name: attach_gate_view(payload["detail_view"]) for name, payload in cases.items()}
+    return {
+        name: attach_saved_run_view(payload["detail_view"]) for name, payload in cases.items()
+    }
 
 
 def build_reopened(cases: dict[str, dict]) -> dict[str, dict]:

@@ -263,7 +263,8 @@
             "up_frac",
             "down_frac",
             "evidence_level",
-            "meaning"
+            "meaning",
+            "explanation"
           ],
           "properties": {
             "assessed": { "type": "boolean" },
@@ -272,7 +273,8 @@
             "up_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "down_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "evidence_level": { "type": ["string", "null"] },
-            "meaning": { "type": "string" }
+            "meaning": { "type": "string" },
+            "explanation": { "type": ["string", "null"], "minLength": 1 }
           }
         },
         "cost": {
@@ -335,11 +337,12 @@
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["block", "kind", "headline"],
+                "required": ["block", "kind", "headline", "detail"],
                 "properties": {
                   "block": { "type": "string", "minLength": 1 },
                   "kind": { "enum": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"] },
-                  "headline": { "type": "string", "minLength": 1 }
+                  "headline": { "type": "string", "minLength": 1 },
+                  "detail": { "type": "string", "minLength": 1 }
                 }
               }
             },

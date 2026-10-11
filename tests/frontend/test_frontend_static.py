@@ -1439,7 +1439,6 @@ def test_the_legacy_decision_is_framed_as_the_gates_with_or_without_a_view() -> 
     assert '"Decision Brief"' not in brief and '"Action"' not in brief
     synthesis = _function_text(js, "renderDecisionSynthesis")
     assert "section(gateBriefTitle(decisionViewOf(payload)), [" in synthesis
-    assert "...reopenedGateBlocks(payload)," in synthesis
     assert '["Gate disposition", decisionBrief.action],' in synthesis
     assert "Existing brief action" not in synthesis and '"Decision synthesis unavailable' not in js
     assert "renderFinalDecisionCard(synthesis, payload)," in synthesis

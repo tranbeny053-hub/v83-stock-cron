@@ -12,14 +12,17 @@ The gates are unchanged (gates/composite.py). They report three kinds of hard bl
 
 The evidence gate, and the liquidity gate on missing data, force the same action and the same score
 token as a risk gate (NO_TRADE, ELEVATED_RISK_AVOID). Those tokens stay. `build_gate_view` turns a
-gate result into the gate framing every surface shows: the kinds, each block, one summary and one
-framing sentence. The frontend displays these sentences and words none of its own.
+gate result into the gate framing every surface shows: the kinds, each block with its headline and
+its detail sentence, one summary and one framing sentence. The frontend displays these sentences
+and words none of its own.
 
 It is a pure function of facts the analysis already holds: the gate result, and the liquidity state
 the liquidity gate judged. Every saved run stores both. So the framing of a reopened run is built
-when it is read (`attach_gate_view`), never stored: an old run and a new one read the same, and a
-wording change needs no stored text rewritten. No field here is named with "code", "key", "hash" or
-"token", which utils/sanitize.py masks in a stored payload.
+when it is read (detail/saved_run_view.py), never stored: an old run and a new one read the same,
+and a wording change needs no stored text rewritten. For the same reason the evidence gate's own
+entry is a fixed sentence, never the skill verdict or its counts, which a saved run does not
+store. No field here is named with "code", "key", "hash" or "token", which utils/sanitize.py masks
+in a stored payload.
 """
 
 from __future__ import annotations
@@ -40,7 +43,9 @@ EVIDENCE_GATE_BLOCKS = frozenset({"SKILL_NOT_DEMONSTRATED"})
 LIQUIDITY_BLOCK = "LIQUIDITY_NOT_VIABLE"
 ELEVATED_RISK_TOKEN = "ELEVATED_RISK_AVOID"
 EVIDENCE_GATE_COPY = "directional skill is not established for this model and timeframe"
-EVIDENCE_GATE_HEADLINE = "Directional skill is not established"
+# The evidence gate's own entry in the list of active gates: its name, and its fixed sentence.
+EVIDENCE_GATE_HEADLINE = "Evidence gate"
+EVIDENCE_GATE_DETAIL = "Directional skill is not established for this model and timeframe."
 NOT_FORCED_BY_A_RISK_GATE = "not forced by a risk gate"
 UNNAMED_HARD_GATE = "One or more hard gates are active."
 NO_HARD_GATE = "No hard gate is active."
@@ -83,10 +88,16 @@ def _kind(block: str, liquidity: Any) -> str:
     return "RISK" if block in RISK_GATE_BLOCKS else "SYSTEM_OR_DATA"
 
 
-def _headline(block: str, liquidity: Any) -> str:
+def _copy(block: str, liquidity: Any) -> tuple[str, str]:
+    """The headline and the detail sentence of one active block."""
+
     if block in EVIDENCE_GATE_BLOCKS:
-        return EVIDENCE_GATE_HEADLINE
-    return blocking_reason(block, liquidity)[0]
+        return EVIDENCE_GATE_HEADLINE, EVIDENCE_GATE_DETAIL
+    return blocking_reason(block, liquidity)
+
+
+def _headline(block: str, liquidity: Any) -> str:
+    return _copy(block, liquidity)[0]
 
 
 def _of_kind(gate: Mapping[str, Any], liquidity: Any, kind: str) -> list[str]:
@@ -183,7 +194,8 @@ def build_gate_view(
             {
                 "block": block,
                 "kind": _kind(block, liquidity),
-                "headline": _headline(block, liquidity),
+                "headline": _copy(block, liquidity)[0],
+                "detail": _copy(block, liquidity)[1],
             }
             for block in blocks
         ],
@@ -191,38 +203,3 @@ def build_gate_view(
         "summary": hard_gate_summary(gate, liquidity),
         "framing": gate_framing(gate, liquidity, state),
     }
-
-
-def _stored_liquidity(detail: Mapping[str, Any]) -> Any:
-    """The liquidity state a saved run stores (detail/builder.py), or None."""
-
-    stored = detail.get("liquidity_execution_detail")
-    return stored.get("liquidity_state") if isinstance(stored, Mapping) else None
-
-
-def attach_gate_view(detail: Any) -> Any:
-    """A run's detail as it is read back, with its gate framing built now from the gate result
-    (`invalidation_detail`) and the liquidity state it stores. The stored detail is not changed,
-    and a detail without a gate result is returned as it is.
-
-    It never raises: reading a saved run must not fail on what an old or damaged row holds (review
-    finding D5). A gate result is framed when its `hard_blocks` is a list of block names, as the
-    gates have always written it, or is absent or None, which reads as no blocks. Any other shape
-    is returned as it is, without a framing: a framing built from it could contradict the record.
-    """
-
-    try:
-        if not isinstance(detail, Mapping):
-            return detail
-        gate = detail.get("invalidation_detail")
-        if not isinstance(gate, Mapping):
-            return detail
-        blocks = gate.get("hard_blocks")
-        if blocks is not None and not (
-            isinstance(blocks, list) and all(isinstance(block, str) for block in blocks)
-        ):
-            return detail
-        view = build_gate_view(gate, liquidity=_stored_liquidity(detail))
-        return {**detail, "gate_view": view}
-    except Exception:
-        return detail

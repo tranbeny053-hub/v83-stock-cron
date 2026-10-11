@@ -448,7 +448,10 @@ def _backend_says(text: str, payload: dict) -> bool:
     view = payload.get("decision_view") or {}
     evidence = view.get("evidence") or {}
     reasons = (payload.get("frontend_display") or {}).get("blocking_reasons") or []
+    gates = (view.get("gates") or {}).get("blocks") or []
     return text in {
+        # Each active gate, as the view's gate authority lists it.
+        *(f"{gate.get('headline')}: {gate.get('detail')}" for gate in gates),
         f"{evidence.get('skill_verdict')} · {evidence.get('resolved_outcomes')} resolved outcomes"
         f" · {evidence.get('reliability_status')}",
         *(f"{reason.get('headline')}: {reason.get('detail')}" for reason in reasons),

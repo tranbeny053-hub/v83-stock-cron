@@ -44,8 +44,12 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # `decision_view` is stamped `decision_view.v2`, because its required `gates` block made a new
 # version of it. The value before, never published, was
 # sha256:2d44574e9090efe273a3bce7fc60f8699ef1c941ba03088420ad08c6452e5cdb.
+# Moved again the same day (step 2): the view's gate block lists each active gate's detail
+# sentence, and its range carries the backend's own explanation of the percentages. The value
+# before, never published, was
+# sha256:4ca98d13a36062f9c8b922cd38228d16a85e398221640cc58fd4df81c0571349.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:4ca98d13a36062f9c8b922cd38228d16a85e398221640cc58fd4df81c0571349"
+    "sha256:7da0623fd29e544b30594d1fb7829e9cac17b444ff61bb5a568d87a5c2e26783"
 )
 # Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
 # a SHA-256 over the canonical JSON of the whole response, so the added
@@ -57,8 +61,10 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # was 3941f194067ec1b2313e4f5c0c53bf3fb7d46f31d6bd7e219fe22954dfe3bf2c.
 # Moved 2026-10-11 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above. The value
 # before, never published, was e1e3911951c1c99588c13a1b429cc37b18336ba8e81b4a172493dc356e1ed421.
+# Moved again the same day (step 2) for the same reason as the analysis hash above. The value
+# before, never published, was b1549b05723e63f571193e832a4bc581cd6742f9a2e401efb69bf30d59c8d23e.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "b1549b05723e63f571193e832a4bc581cd6742f9a2e401efb69bf30d59c8d23e"
+    "89a5d453e193ba5cdd417f8f71d576313d326a5cce4c63854c5e7e3787b321eb"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

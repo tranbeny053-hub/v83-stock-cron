@@ -76,6 +76,7 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "formatValue",
             "persistenceStatusText",
             "decisionViewOf",
+            "savedRunViewOf",
             "decisionDataText",
             "notAssessedByView",
             "legacyProbabilityRows",

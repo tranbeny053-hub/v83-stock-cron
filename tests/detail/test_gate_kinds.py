@@ -24,7 +24,6 @@ from crypto_probability_engine.execution_realism.realism import compute_executio
 from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
 from crypto_probability_engine.gates import composite
 from crypto_probability_engine.gates.composite import apply_composite_gates
-from tests.api.test_analysis_endpoints import login, make_client
 from tests.fixtures.market_data import FIXED_NOW, make_order_book
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -203,6 +202,7 @@ def test_a_measured_liquidity_block_is_a_risk_gate(liquidity: dict) -> None:
         "block": "LIQUIDITY_NOT_VIABLE",
         "kind": "RISK",
         "headline": "Liquidity is not viable",
+        "detail": "Analysis is blocked because current liquidity does not meet the required bar.",
     }
     assert view["risk_gate_active"] is True and "RISK" in view["kinds"]
     assert (
@@ -222,6 +222,10 @@ def test_a_liquidity_block_on_missing_data_is_a_data_gate_and_claims_no_finding(
         "block": "LIQUIDITY_NOT_VIABLE",
         "kind": "SYSTEM_OR_DATA",
         "headline": "Liquidity could not be measured",
+        "detail": (
+            "Analysis is blocked because the order-book data needed to measure liquidity are "
+            "unavailable or unusable. This is missing data, not a finding about the market."
+        ),
     }
     assert view["kinds"] == ["EVIDENCE", "SYSTEM_OR_DATA"]
     assert view["risk_gate_active"] is False
@@ -232,6 +236,7 @@ def test_a_liquidity_block_on_missing_data_is_a_data_gate_and_claims_no_finding(
     assert alone["summary"] == UNMEASURED and alone["kinds"] == ["SYSTEM_OR_DATA"]
     for text in (view["summary"], view["framing"], alone["summary"], alone["framing"]):
         assert not any(word in text.lower() for word in MARKET_FINDING), text
+    assert "not a finding about the market" in view["blocks"][0]["detail"]
 
 
 def test_a_measured_risk_gate_beside_missing_liquidity_data_is_still_the_only_risk_gate() -> None:
@@ -552,7 +557,8 @@ def test_the_gate_view_is_a_pure_function_of_the_gate_result_and_its_liquidity_s
             {
                 "block": "SKILL_NOT_DEMONSTRATED",
                 "kind": "EVIDENCE",
-                "headline": "Directional skill is not established",
+                "headline": "Evidence gate",
+                "detail": "Directional skill is not established for this model and timeframe.",
             }
         ],
         "risk_gate_active": False,
@@ -566,6 +572,7 @@ def test_the_gate_view_is_a_pure_function_of_the_gate_result_and_its_liquidity_s
         "block": "TAIL_RISK_BREACH",
         "kind": "RISK",
         "headline": "Extreme-move risk is too high",
+        "detail": "Analysis is blocked because extreme-move risk exceeds the permitted level.",
     }
     kill = _view(skill_state=SKILL, kill_switch=True)
     assert kill["kinds"] == ["SYSTEM_OR_DATA"] and kill["framing"] == gate_kinds.NOT_A_MARKET_CALL
@@ -579,6 +586,49 @@ def test_the_gate_view_is_a_pure_function_of_the_gate_result_and_its_liquidity_s
     first = gate_kinds.build_gate_view(gate, liquidity=liquidity)
     assert (gate, liquidity) == before
     assert gate_kinds.build_gate_view(gate, liquidity=liquidity) == first
+
+
+def test_each_active_gate_carries_its_headline_and_its_detail_sentence() -> None:
+    """The parity review's first item: the older gate brief alone printed each gate's detail
+    sentence. The authority lists them now. A hard block other than the evidence gate reads as the
+    backend's blocking-reason copy reads it; the evidence gate reads as its fixed sentence, never
+    the skill verdict or its counts, so a saved run and a live one read the same."""
+
+    from crypto_probability_engine.detail import frontend_display
+
+    view = _view(WIDE, skill_state=NO_SKILL, tail_risk_state=TAIL_BREACH, kill_switch=True)
+    assert [entry["block"] for entry in view["blocks"]] == [
+        "KILL_SWITCH",
+        "EXECUTION_COST_TOO_HIGH",
+        "LIQUIDITY_NOT_VIABLE",
+        "TAIL_RISK_BREACH",
+        "SKILL_NOT_DEMONSTRATED",
+    ]
+    for entry in view["blocks"][:-1]:
+        assert (entry["headline"], entry["detail"]) == frontend_display.blocking_reason(
+            entry["block"], WIDE
+        )
+        assert entry["detail"].startswith("Analysis is blocked ")
+    evidence = view["blocks"][-1]
+    assert (evidence["headline"], evidence["detail"]) == (
+        "Evidence gate",
+        "Directional skill is not established for this model and timeframe.",
+    )
+    assert evidence["detail"] == f"D{gate_kinds.EVIDENCE_GATE_COPY[1:]}."
+    # Whatever the skill evidence said, the evidence gate's entry is the same sentence.
+    for verdict in ("INSUFFICIENT_EVIDENCE", "NO_DEMONSTRATED_SKILL", None):
+        other = _view(skill_state={"verdict": verdict, "n": 250})
+        assert other["blocks"] == [
+            {
+                "block": "SKILL_NOT_DEMONSTRATED",
+                "kind": "EVIDENCE",
+                **dict(headline="Evidence gate", detail=evidence["detail"]),
+            }
+        ]
+        for entry in other["blocks"]:
+            assert "250" not in entry["detail"] and str(verdict) not in entry["detail"]
+    unknown = gate_kinds.build_gate_view({"hard_blocks": ["A_NEW_BLOCK"]})["blocks"][0]
+    assert unknown["detail"] == "This is a hard gate, but its description is unavailable."
 
 
 def test_no_gate_view_field_is_named_as_the_sanitizer_masks() -> None:
@@ -662,202 +712,3 @@ def test_an_accepted_claim_keeps_its_own_sentence_under_a_risk_gate() -> None:
     assert view["gates"]["risk_gate_active"] is True
     assert view["detail"] == STATE_COPY["ACCEPTED_FORECAST_CLAIM"][1]
     assert view["gates"]["framing"] == TAIL_FRAMING
-
-
-# --- D5: reading a saved run back ------------------------------------------------------------
-
-
-def _stored(gate: object, liquidity: object = LIQUID) -> dict:
-    return {
-        "run_id": "run-old",
-        "invalidation_detail": gate,
-        "liquidity_execution_detail": {"liquidity_state": liquidity},
-        "decision_brief": {"state_summary": "old"},
-    }
-
-
-def test_a_reopened_run_gets_its_framing_from_the_facts_it_stores() -> None:
-    gate = _gate(skill_state=NO_SKILL)
-    stored = _stored(dict(gate))
-    read = gate_kinds.attach_gate_view(stored)
-    assert read["gate_view"] == gate_kinds.build_gate_view(gate, liquidity=LIQUID)
-    assert "gate_view" not in stored, "the stored detail is not changed"
-    assert read["decision_brief"] is stored["decision_brief"]
-    for without in ({"decision_brief": {}}, {"invalidation_detail": None}, None, "text"):
-        assert gate_kinds.attach_gate_view(without) is without
-
-
-@pytest.mark.parametrize("liquidity", [LIQUID, WIDE, THIN, NO_BOOK, CROSSED])
-@pytest.mark.parametrize("skill", [NO_SKILL, SKILL])
-def test_a_saved_run_is_framed_as_the_live_analysis_was(liquidity: dict, skill: dict) -> None:
-    """The stored liquidity state decides the liquidity gate's kind when a run is read back, as
-    the live one did: a saved run and a live one read the same (no state: a saved run has none)."""
-
-    gate = _gate(liquidity, skill_state=skill)
-    read = gate_kinds.attach_gate_view(json.loads(json.dumps(_stored(gate, liquidity))))
-    assert read["gate_view"] == gate_kinds.build_gate_view(gate, liquidity=liquidity)
-    measured = liquidity in MEASURED
-    assert read["gate_view"]["risk_gate_active"] is measured
-    # A record that lost its liquidity state proves no measurement: never a finding.
-    lost = _stored(gate, liquidity)
-    del lost["liquidity_execution_detail"]
-    if "LIQUIDITY_NOT_VIABLE" in gate["hard_blocks"]:
-        view = gate_kinds.attach_gate_view(lost)["gate_view"]
-        assert "Liquidity could not be measured" in view["summary"]
-        assert "Liquidity is not viable" not in view["summary"] + view["framing"]
-
-
-# What a stored `invalidation_detail` can hold that is not a gate result as the gates write it.
-# Framed anyway, a number or a boolean for `hard_blocks` would raise (the detail route would answer
-# 500), and a string would read as one block a character: a framing that contradicts the record.
-# An absent or None `hard_blocks` is not among them: it reads as no blocks.
-MALFORMED_GATE_RESULTS = [
-    pytest.param(5, id="a-number"),
-    pytest.param(True, id="a-boolean"),
-    pytest.param("NO_TRADE", id="a-string"),
-    pytest.param(["TAIL_RISK_BREACH"], id="a-list"),
-    pytest.param({"hard_blocks": 5, "hard_gate_passed": False}, id="hard-blocks-a-number"),
-    pytest.param({"hard_blocks": True}, id="hard-blocks-a-boolean"),
-    pytest.param({"hard_blocks": "TAIL_RISK_BREACH"}, id="hard-blocks-a-string"),
-    pytest.param({"hard_blocks": {"TAIL_RISK_BREACH": True}}, id="hard-blocks-a-mapping"),
-    pytest.param({"hard_blocks": 0, "hard_gate_passed": False}, id="hard-blocks-zero"),
-    pytest.param({"hard_blocks": False}, id="hard-blocks-false"),
-    pytest.param({"hard_blocks": ""}, id="hard-blocks-an-empty-string"),
-    pytest.param({"hard_blocks": {}}, id="hard-blocks-an-empty-mapping"),
-    pytest.param({"hard_blocks": [None]}, id="a-none-entry"),
-    pytest.param({"hard_blocks": ["TAIL_RISK_BREACH", 7]}, id="a-number-entry"),
-    pytest.param({"hard_blocks": [["TAIL_RISK_BREACH"]]}, id="a-list-entry"),
-    pytest.param({"hard_blocks": [{"block": "TAIL_RISK_BREACH"}]}, id="a-mapping-entry"),
-    pytest.param(
-        {"hard_blocks": 5, "action": None, "added_later": {"deep": [None, 1.5]}},
-        id="none-values-and-extra-keys",
-    ),
-]
-# A gate result with no `hard_blocks`, or with None there: no blocks.
-NO_BLOCKS_GATE_RESULTS = [
-    pytest.param({}, id="an-empty-gate-result"),
-    pytest.param({"hard_blocks": None}, id="hard-blocks-none"),
-    pytest.param({"hard_gate_passed": True, "action": "ALLOW"}, id="absent-and-passed"),
-    pytest.param({"hard_gate_passed": False}, id="absent-and-not-passed"),
-    pytest.param({"hard_blocks": None, "hard_gate_passed": False}, id="none-and-not-passed"),
-    pytest.param({"action": "ABORT"}, id="absent-and-aborted"),
-    pytest.param({"hard_blocks": None, "risk_guard_applied": True}, id="none-and-a-risk-guard"),
-    pytest.param(
-        {"action": None, "forced_score_disposition": None, "added_later": {"deep": [None, 1.5]}},
-        id="absent-with-none-values-and-extra-keys",
-    ),
-]
-# What a stored `liquidity_execution_detail` can hold that is not what the builder writes.
-MALFORMED_LIQUIDITY = [None, 5, "x", [], {"liquidity_state": 5}, {"liquidity_state": ["OK"]}]
-
-
-@pytest.mark.parametrize("gate", NO_BLOCKS_GATE_RESULTS)
-def test_an_absent_or_none_hard_blocks_is_framed_as_no_blocks(gate: dict) -> None:
-    stored = _stored(gate)
-    before = deepcopy(stored)
-    read = gate_kinds.attach_gate_view(stored)
-    assert stored == before and read is not stored
-    view = read["gate_view"]
-    assert view == gate_kinds.build_gate_view(gate, liquidity=LIQUID)
-    assert view["blocks"] == [] and view["kinds"] == [] and view["risk_gate_active"] is False
-    # No block is named, so no risk gate is: the gates' flag alone words no finding.
-    assert view["framing"] == gate_kinds.NOT_A_MARKET_CALL
-    blocked = gate.get("hard_gate_passed") is False or gate.get("action") == "ABORT"
-    assert view["blocked"] is blocked
-    assert view["summary"] == (gate_kinds.UNNAMED_HARD_GATE if blocked else gate_kinds.NO_HARD_GATE)
-
-
-@pytest.mark.parametrize("gate", MALFORMED_GATE_RESULTS)
-def test_a_malformed_stored_gate_result_is_read_back_unchanged_and_unframed(
-    gate: object,
-) -> None:
-    stored = _stored(gate)
-    before = deepcopy(stored)
-    read = gate_kinds.attach_gate_view(stored)
-    assert read is stored and stored == before
-    assert "gate_view" not in read
-
-
-@pytest.mark.parametrize("liquidity", MALFORMED_LIQUIDITY)
-def test_a_malformed_stored_liquidity_state_never_fails_and_never_words_a_finding(
-    liquidity: object,
-) -> None:
-    gate = _gate(THIN, skill_state=NO_SKILL)
-    stored = {"invalidation_detail": gate, "liquidity_execution_detail": liquidity}
-    view = gate_kinds.attach_gate_view(stored)["gate_view"]
-    assert view["summary"] == f"{UNMEASURED} {EVIDENCE_TOO}"
-    assert view["risk_gate_active"] is False
-
-
-def test_a_tuple_of_blocks_is_not_a_stored_list_of_blocks() -> None:
-    stored = {"invalidation_detail": {"hard_blocks": ("TAIL_RISK_BREACH",)}}
-    assert gate_kinds.attach_gate_view(stored) is stored
-    empty = {"invalidation_detail": {"hard_blocks": ()}}
-    assert gate_kinds.attach_gate_view(empty) is empty, "only absent and None read as no blocks"
-
-
-@pytest.mark.parametrize("detail", [None, 5, 1.5, True, "text", b"bytes", [], [{}], object()])
-def test_a_detail_that_is_not_a_mapping_is_returned_as_it_is(detail: object) -> None:
-    assert gate_kinds.attach_gate_view(detail) is detail
-
-
-def test_reading_never_raises_even_when_the_framing_itself_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class Unreadable(dict):
-        def get(self, *_args: object) -> object:
-            raise RuntimeError("unreadable")
-
-    unreadable = Unreadable(invalidation_detail=_gate(skill_state=NO_SKILL))
-    assert gate_kinds.attach_gate_view(unreadable) is unreadable
-    nested = {"invalidation_detail": Unreadable(hard_blocks=[])}
-    assert gate_kinds.attach_gate_view(nested) is nested
-    liquidity = {
-        "invalidation_detail": _gate(skill_state=NO_SKILL),
-        "liquidity_execution_detail": Unreadable(liquidity_state=LIQUID),
-    }
-    assert gate_kinds.attach_gate_view(liquidity) is liquidity
-
-    def failing(*_args: object, **_facts: object) -> dict:
-        raise RuntimeError("framing failed")
-
-    monkeypatch.setattr(gate_kinds, "build_gate_view", failing)
-    stored = _stored(_gate(skill_state=NO_SKILL))
-    assert gate_kinds.attach_gate_view(stored) is stored
-
-
-class _Durable:
-    """A durable store holding one run, as a stored JSON row reads back."""
-
-    def __init__(self, stored: dict) -> None:
-        self.stored = stored
-
-    def get_run_detail(self, run_id: str, *, prediction_origin: str) -> dict | None:
-        del prediction_origin
-        return json.loads(json.dumps(self.stored)) if run_id == "durable-run" else None
-
-
-@pytest.mark.parametrize("gate", MALFORMED_GATE_RESULTS)
-def test_the_detail_route_answers_a_malformed_stored_run_as_it_is_stored(gate: object) -> None:
-    stored = {**_stored(gate), "run_id": "durable-run"}
-    client = make_client()
-    client.app.state.persistence_repository = _Durable(stored)
-    login(client)
-    response = client.get("/v1/analyze/detail/durable-run")
-    assert response.status_code == 200
-    assert response.json() == stored
-    assert "gate_view" not in response.json()
-
-
-@pytest.mark.parametrize("gate", NO_BLOCKS_GATE_RESULTS)
-def test_the_detail_route_frames_a_stored_run_whose_gate_result_has_no_hard_blocks(
-    gate: dict,
-) -> None:
-    stored = {**_stored(gate), "run_id": "durable-run"}
-    client = make_client()
-    client.app.state.persistence_repository = _Durable(stored)
-    login(client)
-    response = client.get("/v1/analyze/detail/durable-run")
-    assert response.status_code == 200
-    expected = gate_kinds.build_gate_view(gate, liquidity=LIQUID)
-    assert response.json() == {**stored, "gate_view": expected}

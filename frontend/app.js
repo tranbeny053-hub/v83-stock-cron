@@ -470,11 +470,22 @@ function decisionViewOf(payload) {
   return view && view.schema_version === "decision_view.v2" ? view : null;
 }
 
-// The one gate authority (owner ruling AD1=A): the view's gates for a live analysis, or the gate
-// framing the backend built when a saved run was read back. This only renders it.
-function gateViewOf(payload) {
-  const gates = decisionViewOf(payload)?.gates || payload?.gate_view;
+// The one gate authority (owner ruling AD1=A): a gate view the backend built, for a live analysis
+// in its decision view and for a saved run in the view built when it was read back. This only
+// renders it.
+function gateView(gates) {
   return gates && gates.schema_version === "gate_view.v1" ? gates : null;
+}
+
+function gateViewOf(payload) {
+  return gateView(decisionViewOf(payload)?.gates || payload?.gate_view);
+}
+
+// The view of a saved run (detail/saved_run_view.py): the backend builds it from what the run
+// stores when the run is read back, and it travels with the detail, never with the history row.
+function savedRunViewOf(detailView) {
+  const saved = detailView?.saved_run_view;
+  return saved && saved.schema_version === "saved_run_view.v1" ? saved : null;
 }
 
 // The gate authority as every surface shows it: the backend's summary, and directly under it the
@@ -490,6 +501,19 @@ function gateFramingBlocks(gates) {
     textBlock("p", gates.summary, "decision-gates"),
     textBlock("p", gates.framing, "decision-gate-framing"),
   ];
+}
+
+// Each active gate, listed under the authority: the backend's headline and its detail sentence,
+// one gate a line (as the older gate brief listed its reasons).
+function gateDetailList(gates) {
+  const lines = (Array.isArray(gates?.blocks) ? gates.blocks : [])
+    .map((block) => [backendText(block?.headline), backendText(block?.detail)])
+    .filter(([headline, detail]) => headline && detail)
+    .map(([headline, detail]) => `${headline}: ${detail}`);
+  if (!lines.length) return [];
+  const list = listBlock(lines);
+  list.classList.add("decision-gate-list");
+  return [list];
 }
 
 function decisionDataBanner(data = {}) {
@@ -582,6 +606,74 @@ function decisionViewRows(payload, view) {
     ["Evidence", decisionEvidenceText(view.evidence)],
     [dispositionLabel(view), display.disposition],
   ];
+}
+
+// A value of a saved run's view: what the stored record holds, or, where the backend gives none,
+// the sentence that says it is not kept. Never "n/a": a reopened run says what it does not store.
+function savedValue(value, format = (kept) => kept) {
+  return value === null || value === undefined ? LIST_NOT_KEPT_TEXT : format(value);
+}
+
+// The rows of a reopened run, under the labels a live analysis uses for the same values.
+function savedRunRows(payload, saved) {
+  const time = saved.time || {};
+  const data = saved.data || {};
+  const range = saved.range || {};
+  const evidence = saved.evidence || {};
+  const notAssessed = range.assessed === false;
+  const venue = savedValue(saved.venue, (kept) => VENUE_LABELS[kept] || kept);
+  const band = savedValue(range.decision_band_frac, formatFractionPct);
+  return [
+    ["Asset · venue", `${payload.normalized_symbol || payload.symbol} · ${venue}`],
+    ["Reference close (UTC)", savedValue(time.reference_close_utc)],
+    ["Horizon end (UTC)", savedValue(time.horizon_end_utc)],
+    ["Horizon", savedValue(saved.horizon)],
+    ["Data source", savedValue(data.data_source)],
+    ["Live data", savedValue(data.is_live_data)],
+    [
+      "In band (inside the decision band)",
+      notAssessed
+        ? NOT_ASSESSED_TEXT
+        : savedValue(range.in_band_frac, (kept) => `${formatFractionPct(kept)} (band ±${band})`),
+    ],
+    [
+      "Up (above the band)",
+      notAssessed ? "Not assessed" : savedValue(range.up_frac, formatFractionPct),
+    ],
+    [
+      "Down (below the band)",
+      notAssessed ? "Not assessed" : savedValue(range.down_frac, formatFractionPct),
+    ],
+    ["Evidence level", savedValue(evidence.level ?? evidence.probability_type)],
+    ["Round-trip cost", savedValue(saved.cost?.round_trip_cost_frac, formatFractionPct)],
+    [
+      "Evidence",
+      evidence.directional_evidence_hold
+        ? decisionEvidenceText(evidence)
+        : savedValue(evidence.skill_verdict),
+    ],
+    ["Calibration", savedValue(evidence.calibration_status)],
+    ["Reliability", savedValue(evidence.reliability_status)],
+    // Without a readable gate result there is no disposition to show: the block says so above.
+    ...(gateView(saved.gates) ? [[dispositionLabel(null), savedValue(saved.disposition)]] : []),
+  ];
+}
+
+// The block of a reopened run: what its percentages are, its gate authority (built by the backend
+// when the run was read), then what the stored record holds. Every sentence is the backend's.
+function renderSavedRun(payload, saved) {
+  const gates = gateView(saved.gates);
+  const range = saved.range || {};
+  const sentence = (text, className) => (backendText(text) ? [textBlock("p", text, className)] : []);
+  return section("Saved analysis", [
+    ...sentence(range.explanation, "decision-detail"),
+    ...(gates
+      ? [...gateFramingBlocks(gates), ...gateDetailList(gates)]
+      : sentence(saved.gates_note, "decision-warning")),
+    keyValueTable(savedRunRows(payload, saved)),
+    ...sentence(range.meaning, "muted"),
+    ...sentence(saved.cost?.label, "muted"),
+  ]);
 }
 
 // The save receipt (owner ruling D4; plan §14.2 item 4). Whether an analysis was saved is known
@@ -2402,19 +2494,15 @@ function renderFutureQuantHooks(hooks = {}) {
   return advanced;
 }
 
-// A reopened run has no view, so its gate summary and framing lead its gate brief instead (the
-// backend built them when the run was read). A live analysis shows them in its decision view.
+// A reopened run has no view: its gate summary and framing are in its own block, built by the
+// backend when the run was read. A live analysis shows them in its decision view.
 function reopenedGates(payload) {
   return decisionViewOf(payload) ? null : gateViewOf(payload);
 }
 
-function reopenedGateBlocks(payload) {
-  return gateFramingBlocks(reopenedGates(payload));
-}
-
 // A reopened run stores its brief's sentence as it was written when saved. Where the backend
-// built its gate framing at read time, that is shown above in its place and the stored sentence
-// is not; a live analysis shows its own brief.
+// built its gate framing at read time, that is shown in its place and the stored sentence is
+// not; a live analysis shows its own brief.
 function briefSummaryRows(label, payload, brief = {}, accepted = null) {
   if (hasGateFraming(reopenedGates(payload))) return [];
   return [[label, accepted ? accepted.detail : brief.state_summary]];
@@ -2431,7 +2519,6 @@ function renderDecisionSynthesis(synthesis, decisionBrief = {}, payload = {}) {
         "No decision synthesis for this run; the existing gate brief is shown.",
         "decision-warning",
       ),
-      ...reopenedGateBlocks(payload),
       keyValueTable([
         ["Gate disposition", decisionBrief.action],
         ...briefSummaryRows("Gate brief summary", payload, decisionBrief, accepted),
@@ -2511,10 +2598,11 @@ function renderStructuredDetail(payload, detailView) {
   // Raw JSON and Download JSON are the backend's response exactly as it was returned: nothing
   // the renderers need is ever added to it.
   const backendResponse = payload;
-  // A saved run has no view; the backend built its gate framing when it was read back. The
-  // renderers below read it from a copy.
-  if (!payload.gate_view && detailView?.gate_view) {
-    payload = { ...payload, gate_view: detailView.gate_view };
+  // A saved run has no view; the backend built one from what the run stores when it was read
+  // back. The older sections below read its gate view from a copy.
+  const saved = decisionViewOf(payload) ? null : savedRunViewOf(detailView);
+  if (saved && gateView(saved.gates)) {
+    payload = { ...payload, gate_view: saved.gates };
   }
   const display = payload.frontend_display || {};
   const dataQuality = payload.data_quality || {};
@@ -2542,15 +2630,23 @@ function renderStructuredDetail(payload, detailView) {
         textBlock("p", view.headline, "decision-headline"),
         textBlock("p", view.detail),
         ...gateFramingBlocks(gateViewOf(payload)),
+        ...gateDetailList(gateViewOf(payload)),
         keyValueTable(decisionViewRows(payload, view)),
         textBlock("p", view.range?.meaning || "", "muted"),
+        // What the percentages are: the backend's sentence, where the view carries one.
+        ...(backendText(view.range?.explanation)
+          ? [textBlock("p", view.range.explanation, "muted")]
+          : []),
         textBlock("p", view.cost?.label || "", "muted"),
         listBlock(view.evidence?.limitations || []),
       ])
     : null;
+  // A reopened run leads with its own block instead.
+  const savedSection = saved ? renderSavedRun(backendResponse, saved) : null;
 
   detailPanel.replaceChildren(
     ...(decisionSection ? [decisionSection] : []),
+    ...(savedSection ? [savedSection] : []),
     renderDecisionSynthesis(payload.decision_synthesis, decisionBrief, payload),
     renderModelQualitySection(payload.decision_synthesis || {}, accepted),
     section("Overview", [

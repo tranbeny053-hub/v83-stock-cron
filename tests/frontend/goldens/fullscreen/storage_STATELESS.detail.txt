@@ -3,6 +3,7 @@ No accepted forecast
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+Evidence gate: Directional skill is not established for this model and timeframe.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -28,6 +29,7 @@ INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE
 Gate disposition (not a market call)
 NO_TRADE
 In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
 No forecast-quality claim is accepted for this model and timeframe.
 Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.

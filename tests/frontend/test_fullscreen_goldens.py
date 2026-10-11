@@ -460,14 +460,22 @@ def test_the_one_block_the_goldens_leave_out_is_the_payload_verbatim(
 ) -> None:
     """The Raw JSON block prints run ids, hashes and every float in full, so it is not pinned.
     It is exactly its heading and the payload the panel was given: nothing else is left out.
-    The detail the panel renders beside the payload carries the read-time gate framing, and none
-    of that is copied into the block (review finding D4): a live analysis prints the backend's own
-    view, and a saved run prints its history row."""
+    The detail the panel renders beside the payload carries the read-time view of a saved run,
+    with its gate view, and none of that is copied into the block (review finding D4): a live
+    analysis prints the backend's own response, and a saved run prints its history row."""
 
     details = goldens.live_details(cases)
     for scenario, payload in cases.items():
-        assert details[scenario]["gate_view"]["schema_version"] == "gate_view.v1", scenario
-        assert "gate_view" not in payload and "gate_view" not in payload["detail_view"], scenario
+        read = details[scenario]["saved_run_view"]
+        assert read["schema_version"] == "saved_run_view.v1", scenario
+        # The same gate authority; only an accepted state (SYNTHETIC) frames its gates in words
+        # of its own, and a saved run has no state.
+        gates = payload["decision_view"]["gates"]
+        accepted = payload["decision_view"]["accepted_claim"]
+        assert {**read["gates"], "framing": ""} == {**gates, "framing": ""}, scenario
+        assert (read["gates"]["framing"] == gates["framing"]) is not accepted, scenario
+        for key in ("saved_run_view", "gate_view"):
+            assert key not in payload and key not in payload["detail_view"], (scenario, key)
     blocks = 0
     for scenario, surfaces in rendered["raw_json"].items():
         for surface, found in surfaces.items():
@@ -476,7 +484,7 @@ def test_the_one_block_the_goldens_leave_out_is_the_payload_verbatim(
             assert heading == rendered["screens"][scenario][surface][-1], (scenario, surface)
             assert json.loads(body) == given, (scenario, surface)
             assert list(json.loads(body)) == list(given), "the payload's own keys, in order"
-            assert '"gate_view"' not in body, (scenario, surface)
+            assert '"gate_view"' not in body and '"saved_run_view"' not in body, scenario
             assert body not in rendered["screens"][scenario][surface], (scenario, surface)
             blocks += 1
     assert blocks == len(SCENARIOS) + len(HISTORY) + 1

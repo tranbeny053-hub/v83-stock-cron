@@ -38,10 +38,15 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME_SECONDS
+from crypto_probability_engine.detail.decision_brief import (
+    PROBABILITY_EXPLANATION,
+    PROBABILITY_TYPE,
+)
 from crypto_probability_engine.detail.gate_kinds import build_gate_view
 
-# v2: the view carries the one gate authority (`gates`, detail/gate_kinds.py). A required field
-# makes a new version: a reader that knows only v1 does not know the gates are in the view.
+# v2: the view carries the one gate authority (`gates`, detail/gate_kinds.py) and, beside what its
+# range means, what its percentages are (`range.explanation`). A required field makes a new
+# version: a reader that knows only v1 does not know the gates are in the view.
 SCHEMA_VERSION = "decision_view.v2"
 # Governed acceptance registries, keyed "<probability_type>:<methodology_version>:<timeframe>".
 # Empty: nothing is accepted. An entry alone does not make the screen agree with it: the UI defers
@@ -162,6 +167,12 @@ def build_decision_view(
     evidence = skill_evidence if isinstance(skill_evidence, Mapping) else {}
     # Precedence 1: data that cannot support an assessment shows no range or probability at all.
     assessed = state != "INVALID_OR_UNAVAILABLE_DATA"
+    # What the percentages are (the horizon in bars, a terminal outcome, not expected return): the
+    # backend's own sentence, which only the older Probability section showed. It describes the
+    # uncalibrated heuristic, so an accepted state, whose own sentence says what the percentages
+    # carry, has none.
+    heuristic = decision_brief.get("probability_type") == PROBABILITY_TYPE
+    explained = state == "NO_ACCEPTED_CLAIM" and heuristic
     return {
         "schema_version": SCHEMA_VERSION,
         "state": state,
@@ -179,6 +190,7 @@ def build_decision_view(
             "down_frac": _fraction(horizon.get("p_down_frac")) if assessed else None,
             "evidence_level": decision_brief.get("probability_type"),
             "meaning": RANGE_MEANING if assessed else NOT_ASSESSED,
+            "explanation": PROBABILITY_EXPLANATION if explained else None,
         },
         "cost": {
             "round_trip_cost_frac": _fraction(execution.get("round_trip_cost_frac")),
