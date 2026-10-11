@@ -43,6 +43,17 @@ TAIL_FRAMING = (
     "execution. It is analysis only, not an instruction."
 )
 UNMEASURED = "A system or data gate is active: Liquidity could not be measured."
+# The liquidity gate's detail when no order book reached the measure, and when one was served
+# and the measure refused it (review finding 2: the first sentence is false for the second).
+NO_BOOK_DETAIL = (
+    "Analysis is blocked because the order-book data needed to measure liquidity are "
+    "unavailable. This is missing data, not a finding about the market."
+)
+UNUSABLE_BOOK_DETAIL = (
+    "Analysis is blocked because the order book that was served has a spread outside the range "
+    "the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, "
+    "not a finding about the market."
+)
 # Wording that calls something a finding about the market.
 MARKET_FINDING = ("risk gate", "finding", "market conditions", "not viable")
 
@@ -222,10 +233,7 @@ def test_a_liquidity_block_on_missing_data_is_a_data_gate_and_claims_no_finding(
         "block": "LIQUIDITY_NOT_VIABLE",
         "kind": "SYSTEM_OR_DATA",
         "headline": "Liquidity could not be measured",
-        "detail": (
-            "Analysis is blocked because the order-book data needed to measure liquidity are "
-            "unavailable or unusable. This is missing data, not a finding about the market."
-        ),
+        "detail": NO_BOOK_DETAIL if liquidity is NO_BOOK else UNUSABLE_BOOK_DETAIL,
     }
     assert view["kinds"] == ["EVIDENCE", "SYSTEM_OR_DATA"]
     assert view["risk_gate_active"] is False
@@ -288,15 +296,13 @@ def test_the_blocking_reason_copy_says_missing_data_and_claims_no_finding() -> N
         "Liquidity is not viable",
         "Analysis is blocked because current liquidity does not meet the required bar.",
     )
-    unmeasured = (
-        "Liquidity could not be measured",
-        "Analysis is blocked because the order-book data needed to measure liquidity are "
-        "unavailable or unusable. This is missing data, not a finding about the market.",
-    )
+    unmeasured = ("Liquidity could not be measured", NO_BOOK_DETAIL)
+    unusable = ("Liquidity could not be measured", UNUSABLE_BOOK_DETAIL)
     for liquidity in MEASURED:
         assert frontend_display.blocking_reason("LIQUIDITY_NOT_VIABLE", liquidity) == measured
-    for liquidity in (*UNMEASURED_STATES, None, {}):
+    for liquidity in (NO_BOOK, None, {}, "x", {"status": "DEGRADED"}):
         assert frontend_display.blocking_reason("LIQUIDITY_NOT_VIABLE", liquidity) == unmeasured
+    assert frontend_display.blocking_reason("LIQUIDITY_NOT_VIABLE", CROSSED) == unusable
     for word in MARKET_FINDING:
         if word != "finding":  # it says, in so many words, that this is not a finding
             assert word not in " ".join(unmeasured).lower(), word
@@ -350,6 +356,127 @@ def test_the_blocking_reason_copy_says_missing_data_and_claims_no_finding() -> N
         assert second["code"] == "SKILL_NOT_DEMONSTRATED"
         # The raw block codes beside it are the gates' own, unchanged.
         assert display["key_reasons"] == ["LIQUIDITY_NOT_VIABLE", "SKILL_NOT_DEMONSTRATED"]
+
+
+def test_a_served_order_book_that_cannot_be_used_is_not_called_missing() -> None:
+    """Review finding 2. A book whose ask is more than three times its bid passes validation, and
+    the liquidity measure refuses to compute a spread from it: the state then holds the book's
+    best bid and ask and no spread. The screen must not say the data are missing (they were
+    served), and must not claim a finding about the market either (owner ruling G2)."""
+
+    from crypto_probability_engine.detail import frontend_display
+
+    served = frontend_display.order_book_was_served
+    assert (CROSSED["best_bid"], CROSSED["best_ask"]) == (10.0, 100.0)
+    assert CROSSED["spread_frac"] is None and CROSSED["status"] == "DEGRADED"
+    assert served(CROSSED) is True and served(LIQUID) is True and served(WIDE) is True
+    for state in (NO_BOOK, None, {}, "x", 5, {"best_bid": 10.0}, {"best_ask": 100.0}):
+        assert served(state) is False, state
+    for state in ({"best_bid": "10", "best_ask": 100.0}, {"best_bid": True, "best_ask": False}):
+        assert served(state) is False, state
+    view = _view(CROSSED, skill_state=NO_SKILL)
+    entry = view["blocks"][0]
+    assert (entry["kind"], entry["headline"]) == (
+        "SYSTEM_OR_DATA",
+        "Liquidity could not be measured",
+    )
+    assert entry["detail"] == UNUSABLE_BOOK_DETAIL
+    assert "missing" not in entry["detail"] and "unavailable" not in entry["detail"]
+    assert "not a finding about the market" in entry["detail"]
+    assert entry["detail"].count(".") == 1, "one sentence"
+    assert view["risk_gate_active"] is False and view["framing"] == gate_kinds.NOT_A_MARKET_CALL
+    # With no book the sentence says missing data, and does not say a book was served.
+    missing = _view(NO_BOOK, skill_state=NO_SKILL)["blocks"][0]["detail"]
+    assert missing == NO_BOOK_DETAIL and "was served" not in missing
+
+
+def _check_6(gate: dict, liquidity: object, execution: object) -> dict:
+    """The stack's "Liquidity and execution" check, from the real builder."""
+
+    from crypto_probability_engine.detail import decision_synthesis
+
+    stack = decision_synthesis._actionability_stack(
+        label="NO_TRADE",
+        gate=gate,
+        data_quality={},
+        provider_state={},
+        epistemic={},
+        probability={},
+        quant_result={"liquidity_state": liquidity, "execution_realism": execution},
+        reliability_status="INSUFFICIENT_SAMPLE",
+    )
+    (check,) = [item for item in stack if item["key"] == "liquidity_execution"]
+    assert check["label"] == "Liquidity and execution" and check["priority"] == 6
+    return check
+
+
+@pytest.mark.parametrize(
+    ("name", "liquidity", "blocks", "sentence"),
+    [
+        ("no book", NO_BOOK, ["LIQUIDITY_NOT_VIABLE"], "Liquidity could not be measured."),
+        ("an unusable book", CROSSED, ["LIQUIDITY_NOT_VIABLE"], "Liquidity could not be measured."),
+        ("too thin, measured", THIN, ["LIQUIDITY_NOT_VIABLE"], "Liquidity is not viable."),
+        (
+            "execution cost too high",
+            LIQUID,
+            ["EXECUTION_COST_TOO_HIGH"],
+            "Execution cost is too high.",
+        ),
+        (
+            "a too-wide measured spread: both",
+            WIDE,
+            ["EXECUTION_COST_TOO_HIGH", "LIQUIDITY_NOT_VIABLE"],
+            "Execution cost is too high; Liquidity is not viable.",
+        ),
+    ],
+)
+def test_the_liquidity_check_says_what_the_gate_authority_says_when_it_blocks(
+    name: str, liquidity: dict, blocks: list[str], sentence: str
+) -> None:
+    """Review finding 1 (the class-B line). Under BLOCK the check printed the two states' status
+    words: "DEGRADED" for an order book that was never measured, and "OK" beside a measured spread
+    that is too wide. When it blocks on the liquidity or the execution-cost gate, its sentence is
+    now the gate authority's own headlines for those blocks, so it can never disagree with it."""
+
+    execution = compute_execution_realism(liquidity)
+    gate = {"hard_blocks": [*blocks, "SKILL_NOT_DEMONSTRATED"], "hard_gate_passed": False}
+    if name != "execution cost too high":  # the one case the real gates cannot give alone
+        real = _gate(liquidity, skill_state=NO_SKILL)
+        assert real["hard_blocks"] == gate["hard_blocks"], name
+    check = _check_6(gate, liquidity, execution)
+    assert (check["status"], check["plain_english"]) == ("BLOCK", sentence), name
+    # The same headlines, in the same order, as the authority's summary and gate list.
+    view = gate_kinds.build_gate_view(gate, liquidity=liquidity)
+    named = "; ".join(entry["headline"] for entry in view["blocks"] if entry["block"] in blocks)
+    assert check["plain_english"] == f"{named}."
+    assert f": {named}." in view["summary"]
+    for word in ("DEGRADED", " is OK", "status"):
+        assert word not in check["plain_english"], (name, word)
+
+
+def test_the_liquidity_check_keeps_its_status_sentence_when_neither_gate_blocks() -> None:
+    for gate in (
+        _gate(LIQUID, skill_state=NO_SKILL),
+        _gate(LIQUID, skill_state=SKILL),
+        _gate(LIQUID, skill_state=NO_SKILL, tail_risk_state=TAIL_BREACH, kill_switch=True),
+    ):
+        check = _check_6(gate, LIQUID, compute_execution_realism(LIQUID))
+        assert (check["status"], check["plain_english"]) == (
+            "PASS",
+            "Liquidity is OK; execution realism is OK.",
+        )
+    # A state that is not OK without the gate's block (no gate result names it): a warning, and
+    # the status words stay: there is no headline of the authority to use.
+    warned = _check_6({"hard_blocks": []}, NO_BOOK, compute_execution_realism(NO_BOOK))
+    assert (warned["status"], warned["plain_english"]) == (
+        "WARN",
+        "Liquidity is DEGRADED; execution realism is DEGRADED.",
+    )
+    unknown = _check_6({"hard_blocks": []}, {}, {})
+    assert (unknown["status"], unknown["plain_english"]) == (
+        "UNKNOWN",
+        "Liquidity is UNKNOWN; execution realism is UNKNOWN.",
+    )
 
 
 def test_the_other_risk_gates_are_always_measured() -> None:

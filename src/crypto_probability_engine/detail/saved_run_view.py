@@ -37,7 +37,13 @@ from crypto_probability_engine.detail.decision_view import (
     NOT_ASSESSED,
     RANGE_MEANING,
 )
-from crypto_probability_engine.detail.gate_kinds import build_gate_view
+from crypto_probability_engine.detail.gate_kinds import (
+    ELEVATED_RISK_TOKEN,
+    NOT_FORCED_BY_A_RISK_GATE,
+    build_gate_view,
+    elevated_risk_is_a_risk_finding,
+    hard_gate_active,
+)
 
 SCHEMA_VERSION = "saved_run_view.v1"
 GATES_NOT_READABLE = (
@@ -63,15 +69,15 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
     assessed = _assessed(gate, provider_state)
     heuristic = brief.get("probability_type") == PROBABILITY_TYPE
     band = _fraction(execution.get("round_trip_cost_frac"))
+    liquidity = liquidity_execution.get("liquidity_state")
+    score = _mapping(detail.get("score_detail"))
     return {
         "schema_version": SCHEMA_VERSION,
-        "gates": None
-        if gate is None
-        else build_gate_view(gate, liquidity=liquidity_execution.get("liquidity_state")),
+        "gates": None if gate is None else build_gate_view(gate, liquidity=liquidity),
         "gates_note": GATES_NOT_READABLE if gate is None else None,
-        "disposition": _disposition(gate, _mapping(detail.get("score_detail"))),
+        "disposition": _disposition(gate, score, liquidity),
         # The stored gate result's own action and blocks, as the gates wrote them (raw tokens).
-        "gate_action": None if gate is None else _text(gate.get("action")),
+        "gate_action": None if gate is None else _token(_text(gate.get("action")), gate, liquidity),
         "hard_blocks": None if gate is None else list(gate.get("hard_blocks") or []),
         "venue": _text(provider_state.get("active_provider")),
         "timeframe_label": _text(brief.get("timeframe_label")),
@@ -142,18 +148,37 @@ def _assessed(gate: Mapping[str, Any] | None, provider_state: Mapping[str, Any])
     blocks = set(gate.get("hard_blocks") or []) if gate is not None else set()
     if blocks & _UNAVAILABLE_DATA_BLOCKS:
         return False
-    return provider_state.get("status") in {"OK", "DEGRADED"}
+    # A provider status the record does not hold says nothing: the stored percentages are then
+    # shown as stored. Only a status that is held, and is neither OK nor DEGRADED, withholds them.
+    status = provider_state.get("status")
+    return not isinstance(status, str) or status in {"OK", "DEGRADED"}
 
 
-def _disposition(gate: Mapping[str, Any] | None, score: Mapping[str, Any]) -> str | None:
-    """The gates' disposition as the live analysis showed it (detail/frontend_display.py): the gate
-    action when a hard gate did not pass, else the score's disposition."""
+def _token(token: str | None, gate: Mapping[str, Any], liquidity: Any) -> str | None:
+    """A stored token as it may be shown. The forced score token is never shown alone: where no
+    risk gate with a measured finding stands behind it and a gate forced it, it carries the note
+    that no risk gate did (owner ruling D6)."""
+
+    if token != ELEVATED_RISK_TOKEN:
+        return token
+    if elevated_risk_is_a_risk_finding(gate, {"disposition": token}, liquidity):
+        return token
+    return f"{token} ({NOT_FORCED_BY_A_RISK_GATE})"
+
+
+def _disposition(
+    gate: Mapping[str, Any] | None, score: Mapping[str, Any], liquidity: Any
+) -> str | None:
+    """The gates' disposition of a saved run: the gate action while a hard gate is active, else the
+    score's disposition. Whether one is active is read from the whole stored gate result (its
+    blocks, its flag, its action), never from `hard_gate_passed` alone: a record whose flag says
+    passed beside a stored block is not shown the score's forced token as if no gate stood."""
 
     if gate is None:
         return None
-    if gate.get("hard_gate_passed") is True:
-        return _text(score.get("disposition"))
-    return _text(gate.get("action"))
+    if hard_gate_active(gate):
+        return _token(_text(gate.get("action")), gate, liquidity)
+    return _token(_text(score.get("disposition")), gate, liquidity)
 
 
 def _hold_active(gate: Mapping[str, Any]) -> bool:

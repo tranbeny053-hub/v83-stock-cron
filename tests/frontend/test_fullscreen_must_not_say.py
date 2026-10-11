@@ -36,7 +36,8 @@ WITHOUT_A_RISK_FINDING = {
     goldens.SAVED_BEFORE: "the evidence gate alone, saved before the gate framing existed",
     "first_check_blocks_SYNTHETIC": "the evidence gate alone, another check shown first",
     "accepted_claim_SYNTHETIC": "the evidence gate alone, under an accepted claim",
-    "missing_order_book_and_evidence": "a gate fired by missing data, with the evidence gate",
+    "unusable_order_book_and_evidence": "a gate fired by unusable data, with the evidence gate",
+    "missing_order_book_and_evidence_SYNTHETIC": "a gate fired by missing data, with it",
     "missing_order_book_only_SYNTHETIC": "a gate fired by missing data, alone",
     "kill_switch_and_evidence": "a system gate, with the evidence gate",
     "system_only_SYNTHETIC": "a system gate, alone",
@@ -133,8 +134,8 @@ def test_every_scenario_is_read_as_one_kind_or_the_other() -> None:
     assert set(WITHOUT_A_RISK_FINDING) | set(WITH_A_RISK_FINDING) == set(SCREENS)
     assert not set(WITHOUT_A_RISK_FINDING) & set(WITH_A_RISK_FINDING)
     assert set(SCREENS) == {*goldens.SCENARIOS, goldens.SAVED_BEFORE}
-    # Every surface of every such scenario is read: 12 scenarios, 40 screens.
-    assert len(CELLS) == sum(len(SCREENS[name]) for name in WITHOUT_A_RISK_FINDING) == 40
+    # Every surface of every such scenario is read: 13 scenarios, 44 screens.
+    assert len(CELLS) == sum(len(SCREENS[name]) for name in WITHOUT_A_RISK_FINDING) == 44
     for name in WITHOUT_A_RISK_FINDING:
         assert set(SCREENS[name]) >= ({"history"} if name == goldens.SAVED_BEFORE else {"single"})
 

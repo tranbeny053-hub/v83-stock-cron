@@ -2,7 +2,7 @@ Saved analysis
 Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 A system or data gate is active: Liquidity could not be measured. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
-Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable or unusable. This is missing data, not a finding about the market.
+Liquidity could not be measured: Analysis is blocked because the order book that was served has a spread outside the range the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, not a finding about the market.
 Evidence gate: Directional skill is not established for this model and timeframe.
 Asset · venue
 BTC/USDT · okx
@@ -191,9 +191,11 @@ View
   |   },
   |   "liquidity_depth": {
   |     "status": "DEGRADED",
+  |     "best_bid": 100,
+  |     "best_ask": 400,
   |     "spread_frac": null,
   |     "top_depth_quote": 0,
-  |     "warning": "Order book unavailable."
+  |     "warning": "Order-book spread is outside bounded fraction range."
   |   },
   |   "volume_anomaly": {
   |     "status": "OK",
@@ -231,9 +233,11 @@ liquidity state
 View
 {
   |   "status": "DEGRADED",
+  |   "best_bid": 100,
+  |   "best_ask": 400,
   |   "spread_frac": null,
   |   "top_depth_quote": 0,
-  |   "warning": "Order book unavailable."
+  |   "warning": "Order-book spread is outside bounded fraction range."
   | }
 execution realism
 View

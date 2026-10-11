@@ -2,7 +2,7 @@ Saved analysis
 Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 A system or data gate is active: Liquidity could not be measured.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
-Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable or unusable. This is missing data, not a finding about the market.
+Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable. This is missing data, not a finding about the market.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

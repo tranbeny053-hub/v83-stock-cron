@@ -3,7 +3,7 @@ No accepted forecast
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
 A system or data gate is active: Liquidity could not be measured.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
-Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable or unusable. This is missing data, not a finding about the market.
+Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable. This is missing data, not a finding about the market.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -88,7 +88,7 @@ Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
 BLOCK
 Liquidity and execution
 #6
-Liquidity is DEGRADED; execution realism is DEGRADED.
+Liquidity could not be measured.
 Evidence: liquidity_state.status, execution_realism.status
 INFO
 Directional edge

@@ -7,6 +7,7 @@ from typing import Any
 from crypto_probability_engine.detail.gate_kinds import (
     elevated_risk_is_a_risk_finding,
     hard_gate_summary,
+    named_blocks,
 )
 
 SCHEMA_VERSION = "1.0"
@@ -574,6 +575,16 @@ def _actionability_stack(
         else f"Tail-risk status is {tail.get('status', 'UNKNOWN')}."
     )
     execution_blocks = {"LIQUIDITY_NOT_VIABLE", "EXECUTION_COST_TOO_HIGH"} & hard_blocks
+    # When this check blocks on those gates, its sentence is the gate authority's own headlines
+    # for them (detail/gate_kinds.py). The two states' status words cannot say it: a measured
+    # spread that is too wide leaves both "OK", and an order book that was never measured reads
+    # "DEGRADED", which is no finding.
+    liquidity_sentence = (
+        f"{named_blocks(gate, liquidity, execution_blocks)}."
+        if execution_blocks
+        else f"Liquidity is {liquidity.get('status', 'UNKNOWN')}; execution realism is "
+        f"{execution.get('status', 'UNKNOWN')}."
+    )
     if execution_blocks:
         liquidity_check = "BLOCK"
     elif liquidity.get("status") == "OK" and execution.get("status") == "OK":
@@ -642,10 +653,7 @@ def _actionability_stack(
             "liquidity_execution",
             liquidity_check,
             "Liquidity and execution",
-            (
-                f"Liquidity is {liquidity.get('status', 'UNKNOWN')}; execution realism is "
-                f"{execution.get('status', 'UNKNOWN')}."
-            ),
+            liquidity_sentence,
             ["liquidity_state.status", "execution_realism.status"],
         ),
         _check(

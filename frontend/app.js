@@ -597,17 +597,22 @@ function savedRunRows(payload, saved) {
   const range = saved.range || {};
   const evidence = saved.evidence || {};
   const notAssessed = range.assessed === false;
+  const asset = payload.normalized_symbol || payload.symbol;
   const venue = savedValue(saved.venue, (kept) => VENUE_LABELS[kept] || kept);
-  const band = savedValue(range.decision_band_frac, formatFractionPct);
+  const band = range.decision_band_frac;
+  const banded = band === null || band === undefined ? "" : ` (band ±${formatFractionPct(band)})`;
   return [
-    ["Asset · venue", `${payload.normalized_symbol || payload.symbol} · ${venue}`],
+    // A value the record does not hold is said on a row of its own, never inside another value.
+    ...(saved.venue
+      ? [["Asset · venue", `${asset} · ${venue}`]]
+      : [["Asset", asset], ["Venue", venue]]),
     ["Reference close (UTC)", savedValue(time.reference_close_utc)],
     ["Horizon end (UTC)", savedValue(time.horizon_end_utc)],
     [
       "In band (inside the decision band)",
       notAssessed
         ? NOT_ASSESSED_TEXT
-        : savedValue(range.in_band_frac, (kept) => `${formatFractionPct(kept)} (band ±${band})`),
+        : savedValue(range.in_band_frac, (kept) => `${formatFractionPct(kept)}${banded}`),
     ],
     [
       "Up (above the band)",

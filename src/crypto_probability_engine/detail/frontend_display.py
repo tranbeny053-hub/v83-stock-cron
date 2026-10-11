@@ -40,13 +40,23 @@ _BLOCKING_REASON_COPY = {
 
 _UNDESCRIBED_BLOCK_DETAIL = "This is a hard gate, but its description is unavailable."
 _LIQUIDITY_BLOCK = "LIQUIDITY_NOT_VIABLE"
-# The liquidity gate also blocks when the order book is missing or unusable. Nothing was measured
-# then, and missing data is not a proven market risk (owner ruling G2, 2026-10-10): its copy says
-# that data are missing and claims no finding about the market.
-_LIQUIDITY_UNMEASURED_COPY = (
-    "Liquidity could not be measured",
+# The liquidity gate also blocks when nothing was measured, and missing or unusable data is not a
+# proven market risk (owner ruling G2, 2026-10-10). Two different facts, each said as it is:
+# - no order book reached the measure: data are missing;
+# - an order book was served, and the measure refused to compute a spread from it (its spread is
+#   outside the bounded range): the data are there and unusable. Nothing is missing, and no finding
+#   about the market is claimed either.
+_LIQUIDITY_UNMEASURED_HEADLINE = "Liquidity could not be measured"
+_LIQUIDITY_MISSING_COPY = (
+    _LIQUIDITY_UNMEASURED_HEADLINE,
     "Analysis is blocked because the order-book data needed to measure liquidity are "
-    "unavailable or unusable. This is missing data, not a finding about the market.",
+    "unavailable. This is missing data, not a finding about the market.",
+)
+_LIQUIDITY_UNUSABLE_COPY = (
+    _LIQUIDITY_UNMEASURED_HEADLINE,
+    "Analysis is blocked because the order book that was served has a spread outside the range "
+    "the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, "
+    "not a finding about the market.",
 )
 
 
@@ -67,12 +77,28 @@ def liquidity_was_measured(liquidity: Any) -> bool:
     return liquidity.get("status") == "OK" and measured
 
 
+def order_book_was_served(liquidity: Any) -> bool:
+    """Whether an order book reached the liquidity measure. The measure reports the book's best bid
+    and ask whenever it had a book, also when it refuses to compute a spread from them; with no
+    book it reports neither (features/liquidity_depth.py). A state that is absent or unreadable
+    shows no book."""
+
+    if not isinstance(liquidity, Mapping):
+        return False
+    return all(
+        isinstance(liquidity.get(side), int | float) and not isinstance(liquidity.get(side), bool)
+        for side in ("best_bid", "best_ask")
+    )
+
+
 def blocking_reason(code: str, liquidity: Any) -> tuple[str, str]:
     """The headline and the detail of a hard block other than the evidence gate, for the liquidity
     state its liquidity gate judged; an unknown code reads as itself."""
 
     if code == _LIQUIDITY_BLOCK and not liquidity_was_measured(liquidity):
-        return _LIQUIDITY_UNMEASURED_COPY
+        if order_book_was_served(liquidity):
+            return _LIQUIDITY_UNUSABLE_COPY
+        return _LIQUIDITY_MISSING_COPY
     return _BLOCKING_REASON_COPY.get(code, (code, _UNDESCRIBED_BLOCK_DETAIL))
 
 

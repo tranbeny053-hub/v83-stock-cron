@@ -90,7 +90,7 @@ Evidence: tail_risk_state.status, tail_risk_state.cvar_loss
 BLOCK
 Liquidity and execution
 #6
-Liquidity is OK; execution realism is OK.
+Execution cost is too high; Liquidity is not viable.
 Evidence: liquidity_state.status, execution_realism.status
 INFO
 Directional edge

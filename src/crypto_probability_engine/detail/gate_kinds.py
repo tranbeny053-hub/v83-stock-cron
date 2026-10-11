@@ -147,6 +147,14 @@ def _names(blocks: list[str], liquidity: Any) -> str:
     return "; ".join(_headline(block, liquidity) for block in blocks)
 
 
+def named_blocks(gate: Mapping[str, Any], liquidity: Any, among: Any) -> str:
+    """The headlines of the active blocks that are in `among`, in the gates' own order and as the
+    summary names them: a check that restates those blocks says exactly this, so it can never
+    disagree with the authority."""
+
+    return _names([block for block in hard_blocks(gate) if block in among], liquidity)
+
+
 def hard_gate_summary(gate: Mapping[str, Any], liquidity: Any) -> str:
     """One or two sentences naming each kind of hard gate that is active."""
 

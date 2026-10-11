@@ -200,6 +200,118 @@ def test_the_disposition_is_the_one_the_live_analysis_showed(
     assert saved["gates"]["summary"] == gate_kinds.NO_HARD_GATE
 
 
+def _damaged(change) -> dict:
+    """The evidence-only analysis as it is stored, with one thing about the record damaged."""
+
+    stored = _stored(_analysis())
+    change(stored)
+    return stored
+
+
+def _view_of(name: str) -> dict:
+    return saved_run_view.build_saved_run_view(_damaged(DAMAGED_RECORDS[name]))
+
+
+# Stored records that are old, damaged or odd (the reviewer's cases, and their siblings): each
+# is read back without an error and without a line that contradicts the record.
+DAMAGED_RECORDS = {
+    "passed_true_with_blocks": lambda d: d["invalidation_detail"].update(hard_gate_passed=True),
+    "passed_true_and_no_blocks": lambda d: d["invalidation_detail"].update(
+        hard_gate_passed=True, hard_blocks=[]
+    ),
+    "passed_true_no_blocks_no_score": lambda d: (
+        d.pop("score_detail"),
+        d["invalidation_detail"].update(hard_gate_passed=True, hard_blocks=[]),
+    ),
+    "blocks_empty_but_not_passed": lambda d: d["invalidation_detail"].update(hard_blocks=[]),
+    "action_missing": lambda d: d["invalidation_detail"].pop("action"),
+    "action_is_the_forced_token": lambda d: d["invalidation_detail"].update(
+        action="ELEVATED_RISK_AVOID"
+    ),
+    "liquidity_execution_absent": lambda d: d.pop("liquidity_execution_detail"),
+    "data_quality_absent": lambda d: d.pop("data_quality_detail"),
+    "provider_state_absent": lambda d: d["data_quality_detail"].pop("provider_state"),
+    "probability_absent": lambda d: d.pop("probability_detail"),
+    "brief_absent": lambda d: d.pop("decision_brief"),
+    "gate_absent": lambda d: d.pop("invalidation_detail"),
+}
+
+
+def test_the_disposition_of_a_saved_run_is_read_from_its_whole_gate_result() -> None:
+    """Review finding 4. A stored gate result whose flag says passed beside a stored block used to
+    show the score's forced token alone ("ELEVATED_RISK_AVOID"). The view now reads whether a
+    hard gate is active from the whole gate result, and the forced token never stands alone."""
+
+    token, note = "ELEVATED_RISK_AVOID", "ELEVATED_RISK_AVOID (not forced by a risk gate)"
+    whole = saved_run_view.build_saved_run_view(_stored(_analysis()))
+    assert (whole["disposition"], whole["gate_action"]) == ("NO_TRADE", "NO_TRADE")
+
+    flagged = _view_of("passed_true_with_blocks")
+    assert flagged["gates"]["summary"].startswith("Evidence gate: ")
+    assert flagged["disposition"] == "NO_TRADE", "the gate is active: its action, not the score's"
+
+    # No block and a flag that says passed: the record holds the score's token and the gate's own
+    # note that the evidence gate forced it. It is shown with the note, never alone.
+    passed = _damaged(DAMAGED_RECORDS["passed_true_and_no_blocks"])
+    assert passed["score_detail"]["disposition"] == token
+    assert passed["invalidation_detail"]["skill_guard_applied"] is True
+    assert saved_run_view.build_saved_run_view(passed)["disposition"] == note
+    # The same record without the gates' note that anything forced it: the score's own reading,
+    # which is a risk reading of the score and stands as the live analysis shows it.
+    for flag in ("skill_guard_applied", "risk_guard_applied", "forced_score_disposition"):
+        passed["invalidation_detail"].pop(flag, None)
+    assert saved_run_view.build_saved_run_view(passed)["disposition"] == token
+    # A stored action that is the forced token itself, under the evidence gate: noted too.
+    forced = _view_of("action_is_the_forced_token")
+    assert (forced["disposition"], forced["gate_action"]) == (note, note)
+    # Under a measured risk gate the token is a risk finding: it stands alone.
+    risk = _damaged(
+        lambda d: d["invalidation_detail"].update(
+            action=token, hard_blocks=["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"]
+        )
+    )
+    assert saved_run_view.build_saved_run_view(risk)["disposition"] == token
+    # Without a score, a passed gate has no disposition to show; without an action, a blocked one.
+    for name in ("passed_true_no_blocks_no_score", "action_missing"):
+        assert _view_of(name)["disposition"] is None, name
+    unnamed = _view_of("blocks_empty_but_not_passed")
+    assert unnamed["gates"]["summary"] == gate_kinds.UNNAMED_HARD_GATE
+    assert unnamed["disposition"] == "NO_TRADE"
+
+
+def test_a_record_that_lost_a_part_shows_what_it_still_holds() -> None:
+    """The same family. A record without its provider state still holds its percentages: they are
+    shown, not called "not assessed". A record without its liquidity and execution state holds no
+    cost and no band: those are None by themselves, and the percentages stand."""
+
+    whole = saved_run_view.build_saved_run_view(_stored(_analysis()))
+    for name in ("data_quality_absent", "provider_state_absent"):
+        saved = _view_of(name)
+        assert saved["range"]["assessed"] is True, name
+        for value in ("in_band_frac", "up_frac", "down_frac", "meaning", "explanation"):
+            assert saved["range"][value] == whole["range"][value] is not None, (name, value)
+        assert saved["venue"] is None, name
+    lost = _view_of("liquidity_execution_absent")
+    assert lost["range"]["decision_band_frac"] is None
+    assert lost["cost"]["round_trip_cost_frac"] is None
+    assert lost["range"]["up_frac"] == whole["range"]["up_frac"]
+    assert lost["gates"] == whole["gates"], "the evidence gate needs no liquidity state"
+
+
+@pytest.mark.parametrize("name", DAMAGED_RECORDS)
+def test_the_detail_route_answers_200_for_every_damaged_record(name: str) -> None:
+    stored = {**_damaged(DAMAGED_RECORDS[name]), "run_id": "durable-run"}
+    client = make_client()
+    client.app.state.persistence_repository = _Durable(stored)
+    login(client)
+    response = client.get("/v1/analyze/detail/durable-run")
+    assert response.status_code == 200, name
+    saved = response.json()["saved_run_view"]
+    assert saved == saved_run_view.build_saved_run_view(stored)
+    for token in (saved["disposition"], saved["gate_action"]):
+        assert token != "ELEVATED_RISK_AVOID", f"{name}: the forced token alone"
+
+
 def test_a_saved_run_shows_no_percentage_the_live_view_withheld(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -219,7 +331,7 @@ def test_a_saved_run_shows_no_percentage_the_live_view_withheld(
         assert saved_run_view.build_saved_run_view(stored)["range"]["assessed"] is False, block
     # The provider's own stored status withholds it too, whatever the stored gate result says
     # or fails to say (the live view reads both: decision_view._data_state).
-    for status in ("UNAVAILABLE", "QUARANTINED", None, 5):
+    for status in ("UNAVAILABLE", "QUARANTINED", ""):
         for gate in ({"hard_blocks": [], "hard_gate_passed": True}, "not a gate result"):
             stored = _stored(_analysis())
             stored["data_quality_detail"]["provider_state"]["status"] = status

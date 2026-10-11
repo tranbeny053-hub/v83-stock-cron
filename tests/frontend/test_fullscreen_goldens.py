@@ -52,7 +52,13 @@ SCENARIOS = {
         "NO_ACCEPTED_CLAIM",
         "STATELESS",
     ),
-    "missing_order_book_and_evidence": (
+    "unusable_order_book_and_evidence": (
+        "NO_TRADE",
+        ["LIQUIDITY_NOT_VIABLE", _EVIDENCE],
+        "NO_ACCEPTED_CLAIM",
+        "STATELESS",
+    ),
+    "missing_order_book_and_evidence_SYNTHETIC": (
         "NO_TRADE",
         ["LIQUIDITY_NOT_VIABLE", _EVIDENCE],
         "NO_ACCEPTED_CLAIM",
@@ -88,7 +94,8 @@ HISTORY = (
     "evidence_only",
     "risk_and_evidence",
     "wide_spread_and_evidence",
-    "missing_order_book_and_evidence",
+    "unusable_order_book_and_evidence",
+    "missing_order_book_and_evidence_SYNTHETIC",
     "kill_switch_and_evidence",
     "storage_OK",
     "risk_only_SYNTHETIC",
@@ -175,8 +182,8 @@ def test_every_scenario_and_surface_has_a_golden_and_no_file_is_stray(raw: dict)
     assert goldens.SURFACES == ("single", "batch", "detail")
     assert goldens.SAVED_BEFORE == SAVED_BEFORE
     expected = goldens.expected_names()
-    # 14 scenarios on 3 surfaces, 9 of them as a saved run read back, and one older saved run.
-    assert len(expected) == len(set(expected)) == 14 * 3 + 9 + 1 == FILES == 52
+    # 15 scenarios on 3 surfaces, 10 of them as a saved run read back, and one older saved run.
+    assert len(expected) == len(set(expected)) == 15 * 3 + 10 + 1 == FILES == 56
     for scenario in SCENARIOS:
         surfaces = (*goldens.SURFACES, *(("history",) if scenario in HISTORY else ()))
         assert list(raw[scenario]) == list(surfaces), scenario
@@ -204,12 +211,19 @@ def test_the_scenarios_are_what_their_names_say(cases: dict[str, dict]) -> None:
         timeframe = "1W" if name == "permission_SYNTHETIC" else "1H"
         assert payload["timeframes"]["primary"] == timeframe, name
         assert payload["normalized_symbol"] == "BTC/USDT", name
-    # The order book each scenario names: none at all, or one whose spread is measured.
+    # The order book each scenario names: none at all (SYNTHETIC by name: no adapter serves an
+    # analysis without one), one that was served and is unusable, or one whose spread is measured.
     for name in SCENARIOS:
         liquidity = cases[name]["liquidity_state"]
         if name.startswith("missing_order_book"):
+            assert name.endswith("_SYNTHETIC"), name
             assert liquidity["status"] == "DEGRADED" and liquidity["spread_frac"] is None, name
             assert liquidity["warning"] == "Order book unavailable.", name
+            assert "best_bid" not in liquidity and "best_ask" not in liquidity, name
+        elif name.startswith("unusable_order_book"):
+            assert liquidity["status"] == "DEGRADED" and liquidity["spread_frac"] is None, name
+            assert (liquidity["best_bid"], liquidity["best_ask"]) == (100, 400), name
+            assert liquidity["warning"] == "Order-book spread is outside bounded fraction range."
         else:
             assert liquidity["status"] == "OK", name
             wide = liquidity["spread_frac"] > 0.01

@@ -80,7 +80,11 @@ SCENARIOS: dict[str, tuple[str, str]] = {
     "evidence_only": (EVIDENCE, NOT_A_MARKET_CALL),
     "risk_and_evidence": (f"{RISK} {EVIDENCE_TOO}", RISK_FRAMING),
     "wide_spread_and_evidence": (f"{WIDE} {EVIDENCE_TOO}", WIDE_FRAMING),
-    "missing_order_book_and_evidence": (f"{UNMEASURED} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
+    "unusable_order_book_and_evidence": (f"{UNMEASURED} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
+    "missing_order_book_and_evidence_SYNTHETIC": (
+        f"{UNMEASURED} {EVIDENCE_TOO}",
+        NOT_A_MARKET_CALL,
+    ),
     "kill_switch_and_evidence": (f"{SYSTEM} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
     "risk_only_SYNTHETIC": (RISK, RISK_FRAMING),
     "missing_order_book_only_SYNTHETIC": (UNMEASURED, NOT_A_MARKET_CALL),
@@ -136,7 +140,8 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
             ["EXECUTION_COST_TOO_HIGH", *liquidity],
             "NO_TRADE",
         ),
-        "missing_order_book_and_evidence": ("NO_TRADE", liquidity, "NO_TRADE"),
+        "unusable_order_book_and_evidence": ("NO_TRADE", liquidity, "NO_TRADE"),
+        "missing_order_book_and_evidence_SYNTHETIC": ("NO_TRADE", liquidity, "NO_TRADE"),
         "kill_switch_and_evidence": (
             "ABORT",
             ["KILL_SWITCH", "SKILL_NOT_DEMONSTRATED"],
@@ -160,7 +165,7 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
         assert cases[name]["gate_result"]["forced_score_disposition"] == token, name
         assert (cases[name]["score_stack"]["disposition"] == "ELEVATED_RISK_AVOID") is forced
     # The gates' own flag does not tell a measured finding from a missing order book.
-    for name in ("wide_spread_and_evidence", "missing_order_book_and_evidence"):
+    for name in ("wide_spread_and_evidence", "missing_order_book_and_evidence_SYNTHETIC"):
         assert cases[name]["gate_result"]["risk_guard_applied"] is True, name
     assert decision_view.ACCEPTED_FORECAST_CLAIMS == frozenset()
     assert decision_view.ACCEPTED_DIRECTIONAL_PERMISSIONS == frozenset()
@@ -238,7 +243,7 @@ def test_without_a_risk_gate_no_screen_words_risk(screens: dict, name: str, surf
             assert FORCED_NOTE in text, f"{name}/{surface}: the token alone in {text!r}"
 
 
-@pytest.mark.parametrize("name", ["missing_order_book_and_evidence", "saved"])
+@pytest.mark.parametrize("name", ["missing_order_book_and_evidence_SYNTHETIC", "saved"])
 def test_a_gate_fired_by_missing_data_is_a_data_gate_on_every_surface(
     cases: dict, reopened: dict, screens: dict, name: str
 ) -> None:
@@ -246,7 +251,7 @@ def test_a_gate_fired_by_missing_data_is_a_data_gate_on_every_surface(
     gave no order book, so the liquidity gate fired on missing data: the same block and the same
     forced token as a measured finding, and no screen calls it one. A saved run reads the same."""
 
-    scenario = "missing_order_book_and_evidence"
+    scenario = "missing_order_book_and_evidence_SYNTHETIC"
     payload = cases[scenario]
     assert payload["liquidity_state"]["warning"] == "Order book unavailable."
     assert "LIQUIDITY_NOT_VIABLE" in payload["gate_result"]["hard_blocks"]
@@ -284,7 +289,13 @@ def test_under_a_real_risk_gate_no_screen_says_no_reason_to_act(
 @pytest.mark.parametrize("surface", ["single", "batch", "detail"])
 def test_missing_evidence_and_a_real_block_cannot_be_confused(screens: dict, surface: str) -> None:
     cells = {name: tuple(screens[name][surface]) for name in SCENARIOS}
-    assert len(set(cells.values())) == len(cells), surface
+    # An order book that is missing and one that was served and is unusable are the same data
+    # gate under the same headline. The two cards read alike for them; the detail panel's gate
+    # list says which it is.
+    twins = ("unusable_order_book_and_evidence", "missing_order_book_and_evidence_SYNTHETIC")
+    alike = surface != "detail"
+    assert (cells[twins[0]] == cells[twins[1]]) is alike, surface
+    assert len(set(cells.values())) == len(cells) - (1 if alike else 0), surface
 
 
 def test_a_run_saved_before_this_change_is_framed_from_its_stored_gate_result(
@@ -671,6 +682,70 @@ def test_a_reopened_run_whose_gate_result_cannot_be_read_says_so_and_frames_noth
         assert texts[texts.index("Up (above the band)") + 1].endswith("%"), name
         for text in texts:
             assert "gate is active" not in text and "risk gate" not in text.lower(), text
+
+
+def test_a_damaged_saved_record_reads_honestly_on_the_screen(cases: dict, reopened: dict) -> None:
+    """Review finding 4 and its family, on the screen. Stored records that lost or contradict a
+    part: the forced token never stands alone; a value the record does not hold says "Not kept
+    in saved history." on a row of its own, never inside another value; and percentages the
+    record holds are shown, not called "not assessed"."""
+
+    def stored(scenario: str, change) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases[scenario]["detail_view"]))
+        change(detail)
+        return {
+            "row": reopened[scenario]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    gate = "invalidation_detail"
+    damaged = {
+        "flag_passed": stored("evidence_only", lambda d: d[gate].update(hard_gate_passed=True)),
+        "flag_passed_no_blocks": stored(
+            "evidence_only", lambda d: d[gate].update(hard_gate_passed=True, hard_blocks=[])
+        ),
+        "liquidity_lost": stored(
+            "wide_spread_and_evidence", lambda d: d.pop("liquidity_execution_detail")
+        ),
+        "data_quality_lost": stored("evidence_only", lambda d: d.pop("data_quality_detail")),
+        "probability_lost": stored("evidence_only", lambda d: d.pop("probability_detail")),
+        "brief_lost": stored("evidence_only", lambda d: d.pop("decision_brief")),
+        "only_a_run_id": {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view({"run_id": "x"}),
+        },
+    }
+    rendered = goldens.render({}, damaged)["screens"]
+    label = "Gate disposition (not a market call)"
+    for name, surfaces in rendered.items():
+        texts = surfaces["history"]
+        block = harness._between(texts, "Saved analysis", "Model Quality")
+        for text in texts:
+            assert NOT_KEPT not in text or text == NOT_KEPT, f"{name}: inside a value: {text!r}"
+            if "ELEVATED_RISK_AVOID" in text:
+                assert FORCED_NOTE in text, f"{name}: the forced token alone: {text!r}"
+        assert "n/a" not in " ".join(block), name
+    shown = {name: surfaces["history"] for name, surfaces in rendered.items()}
+    assert harness._value(shown["flag_passed"], label) == "NO_TRADE"
+    assert harness._value(shown["flag_passed_no_blocks"], label) == FORCED_NOTE
+    # The liquidity state is lost: the percentage stands by itself, and the cost says it is lost.
+    lost = shown["liquidity_lost"]
+    assert harness._value(lost, "In band (inside the decision band)") == "40.04%"
+    assert harness._value(lost, "Round-trip cost") == NOT_KEPT
+    assert "Liquidity is not viable" not in " ".join(lost), "no finding without its measurement"
+    # The provider state is lost: the stored percentages are shown, and the venue says it is lost.
+    quality = shown["data_quality_lost"]
+    assert harness._value(quality, "Up (above the band)") == "39.38%"
+    assert not any("Not assessed" in text for text in quality)
+    assert harness._value(quality, "Asset") == "BTC/USDT"
+    assert harness._value(quality, "Venue") == NOT_KEPT and "Asset · venue" not in quality
+    assert harness._value(shown["probability_lost"], "Up (above the band)") == NOT_KEPT
+    assert harness._value(shown["brief_lost"], "Evidence level") == NOT_KEPT
+    bare = shown["only_a_run_id"]
+    assert bare[1] == (
+        "No gate result can be read from this saved analysis, so no gate framing is shown."
+    )
+    assert label not in harness._between(bare, "Saved analysis", "Model Quality")
 
 
 def test_a_gate_view_of_a_version_this_screen_does_not_know_is_not_rendered(cases: dict) -> None:

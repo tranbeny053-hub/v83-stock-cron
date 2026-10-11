@@ -110,9 +110,12 @@ OLD_STORED_SUMMARY = (
     "BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated "
     "heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID."
 )
-# The order book of an analysis: the fixture's own, none at all (the venue gave no book, so
-# liquidity could not be measured), or a book whose spread is measured and too wide.
-ORDER_BOOKS = ("fixture", "missing", "wide")
+# The order book of an analysis: the fixture's own; none at all (SYNTHETIC: both adapters always
+# fetch a book and refuse an empty one as an error, so no live screen has none); a book that is
+# served and whose ask is more than three times its bid, which passes validation and from which
+# the liquidity measure refuses to compute a spread (reachable today); or a book whose spread is
+# measured and too wide.
+ORDER_BOOKS = ("fixture", "missing", "unusable", "wide")
 
 
 def _select_with(book: str) -> Callable[..., Any]:
@@ -122,6 +125,9 @@ def _select_with(book: str) -> Callable[..., Any]:
         chosen = harness._select(symbol, timeframe, settings=settings)
         if book == "missing":
             return replace(chosen, snapshot=replace(chosen.snapshot, order_book=None))
+        if book == "unusable":
+            apart = make_order_book(bid=100.0, ask=400.0)
+            return replace(chosen, snapshot=replace(chosen.snapshot, order_book=apart))
         if book == "wide":
             wide = make_order_book(bid=100.0, ask=110.0)
             return replace(chosen, snapshot=replace(chosen.snapshot, order_book=wide))
@@ -189,8 +195,11 @@ SCENARIOS: dict[str, Callable[[], dict]] = {
     # A real risk gate beside it: a measured tail-risk breach; a measured spread that is too wide.
     "risk_and_evidence": lambda: _analysis(tail=True),
     "wide_spread_and_evidence": lambda: _analysis(book="wide"),
-    # A gate fired by missing data: the venue gave no order book (owner ruling G2).
-    "missing_order_book_and_evidence": lambda: _analysis(book="missing"),
+    # A gate fired by unusable data (owner ruling G2): an order book was served, and its spread
+    # is outside the range the liquidity measure accepts.
+    "unusable_order_book_and_evidence": lambda: _analysis(book="unusable"),
+    # SYNTHETIC: a gate fired by missing data, no order book at all.
+    "missing_order_book_and_evidence_SYNTHETIC": lambda: _analysis(book="missing"),
     # A system gate beside it.
     "kill_switch_and_evidence": lambda: _analysis(kill=True),
     # The same analysis, for each thing storage can say when it is asked.
@@ -213,7 +222,8 @@ HISTORY = (
     "evidence_only",
     "risk_and_evidence",
     "wide_spread_and_evidence",
-    "missing_order_book_and_evidence",
+    "unusable_order_book_and_evidence",
+    "missing_order_book_and_evidence_SYNTHETIC",
     "kill_switch_and_evidence",
     "storage_OK",
     "risk_only_SYNTHETIC",
