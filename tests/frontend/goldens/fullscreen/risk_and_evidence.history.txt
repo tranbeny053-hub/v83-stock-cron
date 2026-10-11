@@ -1,0 +1,384 @@
+Gate brief (not a market call)
+No decision synthesis for this run; the existing gate brief is shown.
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+Gate disposition
+NO_TRADE
+Gate brief summary
+BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
+Gate brief risk note
+Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
+Scenario plan
+Scenario plan unavailable. Keep using the Decision summary and hard gates.
+Model Quality
+Current status
+Model quality: not measured yet.
+Calibration status
+Not measured yet
+Reliability status
+Not measured yet
+Probabilities are heuristic until enough resolved samples exist.
+Resolved-sample metrics are not surfaced in this view yet.
+Keep collecting samples; this is not reliability evidence and not profitability evidence.
+Live calibration diagnostics
+Read-only diagnostic
+Calibration diagnostics unavailable. Keep using heuristic status.
+How to read model quality
+Heuristic probability
+An early estimate produced before measured calibration is established.
+Insufficient sample
+Too few resolved outcomes are available for a stable quality assessment.
+Measured calibration
+A comparison between forecast probabilities and resolved outcomes after the sample gate is met.
+Brier score
+Average squared probability error; interpret only with a comparable resolved sample.
+Log loss
+A probability error measure that weighs confidently wrong forecasts more heavily.
+Top-label hit rate
+How often the highest-probability label matched the resolved outcome; it is not a complete quality measure.
+Why correctness alone is incomplete
+Probability quality also depends on calibration, sample size, outcome mix, and evaluation context.
+Why this is not profitability evidence
+Forecast diagnostics do not include execution costs, sizing, or realized returns.
+Overview
+Download JSON
+Symbol
+BTC/USDT
+Timeframe
+n/a
+Horizon
+n/a
+Analysis mode
+METRICS_ONLY
+Disposition
+n/a
+Score
+n/a
+As of UTC
+2026-06-06T12:00:00Z
+Run ID
+run_<RUN_ID>
+Data source
+n/a
+Live data
+n/a
+Storage when requested
+No storage configured — analyses are kept only until the server restarts
+Gate brief (not a market call)
+The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+Gate disposition
+NO_TRADE
+Horizon
+1H setup / ~6H horizon
+Model readiness
+Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.
+Calibration
+DEFAULT_PHASE1A
+Reliability
+INSUFFICIENT_SAMPLE
+Profitability claim
+false
+State summary
+BTC/USDT is classified as NO_TRADE for 1H setup / ~6H horizon using an uncalibrated heuristic. Gate action is NO_TRADE and backend disposition is ELEVATED_RISK_AVOID.
+Volatility reference
+Volatility reference only — not a stop/target recommendation.
+Risk note
+Hard gates, provider/data quality, liquidity, tail risk, and execution realism remain authoritative. This brief is display-only.
+Disclaimer
+Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, or financial advice. No profitability claim.
+Key Reasons
+Not kept in saved history.
+Hard Blockers
+TAIL_RISK_BREACH
+SKILL_NOT_DEMONSTRATED
+Watchlist Triggers
+Wait for hard blockers or degraded data conditions to clear.
+Re-check only with fresh backend data over the stated multi-bar horizon.
+Monitor whether backend hard gates remain clear.
+Invalidation Conditions
+Hard blocker persists: TAIL_RISK_BREACH.
+Hard blocker persists: SKILL_NOT_DEMONSTRATED.
+Probability
+Type
+UNCALIBRATED_HEURISTIC_6BAR_OUTCOME
+Up
+n/a%
+Down
+n/a%
+In band
+n/a%
+Model readiness
+Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.
+Explanation
+n/a
+Risk / Gates
+Gate action
+n/a
+Hard blocks
+n/a
+Warnings
+n/a
+risk arbiter
+View
+{
+  |   "status": "OK",
+  |   "risk_arbiter_version": "risk_arbiter_v1",
+  |   "w_alpha": 1,
+  |   "w_omega": 1,
+  |   "w_sigma": 1.5,
+  |   "alpha_signal": 0.00498545907769…,
+  |   "net_signal": 0.000906456998688…,
+  |   "risk_pressure": 0.00423261077025…,
+  |   "arbiter_value": -0.00332615377156…
+  | }
+tail risk
+View
+{
+  |   "status": "OK",
+  |   "tail_method": "HISTORICAL_CVAR",
+  |   "tail_confidence_frac": 0.99,
+  |   "cvar_loss": 0.05,
+  |   "cvar_breach_threshold": 0.025,
+  |   "threshold_method": "TIMEFRAME_SQRT_DURATION_SCALE",
+  |   "timeframe": "1H",
+  |   "evt_status": "DISABLED_PHASE1A"
+  | }
+Market Data Quality
+Status
+n/a
+Latest age seconds
+n/a
+Warnings
+n/a
+Failures
+n/a
+Data source
+n/a
+Live data
+n/a
+Provider State
+Active provider
+n/a
+Status
+n/a
+Cross-provider state
+n/a
+Fallback to single provider
+n/a
+Disagreement bps
+n/a
+Reason
+n/a
+Market Data v2 / Provider Observability
+Symbol availability
+n/a
+Cross-provider state
+n/a
+Fallback to single provider
+n/a
+Disagreement bps
+n/a
+provider resources
+View
+{}
+derived market metrics
+View
+{}
+symbol availability
+n/a
+cross provider state
+UNAVAILABLE
+fallback to single provider
+n/a
+disagreement bps
+n/a
+warnings
+0 items
+[]
+Quant Signals
+market features
+View
+{
+  |   "trend_mtf": {
+  |     "status": "OK",
+  |     "trend_timeframes": [
+  |       "1H",
+  |       "4H",
+  |       "1D"
+  |     ],
+  |     "primary_return": 0.00498545907769…,
+  |     "extended_return": 0.0202446225221…,
+  |     "label": "UP"
+  |   },
+  |   "volatility": {
+  |     "status": "OK",
+  |     "realized_vol": 0.0000497377414987…,
+  |     "method": "PER_BAR_LOG_RETURN_PSTDEV",
+  |     "sample_size": 209
+  |   },
+  |   "liquidity_depth": {
+  |     "status": "OK",
+  |     "best_bid": 120,
+  |     "best_ask": 120.5,
+  |     "spread_frac": 0.00415800415800…,
+  |     "top_depth_quote": 240
+  |   },
+  |   "volume_anomaly": {
+  |     "status": "OK",
+  |     "volume_ratio": 1.00876095119…
+  |   },
+  |   "btc_eth_context": {
+  |     "status": "DEGRADED",
+  |     "reason": "Cross-asset context is a safe placeholder in Sprint 1.",
+  |     "influence_frac": 0
+  |   },
+  |   "correlation_beta": {
+  |     "status": "DEGRADED",
+  |     "reason": "Correlation/beta requires verified cross-asset history.",
+  |     "beta": null,
+  |     "influence_frac": 0
+  |   },
+  |   "memory_features": {
+  |     "status": "DEGRADED",
+  |     "reason": "Durable memory is optional and not configured by default.",
+  |     "influence_frac": 0
+  |   },
+  |   "regime_2state": {
+  |     "status": "OK",
+  |     "regime": "NORMAL_VARIANCE",
+  |     "deterministic_proxy": true
+  |   }
+  | }
+trend summary
+View
+{
+  |   "label": "UP",
+  |   "magnitude_pct": 0.498545907769…
+  | }
+liquidity state
+View
+{
+  |   "status": "OK",
+  |   "best_bid": 120,
+  |   "best_ask": 120.5,
+  |   "spread_frac": 0.00415800415800…,
+  |   "top_depth_quote": 240
+  | }
+execution realism
+View
+{
+  |   "status": "OK",
+  |   "taker_fee_frac": 0.001,
+  |   "maker_fee_frac": 0.001,
+  |   "slippage_model": "DEPTH_AWARE_PHASE1A",
+  |   "slippage_frac": 0.00207900207900…,
+  |   "round_trip_cost_frac": 0.00407900207900…,
+  |   "net_of_cost_binding": true,
+  |   "warnings": []
+  | }
+News Add-on
+State
+News analysis disabled for this run.
+Mode
+METRICS_ONLY
+Warnings
+n/a
+news addon state
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "symbol": "BTC/USDT",
+  |   "configured_source_count": 0,
+  |   "fetch_attempted": false,
+  |   "provider_status": [],
+  |   "warnings": [],
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_evidence_frac": 0,
+  |   "news_influence_frac": 0,
+  |   "failure_is_non_blocking": true,
+  |   "authority_limits": {
+  |     "can_force_constructive": false,
+  |     "can_override_hard_gates": false,
+  |     "sentiment_only_action": "FORBIDDEN"
+  |   }
+  | }
+micro news context
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "items": [],
+  |   "warnings": [],
+  |   "full_article_bodies_stored": false,
+  |   "sentiment_only_action": "FORBIDDEN",
+  |   "message": "News analysis disabled for this run."
+  | }
+macro context
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "mode": "METRICS_ONLY",
+  |   "items": [],
+  |   "warnings": [],
+  |   "full_article_bodies_stored": false,
+  |   "sentiment_only_action": "FORBIDDEN",
+  |   "message": "News analysis disabled for this run."
+  | }
+news evidence
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_influence_frac": 0,
+  |   "clusters": [],
+  |   "links": []
+  | }
+provider status
+0 items
+[]
+news influence
+View
+{
+  |   "status": "DISABLED_METRICS_ONLY",
+  |   "influence_mode": "ADVISORY_DISPLAY_ONLY",
+  |   "news_influence_frac": 0,
+  |   "can_force_constructive": false,
+  |   "can_override_hard_gates": false,
+  |   "sentiment_only_action": "FORBIDDEN"
+  | }
+News Authority / Macro & Micro Context
+Influence mode
+n/a
+Influence
+0.0 advisory display only
+Provider status
+n/a
+status
+DISABLED_METRICS_ONLY
+influence mode
+ADVISORY_DISPLAY_ONLY
+news influence frac
+0
+clusters
+0 items
+[]
+links
+0 items
+[]
+status
+DISABLED_METRICS_ONLY
+mode
+METRICS_ONLY
+items
+0 items
+[]
+warnings
+0 items
+[]
+full article bodies stored
+no
+sentiment only action
+FORBIDDEN
+message
+News analysis disabled for this run.
+Debug / Raw JSON

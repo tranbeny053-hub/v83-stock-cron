@@ -1133,7 +1133,10 @@ console.log(JSON.stringify(rows.map(summarize)));
 
 def test_watchlist_history_failure_does_not_block_symbol_rendering() -> None:
     js = read_frontend("app.js")
-    load_watchlist = extract_javascript_function(js, "loadWatchlist")
+    # loadWatchlist reads its answer's storage status through namedStorageStatus.
+    load_watchlist = "\n".join(
+        extract_javascript_function(js, name) for name in ("namedStorageStatus", "loadWatchlist")
+    )
     script = f"""
 {load_watchlist}
 const calls = [];
@@ -1148,10 +1151,11 @@ const renderWatchlist = (symbols, status, runs) =>
   renders.push({{ symbols, status, hasRuns: runs !== undefined }});
 const readLocalWatchlist = () => ["LOCAL/USDT"];
 const writeLocalWatchlist = () => {{}};
-const document = {{ querySelector: () => ({{ title: "" }}) }};
+const statusLine = {{ title: "" }};
+const document = {{ querySelector: () => statusLine }};
 (async () => {{
   await loadWatchlist();
-  console.log(JSON.stringify({{ calls, renders }}));
+  console.log(JSON.stringify({{ calls, renders, title: statusLine.title }}));
 }})().catch((error) => {{ console.error(error); process.exit(1); }});
 """
     completed = subprocess.run(
@@ -1162,6 +1166,9 @@ const document = {{ querySelector: () => ({{ title: "" }}) }};
     )
     result = json.loads(completed.stdout)
 
+    # loadWatchlist catches whatever its body throws, draws the browser's list and leaves the
+    # error as the line's tooltip. A function missing from this cut-out would end there.
+    assert result["title"] == "", f"loadWatchlist took its failure path: {result['title']}"
     assert sorted(result["calls"]) == ["/v1/runs", "/v1/watchlist"]
     assert result["renders"] == [
         {"symbols": ["ETH/USDT", "BTC/USDT"], "status": "OK", "hasRuns": False}

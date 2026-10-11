@@ -187,12 +187,19 @@ function loginFailureMessage(status, payload) {
   return "Login is temporarily unavailable. Try again shortly.";
 }
 
+// The storage status an answer names: text that is not blank. Anything else names none (null).
+function namedStorageStatus(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+// The one place an answer's storage status reaches the header badge: every answered request
+// passes here (api), and the badge is written only when the answer names a status.
 function updateStatusFromPayload(payload = {}) {
   const status =
-    payload.persistence_status ||
-    payload.debug?.persistence_status ||
-    payload.detail_view?.debug_lite?.persistence_status ||
-    payload.system?.persistence_status;
+    namedStorageStatus(payload.persistence_status) ||
+    namedStorageStatus(payload.debug?.persistence_status) ||
+    namedStorageStatus(payload.detail_view?.debug_lite?.persistence_status) ||
+    namedStorageStatus(payload.system?.persistence_status);
   if (status) {
     updatePersistenceStatus(status);
   }
@@ -2774,12 +2781,21 @@ function writeLocalWatchlist(symbols) {
   localStorage.setItem(watchlistStorageKey, JSON.stringify([...new Set(symbols)].slice(0, 20)));
 }
 
+// The watchlist's own line. It never writes the header badge: an answer's storage status reaches
+// the badge where the answer is read (updateStatusFromPayload), once. Written from here as well,
+// the badge took a made-up UNAVAILABLE from a load or change that reported nothing, and an older
+// answer's status over a newer one when the list was drawn again with its history.
+// `status` is null when a load or change brought no storage status back (a load that failed, or
+// an answer that names none); the line then reads as it always did for a list drawn from the
+// browser: UNAVAILABLE. The line's tooltip is an earlier failed load's error: it goes when the
+// line is written again (a failed load sets its own after this).
 function setWatchlistStatus(status) {
   const target = document.querySelector("#watchlistStatus");
-  updatePersistenceStatus(status);
+  target.title = "";
+  const shown = status ?? "UNAVAILABLE";
   const browserFallback = status !== "OK";
   target.textContent = browserFallback
-    ? `Watchlist persistence: ${status}. Browser fallback is active.`
+    ? `Watchlist persistence: ${shown}. Browser fallback is active.`
     : "Watchlist persistence: OK";
 }
 
@@ -2909,14 +2925,16 @@ async function loadWatchlist() {
       symbols = localSymbols.length ? localSymbols : symbols;
       writeLocalWatchlist(symbols);
     }
-    const status = payload.persistence_status || "UNAVAILABLE";
+    // An answer that names no storage status reports none (null).
+    const status = namedStorageStatus(payload.persistence_status);
     renderWatchlist(symbols, status);
     const runs = await historyRequest;
     if (runs !== null) {
       renderWatchlist(symbols, status, runs);
     }
   } catch (error) {
-    renderWatchlist(readLocalWatchlist(), "UNAVAILABLE");
+    // The load failed (a network error, a refusal, a server error): no storage status came back.
+    renderWatchlist(readLocalWatchlist(), null);
     document.querySelector("#watchlistStatus").title = error.message || "Watchlist unavailable";
   }
 }
@@ -2932,10 +2950,8 @@ async function addWatchlistSymbol(symbol) {
     let symbols = Array.isArray(envelope.symbols)
       ? envelope.symbols.filter((item) => typeof item === "string")
       : [];
-    const persistenceStatus =
-      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
-        ? envelope.persistence_status
-        : "UNAVAILABLE";
+    // An answer that names no storage status reports none (null).
+    const persistenceStatus = namedStorageStatus(envelope.persistence_status);
     if (persistenceStatus !== "OK") {
       symbols = [...new Set([...readLocalWatchlist(), ...symbols])].slice(0, 20);
       writeLocalWatchlist(symbols);
@@ -2957,10 +2973,8 @@ async function removeWatchlistSymbol(symbol) {
     let symbols = Array.isArray(envelope.symbols)
       ? envelope.symbols.filter((item) => typeof item === "string")
       : [];
-    const persistenceStatus =
-      typeof envelope.persistence_status === "string" && envelope.persistence_status.trim()
-        ? envelope.persistence_status
-        : "UNAVAILABLE";
+    // An answer that names no storage status reports none (null).
+    const persistenceStatus = namedStorageStatus(envelope.persistence_status);
     if (persistenceStatus !== "OK") {
       symbols = readLocalWatchlist().filter((item) => item !== symbol);
       writeLocalWatchlist(symbols);
