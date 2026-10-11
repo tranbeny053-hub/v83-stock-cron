@@ -40,6 +40,7 @@ FUNCTIONS = (
     "legacyProbabilityRows",
     "decisionEvidenceText",
     "decisionViewRows",
+    "costCaveatRows",
     "dispositionLabel",
 )
 CONSTANTS = ("NOT_ASSESSED_TEXT", "VENUE_LABELS")

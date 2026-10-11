@@ -130,6 +130,7 @@ _FUNCTIONS = (
     "decisionDataText",
     "decisionEvidenceText",
     "dispositionLabel",
+    "costCaveatRows",
     "decisionViewRows",
     "decisionViewOf",
     "gateView",

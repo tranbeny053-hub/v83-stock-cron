@@ -353,6 +353,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Down (below the band) | 27.00% |
 | Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
 | Round-trip cost | 0.20% |
+| Cost note | This cost is fees only, and so is the decision band it sets: slippage could not be estimated from the order book. |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
 

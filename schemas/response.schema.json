@@ -280,12 +280,19 @@
         "cost": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["round_trip_cost_frac", "taker_fee_frac", "slippage_frac", "label"],
+          "required": [
+            "round_trip_cost_frac",
+            "taker_fee_frac",
+            "slippage_frac",
+            "label",
+            "caveat"
+          ],
           "properties": {
             "round_trip_cost_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "taker_fee_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
             "slippage_frac": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-            "label": { "type": "string" }
+            "label": { "type": "string" },
+            "caveat": { "type": ["string", "null"] }
           }
         },
         "evidence": {

@@ -33,6 +33,7 @@ closed candle, the horizon is close-anchored, and "In band" means the terminal c
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -121,6 +122,13 @@ COST_LABEL = (
     "Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; "
     "it is also the decision band around the reference close."
 )
+# When the execution model could estimate no slippage (no order book, or one the liquidity measure
+# refuses), its round-trip cost is the two taker fees alone, and so is the decision band that cost
+# sets. The view says so beside the cost (the re-review's minor 2). PROVISIONAL wording.
+COST_FEES_ONLY = (
+    "This cost is fees only, and so is the decision band it sets: slippage could not be "
+    "estimated from the order book."
+)
 REASON_COPY = {
     "PRIMARY_VENUE_ABSENT": "The configured primary venue failed; another venue served this data.",
     "CROSS_PROVIDER_CONFLICT": "The venues disagree beyond tolerance; one venue served this data.",
@@ -197,6 +205,7 @@ def build_decision_view(
             "taker_fee_frac": _fraction(execution.get("taker_fee_frac")),
             "slippage_frac": _fraction(execution.get("slippage_frac")),
             "label": COST_LABEL,
+            "caveat": cost_caveat(execution),
         },
         "evidence": {
             "model_readiness": decision_brief.get("model_readiness"),
@@ -210,6 +219,23 @@ def build_decision_view(
         },
         "gates": gates,
     }
+
+
+def cost_caveat(execution: Any) -> str | None:
+    """The sentence that a round-trip cost is fees only, when the execution state itself says so,
+    else None. Read from that state's own facts and from nothing else: it reports that it could
+    estimate no slippage (its status is DEGRADED), it counts none (its slippage is 0), and its
+    cost is exactly its two taker fees. A state that does not hold all of that supports no such
+    sentence: a live view and a saved run's view say nothing they cannot know."""
+
+    if not isinstance(execution, Mapping) or execution.get("status") != "DEGRADED":
+        return None
+    cost = _fraction(execution.get("round_trip_cost_frac"))
+    fee = _fraction(execution.get("taker_fee_frac"))
+    slippage = _fraction(execution.get("slippage_frac"))
+    if cost is None or fee is None or slippage != 0.0:
+        return None
+    return COST_FEES_ONLY if math.isclose(cost, 2.0 * fee, rel_tol=1e-9, abs_tol=1e-12) else None
 
 
 def _data_state(

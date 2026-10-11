@@ -38,6 +38,7 @@ from crypto_probability_engine.detail.decision_view import (
     COST_LABEL,
     NOT_ASSESSED,
     RANGE_MEANING,
+    cost_caveat,
 )
 from crypto_probability_engine.detail.gate_kinds import (
     ELEVATED_RISK_TOKEN,
@@ -100,7 +101,13 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
             # What the percentages are, said from the stored evidence level, not a stored sentence.
             "explanation": PROBABILITY_EXPLANATION if assessed and heuristic else None,
         },
-        "cost": {"round_trip_cost_frac": band, "label": COST_LABEL},
+        # The caveat is read from the stored execution state, as a live view reads it: a record
+        # that does not hold that state has none.
+        "cost": {
+            "round_trip_cost_frac": band,
+            "label": COST_LABEL,
+            "caveat": cost_caveat(liquidity_execution.get("execution_realism")),
+        },
         "evidence": {
             "level": MODEL_READINESS_COPY
             if brief.get("model_readiness") == MODEL_READINESS

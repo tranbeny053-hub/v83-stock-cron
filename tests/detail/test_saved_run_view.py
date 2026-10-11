@@ -157,7 +157,9 @@ def test_a_saved_run_shows_what_its_record_holds_and_none_for_what_it_does_not(
     assert saved["cost"] == {
         "round_trip_cost_frac": view["cost"]["round_trip_cost_frac"],
         "label": decision_view.COST_LABEL,
+        "caveat": None,
     }
+    assert view["cost"]["caveat"] is None, "slippage was estimated: the cost has no caveat"
     evidence = saved["evidence"]
     assert (
         evidence["level"]
@@ -317,6 +319,42 @@ def test_the_disposition_of_a_saved_run_is_read_from_its_whole_gate_result() -> 
     unnamed = _view_of("blocks_empty_but_not_passed")
     assert unnamed["gates"]["summary"] == gate_kinds.UNNAMED_HARD_GATE
     assert unnamed["disposition"] == "NO_TRADE"
+
+
+def test_a_saved_run_says_its_cost_is_fees_only_when_its_record_supports_it() -> None:
+    """The re-review's minor 2, for a reopened run. The caveat is read from the execution state
+    the record stores, as the live view read it. A record that does not hold that state, or holds
+    one that does not support the sentence, shows the cost it holds and no caveat: it says
+    nothing it cannot know."""
+
+    assert _read(_analysis())["cost"]["caveat"] is None, "slippage was estimated"
+    payload = _analysis(book=False)
+    live = payload["decision_view"]["cost"]
+    assert live["caveat"] == decision_view.COST_FEES_ONLY
+    stored = _stored(payload)
+    saved = saved_run_view.build_saved_run_view(stored)["cost"]
+    assert saved["caveat"] == decision_view.COST_FEES_ONLY
+    assert saved["round_trip_cost_frac"] == live["round_trip_cost_frac"] == 0.002
+    execution = "execution_realism"
+    unsupported = {
+        "no liquidity and execution detail": lambda d: d.pop("liquidity_execution_detail"),
+        "no execution state": lambda d: d["liquidity_execution_detail"].pop(execution),
+        "an execution state that is a word": lambda d: d["liquidity_execution_detail"].update(
+            execution_realism="DEGRADED"
+        ),
+        "no status": lambda d: d["liquidity_execution_detail"][execution].pop("status"),
+        "no fee": lambda d: d["liquidity_execution_detail"][execution].pop("taker_fee_frac"),
+        "slippage counted": lambda d: d["liquidity_execution_detail"][execution].update(
+            slippage_frac=0.001
+        ),
+        "another cost": lambda d: d["liquidity_execution_detail"][execution].update(
+            round_trip_cost_frac=0.0041
+        ),
+    }
+    for name, change in unsupported.items():
+        lost = deepcopy(stored)
+        change(lost)
+        assert saved_run_view.build_saved_run_view(lost)["cost"]["caveat"] is None, name
 
 
 def test_a_record_that_lost_a_part_shows_what_it_still_holds() -> None:

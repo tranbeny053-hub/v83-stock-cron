@@ -590,9 +590,18 @@ function decisionViewRows(payload, view) {
         : display.model_readiness_label || range.evidence_level || "n/a",
     ],
     ["Round-trip cost", formatFractionPct(cost.round_trip_cost_frac)],
+    ...costCaveatRows(cost),
     ["Evidence", decisionEvidenceText(view.evidence)],
     [dispositionLabel(view), display.disposition],
   ];
+}
+
+// What the backend says about a cost it could not estimate in full (the view's `cost.caveat`, a
+// saved run's too): its own sentence, on a row of its own directly under the cost. The frontend
+// words nothing: with no sentence there is no row.
+function costCaveatRows(cost) {
+  const caveat = cost && typeof cost.caveat === "string" ? cost.caveat.trim() : "";
+  return caveat ? [["Cost note", caveat]] : [];
 }
 
 // A value of a saved run's view: what the stored record holds, or, where the backend gives none,
@@ -634,6 +643,7 @@ function savedRunRows(payload, saved) {
     ],
     ["Evidence level", savedValue(evidence.level ?? evidence.probability_type)],
     ["Round-trip cost", savedValue(saved.cost?.round_trip_cost_frac, formatFractionPct)],
+    ...costCaveatRows(saved.cost),
     [
       "Evidence",
       evidence.directional_evidence_hold

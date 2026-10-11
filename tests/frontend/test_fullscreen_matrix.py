@@ -441,6 +441,50 @@ def test_a_gate_result_that_does_not_say_it_passed_never_reads_as_passed_on_the_
     assert whole["gates"]["summary"].startswith("Evidence gate: "), "the whole record is framed"
 
 
+# The scenarios whose execution model could estimate no slippage: no order book, or a served
+# book the liquidity measure refuses. Their round-trip cost is the two taker fees alone.
+FEES_ONLY = {
+    "unusable_order_book_and_evidence",
+    "missing_order_book_and_evidence_SYNTHETIC",
+    "missing_order_book_only_SYNTHETIC",
+}
+
+
+@pytest.mark.parametrize("name", list(goldens.SCENARIOS))
+def test_a_fees_only_cost_says_so_under_the_cost_on_every_surface(
+    cases: dict, reopened: dict, screens: dict, name: str
+) -> None:
+    """The re-review's minor 2. Where no slippage could be estimated, "Round-trip cost 0.20%" and
+    "(band ±0.20%)" are the fees alone. Every surface now says so in the backend's sentence, on
+    a row of its own directly under the cost; a reopened run reads it from its stored record.
+    Where slippage was estimated no surface says it, and no number moved."""
+
+    caveat = cases[name]["decision_view"]["cost"]["caveat"]
+    assert (caveat is not None) is (name in FEES_ONLY)
+    if name in reopened:
+        assert reopened[name]["detail"]["saved_run_view"]["cost"]["caveat"] == caveat
+    surfaces = screens[name]
+    assert {"single", "batch", "detail"} <= set(surfaces)
+    assert ("history" in surfaces) is (name in goldens.HISTORY)
+    for surface, texts in surfaces.items():
+        if caveat is None:
+            assert COST_NOTE not in texts, f"{name}/{surface}"
+            assert decision_view.COST_FEES_ONLY not in texts, f"{name}/{surface}"
+            continue
+        assert caveat == decision_view.COST_FEES_ONLY
+        at = texts.index("Round-trip cost")
+        assert texts[at : at + 4] == ["Round-trip cost", "0.20%", COST_NOTE, caveat], surface
+        assert texts.count(COST_NOTE) == 1 and texts.count(caveat) == 1, f"{name}/{surface}"
+        # The band the sentence speaks of is on the same screen, and is that cost.
+        band = harness._value(texts, "In band (inside the decision band)")
+        assert band.endswith("(band ±0.20%)"), f"{name}/{surface}: {band}"
+    assert FEES_ONLY <= set(goldens.HISTORY), "each is also pinned as a reopened run"
+    # The sentence is the backend's: the frontend holds a row label and words nothing.
+    source = (harness.ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    assert "fees only" not in source.lower() and "slippage could not" not in source.lower()
+    assert source.count('"Cost note"') == 1
+
+
 def test_a_card_without_a_view_labels_its_disposition_too(cases: dict) -> None:
     """Owner ruling S3, on the one screen no golden holds: a response without a decision view
     (an older one) still shows its disposition on the batch card, and under the same label."""
@@ -645,6 +689,8 @@ SAVED_ROWS = (
     "Reliability",
     "Gate disposition (not a market call)",
 )
+# The label of the row that holds the backend's caveat on a cost (frontend/app.js costCaveatRows).
+COST_NOTE = "Cost note"
 # The rows a saved run can fill from its record, which read as the live analysis's own rows did.
 SAME_AS_LIVE = (
     "Asset · venue",
@@ -727,8 +773,14 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     meaning, cost = saved["range"]["meaning"], saved["cost"]["label"]
     assert block[-2:] == [meaning, cost], name
     rows = block[2 + 2 + len(saved["gates"]["blocks"]) : -2]
-    assert rows[0::2] == list(SAVED_ROWS), name
+    # The cost's caveat, when the record supports one, is a row of its own under the cost.
+    caveat = saved["cost"]["caveat"]
+    expected = list(SAVED_ROWS)
+    if caveat is not None:
+        expected.insert(expected.index("Round-trip cost") + 1, COST_NOTE)
+    assert rows[0::2] == expected, name
     shown = dict(zip(rows[0::2], rows[1::2], strict=True))
+    assert shown.get(COST_NOTE) == caveat, name
     assert "n/a" not in " ".join(block), f"{name}: a value that is not kept says so"
     # What the record holds reads exactly as the live analysis's own row read.
     scenario = "evidence_only" if name == SAVED_BEFORE else name
