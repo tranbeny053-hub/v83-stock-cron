@@ -30,6 +30,7 @@ import pytest
 
 from crypto_probability_engine.detail import decision_view
 from crypto_probability_engine.features import volatility
+from crypto_probability_engine.global_risk.state import global_risk_state
 from crypto_probability_engine.quant import probability_three_state, tail_cvar
 from tests.fixtures.market_data import FIXED_NOW
 
@@ -64,7 +65,7 @@ SCENARIOS = {
         "NO_ACCEPTED_CLAIM",
         "STATELESS",
     ),
-    "kill_switch_and_evidence": (
+    "kill_switch_and_evidence_SYNTHETIC": (
         "ABORT",
         ["KILL_SWITCH", _EVIDENCE],
         "NO_ACCEPTED_CLAIM",
@@ -96,7 +97,7 @@ HISTORY = (
     "wide_spread_and_evidence",
     "unusable_order_book_and_evidence",
     "missing_order_book_and_evidence_SYNTHETIC",
-    "kill_switch_and_evidence",
+    "kill_switch_and_evidence_SYNTHETIC",
     "storage_OK",
     "risk_only_SYNTHETIC",
     "missing_order_book_only_SYNTHETIC",
@@ -235,6 +236,31 @@ def test_the_scenarios_are_what_their_names_say(cases: dict[str, dict]) -> None:
     assert len(decision_view.ACCEPTANCE_BLOCKERS) == 4
     for name, (_, blocks, _, _) in SCENARIOS.items():
         assert name.endswith("_SYNTHETIC") or _EVIDENCE in blocks, name
+    # A scenario is named SYNTHETIC exactly when today's product cannot produce it (the
+    # re-review's minor 3): the evidence gate is lifted, a state is accepted, no order book was
+    # served, the kill switch is set, or a check of the stack is made up. The kill switch is a
+    # constant False with no setting behind it.
+    assert global_risk_state()["kill_switch"] is False
+    for name, payload in cases.items():
+        blocks = payload["gate_result"]["hard_blocks"]
+        cannot_occur_today = (
+            _EVIDENCE not in blocks
+            or "KILL_SWITCH" in blocks
+            or payload["decision_view"]["accepted_claim"] is True
+            or "best_bid" not in payload["liquidity_state"]
+            or name.startswith("first_check_blocks")
+        )
+        assert name.endswith("_SYNTHETIC") is cannot_occur_today, name
+    reachable = sorted(name for name in SCENARIOS if not name.endswith("_SYNTHETIC"))
+    assert reachable == [
+        "evidence_only",
+        "risk_and_evidence",
+        "storage_OK",
+        "storage_STATELESS",
+        "storage_UNAVAILABLE",
+        "unusable_order_book_and_evidence",
+        "wide_spread_and_evidence",
+    ]
 
 
 def test_two_builds_in_a_row_are_identical(raw: dict, built: dict) -> None:

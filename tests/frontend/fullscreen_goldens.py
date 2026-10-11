@@ -27,8 +27,10 @@ Surfaces:
   what is saved, with the view the route builds from it when it reads it: attach_saved_run_view).
 
 Scenarios (SCENARIOS): every one is an analysis of the real service on the fixture candles. The
-ones named SYNTHETIC cannot occur today: nothing is accepted in the governed registries, and the
-evidence gate is active on every analysis (it is lifted for those builds only).
+ones named SYNTHETIC cannot occur today, and every one that cannot is named so: nothing is
+accepted in the governed registries; the evidence gate is active on every analysis (it is lifted
+for those builds only); both adapters always fetch an order book; and the kill switch is a
+constant False with no setting behind it (global_risk/state.py).
 
 The screens are pinned as first rendered. The DOM stand-in has no backend, so the two requests the
 detail panel makes get no answer: the Storage row stays what storage said at request time (no save
@@ -200,8 +202,8 @@ SCENARIOS: dict[str, Callable[[], dict]] = {
     "unusable_order_book_and_evidence": lambda: _analysis(book="unusable"),
     # SYNTHETIC: a gate fired by missing data, no order book at all.
     "missing_order_book_and_evidence_SYNTHETIC": lambda: _analysis(book="missing"),
-    # A system gate beside it.
-    "kill_switch_and_evidence": lambda: _analysis(kill=True),
+    # SYNTHETIC: a system gate beside it. Nothing sets the kill switch today.
+    "kill_switch_and_evidence_SYNTHETIC": lambda: _analysis(kill=True),
     # The same analysis, for each thing storage can say when it is asked.
     **{
         f"storage_{status}": (lambda status=status: _analysis(storage=status))
@@ -224,7 +226,7 @@ HISTORY = (
     "wide_spread_and_evidence",
     "unusable_order_book_and_evidence",
     "missing_order_book_and_evidence_SYNTHETIC",
-    "kill_switch_and_evidence",
+    "kill_switch_and_evidence_SYNTHETIC",
     "storage_OK",
     "risk_only_SYNTHETIC",
     "missing_order_book_only_SYNTHETIC",

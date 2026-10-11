@@ -85,7 +85,7 @@ SCENARIOS: dict[str, tuple[str, str]] = {
         f"{UNMEASURED} {EVIDENCE_TOO}",
         NOT_A_MARKET_CALL,
     ),
-    "kill_switch_and_evidence": (f"{SYSTEM} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
+    "kill_switch_and_evidence_SYNTHETIC": (f"{SYSTEM} {EVIDENCE_TOO}", NOT_A_MARKET_CALL),
     "risk_only_SYNTHETIC": (RISK, RISK_FRAMING),
     "missing_order_book_only_SYNTHETIC": (UNMEASURED, NOT_A_MARKET_CALL),
     "system_only_SYNTHETIC": (SYSTEM, NOT_A_MARKET_CALL),
@@ -142,7 +142,7 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
         ),
         "unusable_order_book_and_evidence": ("NO_TRADE", liquidity, "NO_TRADE"),
         "missing_order_book_and_evidence_SYNTHETIC": ("NO_TRADE", liquidity, "NO_TRADE"),
-        "kill_switch_and_evidence": (
+        "kill_switch_and_evidence_SYNTHETIC": (
             "ABORT",
             ["KILL_SWITCH", "SKILL_NOT_DEMONSTRATED"],
             "NO_TRADE",
@@ -316,7 +316,7 @@ def test_the_single_cards_banner_names_the_check_that_blocks(screens: dict) -> N
     """The gate summary is in the view, with its framing: the banner does not repeat it."""
 
     assert screens["evidence_only"]["single"][:2] == ["BLOCK", "Hard gates"]
-    assert screens["kill_switch_and_evidence"]["single"][:2] == ["BLOCK", "Hard gates"]
+    assert screens["kill_switch_and_evidence_SYNTHETIC"]["single"][:2] == ["BLOCK", "Hard gates"]
     assert screens["first_check_blocks_SYNTHETIC"]["single"][:2] == ["BLOCK", "Data quality"]
     assert EVIDENCE in screens["first_check_blocks_SYNTHETIC"]["single"]
 
@@ -623,7 +623,7 @@ def test_the_kill_switch_reads_one_disposition_on_every_surface(cases: dict, scr
     trade" or NO_TRADE in the older sections. They are retired, and every surface, a reopened
     run too, reads the gates' own disposition and no other."""
 
-    name = "kill_switch_and_evidence"
+    name = "kill_switch_and_evidence_SYNTHETIC"
     assert cases[name]["gate_result"]["action"] == "ABORT"
     assert cases[name]["decision_brief"]["action"] == "NO_TRADE"
     for surface, texts in screens[name].items():

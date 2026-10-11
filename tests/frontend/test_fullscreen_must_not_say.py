@@ -39,7 +39,7 @@ WITHOUT_A_RISK_FINDING = {
     "unusable_order_book_and_evidence": "a gate fired by unusable data, with the evidence gate",
     "missing_order_book_and_evidence_SYNTHETIC": "a gate fired by missing data, with it",
     "missing_order_book_only_SYNTHETIC": "a gate fired by missing data, alone",
-    "kill_switch_and_evidence": "a system gate, with the evidence gate",
+    "kill_switch_and_evidence_SYNTHETIC": "a system gate, with the evidence gate",
     "system_only_SYNTHETIC": "a system gate, alone",
     "permission_SYNTHETIC": "no gate at all",
 }
