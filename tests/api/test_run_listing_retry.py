@@ -1,14 +1,21 @@
-"""The detail route and the receipt route survive a run store that changes while it is listed
+"""The detail route and the receipt route make a failed listing of the run store again
 (api/app.py, `_listed_as_user_requested`).
 
-Both routes decide whether a held run may be shown by listing the run store. Another request can
-add a run at that moment, and the store's own listing then raises RuntimeError ("OrderedDict
-mutated during iteration"): the route answered 500 for a run that was there. The listing is now
+Both routes decide whether a held run may be shown by listing the run store. That listing used to
+raise RuntimeError ("OrderedDict mutated during iteration") when another request added a run at
+that moment, and the route answered 500 for a run that was there. So a listing that raises it is
 made again, three attempts in all. A store that still fails is the error it always was, and no
 other error is retried.
+
+The store now lists under its own lock, and no longer raises when a run is added while it is
+listed (persistence/run_store.py, tests/persistence/test_run_store_lock.py). The routes' retry
+stays: it is tested here against a store made to raise, and the real store answers the first
+listing.
 """
 
 from __future__ import annotations
+
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,11 +31,14 @@ ROUTES = ("/v1/analyze/detail/{run_id}", "/v1/analyze/receipt/{run_id}")
 MUTATED = "OrderedDict mutated during iteration"
 UNEXPECTED = api_error(500, ErrorCode.BACKEND_TIMEOUT, "Unexpected backend failure.").detail
 NOT_FOUND = {"detail": api_error(404, ErrorCode.RUN_NOT_FOUND, "Run not found.").detail}
+# No test waits this long unless the store hangs; then it fails instead of hanging the suite.
+HANG_GUARD_SECONDS = 30.0
 
 
 class ChangingRunStore(InMemoryRunStore):
-    """A run store whose listing fails as one that is changed while it is listed does: its first
-    `failures` listings raise, and the rest answer. `failures=None`: every listing raises."""
+    """A run store whose listing fails as the real one's did when it was changed while it was
+    listed: its first `failures` listings raise, and the rest answer. `failures=None`: every
+    listing raises."""
 
     failures = 0
     error = RuntimeError
@@ -173,8 +183,8 @@ def test_a_run_that_is_not_held_lists_nothing(client: TestClient, route: str) ->
 
 class AddsARunWhenListed(dict):
     """A held analysis that stands for another request: while the store's listing reads it, a run
-    is added to the store, as an analysis finishing at that moment adds one. `times`: how many
-    listings it does that to."""
+    is added to the store on another thread, as an analysis finishing at that moment adds one.
+    `times`: how many listings it does that to."""
 
     def __init__(self, payload: dict, store: InMemoryRunStore, times: int) -> None:
         super().__init__(payload)
@@ -182,18 +192,23 @@ class AddsARunWhenListed(dict):
 
     def get(self, key: str, default: object = None) -> object:
         if key == "normalized_symbol" and self.added < self.times:
-            self.added += 1
-            self.store.put(
-                f"run-added-{self.added}",
-                {**self, "run_id": f"run-added-{self.added}"},
-                prediction_origin="USER_REQUESTED",
+            run_id = f"run-added-{self.added + 1}"
+            adding = threading.Thread(
+                target=self.store.put,
+                args=(run_id, {**self, "run_id": run_id}),
+                kwargs={"prediction_origin": "USER_REQUESTED"},
+                daemon=True,
             )
+            adding.start()
+            adding.join(HANG_GUARD_SECONDS)
+            # An add that had to wait for the listing to end is not counted: the test then fails.
+            self.added += not adding.is_alive()
         return super().get(key, default)
 
 
 def held_by_the_real_store(times: int) -> tuple[TestClient, str, AddsARunWhenListed]:
     """The real run store, holding two runs: an older one, and a newer one that adds a run while
-    it is listed. The listing reads the newer first, so it goes on over a store that changed."""
+    it is listed. The listing reads the newer first, so the store changes before it is done."""
 
     client = TestClient(make_client().app, raise_server_exceptions=False)
     login(client)
@@ -205,42 +220,33 @@ def held_by_the_real_store(times: int) -> tuple[TestClient, str, AddsARunWhenLis
     return client, older, changing
 
 
-def test_the_real_run_store_raises_runtime_error_when_a_run_is_added_while_it_is_listed() -> None:
-    client, _older, changing = held_by_the_real_store(times=1)
+def test_the_real_run_store_answers_when_a_run_is_added_while_it_is_listed() -> None:
+    """Before it had its lock, this listing raised RuntimeError ("... during iteration")."""
+
+    client, older, changing = held_by_the_real_store(times=1)
     store = client.app.state.run_store
 
-    with pytest.raises(RuntimeError, match="during iteration"):
-        store.list_runs()
+    listed = [row["run_id"] for row in store.list_runs()]
 
     assert changing.added == 1 and store.get("run-added-1") is not None
-    assert [row["run_id"] for row in store.list_runs()][0] == "run-added-1", "it lists again"
+    assert listed == [changing["run_id"], older], "the runs it held when the listing began"
+    assert [row["run_id"] for row in store.list_runs()] == ["run-added-1", *listed], "and the next"
 
 
 @pytest.mark.parametrize("route", ROUTES)
-@pytest.mark.parametrize("times", [1, 2])
-def test_both_routes_answer_when_the_real_store_changes_under_their_listing(
-    route: str, times: int
+def test_both_routes_answer_at_their_first_listing_when_the_real_store_changes_under_it(
+    route: str,
 ) -> None:
-    client, older, changing = held_by_the_real_store(times)
+    """The real store changes under every listing here, and each request answers at its first.
+    Before the store had its lock, one request made all three listings and still answered 500."""
 
-    response = client.get(route.format(run_id=older))
-
-    assert response.status_code == 200, response.text
-    assert changing.added == times, "the store did change under the listing, each time"
-    if "receipt" in route:
-        assert response.json()["state"] == save_receipt.NOT_RETAINED
-        assert response.json()["run_id"] == older
-    else:
-        assert response.json()["run_id"] == older
-
-
-@pytest.mark.parametrize("route", ROUTES)
-def test_the_real_store_changing_under_all_three_listings_is_still_an_error(route: str) -> None:
     client, older, changing = held_by_the_real_store(times=3)
 
-    response = client.get(route.format(run_id=older))
+    for request in (1, 2, 3):
+        response = client.get(route.format(run_id=older))
 
-    assert response.status_code == 500 and response.json() == UNEXPECTED
-    assert changing.added == 3
-    # Nothing is left broken: the next request lists a store that no longer changes.
-    assert client.get(route.format(run_id=older)).status_code == 200
+        assert response.status_code == 200, response.text
+        assert changing.added == request, "one listing a request, and the store changed under it"
+        assert response.json()["run_id"] == older
+        if "receipt" in route:
+            assert response.json()["state"] == save_receipt.NOT_RETAINED
