@@ -1240,7 +1240,8 @@ def test_a_degraded_view_is_never_shown_as_live_ok() -> None:
     assert 'if (data.state === "OK")' in banner
     assert "DEGRADED DATA - " in banner
     detail = _function_text(js, "renderStructuredDetail")
-    assert 'section("Decision view", [' in detail
+    assert 'section("Decision view", [' in _function_text(js, "renderDecisionViewSection")
+    assert "view ? renderDecisionViewSection(payload, view) : null;" in detail
     assert "...(decisionSection ? [decisionSection] : [])," in detail
 
 

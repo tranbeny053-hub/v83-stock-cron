@@ -1454,12 +1454,20 @@ def test_the_wording_is_named_constants_in_one_place() -> None:
 
 
 def test_the_ux_cards_note_says_what_the_screen_does(run: dict) -> None:
-    """The owner's UX card prints the request-time Storage row (scripts/ux_comprehension/card.py).
-    Its note says the screen then asks for a receipt: true of app.js, and proven above."""
+    """The owner's UX card prints the Storage row as the save receipt leaves it
+    (scripts/ux_comprehension/card.py). Its note says the screen asks the backend whether the
+    analysis was saved and shows the state it gives, and that the row reads storage's status at
+    request time until then: true of app.js, and proven above."""
 
     card = (ROOT / "docs" / "runbooks" / "UX_COMPREHENSION_CHECK.md").read_text(encoding="utf-8")
-    note = card[card.index("- Question 4 reads the Storage row") :]
+    note = " ".join(card[card.index("- Question 4 reads the Storage row") :].split())
     assert "shows no per-analysis save" not in card
-    assert "asks the backend for that analysis's save receipt" in " ".join(note.split())
-    assert "This card prints the row as it reads before that" in " ".join(note.split())
+    assert "the screen asks the backend whether that analysis was saved" in note
+    assert "and shows the state the backend gives" in note
+    assert "Until a receipt answers, the row shows storage's status when the analysis was" in note
     assert run["detailStates"]["SAVED"]["shown"] != run["detailStates"]["unanswered"]
+    # The two rows the card shows are the rows the screen shows for those receipt states.
+    for state in ("SAVED", "FAILED"):
+        row = run["detailStates"][state]["shown"]
+        (text,) = [line for line in row if line in card and line.startswith(("Saved", "Save "))]
+        assert f"| Storage | {text} |" in card, state

@@ -2112,6 +2112,27 @@ function renderDecisionSynthesis(synthesis, payload = {}) {
   ]);
 }
 
+// The decision view as the detail panel shows it: its headline and sentence, the gate authority
+// (the summary, its framing, each active gate), its rows, then its notes. Every sentence is the
+// backend's. The owner's UX card prints exactly what this draws (scripts/ux_comprehension).
+function renderDecisionViewSection(payload, view) {
+  const gates = gateViewOf(payload);
+  return section("Decision view", [
+    textBlock("p", view.headline, "decision-headline"),
+    textBlock("p", view.detail),
+    ...gateFramingBlocks(gates),
+    ...gateDetailList(gates),
+    keyValueTable(decisionViewRows(payload, view)),
+    textBlock("p", view.range?.meaning || "", "muted"),
+    // What the percentages are: the backend's sentence, where the view carries one.
+    ...(backendText(view.range?.explanation)
+      ? [textBlock("p", view.range.explanation, "muted")]
+      : []),
+    textBlock("p", view.cost?.label || "", "muted"),
+    listBlock(view.evidence?.limitations || []),
+  ]);
+}
+
 function renderStructuredDetail(payload, detailView) {
   // Raw JSON and Download JSON are the backend's response exactly as it was returned: nothing
   // the renderers need is ever added to it.
@@ -2143,22 +2164,7 @@ function renderStructuredDetail(payload, detailView) {
 
   const view = decisionViewOf(payload);
   const accepted = acceptedViewOf(payload);
-  const decisionSection = view
-    ? section("Decision view", [
-        textBlock("p", view.headline, "decision-headline"),
-        textBlock("p", view.detail),
-        ...gateFramingBlocks(gateViewOf(payload)),
-        ...gateDetailList(gateViewOf(payload)),
-        keyValueTable(decisionViewRows(payload, view)),
-        textBlock("p", view.range?.meaning || "", "muted"),
-        // What the percentages are: the backend's sentence, where the view carries one.
-        ...(backendText(view.range?.explanation)
-          ? [textBlock("p", view.range.explanation, "muted")]
-          : []),
-        textBlock("p", view.cost?.label || "", "muted"),
-        listBlock(view.evidence?.limitations || []),
-      ])
-    : null;
+  const decisionSection = view ? renderDecisionViewSection(payload, view) : null;
   // A reopened run leads with its own block instead.
   const savedSection = saved ? renderSavedRun(backendResponse, saved) : null;
   const checksSection = renderDecisionSynthesis(payload.decision_synthesis, payload);

@@ -706,7 +706,7 @@ def test_an_accepted_claim_keeps_its_own_sentence_under_a_risk_gate() -> None:
     from crypto_probability_engine.detail.decision_view import STATE_COPY
     from scripts.ux_comprehension import card
 
-    accepted = card.Scenario("X", "accepted", True, True, True, False, True, "NO_TRADE", risk=True)
+    accepted = card.Scenario("X", "accepted", True, True, True, False, True, risk=True)
     _, view = card.build(accepted)
     assert view["state"] == "ACCEPTED_FORECAST_CLAIM"
     assert view["gates"]["risk_gate_active"] is True

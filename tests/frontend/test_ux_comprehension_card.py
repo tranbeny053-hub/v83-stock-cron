@@ -2,20 +2,24 @@
 
 Plan §23: UX is PASS only when predefined owner-task scenarios distinguish invalid data, an
 unvalidated model, an accepted forecast, a directional permission and saved/unsaved state. These
-tests prove that the generated scenarios do so on the real backend builder and the real
-frontend, that the answer key follows from each built view (not from the scenario's own flags
-alone), that the acceptance registries are left empty, and that the committed card is current.
+tests prove that the generated scenarios do so on the real gates, the real backend builder and
+the real frontend, that each analysis on the card is the Decision view the real detail panel
+renders, that the answer key follows from each screen (not from the scenario's own flags alone),
+that the acceptance registries are left empty, and that the committed card is current.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
 from itertools import combinations
 
+import fullscreen_goldens as goldens
 import pytest
 
 from crypto_probability_engine.adapters import provider_selection
 from crypto_probability_engine.adapters.symbol_universe import ProviderSymbolUniverse
-from crypto_probability_engine.api import analysis_service
+from crypto_probability_engine.api import analysis_service, save_receipt
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, min_history_for
 from crypto_probability_engine.config.settings import Settings
@@ -27,21 +31,44 @@ from crypto_probability_engine.quant.epistemic_sufficiency import assess_epistem
 from scripts.ux_comprehension import card
 from tests.fixtures.market_data import make_snapshot
 
-STORAGE_KEPT = "Storage available"
-# The Storage row's warning (frontend/app.js persistenceStatusText). It is storage's status when
-# the analysis was requested, so it warns and never forecasts: a save receipt can say otherwise.
-MAY_NOT_BE_KEPT = "may not be kept in Recent Analysis history"
-QUESTION_4 = "Does the screen warn that this analysis may NOT be kept in Recent Analysis history?"
+harness = goldens.harness
+# The Storage row once the screen holds the analysis's save receipt (frontend/app.js
+# SAVE_RECEIPT_TEXT): the state the backend gives, in the screen's own words.
+SAVED = "Saved to Recent Analysis history"
+NOT_CONFIRMED = (
+    "Save not confirmed: this analysis may be missing from Recent Analysis history after a restart"
+)
+# The same row before a receipt answers: storage's status when the analysis was requested.
+AT_REQUEST_TIME = "Storage available"
+QUESTION_4 = "Does the screen say this analysis is saved in Recent Analysis history?"
+
+
+def _texts(blocks: list[dict]) -> list[str]:
+    """A drawn section as the lines a user reads, in order: what a screen's text is."""
+
+    lines: list[str] = []
+    for block in blocks:
+        if block["kind"] == "rows":
+            lines += [text for row in block["rows"] for text in row]
+        elif block["kind"] == "list":
+            lines += block["items"]
+        elif block["text"].strip():
+            lines.append(block["text"])
+    return lines
 
 
 @pytest.fixture(scope="module")
 def screens() -> dict[str, dict[str, object]]:
-    built = [card.build(scenario) for scenario in card.SCENARIOS]
-    rendered = card.render(built)
-    return {
-        scenario.letter: {"view": view, "rows": dict(rows), "headline": view["headline"]}
-        for scenario, (_, view), rows in zip(card.SCENARIOS, built, rendered, strict=True)
-    }
+    shown = {}
+    for screen in card.screens():
+        (rows,) = [block["rows"] for block in screen["blocks"] if block["kind"] == "rows"]
+        shown[screen["scenario"].letter] = {
+            **screen,
+            "rows": dict(rows),
+            "headline": screen["view"]["headline"],
+            "texts": [screen["title"], *_texts(screen["blocks"])],
+        }
+    return shown
 
 
 def test_each_scenario_shows_its_own_state(screens: dict[str, dict[str, object]]) -> None:
@@ -79,10 +106,9 @@ def test_the_scenarios_distinguish_every_section_23_dimension(
         if screens["A"]["rows"][label] != screens["D"]["rows"][label]
     }
     assert differing == {"Storage"}
-    assert screens["A"]["rows"]["Storage"] == STORAGE_KEPT
-    assert screens["D"]["rows"]["Storage"] == (
-        f"Storage unavailable when requested — this analysis {MAY_NOT_BE_KEPT}"
-    )
+    assert screens["A"]["rows"]["Storage"] == SAVED
+    assert screens["D"]["rows"]["Storage"] == NOT_CONFIRMED
+    assert screens["A"]["texts"][1:] != screens["D"]["texts"][1:]
     # Every pair of analyses can be told apart from what the screen shows.
     for left, right in combinations(sorted(screens), 2):
 
@@ -107,39 +133,130 @@ def test_the_answer_key_follows_from_each_built_view(
             yes_no(view["range"]["assessed"]),
             yes_no(view["accepted_claim"]),
             yes_no(view["directional_permission"]),
-            yes_no(MAY_NOT_BE_KEPT in screen["rows"]["Storage"]),
+            yes_no(screen["rows"]["Storage"] == SAVED),
             yes_no(view["gates"]["risk_gate_active"]),
         )
         assert card.answers(scenario) == derived, scenario.letter
 
 
-def test_question_4_asks_what_the_storage_row_can_truthfully_say(
+def test_question_4_tests_the_saved_or_unsaved_state_from_what_the_screen_shows(
     screens: dict[str, dict[str, object]],
 ) -> None:
-    """The Storage row is storage's status when the analysis was requested. It cannot say that an
-    analysis will not be kept: the save receipt can say "Saved…" afterwards. So question 4 asks
-    whether the screen WARNS, in the row's own words, and the card's note says what the row is."""
+    """Owner ruling R4: the save receipt is built and its UX acceptance is open, so question 4
+    tests the plan's saved/unsaved state again, yes or no, from what the screen shows. The
+    Storage row on the card is the receipt's: the backend's own receipt for the analysis, in the
+    frontend's own words, put in the row as the screen puts it."""
 
     assert card.QUESTIONS[3] == QUESTION_4
-    assert MAY_NOT_BE_KEPT in QUESTION_4.replace("may NOT", "may not")
-    # Answer 4, read off each analysis's rendered Storage row and nothing else: only D warns.
-    warned = {
-        letter: MAY_NOT_BE_KEPT in screen["rows"]["Storage"] for letter, screen in screens.items()
-    }
-    assert warned == {"A": False, "B": False, "C": False, "D": True, "E": False, "F": False}
+    said = {letter: screen["rows"]["Storage"] for letter, screen in screens.items()}
+    assert said == {"A": SAVED, "B": SAVED, "C": SAVED, "D": NOT_CONFIRMED, "E": SAVED, "F": SAVED}
+    for letter, screen in screens.items():
+        given, payload = screen["receipt"], screen["payload"]
+        assert given["schema_version"] == save_receipt.SCHEMA_VERSION == "save_receipt.v1"
+        assert given["run_id"] == payload["run_id"], "each analysis is asked for its own receipt"
+        state = save_receipt.FAILED if letter == "D" else save_receipt.SAVED
+        assert given["state"] == state, letter
+        assert sorted(given) == ["checked_at_utc", "run_id", "schema_version", "state"]
+        assert given == card.receipt(screen["scenario"]), "the backend's own builder made it"
+        # Storage answered when each analysis was requested: the receipt, not that, is shown.
+        assert payload["debug"]["persistence_status"] == "OK", letter
+        assert AT_REQUEST_TIME not in screen["texts"], letter
+    # The words are app.js's own for the state, and the answer follows from them alone.
+    source = card.APP_JS.read_text(encoding="utf-8")
+    texts = card._extract(source, "SAVE_RECEIPT_TEXT")
+    assert f'SAVED: "{SAVED}",' in texts
+    first, second = NOT_CONFIRMED[:86], NOT_CONFIRMED[86:]
+    assert f'"{first}" +\n    "{second}",' in texts
+    assert "saved" in SAVED.lower() and "not confirmed" in NOT_CONFIRMED.lower()
     text = card.card_markdown()
     assert f"4. {QUESTION_4}\n" in text
     for forecast in ("will NOT be kept", "will not be kept", "will not appear", "not being"):
         assert forecast not in text, forecast
-    for letter, screen in screens.items():
-        assert f"| Storage | {screen['rows']['Storage']} |" in text, letter
     note = " ".join(text[text.index("- Question 4 reads the Storage row.") :].split())
-    assert (
-        "On this card that row is storage's status when the analysis was requested: "
-        '"Storage available", or a warning that the analysis may not be kept.'
-    ) in note
-    assert "It is read before the analysis is saved." in note
-    assert "the screen asks the backend for that analysis's save receipt" in note
+    assert "On this card that row is the save receipt of the analysis" in note
+    assert "Analyses A, B, C, E and F show a save the backend acknowledged" in note
+    assert "Analysis D shows a save the backend could not confirm" in note
+    assert "its UX acceptance is open until this check is run" in note
+    # A receipt this screen cannot show leaves the row as it was at request time.
+    payload, _ = card.build(card.SCENARIOS[0])
+    for bad in (None, {}, {**card.receipt(card.SCENARIOS[0]), "run_id": "another-run"}):
+        (drawn,) = card.render([(payload, bad)])
+        (rows,) = [block["rows"] for block in drawn["blocks"] if block["kind"] == "rows"]
+        assert dict(rows)["Storage"] == AT_REQUEST_TIME, bad
+
+
+def test_each_analysis_is_the_decision_view_the_real_detail_panel_renders(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """The card cannot drift from the screen: the whole of app.js renders each analysis's detail
+    panel on the DOM stand-in, and the Decision view section it shows is the card's block, line
+    for line. Only the Storage row differs: no backend answers the stand-in, so the panel keeps
+    storage's status at request time, where the card shows the receipt."""
+
+    payloads = {letter: screen["payload"] for letter, screen in screens.items()}
+    script = "\n".join(
+        [
+            harness._DOM_STAND_IN,
+            card.APP_JS.read_text(encoding="utf-8"),
+            f"const payloads = {json.dumps(payloads)};",
+            """
+(async () => {
+  const out = {};
+  for (const [letter, payload] of Object.entries(payloads)) {
+    renderStructuredDetail(payload, {});
+    for (let tick = 0; tick < 5; tick += 1) await new Promise((done) => setTimeout(done, 0));
+    out[letter] = visibleTexts(detailPanel);
+  }
+  process.stdout.write(JSON.stringify(out), () => process.exit(0));
+})();
+""",
+        ]
+    )
+    done = subprocess.run(  # noqa: S603 - node on a script built here, read on stdin
+        [harness.NODE, "-"], input=script, capture_output=True, encoding="utf-8", timeout=60,
+        check=True,
+    )
+    panels = json.loads(done.stdout)
+    assert sorted(panels) == sorted(screens) == list("ABCDEF")
+    for letter, screen in screens.items():
+        panel = harness._between(panels[letter], "Decision view", "Model Quality")
+        on_card = list(screen["texts"])
+        at = on_card.index("Storage") + 1
+        assert panel[at] == AT_REQUEST_TIME and on_card[at] in (SAVED, NOT_CONFIRMED), letter
+        on_card[at] = panel[at]
+        assert on_card == panel, letter
+        # Every line of the block is on the committed card, in this order.
+        text = card.CARD.read_text(encoding="utf-8")
+        block = text.split(f"## Analysis {letter}\n")[1].split("\n## ")[0]
+        position = -1
+        for line in screen["texts"][1:]:
+            position = block.index(line, position + 1)
+
+
+def test_the_gates_on_the_card_are_the_real_gates_not_typed_by_hand(
+    screens: dict[str, dict[str, object]],
+) -> None:
+    """CLAUDE_EXPERT_CHECK finding F9: the card's gate dispositions were typed by hand. Each
+    analysis's gate result is now what gates/composite.py returns for its inputs, and its
+    disposition what the product derives from that."""
+
+    expected = {
+        "A": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"]),
+        "B": ("ABORT", ["PROVIDER_DEGRADED", "SKILL_NOT_DEMONSTRATED"]),
+        "C": ("CONSTRUCTIVE_CAUTIOUS", []),
+        "D": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"]),
+        "E": ("NO_TRADE", ["SKILL_NOT_DEMONSTRATED"]),
+        "F": ("NO_TRADE", ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"]),
+    }
+    for letter, (disposition, blocks) in expected.items():
+        screen = screens[letter]
+        gates = screen["view"]["gates"]
+        assert [entry["block"] for entry in gates["blocks"]] == blocks, letter
+        assert screen["payload"]["frontend_display"]["disposition"] == disposition, letter
+        label = [name for name in screen["rows"] if name.startswith("Gate disposition")]
+        assert [screen["rows"][name] for name in label] == [disposition], letter
+        assert gates["blocked"] is bool(blocks), letter
+    assert not hasattr(card.SCENARIOS[0], "disposition"), "no scenario carries one to type"
 
 
 def test_the_registries_stay_empty() -> None:
@@ -177,15 +294,16 @@ def _view_branch_and_the_rest(function_source: str) -> tuple[str, str]:
 
 
 def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> None:
-    """CLAUDE_EXPERT_CHECK 2026-10-10: the card is the decision view's headline, sentence and rows.
-    Each thing it names around the view is rendered by app.js's timeframe card when a view is
-    present (in its view branch, or outside both branches). The sentence is shown by both cards
-    and the detail panel (owner ruling CLASS-B-4=A)."""
+    """CLAUDE_EXPERT_CHECK 2026-10-10: the card is the decision view, and says what the screens
+    show beside it. Each thing it names around the view is rendered by app.js's timeframe card
+    when a view is present (in its view branch, or outside both branches), and each section it
+    names under the view is one the detail panel renders, in that order. The sentence is shown by
+    both cards and the detail panel (owner ruling CLASS-B-4=A)."""
 
     text = card.card_markdown()
-    assert "This card shows the decision view only" in text
-    assert "none of the following is on this card, so a PASS\n  here says nothing about it" in text
-    assert "The Gate disposition value is made up" in text
+    assert "Each analysis is the Decision view as the detail panel shows it, line for line" in text
+    assert "none of the following is on this card, so\n  a PASS here says nothing about it" in text
+    assert "The gates are the product's own" in text and "made up too" not in text
     source = card.APP_JS.read_text(encoding="utf-8")
     timeframe_card = card._extract(source, "horizonCard")
     view_branch, rest = _view_branch_and_the_rest(timeframe_card)
@@ -197,12 +315,29 @@ def test_the_card_says_it_is_the_view_alone_and_names_what_the_screen_adds() -> 
         assert literal in where, f"{name}: horizonCard no longer shows {literal} with a view"
     # The action row (Immediate action, Plan, Chase) is retired from the screen, so not named.
     assert "renderPermissionRow" not in source and "Immediate action" not in text
+    # The sections under the view: the detail panel's own, in the panel's own order.
+    assert len(card.UNDER_THE_VIEW) == 5
+    for name in card.UNDER_THE_VIEW:
+        assert f"    - {name}\n" in text, name
+    panel = card._extract(source, "renderStructuredDetail")
+    order = [
+        panel.index("...(checksSection ? [checksSection] : []),"),
+        panel.index("renderModelQualitySection("),
+        panel.index('section("Overview", ['),
+        panel.index('section("Gates", ['),
+        panel.index('section("Market Data Quality", ['),
+        panel.index('section("Debug / Raw JSON", ['),
+    ]
+    assert order == sorted(order)
+    checks = card._extract(source, "renderDecisionSynthesis")
+    assert 'section("Decision", [' in checks and "renderActionabilityStack(" in checks
     # The sentence (view.detail) is rendered by both cards and by the detail panel.
-    detail_panel = card._extract(source, "renderStructuredDetail")
-    assert "view.detail" in detail_panel and detail_panel.count("section(") > 1
+    detail_panel = card._extract(source, "renderDecisionViewSection")
+    assert "view.detail" in detail_panel and 'section("Decision view", [' in detail_panel
+    assert "renderDecisionViewSection(payload, view)" in panel
     assert "view.detail" in view_branch
     assert "view.detail" in card._extract(source, "overviewCard")
-    assert "Batch Crypto Analysis screens and the detail\n  panel show them." in text
+    assert "screens show the same headline, sentence, gate summary, framing\n  and rows" in text
     # The two screens the card names are the product's own tab names.
     index_html = (card.ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     for screen in ("Single Crypto Analysis", "Batch Crypto Analysis"):
@@ -342,6 +477,10 @@ def test_the_card_shows_the_views_gate_lines_and_asks_about_risk(
     blocks = {
         letter: text.split(f"## Analysis {letter}\n")[1].split("| Row |")[0] for letter in "ABCDEF"
     }
+    # Each active gate is listed under the framing, with its detail sentence.
+    for letter in "ABCDEF":
+        for gate in screens[letter]["view"]["gates"]["blocks"]:
+            assert f"\n- {gate['headline']}: {gate['detail']}\n" in blocks[letter], letter
     for letter in "ABCDEF":
         gates = screens[letter]["view"]["gates"]
         # The summary, and directly under it the framing: both the backend's, in every state.

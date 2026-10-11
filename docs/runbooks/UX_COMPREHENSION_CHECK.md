@@ -9,6 +9,9 @@ The governing plan's §23 requires this check. Its criterion is quoted after the
 Some analyses below are **SYNTHETIC**: they show states the product cannot show today. The notes
 after the answer key say which, and why.
 
+Each analysis below is the **Decision view** as the detail panel shows it: its headline, its
+sentence, the gate summary with its framing, the active gates, its rows and its notes.
+
 ## How to run it (about ten minutes)
 
 1. Read analyses A to F below as you would read them on screen. Do not look at the answer
@@ -24,7 +27,7 @@ The five questions, for every analysis:
 1. Can the market data support an assessment here?
 2. Has a forecast-quality claim been accepted for it?
 3. Does it carry a directional permission?
-4. Does the screen warn that this analysis may NOT be kept in Recent Analysis history?
+4. Does the screen say this analysis is saved in Recent Analysis history?
 5. Does the screen report a risk gate: a finding about market conditions or execution?
 
 ## Analysis A
@@ -37,13 +40,15 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
+- Evidence gate: Directional skill is not established for this model and timeframe.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage available |
+| Storage | Saved to Recent Analysis history |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -52,15 +57,28 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
 
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- No forecast-quality claim is accepted for this model and timeframe.
+- Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
+- No profitability claim.
+
 ## Analysis B
 
 **Data cannot support an assessment**
 
 The market data for this analysis are unavailable or insufficient, so nothing here is an assessment of the market.
 
-A system or data gate is active: A required data provider is degraded.
+A system or data gate is active: A required data provider is degraded. The evidence gate is active too: directional skill is not established for this model and timeframe.
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
+
+- A required data provider is degraded: Analysis is blocked because a required data provider is not operating normally.
+- Evidence gate: Directional skill is not established for this model and timeframe.
 
 | Row | Shown |
 | --- | --- |
@@ -68,7 +86,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | UNAVAILABLE: Data unavailable. No venue produced valid data for an assessment. |
-| Storage | Storage available |
+| Storage | Saved to Recent Analysis history |
 | In band (inside the decision band) | Not assessed (the data cannot support an assessment) |
 | Up (above the band) | Not assessed |
 | Down (below the band) | Not assessed |
@@ -76,6 +94,14 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Round-trip cost | 0.21% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | ABORT |
+
+Not assessed: the data cannot support an assessment, so no range or probability is shown.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- No forecast-quality claim is accepted for this model and timeframe.
+- Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
+- No profitability claim.
 
 ## Analysis C
 
@@ -93,7 +119,7 @@ The gates' disposition, with an accepted directional permission for this model a
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage available |
+| Storage | Saved to Recent Analysis history |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -101,6 +127,14 @@ The gates' disposition, with an accepted directional permission for this model a
 | Round-trip cost | 0.21% |
 | Evidence | SKILL_DEMONSTRATED · 400 resolved outcomes · MEASURED |
 | Gate disposition (accepted directional permission; not financial advice) | CONSTRUCTIVE_CAUTIOUS |
+
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- Accepted forecast-quality claim for this model and timeframe.
+- No profitability claim.
+- The directional permission is not financial advice: it never tells you to trade.
 
 ## Analysis D
 
@@ -112,13 +146,15 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
+- Evidence gate: Directional skill is not established for this model and timeframe.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage unavailable when requested — this analysis may not be kept in Recent Analysis history |
+| Storage | Save not confirmed: this analysis may be missing from Recent Analysis history after a restart |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -126,6 +162,16 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Round-trip cost | 0.21% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
+
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- No forecast-quality claim is accepted for this model and timeframe.
+- Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
+- No profitability claim.
 
 ## Analysis E
 
@@ -137,13 +183,15 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition: hard gates outrank everything shown.
 
+- Evidence gate: Directional skill is not established for this model and timeframe.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage available |
+| Storage | Saved to Recent Analysis history |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -151,6 +199,13 @@ The gates' disposition: hard gates outrank everything shown.
 | Round-trip cost | 0.21% |
 | Evidence | NO_DEMONSTRATED_SKILL · 400 resolved outcomes · MEASURED |
 | Gate disposition (not a market call) | NO_TRADE |
+
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- Accepted forecast-quality claim for this model and timeframe.
+- No profitability claim.
 
 ## Analysis F
 
@@ -162,13 +217,16 @@ A risk gate is active: Extreme-move risk is too high. The evidence gate is activ
 
 The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 
+- Extreme-move risk is too high: Analysis is blocked because extreme-move risk exceeds the permitted level.
+- Evidence gate: Directional skill is not established for this model and timeframe.
+
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
-| Storage | Storage available |
+| Storage | Saved to Recent Analysis history |
 | In band (inside the decision band) | 42.00% (band ±0.21%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
@@ -177,16 +235,26 @@ The risk gate (Extreme-move risk is too high) is a finding about market conditio
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
 
+In band: the close at the horizon ends within +/- the decision band of the reference close. Up: above it. Down: below it.
+
+Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
+
+Estimated round-trip cost (2 x taker fee + slippage) as a fraction of the notional traded; it is also the decision band around the reference close.
+
+- No forecast-quality claim is accepted for this model and timeframe.
+- Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.
+- No profitability claim.
+
 ## Answer key (read it only after answering)
 
 | Analysis | 1 | 2 | 3 | 4 | 5 |
 | --- | --- | --- | --- | --- | --- |
-| A | yes | no | no | no | no |
-| B | no | no | no | no | no |
-| C | yes | yes | yes | no | no |
-| D | yes | no | no | yes | no |
-| E | yes | yes | no | no | no |
-| F | yes | no | no | no | yes |
+| A | yes | no | no | yes | no |
+| B | no | no | no | yes | no |
+| C | yes | yes | yes | yes | no |
+| D | yes | no | no | no | no |
+| E | yes | yes | no | yes | no |
+| F | yes | no | no | yes | yes |
 
 ## What this check covers, and what it does not
 
@@ -201,25 +269,37 @@ The risk gate (Extreme-move risk is too high) is a finding about market conditio
 - Analysis B is **SYNTHETIC** too, for a different reason. Today, when the market data
   are missing or too short, the product shows an error message and no analysis, so no screen
   shows this state. The product's own code built it for this card only.
-- Every number is a made-up example, not market data. The Gate disposition value is made up
-  too: on a real analysis the gates decide it.
-- This card shows the decision view only: its headline, the sentence under it, its gate lines
-  and its rows, as the Single Crypto Analysis and Batch Crypto Analysis screens and the detail
-  panel show them. It shows no layout or colours.
+- Every number is a made-up example, not market data. The gates are the product's own: each
+  analysis's gate result, and so its Gate disposition, is what the real gates return for its
+  made-up inputs.
+- Each analysis is the Decision view as the detail panel shows it, line for line: the
+  product's own screen code drew it for this card. The cards of the Single Crypto Analysis
+  and Batch Crypto Analysis screens show the same headline, sentence, gate summary, framing
+  and rows; they leave out the list of active gates and the notes under the rows. This card
+  shows no layout or colours.
 - Analysis F is a real risk gate together with the evidence gate. That is the only way a risk
   gate can appear today, because the evidence gate is always active.
-- The screens show more than the view, and none of the following is on this card, so a PASS
-  here says nothing about it:
+- The screens show more than the Decision view, and none of the following is on this card, so
+  a PASS here says nothing about it:
   - On the Single Crypto Analysis screen, each timeframe also shows:
-    - a gate banner
+    - a BLOCK banner naming the check that blocks
     - a role label
     - a role sentence
     - a Signal heat row
     - the data-source line
-  - The detail panel adds its own sections.
-- Question 4 reads the Storage row. On this card that row is storage's status when the
-  analysis was requested: "Storage available", or a warning that the analysis may not be
-  kept. It is read before the analysis is saved. After an analysis is shown, the screen
-  asks the backend for that analysis's save receipt and, when the backend gives one, shows
-  its state in the Storage row. This card prints the row as it reads before that (plan §14.2
-  item 4).
+  - Under the Decision view, the detail panel also shows:
+    - Decision (Probability interpretation and the Actionability stack)
+    - Model Quality
+    - Overview
+    - Gates
+    - the data, provider, quant and news sections, and Raw JSON
+- Question 4 reads the Storage row. On this card that row is the save receipt of the
+  analysis: after an analysis is shown, the screen asks the backend whether that analysis
+  was saved and shows the state the backend gives. Analyses A, B, C, E and F show a save the backend
+  acknowledged; Analysis D shows a save the backend could not confirm. The receipt states
+  are examples for this card, and each is one the product can give today. Until a receipt
+  answers, the row shows storage's status when the analysis was requested instead
+  ("Storage available"); two more receipt states exist and are not on this card ("Saving…
+  not yet confirmed", "Not retained: no storage is configured").
+- The save receipt is built, and whether its wording is understood is what question 4
+  tests: its UX acceptance is open until this check is run.
