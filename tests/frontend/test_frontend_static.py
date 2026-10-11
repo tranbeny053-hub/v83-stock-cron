@@ -54,9 +54,16 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=p7p-20261005-a"' in html
-    assert 'src="/app.js?v=p7p-20261005-a"' in html
+    assert 'href="/styles.css?v=p7p-20261011-a"' in html
+    assert 'src="/app.js?v=p7p-20261011-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
+    # The token moves with the view's version (review finding 3). A browser that kept the script
+    # served under the token before would draw a decision_view.v1 screen over a v2 payload: the
+    # script that renders v2 is never served under that older token.
+    assert 'view.schema_version === "decision_view.v2"' in js
+    assert "p7p-20261005-a" not in html
+    tokens = set(re.findall(r"\?v=([\w.-]+)", html))
+    assert tokens == {"p7p-20261011-a"}, "one token, on the script and the stylesheet alike"
 
 
 def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
