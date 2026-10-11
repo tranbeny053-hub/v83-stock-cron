@@ -77,6 +77,8 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "persistenceStatusText",
             "decisionViewOf",
             "savedRunViewOf",
+            "dispositionLabel",
+            "gateTokenLabel",
             "decisionDataText",
             "notAssessedByView",
             "acceptedViewOf",

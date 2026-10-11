@@ -154,7 +154,7 @@ Horizon
 ~6W horizon
 Analysis mode
 METRICS_ONLY
-Disposition
+Gate disposition (accepted directional permission; not financial advice)
 WATCH
 Score
 50
@@ -169,9 +169,9 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gates
-Gate action
+Gate action (internal gate token; not financial advice)
 WATCH
-Hard blocks
+Hard blocks (internal gate tokens; not financial advice)
 none
 Warnings
 none

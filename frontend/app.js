@@ -428,6 +428,16 @@ function dispositionLabel(view) {
     : "Gate disposition (not a market call)";
 }
 
+// A raw gate token or block code shown outside the decision view says what it is (owner ruling
+// S3): the gates' own internal token, not a market call. The value under it is shown as the
+// backend gives it. Under an accepted directional permission the label stays non-advisory
+// without the words the owner's ruling of 2026-10-06 keeps off a permission's screen.
+function gateTokenLabel(name, kind, view) {
+  return view && view.directional_permission
+    ? `${name} (${kind}; not financial advice)`
+    : `${name} (${kind}, not a market call)`;
+}
+
 // Under an accepted claim the view states the evidence level, as it states the data's health
 // (owner ruling 2026-10-06). Legacy copy written for the uncalibrated heuristic then defers to it:
 // a label reads the view's headline, an explanation its detail, and a reading the view already
@@ -823,7 +833,7 @@ function overviewCard(payload) {
   // The heat is a reading of the percentages: none is shown where the view assesses none.
   const viewHeat = notAssessedByView(payload) ? [] : [heatRow];
   const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [
-    ["Disposition", display.disposition],
+    [dispositionLabel(null), display.disposition],
     ["Score", display.total_score],
     ["Setup", display.timeframe_label || timeframe],
     ["Horizon", display.horizon_label || "multi-bar horizon"],
@@ -2189,7 +2199,8 @@ function renderStructuredDetail(payload, detailView) {
         ],
         ["Horizon", payload.timeframes?.horizon_label || kept.horizon_label],
         ["Analysis mode", payload.analysis_mode],
-        ["Disposition", display.disposition ?? kept.disposition],
+        // The same value as the decision view's own row, under the same label.
+        [dispositionLabel(view), display.disposition ?? kept.disposition],
         ["Score", display.total_score],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
@@ -2210,8 +2221,14 @@ function renderStructuredDetail(payload, detailView) {
     ]),
     section("Gates", [
       keyValueTable([
-        ["Gate action", gate.action ?? kept.gate_action],
-        ["Hard blocks", gate.hard_blocks ?? kept.hard_blocks],
+        [
+          gateTokenLabel("Gate action", "internal gate token", view),
+          gate.action ?? kept.gate_action,
+        ],
+        [
+          gateTokenLabel("Hard blocks", "internal gate tokens", view),
+          gate.hard_blocks ?? kept.hard_blocks,
+        ],
         ["Warnings", dataQuality.warnings],
       ]),
       objectTable(details.risk_detail),

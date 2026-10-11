@@ -71,7 +71,7 @@ Horizon
 ~6H horizon
 Analysis mode
 METRICS_ONLY
-Disposition
+Gate disposition (not a market call)
 NO_TRADE
 Score
 n/a
@@ -86,9 +86,9 @@ yes
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gates
-Gate action
+Gate action (internal gate token, not a market call)
 NO_TRADE
-Hard blocks
+Hard blocks (internal gate tokens, not a market call)
 EXECUTION_COST_TOO_HIGH, LIQUIDITY_NOT_VIABLE, SKILL_NOT_DEMONSTRATED
 Warnings
 n/a

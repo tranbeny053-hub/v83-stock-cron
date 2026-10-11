@@ -159,7 +159,7 @@ Horizon
 ~6H horizon
 Analysis mode
 METRICS_ONLY
-Disposition
+Gate disposition (not a market call)
 NO_TRADE
 Score
 51
@@ -174,9 +174,9 @@ OK: Live data. Latest candle 0s old.
 Storage when requested
 No storage configured — analyses are kept only until the server restarts
 Gates
-Gate action
+Gate action (internal gate token, not a market call)
 NO_TRADE
-Hard blocks
+Hard blocks (internal gate tokens, not a market call)
 LIQUIDITY_NOT_VIABLE, SKILL_NOT_DEMONSTRATED
 Warnings
 none

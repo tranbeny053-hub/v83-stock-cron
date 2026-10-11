@@ -321,6 +321,68 @@ def test_the_single_cards_banner_names_the_check_that_blocks(screens: dict) -> N
     assert EVIDENCE in screens["first_check_blocks_SYNTHETIC"]["single"]
 
 
+# --- raw gate tokens say what they are (owner ruling S3) ------------------------------------
+
+DISPOSITION = "Gate disposition (not a market call)"
+GATE_ACTION = "Gate action (internal gate token, not a market call)"
+HARD_BLOCKS = "Hard blocks (internal gate tokens, not a market call)"
+# Every token the gates or the score can put in a disposition, and every hard block code.
+GATE_TOKENS = {
+    *("NO_TRADE", "ABORT", "WATCH", "CONSTRUCTIVE", "CONSTRUCTIVE_CAUTIOUS", "ELEVATED_RISK_AVOID"),
+    *("KILL_SWITCH", "SHELTER_MODE_BLOCK", "PROVIDER_DEGRADED", "EPISTEMIC_VOID"),
+    *("LIQUIDITY_NOT_VIABLE", "TAIL_RISK_BREACH", "EXECUTION_COST_TOO_HIGH"),
+    "SKILL_NOT_DEMONSTRATED",
+}
+
+
+def _is_raw_gate_token(text: str) -> bool:
+    parts = [part.strip() for part in text.split(",")]
+    return all(part in GATE_TOKENS for part in parts)
+
+
+@pytest.mark.parametrize("name", [*goldens.SCENARIOS, SAVED_BEFORE])
+def test_every_raw_gate_token_on_a_screen_stands_under_a_label_that_says_what_it_is(
+    cases: dict, screens: dict, name: str
+) -> None:
+    """Owner ruling S3. Outside the decision view a raw gate token stood under a bare label
+    ("Disposition", "Gate action", "Hard blocks"). Wherever one is shown, on every surface, the
+    line above it now says it is the gates' own internal token and not a market call (or, under
+    an accepted directional permission, not financial advice). Labels only: each value is what
+    the backend gives, in the place it had."""
+
+    payload = cases["evidence_only" if name == SAVED_BEFORE else name]
+    permission = payload["decision_view"]["directional_permission"]
+    says = "not financial advice" if permission else "not a market call"
+    for surface, texts in screens[name].items():
+        raw = [at for at, text in enumerate(texts) if _is_raw_gate_token(text)]
+        assert raw, f"{name}/{surface}: the disposition is on every screen"
+        for at in raw:
+            assert says in texts[at - 1], f"{name}/{surface}: {texts[at - 1]!r} over {texts[at]!r}"
+        for bare in ("Disposition", "Gate action", "Hard blocks", "Gate disposition"):
+            assert bare not in texts, f"{name}/{surface}: the bare label {bare!r}"
+        if surface in ("single", "batch"):
+            continue
+        # The values are the backend's own, unchanged, in Overview and in Gates.
+        gate = payload["gate_result"]
+        suffix = "; not financial advice)" if permission else ", not a market call)"
+        overview = harness._between(texts, "Overview", "Gates")
+        gates = harness._between(texts, "Gates", "Market Data Quality")
+        label = [text for text in overview if text.startswith("Gate disposition (")]
+        assert (
+            len(label) == 1
+            and harness._value(overview, label[0]) == (payload["frontend_display"]["disposition"])
+        ), f"{name}/{surface}"
+        assert harness._value(gates, f"Gate action (internal gate token{suffix}") == gate["action"]
+        assert harness._value(gates, f"Hard blocks (internal gate tokens{suffix}") == (
+            ", ".join(gate["hard_blocks"]) or "none"
+        ), f"{name}/{surface}"
+        assert gates[1:6:2] == [
+            f"Gate action (internal gate token{suffix}",
+            f"Hard blocks (internal gate tokens{suffix}",
+            "Warnings",
+        ], "the rows keep their order"
+
+
 # --- the older decision sections are retired from the default screen -------------------------
 
 # The headings, labels and fixed lines of the retired sections, in the parity review's order:
@@ -451,9 +513,10 @@ def test_the_kill_switch_reads_one_disposition_on_every_surface(cases: dict, scr
     assert cases[name]["gate_result"]["action"] == "ABORT"
     assert cases[name]["decision_brief"]["action"] == "NO_TRADE"
     for surface, texts in screens[name].items():
-        at = texts.index("Gate disposition (not a market call)")
-        assert texts[at + 1] == "ABORT", surface
-        assert texts.count("Gate disposition (not a market call)") == 1, surface
+        label = "Gate disposition (not a market call)"
+        said = [texts[at + 1] for at, text in enumerate(texts) if text == label]
+        # Once in the view (or the run's own block); the panels repeat it in Overview.
+        assert said == ["ABORT"] * (1 if surface in ("single", "batch") else 2), surface
         assert not any("NO_TRADE" in text or text == "No trade" for text in texts), surface
 
 
@@ -615,8 +678,8 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     # analysis's own rows read: no row reads "n/a" for a value another row of the screen shows.
     live_texts = screens[scenario]["detail"]
     for section, end, labels in (
-        ("Overview", "Gates", ("Timeframe", "Horizon", "Disposition", "Data source")),
-        ("Gates", "Market Data Quality", ("Gate action", "Hard blocks")),
+        ("Overview", "Gates", ("Timeframe", "Horizon", DISPOSITION, "Data source")),
+        ("Gates", "Market Data Quality", (GATE_ACTION, HARD_BLOCKS)),
     ):
         mine = harness._between(texts, section, end)
         theirs = harness._between(live_texts, section, end)
@@ -628,7 +691,7 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
             )
     overview = harness._between(texts, "Overview", "Gates")
     assert harness._value(overview, "Live data") == "yes"
-    assert harness._value(overview, "Disposition") == shown["Gate disposition (not a market call)"]
+    assert harness._value(overview, DISPOSITION) == shown[DISPOSITION]
     # No label of the run's own block is used again on the screen with another value.
     for label, value in shown.items():
         again = [texts[at + 1] for at, text in enumerate(texts) if text == label]
@@ -678,7 +741,8 @@ def test_a_reopened_run_whose_gate_result_cannot_be_read_says_so_and_frames_noth
     for name in damaged:
         texts = rendered[name]["history"]
         assert texts[:4] == ["Saved analysis", EXPLANATION, note, "Asset · venue"], name
-        assert "Gate disposition (not a market call)" not in texts, name
+        block = harness._between(texts, "Saved analysis", "Model Quality")
+        assert DISPOSITION not in block, name
         assert texts[texts.index("Up (above the band)") + 1].endswith("%"), name
         for text in texts:
             assert "gate is active" not in text and "risk gate" not in text.lower(), text
