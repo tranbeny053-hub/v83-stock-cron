@@ -28,7 +28,7 @@ from pathlib import Path
 import fullscreen_goldens as goldens
 import pytest
 
-from crypto_probability_engine.detail import decision_view
+from crypto_probability_engine.detail import decision_view, gate_kinds
 from crypto_probability_engine.features import volatility
 from crypto_probability_engine.global_risk.state import global_risk_state
 from crypto_probability_engine.quant import probability_three_state, tail_cvar
@@ -512,7 +512,16 @@ def test_the_one_block_the_goldens_leave_out_is_the_payload_verbatim(
         # of its own, and a saved run has no state.
         gates = payload["decision_view"]["gates"]
         accepted = payload["decision_view"]["accepted_claim"]
-        assert {**read["gates"], "framing": ""} == {**gates, "framing": ""}, scenario
+        # ... and its entry for the evidence gate, whose verdict a run does not store: the live
+        # analysis gives the backend's reason for it, the reopened run says it is not kept.
+        kept = [
+            {**entry, "detail": gate_kinds.SAVED_EVIDENCE_GATE_DETAIL}
+            if entry["kind"] == "EVIDENCE"
+            else entry
+            for entry in gates["blocks"]
+        ]
+        expected = {**gates, "framing": "", "blocks": kept}
+        assert {**read["gates"], "framing": ""} == expected, scenario
         assert (read["gates"]["framing"] == gates["framing"]) is not accepted, scenario
         for key in ("saved_run_view", "gate_view"):
             assert key not in payload and key not in payload["detail_view"], (scenario, key)

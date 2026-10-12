@@ -40,9 +40,11 @@ from crypto_probability_engine.detail.decision_view import (
     RANGE_MEANING,
     cost_caveat,
 )
+from crypto_probability_engine.detail.frontend_display import stored_liquidity_state
 from crypto_probability_engine.detail.gate_kinds import (
     ELEVATED_RISK_TOKEN,
     NOT_FORCED_BY_A_RISK_GATE,
+    SAVED_EVIDENCE_GATE_DETAIL,
     build_gate_view,
     elevated_risk_is_a_risk_finding,
     hard_gate_active,
@@ -72,11 +74,17 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
     assessed = _assessed(gate, provider_state)
     heuristic = brief.get("probability_type") == PROBABILITY_TYPE
     band = _fraction(execution.get("round_trip_cost_frac"))
-    liquidity = liquidity_execution.get("liquidity_state")
+    # The liquidity state as this record can read it: the measure's own state, or the one value
+    # that says the record holds no readable measurement (then no cause is asserted of the gate).
+    liquidity = stored_liquidity_state(liquidity_execution.get("liquidity_state"))
     score = _mapping(detail.get("score_detail"))
     return {
         "schema_version": SCHEMA_VERSION,
-        "gates": None if gate is None else build_gate_view(gate, liquidity=liquidity),
+        "gates": None
+        if gate is None
+        else build_gate_view(
+            gate, liquidity=liquidity, evidence_detail=SAVED_EVIDENCE_GATE_DETAIL
+        ),
         "gates_note": GATES_NOT_READABLE if gate is None else None,
         "disposition": _disposition(gate, score, liquidity),
         # The stored gate result's own action and blocks, as the gates wrote them (raw tokens).

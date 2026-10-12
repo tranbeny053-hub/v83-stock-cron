@@ -3,7 +3,7 @@ No accepted forecast
 No forecast-quality claim has been accepted for this model and timeframe. The percentages are uncalibrated reference context: not a forecast, not a market signal, and not a reason to act or to avoid acting.
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

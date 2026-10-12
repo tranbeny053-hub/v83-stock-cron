@@ -43,6 +43,7 @@ from crypto_probability_engine.detail.decision_brief import (
     PROBABILITY_EXPLANATION,
     PROBABILITY_TYPE,
 )
+from crypto_probability_engine.detail.frontend_display import evidence_gate_reason
 from crypto_probability_engine.detail.gate_kinds import build_gate_view
 
 # v2: the view carries the one gate authority (`gates`, detail/gate_kinds.py) and, beside what its
@@ -166,7 +167,14 @@ def build_decision_view(
     headline, detail = STATE_COPY[state]
     # The one gate authority (owner ruling AD1=A): every surface takes its gate framing from here.
     # The liquidity state says whether the liquidity gate measured anything (owner ruling G2).
-    gates = build_gate_view(gate, liquidity=quant_result.get("liquidity_state"), state=state)
+    # The evidence gate's own entry carries the backend's reason for the verdict at hand, as the
+    # older key reasons did (the exact-final review's minor m4): a sentence about the model.
+    gates = build_gate_view(
+        gate,
+        liquidity=quant_result.get("liquidity_state"),
+        state=state,
+        evidence_detail=evidence_gate_reason(gate, skill_evidence)[1],
+    )
     if state == "NO_ACCEPTED_CLAIM" and gates["risk_gate_active"]:
         detail = NO_ACCEPTED_CLAIM_UNDER_A_RISK_GATE
     horizon = (quant_result.get("probability_state") or {}).get("horizons", {}).get("H_primary", {})

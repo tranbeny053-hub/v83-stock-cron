@@ -34,7 +34,7 @@ three are no.
 2. Is one of the reasons that market data the system needed today (prices, the order book) was missing or could not be used, or that a safety switch was on?
    - **yes** — Yes.
    - **no** — No.
-3. Is one of the reasons that the model has not yet shown it can predict direction?
+3. Is one of the reasons that the model has yet to show it can predict direction?
    - **yes** — Yes.
    - **no** — No.
 4. How much can you rely on the percentages on this screen as a forecast?
@@ -65,7 +65,7 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -113,7 +113,7 @@ A system or data gate is active: A required data provider is degraded. The evide
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
 - A required data provider is degraded: Analysis is blocked because a required data provider is not operating normally.
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -201,7 +201,7 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -248,7 +248,7 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition: hard gates outrank everything shown.
 
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: On 400 resolved outcomes, the observed directional accuracy did not clear the required evidence threshold — it was not strong enough to rule out chance. This is not a finding that accuracy is at or below 50%.
 
 | Row | Shown |
 | --- | --- |
@@ -293,7 +293,7 @@ A risk gate is active: Extreme-move risk is too high. The evidence gate is activ
 The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 
 - Extreme-move risk is too high: Analysis is blocked because extreme-move risk exceeds the permitted level.
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -341,7 +341,7 @@ A system or data gate is active: Liquidity could not be measured. The evidence g
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
 - Liquidity could not be measured: Analysis is blocked because the order book that was served has a spread outside the range the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, not a finding about the market.
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -390,7 +390,7 @@ A system or data gate is active: Safety shutdown is active. The evidence gate is
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
 - Safety shutdown is active: Analysis is blocked because the system-wide safety shutdown is active.
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |
@@ -437,7 +437,7 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 
-- Evidence gate: Directional skill is not established for this model and timeframe.
+- Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 
 | Row | Shown |
 | --- | --- |

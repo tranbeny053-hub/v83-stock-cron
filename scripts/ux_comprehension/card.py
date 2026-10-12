@@ -95,7 +95,7 @@ QUESTIONS = (
         YES_NO,
     ),
     (
-        "Is one of the reasons that the model has not yet shown it can predict direction?",
+        "Is one of the reasons that the model has yet to show it can predict direction?",
         YES_NO,
     ),
     (

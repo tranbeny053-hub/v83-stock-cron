@@ -4,7 +4,7 @@ A risk gate is active: Execution cost is too high; Liquidity is not viable. The 
 The risk gates (Execution cost is too high; Liquidity is not viable) are findings about market conditions or execution. They are analysis only, not an instruction.
 Execution cost is too high: Analysis is blocked because the estimated execution cost exceeds the permitted level.
 Liquidity is not viable: Analysis is blocked because current liquidity does not meet the required bar.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: Directional skill is not established for this model and timeframe. Its verdict and counts are not kept in saved history.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -127,12 +127,12 @@ n/a
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
 n/a
 Cross-provider state

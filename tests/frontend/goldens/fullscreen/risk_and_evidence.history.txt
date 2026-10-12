@@ -3,7 +3,7 @@ Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 b
 A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 Extreme-move risk is too high: Analysis is blocked because extreme-move risk exceeds the permitted level.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: Directional skill is not established for this model and timeframe. Its verdict and counts are not kept in saved history.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -126,12 +126,12 @@ n/a
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
 n/a
 Cross-provider state

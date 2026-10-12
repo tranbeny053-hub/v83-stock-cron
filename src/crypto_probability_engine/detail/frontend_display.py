@@ -58,6 +58,53 @@ _LIQUIDITY_UNUSABLE_COPY = (
     "the liquidity measure accepts, so liquidity was not measured from it: this is unusable data, "
     "not a finding about the market.",
 )
+# A reopened run reads the liquidity state its record stores. When that state is absent, or is not
+# one the liquidity measure writes, the record shows neither a measurement nor why there is none:
+# the gate's entry then says only that, asserts no cause, and claims no finding about the market
+# (the exact-final review's minor m2). A live analysis always holds the measure's own state and
+# never reads this copy. PROVISIONAL wording.
+_LIQUIDITY_NOT_READABLE_COPY = (
+    "Liquidity gate",
+    "This saved record does not hold a readable liquidity measurement, so it cannot say whether "
+    "liquidity was measured or what the gate found.",
+)
+
+
+class _StoredStateNotReadable:
+    """The one value that stands for a stored liquidity state a saved run cannot read."""
+
+    def __repr__(self) -> str:
+        return "STORED_LIQUIDITY_NOT_READABLE"
+
+
+STORED_LIQUIDITY_NOT_READABLE: Any = _StoredStateNotReadable()
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def stored_liquidity_state(liquidity: Any) -> Any:
+    """A saved run's stored liquidity state when it is one the measure writes
+    (features/liquidity_depth.py), else STORED_LIQUIDITY_NOT_READABLE.
+
+    The measure writes three states: OK with a measured spread; DEGRADED with no spread and the
+    best bid and ask of a book it refused; DEGRADED with no spread and neither price, when no
+    book reached it. Anything else (no state, a state without its status, a spread stored as
+    text) is not a measurement the record holds, and no cause is read from it."""
+
+    if not isinstance(liquidity, Mapping):
+        return STORED_LIQUIDITY_NOT_READABLE
+    status = liquidity.get("status")
+    if status == "OK" and _is_number(liquidity.get("spread_frac")):
+        return liquidity
+    prices = [liquidity.get(side) for side in ("best_bid", "best_ask")]
+    both = all(_is_number(price) for price in prices)
+    neither = all(price is None for price in prices)
+    no_spread = "spread_frac" in liquidity and liquidity["spread_frac"] is None
+    if status == "DEGRADED" and no_spread and (both or neither):
+        return liquidity
+    return STORED_LIQUIDITY_NOT_READABLE
 
 
 def liquidity_was_measured(liquidity: Any) -> bool:
@@ -95,6 +142,8 @@ def blocking_reason(code: str, liquidity: Any) -> tuple[str, str]:
     """The headline and the detail of a hard block other than the evidence gate, for the liquidity
     state its liquidity gate judged; an unknown code reads as itself."""
 
+    if code == _LIQUIDITY_BLOCK and liquidity is STORED_LIQUIDITY_NOT_READABLE:
+        return _LIQUIDITY_NOT_READABLE_COPY
     if code == _LIQUIDITY_BLOCK and not liquidity_was_measured(liquidity):
         if order_book_was_served(liquidity):
             return _LIQUIDITY_UNUSABLE_COPY
@@ -143,6 +192,17 @@ def _skill_blocking_reason(skill_evidence: dict | None) -> tuple[str, str]:
     )
 
 
+def evidence_gate_reason(gate: Mapping[str, Any], skill_evidence: Any) -> tuple[str, str]:
+    """The headline and the sentence of the evidence gate's own reason, for the verdict at hand:
+    the hold's while the directional evidence is under review, else the verdict's. Each is about
+    the model, never about the market. A live analysis holds the verdict; a saved run does not."""
+
+    hold = gate.get("directional_evidence_hold")
+    if isinstance(hold, Mapping) and hold.get("active"):
+        return _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE, _DIRECTIONAL_EVIDENCE_HOLD_DETAIL
+    return _skill_blocking_reason(skill_evidence if isinstance(skill_evidence, dict) else None)
+
+
 def _blocking_reasons(
     gate: dict, skill_evidence: dict | None, liquidity: Any
 ) -> list[dict[str, str]]:
@@ -150,12 +210,7 @@ def _blocking_reasons(
     for raw_code in gate.get("hard_blocks", []):
         code = str(raw_code)
         if code == "SKILL_NOT_DEMONSTRATED":
-            hold = gate.get("directional_evidence_hold")
-            if isinstance(hold, dict) and hold.get("active"):
-                headline = _DIRECTIONAL_EVIDENCE_HOLD_HEADLINE
-                detail = _DIRECTIONAL_EVIDENCE_HOLD_DETAIL
-            else:
-                headline, detail = _skill_blocking_reason(skill_evidence)
+            headline, detail = evidence_gate_reason(gate, skill_evidence)
         else:
             headline, detail = blocking_reason(code, liquidity)
         reasons.append({"code": code, "headline": headline, "detail": detail})

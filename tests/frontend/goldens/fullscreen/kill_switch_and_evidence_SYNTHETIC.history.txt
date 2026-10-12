@@ -3,7 +3,7 @@ Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 b
 A system or data gate is active: Safety shutdown is active. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
 Safety shutdown is active: Analysis is blocked because the system-wide safety shutdown is active.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: Directional skill is not established for this model and timeframe. Its verdict and counts are not kept in saved history.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -126,12 +126,12 @@ n/a
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
 n/a
 Cross-provider state

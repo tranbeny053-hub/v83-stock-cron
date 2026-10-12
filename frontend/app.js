@@ -604,6 +604,16 @@ function costCaveatRows(cost) {
   return caveat ? [["Cost note", caveat]] : [];
 }
 
+// A value a reopened run's rows OUTSIDE its own block read from the view built from its stored
+// record (the exact-final review's minor m3): the row's own value when the screen has one; else,
+// for a reopened run, what that view holds, or the sentence that the record does not hold it. So
+// one row never reads "n/a" for a value another row of the same screen shows. Without such a view
+// the row's own value stands.
+function keptValue(saved, own, kept) {
+  if (own !== null && own !== undefined) return own;
+  return saved ? savedValue(kept) : own;
+}
+
 // A value of a saved run's view: what the stored record holds, or, where the backend gives none,
 // the sentence that says it is not kept. Never "n/a": a reopened run says what it does not store.
 function savedValue(value, format = (kept) => kept) {
@@ -2171,8 +2181,10 @@ function renderStructuredDetail(payload, detailView) {
   const gate = payload.gate_result || {};
   const details = detailView || {};
   // A reopened run's history row carries none of these rows' values. Where the view built from
-  // its stored record holds one, the Overview and Gates rows show it, as the run's own block
-  // does: one row never reads "n/a" for a value another row shows.
+  // its stored record holds one, the row shows it, as the run's own block does: in Overview, in
+  // Gates, and for the data source, the live-data flag and the venue in the data sections below.
+  // One row never reads "n/a" for a value another row shows. A value the record's view does not
+  // carry at all (the data-quality status, the provider's cross-check) still reads "n/a" there.
   const kept = saved || {};
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
@@ -2214,10 +2226,10 @@ function renderStructuredDetail(payload, detailView) {
         ["Score", display.total_score],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
-        ["Data source", display.data_source ?? kept.data?.data_source],
+        ["Data source", keptValue(saved, display.data_source, kept.data?.data_source)],
         view
           ? ["Data", decisionDataText(view.data)]
-          : ["Live data", display.is_live_data ?? kept.data?.is_live_data],
+          : ["Live data", keptValue(saved, display.is_live_data, kept.data?.is_live_data)],
         [
           // Storage's status when the analysis was requested. A live analysis's Storage row (the
           // decision view's) shows its save receipt, which can say otherwise: so this label says
@@ -2250,13 +2262,13 @@ function renderStructuredDetail(payload, detailView) {
         ["Latest age seconds", dataQuality.latest_candle_age_seconds],
         ["Warnings", dataQuality.warnings],
         ["Failures", dataQuality.provider_failures],
-        ["Data source", dataQuality.data_source],
-        ["Live data", dataQuality.is_live_data],
+        ["Data source", keptValue(saved, dataQuality.data_source, kept.data?.data_source)],
+        ["Live data", keptValue(saved, dataQuality.is_live_data, kept.data?.is_live_data)],
       ]),
     ]),
     section("Provider State", [
       keyValueTable([
-        ["Active provider", providerState.active_provider],
+        ["Active provider", keptValue(saved, providerState.active_provider, kept.venue)],
         ["Status", providerState.status],
         ["Cross-provider state", providerState.cross_provider_state],
         ["Fallback to single provider", providerState.fallback_to_single_provider],

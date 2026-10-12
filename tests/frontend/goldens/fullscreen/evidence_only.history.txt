@@ -2,7 +2,7 @@ Saved analysis
 Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 bars ahead on this timeframe: Up ends above the decision band, Down below it, In band inside it (a terminal outcome, not a clock timeout). Not a forecast, not expected return, and not a trade recommendation.
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition, not a market call: a gate outcome is not a forecast to act on.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: Directional skill is not established for this model and timeframe. Its verdict and counts are not kept in saved history.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -125,12 +125,12 @@ n/a
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
 n/a
 Cross-provider state

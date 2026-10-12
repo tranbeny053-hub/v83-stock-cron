@@ -505,6 +505,89 @@ def test_the_human_payload_validates_against_the_schema(live) -> None:
     )
 
 
+# ------------------------------------------------------- the evidence gate's own reason (m4)
+HOLD = {"active": True, "reason": "SKILL_EVIDENCE_HOLD"}
+EVIDENCE_REASONS = [
+    pytest.param(
+        {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0},
+        None,
+        "The model has not been evaluated on this timeframe because fewer than 100 resolved "
+        "outcomes are available. Reported resolved outcomes: 0.",
+        id="not-evaluated",
+    ),
+    pytest.param(
+        {"verdict": "NO_DEMONSTRATED_SKILL", "n": 412, "observed_directional_rate": 0.512},
+        None,
+        "On 412 resolved outcomes, the observed directional accuracy did not clear the required "
+        "evidence threshold — it was not strong enough to rule out chance. The observed "
+        "directional accuracy was 51.2%. This is not a finding that accuracy is at or below 50%.",
+        id="did-not-clear-the-bar",
+    ),
+    pytest.param(
+        None,
+        None,
+        "The directional-skill evidence gate is active, but its verdict is unavailable.",
+        id="verdict-unavailable",
+    ),
+    pytest.param(
+        {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0},
+        HOLD,
+        "Directional candidates are paused while evidence is being corrected. Diagnostic "
+        "evidence, when available, is still reported.",
+        id="under-the-hold",
+    ),
+]
+
+
+@pytest.mark.parametrize(("evidence", "hold", "sentence"), EVIDENCE_REASONS)
+def test_the_evidence_gates_entry_carries_the_backends_reason_for_the_verdict_at_hand(
+    evidence: dict | None, hold: dict | None, sentence: str
+) -> None:
+    """The exact-final review's minor m4. Main showed the backend's reason for the evidence gate
+    as a key reason; the redesign listed a fixed line instead, and the threshold left the screen.
+    On a live view the gate's entry now carries that reason, for each verdict and for the hold:
+    the same sentence `frontend_display.blocking_reasons` gives. Each is about the model. None
+    names the market, a risk or anything to do; the summary and the framing are untouched."""
+
+    gate = {"hard_blocks": ["SKILL_NOT_DEMONSTRATED"], "hard_gate_passed": False}
+    if hold:
+        gate["directional_evidence_hold"] = hold
+    view = view_for(quant_result={"gate_result": gate}, skill_evidence=evidence)
+    gates = view["gates"]
+    (entry,) = gates["blocks"]
+    assert entry == {
+        "block": "SKILL_NOT_DEMONSTRATED",
+        "kind": "EVIDENCE",
+        "headline": "Evidence gate",
+        "detail": sentence,
+    }
+    (reason,) = frontend_display._blocking_reasons(gate, evidence, None)
+    assert reason["detail"] == sentence == frontend_display.evidence_gate_reason(gate, evidence)[1]
+    assert gates["summary"] == (
+        "Evidence gate: directional skill is not established for this model and timeframe. No "
+        "risk gate is active."
+    )
+    assert gates["framing"].startswith("The gates' disposition, not a market call")
+    lowered = sentence.lower()
+    for word in ("market", "risk", "avoid", "wait", "trade", "buy", "sell", "should", "must"):
+        assert word not in lowered.split() and f"{word}." not in lowered, (word, sentence)
+    assert any(about in lowered for about in ("model", "directional", "evidence")), sentence
+
+
+def test_without_a_reason_the_evidence_gates_entry_is_the_fixed_sentence() -> None:
+    """The builder's own default, which a caller with no verdict to speak of gets."""
+
+    from crypto_probability_engine.detail import gate_kinds
+
+    gate = {"hard_blocks": ["TAIL_RISK_BREACH", "SKILL_NOT_DEMONSTRATED"]}
+    fixed = gate_kinds.build_gate_view(gate)["blocks"]
+    assert fixed[1]["detail"] == gate_kinds.EVIDENCE_GATE_DETAIL
+    assert fixed[1]["detail"].startswith("Directional skill is not established for this model")
+    given = gate_kinds.build_gate_view(gate, evidence_detail="A reason.")["blocks"]
+    assert given[1]["detail"] == "A reason." and given[0] == fixed[0], "only the evidence entry"
+    assert gate_kinds.build_gate_view(gate, evidence_detail="")["blocks"] == fixed
+
+
 # ------------------------------------------------------------------ the fees-only cost's caveat
 def _execution_for(book: object) -> dict:
     """The execution state the product computes for an order book (the real two functions)."""

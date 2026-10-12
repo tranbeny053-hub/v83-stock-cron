@@ -173,13 +173,46 @@ def test_every_gate_token_is_what_it_was(cases: dict[str, dict]) -> None:
 
 
 @pytest.mark.parametrize("name", SCENARIOS)
+def _evidence_reason(payload: dict) -> str | None:
+    """The backend's own reason sentence for the evidence gate of a live analysis (the one the
+    older key reasons showed), or None where that gate is not active."""
+
+    reasons = payload["frontend_display"]["blocking_reasons"]
+    found = [entry["detail"] for entry in reasons if entry["code"] == "SKILL_NOT_DEMONSTRATED"]
+    return found[0] if found else None
+
+
+def _as_saved(gates: dict) -> dict:
+    """A live analysis's gate view as its reopened run reads it: the same, except that the
+    evidence gate's entry says the verdict is not kept (the record does not store it)."""
+
+    blocks = [
+        {**entry, "detail": gate_kinds.SAVED_EVIDENCE_GATE_DETAIL}
+        if entry["kind"] == "EVIDENCE"
+        else entry
+        for entry in gates["blocks"]
+    ]
+    return {**gates, "blocks": blocks}
+
+
+# The evidence gate's reason on these scenarios' live screens: no resolved outcome yet.
+LIVE_EVIDENCE_REASON = (
+    "The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes "
+    "are available. Reported resolved outcomes: 0."
+)
+
+
+@pytest.mark.parametrize("name", SCENARIOS)
 def test_the_view_is_the_one_gate_authority(cases: dict[str, dict], name: str) -> None:
     summary, framing = SCENARIOS[name]
     payload = cases[name]
     view = payload["decision_view"]
     gates = view["gates"]
     assert gates == gate_kinds.build_gate_view(
-        payload["gate_result"], liquidity=payload["liquidity_state"], state=view["state"]
+        payload["gate_result"],
+        liquidity=payload["liquidity_state"],
+        state=view["state"],
+        evidence_detail=_evidence_reason(payload),
     )
     assert gates["summary"] == summary and gates["framing"] == framing
     risk = name in WITH_A_RISK_GATE
@@ -189,7 +222,9 @@ def test_the_view_is_the_one_gate_authority(cases: dict[str, dict], name: str) -
     # What a saved run stores is enough to build the same framing when it is read back.
     stored = sanitize_for_export(copy.deepcopy(payload["detail_view"]))
     assert "saved_run_view" not in stored, "the framing is never stored"
-    assert saved_run_view.attach_saved_run_view(stored)["saved_run_view"]["gates"] == gates
+    # (The evidence gate's entry apart: the verdict behind it is not stored. Minor m4.)
+    read = saved_run_view.attach_saved_run_view(stored)["saved_run_view"]["gates"]
+    assert read == _as_saved(gates)
 
 
 @pytest.mark.parametrize("name", SCENARIOS)
@@ -258,7 +293,7 @@ def test_a_gate_fired_by_missing_data_is_a_data_gate_on_every_surface(
     surfaces = ("history",) if name == "saved" else ("single", "batch", "detail")
     if name == "saved":
         stored = reopened[scenario]["detail"]
-        assert stored["saved_run_view"]["gates"] == payload["decision_view"]["gates"]
+        assert stored["saved_run_view"]["gates"] == _as_saved(payload["decision_view"]["gates"])
         assert stored["liquidity_execution_detail"]["liquidity_state"] == payload["liquidity_state"]
     for surface in surfaces:
         texts = screens[scenario][surface]
@@ -485,6 +520,212 @@ def test_a_fees_only_cost_says_so_under_the_cost_on_every_surface(
     assert source.count('"Cost note"') == 1
 
 
+def test_the_forced_token_keeps_its_note_on_the_screen_whatever_flags_the_record_lost(
+    cases: dict, reopened: dict
+) -> None:
+    """The exact-final review's minor m1, through the real app.js: the three stored shapes that
+    showed the forced token bare (the record lost its guard flags). Wherever the token stands on
+    the reopened screen, its note stands with it."""
+
+    def stored(gate: dict, liquidity: dict | None = None) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases["evidence_only"]["detail_view"]))
+        detail["invalidation_detail"] = gate
+        if liquidity is not None:
+            detail["liquidity_execution_detail"]["liquidity_state"] = liquidity
+        return {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    token = "ELEVATED_RISK_AVOID"
+    no_book = {"status": "DEGRADED", "spread_frac": None, "top_depth_quote": 0.0}
+    shapes = {
+        "evidence_block_action_is_the_token": stored(
+            {"hard_gate_passed": False, "hard_blocks": ["SKILL_NOT_DEMONSTRATED"], "action": token}
+        ),
+        "passed_forced_token_still_stored": stored(
+            {
+                "hard_gate_passed": True,
+                "hard_blocks": [],
+                "action": "NO_TRADE",
+                "forced_score_disposition": token,
+            }
+        ),
+        "unmeasured_liquidity_block_action_is_the_token": stored(
+            {"hard_gate_passed": False, "hard_blocks": ["LIQUIDITY_NOT_VIABLE"], "action": token},
+            no_book,
+        ),
+    }
+    rendered = goldens.render({}, shapes)["screens"]
+    assert sorted(rendered) == sorted(shapes)
+    for name, surfaces in rendered.items():
+        texts = surfaces["history"]
+        carrying = [text for text in texts if token in text]
+        assert carrying, f"{name}: the token is on this screen"
+        assert all(text == FORCED_NOTE for text in carrying), (name, carrying)
+
+
+# Stored liquidity states that are absent or are not what the measure writes (minor m2), put
+# where the wide-spread analysis's measured state was.
+NOT_READABLE_LIQUIDITY = {
+    "state_missing": lambda d: d["liquidity_execution_detail"].pop("liquidity_state"),
+    "status_missing": lambda d: d["liquidity_execution_detail"]["liquidity_state"].pop("status"),
+    "spread_is_text": lambda d: d["liquidity_execution_detail"]["liquidity_state"].update(
+        spread_frac="0.095"
+    ),
+    "whole_detail_missing": lambda d: d.pop("liquidity_execution_detail"),
+}
+
+
+def test_a_record_without_a_readable_liquidity_state_asserts_no_cause_on_the_screen(
+    cases: dict, reopened: dict, screens: dict
+) -> None:
+    """The exact-final review's minor m2, through the real app.js. The live analysis measured a
+    spread that was too wide. Its reopened run, with the stored liquidity state lost or partial,
+    said "missing data" or "the order book that was served has a spread outside the range": a
+    cause the record does not show. It now names the liquidity gate and says only that the
+    record holds no readable measurement."""
+
+    name = "wide_spread_and_evidence"
+    live = screens[name]["detail"]
+    assert "Liquidity is not viable: Analysis is blocked because current liquidity does not" in (
+        " ".join(live)
+    )
+
+    def stored(change) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases[name]["detail_view"]))
+        change(detail)
+        return {
+            "row": reopened[name]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    damaged = {key: stored(change) for key, change in NOT_READABLE_LIQUIDITY.items()}
+    rendered = goldens.render({}, damaged)["screens"]
+    summary = (
+        "A risk gate is active: Execution cost is too high. The liquidity gate is active: this "
+        "saved record does not hold a readable liquidity measurement. The evidence gate is active "
+        "too: directional skill is not established for this model and timeframe."
+    )
+    entry = (
+        "Liquidity gate: This saved record does not hold a readable liquidity measurement, so it "
+        "cannot say whether liquidity was measured or what the gate found."
+    )
+    for key, surfaces in rendered.items():
+        texts = surfaces["history"]
+        block = harness._between(texts, "Saved analysis", "Model Quality")
+        # The cost gate is a risk gate by its name alone, so it stays named as one even where
+        # the whole liquidity and execution detail is lost.
+        assert texts.count(summary) == 1 and block.count(entry) == 1, key
+        written = " ".join(block)
+        for claim in ("missing data", "are unavailable", "outside the range", "not viable"):
+            assert claim not in written, (key, claim)
+        assert "Liquidity could not be measured" not in written, key
+        # The risk framing names the cost gate only: the liquidity gate is no finding here.
+        framing = block[block.index(summary) + 1]
+        assert framing == (
+            "The risk gate (Execution cost is too high) is a finding about market conditions or "
+            "execution. It is analysis only, not an instruction."
+        ), key
+
+
+def test_a_reopened_runs_data_sections_never_read_na_for_a_value_its_screen_shows(
+    cases: dict, reopened: dict, screens: dict
+) -> None:
+    """The exact-final review's minor m3. A reopened run's Market Data Quality and Provider State
+    sections read "n/a" for the data source, the live-data flag and the venue, which its own
+    block and its Overview showed. They now show the same value; and where the record does not
+    hold it, every one of those rows says "Not kept in saved history.", never "n/a" in one place
+    and a sentence in another. A run with no saved view to read keeps its rows as they were."""
+
+    def sections(texts: list[str]) -> tuple[list[str], list[str], list[str]]:
+        return (
+            harness._between(texts, "Overview", "Gates"),
+            harness._between(texts, "Market Data Quality", "Provider State"),
+            harness._between(texts, "Provider State", "Market Data v2 / Provider Observability"),
+        )
+
+    for name in (*goldens.HISTORY, SAVED_BEFORE):
+        texts = screens[name]["history"]
+        overview, quality, provider = sections(texts)
+        assert harness._value(overview, "Data source") == "OKX_PUBLIC", name
+        assert harness._value(quality, "Data source") == "OKX_PUBLIC", name
+        assert harness._value(overview, "Live data") == "yes", name
+        assert harness._value(quality, "Live data") == "yes", name
+        assert harness._value(provider, "Active provider") == "okx", name
+        assert harness._value(texts, "Asset · venue") == "BTC/USDT · okx", name
+
+    def stored(change, *, version: str | None = None) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases["evidence_only"]["detail_view"]))
+        change(detail)
+        read = saved_run_view.attach_saved_run_view(detail)
+        if version:
+            read["saved_run_view"]["schema_version"] = version
+        return {"row": reopened["evidence_only"]["row"], "detail": read}
+
+    damaged = {
+        "quality_lost": stored(lambda d: d.pop("data_quality_detail")),
+        "another_version": stored(lambda d: None, version="saved_run_view.v2"),
+    }
+    rendered = goldens.render({}, damaged)["screens"]
+    overview, quality, provider = sections(rendered["quality_lost"]["history"])
+    for rows, label in (
+        (overview, "Data source"),
+        (overview, "Live data"),
+        (quality, "Data source"),
+        (quality, "Live data"),
+        (provider, "Active provider"),
+    ):
+        assert harness._value(rows, label) == NOT_KEPT, label
+    assert harness._value(rendered["quality_lost"]["history"], "Venue") == NOT_KEPT
+    # The exact-final review's minor m5, first gap: a saved-run view of a version this script
+    # does not know is not drawn at all (no block, none of its sentences), and with no view to
+    # read the rows keep their own value.
+    other = rendered["another_version"]["history"]
+    assert "Saved analysis" not in other
+    kept = damaged["another_version"]["detail"]["saved_run_view"]
+    assert kept["gates"]["summary"] not in other and kept["gates"]["framing"] not in other
+    overview, quality, provider = sections(other)
+    for rows, label in ((quality, "Data source"), (provider, "Active provider")):
+        assert harness._value(rows, label) == "n/a", label
+    assert "Saved analysis" in screens["evidence_only"]["history"], "the known version is drawn"
+
+
+def test_a_reopened_run_of_unusable_data_says_not_assessed_not_not_kept(
+    cases: dict, reopened: dict
+) -> None:
+    """The exact-final review's minor m5, second gap. A reopened run whose record shows data that
+    could support no assessment says of its three percentages what the live view said ("Not
+    assessed"), not that they are "not kept": they were never shown. What the record truly does
+    not hold still says "Not kept in saved history."."""
+
+    def stored(status: str) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases["evidence_only"]["detail_view"]))
+        detail["data_quality_detail"]["provider_state"]["status"] = status
+        return {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    runs = {"unavailable": stored("UNAVAILABLE"), "ok": stored("OK")}
+    assert runs["unavailable"]["detail"]["saved_run_view"]["range"]["assessed"] is False
+    rendered = goldens.render({}, runs)["screens"]
+    texts = rendered["unavailable"]["history"]
+    block = harness._between(texts, "Saved analysis", "Model Quality")
+    assert harness._value(block, "In band (inside the decision band)") == (
+        "Not assessed (the data cannot support an assessment)"
+    )
+    assert harness._value(block, "Up (above the band)") == "Not assessed"
+    assert harness._value(block, "Down (below the band)") == "Not assessed"
+    assert harness._value(block, "Reference close (UTC)") == NOT_KEPT
+    assert decision_view.NOT_ASSESSED in block and decision_view.RANGE_MEANING not in block
+    assert not any("%" in text for text in block[: block.index("Evidence level")])
+    # The same record with usable data shows its percentages.
+    usable = harness._between(rendered["ok"]["history"], "Saved analysis", "Model Quality")
+    assert harness._value(usable, "Up (above the band)") == "39.38%"
+    assert "Not assessed" not in " ".join(usable)
+
+
 def test_a_card_without_a_view_labels_its_disposition_too(cases: dict) -> None:
     """Owner ruling S3, on the one screen no golden holds: a response without a decision view
     (an older one) still shows its disposition on the batch card, and under the same label."""
@@ -642,7 +883,10 @@ def test_the_accepted_states_keep_their_ruling_and_gain_the_gate_authority(
     view = payload["decision_view"]
     gates = view["gates"]
     assert gates == gate_kinds.build_gate_view(
-        payload["gate_result"], liquidity=payload["liquidity_state"], state=view["state"]
+        payload["gate_result"],
+        liquidity=payload["liquidity_state"],
+        state=view["state"],
+        evidence_detail=_evidence_reason(payload),
     )
     framing = {
         "accepted_claim_SYNTHETIC": gate_kinds.ACCEPTED_CLAIM_FRAMING,
@@ -703,8 +947,9 @@ SAME_AS_LIVE = (
 )
 
 
-def _gate_lines(payload: dict) -> list[str]:
-    blocks = payload["decision_view"]["gates"]["blocks"]
+def _gate_lines(payload: dict, *, saved: bool = False) -> list[str]:
+    gates = payload["decision_view"]["gates"]
+    blocks = (_as_saved(gates) if saved else gates)["blocks"]
     return [f"{block['headline']}: {block['detail']}" for block in blocks]
 
 
@@ -718,19 +963,30 @@ def test_each_active_gate_is_listed_with_its_detail_under_the_authority(
 
     summary, framing = SCENARIOS[name]
     lines = _gate_lines(cases[name])
-    assert lines and len(lines) == len(cases[name]["gate_result"]["hard_blocks"])
-    for surface in ("detail", "history"):
+    kept = _gate_lines(cases[name], saved=True)
+    assert lines and len(lines) == len(kept) == len(cases[name]["gate_result"]["hard_blocks"])
+    for surface, listed in (("detail", lines), ("history", kept)):
         texts = screens[name][surface]
         at = texts.index(summary)
-        assert texts[at : at + 2 + len(lines)] == [summary, framing, *lines], (name, surface)
+        assert texts[at : at + 2 + len(listed)] == [summary, framing, *listed], (name, surface)
     for surface in ("single", "batch"):
-        for line in lines:
+        for line in (*lines, *kept):
             assert line not in screens[name][surface], (name, surface, line)
-    # The evidence gate's own line is its fixed sentence, on every analysis it blocks.
-    fixed = "Evidence gate: Directional skill is not established for this model and timeframe."
-    assert (fixed in lines) is (
-        "SKILL_NOT_DEMONSTRATED" in cases[name]["gate_result"]["hard_blocks"]
+    # The evidence gate's own line (the exact-final review's minor m4). On a live analysis it
+    # is the backend's reason for the verdict at hand, which main showed as a key reason and
+    # the redesign had dropped: the threshold and the count are on the screen again. A reopened
+    # run does not store the verdict: it keeps the fixed sentence and says so. The two never
+    # contradict each other, and neither says anything about the market.
+    blocked = "SKILL_NOT_DEMONSTRATED" in cases[name]["gate_result"]["hard_blocks"]
+    live = f"Evidence gate: {LIVE_EVIDENCE_REASON}"
+    stored = (
+        "Evidence gate: Directional skill is not established for this model and timeframe. Its "
+        "verdict and counts are not kept in saved history."
     )
+    assert (live in lines) is blocked and (stored in kept) is blocked
+    assert live not in screens[name]["history"] and stored not in screens[name]["detail"]
+    if blocked:
+        assert _evidence_reason(cases[name]) == LIVE_EVIDENCE_REASON
 
 
 def test_the_probability_sections_own_sentence_is_in_the_authoritative_block(

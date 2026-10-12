@@ -1269,7 +1269,9 @@ def test_every_surface_defers_to_the_decision_view() -> None:
         assert directional not in view_branch
     detail = _function_text(js, "renderStructuredDetail")
     assert 'view\n          ? ["Data", decisionDataText(view.data)]' in detail
-    assert ': ["Live data", display.is_live_data ?? kept.data?.is_live_data],' in detail
+    assert (
+        ': ["Live data", keptValue(saved, display.is_live_data, kept.data?.is_live_data)],'
+    ) in detail
     assert "...legacyProbabilityRows(payload, [" not in detail
     assert '...(view ? [["Decision view", decisionDataText(view.data)]] : []),' in detail
     assert "renderDecisionSynthesis(payload.decision_synthesis, payload)" in detail

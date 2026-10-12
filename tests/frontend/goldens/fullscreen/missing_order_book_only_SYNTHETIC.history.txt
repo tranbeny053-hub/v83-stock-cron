@@ -127,12 +127,12 @@ n/a
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
 n/a
 Cross-provider state
