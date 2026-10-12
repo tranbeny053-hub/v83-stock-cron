@@ -142,6 +142,7 @@ _FUNCTIONS = (
     "decisionViewOf",
     "gateView",
     "gateViewOf",
+    "gateAlertClass",
     "hasGateFraming",
     "gateFramingBlocks",
     "gateDetailList",
@@ -150,6 +151,7 @@ _FUNCTIONS = (
     "updatePersistenceStatus",
 )
 _CONSTANTS = (
+    "GATE_ALERT_CLASSES",
     "NOT_ASSESSED_TEXT",
     "VENUE_LABELS",
     "SAVE_RECEIPT_SCHEMA_VERSION",
@@ -515,7 +517,7 @@ three are no.
 # horizonCard). Each is (the words the card uses for it, a literal of horizonCard that renders it,
 # whether that literal sits in horizonCard's own `if (view)` branch or outside both branches).
 OUTSIDE_THE_VIEW = (
-    ("a BLOCK banner naming the check that blocks", '"matrix-block-banner"', False),
+    ("a BLOCK banner naming the check that blocks", "`matrix-block-banner ${alert}`", False),
     ("a role label", "displayRole(role.role)", False),
     ("a role sentence", "role.plainEnglish", True),
     ("a Signal heat row", '"Signal heat (not risk)"', True),

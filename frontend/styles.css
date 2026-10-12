@@ -11,6 +11,7 @@
   --warning: #ffd166;
   --danger: #ff4d4d;
   --gold: #c8a96a;
+  --safety: #a9b8ff;
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }
 
@@ -1500,4 +1501,125 @@ pre {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+}
+
+/* The Decision view's own lines (the Class-B redesign): a headline, its sentence, then the gate
+   summary with its framing as one group, then the list of active gates. Layout only: every word
+   is the backend's, in the backend's order. */
+.decision-headline {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.decision-detail {
+  margin: 0 0 12px;
+  color: color-mix(in srgb, var(--text) 78%, var(--muted));
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* The summary and its framing share one bar down their left edge: they read as one group. */
+.decision-gates,
+.decision-gate-framing {
+  margin: 0;
+  border-left: 3px solid var(--line);
+  padding: 4px 0 4px 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.decision-gates {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.decision-gate-framing {
+  margin-bottom: 12px;
+  color: var(--muted);
+}
+
+.decision-gate-list {
+  margin: 0 0 12px;
+  padding-left: 22px;
+  list-style: disc outside;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.decision-gate-list li {
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+}
+
+.decision-gate-list li:last-child {
+  margin-bottom: 0;
+}
+
+.detail-kv dt,
+.detail-kv dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Alert styles (owner ruling X2). The class is picked from the kinds the backend's gate view
+   names (app.js gateAlertClass). Each is told apart without colour, by its border:
+   - neutral (the evidence gate alone; a gate result that cannot be read; no view): a thin solid
+     grey border. Not red, not amber, no glow;
+   - risk (a risk gate with a measured finding): the thick solid red border;
+   - safety/data (a system or data gate and no risk gate): a thick dashed border of its own hue. */
+.matrix-block-banner.gate-alert-neutral {
+  border: 1px solid var(--line);
+  background: rgba(142, 164, 177, 0.08);
+  box-shadow: none;
+}
+
+.matrix-block-banner.gate-alert-safety {
+  border: 2px dashed var(--safety);
+  background: rgba(169, 184, 255, 0.1);
+  box-shadow: none;
+}
+
+.decision-badge-block.gate-alert-neutral {
+  border: 1px solid var(--muted);
+  color: var(--text);
+  background: rgba(142, 164, 177, 0.08);
+}
+
+.decision-badge-block.gate-alert-safety {
+  border: 1px dashed var(--safety);
+  color: var(--safety);
+  background: rgba(169, 184, 255, 0.1);
+}
+
+.actionability-block.gate-alert-neutral {
+  border: 1px solid var(--muted);
+  background: rgba(5, 8, 11, 0.72);
+  box-shadow: none;
+}
+
+.actionability-block.gate-alert-safety {
+  border: 2px dashed var(--safety);
+  background: rgba(169, 184, 255, 0.06);
+  box-shadow: none;
+}
+
+.decision-gates.gate-alert-neutral,
+.decision-gate-framing.gate-alert-neutral {
+  border-left: 3px solid var(--line);
+}
+
+.decision-gates.gate-alert-risk,
+.decision-gate-framing.gate-alert-risk {
+  border-left: 3px solid var(--danger);
+}
+
+.decision-gates.gate-alert-safety,
+.decision-gate-framing.gate-alert-safety {
+  border-left: 3px dashed var(--safety);
 }

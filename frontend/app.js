@@ -475,18 +475,42 @@ function savedRunViewOf(detailView) {
   return saved && saved.schema_version === "saved_run_view.v1" ? saved : null;
 }
 
+// How a banner, a pill or a status that restates the gate result is styled (owner ruling X2):
+// one CSS class, picked from the kinds the backend's gate view names and from nothing else.
+// - a risk gate with a measured finding: the risk style;
+// - a system or data gate and no risk gate: the safety/data style;
+// - anything else: the neutral style. That is the evidence gate alone, a reopened run's liquidity
+//   gate whose measurement the record does not hold, a gate result that cannot be read, and an
+//   analysis without a view. The neutral style is never the risk one.
+// Colour is a signal too, so it is the backend's kinds that choose it. This words nothing and
+// changes no token: the text on a banner or a pill is what it was.
+const GATE_ALERT_CLASSES = {
+  RISK: "gate-alert-risk",
+  SYSTEM_OR_DATA: "gate-alert-safety",
+  NEUTRAL: "gate-alert-neutral",
+};
+
+function gateAlertClass(gates) {
+  const kinds = Array.isArray(gateView(gates)?.kinds) ? gates.kinds : [];
+  if (kinds.includes("RISK")) return GATE_ALERT_CLASSES.RISK;
+  if (kinds.includes("SYSTEM_OR_DATA")) return GATE_ALERT_CLASSES.SYSTEM_OR_DATA;
+  return GATE_ALERT_CLASSES.NEUTRAL;
+}
+
 // The gate authority as every surface shows it: the backend's summary, and directly under it the
 // backend's framing of that summary. Both sentences are the backend's own, for every state
-// (detail/gate_kinds.py); nothing here words a framing, and the two are never shown apart.
+// (detail/gate_kinds.py); nothing here words a framing, and the two are never shown apart. They
+// share one alert class, so the stylesheet draws them as one group.
 function hasGateFraming(gates) {
   return Boolean(gates && backendText(gates.summary) && backendText(gates.framing));
 }
 
 function gateFramingBlocks(gates) {
   if (!hasGateFraming(gates)) return [];
+  const alert = gateAlertClass(gates);
   return [
-    textBlock("p", gates.summary, "decision-gates"),
-    textBlock("p", gates.framing, "decision-gate-framing"),
+    textBlock("p", gates.summary, `decision-gates ${alert}`),
+    textBlock("p", gates.framing, `decision-gate-framing ${alert}`),
   ];
 }
 
@@ -1003,8 +1027,10 @@ function horizonCard(payload) {
 
   if (blocking) {
     const blockBanner = document.createElement("div");
-    blockBanner.className = "matrix-block-banner";
-    blockBanner.append(decisionBadge("BLOCK", "block"));
+    // The banner restates the gate result: its style is the gate view's kind, not a fixed red.
+    const alert = gateAlertClass(gateViewOf(payload));
+    blockBanner.className = `matrix-block-banner ${alert}`;
+    blockBanner.append(decisionBadge("BLOCK", "block", alert));
     // With a view, the banner names the check that blocks, and the view below it carries the
     // gate summary with its framing: the summary is never shown apart from its framing.
     const viewLeads = Boolean(decisionViewOf(payload));
@@ -1628,9 +1654,9 @@ function textBlock(tagName, text, className = "") {
   return node;
 }
 
-function decisionBadge(text, tone = "neutral") {
-  const badge = textBlock("span", text, `decision-badge decision-badge-${tone}`);
-  return badge;
+function decisionBadge(text, tone = "neutral", alert = "") {
+  const classes = `decision-badge decision-badge-${tone}${alert ? ` ${alert}` : ""}`;
+  return textBlock("span", text, classes);
 }
 
 function orderedActionability(items) {
@@ -1668,10 +1694,15 @@ function decisionStatusTone(status) {
 function renderActionabilityRow(item = {}, payload = {}) {
   const status = backendText(item.status) || "UNKNOWN";
   const row = document.createElement("article");
-  row.className = `actionability-row actionability-${decisionStatusTone(status)}`;
+  // A check that blocks restates the gate result: it takes the gate view's alert class. Every
+  // other status keeps its own style.
+  const alert = status === "BLOCK" ? gateAlertClass(gateViewOf(payload)) : "";
+  row.className = `actionability-row actionability-${decisionStatusTone(status)}${
+    alert ? ` ${alert}` : ""
+  }`;
   const header = document.createElement("div");
   header.className = "actionability-row-header";
-  header.append(decisionBadge(status, decisionStatusTone(status)));
+  header.append(decisionBadge(status, decisionStatusTone(status), alert));
   header.append(textBlock("strong", backendText(item.label) || backendText(item.key) || "Check"));
   if (Number.isFinite(item.priority)) {
     header.append(textBlock("span", `#${item.priority}`, "actionability-priority"));
@@ -2154,7 +2185,7 @@ function renderDecisionViewSection(payload, view) {
   const gates = gateViewOf(payload);
   return section("Decision view", [
     textBlock("p", view.headline, "decision-headline"),
-    textBlock("p", view.detail),
+    textBlock("p", view.detail, "decision-detail"),
     ...gateFramingBlocks(gates),
     ...gateDetailList(gates),
     keyValueTable(decisionViewRows(payload, view)),
