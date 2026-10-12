@@ -29,6 +29,7 @@ import pytest
 
 from crypto_probability_engine.detail import saved_run_view
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
+from scripts.ux_comprehension import card
 from tests.fixtures.market_data import FIXED_NOW
 
 harness = goldens.harness
@@ -257,6 +258,84 @@ def test_a_screen_with_nothing_to_read_is_neutral_and_never_the_risk_style(
     assert unreadable["kinds"] == ["EVIDENCE", "NOT_READABLE"]
     alerts = [e["alert"] for e in drawn["liquidity_not_readable"]["history"] if e["alert"]]
     assert alerts == [[NEUTRAL], [NEUTRAL]], "the summary and its framing, neutral"
+
+
+def test_the_class_is_read_from_the_kinds_and_risk_wins_over_safety_over_evidence() -> None:
+    """Owner ruling X2: "more than one kind: risk wins over safety/data, which wins over
+    evidence". The function itself, cut out of app.js and asked about every combination; a gate
+    view of a version this script does not know, or one that is no gate view, is neutral."""
+
+    source = (ROOT / "frontend" / "app.js").read_text(encoding="utf-8")
+    code = "\n".join(
+        card._extract(source, name) for name in ("GATE_ALERT_CLASSES", "gateView", "gateAlertClass")
+    )
+    asked = {
+        "evidence": ["EVIDENCE"],
+        "none": [],
+        "not_readable": ["EVIDENCE", "NOT_READABLE"],
+        "risk": ["RISK"],
+        "risk_and_evidence": ["EVIDENCE", "RISK"],
+        "safety": ["SYSTEM_OR_DATA"],
+        "safety_and_evidence": ["EVIDENCE", "SYSTEM_OR_DATA"],
+        "risk_and_safety": ["RISK", "SYSTEM_OR_DATA"],
+        "all_three": ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"],
+        "risk_and_not_readable": ["NOT_READABLE", "RISK"],
+        "an_unknown_kind": ["SOMETHING_NEW"],
+    }
+    views = {
+        name: {"schema_version": "gate_view.v1", "kinds": kinds} for name, kinds in asked.items()
+    }
+    views["another_version"] = {"schema_version": "gate_view.v2", "kinds": ["RISK"]}
+    views["no_version"] = {"kinds": ["RISK"]}
+    views["kinds_not_a_list"] = {"schema_version": "gate_view.v1", "kinds": "RISK"}
+    views["nothing"] = None
+    script = (
+        f"{code}\nconst views = {json.dumps(views)};\n"
+        "const out = Object.fromEntries(Object.entries(views).map(([n, v]) => "
+        "[n, gateAlertClass(v)]));\nprocess.stdout.write(JSON.stringify(out));"
+    )
+    done = subprocess.run(  # noqa: S603 - node on a script built here, read on stdin
+        [harness.NODE, "-"],
+        input=script,
+        capture_output=True,
+        encoding="utf-8",
+        timeout=60,
+        check=True,
+    )
+    assert json.loads(done.stdout) == {
+        "evidence": NEUTRAL,
+        "none": NEUTRAL,
+        "not_readable": NEUTRAL,
+        "risk": RISK,
+        "risk_and_evidence": RISK,
+        "safety": SAFETY,
+        "safety_and_evidence": SAFETY,
+        "risk_and_safety": RISK,
+        "all_three": RISK,
+        "risk_and_not_readable": RISK,
+        "an_unknown_kind": NEUTRAL,
+        "another_version": NEUTRAL,
+        "no_version": NEUTRAL,
+        "kinds_not_a_list": NEUTRAL,
+        "nothing": NEUTRAL,
+    }
+
+
+def test_a_risk_gate_beside_a_system_gate_is_drawn_in_the_risk_style(reopened: dict) -> None:
+    """The same precedence on real screens: a measured tail-risk breach beside the kill switch
+    (SYNTHETIC), and beside an order book the measure refuses (reachable today)."""
+
+    both = {
+        "tail_and_kill_SYNTHETIC": goldens._analysis(tail=True, kill=True),
+        "tail_and_unusable_book": goldens._analysis(tail=True, book="unusable"),
+    }
+    for payload in both.values():
+        assert payload["decision_view"]["gates"]["kinds"] == ["EVIDENCE", "RISK", "SYSTEM_OR_DATA"]
+    drawn = styled(both, {})
+    for name, surfaces in drawn.items():
+        for surface, elements in surfaces.items():
+            alerts = {tuple(element["alert"]) for element in elements if element["alert"]}
+            assert alerts == {(RISK,)}, (name, surface, alerts)
 
 
 def _rules(css: str) -> dict[str, str]:

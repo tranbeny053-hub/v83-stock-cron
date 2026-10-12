@@ -557,6 +557,19 @@ def test_a_stored_liquidity_state_the_measure_writes_is_read_as_it_is() -> None:
         assert frontend_display.stored_liquidity_state(state) is state, state
     for state in (None, 5, "OK", [], {}, {"status": "OK"}, {"spread_frac": 0.01}):
         assert frontend_display.stored_liquidity_state(state) is unreadable, state
+    # A state with no spread is the measure's only with the measure's own status beside it.
+    prices = {"best_bid": 100.0, "best_ask": 400.0}
+    for state in (
+        {"spread_frac": None},
+        {"spread_frac": None, **prices},
+        {"status": "STALE", "spread_frac": None},
+        {"status": "OK", "spread_frac": None, **prices},
+        {"status": None, "spread_frac": None},
+    ):
+        assert frontend_display.stored_liquidity_state(state) is unreadable, state
+    no_book = {"status": "DEGRADED", "spread_frac": None}
+    for state in (no_book, {**no_book, **prices}):
+        assert frontend_display.stored_liquidity_state(state) is state, state
     gate = {"hard_blocks": ["LIQUIDITY_NOT_VIABLE"], "hard_gate_passed": False}
     # The live builder is given the measure's state, never the stand-in: with no state at all it
     # still reads as before (no measurement: a data gate), so a live analysis is unaffected.

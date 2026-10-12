@@ -667,7 +667,17 @@ def test_a_reopened_runs_data_sections_never_read_na_for_a_value_its_screen_show
         "quality_lost": stored(lambda d: d.pop("data_quality_detail")),
         "another_version": stored(lambda d: None, version="saved_run_view.v2"),
     }
+    # A row's own value stands where the screen has one: a response without a view that still
+    # carries its data quality, read beside a saved view that names another source.
+    own = {k: v for k, v in cases["evidence_only"].items() if k != "decision_view"}
+    other = stored(lambda d: d["data_quality_detail"]["data_quality"].update(data_source="OTHER"))
+    assert other["detail"]["saved_run_view"]["data"]["data_source"] == "OTHER"
+    damaged["own_value"] = {"row": own, "detail": other["detail"]}
     rendered = goldens.render({}, damaged)["screens"]
+    _, quality, provider = sections(rendered["own_value"]["history"])
+    assert harness._value(quality, "Data source") == own["data_quality"]["data_source"]
+    assert own["data_quality"]["data_source"] == "OKX_PUBLIC"
+    assert harness._value(provider, "Active provider") == own["provider_state"]["active_provider"]
     overview, quality, provider = sections(rendered["quality_lost"]["history"])
     for rows, label in (
         (overview, "Data source"),
