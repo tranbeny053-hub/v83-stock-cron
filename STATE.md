@@ -1,11 +1,16 @@
 # STATE
 
-Updated: 2026-10-14 (**THE RELEASE-PREP WORK IS PUBLISHED (#258): THE FIVE MINORS OF #256, ALERT STYLES BY GATE KIND,
+Updated: 2026-10-15 (**THE RELEASE-PREP WORK IS PUBLISHED (#258): THE FIVE MINORS OF #256, ALERT STYLES BY GATE KIND,
 THE DECISION VIEW'S LAYOUT, THE CHANGELOG, AND REOPENED RUNS THAT SAY WHAT THEIR RECORD HOLDS. IT IS NOT RELEASED.
 THE WORDING IS PROVISIONAL AND THE REQUIRED UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION
 IS REACHABLE. NOTHING IS DEPLOYED.**
 - The owner (verbatim below) authorized the T3, GitHub only, for the exact head and tree, with STATE last: prepared
   under that T3, pushed under a separate one.
+- STANDING RULING (the owner, 2026-10-15, verbatim below): UCPE execution optimization. The critical path to full
+  product completion is optimized for elapsed time, owner effort, model tokens and rework, with zero reduction in
+  quality, product scope, security, testing, evidence integrity, rollback or acceptance. Already-authorized safe
+  T0–T2 work continues automatically; it stops only at genuine owner, T3, T4, protected or security boundaries, or
+  causal blockers. The complete quant roadmap stays in scope.
 - #258 → main 4b8f374d: a merge commit on feat/p7p-release-prep-news-state @ 4529b76 (tree 69b4d530); 10 commits on
   main ab4b43d7; 45 files, +2316/-288.
   - Checked before the merge: the pull request's head, base, 10 commits and 45 files, and every added and removed
@@ -45,15 +50,16 @@ IS REACHABLE. NOTHING IS DEPLOYED.**
   f408417f…, validated 2026-10-14). Two successor threads were graded QUALIFIED against its key on 2026-10-14; for
   the second, the live anchors were reconciled with no drift.
   - Corrected under the owner's T0 of 2026-10-14 (verbatim below). The succession is governed by the owner's
-    authority of 2026-09-28, which that T0 preserves. Never recorded here before, it is in the folder
-    .work/succession/UCPE_SUCCESSOR_HANDOFF_V1/:
-    - 02_AUTHORITY_DOCTRINE_OWNER_UX_AND_ROUTING.md, Appendix A1 (the plan ruling, verbatim) and Appendix A2 (the
-      commissioning instruction's purpose and succession clauses, verbatim);
-    - 08_SUCCESSOR_BOOTSTRAP_QUALIFICATION_AND_RETIREMENT.md, Parts B and C: the protocol built on them (SQ1 to SQ6,
-      six retirement criteria, the retirement record).
+    authority of 2026-09-28, which that T0 preserves. Never recorded here verbatim before, it is in the folder
+    .work/succession/UCPE_SUCCESSOR_HANDOFF_V1/ (revision 2; archive sha256 d5176da5…):
+    - 02_AUTHORITY_DOCTRINE_OWNER_UX_AND_ROUTING.md (sha256 d5fcac0c…), Appendix A1 (the plan ruling, verbatim) and
+      Appendix A2 (the commissioning instruction's purpose and succession clauses, verbatim);
+    - 08_SUCCESSOR_BOOTSTRAP_QUALIFICATION_AND_RETIREMENT.md (sha256 42e80e6a…), Parts B and C: the protocol built on
+      them (SQ1 to SQ6, six retirement criteria, the retirement record).
   - The second successor's gates, as the owner records them (Claude saw no audit): SQ1 to SQ4 PASS; SQ5 blind (the
     live-boundary adjudication) PASS, its milestone PENDING; SQ6 clean streak 3/3, its independent next-boundary
-    choice PENDING. As first prepared (d20522e), this record said SQ1 to SQ6 were PENDING.
+    choice PENDING. SQ5 and SQ6 therefore stay PENDING overall (the protocol's statuses are PENDING, PASS and FAIL).
+    As first prepared (d20522e), this record said SQ1 to SQ6 were PENDING.
   - The owner's retirement consent is conditional: only when every retirement criterion is met, RETIREMENT_RECOMMENDED
     is stated (criterion 5) and the retirement record is verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
 - Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
@@ -61,6 +67,16 @@ IS REACHABLE. NOTHING IS DEPLOYED.**
   H2/F3/§5A change, no A4C reseal.
 - This record is the batch's last publish. Before it: #258.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-15), verbatim — a standing ruling (execution optimization); a child head and a T3 package:**
+```text
+CONTINUE CURRENT — Opus HIGH. Finish the independent review of exact STATE@785ad1d5 against main@4b8f374d without modifying the head under review. If PASS, create a NEW STATE-only child head preserving the owner's ruling below verbatim. Run full gates, scanners and fresh independent review of the cumulative diff; prepare one exact-head T3 package. HOLD on material findings or drift. No push/T3/T4/HF/production/protected access. No Codex or paid API fallback.
+
+OWNER STANDING RULING — UCPE EXECUTION OPTIMIZATION
+From now on, optimize the entire critical path to full UCPE product completion: minimum elapsed time, owner effort, model tokens and rework, with **zero reduction** in quality, product scope, security, testing, evidence integrity, rollback or acceptance.
+Before implementation, identify completion criteria, dependencies, root causes and all related edge cases. Batch independent safe tasks in up to two lanes; integrate, run full gates and review the exact combined result. No endless micro-patching: if a defect class recurs, stop the repetitive repair loop, analyze its root cause and escalate the actual architecture/scope boundary where necessary. Never waive required findings or hide defects.
+Continue all already-authorized safe T0–T2 work automatically; stop only at genuine owner/T3/T4/protected/security boundaries or causal blockers. Measure progress by accepted product capabilities and closed milestones, not commits, tests or arbitrary percentages. Keep the complete quant roadmap in scope.
+Preserve this owner ruling in the next governed STATE update without altering an exact head currently under review. First finish the independent review of STATE@785ad1d5, then follow the exact-head T3 process if eligible. No Codex or paid API fallback.
+```
 - **The owner (2026-10-14), verbatim — a T0: the succession gates and the owner's conditional retirement consent:**
 ```text
 CONTINUE CURRENT (Opus HIGH), /Users/kha/Documents/Kha-app/UCPE. Verify main@4b8f374d and LOCAL STATE@d20522ec; HOLD on drift. T0 LOCAL-only correct SQ1–4 PASS, SQ5 blind PASS/milestone PENDING, SQ6 3/3/boundary PENDING, and owner's conditional retirement consent (all criteria, RETIREMENT_RECOMMENDED, verified record); preserve 2026-09-28 owner authority and verbatim history. New STATE-only head, full gate/3 scanners, fresh diff review. No push/T3/T4/HF/prod/protected access.
@@ -2571,6 +2587,9 @@ LOOP_STATE=THE RELEASE-PREP WORK IS PUBLISHED (#258, 2026-10-14), under the owne
   - Corrected under the owner's T0 of 2026-10-14 (verbatim above), LOCAL only and STATE.md only: the GPT
     succession's gates and the owner's conditional retirement consent; the 2026-09-28 authority and the verbatim
     history are kept.
+  - 2026-10-15: the owner's standing ruling on execution (verbatim above), recorded in a STATE-only child of 785ad1d
+    after that head's independent review (PASS, no finding above NOTE); three of its notes are applied there (the
+    words "verbatim before", SQ5 and SQ6 PENDING overall, the package's digests). 785ad1d itself is unchanged.
   - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom); the GPT hand-over bundle
     .work/p7/gpt_handoff_20261012 is a snapshot of 2026-10-12 and predates #258.
   Before it: THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
@@ -5952,11 +5971,11 @@ LAST_GREEN_SHA=4b8f374d (main, #258: the release-prep work).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-14, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-15, scanners 3/3 each:
   - chore/state-p7p-release-prep-published's tree (main 4b8f374d, whose tree is the reviewed head's, and this
     record): 7651.
-  - Before the merge: feat/p7p-release-prep-news-state @ 4529b76: 7651 (the implementer's, Claude's and the
-    reviewer's run).
+  - Before the merge (2026-10-14): feat/p7p-release-prep-news-state @ 4529b76: 7651 (the implementer's, Claude's and
+    the reviewer's run).
   Before it: PASS 2026-10-12, scanners 3/3 each:
   - main eb70f7f4, locally, and chore/state-p7p-redesign-published's tree (that main and this record): 7583.
   - Before the merge: feat/p7p-class-b-redesign @ 4398a01: 7583.
@@ -6239,7 +6258,10 @@ LAST_VERIFY=PASS 2026-10-14, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-14). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+CODEX_PENDING=NONE (2026-10-15). No Codex or paid API fallback (the owner, 2026-10-15): Claude implements,
+  tests and reviews directly (MODEL SUBSTITUTION); fresh separate-context Claude reviews; no GPT consultation. Model:
+  claude-opus-5-5.
+  Before it: NONE (2026-10-14). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); four fresh separate-context Claude reviews, one per pass; no paid fallback; no GPT consultation
   (grading the successor answers the owner attached was not one). Model: claude-opus-5-5.
   Before it: NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
@@ -6374,7 +6396,7 @@ CODEX_PENDING=NONE (2026-10-14). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-14). Nothing is urgent; production is unchanged and safe as it is.
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-15). Nothing is urgent; production is unchanged and safe as it is.
   Main 4b8f374d is NOT released.
   0. The separate T3 for this STATE record (the owner's T3 of 2026-10-14 had it prepared only): the branch
      chore/state-p7p-release-prep-published, STATE.md only, on main 4b8f374d; its checks; merge commit only; main's
@@ -6389,12 +6411,13 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-14). Nothing is urgent; produ
   4. Hash acceptance at T4 (G5); the UOR side must be told.
   5. T4, the release chain (docs/runbooks/RELEASE.md, not started): only after a UX PASS (X6), on the owner's word.
   - The GPT succession, under the owner's 2026-09-28 authority (preserved 2026-10-14): SQ1 to SQ4 PASS; SQ5 blind
-    PASS, its milestone PENDING; SQ6 3/3, its independent next-boundary choice PENDING (the owner's record). The
-    owner's retirement consent is conditional: every criterion met, RETIREMENT_RECOMMENDED stated, the retirement
-    record verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
+    PASS, its milestone PENDING; SQ6 3/3, its independent next-boundary choice PENDING (the owner's record; SQ5 and
+    SQ6 stay PENDING overall). The owner's retirement consent is conditional: every criterion met,
+    RETIREMENT_RECOMMENDED stated, the retirement record verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
   - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
   - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
     the four acceptance blockers. Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing ruling (the owner, 2026-10-15, verbatim above): UCPE execution optimization.
   - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
     3); DP-D's export limits stay documented and never proven.
   Before it: ONE CONSOLIDATED RELEASE-READINESS BOUNDARY IS AT THE OWNER (2026-10-12). Nothing is urgent; production
