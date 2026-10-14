@@ -19,10 +19,18 @@ and words none of its own.
 It is a pure function of facts the analysis already holds: the gate result, and the liquidity state
 the liquidity gate judged. Every saved run stores both. So the framing of a reopened run is built
 when it is read (detail/saved_run_view.py), never stored: an old run and a new one read the same,
-and a wording change needs no stored text rewritten. For the same reason the evidence gate's own
-entry is a fixed sentence, never the skill verdict or its counts, which a saved run does not
-store. No field here is named with "code", "key", "hash" or "token", which utils/sanitize.py masks
-in a stored payload.
+and a wording change needs no stored text rewritten.
+
+Two things a saved run does not store, and what its framing says instead:
+- the skill verdict and its counts. A live analysis's evidence-gate entry carries the backend's
+  own reason sentence for the verdict at hand (`evidence_detail`); a reopened run's carries the
+  fixed sentence and says that the verdict and its counts are not kept;
+- a liquidity state it can read. When the stored state is absent or is not one the measure
+  writes, the liquidity gate's entry is of the kind NOT_READABLE: it says only that the record
+  holds no readable measurement, and asserts neither a cause nor a finding.
+
+No field here is named with "code", "key", "hash" or "token", which utils/sanitize.py masks in a
+stored payload.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from crypto_probability_engine.detail.frontend_display import (
+    STORED_LIQUIDITY_NOT_READABLE,
     blocking_reason,
     liquidity_was_measured,
 )
@@ -46,6 +55,17 @@ EVIDENCE_GATE_COPY = "directional skill is not established for this model and ti
 # The evidence gate's own entry in the list of active gates: its name, and its fixed sentence.
 EVIDENCE_GATE_HEADLINE = "Evidence gate"
 EVIDENCE_GATE_DETAIL = "Directional skill is not established for this model and timeframe."
+# A reopened run's evidence-gate entry: the fixed sentence, and that the reason a live analysis
+# gave beside it is not in the record (the exact-final review's minor m4). PROVISIONAL wording.
+SAVED_EVIDENCE_GATE_DETAIL = (
+    f"{EVIDENCE_GATE_DETAIL} Its verdict and counts are not kept in saved history."
+)
+# The summary's part for a liquidity gate whose stored measurement a reopened run cannot read
+# (minor m2): the gate is named, and nothing is said about why it fired. PROVISIONAL wording.
+LIQUIDITY_NOT_READABLE_SUMMARY = (
+    "The liquidity gate is active: this saved record does not hold a readable liquidity "
+    "measurement."
+)
 NOT_FORCED_BY_A_RISK_GATE = "not forced by a risk gate"
 UNNAMED_HARD_GATE = "One or more hard gates are active."
 NO_HARD_GATE = "No hard gate is active."
@@ -84,15 +104,18 @@ def _kind(block: str, liquidity: Any) -> str:
     if block in EVIDENCE_GATE_BLOCKS:
         return "EVIDENCE"
     if block == LIQUIDITY_BLOCK:
+        if liquidity is STORED_LIQUIDITY_NOT_READABLE:
+            return "NOT_READABLE"
         return "RISK" if liquidity_was_measured(liquidity) else "SYSTEM_OR_DATA"
     return "RISK" if block in RISK_GATE_BLOCKS else "SYSTEM_OR_DATA"
 
 
-def _copy(block: str, liquidity: Any) -> tuple[str, str]:
-    """The headline and the detail sentence of one active block."""
+def _copy(block: str, liquidity: Any, evidence_detail: str | None = None) -> tuple[str, str]:
+    """The headline and the detail sentence of one active block. The evidence gate's sentence is
+    the one its caller holds for it (`evidence_detail`), else the fixed one."""
 
     if block in EVIDENCE_GATE_BLOCKS:
-        return EVIDENCE_GATE_HEADLINE, EVIDENCE_GATE_DETAIL
+        return EVIDENCE_GATE_HEADLINE, evidence_detail or EVIDENCE_GATE_DETAIL
     return blocking_reason(block, liquidity)
 
 
@@ -124,14 +147,23 @@ def elevated_risk_is_a_risk_finding(
 ) -> bool:
     """Whether the score's ELEVATED_RISK_AVOID is a risk reading.
 
-    It is when a risk gate with a measured finding forced it, or when no gate forced it and the
-    score produced it. It is not when the evidence gate forced it, or the liquidity gate on missing
-    data: both overwrite the score's own disposition without a finding about the market.
+    It is when a risk gate with a measured finding stands behind it, or when no gate forced it
+    and the score produced it (no hard gate is active and the gates recorded no forced token). It
+    is not when the evidence gate forced it, or the liquidity gate on missing data: both
+    overwrite the score's own disposition without a finding about the market.
     """
 
     if str(score.get("disposition") or "") != ELEVATED_RISK_TOKEN:
         return False
-    forced = gate.get("skill_guard_applied") is True or gate.get("risk_guard_applied") is True
+    # A gate forced the token when the gates say so in any of their own ways: a guard flag, the
+    # token they recorded as forced, or simply a hard gate that is active. A stored record that
+    # lost its flags is still not read as the score's own reading (minor m1).
+    forced = (
+        gate.get("skill_guard_applied") is True
+        or gate.get("risk_guard_applied") is True
+        or bool(gate.get("forced_score_disposition"))
+        or hard_gate_active(gate)
+    )
     return risk_gate_active(gate, liquidity) or not forced
 
 
@@ -166,6 +198,8 @@ def hard_gate_summary(gate: Mapping[str, Any], liquidity: Any) -> str:
         parts.append(f"A risk gate is active: {_names(risk, liquidity)}.")
     if other:
         parts.append(f"A system or data gate is active: {_names(other, liquidity)}.")
+    if _of_kind(gate, liquidity, "NOT_READABLE"):
+        parts.append(LIQUIDITY_NOT_READABLE_SUMMARY)
     if evidence and parts:
         parts.append(f"The evidence gate is active too: {EVIDENCE_GATE_COPY}.")
     elif evidence:
@@ -188,10 +222,16 @@ def gate_framing(gate: Mapping[str, Any], liquidity: Any, state: str | None = No
 
 
 def build_gate_view(
-    gate: Mapping[str, Any], *, liquidity: Any = None, state: str | None = None
+    gate: Mapping[str, Any],
+    *,
+    liquidity: Any = None,
+    state: str | None = None,
+    evidence_detail: str | None = None,
 ) -> dict[str, Any]:
     """The gate framing of one analysis: a pure function of its gate result, the liquidity state
-    its liquidity gate judged, and the decision view's state where there is one."""
+    its liquidity gate judged, the decision view's state where there is one, and the sentence
+    its caller holds for the evidence gate's own entry (a live analysis: the backend's reason for
+    the verdict at hand; a reopened run: that the verdict is not kept)."""
 
     blocks = hard_blocks(gate)
     return {
@@ -202,8 +242,8 @@ def build_gate_view(
             {
                 "block": block,
                 "kind": _kind(block, liquidity),
-                "headline": _copy(block, liquidity)[0],
-                "detail": _copy(block, liquidity)[1],
+                "headline": _copy(block, liquidity, evidence_detail)[0],
+                "detail": _copy(block, liquidity, evidence_detail)[1],
             }
             for block in blocks
         ],

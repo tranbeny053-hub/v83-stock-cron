@@ -29,7 +29,7 @@ from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant import pipeline
 from crypto_probability_engine.utils.sanitize import sanitize_for_export
 from tests.api.test_analysis_endpoints import login, make_client
-from tests.fixtures.market_data import FIXED_NOW, make_snapshot
+from tests.fixtures.market_data import FIXED_NOW, make_order_book, make_snapshot
 
 NO_SKILL = {"verdict": "INSUFFICIENT_EVIDENCE", "n": 0, "observed_directional_rate": None}
 SKILL = {"verdict": "SKILL_DEMONSTRATED", "n": 400, "observed_directional_rate": 0.6}
@@ -111,7 +111,21 @@ def test_a_saved_run_reads_the_gate_authority_its_live_analysis_read(
         payload = _analysis(**facts)
         saved = _read(payload)
         # The whole gate view: kinds, blocks with their detail sentences, summary and framing.
-        assert saved["gates"] == payload["decision_view"]["gates"], facts
+        # One entry differs, as it must (minor m4): the evidence gate's. The live analysis holds
+        # the verdict and gives the backend's reason for it; the record does not store the
+        # verdict, so the reopened run gives the fixed sentence and says so.
+        live = payload["decision_view"]["gates"]
+        for mine, theirs in zip(saved["gates"]["blocks"], live["blocks"], strict=True):
+            if mine["kind"] != "EVIDENCE":
+                assert mine == theirs, facts
+                continue
+            assert {**mine, "detail": None} == {**theirs, "detail": None}, facts
+            assert mine["detail"] == gate_kinds.SAVED_EVIDENCE_GATE_DETAIL, facts
+            reasons = payload["frontend_display"]["blocking_reasons"]
+            (reason,) = [entry for entry in reasons if entry["code"] == "SKILL_NOT_DEMONSTRATED"]
+            assert theirs["detail"] == reason["detail"], "the live entry is the backend's reason"
+        rest = {key: value for key, value in saved["gates"].items() if key != "blocks"}
+        assert rest == {key: value for key, value in live.items() if key != "blocks"}, facts
         assert saved["gates_note"] is None
         # The same-session copy (not sanitized) reads the same as the stored copy.
         held = saved_run_view.attach_saved_run_view(payload["detail_view"])
@@ -256,6 +270,44 @@ DAMAGED_RECORDS = {
     "probability_absent": lambda d: d.pop("probability_detail"),
     "brief_absent": lambda d: d.pop("decision_brief"),
     "gate_absent": lambda d: d.pop("invalidation_detail"),
+    # Minor m1 (the exact-final review's three shapes): the record lost its guard flags, and in
+    # two of them the stored action is the forced token itself.
+    "m1_evidence_block_action_is_the_token_no_flags": lambda d: d.__setitem__(
+        "invalidation_detail",
+        {
+            "hard_gate_passed": False,
+            "hard_blocks": ["SKILL_NOT_DEMONSTRATED"],
+            "action": "ELEVATED_RISK_AVOID",
+        },
+    ),
+    "m1_passed_no_flags_forced_token_still_stored": lambda d: d.__setitem__(
+        "invalidation_detail",
+        {
+            "hard_gate_passed": True,
+            "hard_blocks": [],
+            "action": "NO_TRADE",
+            "forced_score_disposition": "ELEVATED_RISK_AVOID",
+        },
+    ),
+    "m1_unmeasured_liquidity_block_action_is_the_token_no_flags": lambda d: (
+        d.__setitem__(
+            "invalidation_detail",
+            {
+                "hard_gate_passed": False,
+                "hard_blocks": ["LIQUIDITY_NOT_VIABLE"],
+                "action": "ELEVATED_RISK_AVOID",
+            },
+        ),
+        d["liquidity_execution_detail"].__setitem__(
+            "liquidity_state",
+            {
+                "status": "DEGRADED",
+                "spread_frac": None,
+                "top_depth_quote": 0.0,
+                "warning": "Order book unavailable.",
+            },
+        ),
+    ),
     # A stored gate result that does not say whether the gates passed (the re-review's minor 1):
     # the rest of the record, its score detail among it, is intact.
     **{
@@ -284,10 +336,16 @@ def test_the_disposition_of_a_saved_run_is_read_from_its_whole_gate_result() -> 
     assert passed["score_detail"]["disposition"] == token
     assert passed["invalidation_detail"]["skill_guard_applied"] is True
     assert saved_run_view.build_saved_run_view(passed)["disposition"] == note
-    # The same record without the gates' note that anything forced it: the score's own reading,
-    # which is a risk reading of the score and stands as the live analysis shows it.
-    for flag in ("skill_guard_applied", "risk_guard_applied", "forced_score_disposition"):
+    # The same record without its two guard flags still holds the token the gates recorded as
+    # forced: that alone says a gate forced it, and the note stays (minor m1: the code used to
+    # read the flags only, and this test dropped all three at once, which hid it).
+    for flag in ("skill_guard_applied", "risk_guard_applied"):
         passed["invalidation_detail"].pop(flag, None)
+    assert passed["invalidation_detail"]["forced_score_disposition"] == token
+    assert saved_run_view.build_saved_run_view(passed)["disposition"] == note
+    # Without that either, nothing in the record says a gate forced it: the score's own reading,
+    # which is a risk reading of the score and stands as the live analysis shows it.
+    passed["invalidation_detail"].pop("forced_score_disposition")
     assert saved_run_view.build_saved_run_view(passed)["disposition"] == token
     # A stored action that is the forced token itself, under the evidence gate: noted too.
     forced = _view_of("action_is_the_forced_token")
@@ -355,6 +413,173 @@ def test_a_saved_run_says_its_cost_is_fees_only_when_its_record_supports_it() ->
         lost = deepcopy(stored)
         change(lost)
         assert saved_run_view.build_saved_run_view(lost)["cost"]["caveat"] is None, name
+
+
+M1_SHAPES = [name for name in DAMAGED_RECORDS if name.startswith("m1_")]
+
+
+@pytest.mark.parametrize("name", M1_SHAPES)
+def test_the_forced_token_keeps_its_note_whatever_flags_the_record_lost(name: str) -> None:
+    """The exact-final review's minor m1. "Forced" was decided from the two guard flags alone, so
+    a record that lost them showed the forced token bare. A gate forced the token when a guard
+    flag says so, when the gates recorded it as forced, or when a hard gate is simply active."""
+
+    note = "ELEVATED_RISK_AVOID (not forced by a risk gate)"
+    assert len(M1_SHAPES) == 3
+    saved = _view_of(name)
+    shown = [saved["disposition"], saved["gate_action"]]
+    assert note in shown and "ELEVATED_RISK_AVOID" not in shown, shown
+    assert saved["gates"]["risk_gate_active"] is False
+    # Each of the three ways, alone, says a gate forced it; with none of them the score's own
+    # token stands; and a risk gate with a measured finding stands behind a bare token.
+    score = {"disposition": "ELEVATED_RISK_AVOID"}
+    finding = gate_kinds.elevated_risk_is_a_risk_finding
+    for gate in (
+        {"skill_guard_applied": True},
+        {"risk_guard_applied": True},
+        {"forced_score_disposition": "ELEVATED_RISK_AVOID"},
+        {"hard_blocks": ["SKILL_NOT_DEMONSTRATED"]},
+        {"hard_gate_passed": False},
+        {"action": "ABORT"},
+    ):
+        assert finding(gate, score, None) is False, gate
+    unforced = ({}, {"hard_gate_passed": True, "hard_blocks": []}, {"forced_score_disposition": ""})
+    for gate in unforced:
+        assert finding(gate, score, None) is True, gate
+    assert finding({"hard_blocks": ["TAIL_RISK_BREACH"], "risk_guard_applied": True}, score, None)
+
+
+# Stored liquidity states that are absent or are not what the liquidity measure writes (the
+# exact-final review's minor m2: the live analysis measured the order book and found too little
+# depth, a risk gate). Each is put where the measured state was.
+NOT_READABLE_LIQUIDITY = {
+    "state_missing": lambda d: d["liquidity_execution_detail"].pop("liquidity_state"),
+    "state_none": lambda d: d["liquidity_execution_detail"].update(liquidity_state=None),
+    "state_a_word": lambda d: d["liquidity_execution_detail"].update(liquidity_state="OK"),
+    "status_missing": lambda d: d["liquidity_execution_detail"]["liquidity_state"].pop("status"),
+    "spread_is_text": lambda d: d["liquidity_execution_detail"]["liquidity_state"].update(
+        spread_frac="0.095"
+    ),
+    "status_unknown": lambda d: d["liquidity_execution_detail"]["liquidity_state"].update(
+        status="STALE"
+    ),
+    "degraded_with_a_spread": lambda d: d["liquidity_execution_detail"]["liquidity_state"].update(
+        status="DEGRADED"
+    ),
+    "degraded_one_price": lambda d: d["liquidity_execution_detail"].update(
+        liquidity_state={"status": "DEGRADED", "spread_frac": None, "best_bid": 100.0}
+    ),
+    "degraded_prices_as_text": lambda d: d["liquidity_execution_detail"].update(
+        liquidity_state={
+            "status": "DEGRADED",
+            "spread_frac": None,
+            "best_bid": "100",
+            "best_ask": True,
+        }
+    ),
+    "degraded_spread_absent": lambda d: d["liquidity_execution_detail"].update(
+        liquidity_state={"status": "DEGRADED"}
+    ),
+    "whole_detail_missing": lambda d: d.pop("liquidity_execution_detail"),
+}
+
+
+@pytest.mark.parametrize("name", NOT_READABLE_LIQUIDITY)
+def test_a_record_without_a_readable_liquidity_state_asserts_no_cause(name: str) -> None:
+    """The exact-final review's minor m2. The live analysis measured its order book (a risk
+    gate: liquidity is not viable). A reopened run whose stored liquidity state is absent or
+    partial used to say that the order-book data were unavailable ("missing data"), or that the
+    served book's spread was out of range: a cause the record does not show. It now names the
+    gate and says only that the record holds no readable measurement: no cause, no finding, and
+    no "missing data"."""
+
+    payload = _analysis(thin=True)
+    live = payload["decision_view"]["gates"]
+    assert live["kinds"] == ["EVIDENCE", "RISK"] and "Liquidity is not viable" in live["summary"]
+    stored = _stored(payload)
+    assert saved_run_view.build_saved_run_view(stored)["gates"]["kinds"] == ["EVIDENCE", "RISK"]
+    NOT_READABLE_LIQUIDITY[name](stored)
+    saved = saved_run_view.build_saved_run_view(stored)
+    gates = saved["gates"]
+    assert gates["kinds"] == ["EVIDENCE", "NOT_READABLE"]
+    assert gates["risk_gate_active"] is False and gates["framing"] == gate_kinds.NOT_A_MARKET_CALL
+    assert gates["summary"] == (
+        "The liquidity gate is active: this saved record does not hold a readable liquidity "
+        "measurement. The evidence gate is active too: directional skill is not established for "
+        "this model and timeframe."
+    )
+    (entry,) = [block for block in gates["blocks"] if block["block"] == "LIQUIDITY_NOT_VIABLE"]
+    assert entry == {
+        "block": "LIQUIDITY_NOT_VIABLE",
+        "kind": "NOT_READABLE",
+        "headline": "Liquidity gate",
+        "detail": (
+            "This saved record does not hold a readable liquidity measurement, so it cannot say "
+            "whether liquidity was measured or what the gate found."
+        ),
+    }
+    written = json.dumps(gates)
+    for claim in ("missing data", "unavailable", "outside the range", "Liquidity is not viable"):
+        assert claim not in written, claim
+    assert "Liquidity could not be measured" not in written
+    assert saved["disposition"] == "NO_TRADE"
+
+
+@pytest.mark.parametrize("name", NOT_READABLE_LIQUIDITY)
+def test_the_detail_route_answers_200_for_a_record_without_a_readable_liquidity_state(
+    name: str,
+) -> None:
+    stored = {**_stored(_analysis(thin=True)), "run_id": "durable-run"}
+    NOT_READABLE_LIQUIDITY[name](stored)
+    client = make_client()
+    client.app.state.persistence_repository = _Durable(stored)
+    login(client)
+    response = client.get("/v1/analyze/detail/durable-run")
+    assert response.status_code == 200, name
+    saved = response.json()["saved_run_view"]
+    assert saved == saved_run_view.build_saved_run_view(stored)
+    assert saved["gates"]["kinds"] == ["EVIDENCE", "NOT_READABLE"], name
+    written = json.dumps(saved)
+    assert "missing data" not in written and "Liquidity is not viable" not in written, name
+
+
+def test_a_stored_liquidity_state_the_measure_writes_is_read_as_it_is() -> None:
+    """The other side of minor m2: the three states the measure writes are read as before, and
+    only a saved run can meet the unreadable one (a live analysis holds the measure's own)."""
+
+    from crypto_probability_engine.detail import frontend_display
+    from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
+
+    unreadable = frontend_display.STORED_LIQUIDITY_NOT_READABLE
+    usable, refused = make_order_book(), make_order_book(bid=100.0, ask=400.0)
+    for book in (None, usable, refused):
+        state = json.loads(json.dumps(compute_liquidity_depth(book)))
+        assert frontend_display.stored_liquidity_state(state) is state, state
+    for state in (None, 5, "OK", [], {}, {"status": "OK"}, {"spread_frac": 0.01}):
+        assert frontend_display.stored_liquidity_state(state) is unreadable, state
+    # A state with no spread is the measure's only with the measure's own status beside it.
+    prices = {"best_bid": 100.0, "best_ask": 400.0}
+    for state in (
+        {"spread_frac": None},
+        {"spread_frac": None, **prices},
+        {"status": "STALE", "spread_frac": None},
+        {"status": "OK", "spread_frac": None, **prices},
+        {"status": None, "spread_frac": None},
+    ):
+        assert frontend_display.stored_liquidity_state(state) is unreadable, state
+    no_book = {"status": "DEGRADED", "spread_frac": None}
+    for state in (no_book, {**no_book, **prices}):
+        assert frontend_display.stored_liquidity_state(state) is state, state
+    gate = {"hard_blocks": ["LIQUIDITY_NOT_VIABLE"], "hard_gate_passed": False}
+    # The live builder is given the measure's state, never the stand-in: with no state at all it
+    # still reads as before (no measurement: a data gate), so a live analysis is unaffected.
+    live = gate_kinds.build_gate_view(gate, liquidity=None)
+    assert live["kinds"] == ["SYSTEM_OR_DATA"]
+    assert live["summary"] == "A system or data gate is active: Liquidity could not be measured."
+    saved = gate_kinds.build_gate_view(gate, liquidity=unreadable)
+    assert saved["kinds"] == ["NOT_READABLE"] and saved["risk_gate_active"] is False
+    assert saved["summary"] == gate_kinds.LIQUIDITY_NOT_READABLE_SUMMARY
+    assert saved["framing"] == gate_kinds.NOT_A_MARKET_CALL
 
 
 def test_a_record_that_lost_a_part_shows_what_it_still_holds() -> None:
@@ -657,10 +882,16 @@ def test_a_malformed_stored_liquidity_state_never_fails_and_never_words_a_findin
     gate = {"hard_blocks": ["LIQUIDITY_NOT_VIABLE", "SKILL_NOT_DEMONSTRATED"]}
     stored = {"invalidation_detail": gate, "liquidity_execution_detail": liquidity}
     view = saved_run_view.attach_saved_run_view(stored)["saved_run_view"]["gates"]
-    assert view["summary"].startswith(
-        "A system or data gate is active: Liquidity could not be measured."
+    # Minor m2: no cause is read from a state the record does not hold. The gate is named, and
+    # the record says only that it holds no readable measurement.
+    assert view["summary"] == (
+        "The liquidity gate is active: this saved record does not hold a readable liquidity "
+        "measurement. The evidence gate is active too: directional skill is not established for "
+        "this model and timeframe."
     )
+    assert view["kinds"] == ["EVIDENCE", "NOT_READABLE"]
     assert view["risk_gate_active"] is False
+    assert view["framing"] == gate_kinds.NOT_A_MARKET_CALL
 
 
 @pytest.mark.parametrize(

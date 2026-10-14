@@ -475,18 +475,42 @@ function savedRunViewOf(detailView) {
   return saved && saved.schema_version === "saved_run_view.v1" ? saved : null;
 }
 
+// How a banner, a pill or a status that restates the gate result is styled (owner ruling X2):
+// one CSS class, picked from the kinds the backend's gate view names and from nothing else.
+// - a risk gate with a measured finding: the risk style;
+// - a system or data gate and no risk gate: the safety/data style;
+// - anything else: the neutral style. That is the evidence gate alone, a reopened run's liquidity
+//   gate whose measurement the record does not hold, a gate result that cannot be read, and an
+//   analysis without a view. The neutral style is never the risk one.
+// Colour is a signal too, so it is the backend's kinds that choose it. This words nothing and
+// changes no token: the text on a banner or a pill is what it was.
+const GATE_ALERT_CLASSES = {
+  RISK: "gate-alert-risk",
+  SYSTEM_OR_DATA: "gate-alert-safety",
+  NEUTRAL: "gate-alert-neutral",
+};
+
+function gateAlertClass(gates) {
+  const kinds = Array.isArray(gateView(gates)?.kinds) ? gates.kinds : [];
+  if (kinds.includes("RISK")) return GATE_ALERT_CLASSES.RISK;
+  if (kinds.includes("SYSTEM_OR_DATA")) return GATE_ALERT_CLASSES.SYSTEM_OR_DATA;
+  return GATE_ALERT_CLASSES.NEUTRAL;
+}
+
 // The gate authority as every surface shows it: the backend's summary, and directly under it the
 // backend's framing of that summary. Both sentences are the backend's own, for every state
-// (detail/gate_kinds.py); nothing here words a framing, and the two are never shown apart.
+// (detail/gate_kinds.py); nothing here words a framing, and the two are never shown apart. They
+// share one alert class, so the stylesheet draws them as one group.
 function hasGateFraming(gates) {
   return Boolean(gates && backendText(gates.summary) && backendText(gates.framing));
 }
 
 function gateFramingBlocks(gates) {
   if (!hasGateFraming(gates)) return [];
+  const alert = gateAlertClass(gates);
   return [
-    textBlock("p", gates.summary, "decision-gates"),
-    textBlock("p", gates.framing, "decision-gate-framing"),
+    textBlock("p", gates.summary, `decision-gates ${alert}`),
+    textBlock("p", gates.framing, `decision-gate-framing ${alert}`),
   ];
 }
 
@@ -604,6 +628,64 @@ function costCaveatRows(cost) {
   return caveat ? [["Cost note", caveat]] : [];
 }
 
+// A value a reopened run's rows OUTSIDE its own block read from the view built from its stored
+// record (the exact-final review's minor m3): the row's own value when the screen has one; else,
+// for a reopened run, what that view holds, or the sentence that the record does not hold it. So
+// one row never reads "n/a" for a value another row of the same screen shows. Without such a view
+// the row's own value stands.
+function keptValue(saved, own, kept) {
+  if (own !== null && own !== undefined) return own;
+  return saved ? savedValue(kept) : own;
+}
+
+// A reopened run's stored market-data block (the release-prep review's minor M-1). The screen's
+// Market Data v2 section shows it whole: detail/builder.py copies each of its values from the
+// analysis's data quality. A live analysis has none here: its rows read its own response.
+function storedMarketBlock(saved, details) {
+  const block = details?.market_data_v2_detail;
+  return saved && block && typeof block === "object" && !Array.isArray(block) ? block : null;
+}
+
+// A row that repeats a value of that block: the row's own value when the screen has one; else,
+// for a reopened run, the value the block holds, as its table below shows it (one it holds as
+// null reads "n/a" in both places). Without the block the row's own value stands.
+function storedMarketValue(market, own, key) {
+  if (own !== null && own !== undefined) return own;
+  return market ? market[key] : own;
+}
+
+// The Provider State rows whose values the market-data block also holds. A reopened run's history
+// row carries no provider state, so for a value the block holds the row is left out: the block's
+// table below shows it, and the row would only read "n/a" beside it.
+function providerCrossRows(providerState, market) {
+  const rows = [
+    ["Cross-provider state", "cross_provider_state"],
+    ["Fallback to single provider", "fallback_to_single_provider"],
+    ["Disagreement bps", "disagreement_bps"],
+  ];
+  return rows.filter(([, key]) => {
+    const own = providerState[key];
+    const shownBelow = market && Object.prototype.hasOwnProperty.call(market, key);
+    return (own !== null && own !== undefined) || !shownBelow;
+  }).map(([label, key]) => [label, providerState[key]]);
+}
+
+// A reopened run's stored news add-on state (the release-prep review's minor MINOR-1). The
+// screen's News Add-on section shows it whole: detail/builder.py stores the analysis's own news
+// add-on state, the object a live analysis's news rows read. A live analysis has none here.
+function storedNewsState(saved, details) {
+  const state = details?.news_detail?.news_addon_state;
+  return saved && state && typeof state === "object" && !Array.isArray(state) ? state : null;
+}
+
+// A news row that repeats a value of that state: the row's own value when the screen has one;
+// else, for a reopened run, the value the state holds, as its table shows it. Without the state
+// the row's own value stands.
+function storedNewsValue(news, own, key) {
+  if (own !== null && own !== undefined) return own;
+  return news ? news[key] : own;
+}
+
 // A value of a saved run's view: what the stored record holds, or, where the backend gives none,
 // the sentence that says it is not kept. Never "n/a": a reopened run says what it does not store.
 function savedValue(value, format = (kept) => kept) {
@@ -665,9 +747,11 @@ function renderSavedRun(payload, saved) {
   const sentence = (text, className) => (backendText(text) ? [textBlock("p", text, className)] : []);
   return section("Saved analysis", [
     ...sentence(range.explanation, "decision-detail"),
+    // Without a readable gate result, the backend's note stands in the summary's place, in the
+    // neutral style: never the risk or the amber one (the release-prep review's minor M-4).
     ...(gates
       ? [...gateFramingBlocks(gates), ...gateDetailList(gates)]
-      : sentence(saved.gates_note, "decision-warning")),
+      : sentence(saved.gates_note, `decision-gate-note ${GATE_ALERT_CLASSES.NEUTRAL}`)),
     keyValueTable(savedRunRows(payload, saved)),
     ...sentence(range.meaning, "muted"),
     ...sentence(saved.cost?.label, "muted"),
@@ -993,8 +1077,10 @@ function horizonCard(payload) {
 
   if (blocking) {
     const blockBanner = document.createElement("div");
-    blockBanner.className = "matrix-block-banner";
-    blockBanner.append(decisionBadge("BLOCK", "block"));
+    // The banner restates the gate result: its style is the gate view's kind, not a fixed red.
+    const alert = gateAlertClass(gateViewOf(payload));
+    blockBanner.className = `matrix-block-banner ${alert}`;
+    blockBanner.append(decisionBadge("BLOCK", "block", alert));
     // With a view, the banner names the check that blocks, and the view below it carries the
     // gate summary with its framing: the summary is never shown apart from its framing.
     const viewLeads = Boolean(decisionViewOf(payload));
@@ -1115,7 +1201,13 @@ function appendDefinitionRows(dl, values) {
     const dt = document.createElement("dt");
     const dd = document.createElement("dd");
     dt.textContent = label;
-    dd.textContent = formatValue(value);
+    // A list of objects (a news provider's status, for one) is shown whole, as the detail tables
+    // show one: its JSON, every field the backend gives. As text it would read "[object Object]".
+    if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) {
+      dd.append(nestedValueBlock(value));
+    } else {
+      dd.textContent = formatValue(value);
+    }
     dl.append(dt, dd);
   }
 }
@@ -1527,6 +1619,17 @@ function keyValueTable(values) {
   return dl;
 }
 
+// An object or a list the backend gives, shown whole: a fold that names its size, over its JSON.
+function nestedValueBlock(item) {
+  const nested = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(item, null, 2);
+  nested.append(summary, pre);
+  return nested;
+}
+
 function objectTable(value) {
   const table = document.createElement("table");
   table.className = "detail-table";
@@ -1537,13 +1640,7 @@ function objectTable(value) {
     const content = document.createElement("td");
     label.textContent = key.replaceAll("_", " ");
     if (item && typeof item === "object") {
-      const nested = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
-      const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(item, null, 2);
-      nested.append(summary, pre);
-      content.append(nested);
+      content.append(nestedValueBlock(item));
     } else {
       content.textContent = formatValue(item);
     }
@@ -1618,9 +1715,9 @@ function textBlock(tagName, text, className = "") {
   return node;
 }
 
-function decisionBadge(text, tone = "neutral") {
-  const badge = textBlock("span", text, `decision-badge decision-badge-${tone}`);
-  return badge;
+function decisionBadge(text, tone = "neutral", alert = "") {
+  const classes = `decision-badge decision-badge-${tone}${alert ? ` ${alert}` : ""}`;
+  return textBlock("span", text, classes);
 }
 
 function orderedActionability(items) {
@@ -1658,10 +1755,15 @@ function decisionStatusTone(status) {
 function renderActionabilityRow(item = {}, payload = {}) {
   const status = backendText(item.status) || "UNKNOWN";
   const row = document.createElement("article");
-  row.className = `actionability-row actionability-${decisionStatusTone(status)}`;
+  // A check that blocks restates the gate result: it takes the gate view's alert class. Every
+  // other status keeps its own style.
+  const alert = status === "BLOCK" ? gateAlertClass(gateViewOf(payload)) : "";
+  row.className = `actionability-row actionability-${decisionStatusTone(status)}${
+    alert ? ` ${alert}` : ""
+  }`;
   const header = document.createElement("div");
   header.className = "actionability-row-header";
-  header.append(decisionBadge(status, decisionStatusTone(status)));
+  header.append(decisionBadge(status, decisionStatusTone(status), alert));
   header.append(textBlock("strong", backendText(item.label) || backendText(item.key) || "Check"));
   if (Number.isFinite(item.priority)) {
     header.append(textBlock("span", `#${item.priority}`, "actionability-priority"));
@@ -2144,7 +2246,7 @@ function renderDecisionViewSection(payload, view) {
   const gates = gateViewOf(payload);
   return section("Decision view", [
     textBlock("p", view.headline, "decision-headline"),
-    textBlock("p", view.detail),
+    textBlock("p", view.detail, "decision-detail"),
     ...gateFramingBlocks(gates),
     ...gateDetailList(gates),
     keyValueTable(decisionViewRows(payload, view)),
@@ -2171,13 +2273,25 @@ function renderStructuredDetail(payload, detailView) {
   const gate = payload.gate_result || {};
   const details = detailView || {};
   // A reopened run's history row carries none of these rows' values. Where the view built from
-  // its stored record holds one, the Overview and Gates rows show it, as the run's own block
-  // does: one row never reads "n/a" for a value another row shows.
+  // its stored record holds one, the row shows it, as the run's own block does: in Overview, in
+  // Gates, and for the data source, the live-data flag and the venue in the data sections below.
+  // A row that repeats a value of the stored market-data block (the warnings, the symbol's
+  // availability, the cross-provider values) shows the block's value; in Provider State it is left
+  // out instead. The news rows that repeat a value of the stored news add-on state (its status,
+  // its warnings and its influence mode) show that value, as News Add-on's table of it does; a
+  // METRICS_ONLY run's "State" row still says news analysis was disabled, and with news analysis
+  // on a record without that state reads "UNAVAILABLE", as before. A value none of these holds
+  // (the score; the data-quality status, age and failures; the provider's status and reason)
+  // still reads "n/a". So does the news "Provider status" row, though that table shows a stored
+  // list: utils/sanitize.py masks a provider's `last_failure_error_code` in the record, so the
+  // stored list is not a copy of the one the row reads.
   const kept = saved || {};
+  const keptMarket = storedMarketBlock(saved, details);
+  const keptNews = storedNewsState(saved, details);
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
-      : payload.news_addon_state?.status || "UNAVAILABLE";
+      : storedNewsValue(keptNews, payload.news_addon_state?.status, "status") || "UNAVAILABLE";
 
   const rawJson = document.createElement("details");
   rawJson.className = "raw-json";
@@ -2214,10 +2328,10 @@ function renderStructuredDetail(payload, detailView) {
         ["Score", display.total_score],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
-        ["Data source", display.data_source ?? kept.data?.data_source],
+        ["Data source", keptValue(saved, display.data_source, kept.data?.data_source)],
         view
           ? ["Data", decisionDataText(view.data)]
-          : ["Live data", display.is_live_data ?? kept.data?.is_live_data],
+          : ["Live data", keptValue(saved, display.is_live_data, kept.data?.is_live_data)],
         [
           // Storage's status when the analysis was requested. A live analysis's Storage row (the
           // decision view's) shows its save receipt, which can say otherwise: so this label says
@@ -2239,7 +2353,7 @@ function renderStructuredDetail(payload, detailView) {
           gateTokenLabel("Hard blocks", "internal gate tokens", view),
           gate.hard_blocks ?? kept.hard_blocks,
         ],
-        ["Warnings", dataQuality.warnings],
+        ["Warnings", storedMarketValue(keptMarket, dataQuality.warnings, "warnings")],
       ]),
       objectTable(details.risk_detail),
     ]),
@@ -2248,29 +2362,43 @@ function renderStructuredDetail(payload, detailView) {
         ...(view ? [["Decision view", decisionDataText(view.data)]] : []),
         ["Status", dataQuality.status],
         ["Latest age seconds", dataQuality.latest_candle_age_seconds],
-        ["Warnings", dataQuality.warnings],
+        ["Warnings", storedMarketValue(keptMarket, dataQuality.warnings, "warnings")],
         ["Failures", dataQuality.provider_failures],
-        ["Data source", dataQuality.data_source],
-        ["Live data", dataQuality.is_live_data],
+        ["Data source", keptValue(saved, dataQuality.data_source, kept.data?.data_source)],
+        ["Live data", keptValue(saved, dataQuality.is_live_data, kept.data?.is_live_data)],
       ]),
     ]),
     section("Provider State", [
       keyValueTable([
-        ["Active provider", providerState.active_provider],
+        ["Active provider", keptValue(saved, providerState.active_provider, kept.venue)],
         ["Status", providerState.status],
-        ["Cross-provider state", providerState.cross_provider_state],
-        ["Fallback to single provider", providerState.fallback_to_single_provider],
-        ["Disagreement bps", providerState.disagreement_bps],
+        ...providerCrossRows(providerState, keptMarket),
         ["Reason", providerState.cross_provider_reason],
       ]),
       objectTable(providerState.providers),
     ]),
     section("Market Data v2 / Provider Observability", [
       keyValueTable([
-        ["Symbol availability", dataQuality.symbol_availability],
-        ["Cross-provider state", dataQuality.cross_provider_state],
-        ["Fallback to single provider", dataQuality.fallback_to_single_provider],
-        ["Disagreement bps", dataQuality.disagreement_bps],
+        [
+          "Symbol availability",
+          storedMarketValue(keptMarket, dataQuality.symbol_availability, "symbol_availability"),
+        ],
+        [
+          "Cross-provider state",
+          storedMarketValue(keptMarket, dataQuality.cross_provider_state, "cross_provider_state"),
+        ],
+        [
+          "Fallback to single provider",
+          storedMarketValue(
+            keptMarket,
+            dataQuality.fallback_to_single_provider,
+            "fallback_to_single_provider",
+          ),
+        ],
+        [
+          "Disagreement bps",
+          storedMarketValue(keptMarket, dataQuality.disagreement_bps, "disagreement_bps"),
+        ],
       ]),
       objectTable(details.market_data_v2_detail || dataQuality.derived_market_metrics),
     ]),
@@ -2282,13 +2410,16 @@ function renderStructuredDetail(payload, detailView) {
       keyValueTable([
         ["State", newsCopy],
         ["Mode", payload.analysis_mode],
-        ["Warnings", display.news_warnings],
+        ["Warnings", storedNewsValue(keptNews, display.news_warnings, "warnings")],
       ]),
       objectTable(details.news_detail),
     ]),
     section("News Authority / Macro & Micro Context", [
       keyValueTable([
-        ["Influence mode", payload.news_addon_state?.influence_mode],
+        [
+          "Influence mode",
+          storedNewsValue(keptNews, payload.news_addon_state?.influence_mode, "influence_mode"),
+        ],
         ["Influence", "0.0 advisory display only"],
         ["Provider status", payload.news_addon_state?.provider_status],
       ]),

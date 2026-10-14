@@ -3,7 +3,7 @@ Up/Down/In band are uncalibrated heuristic estimates for the terminal close ~6 b
 A risk gate is active: Extreme-move risk is too high. The evidence gate is active too: directional skill is not established for this model and timeframe.
 The risk gate (Extreme-move risk is too high) is a finding about market conditions or execution. It is analysis only, not an instruction.
 Extreme-move risk is too high: Analysis is blocked because extreme-move risk exceeds the permitted level.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: Directional skill is not established for this model and timeframe. Its verdict and counts are not kept in saved history.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)
@@ -90,7 +90,7 @@ NO_TRADE
 Hard blocks (internal gate tokens, not a market call)
 TAIL_RISK_BREACH, SKILL_NOT_DEMONSTRATED
 Warnings
-n/a
+none
 risk arbiter
 View
 {
@@ -122,23 +122,17 @@ n/a
 Latest age seconds
 n/a
 Warnings
-n/a
+none
 Failures
 n/a
 Data source
-n/a
+OKX_PUBLIC
 Live data
-n/a
+yes
 Provider State
 Active provider
-n/a
+okx
 Status
-n/a
-Cross-provider state
-n/a
-Fallback to single provider
-n/a
-Disagreement bps
 n/a
 Reason
 n/a
@@ -146,7 +140,7 @@ Market Data v2 / Provider Observability
 Symbol availability
 n/a
 Cross-provider state
-n/a
+UNAVAILABLE
 Fallback to single provider
 n/a
 Disagreement bps
@@ -255,7 +249,7 @@ News analysis disabled for this run.
 Mode
 METRICS_ONLY
 Warnings
-n/a
+none
 news addon state
 View
 {
@@ -322,7 +316,7 @@ View
   | }
 News Authority / Macro & Micro Context
 Influence mode
-n/a
+ADVISORY_DISPLAY_ONLY
 Influence
 0.0 advisory display only
 Provider status

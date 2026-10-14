@@ -54,16 +54,21 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=p7p-20261011-a"' in html
-    assert 'src="/app.js?v=p7p-20261011-a"' in html
+    assert 'href="/styles.css?v=p7p-20261012-a"' in html
+    assert 'src="/app.js?v=p7p-20261012-a"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
     # The token moves with the view's version (review finding 3). A browser that kept the script
     # served under the token before would draw a decision_view.v1 screen over a v2 payload: the
     # script that renders v2 is never served under that older token.
     assert 'view.schema_version === "decision_view.v2"' in js
-    assert "p7p-20261005-a" not in html
+    # It moved again with the release-prep lane: the stylesheet gained the Decision view's layout
+    # and the alert styles, and the script picks the alert class. A browser that kept either
+    # file under the token before would draw the new classes unstyled, or a red banner again.
+    for before in ("p7p-20261005-a", "p7p-20261011-a"):
+        assert before not in html
+    assert "gate-alert-neutral" in js and ".gate-alert-neutral" in read_frontend("styles.css")
     tokens = set(re.findall(r"\?v=([\w.-]+)", html))
-    assert tokens == {"p7p-20261011-a"}, "one token, on the script and the stylesheet alike"
+    assert tokens == {"p7p-20261012-a"}, "one token, on the script and the stylesheet alike"
 
 
 def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
@@ -253,7 +258,7 @@ def test_ui_d1_3_hard_gate_dominates_muted_probability() -> None:
     css = read_frontend("styles.css")
     assert 'item.status === "BLOCK"' in js
     assert "matrix-block-banner" in js
-    assert 'decisionBadge("BLOCK", "block")' in js
+    assert 'decisionBadge("BLOCK", "block", alert)' in js
     assert "probability.informational_only === true" in js
     assert "Informational only" in js
     assert ".matrix-block-banner" in css
@@ -1269,7 +1274,9 @@ def test_every_surface_defers_to_the_decision_view() -> None:
         assert directional not in view_branch
     detail = _function_text(js, "renderStructuredDetail")
     assert 'view\n          ? ["Data", decisionDataText(view.data)]' in detail
-    assert ': ["Live data", display.is_live_data ?? kept.data?.is_live_data],' in detail
+    assert (
+        ': ["Live data", keptValue(saved, display.is_live_data, kept.data?.is_live_data)],'
+    ) in detail
     assert "...legacyProbabilityRows(payload, [" not in detail
     assert '...(view ? [["Decision view", decisionDataText(view.data)]] : []),' in detail
     assert "renderDecisionSynthesis(payload.decision_synthesis, payload)" in detail

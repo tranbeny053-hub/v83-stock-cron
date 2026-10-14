@@ -343,7 +343,7 @@ def test_a_reader_who_matches_words_does_no_better_than_one_who_always_answers_t
     for position, (got, guessed) in enumerate(zip(matched, fixed, strict=True), start=1):
         assert got <= guessed, f"question {position}: matching words beats a fixed answer"
     assert cells - sum(matched) >= 36, matched
-    assert matched == [1, 4, 8, 0, 0, 0], "the measured result, so that a change is seen"
+    assert matched == [1, 4, 6, 0, 0, 0], "the measured result, so that a change is seen"
     sharper = _right(_relative_matcher(letters), screens)
     assert sum(sharper) <= sum(fixed) and cells - sum(sharper) >= 27, sharper
     assert sharper == [6, 8, 1, 0, 0, 0], "the measured result, so that a change is seen"

@@ -61,11 +61,17 @@ payload's `probability_explanation` text, which moves each example's `analysis_h
 schemas, the contract and every value's meaning are unchanged. That episode closed with qualification BLOCKED /
 NOT_PROVEN: its closing ended the hold on publishing this revision, and nothing here reads it as a pass.
 
-Revision 2026-10-10 (owner rulings CLASS-B-4=A and AD1=A; local until the owner's T3): the MANIFEST and the two
-synthetic success examples were regenerated again because the analysis payload's own sentences now say which kind of
-hard gate is active, so the evidence gate is no longer described as elevated risk. That moves each example's
-`analysis_hash` and `evidence_hash`. Every gate action, hard block and disposition token is unchanged, and so are the
-radar schemas, the contract and every value's meaning. The automation analysis still carries no decision view.
+Revision 2026-10-10 (owner rulings CLASS-B-4=A and AD1=A; published to `main` by pull request #256, not released):
+the MANIFEST and the two synthetic success examples were regenerated again because the analysis payload's own
+sentences now say which kind of hard gate is active, so the evidence gate is no longer described as elevated risk.
+That moves each example's `analysis_hash` and `evidence_hash`, and with them the three digests below of the
+regenerated files; nothing else on this page. Every gate action, hard block and disposition token is unchanged, and
+so are the radar schemas, the contract and every value's meaning. The automation analysis still carries no decision
+view.
+
+Note 2026-10-12 (the release-prep change that followed #256): nothing on this page moved again. That change touches
+the human analysis's decision view and its screens only. The automation analysis is unchanged, so the examples, their
+`analysis_hash` and `evidence_hash`, the MANIFEST and every digest below are byte-identical to the revision above.
 
 | File | Role | sha256 |
 |---|---|---|

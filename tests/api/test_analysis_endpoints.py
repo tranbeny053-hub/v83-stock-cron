@@ -570,7 +570,17 @@ def test_detail_lookup_returns_detail_view() -> None:
     # from the facts it stores, and its gate authority equals the live analysis's own.
     read = detail.json()["saved_run_view"]
     assert read["schema_version"] == "saved_run_view.v1"
-    assert read["gates"] == analyze.json()["decision_view"]["gates"]
+    # The same gate view, except the evidence gate's entry: the live analysis gives the reason
+    # for its verdict, and the reopened run says the verdict is not kept (it is not stored).
+    live = analyze.json()["decision_view"]["gates"]
+    assert {**read["gates"], "blocks": None} == {**live, "blocks": None}
+    for mine, theirs in zip(read["gates"]["blocks"], live["blocks"], strict=True):
+        assert {**mine, "detail": None} == {**theirs, "detail": None}
+        if mine["kind"] == "EVIDENCE":
+            assert mine["detail"].endswith("Its verdict and counts are not kept in saved history.")
+            assert "resolved outcomes" in theirs["detail"]
+        else:
+            assert mine["detail"] == theirs["detail"]
     assert read["gates"]["schema_version"] == "gate_view.v1"
     assert "saved_run_view" not in analyze.json()["detail_view"], "the view is never stored"
     assert "gate_view" not in detail.json()

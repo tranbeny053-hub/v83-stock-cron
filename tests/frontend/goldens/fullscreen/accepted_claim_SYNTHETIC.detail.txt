@@ -3,7 +3,7 @@ Accepted forecast-quality claim
 The percentages carry an accepted forecast-quality claim for this model and timeframe. They carry no directional permission.
 Evidence gate: directional skill is not established for this model and timeframe. No risk gate is active.
 The gates' disposition: hard gates outrank everything shown.
-Evidence gate: Directional skill is not established for this model and timeframe.
+Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 Asset · venue
 BTC/USDT · okx
 Reference close (UTC)

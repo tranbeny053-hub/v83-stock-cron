@@ -2,6 +2,62 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-12 - Decision View, Gate Kinds and Save Receipt (on main, not released)
+
+What the next release would carry since production's release `UCPE-PROD-E2-20261004-A`. Nothing
+in this entry is released: it records what is on `main` and in the release-prep change that adds
+this entry.
+
+Changed:
+- Added the Decision view (`decision_view.v2`), the one authoritative block of an analysis: its
+  state, its sentence, its range and cost, its evidence and its gates. It leads the Single card,
+  the Batch card and the Detail panel.
+- Added the gate view (`gate_view.v1`), carried in the Decision view: the backend says which kind
+  each active hard gate is (a risk gate with a measured finding, a system or data gate, the
+  evidence gate), lists each with its sentence, and gives one summary and one framing. The
+  frontend displays these and words none of its own.
+- Added the saved-run view (`saved_run_view.v1`): a reopened run's block is built by the backend
+  from what the run stores when it is read back, and a value the record does not hold says so.
+- Added the save receipt (`save_receipt.v1`, `GET /v1/analyze/receipt/{run_id}`): whether one
+  analysis was saved, asked after its response and shown in its Storage row.
+- Changed the storage wording: the badge reads "Storage, last checked: ...", the Overview row reads
+  "Storage when requested", and neither stands for the save receipt of one analysis.
+- Added a lock to the in-memory run store, so a run added while the store is listed no longer
+  makes a request fail.
+- Retired the older decision sections from the default screen (the decision card, the gate
+  brief, the scenario plan, the advisor explanation and the permission rows). Their fields remain
+  in the response and in Raw JSON.
+- Added a caveat where a round-trip cost is fees only because no slippage could be estimated.
+- Changed how a gate result is styled: by the gate kinds the backend names (neutral for the
+  evidence gate alone, the risk style for a measured risk gate, a distinct style for a system or
+  data gate), with a layout for the Decision view's own lines.
+- Added the owner's UX comprehension card (`docs/runbooks/UX_COMPREHENSION_CHECK.md`), generated
+  from the product's own screens.
+- Changed the frontend asset token to `p7p-20261012-a`.
+- Renamed the third outcome from "Timeout" to "In band" on the screens (UX-1, 85462e4): it is the
+  close at the horizon inside the decision band, not a clock timeout. The analysis payload's
+  `probability_explanation` text changed with it. The data keys stay `p_timeout` and `TIMEOUT`.
+- Added one provider connection pool for the process, one exchange for identical in-flight
+  provider requests, passive per-analysis provider measurement, and an observe-only analysis
+  budget that counts analysis requests and refuses none (#232: 7e39fd3, 948edf7 and 5bcd71c;
+  follow-up #236).
+- Added the R4-C1 candidate identity, `quant/candidate_r4_c1.py`, which no analysis uses (#225,
+  429f1df).
+
+Notes:
+- Analysis only. No trading, order, transfer or execution capability is added.
+- The hard gates are unchanged: every gate action, block code, disposition token and threshold
+  is what it was. What changed is how a gate result is described and shown.
+- `analysis_hash` moves for every human analysis, because the response carries new fields. The
+  automation analysis carries no Decision view, but its `analysis_hash` and `evidence_hash` also
+  moved since production: UX-1 changed its explanation text, and its sentences now say which kind
+  of hard gate is active (the UOR handoff revisions of 2026-10-05 and 2026-10-10).
+- The UX comprehension check is the owner's and has not been run. All new wording is provisional
+  until it is frozen after review.
+- No forecast-quality claim and no directional permission is accepted; both registries are empty.
+- Releases between 2026-06-22 and this entry were not recorded in this file. They are recorded in
+  `ops/release/releases.json` and `STATE.md`.
+
 ## 2026-06-22 - Wave 4D.2 Derivatives Intelligence Shadow Runtime
 
 Changed:
