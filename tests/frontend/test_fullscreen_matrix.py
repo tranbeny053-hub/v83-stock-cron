@@ -757,6 +757,10 @@ def test_a_reopened_runs_market_rows_show_what_its_stored_market_data_block_hold
         "distinct": stored(distinct),
         "block_lost": stored(lambda d: d.pop("market_data_v2_detail")),
     }
+    # A row's own value stands where the screen has one: a response without a view that still
+    # carries its data quality, read beside a stored block that holds other values.
+    own = {k: v for k, v in cases["evidence_only"].items() if k != "decision_view"}
+    runs["own_value"] = {"row": own, "detail": runs["distinct"]["detail"]}
     rendered = goldens.render({}, runs)["screens"]
     # Each row reads its own key: every value of the block is distinct from the others.
     mine = sections(rendered["distinct"]["history"])
@@ -787,6 +791,11 @@ def test_a_reopened_runs_market_rows_show_what_its_stored_market_data_block_hold
             assert harness._value(parts[part], "Warnings") == "none", (name, part)
         for label in PROVIDER_CROSS_LABELS:
             assert label not in parts["provider"], (name, label)
+    theirs = sections(rendered["own_value"]["history"])
+    assert own["data_quality"]["cross_provider_state"] == "UNAVAILABLE"
+    assert harness._value(theirs["v2"], "Cross-provider state") == "UNAVAILABLE"
+    assert harness._value(theirs["gates"], "Warnings") == "none"
+    assert harness._value(theirs["provider"], "Cross-provider state") == "UNAVAILABLE"
     # A record without the block: the rows are as they were, "n/a" each.
     lost = sections(rendered["block_lost"]["history"])
     for label in MARKET_ROWS:
