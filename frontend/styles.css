@@ -1579,6 +1579,12 @@ pre {
   overflow-wrap: anywhere;
 }
 
+/* A row's list shown whole as JSON (app.js appendDefinitionRows): its indentation reads from the
+   left, not from the value column's right edge. */
+.detail-kv dd pre {
+  text-align: left;
+}
+
 /* Alert styles (owner ruling X2). The class is picked from the kinds the backend's gate view
    names (app.js gateAlertClass). Each is told apart without colour, by its border:
    - neutral (the evidence gate alone; a gate result that cannot be read; no view): a thin solid

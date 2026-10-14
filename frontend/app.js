@@ -1201,7 +1201,13 @@ function appendDefinitionRows(dl, values) {
     const dt = document.createElement("dt");
     const dd = document.createElement("dd");
     dt.textContent = label;
-    dd.textContent = formatValue(value);
+    // A list of objects (a news provider's status, for one) is shown whole, as the detail tables
+    // show one: its JSON, every field the backend gives. As text it would read "[object Object]".
+    if (Array.isArray(value) && value.some((item) => item && typeof item === "object")) {
+      dd.append(nestedValueBlock(value));
+    } else {
+      dd.textContent = formatValue(value);
+    }
     dl.append(dt, dd);
   }
 }
@@ -1613,6 +1619,17 @@ function keyValueTable(values) {
   return dl;
 }
 
+// An object or a list the backend gives, shown whole: a fold that names its size, over its JSON.
+function nestedValueBlock(item) {
+  const nested = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
+  const pre = document.createElement("pre");
+  pre.textContent = JSON.stringify(item, null, 2);
+  nested.append(summary, pre);
+  return nested;
+}
+
 function objectTable(value) {
   const table = document.createElement("table");
   table.className = "detail-table";
@@ -1623,13 +1640,7 @@ function objectTable(value) {
     const content = document.createElement("td");
     label.textContent = key.replaceAll("_", " ");
     if (item && typeof item === "object") {
-      const nested = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
-      const pre = document.createElement("pre");
-      pre.textContent = JSON.stringify(item, null, 2);
-      nested.append(summary, pre);
-      content.append(nested);
+      content.append(nestedValueBlock(item));
     } else {
       content.textContent = formatValue(item);
     }
@@ -2266,20 +2277,21 @@ function renderStructuredDetail(payload, detailView) {
   // Gates, and for the data source, the live-data flag and the venue in the data sections below.
   // A row that repeats a value of the stored market-data block (the warnings, the symbol's
   // availability, the cross-provider values) shows the block's value; in Provider State it is left
-  // out instead. The news rows that repeat a value of the stored news add-on state (its warnings
-  // and its influence mode) show that value, as News Add-on's table of it does. A value none of
-  // these holds (the score; the data-quality status, age and failures; the provider's status and
-  // reason) still reads "n/a". So does the news "Provider status" row, though that table shows a
-  // stored list: utils/sanitize.py masks a provider's `last_failure_error_code` in the record, so
-  // the stored list is not a copy of the one the row reads. The news "State" row is not read
-  // from the record either: with news analysis on, a reopened run's row reads "UNAVAILABLE".
+  // out instead. The news rows that repeat a value of the stored news add-on state (its status,
+  // its warnings and its influence mode) show that value, as News Add-on's table of it does; a
+  // METRICS_ONLY run's "State" row still says news analysis was disabled, and with news analysis
+  // on a record without that state reads "UNAVAILABLE", as before. A value none of these holds
+  // (the score; the data-quality status, age and failures; the provider's status and reason)
+  // still reads "n/a". So does the news "Provider status" row, though that table shows a stored
+  // list: utils/sanitize.py masks a provider's `last_failure_error_code` in the record, so the
+  // stored list is not a copy of the one the row reads.
   const kept = saved || {};
   const keptMarket = storedMarketBlock(saved, details);
   const keptNews = storedNewsState(saved, details);
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
-      : payload.news_addon_state?.status || "UNAVAILABLE";
+      : storedNewsValue(keptNews, payload.news_addon_state?.status, "status") || "UNAVAILABLE";
 
   const rawJson = document.createElement("details");
   rawJson.className = "raw-json";
