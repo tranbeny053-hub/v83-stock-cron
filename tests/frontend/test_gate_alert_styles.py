@@ -252,8 +252,17 @@ def test_a_screen_with_nothing_to_read_is_neutral_and_never_the_risk_style(
             e for e in drawn[name]["detail"] if e["role"] == "actionability-row actionability-block"
         ]
         assert blocking and all(e["alert"] == [NEUTRAL] for e in blocking), name
-    # A gate result that cannot be read has no summary to style at all.
-    assert [e for e in drawn["gate_empty"]["history"] if e["alert"]] == []
+    # A gate result that cannot be read has no summary to style: the backend's note stands in its
+    # place, and it alone carries a class, the neutral one (the release-prep review's minor M-4:
+    # it was drawn amber). Drawn with the amber warning class, or the risk one, it fails here.
+    note = [e for e in drawn["gate_empty"]["history"] if e["alert"]]
+    assert note == [
+        {
+            "alert": [NEUTRAL],
+            "role": "decision-gate-note",
+            "text": saved_run_view.GATES_NOT_READABLE[:48],
+        }
+    ]
     unreadable = damaged["liquidity_not_readable"]["detail"]["saved_run_view"]["gates"]
     assert unreadable["kinds"] == ["EVIDENCE", "NOT_READABLE"]
     alerts = [e["alert"] for e in drawn["liquidity_not_readable"]["history"] if e["alert"]]
@@ -389,6 +398,16 @@ def test_the_neutral_style_is_neutral_and_the_three_differ_without_colour() -> N
         assert rules[f"{line}.{NEUTRAL}"] == "border-left: 3px solid var(--line);"
         assert rules[f"{line}.{RISK}"] == "border-left: 3px solid var(--danger);"
         assert rules[f"{line}.{SAFETY}"] == "border-left: 3px dashed var(--safety);"
+    # The note of a reopened run whose gate result cannot be read: the neutral bar, the page's
+    # text colour, and no alarm colour (minor M-4). It has no risk or safety style at all.
+    note = rules[".decision-gate-note"] + rules[f".decision-gate-note.{NEUTRAL}"]
+    for colour in alarm:
+        assert colour not in note, colour
+    assert "border-left: 3px solid var(--line);" in rules[".decision-gate-note"]
+    assert "color: var(--text);" in rules[".decision-gate-note"]
+    assert rules[f".decision-gate-note.{NEUTRAL}"] == "border-left: 3px solid var(--line);"
+    styled_notes = {name for name in rules if name.startswith(".decision-gate-note.gate-alert-")}
+    assert styled_notes == {f".decision-gate-note.{NEUTRAL}"}
     # Readable on the dark page: the neutral and safety pills are light text on a faint fill.
     assert "color: var(--text);" in rules[f".decision-badge-block.{NEUTRAL}"]
     assert "color: var(--safety);" in rules[f".decision-badge-block.{SAFETY}"]

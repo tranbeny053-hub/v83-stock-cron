@@ -701,6 +701,113 @@ def test_a_reopened_runs_data_sections_never_read_na_for_a_value_its_screen_show
     assert "Saved analysis" in screens["evidence_only"]["history"], "the known version is drawn"
 
 
+# The rows that repeat a value of the stored market-data block, and the key each reads.
+MARKET_ROWS = {
+    "Symbol availability": "symbol_availability",
+    "Cross-provider state": "cross_provider_state",
+    "Fallback to single provider": "fallback_to_single_provider",
+    "Disagreement bps": "disagreement_bps",
+}
+PROVIDER_CROSS_LABELS = ("Cross-provider state", "Fallback to single provider", "Disagreement bps")
+
+
+def test_a_reopened_runs_market_rows_show_what_its_stored_market_data_block_holds(
+    cases: dict, reopened: dict, screens: dict
+) -> None:
+    """The release-prep review's minor M-1. A reopened run read "n/a" for the warnings, the
+    symbol's availability and the cross-provider values, which the same screen's Market Data v2
+    section shows a few lines below from the stored `market_data_v2_detail`. Each such row now
+    shows the stored value (in Provider State the row is left out: the block holds those values,
+    not the run's provider state). Live screens are as they were; a value the record does not
+    hold still reads "n/a", as it did."""
+
+    def sections(texts: list[str]) -> dict[str, list[str]]:
+        return {
+            "gates": harness._between(texts, "Gates", "Market Data Quality"),
+            "quality": harness._between(texts, "Market Data Quality", "Provider State"),
+            "provider": harness._between(
+                texts, "Provider State", "Market Data v2 / Provider Observability"
+            ),
+            "v2": harness._between(
+                texts, "Market Data v2 / Provider Observability", "Quant Signals"
+            ),
+        }
+
+    def table(v2: list[str], key: str) -> str:
+        return harness._value(v2, key.replace("_", " "))
+
+    def stored(change) -> dict:
+        detail = sanitize_for_export(copy.deepcopy(cases["evidence_only"]["detail_view"]))
+        change(detail)
+        return {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view(detail),
+        }
+
+    def distinct(detail: dict) -> None:
+        detail["market_data_v2_detail"].update(
+            symbol_availability="BOTH_PROVIDERS",
+            cross_provider_state="COHERENT",
+            fallback_to_single_provider=False,
+            disagreement_bps=3.25,
+            warnings=["first stored warning", "second stored warning"],
+        )
+
+    runs = {
+        "distinct": stored(distinct),
+        "block_lost": stored(lambda d: d.pop("market_data_v2_detail")),
+    }
+    rendered = goldens.render({}, runs)["screens"]
+    # Each row reads its own key: every value of the block is distinct from the others.
+    mine = sections(rendered["distinct"]["history"])
+    expected = {
+        "Symbol availability": "BOTH_PROVIDERS",
+        "Cross-provider state": "COHERENT",
+        "Fallback to single provider": "no",
+        "Disagreement bps": "3.2500",
+    }
+    for label, key in MARKET_ROWS.items():
+        assert harness._value(mine["v2"], label) == expected[label] == table(mine["v2"], key)
+    warnings = "first stored warning, second stored warning"
+    assert harness._value(mine["gates"], "Warnings") == warnings
+    assert harness._value(mine["quality"], "Warnings") == warnings
+    for label in PROVIDER_CROSS_LABELS:
+        assert label not in mine["provider"], label
+    assert [harness._value(mine["provider"], label) for label in ("Status", "Reason")] == [
+        "n/a",
+        "n/a",
+    ], "what the record's view does not carry reads as it did"
+    # Every reopened golden: no such row reads "n/a" where the table below shows a value.
+    for name in (*goldens.HISTORY, SAVED_BEFORE):
+        parts = sections(screens[name]["history"])
+        for label, key in MARKET_ROWS.items():
+            assert harness._value(parts["v2"], label) == table(parts["v2"], key), (name, label)
+        assert harness._value(parts["v2"], "Cross-provider state") == "UNAVAILABLE", name
+        for part in ("gates", "quality"):
+            assert harness._value(parts[part], "Warnings") == "none", (name, part)
+        for label in PROVIDER_CROSS_LABELS:
+            assert label not in parts["provider"], (name, label)
+    # A record without the block: the rows are as they were, "n/a" each.
+    lost = sections(rendered["block_lost"]["history"])
+    for label in MARKET_ROWS:
+        assert harness._value(lost["v2"], label) == "n/a", label
+    for label in PROVIDER_CROSS_LABELS:
+        assert harness._value(lost["provider"], label) == "n/a", label
+    assert harness._value(lost["gates"], "Warnings") == "n/a"
+    # A live analysis's screen is untouched: its own rows, the Provider State ones included.
+    for name in cases:
+        parts = sections(screens[name]["detail"])
+        payload = cases[name]
+        for label in PROVIDER_CROSS_LABELS:
+            assert label in parts["provider"], (name, label)
+        assert harness._value(parts["provider"], "Cross-provider state") == (
+            payload["provider_state"].get("cross_provider_state") or "n/a"
+        ), name
+        assert harness._value(parts["v2"], "Cross-provider state") == (
+            payload["data_quality"].get("cross_provider_state") or "n/a"
+        ), name
+
+
 def test_a_reopened_run_of_unusable_data_says_not_assessed_not_not_kept(
     cases: dict, reopened: dict
 ) -> None:

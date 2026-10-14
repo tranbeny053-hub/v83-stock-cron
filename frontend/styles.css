@@ -1544,6 +1544,18 @@ pre {
   color: var(--muted);
 }
 
+/* A reopened run whose gate result cannot be read: the backend's note stands where the summary
+   would, with the same bar and in the page's own text colour. Never amber or red. */
+.decision-gate-note {
+  margin: 0 0 12px;
+  border-left: 3px solid var(--line);
+  padding: 4px 0 4px 10px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 .decision-gate-list {
   margin: 0 0 12px;
   padding-left: 22px;
@@ -1610,7 +1622,8 @@ pre {
 }
 
 .decision-gates.gate-alert-neutral,
-.decision-gate-framing.gate-alert-neutral {
+.decision-gate-framing.gate-alert-neutral,
+.decision-gate-note.gate-alert-neutral {
   border-left: 3px solid var(--line);
 }
 

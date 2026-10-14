@@ -638,6 +638,38 @@ function keptValue(saved, own, kept) {
   return saved ? savedValue(kept) : own;
 }
 
+// A reopened run's stored market-data block (the release-prep review's minor M-1). The screen's
+// Market Data v2 section shows it whole: detail/builder.py copies each of its values from the
+// analysis's data quality. A live analysis has none here: its rows read its own response.
+function storedMarketBlock(saved, details) {
+  const block = details?.market_data_v2_detail;
+  return saved && block && typeof block === "object" && !Array.isArray(block) ? block : null;
+}
+
+// A row that repeats a value of that block: the row's own value when the screen has one; else,
+// for a reopened run, the value the block holds, as its table below shows it (one it holds as
+// null reads "n/a" in both places). Without the block the row's own value stands.
+function storedMarketValue(market, own, key) {
+  if (own !== null && own !== undefined) return own;
+  return market ? market[key] : own;
+}
+
+// The Provider State rows whose values the market-data block also holds. A reopened run's history
+// row carries no provider state, so for a value the block holds the row is left out: the block's
+// table below shows it, and the row would only read "n/a" beside it.
+function providerCrossRows(providerState, market) {
+  const rows = [
+    ["Cross-provider state", "cross_provider_state"],
+    ["Fallback to single provider", "fallback_to_single_provider"],
+    ["Disagreement bps", "disagreement_bps"],
+  ];
+  return rows.filter(([, key]) => {
+    const own = providerState[key];
+    const shownBelow = market && Object.prototype.hasOwnProperty.call(market, key);
+    return (own !== null && own !== undefined) || !shownBelow;
+  }).map(([label, key]) => [label, providerState[key]]);
+}
+
 // A value of a saved run's view: what the stored record holds, or, where the backend gives none,
 // the sentence that says it is not kept. Never "n/a": a reopened run says what it does not store.
 function savedValue(value, format = (kept) => kept) {
@@ -699,9 +731,11 @@ function renderSavedRun(payload, saved) {
   const sentence = (text, className) => (backendText(text) ? [textBlock("p", text, className)] : []);
   return section("Saved analysis", [
     ...sentence(range.explanation, "decision-detail"),
+    // Without a readable gate result, the backend's note stands in the summary's place, in the
+    // neutral style: never the risk or the amber one (the release-prep review's minor M-4).
     ...(gates
       ? [...gateFramingBlocks(gates), ...gateDetailList(gates)]
-      : sentence(saved.gates_note, "decision-warning")),
+      : sentence(saved.gates_note, `decision-gate-note ${GATE_ALERT_CLASSES.NEUTRAL}`)),
     keyValueTable(savedRunRows(payload, saved)),
     ...sentence(range.meaning, "muted"),
     ...sentence(saved.cost?.label, "muted"),
@@ -2214,9 +2248,12 @@ function renderStructuredDetail(payload, detailView) {
   // A reopened run's history row carries none of these rows' values. Where the view built from
   // its stored record holds one, the row shows it, as the run's own block does: in Overview, in
   // Gates, and for the data source, the live-data flag and the venue in the data sections below.
-  // One row never reads "n/a" for a value another row shows. A value the record's view does not
-  // carry at all (the data-quality status, the provider's cross-check) still reads "n/a" there.
+  // A row that repeats a value of the stored market-data block (the warnings, the symbol's
+  // availability, the cross-provider values) shows the block's value; in Provider State it is left
+  // out instead. So no row reads "n/a" for a value another row shows. A value neither holds (the
+  // data-quality status, age and failures; the provider's status and reason) still reads "n/a".
   const kept = saved || {};
+  const keptMarket = storedMarketBlock(saved, details);
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
@@ -2282,7 +2319,7 @@ function renderStructuredDetail(payload, detailView) {
           gateTokenLabel("Hard blocks", "internal gate tokens", view),
           gate.hard_blocks ?? kept.hard_blocks,
         ],
-        ["Warnings", dataQuality.warnings],
+        ["Warnings", storedMarketValue(keptMarket, dataQuality.warnings, "warnings")],
       ]),
       objectTable(details.risk_detail),
     ]),
@@ -2291,7 +2328,7 @@ function renderStructuredDetail(payload, detailView) {
         ...(view ? [["Decision view", decisionDataText(view.data)]] : []),
         ["Status", dataQuality.status],
         ["Latest age seconds", dataQuality.latest_candle_age_seconds],
-        ["Warnings", dataQuality.warnings],
+        ["Warnings", storedMarketValue(keptMarket, dataQuality.warnings, "warnings")],
         ["Failures", dataQuality.provider_failures],
         ["Data source", keptValue(saved, dataQuality.data_source, kept.data?.data_source)],
         ["Live data", keptValue(saved, dataQuality.is_live_data, kept.data?.is_live_data)],
@@ -2301,19 +2338,33 @@ function renderStructuredDetail(payload, detailView) {
       keyValueTable([
         ["Active provider", keptValue(saved, providerState.active_provider, kept.venue)],
         ["Status", providerState.status],
-        ["Cross-provider state", providerState.cross_provider_state],
-        ["Fallback to single provider", providerState.fallback_to_single_provider],
-        ["Disagreement bps", providerState.disagreement_bps],
+        ...providerCrossRows(providerState, keptMarket),
         ["Reason", providerState.cross_provider_reason],
       ]),
       objectTable(providerState.providers),
     ]),
     section("Market Data v2 / Provider Observability", [
       keyValueTable([
-        ["Symbol availability", dataQuality.symbol_availability],
-        ["Cross-provider state", dataQuality.cross_provider_state],
-        ["Fallback to single provider", dataQuality.fallback_to_single_provider],
-        ["Disagreement bps", dataQuality.disagreement_bps],
+        [
+          "Symbol availability",
+          storedMarketValue(keptMarket, dataQuality.symbol_availability, "symbol_availability"),
+        ],
+        [
+          "Cross-provider state",
+          storedMarketValue(keptMarket, dataQuality.cross_provider_state, "cross_provider_state"),
+        ],
+        [
+          "Fallback to single provider",
+          storedMarketValue(
+            keptMarket,
+            dataQuality.fallback_to_single_provider,
+            "fallback_to_single_provider",
+          ),
+        ],
+        [
+          "Disagreement bps",
+          storedMarketValue(keptMarket, dataQuality.disagreement_bps, "disagreement_bps"),
+        ],
       ]),
       objectTable(details.market_data_v2_detail || dataQuality.derived_market_metrics),
     ]),

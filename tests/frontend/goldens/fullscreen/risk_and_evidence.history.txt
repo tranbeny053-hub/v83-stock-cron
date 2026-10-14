@@ -90,7 +90,7 @@ NO_TRADE
 Hard blocks (internal gate tokens, not a market call)
 TAIL_RISK_BREACH, SKILL_NOT_DEMONSTRATED
 Warnings
-n/a
+none
 risk arbiter
 View
 {
@@ -122,7 +122,7 @@ n/a
 Latest age seconds
 n/a
 Warnings
-n/a
+none
 Failures
 n/a
 Data source
@@ -134,19 +134,13 @@ Active provider
 okx
 Status
 n/a
-Cross-provider state
-n/a
-Fallback to single provider
-n/a
-Disagreement bps
-n/a
 Reason
 n/a
 Market Data v2 / Provider Observability
 Symbol availability
 n/a
 Cross-provider state
-n/a
+UNAVAILABLE
 Fallback to single provider
 n/a
 Disagreement bps
