@@ -44,15 +44,27 @@ IS REACHABLE. NOTHING IS DEPLOYED.**
 - Outside the repository, for the owner's use: a GPT hand-over bundle (.work/p7/gpt_handoff_20261012; ZIP
   f408417f…, validated 2026-10-14). Two successor threads were graded QUALIFIED against its key on 2026-10-14; for
   the second, the live anchors were reconciled with no drift.
-  - Claude's read-only verdict, not a ruling: the 2026-09-28 succession protocol still governs. The owner's
-    instructions of that day, never recorded here before, are verbatim in .work/succession/
-    UCPE_SUCCESSOR_HANDOFF_V1/02_AUTHORITY_DOCTRINE_OWNER_UX_AND_ROUTING.md, Appendices A1 and A2. SQ1 to SQ6 are
-    PENDING for the second successor, with no credit carried over; PREDECESSOR_RETIREMENT = NOT_YET.
+  - Corrected under the owner's T0 of 2026-10-14 (verbatim below). The succession is governed by the owner's
+    authority of 2026-09-28, which that T0 preserves. Never recorded here before, it is in the folder
+    .work/succession/UCPE_SUCCESSOR_HANDOFF_V1/:
+    - 02_AUTHORITY_DOCTRINE_OWNER_UX_AND_ROUTING.md, Appendix A1 (the plan ruling, verbatim) and Appendix A2 (the
+      commissioning instruction's purpose and succession clauses, verbatim);
+    - 08_SUCCESSOR_BOOTSTRAP_QUALIFICATION_AND_RETIREMENT.md, Parts B and C: the protocol built on them (SQ1 to SQ6,
+      six retirement criteria, the retirement record).
+  - The second successor's gates, as the owner records them (Claude saw no audit): SQ1 to SQ4 PASS; SQ5 blind (the
+    live-boundary adjudication) PASS, its milestone PENDING; SQ6 clean streak 3/3, its independent next-boundary
+    choice PENDING. As first prepared (d20522e), this record said SQ1 to SQ6 were PENDING.
+  - The owner's retirement consent is conditional: only when every retirement criterion is met, RETIREMENT_RECOMMENDED
+    is stated (criterion 5) and the retirement record is verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
 - Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
 - Nothing changed in production or the migrations: no deploy, no claim activation, no acceptance change, no
   H2/F3/§5A change, no A4C reseal.
 - This record is the batch's last publish. Before it: #258.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-14), verbatim — a T0: the succession gates and the owner's conditional retirement consent:**
+```text
+CONTINUE CURRENT (Opus HIGH), /Users/kha/Documents/Kha-app/UCPE. Verify main@4b8f374d and LOCAL STATE@d20522ec; HOLD on drift. T0 LOCAL-only correct SQ1–4 PASS, SQ5 blind PASS/milestone PENDING, SQ6 3/3/boundary PENDING, and owner's conditional retirement consent (all criteria, RETIREMENT_RECOMMENDED, verified record); preserve 2026-09-28 owner authority and verbatim history. New STATE-only head, full gate/3 scanners, fresh diff review. No push/T3/T4/HF/prod/protected access.
+```
 - **The owner (2026-10-14), verbatim — the T3, GitHub only, for the exact release-prep head; STATE prepared only:**
 ```text
 CONTINUE CURRENT (Opus XHIGH), /Users/kha/Documents/Kha-app/UCPE. T3 GitHub-only: verify canonical/no drift, exact feat/p7p-release-prep-news-state@4529b76789e2a4a5f787e0da194148d5155712b3, tree 69b4d530e66fa61db87512a25af8c96a6465e16c, full PR diff=reviewed. Push/PR; all required CI/repro PASS on exact SHA; merge-commit only; verify main CI/build. STATE-last: prepare only; separate T3 to push. N-1 HOLD, N-2 DEFER, N-6 unchanged; UX NOT_RUN. HOLD on drift/failure. No HF/T4/prod/protected access.
@@ -2556,6 +2568,9 @@ LOOP_STATE=THE RELEASE-PREP WORK IS PUBLISHED (#258, 2026-10-14), under the owne
       commit's tree is 69b4d530, the reviewed head's tree.
   - This record: prepared under that T3 on the local branch chore/state-p7p-release-prep-published (STATE.md only,
     on main 4b8f374d); it is published only under the owner's separate T3.
+  - Corrected under the owner's T0 of 2026-10-14 (verbatim above), LOCAL only and STATE.md only: the GPT
+    succession's gates and the owner's conditional retirement consent; the 2026-09-28 authority and the verbatim
+    history are kept.
   - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom); the GPT hand-over bundle
     .work/p7/gpt_handoff_20261012 is a snapshot of 2026-10-12 and predates #258.
   Before it: THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
@@ -6362,8 +6377,8 @@ GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-14). Nothing is urgent; production is unchanged and safe as it is.
   Main 4b8f374d is NOT released.
   0. The separate T3 for this STATE record (the owner's T3 of 2026-10-14 had it prepared only): the branch
-     chore/state-p7p-release-prep-published, STATE.md only, one commit on main 4b8f374d; its checks; merge commit
-     only; main's CI and build.
+     chore/state-p7p-release-prep-published, STATE.md only, on main 4b8f374d; its checks; merge commit only; main's
+     CI and build.
   1. The wording freeze: after review (S4, X3), before the UX check (R5). All of it is PROVISIONAL
      (.work/p7/redesign/WORDING_TABLE.md; the prep review's wording notes, N-11, in .work/p7/LANE_RECORD.md). A
      freeze that changes wording needs a lane and a publication of its own before the UX check (U4: after the final
@@ -6373,9 +6388,10 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-14). Nothing is urgent; produ
   3. N-1 (HOLD), N-2 (deferred), N-6 (unchanged): keep, or rule a lane.
   4. Hash acceptance at T4 (G5); the UOR side must be told.
   5. T4, the release chain (docs/runbooks/RELEASE.md, not started): only after a UX PASS (X6), on the owner's word.
-  - The GPT succession (Claude's read-only verdict, not a ruling: the 2026-09-28 protocol governs): the owner names
-    the predecessor thread, confirms it is available and states the reply language once; SQ1 to SQ6 are pending;
-    retirement only on the owner's explicit word.
+  - The GPT succession, under the owner's 2026-09-28 authority (preserved 2026-10-14): SQ1 to SQ4 PASS; SQ5 blind
+    PASS, its milestone PENDING; SQ6 3/3, its independent next-boundary choice PENDING (the owner's record). The
+    owner's retirement consent is conditional: every criterion met, RETIREMENT_RECOMMENDED stated, the retirement
+    record verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
   - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
   - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
     the four acceptance blockers. Two of their texts are partly untrue after the redesign (noted, untouched).
