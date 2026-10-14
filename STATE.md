@@ -1,47 +1,98 @@
 # STATE
 
-Updated: 2026-10-12 (**THE CLASS-B REDESIGN IS PUBLISHED (#256): NO DEFAULT SCREEN READS MISSING EVIDENCE OR MISSING
-DATA AS A MARKET SIGNAL. IT IS NOT RELEASED. FIVE MINORS ARE OPEN, THE WORDING IS PROVISIONAL, AND THE REQUIRED UX
-CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOYED.**
-- The owner (verbatim below) authorized the T3 for the exact reviewed head.
-- #256 → main eb70f7f4: a merge commit on feat/p7p-class-b-redesign @ 4398a01 (tree 1b80fb47); 16 commits on main
-  a208192b; 94 files, +12837/-3137.
-  - Checked before the merge: the pull request's head, tree, commits and file list, and every added and removed
-    line of its 18,604-line diff, equal the reviewed diff.
-  - 6 of 6 checks are green on 4398a01. CI / test ran 7583 passed, the local gate's count. The others: build-a,
-    build-b and compare; the A4 ledger audit rehearsal; the A4 Card-04 companion rehearsal, on its required
-    PostgreSQL 17.6.
-  - Main's push runs on eb70f7f4 are green: CI 38160707620 and reproducible build 38160707585.
-- What it carries:
-  - One gate authority in the Decision view (decision_view.v2, `gates`): the kinds of gate active (evidence;
-    risk, a measured market or execution finding; system or data, which includes missing or unusable data and is
-    never a market finding), one summary, one framing sentence, and each active gate with its headline and detail.
-    The frontend displays these sentences and words none of its own.
-  - What only the older decision sections said is in the view; a reopened run has a view of its own, built when
-    it is read from what the run stores.
-  - The older decision sections are retired from the default screen. Raw gate tokens that remain carry a label.
-  - The view says beside the cost when it is fees only. A new asset token (p7p-20261011-a) is served with the new
-    view version.
-  - 56 whole-screen pins; a whole-screen "must not say" test; the UX card rebuilt from the real screen with six
-    plain-language questions about what a screen means, the save receipt included. The card is PREPARED, NOT RUN.
-- Reviewed before publication by a new reviewer with no prior context: PASS_WITH_MINORS; CLASS_B_REMAINS = NO.
-- OPEN by the owner's word, none of them patched:
-  - m1: a stored record corrupted in three fields at once (a shape no version of the gates has written) shows the
-    forced token without its note;
-  - m2: a reopened run whose stored liquidity state is missing or partial is worded as missing data;
-  - m3: a reopened run's data sections read "n/a" for values its own view shows above;
-  - m4: the evidence gate's threshold ("fewer than 100 resolved outcomes") is on no default screen;
-  - m5: two test mutants survive (a version guard; a reopened unavailable-data run's rows).
-  - The retired sentences remain in the response payload (Raw JSON, Download JSON); they are no longer rendered.
-- Governed hashes moved and are pinned: every analysis_hash moves at release, the two synthetic radar examples'
-  hashes with it. The radar schemas and every value's meaning are unchanged; the automation analysis carries no
-  decision view. Hash acceptance is the owner's, at T4 (G5).
-- All new wording is PROVISIONAL (U2): .work/p7/redesign/WORDING_TABLE.md. It is not frozen.
+Updated: 2026-10-14 (**THE RELEASE-PREP WORK IS PUBLISHED (#258): THE FIVE MINORS OF #256, ALERT STYLES BY GATE KIND,
+THE DECISION VIEW'S LAYOUT, THE CHANGELOG, AND REOPENED RUNS THAT SAY WHAT THEIR RECORD HOLDS. IT IS NOT RELEASED.
+THE WORDING IS PROVISIONAL AND THE REQUIRED UX CHECK IS NOT_RUN. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION
+IS REACHABLE. NOTHING IS DEPLOYED.**
+- The owner (verbatim below) authorized the T3, GitHub only, for the exact head and tree, with STATE last: prepared
+  under that T3, pushed under a separate one.
+- #258 → main 4b8f374d: a merge commit on feat/p7p-release-prep-news-state @ 4529b76 (tree 69b4d530); 10 commits on
+  main ab4b43d7; 45 files, +2316/-288.
+  - Checked before the merge: the pull request's head, base, 10 commits and 45 files, and every added and removed
+    line (2,604) of its diff, equal the reviewed diff (.work/p7/redesign/handoff/full_reviewed_4529b76.diff); each
+    lane's reviewed diff is byte-equal to Git's diff for its range.
+  - 4 of 4 checks are green on 4529b76. CI / test ran 7651 passed, the local gate's count. The others: build-a,
+    build-b and compare. No A4 rehearsal input changed, so neither A4 rehearsal ran.
+  - Main's push runs on 4b8f374d are green: CI 38594841204 and reproducible build 38594841307. The merge commit's
+    tree is 69b4d530, the reviewed head's.
+- What it carries (X1, X2, then the minors of each review):
+  - The five minors of #256's review (m1 to m5): a forced token keeps its note even when a stored record's flags
+    are damaged; a reopened run whose stored liquidity state cannot be read asserts no cause; a reopened run's data
+    rows show the values its own view holds; a live view's evidence-gate entry carries the backend's own reason for
+    the verdict; two test gaps closed.
+  - Alert styles from the backend's gate kinds (X2): neutral for the evidence gate alone; the risk style for a
+    measured risk gate; a dashed style of its own for a system or data gate. The Decision view's lines are laid out
+    (X1). Asset token p7p-20261012-a for both assets.
+  - CHANGELOG.md: one dated entry ("on main, not released") listing what the next release would carry since
+    UCPE-PROD-E2-20261004-A; the UOR handoff note brought up to date (no digest, table or contract change).
+  - Reopened runs show the stored values their own screen holds (market data, news warnings, influence mode, news
+    state) where the stored value is a verified copy of the live one. Their news "Provider status" row stays "n/a":
+    the export sanitizer masks a field of that stored list, and H3 keeps the sanitizer. Their unreadable-gate note is
+    neutral. The live news "Provider status" row shows the backend's list in a fold, not "[object Object]".
+- Reviewed before publication, each pass by a new reviewer with no prior context at its exact head: 1b919ae
+  PASS_WITH_MINORS; 1015a38 PASS_WITH_MINORS; 5e46114 PASS_WITH_MINORS; 4529b76 PASS. CLASS_B_REMAINS = NO each time.
+  Every minor a review raised was closed by the next pass; the reviews' notes are in .work/p7/LANE_RECORD.md.
+- Governed hashes: the analysis and response pins moved once, with their prior values recorded in the test; the
+  automation examples and every UOR digest are unchanged. Hash acceptance is the owner's, at T4 (G5).
+- HELD by the owner's word: N-1 (a per-check colour would need a backend field and move the governed pins) HOLD;
+  N-2 (the card's "Signal heat" tint) deferred; N-6 (NOT_READABLE under gate_view.v1) unchanged. X4, removing the
+  retired sentences from the response payload, is deferred because the contracts permit it: the response schema
+  requires them, the automation evidence withholds them, and removing them would move analysis_hash again.
+- All new wording is PROVISIONAL. The order the rulings give: the owner's wording freeze after review (S4, X3) and
+  before the UX check (R5); the UX check after the final publication (U4, X5); T4 only after a UX PASS (X6). The
+  record below lists the UX check before the freeze; that order was never a ruling.
+- Outside the repository, for the owner's use: a GPT hand-over bundle (.work/p7/gpt_handoff_20261012; ZIP
+  f408417f…, validated 2026-10-14). Two successor threads were graded QUALIFIED against its key on 2026-10-14; for
+  the second, the live anchors were reconciled with no drift.
+  - Claude's read-only verdict, not a ruling: the 2026-09-28 succession protocol still governs. The owner's
+    instructions of that day, never recorded here before, are verbatim in .work/succession/
+    UCPE_SUCCESSOR_HANDOFF_V1/02_AUTHORITY_DOCTRINE_OWNER_UX_AND_ROUTING.md, Appendices A1 and A2. SQ1 to SQ6 are
+    PENDING for the second successor, with no credit carried over; PREDECESSOR_RETIREMENT = NOT_YET.
 - Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
 - Nothing changed in production or the migrations: no deploy, no claim activation, no acceptance change, no
   H2/F3/§5A change, no A4C reseal.
-- This record is the batch's last publish. Before it: #256.)
+- This record is the batch's last publish. Before it: #258.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-14), verbatim — the T3, GitHub only, for the exact release-prep head; STATE prepared only:**
+```text
+CONTINUE CURRENT (Opus XHIGH), /Users/kha/Documents/Kha-app/UCPE. T3 GitHub-only: verify canonical/no drift, exact feat/p7p-release-prep-news-state@4529b76789e2a4a5f787e0da194148d5155712b3, tree 69b4d530e66fa61db87512a25af8c96a6465e16c, full PR diff=reviewed. Push/PR; all required CI/repro PASS on exact SHA; merge-commit only; verify main CI/build. STATE-last: prepare only; separate T3 to push. N-1 HOLD, N-2 DEFER, N-6 unchanged; UX NOT_RUN. HOLD on drift/failure. No HF/T4/prod/protected access.
+```
+- **The owner (2026-10-14), verbatim — one LOCAL lane: MINOR-A and MINOR-B (news State and Provider status):**
+```text
+CONTINUE CURRENT, Opus HIGH. Verify canonical/no drift at feat/p7p-release-prep-news@5e46114519518142872c08dbe8ba8032c94948c3; NEW LOCAL branch. Fix MINOR-A saved News State from verified stored status; MINOR-B live Provider status readable; tests incl unpinned case. Preserve H3 sanitizer; N-1 HOLD, N-2 DEFER, N-6 unchanged; 69 pins/contracts unchanged. Full gate, 3 scanners, 56 screen pins, browser, fresh independent exact-head review. HOLD on drift/scope; no push/T3/T4/prod/protected access.
+```
+- **The owner (2026-10-14), verbatim — one LOCAL lane: MINOR-1 (the reopened news rows):**
+```text
+CONTINUE CURRENT (Opus HIGH), `/Users/kha/Documents/Kha-app/UCPE`. Verify canonical state/no drift at `feat/p7p-release-prep-minors@1015a38fb7901765cfa709dd9d2644295e54a0a7`; new LOCAL branch: fix MINOR-1 (News Warnings/Influence mode/Provider status from verified stored values; fix comment). N-1 HOLD, N-2 DEFER, N-6 untouched, 69 pins/contracts unchanged; full tests, 3 scanners, 56 screens, fresh independent review of exact head; HOLD on drift/scope breach; no push/T3/T4/prod/protected access.
+```
+- **The owner (2026-10-14), verbatim — one LOCAL lane: M-1 to M-5; N-1 only if safe, else HOLD:**
+```text
+CONTINUE CURRENT — Opus HIGH; `/Users/kha/Documents/Kha-app/UCPE`. Read current governing files; confirm `feat/p7p-release-prep@1b919aecfcdc3c24ceee77b8d8b039fa417fec9e`, HOLD on drift. Owner LOCAL-only scope: new branch; fix M-1–M-5; N-1 only if within safe scope, else HOLD; N-2 DEFER; N-6 read-only. Full `./verify.sh`, 3 scanners, 56 screen pins, UI checks and fresh independent review. Return exact head/evidence/blockers; no push, T3/T4, prod, protected access or contract/pin edits.
+```
+- **The owner (2026-10-14), verbatim — does the 2026-09-28 succession protocol still govern (read-only):**
+```text
+CONTINUE CURRENT — Opus HIGH. Read-only determine whether the 2026-09-28 SQ1–SQ6 shadow-audit protocol still governs this newly QUALIFIED successor, using current owner rulings, STATE.md and the original protocol; do not transfer prior candidates' SQ credits. Map current evidence to each gate and identify the shortest compliant retirement path. Return one compact verdict with exact remaining boundaries. No T3/T4, execution, waiver or retirement.
+```
+- **The owner (2026-10-14), verbatim — grade the second successor's cold start; then the read-only anchor check:**
+```text
+[attachment: the second successor thread's answers file]
+CONTINUE CURRENT — Opus HIGH. Independently grade the attached `UCPE_COLD_START_ANSWERS.md` against `.work/p7/gpt_handoff_20261012_ANSWER_KEY.md`, read-only; report exact mismatches and QUALIFIED/NOT_QUALIFIED. Only if PASS, immediately perform the prescribed `01_EXACT_STATE.md` §7 read-only anchor check and reconcile current Git/CI/production/local candidate. Return one compact combined verdict and material differences; no T3/T4, changes or retirement.
+```
+- **The owner (2026-10-14), verbatim — grade the first successor's cold start:**
+```text
+[attachment: the first successor thread's answers file]
+CONTINUE CURRENT — Opus HIGH. Independently grade the attached UCPE COLD_START_ANSWERS against `.work/p7/gpt_handoff_20261012_ANSWER_KEY.md`, read-only. Verify Q1–Q24, P1–P17 and material conflicts; return only PASS/FAIL, mismatched IDs, severity and retirement blockers. No rewriting answers, T3/T4, product changes or self-grading.
+```
+- **The owner (2026-10-12), verbatim — a portable GPT full-retirement bundle:**
+```text
+CONTINUE CURRENT — Opus XHIGH. Build a portable UCPE→GPT full-retirement bundle at `.work/p7/gpt_handoff_20261012`: owner doctrine/rulings, canonical source snapshots, exact Git/CI/production/local T3 state, holds, reviews, release gates, reviewed diff, manifest+SHA256 and cold-start qualification. Include every DIRECT_REQUIRED file's bytes; verify completeness, consistency and no secrets. Export a ZIP. No code changes, T3/push/deploy or new lanes. Return bundle path, ZIP path, digest and validation verdict.
+```
+- **The owner (2026-10-12), verbatim — X1 to X6: one bounded LOCAL release-prep lane:**
+```text
+CONTINUE CURRENT — Opus XHIGH. X1=GO one bounded LOCAL prep lane (5 minors, gate layout, CHANGELOG, UOR note); X2=neutral evidence-only, distinct risk/safety alerts; X3=approve baseline semantics, freeze final wording after review; X4=defer payload removal only if contract permits; X5=owner UX after publication; X6=T4 only after UX PASS.
+
+Run full gates, browser UX, hash/A4 checks and fresh review. No Codex, T3 push, deploy or acceptance relaxation. Return ONE exact-final T3 package or genuine blocker.
+```
 - **The owner (2026-10-12), verbatim — the T3 for the exact-final redesign; then one release-readiness boundary:**
 ```text
 CONTINUE CURRENT — Opus XHIGH. T3 AUTHORIZE exact reviewed feat/p7p-class-b-redesign@4398a010858e0159bc425fc85685448b4ef31e01. Verify exact diff and all required CI, including both A4 rehearsals; merge-commit only if ALL PASS, confirm main CI/build, then publish refreshed STATE last.
@@ -2486,7 +2537,28 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
+LOOP_STATE=THE RELEASE-PREP WORK IS PUBLISHED (#258, 2026-10-14), under the owner's T3. It is NOT released. The
+  wording is PROVISIONAL and the UX check NOT_RUN. No deploy, T4, claim activation, acceptance change or waiver,
+  H2/F3/§5A change or A4C reseal.
+  - The owner (verbatim above): T3, GitHub only, for feat/p7p-release-prep-news-state @
+    4529b76789e2a4a5f787e0da194148d5155712b3, tree 69b4d530e66fa61db87512a25af8c96a6465e16c; the full pull-request
+    diff equal to the reviewed one; every required check green on the exact head; merge commit only; main's CI and
+    build; STATE last, prepared only, pushed under a separate T3.
+  - The four lanes, each a LOCAL pass under its own instruction (verbatim above) with a fresh review at its exact
+    head: 1b919ae (X1, X2: the minors m1-m5, layout, alert styles, CHANGELOG, UOR note); 1015a38 (M-1 to M-5);
+    5e46114 (MINOR-1); 4529b76 (MINOR-A, MINOR-B). Briefs: .work/p7/redesign/TASK_PREP_LANE.md,
+    TASK_MINORS_LANE.md, TASK_NEWS_ROWS.md, TASK_NEWS_STATE.md; reviewed diffs in .work/p7/redesign/handoff/.
+  - Published: #258 → main 4b8f374d, a merge commit (parents ab4b43d7 and 4529b76).
+    - 4 of 4 checks green on 4529b76: CI / test 38593862844 (7651 passed, the local count); reproducible build
+      38593862585 (build-a, build-b, compare). The two A4 rehearsals did not run: their path filters match no
+      changed file.
+    - Main's push runs on 4b8f374d: CI 38594841204 and reproducible build 38594841307, both green. The merge
+      commit's tree is 69b4d530, the reviewed head's tree.
+  - This record: prepared under that T3 on the local branch chore/state-p7p-release-prep-published (STATE.md only,
+    on main 4b8f374d); it is published only under the owner's separate T3.
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom); the GPT hand-over bundle
+    .work/p7/gpt_handoff_20261012 is a snapshot of 2026-10-12 and predates #258.
+  Before it: THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
   OPEN, the wording PROVISIONAL, the UX check NOT_RUN. No patch, deploy, T4, claim activation, acceptance change or
   waiver, H2/F3/§5A change or A4C reseal.
   - The owner (verbatim above): T3 AUTHORIZE the exact reviewed head feat/p7p-class-b-redesign @
@@ -5074,7 +5146,12 @@ LOOP_STATE=THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3.
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-12):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-14):
+  - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
+    (#250, #252), the run-store lock (#254), the class-B redesign (#256), the release-prep work (#258).
+  - NOT released: production is on D 1caa8b08. The required UX check is NOT_RUN; the wording is PROVISIONAL.
+  - Next: the owner's wording freeze and UX check, then the release decisions.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-12):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
     (#250, #252), the run-store lock (#254), the class-B redesign (#256).
   - NOT released: production is on D 1caa8b08. The required UX check is NOT_RUN; the wording is PROVISIONAL; five
@@ -5345,7 +5422,13 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-12):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7p-redesign-published (this record, on main eb70f7f4). Local and unpublished:
+CURRENT_BRANCH=chore/state-p7p-release-prep-published (this record, on main 4b8f374d). Local:
+  - feat/p7p-release-prep @ 1b919ae, feat/p7p-release-prep-minors @ 1015a38, feat/p7p-release-prep-news @ 5e46114,
+    feat/p7p-release-prep-news-state @ 4529b76: each is an ancestor of main now (#258); they can be deleted on the
+    owner's word.
+  - chore/state-p7p-prep-final @ 456448f: a local record never published (it lists the UX check before the wording
+    freeze, against R5); this record replaces it.
+  Before it: chore/state-p7p-redesign-published (this record, on main eb70f7f4). Local and unpublished:
   - chore/state-p7p-redesign-final @ 309f843: the local record this one was rebuilt from; never published as it
     was.
   - feat/p7p-gate-authority @ 716925f, feat/p7p-class-b-root-cause @ 5541cb5, feat/p7p-independent-lanes @ 44ac3bc:
@@ -5579,7 +5662,9 @@ CURRENT_BRANCH=chore/state-p7p-redesign-published (this record, on main eb70f7f4
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=eb70f7f4 (main, #256: the class-B redesign).
+LAST_GREEN_SHA=4b8f374d (main, #258: the release-prep work).
+  Its 4 PR checks, push CI 38594841204 and reproducible build 38594841307 are green. Before it ab4b43d7 (#257).
+  Before it: eb70f7f4 (main, #256: the class-B redesign).
   Its 6 PR checks, push CI 38160707620 and reproducible build 38160707585 are green. Before it a208192b (#255).
   Before it: a208192b (main, #255: the STATE record after #254). Its 4 PR checks, push CI 38150358132 and
   reproducible build 38150358133 are green.
@@ -5852,7 +5937,12 @@ LAST_GREEN_SHA=eb70f7f4 (main, #256: the class-B redesign).
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-12, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-14, scanners 3/3 each:
+  - chore/state-p7p-release-prep-published's tree (main 4b8f374d, whose tree is the reviewed head's, and this
+    record): 7651.
+  - Before the merge: feat/p7p-release-prep-news-state @ 4529b76: 7651 (the implementer's, Claude's and the
+    reviewer's run).
+  Before it: PASS 2026-10-12, scanners 3/3 each:
   - main eb70f7f4, locally, and chore/state-p7p-redesign-published's tree (that main and this record): 7583.
   - Before the merge: feat/p7p-class-b-redesign @ 4398a01: 7583.
   Before it: PASS 2026-10-11, scanners 3/3 each:
@@ -6134,7 +6224,10 @@ LAST_VERIFY=PASS 2026-10-12, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+CODEX_PENDING=NONE (2026-10-14). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
+  SUBSTITUTION); four fresh separate-context Claude reviews, one per pass; no paid fallback; no GPT consultation
+  (grading the successor answers the owner attached was not one). Model: claude-opus-5-5.
+  Before it: NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-10). Codex unavailable (owner): Claude implements, tests and reviews directly (MODEL
   SUBSTITUTION); fresh separate-context Claude reviews; no paid fallback; no GPT consultation. Model: claude-opus-5-5.
@@ -6266,7 +6359,29 @@ CODEX_PENDING=NONE (2026-10-10). Codex unavailable (owner): Claude implements, t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=ONE CONSOLIDATED RELEASE-READINESS BOUNDARY IS AT THE OWNER (2026-10-12). Nothing is urgent; production
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-14). Nothing is urgent; production is unchanged and safe as it is.
+  Main 4b8f374d is NOT released.
+  0. The separate T3 for this STATE record (the owner's T3 of 2026-10-14 had it prepared only): the branch
+     chore/state-p7p-release-prep-published, STATE.md only, one commit on main 4b8f374d; its checks; merge commit
+     only; main's CI and build.
+  1. The wording freeze: after review (S4, X3), before the UX check (R5). All of it is PROVISIONAL
+     (.work/p7/redesign/WORDING_TABLE.md; the prep review's wording notes, N-11, in .work/p7/LANE_RECORD.md). A
+     freeze that changes wording needs a lane and a publication of its own before the UX check (U4: after the final
+     publication).
+  2. The UX comprehension check (plan §23; docs/runbooks/UX_COMPREHENSION_CHECK.md): the owner's, NOT_RUN, on the
+     published screens. PASS is every answer matching the key. R4, the save receipt's UX acceptance, is decided there.
+  3. N-1 (HOLD), N-2 (deferred), N-6 (unchanged): keep, or rule a lane.
+  4. Hash acceptance at T4 (G5); the UOR side must be told.
+  5. T4, the release chain (docs/runbooks/RELEASE.md, not started): only after a UX PASS (X6), on the owner's word.
+  - The GPT succession (Claude's read-only verdict, not a ruling: the 2026-09-28 protocol governs): the owner names
+    the predecessor thread, confirms it is available and states the reply language once; SQ1 to SQ6 are pending;
+    retirement only on the owner's explicit word.
+  - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers. Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
+    3); DP-D's export limits stay documented and never proven.
+  Before it: ONE CONSOLIDATED RELEASE-READINESS BOUNDARY IS AT THE OWNER (2026-10-12). Nothing is urgent; production
   is unchanged and safe as it is. Main eb70f7f4 is NOT released.
   - What a T4 would carry to production: Lane P's Decision view (#246), the save receipt and storage wording
     (#248), the badge fixes (#250, #252), the run-store lock (#254) and the class-B redesign (#256).
@@ -7379,7 +7494,9 @@ OWNER_BOUNDARY=ONE CONSOLIDATED RELEASE-READINESS BOUNDARY IS AT THE OWNER (2026
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the release-readiness decisions above, at your pace (and the dated JWT renewal). Claude:
+NEXT_ACTION=The owner: the separate T3 for this STATE record; then the wording freeze and the UX check on
+  the published screens (and the dated JWT renewal). Claude: passive reads only; no push without a T3; no T4.
+  Before it: The owner: the release-readiness decisions above, at your pace (and the dated JWT renewal). Claude:
   passive reads only; no patch, no push without a T3, no T4.
   Before it: The owner: the T3 for the exact-final package (and the dated JWT renewal). Claude: passive reads only; no
   push without that T3; no further patch to the redesign without the owner's word.
