@@ -81,6 +81,8 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "keptValue",
             "storedMarketBlock",
             "storedMarketValue",
+            "storedNewsState",
+            "storedNewsValue",
             "providerCrossRows",
             "dispositionLabel",
             "gateTokenLabel",

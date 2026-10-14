@@ -817,6 +817,109 @@ def test_a_reopened_runs_market_rows_show_what_its_stored_market_data_block_hold
         ), name
 
 
+# The news rows that repeat a value of the stored news add-on state: label -> (section, key).
+NEWS_ROWS = {"Warnings": ("news", "warnings"), "Influence mode": ("authority", "influence_mode")}
+
+
+def test_a_reopened_runs_news_rows_show_what_its_stored_news_add_on_state_holds(
+    cases: dict, reopened: dict, screens: dict
+) -> None:
+    """The release-prep review's minor MINOR-1. A reopened run read "n/a" for the news warnings
+    and the influence mode, which the same screen's News Add-on section shows from the stored
+    `news_detail.news_addon_state`: the analysis's own news add-on state (detail/builder.py),
+    the object a live analysis's rows read. Each row now shows the stored value. "Provider
+    status" still reads "n/a": the record's list is the sanitized one (a provider's
+    `last_failure_error_code` is masked), not a copy of the list the row reads. Live screens are
+    as they were."""
+
+    def sections(texts: list[str]) -> dict[str, list[str]]:
+        authority = "News Authority / Macro & Micro Context"
+        return {
+            "news": harness._between(texts, "News Add-on", authority),
+            "authority": harness._between(texts, authority, "Debug / Raw JSON"),
+        }
+
+    def row(texts: list[str], label: str) -> str:
+        part, _ = NEWS_ROWS.get(label, ("authority", None))
+        return harness._value(sections(texts)[part], label)
+
+    def stored(change, *, detail: dict | None = None) -> dict:
+        kept = detail if detail is not None else cases["evidence_only"]["detail_view"]
+        kept = sanitize_for_export(copy.deepcopy(kept))
+        change(kept)
+        return {
+            "row": reopened["evidence_only"]["row"],
+            "detail": saved_run_view.attach_saved_run_view(kept),
+        }
+
+    def distinct(detail: dict) -> None:
+        news = detail["news_detail"]
+        news["news_addon_state"].update(
+            warnings=["first stored news warning", "second stored news warning"],
+            influence_mode="STORED_INFLUENCE_MODE",
+            provider_status=[{"provider": "stored_provider", "status": "OK"}],
+        )
+        # Every other block that holds a value of the same name holds another value.
+        for key in ("micro_news_context", "macro_context"):
+            news[key]["warnings"] = ["another block's warning"]
+        detail["market_data_v2_detail"]["warnings"] = ["a market-data warning"]
+        assert news["news_evidence"]["influence_mode"] == "ADVISORY_DISPLAY_ONLY"
+        assert news["news_influence"]["influence_mode"] == "ADVISORY_DISPLAY_ONLY"
+
+    runs = {
+        "distinct": stored(distinct),
+        "state_lost": stored(lambda d: d["news_detail"].pop("news_addon_state")),
+        "news_lost": stored(lambda d: d.pop("news_detail")),
+    }
+    # A row's own value stands where the screen has one: a response without a view that still
+    # carries its news add-on state, read beside a stored state that holds other values.
+    own = {k: v for k, v in cases["evidence_only"].items() if k != "decision_view"}
+    runs["own_value"] = {"row": own, "detail": runs["distinct"]["detail"]}
+    # A live analysis's rows read its own response only: one that carries none of these values,
+    # beside a detail whose news add-on state holds them, still reads "n/a".
+    live = copy.deepcopy(cases["evidence_only"])
+    assert live.get("decision_view"), "a live analysis has its view"
+    live.pop("news_addon_state")
+    live["frontend_display"].pop("news_warnings")
+    live_detail = stored(distinct, detail=live["detail_view"])["detail"]
+    runs["live_without_news"] = {"row": live, "detail": live_detail}
+    rendered = goldens.render({}, runs)["screens"]
+
+    mine = rendered["distinct"]["history"]
+    assert row(mine, "Warnings") == "first stored news warning, second stored news warning"
+    assert row(mine, "Influence mode") == "STORED_INFLUENCE_MODE"
+    assert row(mine, "Provider status") == "n/a", "the stored list is not read"
+    # Every reopened golden: each row shows the value its stored state holds.
+    for name in (*goldens.HISTORY, SAVED_BEFORE):
+        texts = screens[name]["history"]
+        state = reopened[name]["detail"]["news_detail"]["news_addon_state"]
+        assert (state["warnings"], state["influence_mode"]) == ([], "ADVISORY_DISPLAY_ONLY"), name
+        assert row(texts, "Warnings") == "none", name
+        assert row(texts, "Influence mode") == "ADVISORY_DISPLAY_ONLY", name
+        assert row(texts, "Provider status") == "n/a", name
+    # A record without the state, or without its news block: the rows are as they were.
+    for name in ("state_lost", "news_lost"):
+        for label in ("Warnings", "Influence mode", "Provider status"):
+            assert row(rendered[name]["history"], label) == "n/a", (name, label)
+    theirs = rendered["own_value"]["history"]
+    assert own["frontend_display"]["news_warnings"] == []
+    assert row(theirs, "Warnings") == "none"
+    assert row(theirs, "Influence mode") == own["news_addon_state"]["influence_mode"]
+    assert row(theirs, "Provider status") == "none"
+    for label in ("Warnings", "Influence mode", "Provider status"):
+        assert row(rendered["live_without_news"]["history"], label) == "n/a", label
+    # A live analysis's screen is untouched: its own rows.
+    for name in cases:
+        texts = screens[name]["detail"]
+        payload = cases[name]
+        warnings = payload["frontend_display"]["news_warnings"]
+        assert row(texts, "Warnings") == (", ".join(warnings) or "none"), name
+        state = payload["news_addon_state"]
+        assert row(texts, "Influence mode") == state["influence_mode"], name
+        assert state["provider_status"] == [], name
+        assert row(texts, "Provider status") == "none", name
+
+
 def test_a_reopened_run_of_unusable_data_says_not_assessed_not_not_kept(
     cases: dict, reopened: dict
 ) -> None:

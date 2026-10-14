@@ -249,7 +249,7 @@ News analysis disabled for this run.
 Mode
 METRICS_ONLY
 Warnings
-n/a
+none
 news addon state
 View
 {
@@ -316,7 +316,7 @@ View
   | }
 News Authority / Macro & Micro Context
 Influence mode
-n/a
+ADVISORY_DISPLAY_ONLY
 Influence
 0.0 advisory display only
 Provider status

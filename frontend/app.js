@@ -670,6 +670,22 @@ function providerCrossRows(providerState, market) {
   }).map(([label, key]) => [label, providerState[key]]);
 }
 
+// A reopened run's stored news add-on state (the release-prep review's minor MINOR-1). The
+// screen's News Add-on section shows it whole: detail/builder.py stores the analysis's own news
+// add-on state, the object a live analysis's news rows read. A live analysis has none here.
+function storedNewsState(saved, details) {
+  const state = details?.news_detail?.news_addon_state;
+  return saved && state && typeof state === "object" && !Array.isArray(state) ? state : null;
+}
+
+// A news row that repeats a value of that state: the row's own value when the screen has one;
+// else, for a reopened run, the value the state holds, as its table shows it. Without the state
+// the row's own value stands.
+function storedNewsValue(news, own, key) {
+  if (own !== null && own !== undefined) return own;
+  return news ? news[key] : own;
+}
+
 // A value of a saved run's view: what the stored record holds, or, where the backend gives none,
 // the sentence that says it is not kept. Never "n/a": a reopened run says what it does not store.
 function savedValue(value, format = (kept) => kept) {
@@ -2250,10 +2266,16 @@ function renderStructuredDetail(payload, detailView) {
   // Gates, and for the data source, the live-data flag and the venue in the data sections below.
   // A row that repeats a value of the stored market-data block (the warnings, the symbol's
   // availability, the cross-provider values) shows the block's value; in Provider State it is left
-  // out instead. So no row reads "n/a" for a value another row shows. A value neither holds (the
-  // data-quality status, age and failures; the provider's status and reason) still reads "n/a".
+  // out instead. The news rows that repeat a value of the stored news add-on state (its warnings
+  // and its influence mode) show that value, as News Add-on's table of it does. A value none of
+  // these holds (the score; the data-quality status, age and failures; the provider's status and
+  // reason) still reads "n/a". So does the news "Provider status" row, though that table shows a
+  // stored list: utils/sanitize.py masks a provider's `last_failure_error_code` in the record, so
+  // the stored list is not a copy of the one the row reads. The news "State" row is not read
+  // from the record either: with news analysis on, a reopened run's row reads "UNAVAILABLE".
   const kept = saved || {};
   const keptMarket = storedMarketBlock(saved, details);
+  const keptNews = storedNewsState(saved, details);
   const newsCopy =
     payload.analysis_mode === "METRICS_ONLY"
       ? "News analysis disabled for this run."
@@ -2376,13 +2398,16 @@ function renderStructuredDetail(payload, detailView) {
       keyValueTable([
         ["State", newsCopy],
         ["Mode", payload.analysis_mode],
-        ["Warnings", display.news_warnings],
+        ["Warnings", storedNewsValue(keptNews, display.news_warnings, "warnings")],
       ]),
       objectTable(details.news_detail),
     ]),
     section("News Authority / Macro & Micro Context", [
       keyValueTable([
-        ["Influence mode", payload.news_addon_state?.influence_mode],
+        [
+          "Influence mode",
+          storedNewsValue(keptNews, payload.news_addon_state?.influence_mode, "influence_mode"),
+        ],
         ["Influence", "0.0 advisory display only"],
         ["Provider status", payload.news_addon_state?.provider_status],
       ]),
