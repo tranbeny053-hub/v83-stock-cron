@@ -48,6 +48,11 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # sentence, and its range carries the backend's own explanation of the percentages. The value
 # before, never published, was
 # sha256:4ca98d13a36062f9c8b922cd38228d16a85e398221640cc58fd4df81c0571349.
+# Moved 2026-10-12 (the release-prep lane; owner ruling X1, the exact-final review's minor m4): on
+# a live view the evidence gate's entry in the view's gate list carries the backend's own reason
+# for the verdict at hand. The prior value, published on `main` by #256, was
+# sha256:890fb0c084329e81831ac80917964fc7628eba54a8d0fd1177d4bfc2ce06800f.
+# Nothing in the quant, gate, or probability path changed; every gate token is what it was.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
     "sha256:1f4078ca1a0c5087a2cf9eeae52ab540883d3e079066177ea2f80f5d500cc37b"
 )
@@ -63,6 +68,9 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # before, never published, was e1e3911951c1c99588c13a1b429cc37b18336ba8e81b4a172493dc356e1ed421.
 # Moved again the same day (step 2) for the same reason as the analysis hash above. The value
 # before, never published, was b1549b05723e63f571193e832a4bc581cd6742f9a2e401efb69bf30d59c8d23e.
+# Moved 2026-10-12 (the release-prep lane) for the same reason as the analysis hash above. The
+# prior value, published on `main` by #256, was
+# 03cd7d9d36f441e155dea276b2273928af9e484177f2f1a3247ce8d1af75c572.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
     "7ce49caf2ecf2939499a41d7c9e56c2cabe5803b73a8589568b3b2fe7e28619e"
 )
