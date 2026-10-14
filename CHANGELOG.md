@@ -34,13 +34,24 @@ Changed:
 - Added the owner's UX comprehension card (`docs/runbooks/UX_COMPREHENSION_CHECK.md`), generated
   from the product's own screens.
 - Changed the frontend asset token to `p7p-20261012-a`.
+- Renamed the third outcome from "Timeout" to "In band" on the screens (UX-1, 85462e4): it is the
+  close at the horizon inside the decision band, not a clock timeout. The analysis payload's
+  `probability_explanation` text changed with it. The data keys stay `p_timeout` and `TIMEOUT`.
+- Added one provider connection pool for the process, one exchange for identical in-flight
+  provider requests, passive per-analysis provider measurement, and an observe-only analysis
+  budget that counts analysis requests and refuses none (#232: 7e39fd3, 948edf7 and 5bcd71c;
+  follow-up #236).
+- Added the R4-C1 candidate identity, `quant/candidate_r4_c1.py`, which no analysis uses (#225,
+  429f1df).
 
 Notes:
 - Analysis only. No trading, order, transfer or execution capability is added.
 - The hard gates are unchanged: every gate action, block code, disposition token and threshold
   is what it was. What changed is how a gate result is described and shown.
 - `analysis_hash` moves for every human analysis, because the response carries new fields. The
-  automation analysis carries no Decision view.
+  automation analysis carries no Decision view, but its `analysis_hash` and `evidence_hash` also
+  moved since production: UX-1 changed its explanation text, and its sentences now say which kind
+  of hard gate is active (the UOR handoff revisions of 2026-10-05 and 2026-10-10).
 - The UX comprehension check is the owner's and has not been run. All new wording is provisional
   until it is frozen after review.
 - No forecast-quality claim and no directional permission is accepted; both registries are empty.
