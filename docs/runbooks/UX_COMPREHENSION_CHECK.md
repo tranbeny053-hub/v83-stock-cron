@@ -77,7 +77,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
@@ -125,7 +125,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | Not assessed (the data cannot support an assessment) |
 | Up (above the band) | Not assessed |
 | Down (below the band) | Not assessed |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | ABORT |
@@ -213,7 +213,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
@@ -305,7 +305,7 @@ The risk gate (Extreme-move risk is too high) is a finding about market conditio
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |
@@ -353,7 +353,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Cost note | This cost is fees only, and so is the decision band it sets: slippage could not be estimated from the order book. |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
@@ -402,7 +402,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | ABORT |
@@ -449,7 +449,7 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | In band (inside the decision band) | 42.00% (band ±0.20%) |
 | Up (above the band) | 31.00% |
 | Down (below the band) | 27.00% |
-| Evidence level | Model readiness: Heuristic (uncalibrated) — accuracy not yet measured. |
+| Evidence level | Model readiness: Heuristic (uncalibrated) — not validated. |
 | Round-trip cost | 0.20% |
 | Evidence | INSUFFICIENT_EVIDENCE · 0 resolved outcomes · INSUFFICIENT_SAMPLE |
 | Gate disposition (not a market call) | NO_TRADE |

@@ -12,7 +12,7 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy =
-  "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
+  "Model readiness: Heuristic (uncalibrated) — not validated.";
 const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";
 const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];

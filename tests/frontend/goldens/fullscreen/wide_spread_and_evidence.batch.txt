@@ -22,7 +22,7 @@ Up (above the band)
 Down (below the band)
 29.98%
 Evidence level
-Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Model readiness: Heuristic (uncalibrated) — not validated.
 Round-trip cost
 4.96%
 Evidence

@@ -73,6 +73,14 @@ Note 2026-10-12 (the release-prep change that followed #256): nothing on this pa
 the human analysis's decision view and its screens only. The automation analysis is unchanged, so the examples, their
 `analysis_hash` and `evidence_hash`, the MANIFEST and every digest below are byte-identical to the revision above.
 
+Revision 2026-10-15 (owner authorization, F-6 option A; not released): the MANIFEST and the two synthetic success
+examples were regenerated because the analysis payload's model-readiness sentence (`model_readiness_label`, in
+`frontend_display` and `timeframes`) no longer says accuracy is "not yet measured", which contradicted a screen that
+shows an observed directional accuracy. That moves each example's `analysis_hash` and `evidence_hash`, and with them
+the three digests below of the regenerated files; nothing else on this page. Every gate action, hard block and
+disposition token is unchanged, and so are the radar schemas, the contract, every value's meaning and the live canary
+example. The automation analysis still carries no decision view.
+
 | File | Role | sha256 |
 |---|---|---|
 | `schemas/radar_evidence.schema.json` | pinned success schema (`radar_evidence.v1`) | `460458ade4f65e6850e024d3d3a6cc042c40219b802b8ddd89c93ae35a4be5c7` |
@@ -83,9 +91,9 @@ the human analysis's decision view and its screens only. The automation analysis
 | `docs/automation/CREDENTIAL_ROTATION.md` | credential issue, rotation and revocation | `ff791b70fb803f225ec43004dc88ad86537a1418b70517dc7af6219c4fa11827` |
 | `docs/automation/RETENTION_AND_IDEMPOTENCY.md` | retention and idempotency audit | `09739bf95644b8ddff499ffdc7ef7992926dd5c4e50279983cd42c25f5312036` |
 | `docs/automation/F1_RELEASE_PLAN.md` | the owner-gated release plan | `97973502ee6d71e706153164b1a92ca897e6c3ebed88cad0dd83c78b27acb791` |
-| `docs/automation/examples/MANIFEST.json` | synthetic example provenance and digests | `e388e15065af27832c3542e4bfbc31da40e9c8c3e09410c7d5dd0fdcf660f907` |
-| `docs/automation/examples/radar_evidence.v1.synthetic-btc-4h-gate-blocked.json` | synthetic example: gate blocked | `024d3ddaabedc9282692e01d332539d6631db4c9b911d1792d39bb7515975945` |
-| `docs/automation/examples/radar_evidence.v1.synthetic-eth-1h-h2-hold.json` | synthetic example: H2 hold | `485698085fc1aff0203cbf1bbc96dbfb60de2c387678d76100bd32b845fdb9a9` |
+| `docs/automation/examples/MANIFEST.json` | synthetic example provenance and digests | `0cff6b1d2387b92a608300459633ef3534a133fdd41ed35bf97c2f27d502a563` |
+| `docs/automation/examples/radar_evidence.v1.synthetic-btc-4h-gate-blocked.json` | synthetic example: gate blocked | `99cdd6343ae4bc1b544fbbdb887569ea17feef71d25c2b6d2150d9d3813c46d0` |
+| `docs/automation/examples/radar_evidence.v1.synthetic-eth-1h-h2-hold.json` | synthetic example: H2 hold | `c1949c1e7d3921b06873d7c2971af4f3a72378ef90871221467f0537cf8dea33` |
 | `docs/automation/examples/radar_evidence_error.v1.synthetic-quota-exceeded.json` | synthetic error example | `55907162860e60316fd39bb4fdf07cc627fba452074123779158ff23a3a56c60` |
 | `docs/automation/examples_live/PROVENANCE.json` | live example provenance and digest | `128694dd1cfb498c22dff8e06bec03a8541a05433b428e6da6cd5b50386f3860` |
 | `docs/automation/examples_live/radar_evidence.v1.live-canary-btc-4h-20261001.json` | LIVE_SAVED example: the canary's exact answer | `527b81220b3ecf459d0d5a7da584f9c965225c06d20f24cffd4b88c4de47ae39` |
