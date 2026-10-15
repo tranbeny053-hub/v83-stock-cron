@@ -39,7 +39,7 @@ Not measured yet
 Reliability status
 Not measured yet
 Probabilities are heuristic until enough resolved samples exist.
-Resolved-sample metrics are not surfaced in this view yet.
+This summary lists no calibration metric: measured calibration begins once the sample gate is met.
 Keep collecting samples; this is not reliability evidence and not profitability evidence.
 Live calibration diagnostics
 Read-only diagnostic

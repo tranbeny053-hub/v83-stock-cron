@@ -505,7 +505,8 @@ def test_ui_d1_4_model_quality_uses_payload_fields_and_safe_fallbacks() -> None:
     for safe_copy in (
         "Model quality: not measured yet.",
         "Probabilities are heuristic until enough resolved samples exist.",
-        "Resolved-sample metrics are not surfaced in this view yet.",
+        "This summary lists no calibration metric: measured calibration begins once the sample "
+        "gate is met.",
         "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
     ):
         assert safe_copy in js

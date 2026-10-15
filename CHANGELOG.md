@@ -2,6 +2,43 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-15 - Wording freeze: F-1, F-4, F-6 and the Model Quality copy (on main, not released)
+
+Nothing in this entry is released: it records what the change that adds this entry puts on
+`main`, after the entry below.
+
+Changed:
+- F-1: the evidence gate's sentence for a timeframe with no demonstrated skill names the accuracy
+  observed on these outcomes, where there is a rate ("The accuracy observed on these outcomes was
+  44.0%."), and says the true accuracy is unknown ("The true directional accuracy is unknown: this
+  is not a finding that it is at or below 50%."). The verdict and its threshold are unchanged.
+- F-4: the fold that shows a list the backend gives names a list of one in the singular: "0 items",
+  "1 item", "2 items". An object's fold reads "View", as before.
+- F-6: the readiness sentence (`model_readiness_label`, the "Evidence level" row of a screen
+  without an accepted claim) is now "Model readiness: Heuristic (uncalibrated) — not validated."
+  It said that accuracy was "not yet measured", which a screen showing an observed accuracy
+  contradicted.
+- S1/S2: two lines of the Model Quality section no longer state a measurement status that the
+  same section contradicts. The "Current status" card without a calibration metric reads "This
+  summary lists no calibration metric: measured calibration begins once the sample gate is met."
+  (it read "Resolved-sample metrics are not surfaced in this view yet."). A calibration card at
+  INSUFFICIENT_SAMPLE reads "Early diagnostic — too few resolved samples to establish
+  reliability." (it read "Early diagnostic — not measured yet.").
+
+Notes:
+- `analysis_hash` moves for every analysis, human and automation, because F-6's sentence is in
+  the payload (`frontend_display` and `timeframes`); on a timeframe with no demonstrated skill,
+  F-1's sentence moves it as well. The governed pins moved, with their prior values recorded
+  beside them (`tests/api/test_cadence_runtime_primitives.py`). F-4 and S1/S2 are frontend copy
+  only: they move no payload.
+- The UOR synthetic examples were regenerated (`docs/automation/UOR_HANDOFF.md`, revision
+  2026-10-15): in each success example only `analysis_hash` and `evidence_hash` changed. The
+  schemas, the contract, the error example and the live canary example are unchanged.
+- No gate, block code, disposition token, threshold or quant change.
+- All of this wording is provisional. The UX comprehension card was regenerated for F-1 and F-6;
+  the UX check has not been run.
+- F-7 is open: the Decision view's Evidence row reads "1 resolved outcomes" when there is one.
+
 ## 2026-10-12 - Decision View, Gate Kinds and Save Receipt (on main, not released)
 
 What the next release would carry since production's release `UCPE-PROD-E2-20261004-A`. Nothing

@@ -121,7 +121,7 @@ INSUFFICIENT_SAMPLE
 Reliability available
 no
 Historical outcome-rate metric: Not established.
-Resolved-sample metrics are not surfaced in this view yet.
+This summary lists no calibration metric: measured calibration begins once the sample gate is met.
 No profitability claim.
 Live calibration diagnostics
 Read-only diagnostic

@@ -1951,7 +1951,7 @@ function calibrationGateNote(gate) {
   return (
     {
       NO_SAMPLES: "No resolved samples yet.",
-      INSUFFICIENT_SAMPLE: "Early diagnostic — not measured yet.",
+      INSUFFICIENT_SAMPLE: "Early diagnostic — too few resolved samples to establish reliability.",
       WARMING_UP: "Early diagnostic — reliability not established.",
       PRELIMINARY_MEASURED: "Preliminary diagnostic — reliability remains limited.",
       MEASURED: "Measured calibration diagnostic — not a guarantee.",
@@ -2187,7 +2187,7 @@ function renderModelQuality(quality = {}, probability = {}, accepted = null) {
   ].some(hasPayloadValue);
   if (!surfacedMetrics) {
     card.append(
-      textBlock("p", "Resolved-sample metrics are not surfaced in this view yet.", "muted"),
+      textBlock("p", "This summary lists no calibration metric: measured calibration begins once the sample gate is met.", "muted"),
     );
   }
   card.append(
