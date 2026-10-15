@@ -44,8 +44,9 @@ IS REACHABLE. NOTHING IS DEPLOYED.**
   retired sentences from the response payload, is deferred because the contracts permit it: the response schema
   requires them, the automation evidence withholds them, and removing them would move analysis_hash again.
 - All new wording is PROVISIONAL. The order the rulings give: the owner's wording freeze after review (S4, X3) and
-  before the UX check (R5); the UX check after the final publication (U4, X5); T4 only after a UX PASS (X6). The
-  record below lists the UX check before the freeze; that order was never a ruling.
+  before the UX check (R5); any lane that changes a screen (a wording change, an N-1 or N-2 lane) published before the
+  UX check, which runs after the final publication (U4, X5); T4 only after a UX PASS (X6). The record below lists the
+  UX check before the freeze; that order was never a ruling.
 - Outside the repository, for the owner's use: a GPT hand-over bundle (.work/p7/gpt_handoff_20261012; ZIP
   f408417f…, validated 2026-10-14). Two successor threads were graded QUALIFIED against its key on 2026-10-14; for
   the second, the live anchors were reconciled with no drift.
@@ -67,6 +68,10 @@ IS REACHABLE. NOTHING IS DEPLOYED.**
   H2/F3/§5A change, no A4C reseal.
 - This record is the batch's last publish. Before it: #258.)
 **Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- **The owner (2026-10-15), verbatim — a T0: N-1/N-2 before the UX check, #257's history, the wording table:**
+```text
+CONTINUE CURRENT — Opus HIGH. Verify main@4b8f374d and STATE@7941a51; HOLD on drift. NEW LOCAL STATE-only child: correct N-1/N-2→UX sequencing and verified #257 merge history; preserve verbatim owner text, pins and holds. Refresh `.work/p7/redesign/WORDING_TABLE.md` locally. Run full gate, 3 scanners and fresh cumulative-diff review. Return exact T3-ready head or material blocker; no further nonblocking micro-patches. No push/T3/T4/HF/prod/protected access.
+```
 - **The owner (2026-10-15), verbatim — a standing ruling (execution optimization); a child head and a T3 package:**
 ```text
 CONTINUE CURRENT — Opus HIGH. Finish the independent review of exact STATE@785ad1d5 against main@4b8f374d without modifying the head under review. If PASS, create a NEW STATE-only child head preserving the owner's ruling below verbatim. Run full gates, scanners and fresh independent review of the cumulative diff; prepare one exact-head T3 package. HOLD on material findings or drift. No push/T3/T4/HF/production/protected access. No Codex or paid API fallback.
@@ -2590,6 +2595,10 @@ LOOP_STATE=THE RELEASE-PREP WORK IS PUBLISHED (#258, 2026-10-14), under the owne
   - 2026-10-15: the owner's standing ruling on execution (verbatim above), recorded in a STATE-only child of 785ad1d
     after that head's independent review (PASS, no finding above NOTE); three of its notes are applied there (the
     words "verbatim before", SQ5 and SQ6 PENDING overall, the package's digests). 785ad1d itself is unchanged.
+  - 2026-10-15, under the owner's T0 (verbatim above), in a STATE-only child of 7941a51 (unchanged), the two minors
+    of 7941a51's cumulative review: a decision on N-1 or N-2 comes before the UX check; #257 has its own history
+    entry, read on GitHub. Also its NOTE-7: the wording table (.work/p7/redesign/WORDING_TABLE.md) is refreshed to
+    main 4b8f374d.
   - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom); the GPT hand-over bundle
     .work/p7/gpt_handoff_20261012 is a snapshot of 2026-10-12 and predates #258.
   Before it: THE CLASS-B REDESIGN IS PUBLISHED (2026-10-12), under the owner's T3. It is NOT released. Five minors stay
@@ -5180,11 +5189,12 @@ LOOP_STATE=THE RELEASE-PREP WORK IS PUBLISHED (#258, 2026-10-14), under the owne
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-14):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-15):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
     (#250, #252), the run-store lock (#254), the class-B redesign (#256), the release-prep work (#258).
   - NOT released: production is on D 1caa8b08. The required UX check is NOT_RUN; the wording is PROVISIONAL.
-  - Next: the owner's wording freeze and UX check, then the release decisions.
+  - Next: the owner's wording freeze and N-1/N-2 decisions (any screen change published first), then the UX check,
+    then the release decisions.
   Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-12):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
     (#250, #252), the run-store lock (#254), the class-B redesign (#256).
@@ -5698,6 +5708,8 @@ CURRENT_BRANCH=chore/state-p7p-release-prep-published (this record, on main 4b8f
   - chore/state-post-106.
 LAST_GREEN_SHA=4b8f374d (main, #258: the release-prep work).
   Its 4 PR checks, push CI 38594841204 and reproducible build 38594841307 are green. Before it ab4b43d7 (#257).
+  Before it: ab4b43d7 (main, #257: the STATE record after #256). Its 4 PR checks (CI 38161197932; reproducible build
+  38161197925), push CI 38161573204 and reproducible build 38161573644 are green (read on GitHub 2026-10-15).
   Before it: eb70f7f4 (main, #256: the class-B redesign).
   Its 6 PR checks, push CI 38160707620 and reproducible build 38160707585 are green. Before it a208192b (#255).
   Before it: a208192b (main, #255: the STATE record after #254). Its 4 PR checks, push CI 38150358132 and
@@ -6402,14 +6414,17 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-15). Nothing is urgent; produ
      chore/state-p7p-release-prep-published, STATE.md only, on main 4b8f374d; its checks; merge commit only; main's
      CI and build.
   1. The wording freeze: after review (S4, X3), before the UX check (R5). All of it is PROVISIONAL
-     (.work/p7/redesign/WORDING_TABLE.md; the prep review's wording notes, N-11, in .work/p7/LANE_RECORD.md). A
-     freeze that changes wording needs a lane and a publication of its own before the UX check (U4: after the final
-     publication).
-  2. The UX comprehension check (plan §23; docs/runbooks/UX_COMPREHENSION_CHECK.md): the owner's, NOT_RUN, on the
-     published screens. PASS is every answer matching the key. R4, the save receipt's UX acceptance, is decided there.
-  3. N-1 (HOLD), N-2 (deferred), N-6 (unchanged): keep, or rule a lane.
-  4. Hash acceptance at T4 (G5); the UOR side must be told.
-  5. T4, the release chain (docs/runbooks/RELEASE.md, not started): only after a UX PASS (X6), on the owner's word.
+     (.work/p7/redesign/WORDING_TABLE.md, refreshed 2026-10-15 to main 4b8f374d; the prep review's wording notes,
+     N-11, in .work/p7/LANE_RECORD.md).
+  2. N-1 (HOLD), N-2 (deferred), N-6 (unchanged): keep, or rule a lane. A lane for N-1 or N-2 changes a screen, so
+     this decision also comes before the UX check.
+  3. Any change from 1 or 2 is published before the UX check (U4, X5: the check runs after the final publication).
+     If nothing changes, nothing more is published.
+  4. The UX comprehension check (plan §23; docs/runbooks/UX_COMPREHENSION_CHECK.md): the owner's, NOT_RUN, on the
+     final published screens. PASS is every answer matching the key. R4, the save receipt's UX acceptance, is decided
+     there.
+  5. Hash acceptance at T4 (G5); the UOR side must be told.
+  6. T4, the release chain (docs/runbooks/RELEASE.md, not started): only after a UX PASS (X6), on the owner's word.
   - The GPT succession, under the owner's 2026-09-28 authority (preserved 2026-10-14): SQ1 to SQ4 PASS; SQ5 blind
     PASS, its milestone PENDING; SQ6 3/3, its independent next-boundary choice PENDING (the owner's record; SQ5 and
     SQ6 stay PENDING overall). The owner's retirement consent is conditional: every criterion met,
@@ -7533,8 +7548,9 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-15). Nothing is urgent; produ
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the separate T3 for this STATE record; then the wording freeze and the UX check on
-  the published screens (and the dated JWT renewal). Claude: passive reads only; no push without a T3; no T4.
+NEXT_ACTION=The owner: the separate T3 for this STATE record; then the wording freeze and the N-1/N-2
+  decisions, any change they bring published, then the UX check on the final published screens (and the dated JWT
+  renewal). Claude: passive reads only; no push without a T3; no T4.
   Before it: The owner: the release-readiness decisions above, at your pace (and the dated JWT renewal). Claude:
   passive reads only; no patch, no push without a T3, no T4.
   Before it: The owner: the T3 for the exact-final package (and the dated JWT renewal). Claude: passive reads only; no
