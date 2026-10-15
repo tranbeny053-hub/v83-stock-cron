@@ -2012,7 +2012,7 @@ function renderCalibrationTimeframe(item = {}) {
 
   const values = [
     ["Resolved sample count", formatCalibrationCount(item.sample_count)],
-    ["Reliability status", calibrationGateLabel(item.reliability_status)],
+    ["Sample gate", calibrationGateLabel(item.reliability_status)],
     ["Brier score", formatCalibrationMetric(item.brier_score)],
     ["Log loss", formatCalibrationMetric(item.log_loss)],
     ["Top-label hit rate (diagnostic)", formatCalibrationPercent(item.top_label_hit_rate)],
