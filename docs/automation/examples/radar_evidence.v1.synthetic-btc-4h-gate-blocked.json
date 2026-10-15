@@ -1,5 +1,5 @@
 {
-  "analysis_hash": "sha256:089190dca0835910b97fcf1712b7c32c7f98ca5542a23580a593404d456d3c48",
+  "analysis_hash": "sha256:0261ee3938dae77f0aad5b597d2889ecc578176b189076a58f03a1e8f210baf3",
   "analysis_schema_version": "1.1-crypto-probability",
   "as_of_utc": "2026-06-06T12:00:00Z",
   "build_info": {
@@ -35,7 +35,7 @@
     "basis": "CANONICAL_INPUTS_AND_RELEASE",
     "live_repeat_reproducible": false
   },
-  "evidence_hash": "sha256:727933bc740a6dc62833794cc7ffafa517f2fe5c5f46374fbbba5dec43edf23f",
+  "evidence_hash": "sha256:0797126bbcc0d2c0c73611d00a41131d277efa386c0db336fcc6e298dda88b44",
   "evidence_origin": "AUTOMATED_RADAR",
   "frontend_display": {
     "disposition": "NO_TRADE",

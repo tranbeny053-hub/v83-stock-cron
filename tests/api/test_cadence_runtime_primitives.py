@@ -53,8 +53,13 @@ from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 # for the verdict at hand. The prior value, published on `main` by #256, was
 # sha256:890fb0c084329e81831ac80917964fc7628eba54a8d0fd1177d4bfc2ce06800f.
 # Nothing in the quant, gate, or probability path changed; every gate token is what it was.
+# Moved 2026-10-15 (F-6; owner authorization of option A): the readiness sentence
+# (`model_readiness_label`, in `frontend_display` and `timeframes`) no longer says accuracy is
+# "not yet measured". The prior value, published on `main` by #258, was
+# sha256:1f4078ca1a0c5087a2cf9eeae52ab540883d3e079066177ea2f80f5d500cc37b.
+# Nothing in the quant, gate, or probability path changed; every gate token is what it was.
 EXPECTED_DEFAULT_ANALYSIS_HASH = (
-    "sha256:1f4078ca1a0c5087a2cf9eeae52ab540883d3e079066177ea2f80f5d500cc37b"
+    "sha256:4d1575c697085bb4625874d932ce5a6b50bc514ec22063763d0198debc8fdc2a"
 )
 # Moved 2026-08-23 for the same reason as EXPECTED_DEFAULT_ANALYSIS_HASH above: this is
 # a SHA-256 over the canonical JSON of the whole response, so the added
@@ -71,8 +76,11 @@ EXPECTED_DEFAULT_ANALYSIS_HASH = (
 # Moved 2026-10-12 (the release-prep lane) for the same reason as the analysis hash above. The
 # prior value, published on `main` by #256, was
 # 03cd7d9d36f441e155dea276b2273928af9e484177f2f1a3247ce8d1af75c572.
+# Moved 2026-10-15 (F-6) for the same reason as the analysis hash above. The prior value,
+# published on `main` by #258, was
+# 7ce49caf2ecf2939499a41d7c9e56c2cabe5803b73a8589568b3b2fe7e28619e.
 EXPECTED_DEFAULT_RESPONSE_HASH = (
-    "7ce49caf2ecf2939499a41d7c9e56c2cabe5803b73a8589568b3b2fe7e28619e"
+    "4e11291300faba90b697ca0d06dc69b21b0874a17950998582aaa01b12d4971c"
 )
 EXPECTED_CADENCE_RUN_ID = "cadence-265a4bf99c44ef001b40b1bdc514f9a3"
 

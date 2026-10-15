@@ -22,7 +22,7 @@ Up (above the band)
 Down (below the band)
 38.49%
 Evidence level
-Model readiness: Heuristic (uncalibrated) — accuracy not yet measured.
+Model readiness: Heuristic (uncalibrated) — not validated.
 Round-trip cost
 0.20%
 Cost note
@@ -129,7 +129,7 @@ Reliability available
 no
 Historical outcome-rate metric: Not established.
 Reliability is not measured from sufficient resolved samples; treat probability as informational only.
-Resolved-sample metrics are not surfaced in this view yet.
+This summary lists no calibration metric: measured calibration begins once the sample gate is met.
 Keep collecting samples; this is not reliability evidence and not profitability evidence.
 Live calibration diagnostics
 Read-only diagnostic

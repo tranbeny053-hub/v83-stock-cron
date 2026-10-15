@@ -515,13 +515,43 @@ EVIDENCE_REASONS = [
         "outcomes are available. Reported resolved outcomes: 0.",
         id="not-evaluated",
     ),
+    # F-1 (PROVISIONAL wording): the rate is the one observed on these outcomes, a sample; the
+    # true directional accuracy is unknown, and the verdict is no finding that it is at or below
+    # 50%. Observed above 50%, under 50%, with no rate, and on an unavailable number of outcomes.
     pytest.param(
         {"verdict": "NO_DEMONSTRATED_SKILL", "n": 412, "observed_directional_rate": 0.512},
         None,
         "On 412 resolved outcomes, the observed directional accuracy did not clear the required "
-        "evidence threshold — it was not strong enough to rule out chance. The observed "
-        "directional accuracy was 51.2%. This is not a finding that accuracy is at or below 50%.",
+        "evidence threshold — it was not strong enough to rule out chance. The accuracy observed "
+        "on these outcomes was 51.2%. The true directional accuracy is unknown: this is not a "
+        "finding that it is at or below 50%.",
         id="did-not-clear-the-bar",
+    ),
+    pytest.param(
+        {"verdict": "NO_DEMONSTRATED_SKILL", "n": 400, "observed_directional_rate": 0.44},
+        None,
+        "On 400 resolved outcomes, the observed directional accuracy did not clear the required "
+        "evidence threshold — it was not strong enough to rule out chance. The accuracy observed "
+        "on these outcomes was 44.0%. The true directional accuracy is unknown: this is not a "
+        "finding that it is at or below 50%.",
+        id="did-not-clear-the-bar-observed-under-50",
+    ),
+    pytest.param(
+        {"verdict": "NO_DEMONSTRATED_SKILL", "n": 400, "observed_directional_rate": None},
+        None,
+        "On 400 resolved outcomes, the observed directional accuracy did not clear the required "
+        "evidence threshold — it was not strong enough to rule out chance. The true directional "
+        "accuracy is unknown: this is not a finding that it is at or below 50%.",
+        id="did-not-clear-the-bar-no-rate",
+    ),
+    pytest.param(
+        {"verdict": "NO_DEMONSTRATED_SKILL", "n": None, "observed_directional_rate": 0.44},
+        None,
+        "On an unavailable number of resolved outcomes, the observed directional accuracy did not "
+        "clear the required evidence threshold — it was not strong enough to rule out chance. The "
+        "accuracy observed on these outcomes was 44.0%. The true directional accuracy is unknown: "
+        "this is not a finding that it is at or below 50%.",
+        id="did-not-clear-the-bar-n-unavailable",
     ),
     pytest.param(
         None,

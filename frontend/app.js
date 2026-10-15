@@ -12,7 +12,7 @@ const devModeStatus = document.querySelector("#devModeStatus");
 const watchlistStorageKey = "ucpe_watchlist_symbols";
 const heatLegend = "Signal heat — not risk";
 const modelReadinessCopy =
-  "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured.";
+  "Model readiness: Heuristic (uncalibrated) — not validated.";
 const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";
 const calibrationDiagnosticsCacheTtlMs = 60000;
 const singleTimeframes = ["15m", "1H", "4H", "1D", "1W", "1M"];
@@ -1620,10 +1620,13 @@ function keyValueTable(values) {
 }
 
 // An object or a list the backend gives, shown whole: a fold that names its size, over its JSON.
+// A list's size reads "0 items", "1 item", "2 items"; an object's fold reads "View".
 function nestedValueBlock(item) {
   const nested = document.createElement("details");
   const summary = document.createElement("summary");
-  summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
+  summary.textContent = Array.isArray(item)
+    ? `${item.length} ${item.length === 1 ? "item" : "items"}`
+    : "View";
   const pre = document.createElement("pre");
   pre.textContent = JSON.stringify(item, null, 2);
   nested.append(summary, pre);
@@ -1948,7 +1951,7 @@ function calibrationGateNote(gate) {
   return (
     {
       NO_SAMPLES: "No resolved samples yet.",
-      INSUFFICIENT_SAMPLE: "Early diagnostic — not measured yet.",
+      INSUFFICIENT_SAMPLE: "Early diagnostic — too few resolved samples to establish reliability.",
       WARMING_UP: "Early diagnostic — reliability not established.",
       PRELIMINARY_MEASURED: "Preliminary diagnostic — reliability remains limited.",
       MEASURED: "Measured calibration diagnostic — not a guarantee.",
@@ -2184,7 +2187,7 @@ function renderModelQuality(quality = {}, probability = {}, accepted = null) {
   ].some(hasPayloadValue);
   if (!surfacedMetrics) {
     card.append(
-      textBlock("p", "Resolved-sample metrics are not surfaced in this view yet.", "muted"),
+      textBlock("p", "This summary lists no calibration metric: measured calibration begins once the sample gate is met.", "muted"),
     );
   }
   card.append(

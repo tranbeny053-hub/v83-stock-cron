@@ -19,7 +19,10 @@ UNCALIBRATED_BANNER = (
     "over a multi-bar horizon, not validated forecasts. Not financial advice. "
     "No profitability claim."
 )
-MODEL_READINESS_COPY = "Model readiness: Heuristic (uncalibrated) — accuracy not yet measured."
+# The sentence must be true in every state (F-6, PROVISIONAL wording). No forecast-quality claim
+# is accepted, and whether an accuracy was observed depends on the timeframe's evidence, so it
+# states no measurement status.
+MODEL_READINESS_COPY = "Model readiness: Heuristic (uncalibrated) — not validated."
 PROBABILITY_TYPE = "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
 MODEL_READINESS = "HEURISTIC_UNCALIBRATED"
 DISCLAIMER = (

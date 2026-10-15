@@ -92,7 +92,8 @@ STATE_INDEPENDENT_UI_TEXTS = {
     *("Reliability available", "Evidence", "Evidence level", "Why reliability is insufficient"),
     *("Live calibration diagnostics", "Read-only diagnostic", "news evidence"),
     "Per-timeframe calibration diagnostics",
-    "Resolved-sample metrics are not surfaced in this view yet.",
+    "This summary lists no calibration metric: measured calibration begins once the sample gate "
+    "is met.",
     *("Heuristic probability", "Insufficient sample", "Measured calibration"),
     "An early estimate produced before measured calibration is established.",
     "A comparison between forecast probabilities and resolved outcomes after the sample gate "

@@ -306,12 +306,14 @@ def test_the_live_provider_status_row_shows_the_backends_list_whole(
 ) -> None:
     """MINOR-B. The live row shows the list as the detail tables show one: the fold with its
     size, over its JSON, every field the backend gives (a failure's code included); no words of
-    the frontend's own. A run with no providers reads "none"."""
+    the frontend's own. A run with no providers reads "none". The fold names its size as the
+    shared fold does (F-4): one provider is "1 item", two are "2 items"."""
 
-    for name in ("provider_ok", "provider_fails"):
+    for name, size in (("provider_ok", "1 item"), ("provider_fails", "2 items")):
         listed = answers[name]["live"]["row"]["news_addon_state"]["provider_status"]
         summary, shown = _provider_block(screens[f"{name}.live"])
-        assert summary == f"{len(listed)} items", name
+        assert summary == size, name
+        assert len(listed) == int(size.split()[0]), name
         assert shown == listed, name
     _, shown = _provider_block(screens["provider_fails.live"])
     (failed,) = [item for item in shown if item["provider"] == "gdelt"]

@@ -505,7 +505,8 @@ def test_ui_d1_4_model_quality_uses_payload_fields_and_safe_fallbacks() -> None:
     for safe_copy in (
         "Model quality: not measured yet.",
         "Probabilities are heuristic until enough resolved samples exist.",
-        "Resolved-sample metrics are not surfaced in this view yet.",
+        "This summary lists no calibration metric: measured calibration begins once the sample "
+        "gate is met.",
         "Keep collecting samples; this is not reliability evidence and not profitability evidence.",
     ):
         assert safe_copy in js
@@ -741,14 +742,15 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
 
 
 def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:
+    from crypto_probability_engine.detail.decision_brief import MODEL_READINESS_COPY
+
     js = read_frontend("app.js")
     html = read_frontend("index.html")
     assert "Confidence" not in js
     assert "confidence_frac" not in js
-    assert (
-        "Model readiness: Heuristic (uncalibrated) — not accuracy; quality is not yet measured."
-        in js
-    )
+    # The fallback (a payload with neither a decision view nor a label) is the backend's own
+    # readiness sentence, as an exact string literal (F-6).
+    assert f'"{MODEL_READINESS_COPY}"' in js
     assert "Model readiness" not in html or "Confidence" not in html
 
 
