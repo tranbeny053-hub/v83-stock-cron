@@ -1620,10 +1620,13 @@ function keyValueTable(values) {
 }
 
 // An object or a list the backend gives, shown whole: a fold that names its size, over its JSON.
+// A list's size reads "0 items", "1 item", "2 items"; an object's fold reads "View".
 function nestedValueBlock(item) {
   const nested = document.createElement("details");
   const summary = document.createElement("summary");
-  summary.textContent = Array.isArray(item) ? `${item.length} items` : "View";
+  summary.textContent = Array.isArray(item)
+    ? `${item.length} ${item.length === 1 ? "item" : "items"}`
+    : "View";
   const pre = document.createElement("pre");
   pre.textContent = JSON.stringify(item, null, 2);
   nested.append(summary, pre);
