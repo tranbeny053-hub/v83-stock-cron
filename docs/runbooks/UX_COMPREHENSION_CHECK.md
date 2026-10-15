@@ -248,7 +248,7 @@ Evidence gate: directional skill is not established for this model and timeframe
 
 The gates' disposition: hard gates outrank everything shown.
 
-- Evidence gate: On 400 resolved outcomes, the observed directional accuracy did not clear the required evidence threshold — it was not strong enough to rule out chance. This is not a finding that accuracy is at or below 50%.
+- Evidence gate: On 400 resolved outcomes, the observed directional accuracy did not clear the required evidence threshold — it was not strong enough to rule out chance. The true directional accuracy is unknown: this is not a finding that it is at or below 50%.
 
 | Row | Shown |
 | --- | --- |

@@ -177,13 +177,17 @@ def _skill_blocking_reason(skill_evidence: dict | None) -> tuple[str, str]:
         count = str(n) if n is not None else "an unavailable number of"
         observed_rate = evidence.get("observed_directional_rate")
         rate_text = ""
+        # Two accuracies, each named (F-1, PROVISIONAL wording): the rate is the one observed on
+        # these outcomes, a sample; the true directional accuracy is unknown, and the verdict is
+        # no finding about it. The verdict and its threshold are the gate's, unchanged.
         if isinstance(observed_rate, (int, float)) and not isinstance(observed_rate, bool):
-            rate_text = f" The observed directional accuracy was {observed_rate * 100:.1f}%."
+            rate_text = f" The accuracy observed on these outcomes was {observed_rate * 100:.1f}%."
         return (
             "Directional accuracy did not clear the evidence bar",
             f"On {count} resolved outcomes, the observed directional accuracy did not clear "
             f"the required evidence threshold — it was not strong enough to rule out "
-            f"chance.{rate_text} This is not a finding that accuracy is at or below 50%.",
+            f"chance.{rate_text} The true directional accuracy is unknown: this is not a "
+            f"finding that it is at or below 50%.",
         )
 
     return (
