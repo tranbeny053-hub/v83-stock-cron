@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-16 - The calibration card's sample gate and the Evidence row's singular (on main, not released)
+
+Nothing in this entry is released: it records #261, on `main` since 2026-10-15, and what the
+change that adds this entry puts on `main`, after the entry below.
+
+Changed:
+- #261: each calibration card's row that shows its timeframe's sample gate reads "Sample gate"; it
+  read "Reliability status", the label of the "Current status" card's row for the analysis's fixed
+  calibration baseline. Its value is unchanged.
+- F-7: the Decision view's Evidence row reads "1 resolved outcome" for one; "0 resolved outcomes"
+  and "N resolved outcomes" are unchanged.
+
+Notes:
+- Frontend copy only: no payload, `analysis_hash`, governed pin, UOR or contract change.
+- All of this wording is provisional; the UX check has not been run.
+- The baseline residual stays open: the summary's fixed "INSUFFICIENT_SAMPLE".
+
 ## 2026-10-15 - Wording freeze: F-1, F-4, F-6 and the Model Quality copy (on main, not released)
 
 Nothing in this entry is released: it records what the change that adds this entry puts on
