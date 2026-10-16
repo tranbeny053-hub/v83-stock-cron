@@ -571,7 +571,7 @@ function decisionEvidenceText(evidence = {}) {
   const outcomes =
     evidence.resolved_outcomes === null || evidence.resolved_outcomes === undefined
       ? null
-      : `${evidence.resolved_outcomes} resolved outcomes`;
+      : `${evidence.resolved_outcomes} resolved ${evidence.resolved_outcomes === 1 ? "outcome" : "outcomes"}`;
   return [evidence.skill_verdict, outcomes, evidence.reliability_status].filter(Boolean).join(" · ")
     || "Unavailable";
 }
