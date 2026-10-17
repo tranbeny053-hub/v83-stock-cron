@@ -1,26 +1,26 @@
 {
   "critical_source_digests": {
     "Dockerfile": "79343d238cf3a29c91bb1cef8cb70088a23c18e7cbc2f17f903c1133e85698cb",
-    "frontend/app.js": "c683d20afe26bcd71ff3d1e4f18cf820c419eb04e31d8393310bb1280776a1c3",
-    "frontend/index.html": "70928eb4b1363f75022e07fa30fc877071979e8165ed6061af338923becc0191",
-    "frontend/styles.css": "c7be1c9db153391f1712530a34d28e3732ebb596208cf09e8d50bdad74a31247",
+    "frontend/app.js": "f9576041010716edec04fc7e504008c079adee04c8c7b670072f75bada7a6271",
+    "frontend/index.html": "1c236cb9cdf4983efeb32b74a220806c9087600d929ab1fb7d90e281d83cafa8",
+    "frontend/styles.css": "2648c02a2d6d4cd15d12cab7911daa97758fe27d9a23b0ba70bf4cd2748fc4a1",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
-    "schemas/response.schema.json": "0c1bea86236a7a74b012b24b9908b205dbe0aec1b41ffd7b7f5c1becbf911055",
-    "src/crypto_probability_engine/api/analysis_service.py": "11ee0a5795d1f14580469d49b74623b6475d28eac51301fb2ced29d036fabec8",
-    "src/crypto_probability_engine/api/app.py": "8f3ce3ff049fadb845a3ac04e1c0cc150646d7b67b30b42800026e6e630812b7",
-    "src/crypto_probability_engine/config/build_info.py": "7a1ca1c8a54be175aa293a023bdb314da74e3c78a2b368bd0a5553bb6b62830b",
+    "schemas/response.schema.json": "6ad6b25c459cc951f960f4414dbaf4205adf24170a57c32eedf5d964e3a315a0",
+    "src/crypto_probability_engine/api/analysis_service.py": "d01095c5101136a7917fa001b6617ac90ca9e37c53bc66b4752f56943784f1fa",
+    "src/crypto_probability_engine/api/app.py": "c6a17c55393b042ed8ccd263d0beefa1ad5640318eac9768af2a8ebc13429986",
+    "src/crypto_probability_engine/config/build_info.py": "f8e45b2eabd7d1c1669a8ae0435b03d440665a2010409f829048262fd6b17936",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · PROD-E2-20261004-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-P7P-20261017-A",
   "frontend_asset_tokens": {
-    "app_js": "w4c1-ka1-20260828-a",
-    "styles_css": "w4c1-ka1-20260828-a"
+    "app_js": "p7p-20261012-a",
+    "styles_css": "p7p-20261012-a"
   },
-  "hf_main_sha": "1caa8b08ebfc45b79a9b14d8217dad3b112cda8d",
-  "release_id": "UCPE-PROD-E2-20261004-A",
-  "release_label": "PROD-E2 release of main",
+  "hf_main_sha": "27edbcad7adadf85a7a747fb622d69e34a8446dd",
+  "release_id": "UCPE-PROD-P7P-20261017-A",
+  "release_label": "PROD-P7P release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "prod-e2"
+  "source_milestone": "prod-p7p"
 }
