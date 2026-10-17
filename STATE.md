@@ -1,73 +1,109 @@
 # STATE
 
-Updated: 2026-10-17 (**THE WORDING-FREEZE FIXES (#260), THE SAMPLE-GATE LABEL (#261) AND THE EVIDENCE ROW'S SINGULAR
-(#262) ARE PUBLISHED. THEY ARE NOT RELEASED. THE WORDING IS PROVISIONAL AND THE REQUIRED UX CHECK IS NOT_RUN. NO
-FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOYED.**
-- The owner (verbatim below) authorized three code T3s, GitHub only, each for its exact head and tree. STATE is
-  last, pushed under a separate T3. It supersedes five local records, never published: c32be85f (#260 alone),
-  3e8feacd (held at the T3 preflight of 2026-10-16: its header dropped the succession's authority), c449361f (held by
-  the owner on 2026-10-16 for the F-7 lane), b3bef0ae (held at the T3 preflight of 2026-10-17: the independent audit
-  found no record of what "#23/#26" names, and a still-true caveat dropped from the boundary entry) and 87499556
-  (prepared for the doctrine-rows reading; the owner then named the predecessor's verdicts #23 and #26).
-  The baseline residual stays OPEN.
-- #260 → main b564a268: a merge commit on feat/p7p-freeze-s1s2 @ f6edcc6 (tree 6940fb49); 4 commits on main 21116783;
-  70 files, +1215/-114.
-  - Checked before the merge: the pull request's head, base, 4 commits and 70 files, and every added and removed
-    line (1,329) of its diff, equal the reviewed diff (.work/p7/redesign/evidence_f6edcc6/
-    combined_21116783_f6edcc6.diff, sha256 1d2bdf43…).
-  - 6 of 6 checks green on f6edcc6: CI / test 38747961363 (7729 passed, the local count); reproducible build
-    38747961547 (build-a, build-b, compare); A4 ledger audit rehearsal 38747961381 and A4 Card-04 companion
-    rehearsal 38747961872, both run because docs/automation/examples changed.
-  - Main's push runs on b564a268: CI 38748917030 (7729 passed) and reproducible build 38748917160, both green. The
-    merge commit's tree is 6940fb49, the reviewed head's tree.
-- #261 → main fdefe00b: a merge commit on feat/p7p-sample-gate-label @ c958931 (tree 1b6c32b8); 1 commit on main
-  b564a268; 2 files, +235/-1.
-  - Checked before the merge: the pull request's head, base, 1 commit and 2 files, and every added and removed line
-    (236) of its diff, equal the reviewed diff (.work/p7/redesign/evidence_c958931/sample_gate_b564a26_c958931.diff,
-    sha256 7dd984a1…).
-  - 4 of 4 checks green on c958931: CI / test 38760170198 (7745 passed, the local count); reproducible build
-    38760170265 (build-a, build-b, compare). The two A4 rehearsals did not run: their path filters match no changed
-    file.
-  - Main's push runs on fdefe00b: CI 38760933589 (7745 passed) and reproducible build 38760933597, both green. The
-    merge commit's tree is 1b6c32b8, the reviewed head's tree.
-- #262 → main 84761977: a merge commit on feat/p7p-f7-grammar @ 7f6c445 (tree 019b162b); 1 commit on main
-  fdefe00b; 3 files, +281/-1.
-  - Checked before the merge: the pull request's head, base, 1 commit and its files, and every added and removed line
-    (282) of its diff, equal the reviewed diff (.work/p7/redesign/evidence_7f6c445/f7_fdefe00_7f6c445.diff,
-    sha256 85e28eec…).
-  - 4 of 4 checks green on 7f6c445: CI / test 38936621432 (7769 passed, the local count); reproducible build
-    38936618125 (build-a, build-b, compare). The two A4 rehearsals did not run: their path filters match no changed
-    file.
-  - Main's push runs on 84761977: CI 38937389856 (7769 passed) and reproducible build 38937390028, both green. The
-    merge commit's tree is 019b162b, the reviewed head's tree.
-- What #260 carries (the owner's findings and rulings of 2026-10-15, verbatim below):
-  - F-1 (49fa0d2): the evidence gate's NO_DEMONSTRATED_SKILL sentence names the accuracy observed on these outcomes
-    (a sample) and says the true directional accuracy is unknown. No statistic, threshold or verdict changes.
-  - F-4 (8acae6e): the shared fold of a list reads "0 items", "1 item", "N items"; an object still reads "View".
-  - F-6 (1ea04a6): the readiness sentence, the "Evidence level" row of every screen without an accepted claim, said
-    accuracy was "not yet measured"; a NO_DEMONSTRATED_SKILL screen (15m, 1D and 1W in production) contradicted it.
-    It now reads "Model readiness: Heuristic (uncalibrated) — not validated." The frontend's fallback is the same.
-  - S1/S2 (f6edcc6), frontend copy only: two lines of the detail's Model Quality section no longer state a
-    measurement status that the same section contradicts; tests pin F-6's sentence on 15m, 1D, 1W and under the H2
-    hold; a CHANGELOG entry ("on main, not released").
-- What #261 carries (c958931, frontend copy only): each calibration card's row that shows its timeframe's sample gate
-  reads "Sample gate", not "Reliability status". Its value is unchanged and is the gate by construction (the
-  endpoint's only item constructor sets reliability_status and sample_gate from one sample_gate_for(valid_count); no
-  stored value enters an item). The Model Quality summary's own "Reliability status" row is unchanged. Sixteen tests
-  cover 0, 99, 100, 299, 300 and 500 valid outcomes. No golden and no UX-card line moved.
-- What #262 carries (7f6c445, frontend copy and docs only): the Decision view's Evidence row reads "1 resolved outcome"
-  for one ("0 resolved outcomes" and "N resolved outcomes" unchanged; F-7, the pattern of F-4); CHANGELOG.md gains an
-  entry ("on main, not released") for #261's relabel and F-7. No golden and no UX-card line moved.
-- Governed hashes: the analysis and response pins moved once (F-6, #260), with their prior values recorded in the
-  test; #261 and #262 move no payload. Hash acceptance is the owner's, at T4 (G5).
+Updated: 2026-10-17 (**UCPE-PROD-P7P-20261017-A IS RELEASED. PRODUCTION IS D 27edbcad (#264), RE-PINNED AT R 27682005
+(#265); THE GUARD READS HEALTHY ON R. THE OWNER'S UX CHECK PASSED 54/54 AND THE WORDING IS FROZEN.
+G5 IS ACCEPTED FOR THE P0→D HASH MOVEMENT ONLY, WITH NO FORECAST ACCEPTANCE; THE A4 SEALS ARE KEPT AS E2-ONLY
+EVIDENCE. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), in order:
+  - the T3 that published the previous STATE record (#263);
+  - the wording freeze (A);
+  - two T0s for an AI UX audit, kept apart from the owner's check, then the owner's UX result (PASS 54/54);
+  - the release prep (T0–T2, LOCAL);
+  - the identity T3 (#264 = D), with A4 KEEP and G5 deferred to T4;
+  - the guard T3 on D, the preflight prepared offline;
+  - the T4 (DEPLOY-UCPE-PROD-P7P-20261017-A): G5 ACCEPT for the P0→D hash movement only, A4 KEEP E2, no forecast
+    acceptance;
+  - the re-pin T3 (#265 = R) with the guard on R. The UOR items it names are UOR HOLDs, not UCPE blockers.
+  - STATE is last, pushed under a separate T3.
+- #263 → main ad70e1cb: a merge commit on chore/state-p7p-freeze-final-5 @ c7ea3a6c (tree 7424a78b); STATE.md only,
+  +353/-63.
+  - Checked before the merge: the head, the base, 1 commit and 1 file, and all 416 changed lines equal the reviewed
+    diff (sha256 5ddcf1e2…).
+  - 4 of 4 checks green on c7ea3a6c: CI / test 38950729563 (7769 passed, the local count); reproducible build
+    38950729633. Main's push runs on ad70e1cb: CI 38951473191 (7769 passed) and reproducible build 38951473548,
+    both green. Record: .work/p7/redesign/handoff/T3_EXECUTION_263.md.
+- The wording freeze (the owner, verbatim below: A, on main ad70e1cb and the sheet
+  .work/p7/redesign/WORDING_FREEZE_SHEET_20261017.md, sha256 2b9084f0…):
+  - FROZEN: F-1, F-4, F-6, S1, S2, the sample-gate label and F-7, its note included. KEPT: F-2, F-3, F-5.
+  - N-1 HOLD, N-2 DEFER, N-6 unchanged. The baseline residual stays OPEN, not waived.
+  - Verified 30/30 against main and the UX card (.work/p7/redesign/handoff/verify_freeze_20261017.py; the record:
+    .work/p7/redesign/WORDING_FREEZE_RECORD_20261017.md).
+- THE OWNER'S UX CHECK: PASS 54/54 (verbatim below; 2026-10-17 17:08 +0700, on main ad70e1cb, plan §23). R4, the
+  save receipt's UX acceptance, was decided there: PASS.
+  - Kept apart, never a substitute: AI_AUDIT 54/54, from an owner-supplied run (its file's sha256 9690cd4a…; it
+    states no run details, so its isolation is the owner's, not verifiable here), frozen before a deterministic
+    comparison with the key. Its 5 ambiguities are all on question 6's three storage lines, and they are not material
+    (.work/p7/redesign/G5_EVIDENCE_20261017.md §4). An earlier run by a Claude subagent stays HOLD, uncompared: it
+    received CLAUDE.md and memory. Detail sealed in .work/p7/redesign/ux_ai_audit/.
+  - A caveat (.work/p7/LANE_RECORD.md): after the AI audit's packet was sent and before the owner's check, a failed
+    masking command printed the card's answer key once in this session's tool output. The reader's inputs held no
+    key row, and the owner was told not to expand this session's tool outputs before the check. The PASS is the
+    owner's own result.
+- The release prep (the owner's T0–T2, verbatim below): .work/p7/redesign/RELEASE_DECISION_PACKAGE_20261017.md and
+  G5_EVIDENCE_20261017.md, both read-only.
+- #264 → D 27edbcad7adadf85a7a747fb622d69e34a8446dd (2026-10-17T10:42:54Z): a merge commit on
+  release/p7p-identity @ 1683e9b9 (tree fb529a10).
+  - The release identity UCPE-PROD-P7P-20261017-A ("PROD-P7P release of main", milestone "prod-p7p"), made by
+    scripts/release.py identity: build_info.py, its test, and the guard's delta mirror (7 paths). The tool's
+    138-column note was rewrapped by hand, its words unchanged.
+  - A fresh review PASS; the local gate 7769, 3 of 3. 4 of 4 checks green on 1683e9b9: CI / test 39025584961 (7769
+    passed); reproducible build 39025584851. Main's push runs on D: CI 39025953604 (7769 passed) and reproducible
+    build 39025953598, both green. Record: .work/p7/redesign/evidence_identity_1683e9b/T3_EXECUTION_264.md.
+- The guard on D (the owner's T3): dispatched once, run 39026573615. GUARD_VERIFY=PASS 8/8: HEALTHY ×3, exit 0, the
+  pin 1caa8b08 live and pinned, E2 live and intended, the 7 delta paths. Record:
+  .work/p7/redesign/evidence_guard_27edbca/T3_EXECUTION_GUARD.md.
+- THE RELEASE (the owner's T4, verbatim below; record
+  .work/p7/redesign/evidence_deploy_27edbca/T4_EXECUTION_DEPLOY.md):
+  - The preflight, in two authenticated stages. Stage 1 stopped at check 5 by design and printed the digest. Stage 2:
+    PREFLIGHT=PASS 9/9 at 11:30:16Z.
+    - main = D, with green push CI; hf main = 1caa8b08; the Space RUNNING at the pin, serving E2, health 200;
+    - a fast-forward; the runtime delta, 21 files (f1c9f463…), byte-equal to the reviewed list;
+    - new asset tokens; no unapplied migration; the guard HEALTHY on D; the dry run 1caa8b0..27edbca.
+  - DEPLOY=PASS, once, 11:30:40Z → 11:30:45Z: 1caa8b0..27edbca → main, with no force. CONSUMED; never rerun.
+  - SETTLE=PASS 7/7 at 11:31:12Z: RUNNING at D after 1 poll; health 200; build-info P7P with its fingerprint; D's
+    index.html, app.js and styles.css bytes served (p7p-20261012-a); the probe POST /v1/automation/radar-evidence
+    401 CREDENTIAL_REQUIRED.
+  - No retry, no rollback and no rollback-check (it reads hf; not asked). The rollback target is now 1caa8b08 (E2):
+    5/5 offline (.work/p7/redesign/evidence_preflight_offline_27edbca/).
+- #265 → R 2768200512e522c4764bb1c7a459d2a8635c2a78 (2026-10-17T13:40:43Z): a merge commit on
+  chore/repin-p7p @ c8e7a8aa (tree 86ee66d6); 1 commit on D; 3 files, +31/-33.
+  - The re-pin (release step 6). release.py repin's own output, 239c21aa (deterministic: a worktree and a clone gave
+    it alike), failed the gate. This was the first causal failure, two defects in the guard test:
+    - its note was 125 columns (ruff E501);
+    - the test still asserted the old asset tokens, because repin rewrites identity, never tokens.
+    - One targeted repair by exact match (handoff/repin_repair.py): the note rewrapped, the same 21 words; the tokens.
+  - c8e7a8aa is deterministic too (a worktree and a clone). The gate 7769, 3 of 3; an independent recomputation from
+    D's bytes 13/13; a fresh review PASS, with two MINOR notes on release.py for a later T1.
+  - Checked before the merge: the head, the base, 1 commit and 3 files, and all 64 changed lines equal the reviewed
+    diff (sha256 45239abf…).
+  - 4 of 4 checks green on c8e7a8aa: CI / test 39037236305 (7769 passed, the local count); reproducible build
+    39037236296 (build-a, build-b, compare).
+  - Main's push runs on R: CI 39037551766 (7769 passed) and reproducible build 39037551779, both green. The merge
+    commit's tree is 86ee66d6, the reviewed head's tree.
+  - Record: .work/p7/redesign/evidence_repin_c8e7a8a/ and .work/p7/redesign/REPIN_T3_PACKAGE.md.
+- The guard on R (the owner's T3): dispatched once, run 39037863091. GUARD_VERIFY=PASS 8/8: HEALTHY ×3, exit 0, hf
+  main = pinned = D, P7P live and intended, the delta empty. Before it, the scheduled run 39031942197 on D read
+  PIN_DRIFT ×3, as expected between the deploy and R. Record:
+  .work/p7/redesign/evidence_guard_r_2768200/T3_EXECUTION_GUARD_R.md.
+- What the release carries (production 1caa8b08 → D):
+  - the 44 merged pull requests #221 to #264, among them the DecisionView and the §23 card, the save receipt, the
+    run-store lock, the class-B redesign, the release prep, the wording freeze, the STATE records and the identity;
+  - 175 files, of which 21 are runtime (17 in src, 3 in frontend, 1 in schemas). No Dockerfile, requirements or
+    migration change. quant/candidate_r4_c1.py ships unwired: nothing in src imports it.
+  - The H2 hold is unchanged: calibration/skill.py is identical.
+- G5 (the owner, at T4): ACCEPT, for the P0→D hash movement only. analysis_hash and evidence_hash differ for the same
+  inputs from this release on; rows stored before keep theirs. No forecast acceptance. The proof:
+  .work/p7/redesign/G5_PROOF_FOR_T4_20261017.md.
+- A4 (the owner): KEEP both seals (2007fa28…, 0b3cbb75…) as E2-only historical evidence; no reseal and no relabel.
 - UOR, under the owner's authorization (#260): the two synthetic success examples (only analysis_hash and
   evidence_hash) and the MANIFEST were regenerated; docs/automation/UOR_HANDOFF.md §4 carries their three new digests
   with a dated revision note. The schemas, the contract, every value's meaning, the error example, the live canary
   example and the A4 seals are unchanged. The UOR thread is to be told by the owner, if not yet done (the note:
   .work/p7/redesign/FREEZE_T3_PACKAGE.md).
-- Reviewed before publication, each head by a new reviewer with no prior context: 8acae6e PASS; 1ea04a6
-  PASS_WITH_MINORS; f6edcc6 PASS_WITH_MINORS; c958931 PASS; 7f6c445 PASS. CLASS_B_REMAINS = NO each
-  time. Their notes are in .work/p7/LANE_RECORD.md and the packages.
+  - The release note for the UOR thread, the owner's to relay: .work/p7/redesign/PREFLIGHT_T4_PACKAGE_20261017.md §6.
+  - A read-only review of the UOR loop-holder's Episode-04 Lane B package was delivered on that session's request
+    (FINDINGS; the report: .work/p7/redesign/uor_review_20261017/REVIEW_REPORT_ba4955d3.md). The owner ruled its P8
+    pin (E2 → D) and c50's MAJOR UOR HOLDs, not UCPE blockers.
 - OPEN, by the owner's word:
   - The baseline residual: the live analysis's calibration state is a fixed placeholder (evaluator-pinned source) and
     still reads "INSUFFICIENT_SAMPLE" in the summary. #261 removed the label collision with the cards' sample gate;
@@ -79,10 +115,12 @@ FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOY
   - X4, removing the retired sentences from the response payload, is deferred because the contracts permit it: the
     response schema requires them, the automation evidence withholds them, and removing them would move analysis_hash
     again.
-- All new wording is PROVISIONAL. The order the rulings give: the owner's wording freeze after review (S4, X3) and
-  before the UX check (R5); any lane that changes a screen (a wording change, an N-1 or N-2 lane) published before the
-  UX check, which runs after the final publication (U4, X5); T4 only after a UX PASS (X6). The record below lists the
-  UX check before the freeze; that order was never a ruling.
+- Follow-ups, each on the owner's word:
+  - CHANGELOG.md's three "(on main, not released)" entries name the release, and their stale "provisional" and "the
+    UX check has not been run" lines are brought up to date;
+  - docs/automation/UOR_HANDOFF.md's "Production now serves" line names P7P;
+  - a T1 fix of scripts/release.py: repin updates the guard test's asserted asset tokens; identity and repin wrap their
+    notes at 98 columns.
 - Outside the repository, for the owner's use: a GPT hand-over bundle (.work/p7/gpt_handoff_20261012; ZIP
   f408417f…, validated 2026-10-14). Two successor threads were graded QUALIFIED against its key on 2026-10-14; for
   the second, the live anchors were reconciled with no drift.
@@ -114,11 +152,52 @@ FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE. NOTHING IS DEPLOY
 - verify.sh's speed (the owner's request, verbatim below): diagnosed in .work/perf/VERIFY_SPEED_DIAGNOSIS.md; two
   test-only speed-ups on the local branch perf/test-suite-speed @ fb0bfaf (not pushed; its own T3); a parallel gate
   is the owner's decision.
-- Publication is not release. Production stays on D 1caa8b08 until a T4 of the owner's.
-- Nothing changed in production or the migrations: no deploy, no claim activation, no acceptance change, no
-  H2/F3/§5A change, no A4C reseal.
-- This record is the batch's last publish. Before it: #262.)
-**Production is unchanged: D 1caa8b08 / UCPE-PROD-E2-20261004-A (R bb2a49bd). The rollback target is 6f4420a9 (R1A).**
+- Publication is not release. Production is D 27edbcad; main R differs from D only in the baseline, the guard test and
+  the release registry, none of them a runtime path.
+- Nothing else changed: no migration, no claim activation, no claim-acceptance change, no H2/F3/§5A change, no A4C
+  reseal, no HF write beyond the one deploy.
+- This record is the batch's last publish. Before it: #265.)
+**Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-10-17), verbatim — the re-pin T3 (#265 = R) and the guard on R; the UOR items are UOR HOLDs:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. UOR peer review delivered; P8 pin E2→D and c50 MAJOR are UOR HOLDS, not UCPE blockers. Prioritize UCPE; no new UOR work. T3 publish exact chore/repin-p7p@c8e7a8aad0793aa8b8b3e35432a6b00f44182f5e, tree 86ee66d6c3974ae8cc3cb6fc3274b038be0657ac, base main@27edbcad. Verify drift/diff; PR 4/4 PASS on SHA; merge-commit R; main CI/build PASS. Dispatch guard ONCE on R: HEALTHY 3/3, pin D, P7P live, delta []. Prep STATE LOCAL; HOLD mismatch. No HF write/T4/prod.
+```
+- **The owner (2026-10-17), verbatim — the T4 deploy; G5 ACCEPT for the P0→D hash movement only:**
+```text
+CONTINUE CURRENT (Opus XHIGH), UCPE. G5 ACCEPT P0→D hash movement only; A4 KEEP E2, no forecast acceptance. T4 AUTHORIZE DEPLOY-UCPE-PROD-P7P-20261017-A, D=27edbcad7adadf85a7a747fb622d69e34a8446dd, CONDITIONAL: verify 21-file delta f1c9f4634beaf26fc1cb6d6260b233e91333c10eb4a68650aea8db2b6b0d03df; 2-stage authenticated preflight PASS 9/9, guard HEALTHY, HF=1caa8b08, main=D. Deploy ONCE within 30m; settle+401 probe. HOLD on mismatch/STOP; no retry/rollback. Prep re-pin LOCAL, return at T3.
+```
+- **The owner (2026-10-17), verbatim — the guard T3 on D (option A); the preflight prepared offline:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T3 AUTHORIZE option A: dispatch .github/workflows/source-integrity-guard.yml ONCE on main@27edbcad7adadf85a7a747fb622d69e34a8446dd; run release.py guard-verify per .work/p7/redesign/GUARD_T3_PACKAGE.md. Require HEALTHY 3/3, pin 1caa8b08, E2 live/intended, exact 7-path delta; HOLD on mismatch. Then prepare step-3 preflight evidence/owner card offline, without executing HF dry-push. G5 DEFERRED, A4 KEEP. No deploy/T4/HF write/prod mutation.
+```
+- **The owner (2026-10-17), verbatim — the identity T3 (#264 = D); A4 KEEP; G5 deferred to T4:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. A4=KEEP both seals as E2-only historical evidence; no reseal/relabel. G5 remains deferred to T4 per owner ruling; prepare exact hash/UOR proof, no early ACCEPTED. T3 GitHub-only AUTHORIZE release/p7p-identity@1683e9b95eae15bd749dca9b85a42fe97c6310bf, tree fb529a105d42ef6233bde5bb357e5e0b3c5a9783, base main@ad70e1cb. Exact-head preflight; PR 4/4 PASS; merge-commit only; main CI/build PASS. Prepare next guard T3. HOLD on drift. No HF/T4/prod.
+```
+- **The owner (2026-10-17), verbatim — the release prep: T0–T2 LOCAL; the release id:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T0–T2 LOCAL release prep on main@ad70e1cb; release ID UCPE-PROD-P7P-20261017-A. First assess 5 sealed AI UX ambiguities against owner UX PASS; HOLD if material. Verify G5 old/new hash impact, UOR implications, migration/token/rollback evidence. If clear, run release.py identity in clean worktree, full gate + fresh diff review; prepare exact-head T3 package. G5 acceptance reserved for owner after evidence. No push/T3/T4/HF/prod/secret use.
+```
+- **The owner (2026-10-17), verbatim — the owner's UX check result:**
+```text
+UX CHECK RESULT (owner, main@ad70e1cb): PASS 54/54.
+```
+- **The owner (2026-10-17), verbatim — a T0: verify the AI UX audit's file, freeze it, then compare:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T0 read-only: verify ~/Downloads/UCPE_AI_UX_AUDIT_ad70e1cb.md, freeze its SHA and 54 answers before comparing with the key at main@ad70e1cb. Report aggregate score and ambiguity count without exposing answers, key or hints. Keep AI_AUDIT separate from OWNER_UX=NOT_RUN. HOLD on invalid provenance or format. No edits/T3/T4/HF/prod.
+```
+- **The owner (2026-10-17), verbatim — a T0: the UX packet for one isolated blind reviewer:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T0 LOCAL: from UX card at main@ad70e1cb, create exact Q1–Q6 and A–I packet excluding answer key, post-key notes, links and hints; verify no leakage. Give packet only to ONE fresh isolated blind reviewer with no repo/key/prior context; freeze 54 answers before deterministic comparison. Report AI_AUDIT separately from OWNER_UX=NOT_RUN; flag ambiguities. HOLD if isolation cannot be proved. No edits, T3/T4/HF/prod or invented PASS.
+```
+- **The owner (2026-10-17), verbatim — the wording freeze: A:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. OWNER RULING: WORDING FREEZE=A on published main@ad70e1cb and .work/p7/redesign/WORDING_FREEZE_SHEET_20261017.md, including F-7 note. Approve current reviewed copy; F2/F3/F5 KEEP; N1 HOLD, N2 DEFER, N6 unchanged; baseline residual OPEN, not waived. Verify sheet against main and UX card; HOLD on mismatch. Record freeze for next STATE LOCAL. Prepare owner UX 54/54 instructions, without answering for me. No code/push/T3/T4/HF/prod.
+```
+- **The owner (2026-10-17), verbatim — the STATE T3 for c7ea3a6c (#263):**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T3 GitHub-only: publish exact chore/state-p7p-freeze-final-5@c7ea3a6c93b1b43a12a1de4abe03314f5cc5fcf1, tree 7424a78bd43240ff807e2ae6f104d2a810fbc65e, base main@84761977. Preflight exact reviewed STATE-only diff/evidence, no drift; 4 required PR checks PASS on exact SHA, merge-commit only; verify main CI/build. Preserve SQ5 PENDING/SQ6 3/3, retirement HOLD, UX NOT_RUN, baseline OPEN. T0 prep wording-freeze/UX. HOLD on mismatch. No HF/T4/prod.
+```
 - **The owner (2026-10-17), verbatim — the relay file placed; resume the T0:**
 ```text
 Relay file now in Downloads; resume the T0
@@ -2701,7 +2780,31 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE WORDING-FREEZE FIXES (#260), THE SAMPLE-GATE LABEL (#261) AND THE EVIDENCE ROW'S SINGULAR (#262) ARE
+LOOP_STATE=UCPE-PROD-P7P-20261017-A IS RELEASED (2026-10-17): production is D 27edbcad (#264); the re-pin is
+  R 27682005 (#265); the guard reads HEALTHY on R (run 39037863091, GUARD_VERIFY=PASS 8/8).
+  Each step ran under the owner's word (verbatim above): the wording freeze (A), the owner's UX check (PASS 54/54),
+  the identity T3, the guard T3 on D, the T4 (G5 ACCEPT for the P0→D hash movement only; A4 KEEP E2; no forecast
+  acceptance), the re-pin T3 with the guard on R. No claim activation, claim-acceptance change, H2/F3/§5A change or
+  A4C reseal.
+  - #263 → main ad70e1cb (the previous STATE record).
+  - #264 → D 27edbcad7adadf85a7a747fb622d69e34a8446dd: the identity, by release.py identity plus one hand rewrap of a
+    138-column note. Gate 7769; fresh review PASS; 4 of 4 checks; main's push runs green.
+  - The guard on D: run 39026573615, GUARD_VERIFY=PASS 8/8.
+  - The T4: a two-stage authenticated preflight (stage 2 PASS 9/9 at 11:30:16Z); DEPLOY=PASS once at 11:30:45Z
+    (1caa8b0..27edbca, no force; CONSUMED); SETTLE=PASS 7/7 at 11:31:12Z with the 401 probe. No retry, no rollback.
+  - #265 → R 2768200512e522c4764bb1c7a459d2a8635c2a78: the re-pin. The tool's raw output failed the gate (a
+    125-column note; the guard test's asserted asset tokens unchanged by repin); one targeted repair; deterministic
+    twice; gate 7769; independent check 13/13; fresh review PASS; 4 of 4 checks.
+  - The guard on R (the owner's T3): dispatched once, run 39037863091. GUARD_VERIFY=PASS 8/8: HEALTHY ×3, exit 0, hf
+    main = pinned = D, P7P live and intended, the delta empty. Before it, the scheduled run 39031942197 on D read
+    PIN_DRIFT ×3, as expected between the deploy and R. Record:
+    .work/p7/redesign/evidence_guard_r_2768200/T3_EXECUTION_GUARD_R.md.
+  - A read-only review for the UOR loop-holder's Episode-04 package, on that session's request: delivered. The owner
+    ruled its P8 pin (E2 → D) and c50's MAJOR UOR HOLDs, not UCPE blockers.
+  - This record: prepared on the local branch chore/state-p7p-release (STATE.md only, on main 27682005);
+    it is published only under the owner's separate T3.
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom).
+  Before it: THE WORDING-FREEZE FIXES (#260), THE SAMPLE-GATE LABEL (#261) AND THE EVIDENCE ROW'S SINGULAR (#262) ARE
   PUBLISHED (#260 and #261 on 2026-10-15, #262 on 2026-10-17), each under the owner's T3. They are NOT released. The
   wording is PROVISIONAL and the UX check NOT_RUN. No deploy, T4, claim activation, acceptance change or waiver,
   H2/F3/§5A change or A4C reseal.
@@ -5402,6 +5505,15 @@ LOOP_STATE=THE WORDING-FREEZE FIXES (#260), THE SAMPLE-GATE LABEL (#261) AND THE
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-17):
+  - RELEASED: UCPE-PROD-P7P-20261017-A, production D 27edbcad, re-pinned at R 27682005. It carries everything published
+    since E2, among them: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the
+    follow-up changes (#250, #252), the run-store lock (#254), the class-B redesign (#256), the release-prep work
+    (#258), the wording-freeze fixes (#260), the sample-gate label (#261), the Evidence row's singular (#262), and the
+    STATE records.
+  - The owner's UX check PASS 54/54; the wording FROZEN (A); G5 accepted for P0→D only; A4 kept.
+  - Next: the follow-ups on the owner's word (the CHANGELOG release names, the UOR_HANDOFF production line, the
+    release.py T1 fix), the UOR relay, the dated JWT renewal.
+  Before it: POST-PHASE-4 / PHASE 7-8 (2026-10-17):
   - Published: Lane R, DP-D, Lane P with the §23 card (#246), the independent changes (#248), the follow-up changes
     (#250, #252), the run-store lock (#254), the class-B redesign (#256), the release-prep work (#258) and its STATE
     record (#259), the wording-freeze fixes (#260), the sample-gate label (#261), the Evidence row's singular (#262).
@@ -5685,7 +5797,20 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 (2026-10-17):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-p7p-freeze-final-5 (this record, on main 84761977). Local:
+CURRENT_BRANCH=chore/state-p7p-release (this record, on main 27682005). Local:
+  - release/p7p-identity @ 1683e9b9 and chore/repin-p7p @ c8e7a8aa: both ancestors of main now (#264, #265), both
+    on origin. They can be deleted on the owner's word.
+  - feat/p7p-freeze-f1-f4 @ 8acae6e, feat/p7p-freeze-f6 @ 1ea04a6, feat/p7p-freeze-s1s2 @ f6edcc6,
+    feat/p7p-sample-gate-label @ c958931, feat/p7p-f7-grammar @ 7f6c445, chore/state-p7p-freeze-final-5 @ c7ea3a6c
+    and chore/state-p7p-release-prep-published @ c2357e3: ancestors of main (#259 to #263). They can be deleted on
+    the owner's word.
+  - chore/state-p7p-freeze-published @ c32be85f, chore/state-p7p-freeze-final @ 3e8feacd,
+    chore/state-p7p-freeze-final-2 @ c449361f, chore/state-p7p-freeze-final-3 @ b3bef0ae and
+    chore/state-p7p-freeze-final-4 @ 87499556; the local tags backup/state-p7p-freeze-final-5-45572e5 and
+    -20b6bb2: never published, superseded by #263. They can be deleted on the owner's word.
+  - perf/test-suite-speed @ fb0bfaf: two test-only speed-ups for verify.sh (.work/perf/VERIFY_SPEED_DIAGNOSIS.md);
+    not pushed; its own T3.
+  Before it: chore/state-p7p-freeze-final-5 (this record, on main 84761977). Local:
   - feat/p7p-freeze-f1-f4 @ 8acae6e, feat/p7p-freeze-f6 @ 1ea04a6, feat/p7p-freeze-s1s2 @ f6edcc6,
     feat/p7p-sample-gate-label @ c958931 and feat/p7p-f7-grammar @ 7f6c445: each is an ancestor of main now (#260,
     #261, #262); the last three are also on origin. They can be deleted on the owner's word.
@@ -5938,7 +6063,14 @@ CURRENT_BRANCH=chore/state-p7p-freeze-final-5 (this record, on main 84761977). L
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=84761977 (main, #262: the Evidence row's singular and the CHANGELOG entries).
+LAST_GREEN_SHA=27682005 (main, #265: the re-pin after the P7P deploy).
+  Its 4 PR checks (CI 39037236305; reproducible build 39037236296), push CI 39037551766 and reproducible build
+  39037551779 are green. Before it 27edbcad (#264).
+  Before it: 27edbcad (main, #264: the identity UCPE-PROD-P7P-20261017-A, D, now production). Its 4 PR checks (CI
+  39025584961; reproducible build 39025584851), push CI 39025953604 and reproducible build 39025953598 are green.
+  Before it: ad70e1cb (main, #263: the STATE record). Its 4 PR checks (CI 38950729563; reproducible build
+  38950729633), push CI 38951473191 and reproducible build 38951473548 are green.
+  Before it: 84761977 (main, #262: the Evidence row's singular and the CHANGELOG entries).
   Its 4 PR checks, push CI 38937389856 and reproducible build 38937390028 are green. Before it fdefe00b (#261).
   Before it: fdefe00b (main, #261: the sample-gate label).
   Its 4 PR checks, push CI 38760933589 and reproducible build 38760933597 are green. Before it b564a268 (#260).
@@ -6224,6 +6356,10 @@ LAST_GREEN_SHA=84761977 (main, #262: the Evidence row's singular and the CHANGEL
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS 2026-10-17, scanners 3/3 each:
+  - chore/state-p7p-release's tree (main 27682005 and this record): 7769.
+  - Before the merges: chore/repin-p7p @ c8e7a8aa: 7769 (Claude's and the reviewer's runs); release/p7p-identity @
+    1683e9b9: 7769 (Claude's and the reviewer's runs).
+  Before it: PASS 2026-10-17, scanners 3/3 each:
   - chore/state-p7p-freeze-final-5's tree (main 84761977, whose tree is the F-7 head's, and this record): 7769.
   - Before the merges: feat/p7p-f7-grammar @ 7f6c445: 7769 (the implementer's, Claude's and the reviewer's
     runs); feat/p7p-sample-gate-label @ c958931: 7745 (the same three); feat/p7p-freeze-s1s2 @ f6edcc6: 7729 (the
@@ -6517,6 +6653,10 @@ LAST_VERIFY=PASS 2026-10-17, scanners 3/3 each:
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
 CODEX_PENDING=NONE (2026-10-17). No Codex or paid API fallback (the owner): Claude implements, tests and
+  reviews directly (MODEL SUBSTITUTION); fresh reviewer agents for the identity, the re-pin and this record, and one
+  blind-reader agent for the AI audit (HOLD, uncompared), each in a separate context; no GPT consultation. Model:
+  claude-opus-5-5.
+  Before it: NONE (2026-10-17). No Codex or paid API fallback (the owner): Claude implements, tests and
   reviews directly (MODEL SUBSTITUTION); five fresh implementer agents and five fresh reviewer agents, one pair per
   lane, each in a separate context; no GPT consultation. Model: claude-opus-5-5.
   Before it: NONE (2026-10-15). No Codex or paid API fallback (the owner, 2026-10-15): Claude implements,
@@ -6657,7 +6797,38 @@ CODEX_PENDING=NONE (2026-10-17). No Codex or paid API fallback (the owner): Clau
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-17). Nothing is urgent; production is unchanged and safe as it is.
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-17). Nothing is urgent. Production is D 27edbcad /
+  UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, and the guard reads it HEALTHY.
+  0. The separate T3 for this STATE record: the branch chore/state-p7p-release, STATE.md only, on main 27682005; its
+     checks; merge commit only; main's CI and build.
+  1. Relay the release note to the UOR thread (.work/p7/redesign/PREFLIGHT_T4_PACKAGE_20261017.md §6). Tell the
+     UOR thread of #260's example revision, if not yet done (the note to relay:
+     .work/p7/redesign/FREEZE_T3_PACKAGE.md). The UOR side's P8 pin and c50 are UOR HOLDs.
+  2. The follow-ups, each on its own word: CHANGELOG.md's "(on main, not released)" entries and their stale
+     provisional and UX lines; UOR_HANDOFF.md's production line; the release.py T1 fix (repin's asserted tokens;
+     notes wrapped at 98 columns).
+  3. Open by the owner's word, no decision asked: the baseline residual (the summary's fixed "INSUFFICIENT_SAMPLE";
+     options in .work/p7/redesign/BASELINE_SCOPE_TRACE_20261015.md); the reviews' notes (.work/p7/LANE_RECORD.md).
+     F-2, F-3 and F-5 are kept. N-1 HOLD, N-2 deferred, N-6 unchanged (the freeze rulings); X4 deferred.
+  4. Branch cleanup on the owner's word (CURRENT_BRANCH lists them).
+  - perf/test-suite-speed @ fb0bfaf: its T3, and whether verify.sh runs in parallel (.work/perf/
+    VERIFY_SPEED_DIAGNOSIS.md).
+  - The GPT succession, under the owner's 2026-09-28 authority (preserved 2026-10-14): SQ1 to SQ4 PASS; SQ5 PENDING
+    (#23 found #22's SQ5 PASS and RETIREMENT_RECOMMENDED premature; SQ5 restarts after HOLD #19, the blind case at #12
+    no longer counts, and a new real milestone with a fresh unframed live-boundary result is required); SQ6 3/3 again
+    at #26 after #23's restart, final qualification PENDING. These are the owner's record and owner-relayed text, not
+    a verified transcript; SQ5 and SQ6 stay PENDING overall. The retirement record (revision 2, before #23) is ON HOLD
+    (criterion 2, SQ5, not supported under 08 Part B after HOLD #19); its options are the owner's. The owner's
+    retirement consent is conditional: every criterion met, RETIREMENT_RECOMMENDED stated, the retirement record
+    verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
+  - DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers (BACKEND_COPY names the fixed live calibration state behind the baseline residual).
+    Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing ruling (the owner, 2026-10-15, verbatim above): UCPE execution optimization.
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option
+    3); DP-D's export limits stay documented and never proven.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-17). Nothing is urgent; production is unchanged and safe as it is.
   Main 84761977 is NOT released.
   0. The separate T3 for this STATE record: the branch chore/state-p7p-freeze-final-5, STATE.md only, on main 84761977;
      its checks; merge commit only; main's CI and build.
@@ -7835,7 +8006,10 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-17). Nothing is urgent; produ
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the separate T3 for this STATE record; relay the UOR note if not yet done; the
+NEXT_ACTION=The owner: the separate T3 for this STATE record; relay the release note to the UOR
+  thread; the follow-ups on the owner's word; the dated JWT renewal (by 2026-10-30). Claude: passive reads only; no
+  push without a T3; no T4.
+  Before it: The owner: the separate T3 for this STATE record; relay the UOR note if not yet done; the
   wording freeze and the N-1/N-2 decisions, any change they bring published, then the UX check on the final published
   screens (and the dated JWT renewal). Claude: passive reads only; no push without a T3; no T4.
   Before it: The owner: the separate T3 for this STATE record; then the wording freeze and the N-1/N-2
