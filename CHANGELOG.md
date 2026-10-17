@@ -2,10 +2,24 @@
 
 All notable changes to this project are recorded here.
 
-## 2026-10-16 - The calibration card's sample gate and the Evidence row's singular (on main, not released)
+## 2026-10-17 - Release UCPE-PROD-P7P-20261017-A
 
-Nothing in this entry is released: it records #261, on `main` since 2026-10-15, and what the
-change that adds this entry puts on `main`, after the entry below.
+Released to production on 2026-10-17: `UCPE-PROD-P7P-20261017-A`, commit `27edbcad` (#264), over
+`UCPE-PROD-E2-20261004-A` (`1caa8b08`). It carries the three entries below. The runtime baseline was
+re-pinned to it (#265), and the source-integrity guard reads it healthy.
+
+Notes:
+- The wording was frozen on 2026-10-17, and the owner's UX comprehension check passed (54 of 54).
+- The owner accepted the movement of `analysis_hash` and `evidence_hash` from E2 to this release, and
+  only that: no forecast-quality claim and no directional permission is accepted; both registries are
+  empty.
+- No migration, gate or threshold change. In `quant/`, only the R4-C1 candidate identity was added,
+  and no analysis uses it. The H2 hold is unchanged.
+- The A4 audit seals stay as sealed against `UCPE-PROD-E2-20261004-A`: no reseal.
+
+## 2026-10-16 - The calibration card's sample gate and the Evidence row's singular (released in UCPE-PROD-P7P-20261017-A)
+
+It records #261 and F-7 (#262), released in `UCPE-PROD-P7P-20261017-A` on 2026-10-17.
 
 Changed:
 - #261: each calibration card's row that shows its timeframe's sample gate reads "Sample gate"; it
@@ -16,13 +30,12 @@ Changed:
 
 Notes:
 - Frontend copy only: no payload, `analysis_hash`, governed pin, UOR or contract change.
-- All of this wording is provisional; the UX check has not been run.
+- The wording was frozen, and the owner's UX check passed, on 2026-10-17, before the release.
 - The baseline residual stays open: the summary's fixed "INSUFFICIENT_SAMPLE".
 
-## 2026-10-15 - Wording freeze: F-1, F-4, F-6 and the Model Quality copy (on main, not released)
+## 2026-10-15 - Wording freeze: F-1, F-4, F-6 and the Model Quality copy (released in UCPE-PROD-P7P-20261017-A)
 
-Nothing in this entry is released: it records what the change that adds this entry puts on
-`main`, after the entry below.
+It records #260, released in `UCPE-PROD-P7P-20261017-A` on 2026-10-17.
 
 Changed:
 - F-1: the evidence gate's sentence for a timeframe with no demonstrated skill names the accuracy
@@ -52,15 +65,15 @@ Notes:
   2026-10-15): in each success example only `analysis_hash` and `evidence_hash` changed. The
   schemas, the contract, the error example and the live canary example are unchanged.
 - No gate, block code, disposition token, threshold or quant change.
-- All of this wording is provisional. The UX comprehension card was regenerated for F-1 and F-6;
-  the UX check has not been run.
-- F-7 is open: the Decision view's Evidence row reads "1 resolved outcomes" when there is one.
+- The UX comprehension card was regenerated for F-1 and F-6. The wording was frozen, and the
+  owner's UX check passed, on 2026-10-17, before the release.
+- F-7, the Decision view's Evidence row reading "1 resolved outcomes" for one, was fixed by #262
+  (the entry above).
 
-## 2026-10-12 - Decision View, Gate Kinds and Save Receipt (on main, not released)
+## 2026-10-12 - Decision View, Gate Kinds and Save Receipt (released in UCPE-PROD-P7P-20261017-A)
 
-What the next release would carry since production's release `UCPE-PROD-E2-20261004-A`. Nothing
-in this entry is released: it records what is on `main` and in the release-prep change that adds
-this entry.
+What the release `UCPE-PROD-P7P-20261017-A` (2026-10-17) carries since `UCPE-PROD-E2-20261004-A`, as
+merged up to the release-prep change that added this entry.
 
 Changed:
 - Added the Decision view (`decision_view.v2`), the one authoritative block of an analysis: its
@@ -106,8 +119,8 @@ Notes:
   automation analysis carries no Decision view, but its `analysis_hash` and `evidence_hash` also
   moved since production: UX-1 changed its explanation text, and its sentences now say which kind
   of hard gate is active (the UOR handoff revisions of 2026-10-05 and 2026-10-10).
-- The UX comprehension check is the owner's and has not been run. All new wording is provisional
-  until it is frozen after review.
+- The owner's UX comprehension check passed (54 of 54) and the wording was frozen, both on
+  2026-10-17, before the release.
 - No forecast-quality claim and no directional permission is accepted; both registries are empty.
 - Releases between 2026-06-22 and this entry were not recorded in this file. They are recorded in
   `ops/release/releases.json` and `STATE.md`.

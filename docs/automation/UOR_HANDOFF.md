@@ -61,7 +61,7 @@ payload's `probability_explanation` text, which moves each example's `analysis_h
 schemas, the contract and every value's meaning are unchanged. That episode closed with qualification BLOCKED /
 NOT_PROVEN: its closing ended the hold on publishing this revision, and nothing here reads it as a pass.
 
-Revision 2026-10-10 (owner rulings CLASS-B-4=A and AD1=A; published to `main` by pull request #256, not released):
+Revision 2026-10-10 (owner rulings CLASS-B-4=A and AD1=A; published to `main` by #256; released in P7P):
 the MANIFEST and the two synthetic success examples were regenerated again because the analysis payload's own
 sentences now say which kind of hard gate is active, so the evidence gate is no longer described as elevated risk.
 That moves each example's `analysis_hash` and `evidence_hash`, and with them the three digests below of the
@@ -73,7 +73,7 @@ Note 2026-10-12 (the release-prep change that followed #256): nothing on this pa
 the human analysis's decision view and its screens only. The automation analysis is unchanged, so the examples, their
 `analysis_hash` and `evidence_hash`, the MANIFEST and every digest below are byte-identical to the revision above.
 
-Revision 2026-10-15 (owner authorization, F-6 option A; not released): the MANIFEST and the two synthetic success
+Revision 2026-10-15 (owner authorization, F-6 option A; released in P7P): the MANIFEST and the two synthetic success
 examples were regenerated because the analysis payload's model-readiness sentence (`model_readiness_label`, in
 `frontend_display` and `timeframes`) no longer says accuracy is "not yet measured", which contradicted a screen that
 shows an observed directional accuracy. That moves each example's `analysis_hash` and `evidence_hash`, and with them
@@ -110,8 +110,9 @@ example. The automation analysis still carries no decision view.
   That is no longer true.
   - F1 introduced the route, and every later release inherits it unchanged:
     `src/crypto_probability_engine/automation/`, `api/automation_endpoint.py`, migration 0013 and both radar
-    schemas are byte-identical from F1's `5a3ef022` to `1caa8b08`.
-  - Production now serves it as `UCPE-PROD-E2-20261004-A`, commit `1caa8b08`.
+    schemas are byte-identical from F1's `5a3ef022` to `27edbcad`.
+  - Production now serves it as `UCPE-PROD-P7P-20261017-A`, commit `27edbcad` (released 2026-10-17). Before it:
+    `UCPE-PROD-E2-20261004-A`, commit `1caa8b08`.
   - Each response's `build_info.release_id`, and its ledger row's `release_id`, name the release that served
     that request.
 - Adding it to UOR's `ACCEPTED_UPSTREAM_RELEASES` is an owner decision on UOR's side, made after UOR's contract
