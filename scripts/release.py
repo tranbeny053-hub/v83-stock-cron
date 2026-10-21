@@ -30,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import textwrap
 import time
 import urllib.error
 import urllib.request
@@ -383,7 +384,12 @@ def set_build_info_test(text: str, old: dict[str, str], new: dict[str, str]) -> 
 
 def delta_block(paths: Iterable[str], note: Sequence[str]) -> str:
     lines = [DELTA_HEADER]
-    lines.extend(f"# {line}\n" for line in note)
+    for element in note:
+        for line in textwrap.wrap(element, width=98, break_long_words=False,
+                                  break_on_hyphens=False):
+            if len(line) > 98:
+                raise Stop(f"delta note line exceeds 98 columns: {line}")
+            lines.append(f"# {line}\n")
     ordered = sorted(paths)
     if ordered:
         body = "".join(f'    "{path}",\n' for path in ordered)
@@ -420,6 +426,18 @@ def set_guard_identity(text: str, old: dict[str, str], new: dict[str, str]) -> s
             f"the guard test's pinned {key} assertion",
         )
     return text
+
+
+def set_guard_asset_tokens(text: str, old: dict[str, str], new: dict[str, str]) -> str:
+    if old == new:
+        return text
+    def block(tokens: dict[str, str]) -> str:
+        return ('    assert intended.asset_tokens == {\n'
+                f'        "app_js": "{tokens["app_js"]}",\n'
+                f'        "styles_css": "{tokens["styles_css"]}",\n'
+                '    }\n')
+    return replace_once(text, block(old), block(new),
+                        f"{GUARD_TEST_PATH}'s asset-token assertion")
 
 
 # -------------------------------------------------------------------------------- identity step
@@ -809,6 +827,7 @@ def cmd_repin(env: Env, args: argparse.Namespace) -> int:
         raise Stop("the worktree is not clean")
     baseline = baseline_at(env, d)
     previous = baseline["hf_main_sha"]
+    old_tokens = baseline["frontend_asset_tokens"]
     if previous == d:
         raise Stop("the baseline at D already pins D")
     if not is_ancestor(env, previous, d):
@@ -835,6 +854,7 @@ def cmd_repin(env: Env, args: argparse.Namespace) -> int:
     guard_path = tree / GUARD_TEST_PATH
     text = set_guard_pin(guard_path.read_text(encoding="utf-8"), d)
     text = set_guard_identity(text, old, new)
+    text = set_guard_asset_tokens(text, old_tokens, repinned["frontend_asset_tokens"])
     text = set_guard_delta(text, [], [
         f"{new['release_id']} deployed main's own tree, so nothing stands in it:",
         f"{', '.join(Path(path).name for path in delta)} cleared with that release.",

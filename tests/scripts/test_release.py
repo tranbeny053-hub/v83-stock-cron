@@ -98,6 +98,53 @@ def test_the_guard_test_editors_match_the_real_guard_test_exactly_once() -> None
     edited = rel.set_guard_identity(repinned, old, new)
     assert f'    assert intended.release_id == "{BETA}"\n' in edited
     assert f'    assert intended.release_id == "{old["release_id"]}"\n' not in edited
+    baseline = json.loads(_real(rel.BASELINE_PATH))
+    old_tokens = baseline["frontend_asset_tokens"]
+    new_tokens = {"app_js": "x-new", "styles_css": "y-new"}
+    edited = rel.set_guard_asset_tokens(edited, old_tokens, new_tokens)
+    assert '"app_js": "x-new"' in edited
+    assert f'"app_js": "{old_tokens["app_js"]}"' not in edited
+
+
+def test_guard_asset_tokens_editor_is_exact() -> None:
+    old = {"app_js": "old-a", "styles_css": "old-s"}
+    new = {"app_js": "new-a", "styles_css": "new-s"}
+    block = ('    assert intended.asset_tokens == {\n'
+             '        "app_js": "old-a",\n        "styles_css": "old-s",\n    }\n')
+    edited = rel.set_guard_asset_tokens("before\n" + block + "after\n", old, new)
+    assert '"app_js": "new-a"' in edited and '"styles_css": "new-s"' in edited
+    assert rel.set_guard_asset_tokens(block, old, old) == block
+    with pytest.raises(rel.Stop, match="asset-token assertion"):
+        rel.set_guard_asset_tokens("absent", old, new)
+    with pytest.raises(rel.Stop, match="asset-token assertion"):
+        rel.set_guard_asset_tokens(block + block, old, new)
+
+
+@pytest.mark.parametrize("note", [
+    ["Now standing in it: app.js, index.html, styles.css, response.schema.json, "
+     "analysis_service.py, app.py, build_info.py, merged but not yet"],
+    ["app.js, index.html, styles.css, response.schema.json, analysis_service.py, "
+     "app.py, build_info.py cleared with that release."],
+])
+def test_delta_block_wraps_p7p_notes(note: list[str]) -> None:
+    block = rel.delta_block([], note)
+    assert all(len(line) <= 100 for line in block.splitlines())
+    comment_lines = block.splitlines()[len(rel.DELTA_HEADER.splitlines()): -1]
+    assert " ".join(" ".join(note).split()).split() == " ".join(
+        line[2:] for line in comment_lines
+    ).split()
+    assert len(rel.DELTA_BLOCK_RE.findall(block)) == 1
+
+
+def test_delta_block_preserves_short_note_elements() -> None:
+    block = rel.delta_block([], ["a", "b"])
+    header_lines = len(rel.DELTA_HEADER.splitlines())
+    assert block.splitlines()[header_lines:header_lines + 2] == ["# a", "# b"]
+
+
+def test_delta_block_rejects_overlong_word() -> None:
+    with pytest.raises(rel.Stop, match="x{99}"):
+        rel.delta_block([], ["x" * 99])
 
 
 def test_the_delta_definition_equals_the_guard_tests_own_mirror() -> None:
@@ -256,6 +303,8 @@ def _guard_test(pin: str, identity: dict[str, str]) -> str:
         + rel.delta_block([], ["fixture"])
         + "\n\ndef test_identity(intended):\n"
         + asserts
+        + '    assert intended.asset_tokens == {\n'
+        + '        "app_js": "tok1",\n        "styles_css": "tok1",\n    }\n'
     )
 
 
@@ -463,6 +512,19 @@ def test_identity_sets_the_three_files_and_mirrors_the_guarded_delta(world: Worl
     assert rel.parse_identity((world.work / rel.BUILD_INFO_PATH).read_text())["release_id"] == BETA
 
 
+def test_repin_moves_the_guard_tests_asserted_asset_tokens(world: World) -> None:
+    _write(world.work, "frontend/index.html",
+           '<link href="/styles.css?v=tok2" />\n<script src="/app.js?v=tok2"></script>\n')
+    d = _prepare_beta(world)
+    tree = world.worktree("wt_repin_tokens", d)
+    assert rel.main(["repin", d, "--worktree", str(tree)], world.env()) == 0
+    guard_text = (tree / rel.GUARD_TEST_PATH).read_text()
+    assert '"app_js": "tok2"' in guard_text
+    assert '"styles_css": "tok2"' in guard_text
+    assert "tok1" not in guard_text
+    assert all(len(line) <= 100 for line in guard_text.splitlines())
+
+
 def test_identity_refuses_a_dirty_worktree_or_an_unchanged_release(world: World) -> None:
     tree = world.worktree("wt_dirty", "HEAD")
     _write(tree, "stray.txt", "x\n")
@@ -537,6 +599,7 @@ def test_the_full_release_chain_then_an_h2_safe_rollback(
     guard_text = (first / rel.GUARD_TEST_PATH).read_text()
     assert f'PIN_SHA = "{d}"' in guard_text and "CURRENT_DELTA_PATHS: list[str] = []" in guard_text
     assert f'assert intended.release_id == "{BETA}"' in guard_text
+    assert all(len(line) <= 100 for line in guard_text.splitlines())
     registry = json.loads((first / rel.REGISTRY_PATH).read_text())
     assert registry["releases"][-1] == {"commit": d, "deployed_over": world.c0, "h2_hold": True,
                                         "release_id": BETA}
