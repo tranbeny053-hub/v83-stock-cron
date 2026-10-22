@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-22 - Next-generation groundwork, the release tool's re-pin fix and the gate's lint message (on main, not released)
+
+It records #268, #269 and #270. Nothing in this entry is released.
+
+Added:
+- #268: `docs/NG_SCALE_EXP00_DEPENDENCY_AUDIT.md`, a read-only trace of the forecast probabilities
+  from the pipeline to their consumers, storage and response, and a new package,
+  `crypto_probability_engine/quant_ng`, with `docs/NG_SCALE_CONTRACTS.md`:
+  - the governing plan's evidence-population, forecast-clock and replay-custody safeguards as pure
+    functions;
+  - a strict artifact manifest.
+
+Fixed:
+- #269: `scripts/release.py repin` now moves the guard test's asserted asset tokens, and `identity`
+  and `repin` wrap each note so that no comment line is longer than 100 columns. Both were repaired
+  by hand at the P7P release.
+- #270: `verify.sh` names the first ruff finding when lint fails; with ruff's default output format
+  it printed an empty detail.
+
+Notes:
+- Nothing imports the new package: no served number, gate, stored row or response changes.
+- No migration, gate, threshold or runtime behaviour change. The next release's runtime delta will
+  include the unwired package's files.
+- The next-generation plan these support (NGA) is proposed, not adopted; its decisions are the
+  owner's.
+
 ## 2026-10-17 - Release UCPE-PROD-P7P-20261017-A
 
 Released to production on 2026-10-17: `UCPE-PROD-P7P-20261017-A`, commit `27edbcad` (#264), over
