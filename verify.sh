@@ -41,7 +41,7 @@ fi
 [ -x "$PY" ]   || fail "missing .venv"
 [ -x "$RUFF" ] || fail "missing ruff in .venv"
 
-"$RUFF" check . >"$LOG" 2>&1 || fail "ruff: $(grep -m1 -E '^[^ ]+:[0-9]+' "$LOG" | cut -c1-120)"
+"$RUFF" check --output-format=concise . >"$LOG" 2>&1 || fail "ruff: $(grep -m1 -E '^[^ ]+:[0-9]+' "$LOG" | cut -c1-120)"
 
 "$PY" -m pytest -q >"$LOG" 2>&1 || {
   first=$(grep -m1 -E '^(FAILED|ERROR)' "$LOG" | cut -c1-120)
