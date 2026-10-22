@@ -128,6 +128,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `ops/hf_runtime_baseline.json` | ACTIVE_PIN | source-integrity-guard.yml | local | Read by scripts/source_integrity_guard.py. |
 | `ops/oos_candidate_freeze.json` | ACTIVE_PIN | tests only; collector freeze guard | local | Read by tests/oos/test_freeze_guard.py. |
 | `ops/quant_ng/REFERENCE_SPEC_v1.json` | ACTIVE_PIN | tests only | local | The NGA reference spec v1 (R4's generation-2 gating reference; PROPOSAL, unwired): its sha256 is REFERENCE_SPEC_V1_SHA256 in src/crypto_probability_engine/quant_ng/reference.py, checked by tests/quant_ng/test_reference.py. |
+| `ops/quant_ng/REFERENCE_SPEC_v1d.json` | ACTIVE_PIN | tests only | local | The NGA reference spec v1d (1D, PROPOSAL, UNWIRED): its sha256 is REFERENCE_SPEC_V1D_SHA256 in src/crypto_probability_engine/quant_ng/reference_v1d.py, checked by tests/quant_ng/test_reference_v1d.py. |
 | `ops/release/config.json` | ACTIVE_RELEASE | owner-local (release.py) | local | Read by scripts/release.py for release and rollback checks. |
 | `ops/release/releases.json` | ACTIVE_RELEASE | owner-local (release.py) | local | Read by scripts/release.py for release and rollback checks. |
 | `ops/section_5a_evaluator_pin.json` | ACTIVE_PIN | tests only; isolated route attestation | local | Read by tests/workflows/test_owner_url_environment.py. |

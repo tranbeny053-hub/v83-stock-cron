@@ -35,6 +35,10 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
   `ops/quant_ng/REFERENCE_SPEC_v1.json` and a test; spec v1 values are R4's frozen research
   spec, pinned by the loader and a test; pi0 is caller-supplied; synthetic deployments
   are bit-identical to R4's research code.
+- `reference_v1d` pins 1D to one type and 365-day memory; n0 = 1 row follows v1's rule.
+  This is development only; 1W awaits its alignment and lattice phase definitions.
+- `availability` marks 1M and H_extended UNAVAILABLE; the 24-bar extension is deferred,
+  not cancelled.
 - `candidate` delegates C1's triplet to `candidate_r4_c1` behind an ELIGIBLE manifest, the σ guard,
   and the central range; no model constants exist in the repository.
 
@@ -42,7 +46,8 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 
 There is no registry, pipeline, wiring, lattice, model constant, prior value, decision tolerance,
 F3 or look. The reference tier's priors and the candidate's constants are always the caller's;
-none exists here. 1D and 1W (spec v1d) wait on the owner's OD-NG-6. EXP-01 and EXP-02 on real
+none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
+implemented; 1W waits on two definitions. EXP-01 and EXP-02 on real
 data are the owner's to scope; the parity shown here is synthetic. S-R2 revision evidence and
 S-R4 retention (including never deleting claim evidence and capacity stop rules) are process
 rules with no code here. S-E3 freeze content and S-C1's maximum commit delay are protocol and
