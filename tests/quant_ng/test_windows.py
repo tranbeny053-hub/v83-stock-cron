@@ -284,3 +284,25 @@ def test_empty_and_unsupported_well_formed_windows_are_refused() -> None:
 def test_window_dataclass_refuses_empty_candles() -> None:
     with pytest.raises(ValueError):
         Window("binance", SYMBOL.display, "15m", (), WindowSource.SNAPSHOT, 0)
+
+
+def test_malformed_snapshot_tail_precedes_available_adapter() -> None:
+    items = list(candles(5))
+    items[-1] = replace(items[-1], open_time_utc=items[-1].open_time_utc + timedelta(seconds=BAR))
+    adapter = FakeAdapter(history(candles(5)))
+
+    assert_reason(UnavailableReason.WINDOW_MALFORMED, lambda: acquire_window(
+        snapshot(tuple(items)), symbol=SYMBOL, bars_required=3, history_adapter=adapter
+    ))
+    assert adapter.calls == []
+
+
+def test_stale_history_uses_supplied_now_and_calls_adapter_once() -> None:
+    stale = candles(3, start=datetime(2010, 1, 1, tzinfo=UTC))
+    adapter = FakeAdapter(history(stale))
+
+    assert_reason(UnavailableReason.HISTORY_INVALID, lambda: acquire_window(
+        snapshot(candles(1)), symbol=SYMBOL, bars_required=3, history_adapter=adapter,
+        now_utc=datetime(2025, 1, 1, tzinfo=UTC),
+    ))
+    assert len(adapter.calls) == 1

@@ -1,8 +1,9 @@
 """PROPOSAL, UNWIRED: C1 candidate triplet behind an eligible artifact manifest.
 
-Nothing outside ``quant_ng`` imports this module. It decides nothing and contains no constants;
-the manifest supplies them. C1 only. The zero-probability clip is an evaluation contract only;
-this module never clips. The table tail clamp keeps p_up and p_down at least 1/(n+1), while
+Nothing outside ``quant_ng`` imports this module. It decides nothing and contains no model
+constants (a manifest supplies them). C1 only. An evaluator clips at its own epsilon; plan v2 §H
+names 1e-12; this module never clips. The table tail clamp keeps p_up and p_down at least
+1/(n+1), while
 p_timeout is 0 at band 0 and an evaluator must clip it.
 """
 
@@ -20,8 +21,6 @@ from crypto_probability_engine.quant import candidate_r4_c1
 from crypto_probability_engine.quant_ng import artifact, windows
 
 PROVIDER_VENUES = MappingProxyType({"binance": "BINANCE_PUBLIC", "okx": "OKX_PUBLIC"})
-# Evaluation clip of the zero-probability contract (plan v2 §H); this module never clips.
-ZERO_PROBABILITY_EPS = 1e-12
 
 
 class CandidateUnavailableReason(StrEnum):
@@ -30,6 +29,7 @@ class CandidateUnavailableReason(StrEnum):
     CELL_MISMATCH = "CELL_MISMATCH"
     ARTIFACT_STALE = "ARTIFACT_STALE"
     BAND_OUT_OF_RANGE = "BAND_OUT_OF_RANGE"
+    WINDOW_UNAVAILABLE = "WINDOW_UNAVAILABLE"
     SIGMA_GUARD = "SIGMA_GUARD"
     CENTRAL_QUANTILE_OUT_OF_TABLE = "CENTRAL_QUANTILE_OUT_OF_TABLE"
     CENTRAL_RANGE_DOMAIN = "CENTRAL_RANGE_DOMAIN"
@@ -87,6 +87,7 @@ def central_half_width(
         )
     scaled = quantile * 100
     nearest = round(scaled)
+    # Match a floating-point value to its quantile grid point, not a model tolerance.
     if abs(scaled - nearest) <= 1e-9:
         z = knots[nearest]
     else:
@@ -117,12 +118,20 @@ def compute_candidate(
     if venue is None:
         raise CandidateUnavailable(CandidateUnavailableReason.VENUE_UNKNOWN,
                                    f"unknown provider {window.provider!r}")
+    if (isinstance(band_frac, bool) or not isinstance(band_frac, Real)
+            or not math.isfinite(band_frac) or band_frac < 0):
+        raise CandidateUnavailable(CandidateUnavailableReason.BAND_OUT_OF_RANGE,
+                                   "band_frac must be finite, non-bool, and non-negative")
     status = artifact.artifact_status(
         manifest, now_utc=now_utc, symbol=window.normalized_symbol, venue=venue,
         timeframe=window.timeframe, band_frac=band_frac,
     )
     if status is not artifact.ArtifactStatus.ELIGIBLE:
         raise CandidateUnavailable(CandidateUnavailableReason(status.value), status.value)
+    required = candidate_r4_c1.REQUIRED_CANDLES[window.timeframe]
+    if len(window.candles) < required:
+        raise CandidateUnavailable(CandidateUnavailableReason.WINDOW_UNAVAILABLE,
+                                   "window is shorter than the C1 minimum")
     cells = candidate_r4_c1.validate_constants(manifest.constants)
     cell = cells[(window.normalized_symbol, window.timeframe)]
     result = candidate_r4_c1.compute_r4_c1_probabilities(

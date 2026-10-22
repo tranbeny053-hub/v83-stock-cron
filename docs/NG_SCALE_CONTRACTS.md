@@ -32,14 +32,15 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 - `windows` validates one window: snapshot first, else one bounded history fetch proven to
   extend the snapshot; never shorter; fail closed.
 - `reference` pins spec v1 to R4's generation-2 day-type base rate in
-  `ops/quant_ng/REFERENCE_SPEC_v1.json` and a test; pi0 is caller-supplied; synthetic deployments
+  `ops/quant_ng/REFERENCE_SPEC_v1.json` and a test; spec v1 values are R4's frozen research
+  spec, pinned by the loader and a test; pi0 is caller-supplied; synthetic deployments
   are bit-identical to R4's research code.
 - `candidate` delegates C1's triplet to `candidate_r4_c1` behind an ELIGIBLE manifest, the σ guard,
-  and the central range; no constants exist in the repository.
+  and the central range; no model constants exist in the repository.
 
 ## Deliberately absent
 
-There is no registry, pipeline, wiring, lattice, constant value, prior value, tolerance value,
+There is no registry, pipeline, wiring, lattice, model constant, prior value, decision tolerance,
 F3 or look. The reference tier's priors and the candidate's constants are always the caller's;
 none exists here. 1D and 1W (spec v1d) wait on the owner's OD-NG-6. EXP-01 and EXP-02 on real
 data are the owner's to scope; the parity shown here is synthetic. S-R2 revision evidence and

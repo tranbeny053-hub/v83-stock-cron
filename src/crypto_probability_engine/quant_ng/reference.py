@@ -1,7 +1,10 @@
 """PROPOSAL, UNWIRED; this spec-pinned reference decides nothing and computes no prior.
 
 Nothing outside ``quant_ng`` imports this module. Spec v1 covers 15m, 1H, and 4H;
-1D/1W (spec v1d) wait on the owner's OD-NG-6.
+1D/1W (spec v1d) wait on the owner's OD-NG-6. The tie rule ``horizon_end <=
+reference_close`` is R4's candle research rule; persisted-row wiring must restate it (R4
+production uses ``resolved_at < predicted_at``). Candle anchors require adjacent candles and
+refuse gaps; supplied anchors may span gaps with longer horizons, as R4 counts them.
 """
 
 from __future__ import annotations
@@ -9,9 +12,9 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from numbers import Real
 from types import MappingProxyType
 
@@ -47,6 +50,17 @@ class Label(IntEnum):
     UP = 0
     DOWN = 1
     TIMEOUT = 2
+
+
+class ReferenceUnavailableReason(StrEnum):
+    WINDOW_SHORT = "WINDOW_SHORT"
+
+
+class ReferenceUnavailable(Exception):
+    def __init__(self, reason: ReferenceUnavailableReason, detail: str) -> None:
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason.value}: {detail}")
 
 
 def _require_utc(value: datetime, name: str) -> None:
@@ -104,6 +118,7 @@ class ReferenceSpec:
     n0_days: int
     lattice_bars: int
     horizon_bars: int
+    _loaded: bool = field(default=False, repr=False, compare=False)
 
 
 def _positive_int(value: object, name: str) -> int:
@@ -144,6 +159,10 @@ def load_reference_spec(payload: Mapping[str, object]) -> ReferenceSpec:
     spec_id = payload["spec_id"]
     if spec_id != "reference-daytype-v1":
         raise ValueError("Unsupported spec_id")
+    if (memories != {"15m": 7, "1H": 28, "4H": 28}
+            or payload["n0_days"] != 3 or payload["lattice_bars"] != 3
+            or payload["horizon_bars"] != 6):
+        raise ValueError("not reference spec v1")
     return ReferenceSpec(
         spec_id=spec_id,
         bar_seconds=MappingProxyType(bars),
@@ -151,12 +170,19 @@ def load_reference_spec(payload: Mapping[str, object]) -> ReferenceSpec:
         n0_days=_positive_int(payload["n0_days"], "n0_days"),
         lattice_bars=_positive_int(payload["lattice_bars"], "lattice_bars"),
         horizon_bars=_positive_int(payload["horizon_bars"], "horizon_bars"),
+        _loaded=True,
     )
+
+
+def _require_loaded(spec: ReferenceSpec) -> None:
+    if not spec._loaded:
+        raise ValueError("build specs with load_reference_spec")
 
 
 def n0_rows(spec: ReferenceSpec, timeframe: str) -> int:
     """Return the baseline count at the timeframe's reference lattice."""
 
+    _require_loaded(spec)
     seconds = _timeframe(spec, timeframe)
     return spec.n0_days * (86_400 // (spec.lattice_bars * seconds))
 
@@ -227,6 +253,7 @@ def reference_from_anchors(
 ) -> ReferenceTriplet:
     """Compute one day-type reference from the supplied anchor population."""
 
+    _require_loaded(spec)
     _require_utc(reference_close_utc, "reference_close_utc")
     if deployment_start_utc is not None:
         _require_utc(deployment_start_utc, "deployment_start_utc")
@@ -276,6 +303,7 @@ def anchors_from_candles(
 ) -> tuple[Anchor, ...]:
     """Build every six-bar outcome whose close is on the spec lattice."""
 
+    _require_loaded(spec)
     seconds = _timeframe(spec, timeframe)
     band = _finite_real(band_frac, "band_frac")
     if band < 0.0:
@@ -303,9 +331,11 @@ def compute_reference(
     spec: ReferenceSpec,
     priors: ReferencePriors | None,
     deployment_start_utc: datetime | None = None,
+    allow_partial_memory: bool = False,
 ) -> ReferenceTriplet:
     """Compute a reference and mark whether the candle window covers its memory."""
 
+    _require_loaded(spec)
     _timeframe(spec, timeframe)
     windows.require_well_formed(candles, timeframe)
     reference_close = candles[-1].close_time_utc
@@ -323,9 +353,13 @@ def compute_reference(
     earliest = reference_close - timedelta(
         days=spec.memory_days[timeframe]
     ) - timedelta(seconds=(spec.horizon_bars - 1) * spec.bar_seconds[timeframe])
+    covers_memory = candles[0].close_time_utc <= earliest
+    if not covers_memory and not allow_partial_memory:
+        raise ReferenceUnavailable(ReferenceUnavailableReason.WINDOW_SHORT,
+                                   "Candle window does not cover the full reference memory.")
     return ReferenceTriplet(
         **{
             **result.__dict__,
-            "window_covers_memory": candles[0].close_time_utc <= earliest,
+            "window_covers_memory": covers_memory,
         }
     )

@@ -22,6 +22,9 @@ from crypto_probability_engine.quant_ng.reference import (
     Label,
     ReferenceNotFrozenError,
     ReferencePriors,
+    ReferenceSpec,
+    ReferenceUnavailable,
+    ReferenceUnavailableReason,
     anchors_from_candles,
     compute_reference,
     label,
@@ -248,9 +251,106 @@ def test_compute_reference_fields_and_memory_coverage() -> None:
     assert replace(actual, window_covers_memory=None) == expected
     assert actual.window_covers_memory is True
     shorter = _candles(677, "15m")
-    assert compute_reference(
-        shorter, timeframe="15m", band_frac=0.01, spec=SPEC, priors=priors
-    ).window_covers_memory is False
+    with pytest.raises(ReferenceUnavailable) as error:
+        compute_reference(shorter, timeframe="15m", band_frac=0.01,
+                          spec=SPEC, priors=priors)
+    assert error.value.reason is ReferenceUnavailableReason.WINDOW_SHORT
+    assert compute_reference(shorter, timeframe="15m", band_frac=0.01,
+                              spec=SPEC, priors=priors,
+                              allow_partial_memory=True).window_covers_memory is False
+
+
+def test_saturday_midnight_deployment_matches_r4_oracle() -> None:
+    refs = [datetime(2025, 1, 4, tzinfo=UTC) + timedelta(hours=3 * i) for i in range(5)]
+    ends = [ref + timedelta(hours=6) for ref in refs]
+    labels = [Label.DOWN, Label.TIMEOUT, Label.UP, Label.TIMEOUT, Label.DOWN]
+    anchors = tuple(Anchor(ref, end, outcome)
+                    for ref, end, outcome in zip(refs, ends, labels, strict=True))
+    deployment_start = refs[0]
+    deployed_refs = refs
+    expected = reference_probs(
+        np.array([int(ref.timestamp() * 1000) for ref in deployed_refs], dtype=np.int64),
+        np.array([int(end.timestamp() * 1000) for end in ends], dtype=np.int64),
+        np.array([int(outcome) for outcome in labels], dtype=np.int64),
+        n0=n0_rows(SPEC, "1H"), prior={0: 0.2, 1: 0.3, 2: 0.4},
+        memory_days=28, day_types=True,
+    )
+    assert classify_day_type(refs[0]) is DayType.SATURDAY
+    for index, ref in enumerate(deployed_refs):
+        actual = reference_from_anchors(
+            anchors, reference_close_utc=ref, timeframe="1H", spec=SPEC,
+            priors=ReferencePriors((0.2, 0.3, 0.4)),
+            deployment_start_utc=deployment_start,
+        )
+        assert actual.day_type is DayType.SATURDAY
+        assert (actual.p_up_frac, actual.p_down_frac, actual.p_timeout_frac) == tuple(
+            expected[index]
+        )
+
+
+def _closes_candles(closes: tuple[float, ...]):
+    first = datetime(2025, 1, 8, tzinfo=UTC)
+    return tuple(
+        MarketCandle(
+            first + timedelta(hours=index), first + timedelta(hours=index + 1),
+            close, close, close, close, 1.0,
+        )
+        for index, close in enumerate(closes)
+    )
+
+
+def test_hand_worked_reference_golden_and_literal_candle_anchors() -> None:
+    # Lattice closes are 03:00, 06:00, 09:00, 12:00, 15:00Z. Anchors fit only when
+    # j + 6 < 16, so indices 0, 1, 2 (03:00, 06:00, 09:00) fit. Their returns and
+    # labels at band 0.002 are 99/100 - 1 (DOWN), 101.1/101 - 1 (TIMEOUT),
+    # and 101.4/99 - 1 (UP). By the final close at 16:00Z all three are known;
+    # K=3 and T=1, all are Wednesday WEEKDAY. For 1H, n0 = 3 * 8 = 24, hence
+    # p_timeout = (24 * 0.4 + T) / (24 + K).
+    closes = (100, 100, 100, 100, 101, 101, 100, 99.5,
+              99, 98.9, 99, 101.1, 101, 101.5, 101.4, 101.3)
+    candles = _closes_candles(closes)
+    anchors = anchors_from_candles(candles, timeframe="1H", band_frac=0.002, spec=SPEC)
+    expected_anchors = [
+        (datetime(2025, 1, 8, 3, tzinfo=UTC), datetime(2025, 1, 8, 9, tzinfo=UTC), Label.DOWN),
+        (datetime(2025, 1, 8, 6, tzinfo=UTC), datetime(2025, 1, 8, 12, tzinfo=UTC), Label.TIMEOUT),
+        (datetime(2025, 1, 8, 9, tzinfo=UTC), datetime(2025, 1, 8, 15, tzinfo=UTC), Label.UP),
+    ]
+    actual_anchors = [(a.reference_close_utc, a.horizon_end_utc, a.label) for a in anchors]
+    assert actual_anchors == expected_anchors
+
+    result = compute_reference(
+        candles, timeframe="1H", band_frac=0.002, spec=SPEC,
+        priors=ReferencePriors((0.4, 0.3, 0.2)), allow_partial_memory=True,
+    )
+    assert result.k_same_type == 3
+    assert result.t_same_type == 1
+    assert result.p_timeout_frac == (24 * 0.4 + 1) / (24 + 3)
+    assert result.p_up_frac == result.p_down_frac == (1 - result.p_timeout_frac) / 2
+    assert result.window_covers_memory is False
+
+
+def test_reference_direct_spec_loader_and_default_memory_refusals() -> None:
+    direct = ReferenceSpec(SPEC.spec_id, SPEC.bar_seconds, SPEC.memory_days,
+                           SPEC.n0_days, SPEC.lattice_bars, SPEC.horizon_bars)
+    with pytest.raises(ValueError):
+        reference_from_anchors((), reference_close_utc=datetime(2025, 1, 8, tzinfo=UTC),
+                               timeframe="1H", spec=direct,
+                               priors=ReferencePriors((0.2, 0.3, 0.4)))
+    with pytest.raises(ValueError):
+        n0_rows(direct, "1H")
+    for mutate in (
+        lambda payload: payload.update(n0_days=50),
+        lambda payload: payload["timeframes"]["15m"].update(memory_days=1),
+        lambda payload: payload.update(lattice_bars=1),
+    ):
+        payload = copy.deepcopy(SPEC_PAYLOAD)
+        mutate(payload)
+        with pytest.raises(ValueError):
+            load_reference_spec(payload)
+    priors = ReferencePriors((0.2, 0.3, 0.4))
+    full_window = _candles(678, "15m")
+    assert compute_reference(full_window, timeframe="15m", band_frac=0.01,
+                             spec=SPEC, priors=priors).window_covers_memory is True
 
 
 # Verbatim port of R4's research reference
@@ -326,18 +426,20 @@ def test_r4_synthetic_bit_exact_parity(timeframe: str, memory: int) -> None:
         labels = [rng.randrange(3) for _ in refs]
         pi0 = [rng.random() for _ in range(3)]
         ref_ms = np.array([int(ref.timestamp() * 1000) for ref in refs], dtype=np.int64)
-        end_ms = np.array([int(end.timestamp() * 1000) - 1 for end in ends], dtype=np.int64)
+        end_ms = np.array([int(end.timestamp() * 1000) for end in ends], dtype=np.int64)
+        deployment_index = 1
         expected = reference_probs(
-            ref_ms, end_ms, labels, n0=n0_rows(SPEC, timeframe),
+            ref_ms[deployment_index:], end_ms[deployment_index:],
+            labels[deployment_index:], n0=n0_rows(SPEC, timeframe),
             prior={0: pi0[0], 1: pi0[1], 2: pi0[2]},
             memory_days=memory, day_types=True,
         )
-        first_ref = refs[0]
+        first_ref = refs[deployment_index]
         anchors = tuple(
             Anchor(ref, end, Label(outcome))
             for ref, end, outcome in zip(refs, ends, labels, strict=True)
         )
-        for index, ref in enumerate(refs):
+        for index, ref in enumerate(refs[deployment_index:]):
             actual = reference_from_anchors(
                 anchors, reference_close_utc=ref, timeframe=timeframe, spec=SPEC,
                 priors=ReferencePriors(tuple(pi0)), deployment_start_utc=first_ref,
@@ -345,7 +447,7 @@ def test_r4_synthetic_bit_exact_parity(timeframe: str, memory: int) -> None:
             if actual.p_timeout_frac != expected[index, 2]:
                 pytest.fail(
                     f"first R4 parity mismatch: timeframe={timeframe}, deployment={_deployment}, "
-                    f"row={index}, actual={actual.p_timeout_frac!r}, "
+                    f"row={index + deployment_index}, actual={actual.p_timeout_frac!r}, "
                     f"expected={expected[index, 2]!r}"
                 )
             cases += 1
@@ -375,28 +477,32 @@ def test_r4_synthetic_bit_exact_parity_long_deployments(timeframe: str, memory: 
         labels = [rng.randrange(3) for _ in refs]
         pi0 = [rng.random() for _ in range(3)]
         ref_ms = np.array([int(ref.timestamp() * 1000) for ref in refs], dtype=np.int64)
-        end_ms = np.array([int(end.timestamp() * 1000) - 1 for end in ends], dtype=np.int64)
+        end_ms = np.array([int(end.timestamp() * 1000) for end in ends], dtype=np.int64)
+        deployment_index = 1
         expected = reference_probs(
-            ref_ms, end_ms, labels, n0=n0_rows(SPEC, timeframe),
+            ref_ms[deployment_index:], end_ms[deployment_index:],
+            labels[deployment_index:], n0=n0_rows(SPEC, timeframe),
             prior=dict(enumerate(pi0)), memory_days=memory, day_types=True,
         )
         anchors = tuple(Anchor(ref, end, Label(outcome))
                         for ref, end, outcome in zip(refs, ends, labels, strict=True))
-        deployment_start = refs[0]
+        deployment_start = refs[deployment_index]
         memory_exercised = False
-        for index, ref in enumerate(refs):
+        for index, ref in enumerate(refs[deployment_index:]):
+            index += deployment_index
             known_anchors = tuple(anchor for anchor in anchors
                                   if anchor.horizon_end_utc <= ref)
             known_same_type = [
                 anchor for anchor in anchors
-                if classify_day_type(anchor.reference_close_utc) == classify_day_type(ref)
+                if anchor.reference_close_utc >= deployment_start
+                and classify_day_type(anchor.reference_close_utc) == classify_day_type(ref)
                 and anchor.horizon_end_utc <= ref
             ]
             actual = reference_from_anchors(
                 known_anchors, reference_close_utc=ref, timeframe=timeframe, spec=SPEC,
                 priors=ReferencePriors(tuple(pi0)), deployment_start_utc=deployment_start,
             )
-            assert actual.p_timeout_frac == expected[index, 2]
+            assert actual.p_timeout_frac == expected[index - deployment_index, 2]
             saw_types.add(actual.day_type)
             if len(known_same_type) > actual.k_same_type:
                 memory_exercised = True
