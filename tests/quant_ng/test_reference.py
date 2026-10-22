@@ -53,6 +53,7 @@ def test_spec_hash_constants_and_values() -> None:
         lambda payload: payload.update(unexpected=True),
         lambda payload: payload.pop("formula"),
         lambda payload: payload.update(schema_version="wrong"),
+        lambda payload: payload.update(spec_id="reference-daytype-v2"),
         lambda payload: payload.update(n0_days=True),
         lambda payload: payload.update(n0_days=0),
         lambda payload: payload["timeframes"].update(
@@ -163,6 +164,16 @@ def test_reference_k_zero_preserves_prior_float_exactly() -> None:
     assert result.p_timeout_frac is prior
     assert result.p_up_frac == result.p_down_frac
     assert result.k_same_type == result.t_same_type == 0
+
+
+def test_integer_priors_are_normalized_to_float_for_k_zero() -> None:
+    priors = ReferencePriors((0, 1, 0))
+    assert priors.pi0 == (0.0, 1.0, 0.0)
+    result = reference_from_anchors(
+        (), reference_close_utc=datetime(2025, 1, 8, tzinfo=UTC),
+        timeframe="1H", spec=SPEC, priors=priors,
+    )
+    assert type(result.p_timeout_frac) is float
 
 
 def test_reference_refusals() -> None:
@@ -339,3 +350,57 @@ def test_r4_synthetic_bit_exact_parity(timeframe: str, memory: int) -> None:
                 )
             cases += 1
     assert cases >= 300
+
+
+@pytest.mark.parametrize("timeframe,memory", [("15m", 7), ("1H", 28), ("4H", 28)])
+def test_r4_synthetic_bit_exact_parity_long_deployments(timeframe: str, memory: int) -> None:
+    rng = random.Random(924_000 + SPEC.bar_seconds[timeframe])
+    seconds = SPEC.bar_seconds[timeframe]
+    lattice = 3 * seconds
+    memory_rows = memory * 86_400 // lattice
+    saw_types: set[DayType] = set()
+    deployments = 10
+    for deployment in range(deployments):
+        count = memory_rows + 60
+        # Random weekday start; all weekday/weekend types occur in each long span.
+        start = datetime(2025, 1, 6, tzinfo=UTC) + timedelta(
+            days=7 * rng.randint(0, 8) + rng.randrange(5), hours=rng.randint(0, 23)
+        )
+        start = start.replace(minute=0, second=0, microsecond=0)
+        epoch = int(start.timestamp())
+        start += timedelta(seconds=(-epoch) % lattice)
+        refs = [start + timedelta(seconds=i * lattice) for i in range(count)]
+        ends = [ref + timedelta(seconds=(6 + (rng.random() < 0.01)) * seconds)
+                for ref in refs]
+        labels = [rng.randrange(3) for _ in refs]
+        pi0 = [rng.random() for _ in range(3)]
+        ref_ms = np.array([int(ref.timestamp() * 1000) for ref in refs], dtype=np.int64)
+        end_ms = np.array([int(end.timestamp() * 1000) - 1 for end in ends], dtype=np.int64)
+        expected = reference_probs(
+            ref_ms, end_ms, labels, n0=n0_rows(SPEC, timeframe),
+            prior=dict(enumerate(pi0)), memory_days=memory, day_types=True,
+        )
+        anchors = tuple(Anchor(ref, end, Label(outcome))
+                        for ref, end, outcome in zip(refs, ends, labels, strict=True))
+        deployment_start = refs[0]
+        memory_exercised = False
+        for index, ref in enumerate(refs):
+            known_anchors = tuple(anchor for anchor in anchors
+                                  if anchor.horizon_end_utc <= ref)
+            known_same_type = [
+                anchor for anchor in anchors
+                if classify_day_type(anchor.reference_close_utc) == classify_day_type(ref)
+                and anchor.horizon_end_utc <= ref
+            ]
+            actual = reference_from_anchors(
+                known_anchors, reference_close_utc=ref, timeframe=timeframe, spec=SPEC,
+                priors=ReferencePriors(tuple(pi0)), deployment_start_utc=deployment_start,
+            )
+            assert actual.p_timeout_frac == expected[index, 2]
+            saw_types.add(actual.day_type)
+            if len(known_same_type) > actual.k_same_type:
+                memory_exercised = True
+        assert memory_exercised, (
+            f"memory exclusion not exercised: {timeframe} deployment {deployment}"
+        )
+    assert saw_types == {DayType.WEEKDAY, DayType.SATURDAY, DayType.SUNDAY}

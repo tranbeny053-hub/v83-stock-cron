@@ -142,8 +142,8 @@ def load_reference_spec(payload: Mapping[str, object]) -> ReferenceSpec:
     if not isinstance(provenance["where"], str) or not provenance["where"].strip():
         raise ValueError("provenance.where must be non-empty")
     spec_id = payload["spec_id"]
-    if not isinstance(spec_id, str) or not spec_id:
-        raise ValueError("spec_id must be non-empty")
+    if spec_id != "reference-daytype-v1":
+        raise ValueError("Unsupported spec_id")
     return ReferenceSpec(
         spec_id=spec_id,
         bar_seconds=MappingProxyType(bars),
@@ -170,10 +170,13 @@ class ReferencePriors:
     def __post_init__(self) -> None:
         if not isinstance(self.pi0, tuple) or len(self.pi0) != 3:
             raise ValueError("pi0 must be a three-item tuple indexed by DayType")
+        normalized = []
         for value in self.pi0:
             number = _finite_real(value, "pi0")
             if not 0.0 <= number <= 1.0:
                 raise ValueError("pi0 values must be in [0, 1]")
+            normalized.append(number)
+        object.__setattr__(self, "pi0", tuple(normalized))
 
 
 class ReferenceNotFrozenError(RuntimeError):
