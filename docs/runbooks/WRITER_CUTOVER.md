@@ -5,6 +5,11 @@ The live writer saves with Supabase's service-role key today. After this switch,
 because they create and enter secrets. Never paste a key or a token into chat, a file in this
 repository, or a log.
 
+**Status (2026-10-04 onward): the switch is done.** Since the Phase 3 exit the writer saves only as
+`ucpe_api_writer`, and `SUPABASE_SERVICE_ROLE_KEY` was deleted from the Space. The writer token is
+therefore its only credential: **never delete `SUPABASE_WRITER_JWT`**. Renewing it is the
+"Afterwards" section below. The cutover steps are kept as the record of how the switch was made.
+
 **Preconditions:**
 - release UCPE-PROD-WA-20261003-A or later is live (the two-header writer);
 - migrations 0016 and 0017 are applied (the role, its grants, and the forecast bundle function);
@@ -97,20 +102,25 @@ service-role key.
 - **Supabase dashboard, API logs:** the writer's requests run as `ucpe_api_writer`.
 - **If the receipt is NOT_SAVED or COMMIT_UNKNOWN after the switch:** delete the secret
   `SUPABASE_WRITER_JWT`. The Space restarts and the writer is back on the service-role key. Then
-  tell Claude.
+  tell Claude. (Cutover only. Since 2026-10-04 the service-role key is gone, so there is no
+  fallback: never delete the secret. Run step 5, replace the secret's value with the new token,
+  clear the clipboard (step 7), then tell Claude.)
 
 ## Afterwards
 
 - **Every 30 days, before the printed expiry:** run step 5 again, and replace the secret
-  `SUPABASE_WRITER_JWT` with the new token.
+  `SUPABASE_WRITER_JWT` with the new token. Replace it; never delete it.
   - An expired token makes every save fail: the receipts turn NOT_SAVED or COMMIT_UNKNOWN, and the
     circuit opens. Analyses are still served.
   - The signing key stays the same.
-- **Never revoke the legacy JWT secret** (a "Previous key" now). The service-role key is signed by
-  it, and that key stays in use until D6.
-- **Optional tidy-up:** Supabase's unused key from step 2b can be revoked (⋮ → Revoke key).
+- **Never revoke the legacy JWT secret** (a "Previous key" now): the service-role key is signed by
+  it. Ask Claude before revoking any key.
+- **Optional tidy-up:** Supabase's unused key from step 2b can be revoked (⋮ → Revoke key), after
+  asking Claude.
 - **If `~/ucpe-keys` is ever exposed:** tell Claude. The fix is a new key rotated in, the exposed
   key revoked, and a new token.
-- **D6, later.** Once the switch has held for a while:
+- **D6, done (2026-10-04).** Migration 0018 left service_role SELECT-only on core evidence. The
+  same day, step C1 of the E2 consolidation deleted `SUPABASE_SERVICE_ROLE_KEY` from the Space.
+  The plan, kept as the record:
   - delete `SUPABASE_SERVICE_ROLE_KEY` from the Space;
   - a later migration (a T4) narrows service_role's grants on core evidence.
