@@ -170,7 +170,8 @@ def test_no_production_path_calls_the_history_capability() -> None:
     """Zero behaviour change: the first caller is a future, owner-authorized wiring.
 
     Outside the adapters, only the dormant distributional-v2 serving path names the capability,
-    and nothing imports that path.
+    and nothing imports that path. The dormant quant_ng package (NGA, unwired) may also name the
+    capability, and nothing outside quant_ng imports it.
     """
 
     package = ROOT / "src" / "crypto_probability_engine"
@@ -183,6 +184,7 @@ def test_no_production_path_calls_the_history_capability() -> None:
         "adapters/candle_history.py",
         "adapters/public_market.py",
         "quant/distributional_v2_serving.py",
+        "quant_ng/windows.py",
     ]
     importers = [
         name
@@ -190,6 +192,12 @@ def test_no_production_path_calls_the_history_capability() -> None:
         if "distributional_v2_serving" in text and name != "quant/distributional_v2_serving.py"
     ]
     assert importers == []
+    quant_ng_importers = [
+        name
+        for name, text in sources.items()
+        if not name.startswith("quant_ng/") and "quant_ng" in text
+    ]
+    assert quant_ng_importers == []
 
 
 # --------------------------------------------------------------------------- request bounds

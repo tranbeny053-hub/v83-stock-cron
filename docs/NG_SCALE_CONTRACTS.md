@@ -29,11 +29,27 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 - `load_manifest` and `artifact_status` validate the v1 manifest shape, recipe/cell identity,
   recipe venue binding (C1 is Binance spot), fit chronology, per-cell status, training-end
   staleness, and caller-supplied band bounds.
+- `windows` validates one window: snapshot first, else one bounded history fetch proven to
+  extend the snapshot; never shorter; fail closed.
+- `reference` pins spec v1 to R4's generation-2 day-type base rate in
+  `ops/quant_ng/REFERENCE_SPEC_v1.json` and a test; spec v1 values are R4's frozen research
+  spec, pinned by the loader and a test; pi0 is caller-supplied; synthetic deployments
+  are bit-identical to R4's research code.
+- `reference_v1d` pins 1D to one type and 365-day memory; n0 = 1 row follows v1's rule.
+  This is development only; 1W awaits its alignment and lattice phase definitions.
+- `availability` marks 1M and H_extended UNAVAILABLE; the 24-bar extension is deferred,
+  not cancelled.
+- `candidate` delegates C1's triplet to `candidate_r4_c1` behind an ELIGIBLE manifest, the σ guard,
+  and the central range; no model constants exist in the repository.
 
 ## Deliberately absent
 
-There is no registry, reference tier, wiring, constant value, tolerance value, F3, or any look.
-S-R2 revision evidence and S-R4 retention (including never deleting claim evidence and capacity
-stop rules) are process rules with no code here. S-E3 freeze content and S-C1's maximum commit
-delay are protocol and owner matters; this code sets neither. These safeguards are executable
-proposals only; they do not select or serve a model.
+There is no registry, pipeline, wiring, lattice, model constant, prior value, decision tolerance,
+F3 or look. The reference tier's priors and the candidate's constants are always the caller's;
+none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
+implemented; 1W waits on two definitions. EXP-01 and EXP-02 on real
+data are the owner's to scope; the parity shown here is synthetic. S-R2 revision evidence and
+S-R4 retention (including never deleting claim evidence and capacity stop rules) are process
+rules with no code here. S-E3 freeze content and S-C1's maximum commit delay are protocol and
+owner matters; this code sets neither. These safeguards are executable proposals only; they do
+not select or serve a model.

@@ -1,0 +1,25 @@
+{
+  "schema_version": "quant-ng-reference-spec.v1",
+  "spec_id": "reference-daytype-v1",
+  "status": "PROPOSAL, UNWIRED. R4's generation-2 gating reference written as a spec; it adopts nothing, and any use is PROPOSED-REQUIRES-OWNER-APPROVAL.",
+  "formula": "p_timeout = (n0 * pi0 + T) / (n0 + K); p_up = p_down = (1 - p_timeout) / 2, computed once; K == 0 returns pi0 exactly",
+  "timeframes": {
+    "15m": {"bar_seconds": 900, "memory_days": 7},
+    "1H": {"bar_seconds": 3600, "memory_days": 28},
+    "4H": {"bar_seconds": 14400, "memory_days": 28}
+  },
+  "n0_days": 3,
+  "lattice_bars": 3,
+  "horizon_bars": 6,
+  "label_rule": "r = close[j + horizon_bars] / close[j] - 1; UP if r > band, DOWN if r < -band, else TIMEOUT",
+  "population": "anchors whose reference_close (UTC epoch seconds) is a multiple of lattice_bars * bar_seconds",
+  "day_type_rule": "the UTC calendar date of reference_close: 0 weekday (Monday-Friday), 1 Saturday, 2 Sunday",
+  "counting_rule": "K and T count anchors of the same day type with horizon_end <= reference_close and horizon_end > reference_close - memory_days, and reference_close >= the deployment start when one is given; T counts their TIMEOUT labels",
+  "prior": "pi0 per day type, supplied by the caller from a frozen corpus; never computed here",
+  "provenance": {
+    "r4_reference_py_sha256": "cb45a388f4c47fc291ef887a9aa29f4d124a245b9e61129d3eb105defda8dd3c",
+    "r4_reference_spec_v2_sha256": "81160254fce7a3fdfffbb1b17cfb4e4fb5e29189c6ec427b63d4792ba1a65c35",
+    "wave2_reference_spec_sha256": "7be9238d600c19e960945770e52581dd2c6a233eafdb50e24edd2caf5878da01",
+    "where": "local research files, not in this repository: research3/wave2/gate/reference.py, research3/r4/v1/REFERENCE_SPEC_V2.json, research3/wave2/gate/REFERENCE_SPEC.json"
+  }
+}
