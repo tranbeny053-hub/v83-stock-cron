@@ -2,6 +2,36 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-23 - The next-generation window, reference and candidate tiers, dormant (on main, not released)
+
+It records #272. Nothing in this entry is released.
+
+Added:
+- #272: five modules in `crypto_probability_engine/quant_ng`, with their specs and tests, and an
+  update to `docs/NG_SCALE_CONTRACTS.md`:
+  - `windows.py`: one validated, fail-closed candle window;
+  - `reference.py`, with `ops/quant_ng/REFERENCE_SPEC_v1.json`: the day-type base-rate reference
+    (spec v1, the research programme's frozen generation-2 reference), and `reference_v1d.py`,
+    with `ops/quant_ng/REFERENCE_SPEC_v1d.json`: a single-type variant for daily bars (1D only),
+    for development only;
+  - `candidate.py`: the R4-C1 candidate behind an eligible artifact manifest, with a sigma guard
+    and a named central range;
+  - `availability.py`: monthly targets and the extended horizon reported as unavailable.
+
+Notes:
+- These are proposals: the next-generation plan is not adopted, and the sigma guard is a proposed
+  reading of its guard.
+- Nothing outside `quant_ng` imports the new modules: no served number, gate, stored row or response
+  changes. The candle-history caller guard admits `quant_ng/windows.py` as a dormant caller.
+- No model constant or prior value is in the repository: a manifest supplies the candidate's
+  constants and the caller the priors; spec v1's values are the research programme's frozen
+  reference spec, and v1d's are the next-generation plan's daily variant of it.
+- A one-time parity run on development data, authorized by the owner, found spec v1's reference
+  (`reference.py`) equal to the research code's, bit for bit, in 108 of 108 cells. That is
+  implementation parity, not a forecast-quality claim.
+- No migration, gate, threshold or runtime behaviour change. The next release's runtime delta will
+  include the package's new modules.
+
 ## 2026-10-22 - Next-generation groundwork, the release tool's re-pin fix and the gate's lint message (on main, not released)
 
 It records #268, #269 and #270. Nothing in this entry is released.
