@@ -1,19 +1,21 @@
 {
   "schema_version": "quant-ng-reference-spec.v1d",
   "spec_id": "reference-daytype-v1d",
-  "status": "PROPOSAL, UNWIRED. The owner approved reference spec v1d for development only (OD-NG-6, 2026-10-22); 1M and the extended horizon stay UNAVAILABLE; the 24-bar contract extension is deferred, not cancelled. Any use is PROPOSED-REQUIRES-OWNER-APPROVAL.",
+  "status": "PROPOSAL, UNWIRED. The owner approved reference spec v1d for development only (OD-NG-6, 2026-10-22); the owner's 1W ruling (2026-10-23) is DEV-only and grants no F3 access. 1M and the extended horizon stay UNAVAILABLE; the 24-bar contract extension is deferred, not cancelled. Any use is PROPOSED-REQUIRES-OWNER-APPROVAL.",
   "formula": "p_timeout = (n0 * pi0 + T) / (n0 + K); p_up = p_down = (1 - p_timeout) / 2, computed once; K == 0 returns pi0 exactly",
   "timeframes": {
-    "1D": {"bar_seconds": 86400, "memory_days": 365, "n0_rows": 1.0}
+    "1D": {"bar_seconds": 86400, "memory_days": 365, "n0_rows": 1.0},
+    "1W": {"bar_seconds": 604800, "memory_days": null, "n0_rows": 0.14285714285714285}
   },
   "day_types": "single",
   "lattice_bars": 3,
   "horizon_bars": 6,
   "label_rule": "r = close[j + horizon_bars] / close[j] - 1; UP if r > band, DOWN if r < -band, else TIMEOUT",
-  "population": "anchors whose reference_close (UTC epoch seconds) is a multiple of lattice_bars * bar_seconds",
-  "counting_rule": "K and T count every anchor (single day type) with horizon_end <= reference_close and horizon_end > reference_close - memory_days, and reference_close >= the deployment start when one is given; T counts their TIMEOUT labels",
-  "n0_rule": "v1's pseudo-count, n0 = 3 days of lattice rows, computed exactly: 3 * 86400 / (lattice_bars * bar_seconds) = 1 row for 1D (v1's integer formula, written for intraday bars, is 0 here)",
+  "population": "1D anchors have reference_close (UTC epoch seconds) a multiple of lattice_bars * bar_seconds; 1W anchors use the 2026-09-21T00:00:00Z phase and extend backward only",
+  "counting_rule": "K and T count every matured anchor (single day type) with horizon_end <= reference_close and reference_close >= the deployment start when one is given; when memory_days is not null, also require horizon_end > reference_close - memory_days; T counts TIMEOUT labels",
+  "n0_rule": "v1's pseudo-count, n0 = 3 days of lattice rows, computed exactly: 3 * 86400 / (lattice_bars * bar_seconds) = 1 row for 1D and 0.14285714285714285 row for 1W (v1's integer formula, written for intraday bars, gives 0 for both)",
   "prior": "a single pi0 supplied by the caller from a frozen corpus; never computed here",
-  "pending": "1W waits on two definitions the plan does not give: the weekly bar alignment (Binance weeks open on Monday 00:00 UTC, which is not a multiple of 7 days from the epoch) and the phase of its 3-week lattice",
-  "provenance": "NGA plan v1.0 §F.2 L1 ('spec v1d (1D 365 d single type; 1W all available)'); v2 §F.2 L1; Track A §7 ('single type for 1D+', 'pseudo-count n0 = 3 days of rows')"
+  "pending": "The 24-bar extension stays deferred, not cancelled",
+  "provenance": "NGA plan v1.0 §F.2 L1 ('spec v1d (1D 365 d single type; 1W all available)'); v2 §F.2 L1; Track A §7 ('single type for 1D+', 'pseudo-count n0 = 3 days of rows'); owner's ruling 2026-10-23 defines 1W Monday 00:00 UTC alignment and 2026-09-21T00:00:00Z backward lattice phase; memory from plan v1.0 §F.2 L1; n0 from v1's rule",
+  "lattice_1w": {"anchor_utc": "2026-09-21T00:00:00Z", "extends": "backward", "week_open": "Monday 00:00 UTC"}
 }
