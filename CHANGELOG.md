@@ -2,6 +2,31 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-23 - Weekly bars for the daily reference variant, dormant, and the writer runbook's current advice (on main, not released)
+
+It records #275 and #277. Nothing in this entry is released.
+
+Changed:
+- #275: `quant_ng/reference_v1d.py` and `ops/quant_ng/REFERENCE_SPEC_v1d.json`, with tests and an
+  update to `docs/NG_SCALE_CONTRACTS.md`, add weekly bars (1W) to the single-type daily variant, as
+  the owner ruled, for development only:
+  - weeks open on Monday at 00:00 UTC;
+  - the 3-week lattice is anchored at 2026-09-21T00:00Z and extended backward only, and a weekly
+    candle, a reference close, or a supplied anchor that closes or ends after that instant is
+    refused;
+  - the memory is all available history, and the pseudo-count is the existing "3 days of lattice
+    rows" rule computed exactly (1/7 of a row);
+  - daily bars, `reference.py` and `windows.py` are unchanged.
+- #277: `docs/runbooks/WRITER_CUTOVER.md` now says the switch to the least-privilege writer is
+  done and the writer's token is its only credential: never delete it; renew it by minting a new
+  token, replacing the secret's value and clearing the clipboard; ask before revoking any key.
+
+Notes:
+- #275 is a proposal: the next-generation plan is not adopted, and nothing outside `quant_ng`
+  imports the module: no served number, gate, stored row or response changes.
+- No migration, gate, threshold or runtime behaviour change. The next release's runtime delta will
+  include the module's weekly bars.
+
 ## 2026-10-23 - The next-generation window, reference and candidate tiers, dormant (on main, not released)
 
 It records #272. Nothing in this entry is released.
