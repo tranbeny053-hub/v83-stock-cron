@@ -1,118 +1,162 @@
 # STATE
 
-Updated: 2026-10-23 (**THE OWNER RULED OD-NG-2 (DEFER), OD-NG-4 (KEEP_HOLD, THE REFERENCE HIDDEN) AND OD-NG-6
-(v1d, DEVELOPMENT ONLY) AND SCOPED EXP-01 AND EXP-02. EXP-01 PASSED: QUANT_NG'S REFERENCE EQUALS R4'S, BIT FOR
-BIT, ON R4'S DEV DATA (108 OF 108 CELLS). EXP-02 OPTION R: THE SEALED CONSTANTS LOAD, AND THE ARTIFACT IS STALE BY
-CONSTRUCTION. UNDER THE OWNER'S T3 OF 2026-10-23 THE DORMANT B-NG1 LANE (#272) AND THE CHANGELOG ENTRY FOR #268 TO
-#270 (#273) ARE PUBLISHED AND 14 MERGED BRANCHES ARE DELETED. PRODUCTION IS UNCHANGED: D 27edbcad /
-UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+Updated: 2026-10-23 (**THE OWNER RULED 1W FOR v1d (DEVELOPMENT ONLY), THEN AUTHORIZED THE BATCH'S T3 AND ONE
+OFFLINE 1D BUILD. PUBLISHED: THE 1W LANE (#275), THE CHANGELOG ENTRY FOR #272 (#276) AND THE WRITER RUNBOOK'S
+CORRECTION (#277); THE THREE MERGED BRANCHES OF #272 TO #274 ARE DELETED. THE ONE OFFLINE S1 BUILD RAN AND PASSED:
+236 DAILY CANDLES PER SYMBOL FROM THE HELD NG-1 TRADES. THE 1D EVALUATION PROTOCOL IS WRITTEN AND TWICE REVIEWED;
+THE EVALUATION ITSELF WAITS FOR THE OWNER. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO
+FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
 - The owner (verbatim below), in order:
-  - the instruction of 2026-10-22 (~19:58 +0700): from STATE and the NGA card revision 4, prepare exact
-    metadata-only EXP-01 DEV and EXP-02 D4 allowlists and exclusions, with no protected read; exhaust the
-    independent synthetic and dormant B-NG1 work with Codex, full gates and T2 review; batch the genuine OD-NG
-    rulings and the JWT renewal boundary; the CHANGELOG and the cleanup later, batched;
-  - the rulings of 2026-10-22 (~23:25 +0700): EXP-01 = AUTHORIZE §1 of the allowlists only, with preflight guards
-    and STOP on any mismatch; EXP-02 = R, the sealed 1H OP1_CONSTANTS read-only, no D4 rerun; OD-NG-4 = KEEP_HOLD
-    with the reference hidden; OD-NG-2 = DEFER; OD-NG-6 = YES, v1d for development only, 1M and H_extended
-    UNAVAILABLE, the 24-bar extension deferred, not cancelled; exhaust safe T0–T2 with full gates and reviews;
-    batch the T3. Not ruled, defaults unchanged: OD-NG-1 (F3 protected), OD-NG-3 (no collection), OD-NG-4b
-    (default no), OD-NG-5 (no universe fetch), OD-NG-7 (no constant approved); OD-NG-8 was ruled on 2026-09-26 (H2
-    Q1–Q8), which corrects the previous record's "OD-NG-1…8 are open". Record:
-    .work/bng1_20261022/rulings/RULINGS_RECORD_20261022.md.
-  - the T3 of 2026-10-23: first reconcile this record's gate file that showed 74b9682 (no false PASS); publish the
-    exact lane, then CHANGELOG heads, with verified diffs, 4 of 4 PR checks, merge commits and main's CI and
-    build; delete only the 14 SHA-matched ancestor refs with lease checks; rebuild this record last with an
-    exact-head gate, carry-over and a fresh review; HOLD on drift; GitHub only, no T4, production, F3 or §5A; then
-    continue safe T0–T2.
-- #271 → M4 42f6bc42ec12ba1b2a7c6806771da932b056a505 (2026-10-22T06:10:26Z), the previous record: a merge commit
-  on chore/state-nga-addendum-lanes @ 912bdc51 (tree 7b728b9d); STATE.md only, +409/-163. 4 of 4 checks green on
-  912bdc51: CI / test 39731875062 (7850 passed); reproducible build 39731875092. Main's push runs on M4: CI
-  39732312316 (7850 passed) and reproducible build 39732312346, both green
-  (.work/lanes_20261022/T3_EXECUTION_268_270.md).
-- THE ALLOWLISTS (Lane A, T0, metadata only; no protected value inspected):
-  .work/bng1_20261022/EXP01_EXP02_ALLOWLISTS.md, revision 4 (revisions 1 to 3 kept). §1, EXP-01: the 1H rows from
-  D4's 1H extract only; 15m and 4H by a one-time extract from the research store, predicted_at read whole,
-  horizon_end streamed to the cut, the outcomes (r and index) read for the first N rows only; the 1H store's
-  predicted_at for the fold boundaries only; no label, rv6_fut or feature member read and no sidecar parsed
-  (hashed only); STOP on any mismatch. Cuts: 15m 1772639099999, 1H 1758625199999 and 4H 1744617599999, each R2's
-  fold-7 start as the run recomputed it (for 4H the allowlist had estimated R2's start one bar later from metadata
-  and took G1's value to be safe; the recomputation equals G1's). §2: the EXP-02 options R, D and N. §3: the
-  exclusions (§5A, F3, the sealed folds and files, the research pickles). Three fresh checks: revisions 1 and 2
-  each had a MAJOR (a wrong pickle path; a prefix read that contradicted the boundary recomputation), both fixed;
-  revision 3 PASS, its notes folded.
-- EXP-01 under §1 (the owner's ruling; ran once at 2026-10-22T18:15:02Z, 89 s;
-  .work/bng1_20261022/exp01/EXP_RESULTS_20261023.md): PASS. 108 of 108 cells (BTCUSDT and ETHUSDT × 15m, 1H and 4H
-  × DEV folds 1–6 × bands 0.002, 0.003 and 0.0045), 156,108 rows compared, max |Δ| = 0.0 against a tolerance of
-  1e-12: quant_ng's reference spec v1 (reference.py 306b3be3…) reproduces R4's generation-2 day-type base rate,
-  computed by R4's own code, bit for bit on R4's real DEV populations (implementation parity only: not a
-  forecast-quality claim; nothing is wired or served, and the reference stays hidden). 14 guards PASS (every
-  digest before and after; the constants agreed three ways; the boundaries and cuts; the store prefix read twice
-  and identical; the 1H extract equal to the store's first rows; the opened-path allowlist; no network). It opened
-  exactly §1's files: no label, rv6_fut or feature member was opened, the six sidecars were hashed and never
-  parsed, and no outcome at or past a cut was decoded. The outputs (PASS/FAIL, row counts and max |Δ| per cell;
-  §1's one-time extract) stay under .work, read-only.
-- EXP-02 option R (ran once at 2026-10-22T18:16:44Z): the sealed OP1_CONSTANTS.json (7b1dcf61…) and its copy,
-  read-only; nothing refit. For BTC/USDT and ETH/USDT at 1H, validate_constants and load_manifest PASS; the
-  artifact status and the candidate tier's refusal are ARTIFACT_STALE, as expected by construction (the training
-  end, 2025-09-23, plus the 242-day cap, 2026-05-23, precedes the fit, 2026-10-04), so the refusal says nothing
-  about the constants; the R4-C1 arithmetic's structural checks pass on a synthetic window. It opened only the
-  plan, D4's MANIFEST and the two OP1 copies.
-- THE EXP TOOLS (Lane A, T1; a scratch worktree, never published; .work/bng1_20261022/exp01): Codex tasks 931 and
-  933, then 935 and 936 (both BLOCKED part-way), then Claude's consolidated repair. Two fresh independent reviews
-  before any real read: review 1 FINDINGS (a MAJOR: zipfile's read-ahead pulled up to 4,095 bytes past the cut
-  into its buffer, a repeat of 931's read-past-the-cut class, repaired by Claude with a byte-counting regression
-  test; 7 MINOR); review 2 PASS (3 MINOR and 7 NOTE, folded: a fail-closed compression preflight closes the class
-  by construction; the open allowlist runs before any data and at the end; the tools refuse to run unless no
-  bytecode is read or written). 47 tool tests (two sensitivity controls fail 108 of 108 cells; 29 STOP cases, each
-  on its guard); the tools' gate 7963, scanners 3/3; two rehearsals with the real code paths. Sealed at
-  2026-10-22T18:14:49Z (SEAL_EXP.sha256) before the one run each.
-- THE B-NG1 LANE (Lane B, T2): #272 → M5 4e080ec6 (merged at 2026-10-23T02:26:16Z), a merge commit on
-  feat/ng-bng1-dormant @ 8f7043f3 (tree 9e7ac41a, M5's tree too): A d8f23440 (one fail-closed candle window), B
-  84b7616e (reference spec v1 = R4's generation-2 day-type base rate, af8a385b…), C 34dd13f8 (the candidate tier
-  behind an eligible manifest), D 66bad90f (the T2 review's repairs; its MAJOR refuted by R4's own harness), E
-  8f7043f3 (OD-NG-6: reference spec v1d for 1D, development only, 1c53d4a5…; availability: 1M →
-  TARGET_NOT_RESOLVABLE_1M, H_extended → NOT_MODELED, the 24-bar extension DEFERRED_NOT_CANCELLED). reference.py
-  (spec v1) stays at 306b3be3…, the bytes EXP-01 tested. PROPOSAL, UNWIRED: nothing outside quant_ng imports it;
-  no served number, gate, row or response changes. 16 files, +2414/-10; 0 of the 69 pinned files. Gates 7880,
-  7899, 7909, 7916 and 7950, scanners 3/3; the exact head 8f7043f3: 7950; a mutation probe killed 11 of 11 mutants
-  (on the tree committed as 66bad90f). Checked before the merge: the exact head, base M4, 5 commits and 16 files,
-  and all 2,424 changed lines equal to the reviewed diff (byte-identical; sha256 a9129229…). 4 of 4 checks green
-  on 8f7043f3: CI / test 39889029876 (7950 passed); reproducible build 39889029877. Main's push runs on M5: CI
-  39889561239 (7950 passed) and reproducible build 39889561243, both green.
-- THE CHANGELOG ENTRY for #268 to #270: #273 → M6 bc634f59 (merged at 2026-10-23T02:39:42Z), a merge commit on
-  docs/changelog-268-270 @ 592ae9e7 (one commit on M4; CHANGELOG.md +26/-0; gate 7850,
-  .work/lanes_20261022/gate_changelog_592ae9e.txt). Checked before the merge: the exact head, 1 commit and 1 file,
-  and the changed lines equal to the reviewed diff. 4 of 4 checks green on 592ae9e7: CI / test 39890138437 (7950
-  passed, on the PR's merge ref with M5); reproducible build 39890138414. Main's push runs on M6: CI 39890781304
-  (7950 passed) and reproducible build 39890781449, both green. The lane's own entry waits for a later batch.
-- M6's tree is 16f0459c, the tree of the scratch integration of M4 + the CHANGELOG + the lane that gated
-  VERIFY=PASS 7950, scanners 3/3, before publication.
-- THE CLEANUP (the owner's T3): the 14 branches of .work/t3_batch_20261023/CLEANUP_LIST.txt deleted from origin in
-  one atomic push, each with a lease at its listed SHA and each an ancestor of main; origin then held 249 heads.
-  The push named only these 14 branch refs: tags and every other branch untouched.
-- The owner's condition, met before any push: the gate file named for this record's head was a copy of a
-  working-tree gate run while HEAD was still 74b96824; it was removed, and the exact-head gate of 1d19cbfe passed
-  (7850, scanners 3/3; .work/t3_batch_20261023/RECONCILIATION_GATE_1d19cbf.md).
-- The rulings applied: under OD-NG-4 KEEP_HOLD and OD-NG-2 DEFER the registry and pipeline_ng are not built (they
-  would only encode the hold, and wiring needs T3/T4). Under OD-NG-6, v1d covers 1D; 1W waits on two definitions
-  the plan does not give (the weekly bar's alignment, as Binance weeks open on Monday 00:00 UTC, and the phase of
-  its 3-week lattice); evaluating v1d on development data needs 1D data, which no authorized store holds.
+  - the T3 of 2026-10-23 (the previous batch), executed in full and recorded by #274 (the record below);
+  - the instruction of 2026-10-23: 1W for v1d, development only: weeks open Monday 00:00 UTC; the 3-week lattice's
+    phase is anchored at 2026-09-21T00:00Z and extended backward; this grants no F3 access. Audit n0, the prior
+    and maturity against tc-v1 and invent no further parameter; exhaust safe dormant and synthetic T0–T2 with
+    Codex, full gates and review; batch the CHANGELOG entry for #272 with the next substantive T3; prepare an
+    exact 1D DEV-data allowlist and a JWT renewal card; no data fetch, F3, §5A, T3, T4 or production; return only
+    at a genuine boundary.
+  - the T3 of 2026-10-23 for this batch: publish exactly the package (the lane, the CHANGELOG entry for #272, the
+    runbook correction), with the optional 3-ref SHA-leased cleanup; verify exact diffs, 4 of 4 PR checks, merge
+    commits and main's CI and build; this record last with a fresh gate and review; HOLD on drift. And 1D DEV =
+    Option A from S1 (§3 of the allowlist): one offline guarded build of 236 bars per symbol only; the protocol
+    reviewed BEFORE any evaluation; continue safe T0–T2; no fetch, T4, production, F3 or §5A.
+- #274 → M7 88880ea907e36d39ca362b030df3c5d7e5dab579 (merged at 2026-10-23T03:09:29Z), the previous record: a
+  merge commit on chore/state-bng1-batch @ 8093b0f3 (tree d9eeeeb2, M7's tree too); STATE.md only, +328/-110. 4 of
+  4 checks green on 8093b0f3: CI / test 39892978897 (7950 passed, on the PR's merge ref); reproducible build
+  39892978915. Main's push runs on M7: CI 39893492048 (7950 passed) and reproducible build 39893492060, both green
+  (.work/t3_batch_20261023/T3_EXECUTION_BATCH_20261023.md).
+- THE 1W LANE (T2): #275 → M8 711e629f (merged at 2026-10-23T07:01:18Z), a merge commit on feat/ng-v1d-1w @
+  9c8cd7c0 (one commit on M7; tree d69ebf23, M8's tree too). reference_v1d.py gains 1W exactly as ruled: bars of
+  604,800 s that open on a Monday at 00:00 UTC; the lattice anchored at 2026-09-21T00:00Z and extended backward
+  only; a 1W candle, reference close or supplied anchor (its reference close or horizon end) after the anchor
+  raises ValueError, so no path reaches F3; memory "all available" (NGA plan v1.0 §F.2 L1), so 1W never raises
+  WINDOW_SHORT; n0 is v1's rule, "3 days of lattice rows", computed exactly: 1/7 row. Unchanged: one day type,
+  6-bar horizons (tc-v1's I2), the tie rule, the label rule and a caller-supplied prior; 1D; reference.py (spec
+  v1, the bytes EXP-01 tested) and windows.py, byte-identical. Spec v1d re-pinned at 91b8c6a2…. PROPOSAL, UNWIRED:
+  nothing outside quant_ng imports it; no served number, gate, row or response changes. 5 files, +300/-49; 0 of
+  the 69 pinned files. +17 test cases net (18 added, 1 removed from a parametrization), among them an n0-sensitive
+  hand-worked golden and 200 synthetic deployments bit-identical to R4's research function in its single-type
+  cumulative mode. Checked before the merge: the exact head, base M7, 1 commit and 5 files, and the 349 changed
+  lines equal to the reviewed diff (GitHub's diff differs only in the context labels of 7 hunk headers: 5 omitted,
+  2 different). 4 of 4 checks green on 9c8cd7c0: CI 39914395299 (7967 passed, on the PR's merge ref); reproducible
+  build 39914395350. Main's push runs on M8: CI 39915109585 (7967 passed) and reproducible build 39915109331, both
+  green.
+- The lane's checks: Codex tasks 941 (the build) and 942 (one repair). A fresh independent review of the code and
+  the audit: REVIEW=PASS, 11 MINOR + 2 NOTE, folded by 942 (code, tests, docstrings, the spec's n0 note) and by
+  Claude (the contracts doc's sentence; the audit's revision 2). It reviewed 941's diff; 942's repair was read by
+  Claude and gated, not re-reviewed. Its mutation probe left 5 of 25 mutants alive: 4 test gaps, each targeted by
+  a test 942 added (the probe was not re-run), and 1 equivalent; 1D unchanged on 4,500 random cases. Claude read
+  the diff (T2). Gates: the working tree after 941, 7961 (it printed the base, 88880ea: not an exact head); the
+  exact heads 59c0aea1 (the first message, kept as tag backup/ng-v1d-1w-59c0aea) and 9c8cd7c0, 7967 each, scanners
+  3/3.
+- THE AUDIT (T0; .work/v1d_1w_20261023/AUDIT_N0_PRIOR_MATURITY_TC_V1.md, revision 3, revisions 1 and 2 kept):
+  tc-v1 fixes the event (close-anchored 6-bar horizons, I2), the 3-state label and the exact terminal bar (I4),
+  and no pseudo-count, prior, memory or lattice. The tier is consistent with it for candle-built anchors, and no
+  parameter is invented. For the owner: 1W's n0 is 1/7 of one anchor (N2), so the 1W reference is close to its
+  matured anchors' plain TIMEOUT share from the first one on. Requirements before any wiring (none is authorized):
+  matured, frozen priors of the same event at the forecast's own band (P1–P3); candle-built anchors or an I2 check
+  (M1); the resolver's timestamps for maturity (M2); one label arithmetic for the reference and the resolver,
+  tested at the band edge, where the two disagree today (M5: 60,000 → 60,120 at band 0.002 is TIMEOUT for the
+  resolver and UP for the reference); a stated history depth for 1W (M6). The last admissible BTC/ETH 1W lattice
+  anchor is 2026-06-29 under the 2026-08-12 admission bound (M3); the code enforces neither that bound nor the
+  exclusion window, so any future 1W data allowlist must.
+- THE 1D DEV-DATA ALLOWLIST (T0, metadata only; .work/v1d_1w_20261023/ALLOWLIST_1D_DEV.md, revision 3, revisions 1
+  and 2 kept). The owner then authorized Option A from S1 (one offline build); nothing was fetched. Option A
+  (recommended): daily bars opening 2024-08-21 → 2025-04-13, 236 per symbol (BTCUSDT, ETHUSDT): NG-1's admissible
+  calendar cut to whole UTC days, touching no protected span at any timeframe; seen or mined, never confirmatory,
+  as NG-1's Rule R-1 and D4 classified it. Two sources: S1 (recommended), built offline from the NG-1 aggTrades
+  already held (62 ZIPs with their official checksums; no network, nothing re-downloaded); or S2, one bounded
+  fetch of Binance's 1d klines (two requests; assertions before any network request; raw capture; guards). Options
+  B (1,696 bars) and C (1,128) overlap used-up F2 spans (and C the 4H sealed folds) and need per-timeframe
+  accounting, NG-1's "Option W (owner only)". Use: v1d 1D evaluated on its own, aggregates only; its protocol is a
+  separate step.
+- THE JWT RENEWAL CARD (T0; .work/v1d_1w_20261023/JWT_RENEWAL_CARD.md, revision 2): the owner's six steps (check
+  the key files; mint; check the kid; replace the Space secret's value, under Secrets; clear the clipboard; tell
+  Claude), about 10 minutes, due by 2026-10-30 (the token expires 2026-11-02). Since the Phase 3 exit the token is
+  the writer's only credential, so the card says never delete it and never run generate; no test traffic.
+- THE RUNBOOK CORRECTION (T0): #277 → M10 8e1a5ecd (merged at 2026-10-23T07:30:53Z), a merge commit on
+  docs/writer-runbook-current @ 8ee40089 (one commit on M7; tree 64fa99d9; docs/runbooks/WRITER_CUTOVER.md
+  +16/-6). The runbook still advised deleting SUPABASE_WRITER_JWT to fall back to the service-role key, which was
+  deleted on 2026-10-04. Now: a dated status note (the token is the only credential; never delete it); the
+  fallback marked cutover-only and replaced by mint, replace and clear the clipboard; never revoke the legacy JWT
+  secret, and ask Claude before revoking any key; D6 marked done (0018; step C1 of the E2 consolidation deleted
+  the key the same day). Exact-head gate 7950, scanners 3/3; the first head 579625e2 (exact-head gate 7950) kept
+  as tag backup/writer-runbook-579625e. Checked before the merge: the exact head, 1 commit and 1 file, the diff
+  byte-identical to the reviewed one. 4 of 4 checks green on 8ee40089: CI 39917497466 (7967 passed, on the PR's
+  merge ref); reproducible build 39917497397. Main's push runs on M10: CI 39918263847 (7967 passed) and
+  reproducible build 39918263843, both green.
+- A fresh independent fact-check of the allowlist, the card and the runbook commit
+  (.work/v1d_1w_20261023/REVIEW_BRIEF_DOCS.md): REVIEW=PASS, 7 MINOR + 3 NOTE, all folded: F2's status after the
+  2026-09-18 look; the records that decide B and C; the held NG-1 aggTrades as a no-network source; the
+  pre-network assertions; F1 and the exclusion window; the runbook's mint-replace-clear sequence, its revocation
+  line and D6's exact grouping; the card's clipboard, file-permission, generate and Secrets lines, and the kid
+  check as the first diagnostic.
+- THE CHANGELOG ENTRY FOR #272 (T0): #276 → M9 fa5425b6 (merged at 2026-10-23T07:14:21Z), a merge commit on
+  docs/changelog-272 @ c0fe4184 (one commit on M7; tree ac9ab6b5; CHANGELOG.md +30/-0; exact-head gate 7950). A
+  fresh fact-check found 1 MAJOR ("no constants or priors", false as written: spec v1 carries R4's frozen research
+  values) and 4 MINOR, all fixed; the re-check PASS. Earlier heads kept as tags backup/changelog-272-f0d2e6d and
+  -db0cafa (.work/changelog_272/T3_PACKAGE_CHANGELOG_272.md). Checked before the merge: the exact head, 1 commit
+  and 1 file, the diff byte-identical to the reviewed one. 4 of 4 checks green on c0fe4184: CI 39915638801 (7967
+  passed, on the PR's merge ref); reproducible build 39915638624. Main's push runs on M9: CI 39916470110 (7967
+  passed) and reproducible build 39916470115, both green. The 1W lane's own entry waits for a later batch.
+- M10's tree is 12d33b3c, the tree of the scratch integration of M7 + the lane + the CHANGELOG entry + the runbook
+  correction (c0ccd998) that gated VERIFY=PASS 7967, scanners 3/3, before publication
+  (.work/t3_batch_1w/T3_EXECUTION_BATCH_1W.md).
+- THE CLEANUP (the owner's T3): the 3 branches of .work/t3_batch_1w/CLEANUP_LIST_1W_OPTIONAL.txt
+  (feat/ng-bng1-dormant, docs/changelog-268-270 and chore/state-bng1-batch, #272's to #274's) deleted from origin
+  in one atomic push, each with a lease at its listed SHA, each an ancestor of M10 and the head of no open PR; a
+  dry run verified all three first. Origin went from 253 heads to 250: main, 248 branches merged into it, and
+  chore/state-w26 (unmerged). The push named only these 3 branch refs: tags and every other branch untouched.
+- THE S1 BUILD (the owner's authority of 2026-10-23: one offline guarded build, Option A from S1): the tool (T1; a
+  scratch worktree, never published; .work/v1d_1w_20261023) came from Codex tasks 951 to 953 and Claude's
+  consolidated repair. Two fresh reviews ran before any read. Review 1: FINDINGS (the run would outlast a
+  foreground command, and a killed run left an empty folder the tool would accept again; CRLF CHECKSUMs would STOP
+  it after a full parse; 10 surviving mutants), all folded. Review 2: PASS (its replica of the real window passed
+  with the exact command), its notes folded by Claude, not re-reviewed. Phases: setup, then an exclusive commit
+  marker, then the read, then the write; a preventive audit hook (no network, no process, no write or file-system
+  change outside the output, no unplanned input open); 75 tests; 22 of 22 targeted mutants killed; gate 8025.
+  Sealed (build_1d.py 96e633f7…, plan 17aba8d8…), rehearsed with the exact interpreter and flags on a synthetic
+  replica of the real window (no --run-real; PASS), then run ONCE, detached, 2026-10-23T08:52:45Z to 09:02:43Z:
+  PASS. 236 consecutive daily candles per symbol (2024-08-21 to 2025-04-13) from 416,220,475 BTCUSDT and
+  337,797,026 ETHUSDT trades, exactly NG-1 Stage 1's own counts; inside the NG-1 data folder it opened exactly the
+  62 ZIPs and 62 CHECKSUMs, read-only; inputs and NG-1's code folder unchanged; the outputs, read-only, are in
+  .work/v1d_1w_20261023/s1_output (BTCUSDT_1D.json a2bf17ae…, ETHUSDT_1D.json 25f59a93…, S1_RESULT.json,
+  S1_STARTED, MANIFEST.sha256 de1968d7…). The bars are built from trades, not Binance's published 1d klines. The
+  run is consumed: never rerun.
+- THE 1D EVALUATION PROTOCOL (T0; .work/v1d_1w_20261023/EVAL_PROTOCOL_V1D_1D.md, revision 3, revisions 1 and 2
+  kept): v1d at 1D on the S1 candles, development characterization only (seen or mined, never confirmatory; v1d's
+  claims are prospective); R2's folds (K = 8, 68 evaluation rows per symbol and band) and R4's priors; v1d against
+  its own frozen prior; the 3-class Brier score primary; log loss with zero-probability rows counted and written
+  as INF, never clipped; aggregates only. Registered before any run: the design sees v1d's cold start only (K ≤ 7;
+  16 of 68 rows equal the prior), so a worse v1d score is the expected result under a stationary TIMEOUT rate, and
+  the INF counts favour v1d mechanically. Review 1 (fresh): FINDINGS, 2 MAJOR (that expectation unregistered; R2's
+  package puts the main checkout's src first on sys.path, so EXP-01's import-provenance guard is required) + 4
+  MINOR + 2 NOTE, all folded in revision 2. Review 2 (fresh): PASS, 3 MINOR + 4 NOTE (the snapshot commit named;
+  EXP-01's opened-path scope, REFUSAL versus STOP and a rehearsal; S1's output format and the MarketCandle rule),
+  folded in revision 3, not re-reviewed. The evaluation itself is NOT authorized: the owner's.
 - Codex was available (codex-cli 0.163.0, ChatGPT login, gpt-6-luna; no API key, no paid fallback), and the
-  owner's instructions permitted it: twelve delegations, 921 to 926 and 931 to 936, each from Claude's written
-  task. 921, 923, 925, 931, 934, 935 and 936 returned BLOCKED or partial (934 only because Codex stopped the
-  silent verify.sh; 935 ran a bare pytest; 936's gate failed on Claude's own over-long protected line). Claude
-  re-ran every gate, read every diff and repaired three repeated classes itself (923's fixture; the EXP tools'
-  read-past-the-cut class; the EXP tests after 935 and 936). Every log was scanned: no secret
-  (.work/p7/LANE_RECORD.md; the model is named in each log).
+  owner's instructions asked for it: five delegations, each from Claude's written task: 941 and 942 (the 1W lane),
+  both DONE; 951 (the S1 tool; BLOCKED only for two honest notes: it had read the plan file, and the `-m` command
+  form cannot work under `-I`), 952 (Claude's review found the real run could never start, a per-row loop too slow
+  for the real input, and a gap in the write guard) and 953 (under `-I` the parser load wrote bytecode beside
+  NG-1's code, which Codex's sandbox had masked), both DONE. A repeated defect class (setup refusals that created
+  the output folder) then ended delegation: Claude's consolidated repair. Claude re-ran the gates, read every diff
+  and ran the tool's tests outside the sandbox. All five logs were scanned: no secret (.work/p7/LANE_RECORD.md).
 - The GPT succession is unchanged, governed by the owner's authority of 2026-09-28 (preserved 2026-10-14): SQ1 to
   SQ4 PASS; SQ5 PENDING; SQ6 3/3 again at #26, final qualification PENDING; the retirement record ON HOLD;
   PREDECESSOR_RETIREMENT = NOT_YET (the detail: OWNER_BOUNDARY and the previous record below).
-- Nothing else changed: no migration, no claim activation, no claim-acceptance change, no H2/F3/§5A change, no A4C
-  reseal, no HF write, no production query, no workflow dispatch, no secret. No sealed-fold outcome (only the
-  timestamps §1 allows), no F3 or §5A data and no look beyond the owner's two rulings: EXP-01 opened only §1's
-  files and EXP-02 only the files option R names.
-- This record is the batch's last publish. Before it: #273.)
+- Nothing else changed: no fetch and no data read beyond the S1 build's planned files (the 62 ZIPs and 62
+  CHECKSUMs), no migration, no claim activation, no claim-acceptance change, no H2/F3/§5A change, no A4C reseal,
+  no HF write, no production query, no workflow dispatch, no secret.
+- This record is the batch's last publish. Before it: #277.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-10-23), verbatim — the T3 for the batch (incl. the cleanup) and the one 1D build:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T3 GitHub-only AUTHORIZE exact .work/t3_batch_1w/T3_PACKAGE_BATCH_1W.md incl. optional 3-ref SHA-leased cleanup; verify exact diffs, PR 4/4 checks, merge commits, main CI/build, STATE last with fresh gate/review; HOLD on drift. 1D DEV=AUTHORIZE Option A/S1 §3 of .work/v1d_1w_20261023/ALLOWLIST_1D_DEV.md: one offline guarded 236-bar/symbol build only; review protocol BEFORE evaluation. Continue safe T0–T2; no fetch/T4/prod/F3/§5A.
+```
+- **The owner (2026-10-23), verbatim — 1W for v1d (development only), the audit, the 1D allowlist and the JWT card:**
+```text
+CONTINUE CURRENT (Opus XHIGH), UCPE. OWNER 1W DEV-only: weekly UTC Monday 00:00; 3-week lattice phase anchored 2026-09-21T00:00Z, extended backward. This grants no F3 access. Audit n0/prior/maturity against tc-v1; invent no further parameters. Exhaust safe dormant/synthetic T0–T2 with Codex, full gates/review. Batch CHANGELOG #272 with next substantive T3. Prepare exact 1D DEV-data allowlist and JWT renewal card. No data fetch, F3/§5A, T3/T4 or prod. Return only at a genuine boundary.
+```
 - **The owner (2026-10-23), verbatim — the T3 for the lane, the CHANGELOG entry, the cleanup and this record, last:**
 ```text
 CONTINUE CURRENT (Opus HIGH), UCPE. T3 GitHub-only AUTHORIZE .work/t3_batch_20261023/T3_PACKAGE_BATCH_20261023.md, conditional: first reconcile gate_state_local_1d19cbf.txt showing 74b9682; no false PASS. Publish exact B-NG1 then CHANGELOG heads, verify diffs, PR checks 4/4, merge commits and main CI/build. Delete only 14 SHA-matched ancestor refs in CLEANUP_LIST using lease checks. Rebuild STATE last with exact-head gate, carry-over and fresh review. HOLD on drift. No T4/prod/F3/§5A; continue safe T0–T2.
@@ -622,6 +666,118 @@ Do not return on routine milestones. Return only after all safe work under these
   publication is a new T3.
 - **Unchanged:** Phase 4 INFEASIBLE; D4 consumed; F3 KEEP_UNSPENT; the H2 hold; evidence-origin semantics; no
   manufactured USER_REQUESTED traffic; no production query, deploy, database write, secret or §5A access.
+Previously (**THE OWNER RULED OD-NG-2 (DEFER), OD-NG-4 (KEEP_HOLD, THE REFERENCE HIDDEN) AND OD-NG-6
+(v1d, DEVELOPMENT ONLY) AND SCOPED EXP-01 AND EXP-02. EXP-01 PASSED: QUANT_NG'S REFERENCE EQUALS R4'S, BIT FOR
+BIT, ON R4'S DEV DATA (108 OF 108 CELLS). EXP-02 OPTION R: THE SEALED CONSTANTS LOAD, AND THE ARTIFACT IS STALE BY
+CONSTRUCTION. UNDER THE OWNER'S T3 OF 2026-10-23 THE DORMANT B-NG1 LANE (#272) AND THE CHANGELOG ENTRY FOR #268 TO
+#270 (#273) ARE PUBLISHED AND 14 MERGED BRANCHES ARE DELETED. PRODUCTION IS UNCHANGED: D 27edbcad /
+UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), in order:
+  - the instruction of 2026-10-22 (~19:58 +0700): from STATE and the NGA card revision 4, prepare exact
+    metadata-only EXP-01 DEV and EXP-02 D4 allowlists and exclusions, with no protected read; exhaust the
+    independent synthetic and dormant B-NG1 work with Codex, full gates and T2 review; batch the genuine OD-NG
+    rulings and the JWT renewal boundary; the CHANGELOG and the cleanup later, batched;
+  - the rulings of 2026-10-22 (~23:25 +0700): EXP-01 = AUTHORIZE §1 of the allowlists only, with preflight guards
+    and STOP on any mismatch; EXP-02 = R, the sealed 1H OP1_CONSTANTS read-only, no D4 rerun; OD-NG-4 = KEEP_HOLD
+    with the reference hidden; OD-NG-2 = DEFER; OD-NG-6 = YES, v1d for development only, 1M and H_extended
+    UNAVAILABLE, the 24-bar extension deferred, not cancelled; exhaust safe T0–T2 with full gates and reviews;
+    batch the T3. Not ruled, defaults unchanged: OD-NG-1 (F3 protected), OD-NG-3 (no collection), OD-NG-4b
+    (default no), OD-NG-5 (no universe fetch), OD-NG-7 (no constant approved); OD-NG-8 was ruled on 2026-09-26 (H2
+    Q1–Q8), which corrects the previous record's "OD-NG-1…8 are open". Record:
+    .work/bng1_20261022/rulings/RULINGS_RECORD_20261022.md.
+  - the T3 of 2026-10-23: first reconcile this record's gate file that showed 74b9682 (no false PASS); publish the
+    exact lane, then CHANGELOG heads, with verified diffs, 4 of 4 PR checks, merge commits and main's CI and
+    build; delete only the 14 SHA-matched ancestor refs with lease checks; rebuild this record last with an
+    exact-head gate, carry-over and a fresh review; HOLD on drift; GitHub only, no T4, production, F3 or §5A; then
+    continue safe T0–T2.
+- #271 → M4 42f6bc42ec12ba1b2a7c6806771da932b056a505 (2026-10-22T06:10:26Z), the previous record: a merge commit
+  on chore/state-nga-addendum-lanes @ 912bdc51 (tree 7b728b9d); STATE.md only, +409/-163. 4 of 4 checks green on
+  912bdc51: CI / test 39731875062 (7850 passed); reproducible build 39731875092. Main's push runs on M4: CI
+  39732312316 (7850 passed) and reproducible build 39732312346, both green
+  (.work/lanes_20261022/T3_EXECUTION_268_270.md).
+- THE ALLOWLISTS (Lane A, T0, metadata only; no protected value inspected):
+  .work/bng1_20261022/EXP01_EXP02_ALLOWLISTS.md, revision 4 (revisions 1 to 3 kept). §1, EXP-01: the 1H rows from
+  D4's 1H extract only; 15m and 4H by a one-time extract from the research store, predicted_at read whole,
+  horizon_end streamed to the cut, the outcomes (r and index) read for the first N rows only; the 1H store's
+  predicted_at for the fold boundaries only; no label, rv6_fut or feature member read and no sidecar parsed
+  (hashed only); STOP on any mismatch. Cuts: 15m 1772639099999, 1H 1758625199999 and 4H 1744617599999, each R2's
+  fold-7 start as the run recomputed it (for 4H the allowlist had estimated R2's start one bar later from metadata
+  and took G1's value to be safe; the recomputation equals G1's). §2: the EXP-02 options R, D and N. §3: the
+  exclusions (§5A, F3, the sealed folds and files, the research pickles). Three fresh checks: revisions 1 and 2
+  each had a MAJOR (a wrong pickle path; a prefix read that contradicted the boundary recomputation), both fixed;
+  revision 3 PASS, its notes folded.
+- EXP-01 under §1 (the owner's ruling; ran once at 2026-10-22T18:15:02Z, 89 s;
+  .work/bng1_20261022/exp01/EXP_RESULTS_20261023.md): PASS. 108 of 108 cells (BTCUSDT and ETHUSDT × 15m, 1H and 4H
+  × DEV folds 1–6 × bands 0.002, 0.003 and 0.0045), 156,108 rows compared, max |Δ| = 0.0 against a tolerance of
+  1e-12: quant_ng's reference spec v1 (reference.py 306b3be3…) reproduces R4's generation-2 day-type base rate,
+  computed by R4's own code, bit for bit on R4's real DEV populations (implementation parity only: not a
+  forecast-quality claim; nothing is wired or served, and the reference stays hidden). 14 guards PASS (every
+  digest before and after; the constants agreed three ways; the boundaries and cuts; the store prefix read twice
+  and identical; the 1H extract equal to the store's first rows; the opened-path allowlist; no network). It opened
+  exactly §1's files: no label, rv6_fut or feature member was opened, the six sidecars were hashed and never
+  parsed, and no outcome at or past a cut was decoded. The outputs (PASS/FAIL, row counts and max |Δ| per cell;
+  §1's one-time extract) stay under .work, read-only.
+- EXP-02 option R (ran once at 2026-10-22T18:16:44Z): the sealed OP1_CONSTANTS.json (7b1dcf61…) and its copy,
+  read-only; nothing refit. For BTC/USDT and ETH/USDT at 1H, validate_constants and load_manifest PASS; the
+  artifact status and the candidate tier's refusal are ARTIFACT_STALE, as expected by construction (the training
+  end, 2025-09-23, plus the 242-day cap, 2026-05-23, precedes the fit, 2026-10-04), so the refusal says nothing
+  about the constants; the R4-C1 arithmetic's structural checks pass on a synthetic window. It opened only the
+  plan, D4's MANIFEST and the two OP1 copies.
+- THE EXP TOOLS (Lane A, T1; a scratch worktree, never published; .work/bng1_20261022/exp01): Codex tasks 931 and
+  933, then 935 and 936 (both BLOCKED part-way), then Claude's consolidated repair. Two fresh independent reviews
+  before any real read: review 1 FINDINGS (a MAJOR: zipfile's read-ahead pulled up to 4,095 bytes past the cut
+  into its buffer, a repeat of 931's read-past-the-cut class, repaired by Claude with a byte-counting regression
+  test; 7 MINOR); review 2 PASS (3 MINOR and 7 NOTE, folded: a fail-closed compression preflight closes the class
+  by construction; the open allowlist runs before any data and at the end; the tools refuse to run unless no
+  bytecode is read or written). 47 tool tests (two sensitivity controls fail 108 of 108 cells; 29 STOP cases, each
+  on its guard); the tools' gate 7963, scanners 3/3; two rehearsals with the real code paths. Sealed at
+  2026-10-22T18:14:49Z (SEAL_EXP.sha256) before the one run each.
+- THE B-NG1 LANE (Lane B, T2): #272 → M5 4e080ec6 (merged at 2026-10-23T02:26:16Z), a merge commit on
+  feat/ng-bng1-dormant @ 8f7043f3 (tree 9e7ac41a, M5's tree too): A d8f23440 (one fail-closed candle window), B
+  84b7616e (reference spec v1 = R4's generation-2 day-type base rate, af8a385b…), C 34dd13f8 (the candidate tier
+  behind an eligible manifest), D 66bad90f (the T2 review's repairs; its MAJOR refuted by R4's own harness), E
+  8f7043f3 (OD-NG-6: reference spec v1d for 1D, development only, 1c53d4a5…; availability: 1M →
+  TARGET_NOT_RESOLVABLE_1M, H_extended → NOT_MODELED, the 24-bar extension DEFERRED_NOT_CANCELLED). reference.py
+  (spec v1) stays at 306b3be3…, the bytes EXP-01 tested. PROPOSAL, UNWIRED: nothing outside quant_ng imports it;
+  no served number, gate, row or response changes. 16 files, +2414/-10; 0 of the 69 pinned files. Gates 7880,
+  7899, 7909, 7916 and 7950, scanners 3/3; the exact head 8f7043f3: 7950; a mutation probe killed 11 of 11 mutants
+  (on the tree committed as 66bad90f). Checked before the merge: the exact head, base M4, 5 commits and 16 files,
+  and all 2,424 changed lines equal to the reviewed diff (byte-identical; sha256 a9129229…). 4 of 4 checks green
+  on 8f7043f3: CI / test 39889029876 (7950 passed); reproducible build 39889029877. Main's push runs on M5: CI
+  39889561239 (7950 passed) and reproducible build 39889561243, both green.
+- THE CHANGELOG ENTRY for #268 to #270: #273 → M6 bc634f59 (merged at 2026-10-23T02:39:42Z), a merge commit on
+  docs/changelog-268-270 @ 592ae9e7 (one commit on M4; CHANGELOG.md +26/-0; gate 7850,
+  .work/lanes_20261022/gate_changelog_592ae9e.txt). Checked before the merge: the exact head, 1 commit and 1 file,
+  and the changed lines equal to the reviewed diff. 4 of 4 checks green on 592ae9e7: CI / test 39890138437 (7950
+  passed, on the PR's merge ref with M5); reproducible build 39890138414. Main's push runs on M6: CI 39890781304
+  (7950 passed) and reproducible build 39890781449, both green. The lane's own entry waits for a later batch.
+- M6's tree is 16f0459c, the tree of the scratch integration of M4 + the CHANGELOG + the lane that gated
+  VERIFY=PASS 7950, scanners 3/3, before publication.
+- THE CLEANUP (the owner's T3): the 14 branches of .work/t3_batch_20261023/CLEANUP_LIST.txt deleted from origin in
+  one atomic push, each with a lease at its listed SHA and each an ancestor of main; origin then held 249 heads.
+  The push named only these 14 branch refs: tags and every other branch untouched.
+- The owner's condition, met before any push: the gate file named for this record's head was a copy of a
+  working-tree gate run while HEAD was still 74b96824; it was removed, and the exact-head gate of 1d19cbfe passed
+  (7850, scanners 3/3; .work/t3_batch_20261023/RECONCILIATION_GATE_1d19cbf.md).
+- The rulings applied: under OD-NG-4 KEEP_HOLD and OD-NG-2 DEFER the registry and pipeline_ng are not built (they
+  would only encode the hold, and wiring needs T3/T4). Under OD-NG-6, v1d covers 1D; 1W waits on two definitions
+  the plan does not give (the weekly bar's alignment, as Binance weeks open on Monday 00:00 UTC, and the phase of
+  its 3-week lattice); evaluating v1d on development data needs 1D data, which no authorized store holds.
+- Codex was available (codex-cli 0.163.0, ChatGPT login, gpt-6-luna; no API key, no paid fallback), and the
+  owner's instructions permitted it: twelve delegations, 921 to 926 and 931 to 936, each from Claude's written
+  task. 921, 923, 925, 931, 934, 935 and 936 returned BLOCKED or partial (934 only because Codex stopped the
+  silent verify.sh; 935 ran a bare pytest; 936's gate failed on Claude's own over-long protected line). Claude
+  re-ran every gate, read every diff and repaired three repeated classes itself (923's fixture; the EXP tools'
+  read-past-the-cut class; the EXP tests after 935 and 936). Every log was scanned: no secret
+  (.work/p7/LANE_RECORD.md; the model is named in each log).
+- The GPT succession is unchanged, governed by the owner's authority of 2026-09-28 (preserved 2026-10-14): SQ1 to
+  SQ4 PASS; SQ5 PENDING; SQ6 3/3 again at #26, final qualification PENDING; the retirement record ON HOLD;
+  PREDECESSOR_RETIREMENT = NOT_YET (the detail: OWNER_BOUNDARY and the previous record below).
+- Nothing else changed: no migration, no claim activation, no claim-acceptance change, no H2/F3/§5A change, no A4C
+  reseal, no HF write, no production query, no workflow dispatch, no secret. No sealed-fold outcome (only the
+  timestamps §1 allows), no F3 or §5A data and no look beyond the owner's two rulings: EXP-01 opened only §1's
+  files and EXP-02 only the files option R names.
+- This record is the batch's last publish. Before it: #273.)
 Previously (**NGA ADDENDUM 5 IS SEALED: TEN SAFEGUARDS OF THE ADOPTED PLAN THAT THE NEXT-GENERATION
 PLAN HAD DROPPED ARE CARRIED FORWARD. THREE BRANCHES (TWO LANES) ARE PUBLISHED: #268, #269 AND #270. PRODUCTION IS
 UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
@@ -3068,7 +3224,18 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE OWNER'S T3 OF 2026-10-23 EXECUTED: #272 → M5 4e080ec6, #273 → M6 bc634f59; 14 MERGED BRANCHES
+LOOP_STATE=THE OWNER'S T3 OF 2026-10-23 FOR THE 1W BATCH IS EXECUTED: #275 → M8 711e629f, #276 → M9 fa5425b6, #277
+  → M10 8e1a5ecd; THE 3 MERGED BRANCHES OF #272 TO #274 DELETED; THE ONE OFFLINE S1 BUILD RAN AND PASSED; THIS
+  RECORD PUBLISHED LAST. The 1D evaluation protocol is written and twice reviewed; the evaluation waits for the
+  owner. Production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005. Main is M10
+  8e1a5ecd (#277) before this record.
+  - #275, #276 and #277: 4 of 4 checks each on the exact heads; main's push runs green on M8, M9 and M10.
+  - The S1 build: PASS, 236 daily candles per symbol, run once at 2026-10-23T08:52:45Z; consumed, never rerun.
+  - This record: chore/state-v1d-1w-batch rebuilt on M10 (STATE.md only), published last under the owner's T3.
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (the running record, newest at the bottom),
+    .work/t3_batch_1w/T3_EXECUTION_BATCH_1W.md and .work/v1d_1w_20261023 (RUN_COMMANDS_S1.md, s1_output/,
+    s1_run.*, EVAL_PROTOCOL_V1D_1D.md).
+  Before it: THE OWNER'S T3 OF 2026-10-23 EXECUTED: #272 → M5 4e080ec6, #273 → M6 bc634f59; 14 MERGED BRANCHES
   DELETED; THIS RECORD PUBLISHED LAST. Production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned
   at R 27682005. Main is M6 bc634f59 (#273) before this record.
   - #271 → M4 42f6bc42 (the previous STATE record): 4 of 4 checks, main's push runs green.
@@ -5822,6 +5989,16 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 AND THE NGA PROPOSAL (2026-10-23):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad.
   - The next generation: NGA v2 PROPOSED (not adopted), with Addendum 5's ten carried safeguards. Ruled on
     2026-10-22: OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD with the reference hidden, OD-NG-6 YES (v1d, development only);
+    on 2026-10-23: 1W for v1d (development only, no F3 access) and one offline 1D build (Option A from S1); the
+    others keep their defaults. Published: #272 and #273, then #275 (the 1W lane), #276 (the CHANGELOG entry for
+    #272) and #277 (the runbook correction). Done: the S1 development candles (PASS) and the evaluation protocol
+    (revision 3, two fresh reviews).
+  - Next: the owner's word on the 1D evaluation; the dated JWT renewal (by 2026-10-30); the CHANGELOG entry for
+    #275 in a later batch.
+  Before it: POST-PHASE-4 / PHASE 7-8 AND THE NGA PROPOSAL (2026-10-23):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad.
+  - The next generation: NGA v2 PROPOSED (not adopted), with Addendum 5's ten carried safeguards. Ruled on
+    2026-10-22: OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD with the reference hidden, OD-NG-6 YES (v1d, development only);
     the others keep their defaults. Done: the allowlists, EXP-01 and EXP-02 option R (local records); published:
     the dormant B-NG1 lane (#272: window, reference v1 and v1d, candidate, availability) and the CHANGELOG entry
     (#273).
@@ -6126,7 +6303,21 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8 AND THE NGA PROPOSAL (2026-10-23):
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-bng1-batch (this record, on main M6 bc634f59). Merged, on origin:
+CURRENT_BRANCH=chore/state-v1d-1w-batch (this record, on main M10 8e1a5ecd). Merged, on origin:
+  - feat/ng-v1d-1w @ 9c8cd7c0 (#275), docs/changelog-272 @ c0fe4184 (#276) and docs/writer-runbook-current @
+    8ee40089 (#277); they and this record's branch can be deleted on the owner's word.
+  - Deleted from origin under the owner's T3 of 2026-10-23 (CLEANUP_LIST_1W_OPTIONAL.txt): feat/ng-bng1-dormant,
+    docs/changelog-268-270 and chore/state-bng1-batch (each SHA-matched and an ancestor of main); their commits
+    remain in main's history.
+  - Local, never published: scratch/s1-1d-build @ 88880ea9 with the S1 tool and its tests uncommitted (worktree
+    .work/wt-s1-build); the sealed copies are in .work/v1d_1w_20261023/s1_tool.
+  - Local worktrees: .work/wt-state-1w (this record), .work/wt-v1d-1w, .work/wt-changelog-272 and
+    .work/wt-writer-runbook (the merged branches), .work/wt-s1-build (the S1 tool) and .work/wt-int-1w (the
+    scratch integration, detached at c0ccd998).
+  - Local tags, not on origin: backup/state-v1d-1w-batch-5beaf01 and -a286566 (this record's local heads before
+    the rebuild on M10), backup/ng-v1d-1w-59c0aea, backup/changelog-272-f0d2e6d and -db0cafa, and
+    backup/writer-runbook-579625e; backup/state-bng1-batch-74b9682, -1d19cbf and -e86ca25, unchanged.
+  Before it: chore/state-bng1-batch (this record, on main M6 bc634f59). Merged, on origin:
   - feat/ng-bng1-dormant @ 8f7043f3: merged by #272.
   - docs/changelog-268-270 @ 592ae9e7: merged by #273.
   - They and this record's branch can be deleted on the owner's word.
@@ -6416,7 +6607,11 @@ CURRENT_BRANCH=chore/state-bng1-batch (this record, on main M6 bc634f59). Merged
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=bc634f59 (main, #273: the CHANGELOG entry; the last merge before this record). Its 4 PR checks (CI
+LAST_GREEN_SHA=8e1a5ecd (main M10, #277: the runbook correction; the last merge before this record). Its 4 PR
+  checks (CI 39917497466; reproducible build 39917497397), push CI 39918263847 and reproducible build 39918263843
+  are green. Before it, with 4 of 4 PR checks and main's push runs green: fa5425b6 (#276; push CI 39916470110,
+  build 39916470115) and 711e629f (#275; push CI 39915109585, build 39915109331).
+  Before it: bc634f59 (main, #273: the CHANGELOG entry; the last merge before this record). Its 4 PR checks (CI
   39890138437; reproducible build 39890138414), push CI 39890781304 and reproducible build 39890781449 are green.
   Before it, with 4 of 4 PR checks and main's push runs green: 4e080ec6 (#272; push CI 39889561239, build
   39889561243) and 42f6bc42 (#271; push CI 39732312316, build 39732312346).
@@ -6719,6 +6914,15 @@ LAST_GREEN_SHA=bc634f59 (main, #273: the CHANGELOG entry; the last merge before 
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
 LAST_VERIFY=PASS 2026-10-23, scanners 3/3 each:
+  - The PR checks (head_sha = the exact heads; each PR's tests ran on its merge ref): 9c8cd7c0 7967; c0fe4184
+    7967; 8ee40089 7967. Main's push runs: M8, M9 and M10, 7967 each.
+  - Before publication: the lane's exact heads 59c0aea1 and 9c8cd7c0, 7967 each; the CHANGELOG entry's exact heads
+    f0d2e6db, db0cafac and c0fe4184, 7950 each; the runbook correction's exact heads 579625e2 and 8ee40089, 7950
+    each; their integration on M7 (c0ccd998), 7967; this record's local heads 5beaf01b and a286566b, 7950 each.
+  - The S1 tool's scratch worktree (never published; working-tree gates on its base 88880ea): after 953, 7978;
+    after Claude's consolidated repair, 8000; the final bytes, 8025, unchanged during the gate. The sealed tool's
+    rehearsal: exit 0, PASS. The real run: exit 0, PASS; the post-run check PASS.
+  Before it: PASS 2026-10-23, scanners 3/3 each:
   - The PR checks (head_sha = the exact heads; each PR's tests ran on its merge ref): 8f7043f3 7950; 592ae9e7 7950
     (with M5). Main's push runs: M5 7950, M6 7950.
   - The lane: 7880, 7899 and 7909 on the trees just before commits A, B and C; the exact heads 66bad90f 7916 and
@@ -7027,7 +7231,11 @@ LAST_VERIFY=PASS 2026-10-23, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-23). Codex was available and used for mechanical work under the owner's instructions
+CODEX_PENDING=NONE (2026-10-23). Codex was available and used under the owner's instructions of 2026-10-23
+  (codex-cli 0.163.0, ChatGPT login, gpt-6-luna; no API key, no paid fallback): tasks 941 and 942 (the 1W lane)
+  and 951 to 953 (the S1 tool), all finished, none pending; the tool's last repair was Claude's (a repeated defect
+  class).
+  Before it: NONE (2026-10-23). Codex was available and used for mechanical work under the owner's instructions
   of 2026-10-22 (codex-cli 0.163.0, ChatGPT login, default model gpt-6-luna; no API key, no paid fallback): tasks
   921 to 926 and 931 to 936, all finished, none pending.
   Before it: NONE (2026-10-22).
@@ -7184,7 +7392,52 @@ CODEX_PENDING=NONE (2026-10-23). Codex was available and used for mechanical wor
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-23). Nothing is urgent except the dated JWT renewal. Production
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-23, after the T3 of the 1W batch). Nothing is urgent except the
+  dated JWT renewal. Production is D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made
+  no production read or change.
+  0. Done: the owner's T3 of 2026-10-23 for the 1W batch (#275 to #277 merged, the 3 branches deleted, this record
+     last) and the one S1 build (PASS).
+  1. The 1D evaluation (.work/v1d_1w_20261023/EVAL_PROTOCOL_V1D_1D.md, revision 3; two fresh reviews, the second
+     PASS, its notes folded, not re-reviewed): run it once as written, or not. It is development characterization
+     only, never a claim; its registered expectation is that, under a stationary TIMEOUT rate, v1d's cold start
+     scores no better than its own frozen prior. Not authorized. 1W has no development corpus (none held, none
+     asked).
+  2. DATED: the writer JWT expires 2026-11-02; renew it by 2026-10-30 with the card
+     (.work/v1d_1w_20261023/JWT_RENEWAL_CARD.md). Claude cannot do it: it never sees the token or the key.
+  3. The NGA decisions (.work/nga/master/MASTER_PLAN_v2.md §M), with NGA Addendum 5's safeguards as conditions any
+     choice must meet. Ruled 2026-10-22: OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD (the reference hidden), OD-NG-6 YES
+     (v1d, development only); 2026-10-23: 1W for v1d (development only, no F3 access). OD-NG-8: ruled 2026-09-26
+     (H2 Q1–Q8), which corrects the previous record's "OD-NG-1…8 open". Open, defaults unchanged: OD-NG-1,
+     OD-NG-3, OD-NG-4b, OD-NG-5 and OD-NG-7. Until ruled, the default is the current hold with reference numbers
+     hidden.
+  4. The UOR relay's acknowledgment is PENDING (msg 4257f59e…). The UOR side's P8 pin and c50 are UOR HOLDs.
+  5. Open by the owner's word, no decision asked: the baseline residual (the summary's fixed
+     "INSUFFICIENT_SAMPLE"; options in .work/p7/redesign/BASELINE_SCOPE_TRACE_20261015.md); the reviews' notes
+     (.work/p7/LANE_RECORD.md). F-2, F-3 and F-5 are kept. N-1 HOLD, N-2 deferred, N-6 unchanged (the freeze
+     rulings); X4 deferred.
+  6. The other merged branches on origin (248 besides main after the cleanup, including #275's, #276's and #277's
+     branches, and then this record's own; chore/state-w26 is unmerged), the local tags, and the local branches
+     CURRENT_BRANCH's earlier entries list: on the owner's word.
+  7. The local .venv's ruff is 0.16.3; requirements.txt pins 0.16.9 (CI's), so the local lint can differ from
+     CI's. Syncing it downloads ruff-0.16.9-py3-none-macosx_11_0_arm64.whl (9.9 MB, from PyPI; its hash is pinned
+     in requirements.txt): the owner's permission.
+  - perf/test-suite-speed @ fb0bfaf: its T3, and whether verify.sh runs in parallel
+    (.work/perf/VERIFY_SPEED_DIAGNOSIS.md).
+  - The GPT succession, under the owner's 2026-09-28 authority (preserved 2026-10-14): SQ1 to SQ4 PASS; SQ5
+    PENDING (#23 found #22's SQ5 PASS and RETIREMENT_RECOMMENDED premature; SQ5 restarts after HOLD #19, the blind
+    case at #12 no longer counts, and a new real milestone with a fresh unframed live-boundary result is
+    required); SQ6 3/3 again at #26 after #23's restart, final qualification PENDING. These are the owner's record
+    and owner-relayed text, not a verified transcript; SQ5 and SQ6 stay PENDING overall. The retirement record
+    (revision 2, before #23) is ON HOLD (criterion 2, SQ5, not supported under 08 Part B after HOLD #19); its
+    options are the owner's. The owner's retirement consent is conditional: every criterion met,
+    RETIREMENT_RECOMMENDED stated, the retirement record verified. Until then PREDECESSOR_RETIREMENT = NOT_YET.
+  - Mandatory before any forecast-quality claim or directional permission can become reachable (no decision now):
+    the four acceptance blockers (BACKEND_COPY names the fixed live calibration state behind the baseline
+    residual). Two of their texts are partly untrue after the redesign (noted, untouched).
+  - Standing ruling (the owner, 2026-10-15, verbatim above): UCPE execution optimization.
+  - Standing: the H2 hold, F3 KEEP_UNSPENT, Phase 4 INFEASIBLE and D4 consumed; full-data custody (DP-D option 3);
+    DP-D's export limits stay documented and never proven.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-23). Nothing is urgent except the dated JWT renewal. Production
   is D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, and the guard reads it HEALTHY.
   0. Done: the owner's T3 of 2026-10-23. #272 and #273 merged (M5 4e080ec6, M6 bc634f59), the 14 listed branches
      deleted, and this record published last under it.
@@ -8464,7 +8717,11 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-23). Nothing is urgent except
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: 1W's definitions and the v1d data scope, when ready; the dated JWT renewal (by 2026-10-30).
+NEXT_ACTION=The owner: the 1D evaluation's authorization (protocol revision 3), when ready; the dated JWT renewal
+  (by 2026-10-30, with the card). Claude: LOCAL until the next genuine owner boundary; the next safe step is the
+  CHANGELOG entry for #275 on its own branch (its publication is a new T3); if the evaluation is authorized: its
+  tool by Codex, two fresh reviews, a seal, a rehearsal and one run. No push without a T3; no T4.
+  Before it: The owner: 1W's definitions and the v1d data scope, when ready; the dated JWT renewal (by 2026-10-30).
   Claude: the owner's "continue safe T0–T2", LOCAL, until the next genuine owner boundary (first the lane's
   CHANGELOG entry on its own branch; its publication is a new T3); no push without a T3; no T4.
   Before it: The owner: the NGA decisions, when ready; the dated JWT renewal (by 2026-10-30). Claude: the
