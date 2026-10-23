@@ -109,7 +109,8 @@ service-role key.
 ## Afterwards
 
 - **Every 30 days, before the printed expiry:** run step 5 again, and replace the secret
-  `SUPABASE_WRITER_JWT` with the new token. Replace it; never delete it.
+  `SUPABASE_WRITER_JWT` with the new token. Replace it; never delete it. Then clear the clipboard
+  (step 7).
   - An expired token makes every save fail: the receipts turn NOT_SAVED or COMMIT_UNKNOWN, and the
     circuit opens. Analyses are still served.
   - The signing key stays the same.
