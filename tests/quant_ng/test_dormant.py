@@ -108,3 +108,25 @@ def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
             if any(_matches(name, prefix) for prefix in FORBIDDEN):
                 violations.append((str(path.relative_to(ROOT)), name))
     assert violations == []
+
+
+def test_src_does_not_import_quant_ng_fit() -> None:
+    """No product module imports the dormant fit gate.
+
+    This reads import statements only, so a reference through subprocess, runpy or
+    spec_from_file_location would pass it; the inventory row and the T1 tier are what keep the
+    script out of the serving path.
+    """
+    violations = []
+    src = ROOT / "src"
+    for path in src.rglob("*.py"):
+        names = _imported_module_names(
+            path.read_text(encoding="utf-8"), _module_path(path, src)
+        )
+        imports_fit = any(
+            _matches(name, "scripts.quant_ng_fit") or _matches(name, "quant_ng_fit")
+            for name in names
+        )
+        if imports_fit:
+            violations.append(str(path.relative_to(ROOT)))
+    assert violations == []
