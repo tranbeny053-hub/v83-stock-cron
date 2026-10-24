@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-24 - Clearing the clipboard after each writer-token renewal (on main, not released)
+
+It records #280. Nothing in this entry is released.
+
+Changed:
+- #280: `docs/runbooks/WRITER_CUTOVER.md` adds one step to the 30-day renewal advice: after
+  replacing the `SUPABASE_WRITER_JWT` secret with the new token, clear the clipboard (step 7). The
+  renewal card already said so; the runbook's own paragraph did not.
+
+Notes:
+- Documentation only: no code, schema, migration, gate, threshold or runtime behaviour change.
+- The advice itself is unchanged: replace the token, never delete it, and an expired token makes
+  every save fail while analyses are still served.
+
 ## 2026-10-23 - Weekly bars for the daily reference variant, dormant, and the writer runbook's current advice (on main, not released)
 
 It records #275 and #277. Nothing in this entry is released.
