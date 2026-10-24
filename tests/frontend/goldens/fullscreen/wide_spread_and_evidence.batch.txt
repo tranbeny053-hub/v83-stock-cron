@@ -7,8 +7,12 @@ A risk gate is active: Execution cost is too high; Liquidity is not viable. The 
 The risk gates (Execution cost is too high; Liquidity is not viable) are findings about market conditions or execution. They are analysis only, not an instruction.
 Asset · venue
 BTC/USDT · okx
+Reference close (Vietnam)
+2026-06-06 19:00:00 (UTC+07)
 Reference close (UTC)
 2026-06-06T12:00:00Z
+Horizon end (Vietnam)
+2026-06-07 01:00:00 (UTC+07)
 Horizon end (UTC)
 2026-06-06T18:00:00Z
 Data

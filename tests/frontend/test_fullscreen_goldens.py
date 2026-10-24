@@ -22,8 +22,9 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import fullscreen_goldens as goldens
 import pytest
@@ -410,8 +411,25 @@ def test_a_last_digit_of_the_platforms_maths_does_not_change_a_golden(
     )
 
 
-_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[0-9T:.Z+-]*")
+# A UTC instant as the backend sends it, or the Vietnam rendering of one (app.js's
+# formatVietnamTime): the whole rendered string is matched, so a time derived from anything but a
+# fixture instant still fails this test.
+_TIME = re.compile(
+    r"\d{4}-\d{2}-\d{2}(?:\s\d{2}:\d{2}:\d{2}\s\(UTC[+-]\d{2}(?::\d{2})?\)|[0-9T:.Z+-]*)"
+)
 _HASH = re.compile(r"[0-9a-f]{32,}")
+_VIETNAM = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def _vietnam(instant: str) -> str:
+    """The instant as app.js's formatVietnamTime renders it, computed here independently."""
+
+    moment = datetime.strptime(instant, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    local = moment.astimezone(_VIETNAM)
+    offset = local.utcoffset()
+    hours, minutes = divmod(int(offset.total_seconds()) // 60, 60)
+    suffix = f"UTC+{hours:02d}" + (f":{minutes:02d}" if minutes else "")
+    return f"{local:%Y-%m-%d %H:%M:%S} ({suffix})"
 
 
 def test_every_time_on_a_screen_is_the_fixtures_and_no_screen_prints_a_hash(
@@ -424,6 +442,8 @@ def test_every_time_on_a_screen_is_the_fixtures_and_no_screen_prints_a_hash(
         assert time["as_of_utc"] == time["reference_close_utc"] == fixed, scenario
         assert case["as_of_utc"] == fixed, scenario
         allowed = {fixed, time["horizon_end_utc"]}
+        # The same instants as the screens now also show them, in Vietnam time.
+        allowed |= {_vietnam(instant) for instant in tuple(allowed)}
         for surface, texts in surfaces.items():
             shown = {found for text in texts for found in _TIME.findall(text)}
             assert shown and shown <= allowed, (scenario, surface, shown - allowed)

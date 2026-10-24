@@ -27,6 +27,8 @@ from tests.fixtures.market_data import make_snapshot
 ROOT = Path(__file__).resolve().parents[2]
 NODE = shutil.which("node")
 FUNCTIONS = (
+    "vietnamTimeParts",
+    "formatVietnamTime",
     "formatNumber",
     "formatPct",
     "formatFractionPct",
@@ -183,9 +185,11 @@ def test_the_rows_a_user_reads() -> None:
     view = _view()
     banner, ordered, refuses_unknown = _render(view)
     rows = dict(ordered)
-    assert [label for label, _ in ordered][:5] == [
+    assert [label for label, _ in ordered][:7] == [
         "Asset · venue",
+        "Reference close (Vietnam)",
         "Reference close (UTC)",
+        "Horizon end (Vietnam)",
         "Horizon end (UTC)",
         "Data",
         "Storage",
@@ -200,8 +204,19 @@ def test_the_rows_a_user_reads() -> None:
     assert rows["Gate disposition (not a market call)"] == "NO_TRADE"
     assert rows["Reference close (UTC)"] == view["time"]["reference_close_utc"]
     assert rows["Horizon end (UTC)"] == view["time"]["horizon_end_utc"]
+    assert rows["Reference close (Vietnam)"] == _formatted_vietnam(
+        view["time"]["reference_close_utc"]
+    )
+    assert rows["Horizon end (Vietnam)"] == _formatted_vietnam(view["time"]["horizon_end_utc"])
+    labels = [label for label, _ in ordered]
+    assert labels.index("Reference close (Vietnam)") + 1 == labels.index("Reference close (UTC)")
+    assert labels.index("Horizon end (Vietnam)") + 1 == labels.index("Horizon end (UTC)")
     assert rows["Reference close (UTC)"] != view["time"]["as_of_utc"]
     assert refuses_unknown, "a view of an unknown schema version is never rendered"
+
+
+def _formatted_vietnam(value: str) -> str:
+    return _node("console.log(JSON.stringify(formatVietnamTime(value)));", value=value)
 
 
 def test_the_data_row_carries_freshness_and_a_readable_venue() -> None:

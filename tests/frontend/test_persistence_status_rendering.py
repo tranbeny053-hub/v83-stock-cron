@@ -89,6 +89,9 @@ def _rendered_detail_overviews() -> list[list[list[object]]]:
             "decisionDataText",
             "notAssessedByView",
             "acceptedViewOf",
+            # renderStructuredDetail renders the "As of (Vietnam)" row, so its formatters come too.
+            "vietnamTimeParts",
+            "formatVietnamTime",
             "renderStructuredDetail",
         )
     )

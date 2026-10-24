@@ -326,8 +326,67 @@ function startRefreshCooldown() {
   updateRefreshButton();
 }
 
+function vietnamTimeParts(value) {
+  if (value == null || value === "") return null;
+  // An instant, never a wall-clock reading: a string must carry Z or an explicit offset (a bare
+  // YYYY-MM-DD is UTC by the ISO spec), because `new Date("2026-06-06T18:00:00")` is read in the
+  // viewer's own zone and would render hours out beside the UTC value it came from. The patterns
+  // live here, not at the top level, so no caller has to assemble a constant to use this.
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/;
+  const utcDateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof value === "string" && !zoned.test(value) && !utcDateOnly.test(value)) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    // h23 alone, and no hour12: with both set an engine may resolve h24, whose hour 24 belongs to
+    // the PREVIOUS day — rewriting the hour alone would then be a whole day out.
+    hourCycle: "h23",
+    timeZoneName: "shortOffset",
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(parsed).map(({ type, value: part }) => [type, part]),
+  );
+  const offset = parts.timeZoneName.match(/^GMT(?:([+-])(\d{1,2})(?::?(\d{2}))?)?$/);
+  const normalizedOffset = offset
+    ? offset[1]
+      ? `UTC${offset[1]}${offset[2].padStart(2, "0")}${offset[3] ? `:${offset[3]}` : ""}`
+      : "UTC"
+    : parts.timeZoneName.replace(/^GMT/, "UTC");
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+    offset: normalizedOffset,
+  };
+}
+
+function formatVietnamTime(value) {
+  const parts = vietnamTimeParts(value);
+  if (!parts) return String(value ?? "");
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} (${parts.offset})`;
+}
+
+function formatVietnamClock(value) {
+  const parts = vietnamTimeParts(value);
+  if (!parts) return String(value ?? "");
+  return `${parts.hour}:${parts.minute}:${parts.second} (${parts.offset})`;
+}
+
 function markRefreshed(label = "last refreshed") {
-  lastRefreshed.textContent = `${label} at ${new Date().toLocaleTimeString()}`;
+  lastRefreshed.textContent = `${label} at ${formatVietnamClock(new Date())}`;
   startRefreshCooldown();
 }
 
@@ -588,7 +647,12 @@ function decisionViewRows(payload, view) {
       "Asset · venue",
       `${payload.normalized_symbol} · ${VENUE_LABELS[data.venue] || data.venue || "n/a"}`,
     ],
+    [
+      "Reference close (Vietnam)",
+      time.reference_close_utc ? formatVietnamTime(time.reference_close_utc) : "n/a",
+    ],
     ["Reference close (UTC)", time.reference_close_utc || "n/a"],
+    ["Horizon end (Vietnam)", time.horizon_end_utc ? formatVietnamTime(time.horizon_end_utc) : "n/a"],
     ["Horizon end (UTC)", time.horizon_end_utc || "n/a"],
     ["Data", decisionDataText(data)],
     [
@@ -707,7 +771,9 @@ function savedRunRows(payload, saved) {
     ...(saved.venue
       ? [["Asset · venue", `${asset} · ${venue}`]]
       : [["Asset", asset], ["Venue", venue]]),
+    ["Reference close (Vietnam)", savedValue(time.reference_close_utc || null, formatVietnamTime)],
     ["Reference close (UTC)", savedValue(time.reference_close_utc)],
+    ["Horizon end (Vietnam)", savedValue(time.horizon_end_utc || null, formatVietnamTime)],
     ["Horizon end (UTC)", savedValue(time.horizon_end_utc)],
     [
       "In band (inside the decision band)",
@@ -1406,10 +1472,9 @@ async function openDetail(payload) {
 }
 
 function formatRecentTime(value) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value || "Time unavailable")
-    : parsed.toLocaleString();
+  // `new Date(null)` is the epoch, not an invalid date, so a null never reaches the formatter.
+  const parts = value == null ? null : vietnamTimeParts(value);
+  return parts ? formatVietnamTime(value) : String(value || "Time unavailable");
 }
 
 function uniqueRecentValues(runs, key, preferredOrder = null) {
@@ -2329,6 +2394,10 @@ function renderStructuredDetail(payload, detailView) {
         // The same value as the decision view's own row, under the same label.
         [dispositionLabel(view), display.disposition ?? kept.disposition],
         ["Score", display.total_score],
+        [
+          "As of (Vietnam)",
+          payload.as_of_utc ? formatVietnamTime(payload.as_of_utc) : payload.as_of_utc,
+        ],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
         ["Data source", keptValue(saved, display.data_source, kept.data?.data_source)],

@@ -11,8 +11,12 @@ The gates' disposition: hard gates outrank everything shown.
 1H is interpreted as tactical swing bridge; it does not change the underlying probability values.
 Asset · venue
 BTC/USDT · okx
+Reference close (Vietnam)
+2026-06-06 19:00:00 (UTC+07)
 Reference close (UTC)
 2026-06-06T12:00:00Z
+Horizon end (Vietnam)
+2026-06-07 01:00:00 (UTC+07)
 Horizon end (UTC)
 2026-06-06T18:00:00Z
 Data

@@ -7,8 +7,12 @@ Liquidity could not be measured: Analysis is blocked because the order-book data
 Evidence gate: The model has not been evaluated on this timeframe because fewer than 100 resolved outcomes are available. Reported resolved outcomes: 0.
 Asset · venue
 BTC/USDT · okx
+Reference close (Vietnam)
+2026-06-06 19:00:00 (UTC+07)
 Reference close (UTC)
 2026-06-06T12:00:00Z
+Horizon end (Vietnam)
+2026-06-07 01:00:00 (UTC+07)
 Horizon end (UTC)
 2026-06-06T18:00:00Z
 Data
@@ -165,6 +169,8 @@ Gate disposition (not a market call)
 NO_TRADE
 Score
 51
+As of (Vietnam)
+2026-06-06 19:00:00 (UTC+07)
 As of UTC
 2026-06-06T12:00:00Z
 Run ID

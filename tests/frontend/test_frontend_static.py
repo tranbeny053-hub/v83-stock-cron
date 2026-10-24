@@ -897,6 +897,9 @@ def test_watchlist_analysis_context_joins_normalized_symbol_and_preserves_order(
     functions = "\n".join(
         extract_javascript_function(js, name)
         for name in (
+            # formatRecentTime renders Vietnam time, so its formatters come with it.
+            "vietnamTimeParts",
+            "formatVietnamTime",
             "formatRecentTime",
             "recentSourceLabel",
             "latestRunsByNormalizedSymbol",
@@ -1215,14 +1218,18 @@ def _function_text(js: str, name: str) -> str:
 
 
 def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
-    """Plan §14.1-§14.2 (owner rulings DP-A and DP-F): when the backend sends a DecisionView, the
-    card renders it first, in the plan's information order, and recomputes nothing."""
+    """Plan §14.1-§14.2 (owner rulings DP-A and DP-F, scope amended by the owner on
+    2026-10-24 to add a Vietnam-time row immediately before each UTC row): when the backend sends a
+    DecisionView, the card renders it first, in the plan's information order, and recomputes
+    nothing."""
 
     js = read_frontend("app.js")
     rows = _function_text(js, "decisionViewRows")
     order = [
         '"Asset · venue"',
+        '"Reference close (Vietnam)"',
         '"Reference close (UTC)"',
+        '"Horizon end (Vietnam)"',
         '"Horizon end (UTC)"',
         '"Data"',
         '"Storage"',
