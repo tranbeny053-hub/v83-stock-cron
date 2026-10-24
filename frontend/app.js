@@ -328,6 +328,15 @@ function startRefreshCooldown() {
 
 function vietnamTimeParts(value) {
   if (value == null || value === "") return null;
+  // An instant, never a wall-clock reading: a string must carry Z or an explicit offset (a bare
+  // YYYY-MM-DD is UTC by the ISO spec), because `new Date("2026-06-06T18:00:00")` is read in the
+  // viewer's own zone and would render hours out beside the UTC value it came from. The patterns
+  // live here, not at the top level, so no caller has to assemble a constant to use this.
+  const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/;
+  const utcDateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof value === "string" && !zoned.test(value) && !utcDateOnly.test(value)) {
+    return null;
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
 
@@ -638,7 +647,12 @@ function decisionViewRows(payload, view) {
       "Asset · venue",
       `${payload.normalized_symbol} · ${VENUE_LABELS[data.venue] || data.venue || "n/a"}`,
     ],
+    [
+      "Reference close (Vietnam)",
+      time.reference_close_utc ? formatVietnamTime(time.reference_close_utc) : "n/a",
+    ],
     ["Reference close (UTC)", time.reference_close_utc || "n/a"],
+    ["Horizon end (Vietnam)", time.horizon_end_utc ? formatVietnamTime(time.horizon_end_utc) : "n/a"],
     ["Horizon end (UTC)", time.horizon_end_utc || "n/a"],
     ["Data", decisionDataText(data)],
     [
@@ -757,7 +771,9 @@ function savedRunRows(payload, saved) {
     ...(saved.venue
       ? [["Asset · venue", `${asset} · ${venue}`]]
       : [["Asset", asset], ["Venue", venue]]),
+    ["Reference close (Vietnam)", savedValue(time.reference_close_utc || null, formatVietnamTime)],
     ["Reference close (UTC)", savedValue(time.reference_close_utc)],
+    ["Horizon end (Vietnam)", savedValue(time.horizon_end_utc || null, formatVietnamTime)],
     ["Horizon end (UTC)", savedValue(time.horizon_end_utc)],
     [
       "In band (inside the decision band)",
@@ -2378,6 +2394,10 @@ function renderStructuredDetail(payload, detailView) {
         // The same value as the decision view's own row, under the same label.
         [dispositionLabel(view), display.disposition ?? kept.disposition],
         ["Score", display.total_score],
+        [
+          "As of (Vietnam)",
+          payload.as_of_utc ? formatVietnamTime(payload.as_of_utc) : payload.as_of_utc,
+        ],
         ["As of UTC", payload.as_of_utc],
         ["Run ID", payload.run_id],
         ["Data source", keptValue(saved, display.data_source, kept.data?.data_source)],

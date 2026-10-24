@@ -1150,7 +1150,9 @@ EXPLANATION = (
 # The rows of a reopened run's block, in order, under the labels a live analysis uses.
 SAVED_ROWS = (
     "Asset · venue",
+    "Reference close (Vietnam)",
     "Reference close (UTC)",
+    "Horizon end (Vietnam)",
     "Horizon end (UTC)",
     "In band (inside the decision band)",
     "Up (above the band)",
@@ -1276,9 +1278,15 @@ def test_a_reopened_run_has_a_block_of_its_own_and_says_what_it_does_not_store(
     assert shown["Calibration"] == "DEFAULT_PHASE1A"
     assert shown["Reliability"] == "INSUFFICIENT_SAMPLE"
     # What it does not hold: the live analysis had these, and the saved run says they are not kept.
-    for label in ("Reference close (UTC)", "Horizon end (UTC)", "Evidence"):
+    for label in (
+        "Reference close (Vietnam)",
+        "Reference close (UTC)",
+        "Horizon end (Vietnam)",
+        "Horizon end (UTC)",
+        "Evidence",
+    ):
         assert shown[label] == NOT_KEPT and live_shown[label] != NOT_KEPT, (name, label)
-    assert block.count(NOT_KEPT) == 3, name
+    assert block.count(NOT_KEPT) == 5, name
     # The disposition is the gates' own (ABORT under the kill switch), not the brief's action.
     assert shown["Gate disposition (not a market call)"] == live["gate_result"]["action"]
     # The Overview and Gates rows of a reopened run show what its record holds, as the live

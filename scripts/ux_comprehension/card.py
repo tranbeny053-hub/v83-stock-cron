@@ -138,6 +138,9 @@ _FUNCTIONS = (
     "decisionEvidenceText",
     "dispositionLabel",
     "costCaveatRows",
+    # decisionViewRows renders a Vietnam-time row beside each UTC row, so its formatters come too.
+    "vietnamTimeParts",
+    "formatVietnamTime",
     "decisionViewRows",
     "decisionViewOf",
     "gateView",

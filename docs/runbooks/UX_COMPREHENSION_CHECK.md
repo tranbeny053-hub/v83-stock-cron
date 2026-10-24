@@ -70,7 +70,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Saved to Recent Analysis history |
@@ -118,7 +120,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · n/a |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | UNAVAILABLE: Data unavailable. No venue produced valid data for an assessment. |
 | Storage | Save not confirmed: this analysis may be missing from Recent Analysis history after a restart |
@@ -161,7 +165,9 @@ The gates' disposition, with an accepted directional permission for this model a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Saved to Recent Analysis history |
@@ -206,7 +212,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Save not confirmed: this analysis may be missing from Recent Analysis history after a restart |
@@ -253,7 +261,9 @@ The gates' disposition: hard gates outrank everything shown.
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Saved to Recent Analysis history |
@@ -298,7 +308,9 @@ The risk gate (Extreme-move risk is too high) is a finding about market conditio
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Saved to Recent Analysis history |
@@ -346,7 +358,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Save not confirmed: this analysis may be missing from Recent Analysis history after a restart |
@@ -395,7 +409,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Saved to Recent Analysis history |
@@ -442,7 +458,9 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 | Row | Shown |
 | --- | --- |
 | Asset · venue | BTC/USDT · binance |
+| Reference close (Vietnam) | 2026-10-05 19:00:00 (UTC+07) |
 | Reference close (UTC) | 2026-10-05T12:00:00Z |
+| Horizon end (Vietnam) | 2026-10-06 01:00:00 (UTC+07) |
 | Horizon end (UTC) | 2026-10-05T18:00:00Z |
 | Data | OK: Live data. Latest candle 5s old. |
 | Storage | Not retained: no storage is configured |

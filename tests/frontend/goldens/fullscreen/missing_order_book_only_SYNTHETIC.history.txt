@@ -5,7 +5,11 @@ The gates' disposition, not a market call: a gate outcome is not a forecast to a
 Liquidity could not be measured: Analysis is blocked because the order-book data needed to measure liquidity are unavailable. This is missing data, not a finding about the market.
 Asset · venue
 BTC/USDT · okx
+Reference close (Vietnam)
+Not kept in saved history.
 Reference close (UTC)
+Not kept in saved history.
+Horizon end (Vietnam)
 Not kept in saved history.
 Horizon end (UTC)
 Not kept in saved history.
@@ -75,6 +79,8 @@ Gate disposition (not a market call)
 NO_TRADE
 Score
 n/a
+As of (Vietnam)
+2026-06-06 19:00:00 (UTC+07)
 As of UTC
 2026-06-06T12:00:00Z
 Run ID
