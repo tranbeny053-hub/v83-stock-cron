@@ -326,8 +326,58 @@ function startRefreshCooldown() {
   updateRefreshButton();
 }
 
+function vietnamTimeParts(value) {
+  if (value == null || value === "") return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    // h23 alone, and no hour12: with both set an engine may resolve h24, whose hour 24 belongs to
+    // the PREVIOUS day — rewriting the hour alone would then be a whole day out.
+    hourCycle: "h23",
+    timeZoneName: "shortOffset",
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(parsed).map(({ type, value: part }) => [type, part]),
+  );
+  const offset = parts.timeZoneName.match(/^GMT(?:([+-])(\d{1,2})(?::?(\d{2}))?)?$/);
+  const normalizedOffset = offset
+    ? offset[1]
+      ? `UTC${offset[1]}${offset[2].padStart(2, "0")}${offset[3] ? `:${offset[3]}` : ""}`
+      : "UTC"
+    : parts.timeZoneName.replace(/^GMT/, "UTC");
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+    offset: normalizedOffset,
+  };
+}
+
+function formatVietnamTime(value) {
+  const parts = vietnamTimeParts(value);
+  if (!parts) return String(value ?? "");
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second} (${parts.offset})`;
+}
+
+function formatVietnamClock(value) {
+  const parts = vietnamTimeParts(value);
+  if (!parts) return String(value ?? "");
+  return `${parts.hour}:${parts.minute}:${parts.second} (${parts.offset})`;
+}
+
 function markRefreshed(label = "last refreshed") {
-  lastRefreshed.textContent = `${label} at ${new Date().toLocaleTimeString()}`;
+  lastRefreshed.textContent = `${label} at ${formatVietnamClock(new Date())}`;
   startRefreshCooldown();
 }
 
@@ -1406,10 +1456,9 @@ async function openDetail(payload) {
 }
 
 function formatRecentTime(value) {
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value || "Time unavailable")
-    : parsed.toLocaleString();
+  // `new Date(null)` is the epoch, not an invalid date, so a null never reaches the formatter.
+  const parts = value == null ? null : vietnamTimeParts(value);
+  return parts ? formatVietnamTime(value) : String(value || "Time unavailable");
 }
 
 function uniqueRecentValues(runs, key, preferredOrder = null) {

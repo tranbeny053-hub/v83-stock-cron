@@ -897,6 +897,9 @@ def test_watchlist_analysis_context_joins_normalized_symbol_and_preserves_order(
     functions = "\n".join(
         extract_javascript_function(js, name)
         for name in (
+            # formatRecentTime renders Vietnam time, so its formatters come with it.
+            "vietnamTimeParts",
+            "formatVietnamTime",
             "formatRecentTime",
             "recentSourceLabel",
             "latestRunsByNormalizedSymbol",

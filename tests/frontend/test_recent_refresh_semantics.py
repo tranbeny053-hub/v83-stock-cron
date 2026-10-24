@@ -29,6 +29,9 @@ def _refresh_states() -> dict[str, object]:
     functions = "\n".join(
         _extract_function(source, name)
         for name in (
+            # markRefreshed renders the clock in Vietnam time, so its formatters come with it.
+            "vietnamTimeParts",
+            "formatVietnamClock",
             "showPanel",
             "refreshCurrentView",
             "markRefreshed",
