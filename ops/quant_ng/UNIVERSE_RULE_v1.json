@@ -1,0 +1,54 @@
+{
+  "spec_id": "ucpe.quant_ng.universe_rule.v1",
+  "ruled": {
+    "decision": "OD-NG-5(a)",
+    "by": "owner",
+    "date": "2026-10-25",
+    "mode": "synthetic-only"
+  },
+  "venue": "binance-spot",
+  "quote": "USDT",
+  "instrument": "spot",
+  "not_candidates": ["BTCUSDT", "ETHUSDT"],
+  "as_of": {"alignment": "utc_midnight", "closed_bars_only": true},
+  "ranking": {
+    "window_days": 90,
+    "statistic": "median_daily_quote_volume",
+    "tie_break": "symbol_ascending"
+  },
+  "caps": {"15m": 30, "1H": null, "4H": null},
+  "new_listing_min_age_days": 90,
+  "history_window_bars": {"15m": 678, "1H": 678, "4H": 174},
+  "completeness_threshold": null,
+  "governed_span_days": 90,
+  "exclusions": {
+    "verification": "as_of_required",
+    "pegged": ["AEUR", "BUSD", "DAI", "EUR", "EURI", "FDUSD", "TUSD", "USDC", "USDP"],
+    "asset_backed": ["PAXG"],
+    "wrapped": ["BETH", "WBETH", "WBTC"],
+    "leveraged": {"by": "enumeration", "verification_triggers": ["BEAR", "BULL", "DOWN", "UP"]}
+  },
+  "freshness": {
+    "known_not_fresh": [
+      {"symbols": ["ETCUSDT", "LINKUSDT", "LTCUSDT", "TRXUSDT", "XLMUSDT"], "timeframes": ["15m", "1H", "4H"],
+       "state": "spent"},
+      {"symbols": ["ADAUSDT", "BNBUSDT", "DOGEUSDT", "SOLUSDT", "XRPUSDT"], "timeframes": ["15m", "1H"],
+       "state": "spent"},
+      {"symbols": ["ADAUSDT", "BNBUSDT", "DOGEUSDT", "SOLUSDT", "XRPUSDT"], "timeframes": ["4H"],
+       "state": "unspent_unproven"}
+    ],
+    "operating_period": "protective",
+    "unknown": "not_fresh"
+  },
+  "f3": {
+    "calendar_start_utc": "2026-09-21T00:00:00Z",
+    "firewall": "F-C",
+    "firewall_scope": ["artifacts", "constants", "methodology"]
+  },
+  "provenance": {
+    "required": ["available_from_utc", "official_checksum", "revision_history_complete", "revisions", "sha256",
+                 "source"],
+    "unknown": "fail_closed"
+  },
+  "sources_accepted": ["synthetic"]
+}
