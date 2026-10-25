@@ -1,0 +1,802 @@
+#!/usr/bin/env python3
+"""Build synthetic, dormant as-of universe snapshots for OD-NG-5(a).
+
+This tool builds membership snapshots and their input manifest. It does not fetch
+or use real data (OD-NG-5(b)), define a completeness constant (OD-NG-7 item 7.1),
+or produce evaluation rows or outcome accounting. Ruled values live in
+UNIVERSE_RULE_v1.json, pinned by its SHA-256 digest. Plans and evidence follow
+the schemas validated below. Exit codes are 0 for PASS and 2 for REFUSAL. The
+F-C firewall ships an admissibility check requiring a clean methodology and no
+F3-calendar overlap; it does not make F3 judgments.
+
+Plan schema (all keys required; unknown keys are refused)::
+
+    {"plan_id": "ucpe.quant_ng.universe.v1", "as_of_utc": "<ISO-8601 Z, a UTC midnight>",
+     "evidence": {"path": "<file>", "sha256": "<64 lowercase hex>"},
+     "operating_period_start": {"utc": "<ISO-8601 Z or null>", "provenance": "<text or null>"},
+     "completeness": {"threshold": "<synthetic test number>", "ruling": "SYNTHETIC_TEST_ONLY"},
+     "output_dir": "<new or empty folder>"}
+
+Evidence schema::
+
+    {"evidence_id": "ucpe.quant_ng.universe_evidence.v1", "source": "synthetic",
+     "candidates": [{"symbol", "base", "quote", "lineage", "listing",
+                     "daily_quote_volume", "coverage"}],
+     "exclusion_verification": [{"base", "class", "valid_from_utc", "valid_to_utc", "provenance"}],
+     "not_leveraged_verification": [{"base", "valid_from_utc", "valid_to_utc", "provenance"}],
+     "freshness": [{"symbol", "timeframe", "span_start_utc", "span_end_utc",
+                    "state", "provenance"}]}
+
+Each provenance value has source, sha256, official_checksum, available_from_utc,
+revisions, and revision_history_complete. Candidate listing and volume values
+pair their fields with provenance; coverage maps each timeframe to a present bar
+count and provenance.
+
+Rules implemented from OD_NG_5_PART_A_RULED.md §2:
+B1 — verified as-of exclusions and leveraged-token trigger verification.
+B2 — known freshness states and freshness evidence precedence.
+B3 — operating-period protection and unknown when its start is absent.
+B4 — calendar-overlap and methodology firewall stamping.
+B5 — historical availability and revision provenance checks.
+B6 — synthetic-only completeness threshold requirement.
+B7 — top-30 undecidability and the contenders that actually block it.
+B8 — refusal of membership bars and listing dates at or after T.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import math
+import re
+import sys
+from datetime import datetime, timedelta
+from decimal import Context, Decimal, Inexact, InvalidOperation, Rounded, localcontext
+from pathlib import Path
+from typing import Any
+
+UNIVERSE_RULE_V1_SHA256 = "1f81113bb00983a17fa5924569c30a9982efac83676f9495c106cd5bf3cfbb39"
+_FIT_SPEC = importlib.util.spec_from_file_location(
+    "quant_ng_fit", Path(__file__).with_name("quant_ng_fit.py")
+)
+if _FIT_SPEC is None or _FIT_SPEC.loader is None:
+    raise RuntimeError("cannot load fit helper")
+_FIT = importlib.util.module_from_spec(_FIT_SPEC)
+sys.modules["quant_ng_fit"] = _FIT
+_PREVIOUS_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
+try:
+    _FIT_SPEC.loader.exec_module(_FIT)
+finally:
+    sys.dont_write_bytecode = _PREVIOUS_BYTECODE
+
+Refusal = _FIT.Refusal
+_path = _FIT._path
+_no_duplicate_keys = _FIT._no_duplicate_keys
+_json_bytes = _FIT._json_bytes
+create_readonly = _FIT.create_readonly
+install_guard = _FIT.install_guard
+_make_output = _FIT._make_output
+_unwind = _FIT._unwind
+PROTECTED = _FIT.PROTECTED
+FORBIDDEN_TREES = _FIT.FORBIDDEN_TREES
+_OUTPUT_HOLDER: list[Path | None] = [None]
+
+PLAN_KEYS = {
+    "plan_id",
+    "as_of_utc",
+    "evidence",
+    "operating_period_start",
+    "completeness",
+    "output_dir",
+}
+PROV_KEYS = {
+    "source",
+    "sha256",
+    "official_checksum",
+    "available_from_utc",
+    "revisions",
+    "revision_history_complete",
+}
+HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+# A base asset is upper-case letters and digits only, and a symbol is exactly its base followed by
+# the ruled quote. Anything else — lower case, padding, a declared base that is not the symbol's —
+# is refused, because every rule below (the reserved symbols, the exclusion lists, the known cells)
+# matches on these strings exactly, and a non-canonical spelling would slip past all of them.
+BASE_RE = re.compile(r"^[A-Z0-9]+$")
+# A volume is a plain non-negative decimal string: no JSON number (a binary float), no sign, no
+# exponent, no underscore or padding.
+VOLUME_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)?$")
+# Medians and thresholds are computed exactly: any rounding raises, and is refused.
+EXACT = Context(prec=1000, traps=[Inexact, Rounded, InvalidOperation])
+
+
+def instant(value: Any) -> datetime:
+    try:
+        return _FIT._instant(value)
+    except Refusal as exc:
+        raise Refusal("malformed instant") from exc
+
+
+def load_rule(path: Path) -> dict[str, Any]:
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise Refusal("rule unreadable") from exc
+    if hashlib.sha256(raw).hexdigest() != UNIVERSE_RULE_V1_SHA256:
+        raise Refusal("rule digest mismatch")
+    try:
+        parsed = json.loads(raw, object_pairs_hook=_no_duplicate_keys)
+    except (ValueError, UnicodeError) as exc:
+        raise Refusal("rule malformed") from exc
+    if not isinstance(parsed, dict):
+        raise Refusal("rule malformed")
+    return parsed
+
+
+def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
+    # The synthetic-only gate comes first, so a non-synthetic record is refused even when it is
+    # also malformed, instead of being quietly treated as unknown.
+    if isinstance(raw, dict) and "source" in raw and raw["source"] != "synthetic":
+        raise Refusal("source must be synthetic")
+    if not isinstance(raw, dict) or set(raw) != PROV_KEYS:
+        return False, {}
+    sha = raw.get("sha256")
+    official = raw.get("official_checksum")
+    if (
+        not isinstance(sha, str)
+        or not HEX_RE.fullmatch(sha)
+        or not isinstance(official, str)
+        or not HEX_RE.fullmatch(official)
+    ):
+        return False, {}
+    try:
+        available = instant(raw.get("available_from_utc"))
+    except Refusal:
+        return False, {}
+    revisions = raw.get("revisions")
+    if not isinstance(revisions, list) or raw.get("revision_history_complete") is not True:
+        return False, {}
+    checked = []
+    for item in revisions:
+        if not isinstance(item, dict) or set(item) != {"sha256", "available_from_utc"}:
+            return False, {}
+        digest = item.get("sha256")
+        if not isinstance(digest, str) or not HEX_RE.fullmatch(digest):
+            return False, {}
+        try:
+            date = instant(item.get("available_from_utc"))
+        except Refusal:
+            return False, {}
+        checked.append((date, digest))
+    if not any(digest == sha and date == available for date, digest in checked):
+        return False, {}
+    current = [entry for entry in checked if entry[0] <= cutoff]
+    # The revision current at T is the latest one available at or before T. Two different digests
+    # published at that same instant leave no single current revision, so the record is unknown.
+    latest = max((date for date, _ in current), default=None)
+    at_latest = {digest for date, digest in current if date == latest}
+    usable = sha == official and at_latest == {sha} and available <= cutoff
+    return usable, {"sha256": sha, "available_from_utc": raw["available_from_utc"]}
+
+
+def _canonical_symbol(symbol: Any, quote: str) -> bool:
+    return (
+        isinstance(symbol, str)
+        and symbol.endswith(quote)
+        and bool(BASE_RE.fullmatch(symbol[: -len(quote)]))
+    )
+
+
+def _volume_key(record: dict[str, Any]) -> tuple[Decimal, str]:
+    """Rank by median volume descending, then symbol ascending. `copy_negate` is exact; a unary
+    minus would round in the default 28-digit context and could reorder two large medians."""
+
+    return Decimal(record["median_daily_quote_volume"]).copy_negate(), record["symbol"]
+
+
+def _span_covers(start: datetime, end: datetime | None, at: datetime) -> bool:
+    return start <= at and (end is None or at < end)
+
+
+def _prov_entries(
+    raw: Any, cutoff: datetime, expected: set[str]
+) -> list[tuple[dict[str, Any], bool]]:
+    if not isinstance(raw, list):
+        raise Refusal("malformed verification list")
+    out = []
+    for item in raw:
+        if not isinstance(item, dict) or set(item) != expected:
+            raise Refusal("malformed verification entry")
+        usable, _ = _prov(item.get("provenance"), cutoff)
+        start = instant(item.get("valid_from_utc"))
+        end = None if item.get("valid_to_utc") is None else instant(item["valid_to_utc"])
+        if end is not None and end <= start:
+            raise Refusal("malformed verification span")
+        out.append((item, usable and _span_covers(start, end, cutoff)))
+    return out
+
+
+def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list[dict[str, Any]]:
+    if not isinstance(bundle, dict) or set(bundle) != {
+        "evidence_id",
+        "source",
+        "candidates",
+        "exclusion_verification",
+        "not_leveraged_verification",
+        "freshness",
+    }:
+        raise Refusal("malformed evidence")
+    if (
+        bundle.get("evidence_id") != "ucpe.quant_ng.universe_evidence.v1"
+        or bundle.get("source") != "synthetic"
+    ):
+        raise Refusal("source must be synthetic")
+    if not all(
+        isinstance(bundle.get(k), list)
+        for k in ("candidates", "exclusion_verification", "not_leveraged_verification", "freshness")
+    ):
+        raise Refusal("malformed evidence")
+    exclusions = _prov_entries(
+        bundle["exclusion_verification"],
+        cutoff,
+        {"base", "class", "valid_from_utc", "valid_to_utc", "provenance"},
+    )
+    not_lev = _prov_entries(
+        bundle["not_leveraged_verification"],
+        cutoff,
+        {"base", "valid_from_utc", "valid_to_utc", "provenance"},
+    )
+    for item, _ in exclusions:
+        if (
+            not isinstance(item["base"], str)
+            or not BASE_RE.fullmatch(item["base"])
+            or item["class"] not in {"pegged", "asset_backed", "wrapped", "leveraged"}
+        ):
+            raise Refusal("malformed exclusion verification")
+    for item, _ in not_lev:
+        if not isinstance(item["base"], str) or not BASE_RE.fullmatch(item["base"]):
+            raise Refusal("malformed not-leveraged verification")
+    tf_names = tuple(rule["history_window_bars"])
+    rows = []
+    seen = set()
+    for c in bundle["candidates"]:
+        if not isinstance(c, dict) or set(c) != {
+            "symbol",
+            "base",
+            "quote",
+            "lineage",
+            "listing",
+            "daily_quote_volume",
+            "coverage",
+        }:
+            raise Refusal("malformed candidate")
+        symbol, base = c["symbol"], c["base"]
+        if not isinstance(base, str) or not BASE_RE.fullmatch(base):
+            raise Refusal("non-canonical base")
+        if c["quote"] != rule["quote"]:
+            raise Refusal("quote mismatch")
+        if base == rule["quote"] or symbol != base + rule["quote"]:
+            raise Refusal("non-canonical symbol")
+        if symbol in seen:
+            raise Refusal("duplicate or malformed symbol")
+        if c["lineage"] is not None and (
+            not isinstance(c["lineage"], str) or not BASE_RE.fullmatch(c["lineage"])
+        ):
+            raise Refusal("malformed lineage")
+        seen.add(symbol)
+        if symbol in rule["not_candidates"]:
+            raise Refusal("not a candidate")
+        listing, volume = c["listing"], c["daily_quote_volume"]
+        if (
+            not isinstance(listing, dict)
+            or set(listing) != {"first_daily_bar_open_utc", "provenance"}
+            or not isinstance(volume, dict)
+            or set(volume) != {"bars", "provenance"}
+        ):
+            raise Refusal("malformed listing or volume")
+        first = instant(listing["first_daily_bar_open_utc"])
+        if first.hour or first.minute or first.second or first.microsecond:
+            raise Refusal("listing date is not UTC midnight")
+        if first >= cutoff:
+            raise Refusal("evidence date at or after T")
+        lu, lp = _prov(listing["provenance"], cutoff)
+        vu, vp = _prov(volume["provenance"], cutoff)
+        bars = volume["bars"]
+        if not isinstance(bars, list):
+            raise Refusal("malformed daily bars")
+        parsed_bars = []
+        for bar in bars:
+            if not isinstance(bar, dict) or set(bar) != {"open_utc", "quote_volume"}:
+                raise Refusal("malformed daily bar")
+            dt = instant(bar["open_utc"])
+            if dt.hour or dt.minute or dt.second or dt.microsecond:
+                raise Refusal("daily bar is not UTC midnight")
+            if dt >= cutoff:
+                raise Refusal("daily bar at or after T")
+            raw_volume = bar["quote_volume"]
+            if not isinstance(raw_volume, str) or not VOLUME_RE.fullmatch(raw_volume):
+                raise Refusal("malformed volume")
+            number = Decimal(raw_volume)
+            parsed_bars.append((dt, number))
+        if len({x[0] for x in parsed_bars}) != len(parsed_bars):
+            raise Refusal("duplicate daily bar")
+        coverage = c["coverage"]
+        if not isinstance(coverage, dict) or set(coverage) != set(tf_names):
+            raise Refusal("malformed coverage")
+        cov = {}
+        for tf in tf_names:
+            cell = coverage[tf]
+            if not isinstance(cell, dict) or set(cell) != {"present_in_window", "provenance"}:
+                raise Refusal("malformed coverage")
+            count = cell["present_in_window"]
+            if (
+                isinstance(count, bool)
+                or not isinstance(count, int)
+                or count < 0
+                or count > rule["history_window_bars"][tf]
+            ):
+                raise Refusal("invalid coverage count")
+            usable, prov = _prov(cell["provenance"], cutoff)
+            cov[tf] = {"count": count, "usable": usable, "input": prov}
+        rows.append(
+            {
+                "symbol": symbol,
+                "base": base,
+                "lineage": c["lineage"],
+                "first": first,
+                "listing_usable": lu,
+                "volume_usable": vu,
+                "bars": parsed_bars,
+                "coverage": cov,
+                "listing_input": lp,
+                "volume_input": vp,
+                "exclusions": exclusions,
+                "not_lev": not_lev,
+            }
+        )
+    return rows
+
+
+def _median(values: list[Decimal]) -> Decimal | None:
+    if not values:
+        return None
+    vals = sorted(values)
+    mid = len(vals) // 2
+    if len(vals) % 2:
+        return vals[mid]
+    try:
+        with localcontext(EXACT):
+            return (vals[mid - 1] + vals[mid]) / Decimal(2)
+    except (Inexact, Rounded) as exc:
+        raise Refusal("volume beyond exact precision") from exc
+
+
+def _exact_product(a: Decimal, b: Decimal) -> Decimal:
+    with localcontext(EXACT):
+        return a * b
+
+
+def _decimal_string(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return format(value, "f")
+
+
+def _freshness(
+    bundle: dict[str, Any],
+    row: dict[str, Any],
+    tf: str,
+    start: datetime,
+    end: datetime,
+    operating: datetime | None,
+    rule: dict[str, Any],
+    cutoff: datetime,
+) -> str:
+    known = rule["freshness"]["known_not_fresh"]
+    for entry in known:
+        if row["symbol"] in entry["symbols"] and tf in entry["timeframes"]:
+            return entry["state"]
+    if operating is None:
+        return "unknown"
+    if start < end and end > operating:
+        return "operating_period"
+    overlapping = []
+    for item in bundle["freshness"]:
+        if not isinstance(item, dict) or set(item) != {
+            "symbol",
+            "timeframe",
+            "span_start_utc",
+            "span_end_utc",
+            "state",
+            "provenance",
+        }:
+            raise Refusal("malformed freshness entry")
+        usable, _ = _prov(item["provenance"], cutoff)
+        a, b = instant(item["span_start_utc"]), instant(item["span_end_utc"])
+        if b <= a:
+            raise Refusal("malformed freshness span")
+        if (
+            item["state"] not in {"fresh", "spent", "unspent_unproven"}
+            or not _canonical_symbol(item["symbol"], rule["quote"])
+            or item["timeframe"] not in rule["history_window_bars"]
+        ):
+            raise Refusal("malformed freshness state")
+        overlaps = a < end and b > start
+        if item["symbol"] == row["symbol"] and item["timeframe"] == tf and overlaps:
+            overlapping.append((item, usable, a, b))
+    for state in ("spent", "unspent_unproven"):
+        if any(usable and item["state"] == state for item, usable, _, _ in overlapping):
+            return state
+    if any(not usable for _, usable, _, _ in overlapping):
+        return "unknown"
+    if any(item["state"] == "fresh" and a <= start and b >= end for item, _, a, b in overlapping):
+        return "fresh"
+    return "unknown"
+
+
+def f3_judgment_admissible(snapshot: dict[str, Any]) -> bool:
+    return (
+        snapshot.get("f3_firewall") == "F-C"
+        and snapshot.get("f3_calendar_overlap") is False
+        and isinstance(snapshot.get("methodology"), dict)
+        and snapshot["methodology"].get("f3_clean") is True
+    )
+
+
+def build(
+    plan: dict[str, Any],
+    evidence: dict[str, Any],
+    rule: dict[str, Any],
+    evidence_sha: str,
+    tool_sha: str,
+) -> dict[str, Any]:
+    cutoff = instant(plan["as_of_utc"])
+    threshold = plan["completeness"]["threshold"]
+    operating_raw = plan["operating_period_start"]["utc"]
+    operating = None if operating_raw is None else instant(operating_raw)
+    candidates = _candidate_rows(evidence, rule, cutoff)
+    for item in evidence["freshness"]:
+        if not isinstance(item, dict) or set(item) != {
+            "symbol",
+            "timeframe",
+            "span_start_utc",
+            "span_end_utc",
+            "state",
+            "provenance",
+        }:
+            raise Refusal("malformed freshness entry")
+        span_start = instant(item["span_start_utc"])
+        span_end = instant(item["span_end_utc"])
+        _prov(item["provenance"], cutoff)
+        if (
+            not _canonical_symbol(item["symbol"], rule["quote"])
+            or item["timeframe"] not in rule["history_window_bars"]
+            or item["state"] not in {"fresh", "spent", "unspent_unproven"}
+            or span_end <= span_start
+        ):
+            raise Refusal("malformed freshness entry")
+        # Evidence may restate a known cell's state, but never contradict it: a known cell marked
+        # with any other state is refused, not only one marked fresh.
+        if any(
+            item["symbol"] in known["symbols"]
+            and item["timeframe"] in known["timeframes"]
+            and item["state"] != known["state"]
+            for known in rule["freshness"]["known_not_fresh"]
+        ):
+            raise Refusal("freshness contradicts known_not_fresh")
+    inputs: dict[str, dict[str, str]] = {}
+    new_listings, excluded, not_admitted = [], [], []
+    records = []
+    for index, item in enumerate(evidence["exclusion_verification"]):
+        _, metadata = _prov(item.get("provenance"), cutoff)
+        if metadata:
+            inputs[f"exclusion:{index}"] = metadata
+    for index, item in enumerate(evidence["not_leveraged_verification"]):
+        _, metadata = _prov(item.get("provenance"), cutoff)
+        if metadata:
+            inputs[f"not_leveraged:{index}"] = metadata
+    for index, item in enumerate(evidence["freshness"]):
+        _, metadata = _prov(item.get("provenance"), cutoff)
+        if metadata:
+            inputs[f"freshness:{index}"] = metadata
+    for row in candidates:
+        symbol, base = row["symbol"], row["base"]
+        for name in ("listing_input", "volume_input"):
+            if row[name]:
+                inputs[f"{symbol}:{name}"] = row[name]
+        for tf, cell in row["coverage"].items():
+            if cell["input"]:
+                inputs[f"{symbol}:coverage:{tf}"] = cell["input"]
+        labels = rule["exclusions"]
+        class_found = next(
+            (cl for cl in ("pegged", "asset_backed", "wrapped") if base in labels[cl]), None
+        )
+        covering = [(e, ok) for e, ok in row["exclusions"] if e["base"] == base and ok]
+        lev_cover = any(
+            e["base"] == base and e["class"] == "leveraged" and ok for e, ok in row["exclusions"]
+        )
+        nl_cover = any(e["base"] == base and ok for e, ok in row["not_lev"])
+        terminal_reason = None
+        if class_found:
+            if any(e["class"] == class_found for e, _ in covering):
+                excluded.append({"symbol": symbol, "class": class_found})
+                terminal_reason = f"excluded:{class_found}"
+                excluded_state = None
+            else:
+                excluded_state = "exclusion_unverified"
+        elif lev_cover:
+            excluded.append({"symbol": symbol, "class": "leveraged"})
+            terminal_reason = "excluded:leveraged"
+            excluded_state = None
+        elif (
+            any(base.endswith(suffix) for suffix in labels["leveraged"]["verification_triggers"])
+            and not nl_cover
+        ):
+            excluded_state = "exclusion_unverified"
+        else:
+            excluded_state = None
+        age_days = (cutoff - row["first"]).days
+        if (
+            terminal_reason is None
+            and row["listing_usable"]
+            and age_days < rule["new_listing_min_age_days"]
+        ):
+            new_listings.append({"symbol": symbol, "age_days": age_days})
+            terminal_reason = "new_listing"
+        bars = [
+            v
+            for dt, v in row["bars"]
+            if cutoff - timedelta(days=rule["ranking"]["window_days"]) <= dt < cutoff
+        ]
+        completeness_1d = Decimal(len(bars))
+        window_days = Decimal(rule["ranking"]["window_days"])
+        threshold_decimal = Decimal(str(threshold))
+        median = _median(bars) if row["volume_usable"] else None
+        statuses = {}
+        for tf, cell in row["coverage"].items():
+            reason = None
+            if terminal_reason:
+                reason = terminal_reason
+            elif row["volume_usable"] and completeness_1d < _exact_product(
+                threshold_decimal, window_days
+            ):
+                reason = "incomplete_1d"
+            elif cell["usable"] and Decimal(cell["count"]) < _exact_product(
+                threshold_decimal, Decimal(rule["history_window_bars"][tf])
+            ):
+                reason = f"incomplete_{tf}"
+            elif not row["listing_usable"] or not row["volume_usable"] or not cell["usable"]:
+                reason = "provenance_unknown"
+            elif excluded_state:
+                reason = excluded_state
+            statuses[tf] = {
+                "status": "member" if reason is None else f"not_admitted: {reason}",
+                "reason": reason,
+            }
+            if reason:
+                not_admitted.append({"symbol": symbol, "reason": reason, "timeframe": tf})
+        records.append(
+            {
+                "symbol": symbol,
+                "listing": {
+                    "first_daily_bar_open_utc": row["first"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                },
+                "median_daily_quote_volume": _decimal_string(median),
+                "rank_15m": None,
+                "lineage": row["lineage"],
+                "timeframes": statuses,
+                "freshness": {},
+            }
+        )
+    by_symbol = {r["symbol"]: r for r in records}
+    cap = rule["caps"]["15m"]
+    eligible = [r for r in records if r["timeframes"]["15m"]["reason"] is None]
+    eligible.sort(key=_volume_key)
+    for rank, rec in enumerate(eligible, 1):
+        rec["rank_15m"] = rank
+    unknown = [
+        r
+        for r in records
+        if r["timeframes"]["15m"]["reason"] in {"provenance_unknown", "exclusion_unverified"}
+    ]
+    cutoff_key = (
+        _volume_key(eligible[cap - 1])
+        if len(eligible) >= cap
+        else None
+    )
+    undecidable = any(
+        r["median_daily_quote_volume"] is None
+        or cutoff_key is None
+        or _volume_key(r) < cutoff_key
+        for r in unknown
+    )
+    blocking = [
+        r["symbol"]
+        for r in unknown
+        if r["median_daily_quote_volume"] is None
+        or cutoff_key is None
+        or _volume_key(r) < cutoff_key
+    ]
+    m15 = [] if undecidable else [r["symbol"] for r in eligible[:cap]]
+    if not undecidable:
+        for rec in eligible[cap:]:
+            rec["timeframes"]["15m"] = {"status": "not_admitted: cap", "reason": "cap"}
+            not_admitted.append({"symbol": rec["symbol"], "reason": "cap", "timeframe": "15m"})
+    else:
+        for rec in eligible:
+            rec["rank_15m"] = None
+            rec["timeframes"]["15m"] = {"status": "undecidable", "reason": "top_n_undecidable"}
+    members = {
+        "15m": {
+            "status": "UNDECIDABLE" if undecidable else "DECIDED",
+            "symbols": sorted(m15),
+            **({"blocking": sorted(blocking)} if undecidable else {}),
+        },
+        "1H": {
+            "status": "DECIDED",
+            "symbols": sorted(
+                r["symbol"] for r in records if r["timeframes"]["1H"]["reason"] is None
+            ),
+        },
+        "4H": {
+            "status": "DECIDED",
+            "symbols": sorted(
+                r["symbol"] for r in records if r["timeframes"]["4H"]["reason"] is None
+            ),
+        },
+    }
+    span_end = cutoff + timedelta(days=rule["governed_span_days"])
+    for tf, group in members.items():
+        if tf == "15m" and group["status"] == "UNDECIDABLE":
+            continue
+        for sym in group["symbols"]:
+            rec = by_symbol[sym]
+            rec["freshness"][tf] = _freshness(
+                evidence,
+                next(c for c in candidates if c["symbol"] == sym),
+                tf,
+                cutoff,
+                span_end,
+                operating,
+                rule,
+                cutoff,
+            )
+    f3 = instant(rule["f3"]["calendar_start_utc"])
+
+    overlap = (
+        span_end > f3
+        or any(
+            dt >= f3 and cutoff - timedelta(days=rule["ranking"]["window_days"]) <= dt < cutoff
+            for row in candidates
+            for dt, _ in row["bars"]
+        )
+        or any(row["first"] >= f3 for row in candidates)
+    )
+    return {
+        "snapshot_id": "ucpe.universe.asof.v2",
+        "status": "SYNTHETIC",
+        "as_of_utc": plan["as_of_utc"],
+        "rule_sha256": UNIVERSE_RULE_V1_SHA256,
+        "evidence_sha256": evidence_sha,
+        "tool_sha256": tool_sha,
+        "ruling": {
+            "R1": rule["ranking"]["window_days"],
+            "R2": rule["caps"]["15m"],
+            "R3": {tf: rule["caps"][tf] for tf in ("1H", "4H")},
+            "R4": rule["exclusions"],
+            "R5": rule["freshness"]["known_not_fresh"],
+            "R6": rule["freshness"]["operating_period"],
+            "R7": rule["f3"]["firewall"],
+        },
+        "completeness": plan["completeness"],
+        "operating_period_start": plan["operating_period_start"],
+        "f3_firewall": rule["f3"]["firewall"],
+        "f3_calendar_overlap": overlap,
+        "methodology": {
+            "rule_sha256": UNIVERSE_RULE_V1_SHA256,
+            "tool_sha256": tool_sha,
+            "f3_clean": True,
+            "basis": (
+                "ruled 2026-10-25 by the owner from documents only; "
+                "this tool reads synthetic evidence only"
+            ),
+        },
+        "members": members,
+        "symbols": records,
+        "new_listings": new_listings,
+        "excluded": excluded,
+        "not_admitted": not_admitted,
+        "inputs": inputs,
+    }
+
+
+def run(plan_arg: str) -> dict[str, Any]:
+    plan_path = _path(plan_arg)
+    raw, plan = _json_bytes(plan_path, "plan unreadable")
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != PLAN_KEYS
+        or plan.get("plan_id") != "ucpe.quant_ng.universe.v1"
+    ):
+        raise Refusal("invalid plan")
+    cutoff = instant(plan["as_of_utc"])
+    if any((cutoff.hour, cutoff.minute, cutoff.second, cutoff.microsecond)):
+        raise Refusal("as_of_utc must be UTC midnight")
+    ev = plan["evidence"]
+    if (
+        not isinstance(ev, dict)
+        or set(ev) != {"path", "sha256"}
+        or not isinstance(ev["sha256"], str)
+        or not HEX_RE.fullmatch(ev["sha256"])
+    ):
+        raise Refusal("malformed evidence pin")
+    evidence_path = _path(ev["path"])
+    evidence_bytes, evidence = _json_bytes(evidence_path, "evidence unreadable")
+    evidence_sha = hashlib.sha256(evidence_bytes).hexdigest()
+    if evidence_sha != ev["sha256"]:
+        raise Refusal("evidence digest mismatch")
+    op = plan["operating_period_start"]
+    if not isinstance(op, dict) or set(op) != {"utc", "provenance"}:
+        raise Refusal("malformed operating period")
+    if op["utc"] is None:
+        if op["provenance"] is not None:
+            raise Refusal("malformed operating period")
+    else:
+        instant(op["utc"])
+        if not isinstance(op["provenance"], str) or not op["provenance"].strip():
+            raise Refusal("operating period provenance required")
+    comp = plan["completeness"]
+    if not isinstance(comp, dict) or set(comp) != {"threshold", "ruling"}:
+        raise Refusal("malformed completeness")
+    if comp["threshold"] is None:
+        raise Refusal("completeness threshold unruled: OD-NG-7 item 7.1")
+    if (
+        isinstance(comp["threshold"], bool)
+        or not isinstance(comp["threshold"], (int, float))
+        or not math.isfinite(comp["threshold"])
+        or not 0 < comp["threshold"] <= 1
+    ):
+        raise Refusal("invalid completeness threshold")
+    if comp["ruling"] != "SYNTHETIC_TEST_ONLY":
+        raise Refusal("completeness threshold requires SYNTHETIC_TEST_ONLY")
+    output = _path(plan["output_dir"])
+    _OUTPUT_HOLDER[0] = output
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise Refusal("output folder is not empty")
+    root = Path(__file__).resolve().parents[1]
+    rule = load_rule(root / "ops/quant_ng/UNIVERSE_RULE_v1.json")
+    tool_sha = hashlib.sha256(Path(__file__).resolve().read_bytes()).hexdigest()
+    snapshot = build(plan, evidence, rule, evidence_sha, tool_sha)
+    payload = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    created = _make_output(output)
+    try:
+        create_readonly(output / "UNIVERSE_SNAPSHOT.json", payload.encode())
+    except BaseException:
+        _unwind(created)
+        raise
+    return {
+        "status": "PASS",
+        "artifact": str(output / "UNIVERSE_SNAPSHOT.json"),
+        "artifact_sha256": hashlib.sha256(payload.encode()).hexdigest(),
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("plan")
+    install_guard(_OUTPUT_HOLDER)
+    try:
+        result = run(parser.parse_args(argv).plan)
+    except BaseException as exc:
+        reason = str(exc) if isinstance(exc, Refusal) else f"run failed: {type(exc).__name__}"
+        print(json.dumps({"status": "REFUSAL", "reason": reason}, separators=(",", ":")))
+        return 2
+    print(json.dumps(result, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
