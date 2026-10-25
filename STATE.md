@@ -1,114 +1,114 @@
 # STATE
 
-Updated: 2026-10-24 (**THE WRITER TOKEN IS RENEWED (NEW EXPIRY 2026-11-23; NEXT RENEWAL DUE BY 2026-11-20). B-NG2's
-FIRST PIECE IS ON MAIN, DORMANT: THE FIT TOOL'S PRECONDITION GATE, WITH NO ESTIMATOR, NO UNIVERSE RULE AND NO
-REAL-DATA MODE. THE CHANGELOG RECORDS #280. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE
-RERUN. NGA IS STILL PROPOSED, NOT ADOPTED. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO
-FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), in order: the T3 that published the previous record; then "verify M14/#281; correct
-  stale LOOP_STATE …; exhaust decision-independent, synthetic-only B-NG2 T0–T2 … batch CHANGELOG #280"; then the
-  writer-token renewal with its new expiry.
-- **M14 / #281 VERIFIED** (the previous record's publication, read-only): local main = refs/remotes/origin/main = the
-  remote's main = bfbc5bb217fc4c2477b604412fa34bae7cf23661; tree 330ad813; parents d05ca6c7 and 34fe44e5; STATE.md
-  only, +178/−158; the checkout clean; PR #281 MERGED at 2026-10-24T04:46:45Z with head 34fe44e5 and base d05ca6c7;
-  4 of 4 checks on that head (CI 40063256980, 7967 passed; build 40063257087) and main's two push runs green
-  (CI 40063686956, 7967 passed; build 40063686990), with the scheduled Runtime Source Integrity Guard 40063969280
-  also green. Record:
-  .work/v1d_1w_20261023/T3_EXECUTION_STATE_1D_EVAL.md. Local main became M14 at 2026-10-24T04:59:08Z (the
-  fast-forward; the merge commit's own time is 04:46:44Z), and the UOR peer was given all three timestamps for its
-  entry 34.
-- **THE WRITER TOKEN (no production change, no credential seen):** the owner renewed `SUPABASE_WRITER_JWT` on
-  2026-10-24; the new expiry is **2026-11-23**, so the **next renewal is due by 2026-11-20** (the card's standing
-  three-day margin). The card is revision 3 (revision 2 kept). Claude never sees the token. Persistence will be
-  confirmed **passively**, from the next genuine USER_REQUESTED save's receipt: no smoke traffic was generated and
-  none will be. Until such a save appears, the renewal is recorded as reported by the owner and not independently
-  confirmed.
-- **PUBLISHED IN THIS BATCH, each with the exact head, a byte-identical diff, 4 of 4 checks on that head, a merge
-  commit after a drift check and main's push runs green:** #282 -> **M15 6dd705dd656d8602a64a3c3afb0e2b4b2de56236**
-  (the CHANGELOG; head 47309ca5, tree 166ab54e, mergedAt 2026-10-24T06:10:04Z; CI 40068671355 with 7967 passed,
-  build 40068671362; main's push runs CI 40069119455 and build 40069119458) and #283 -> **M16
-  be53b55ca6d181132f0036dd9b89c2f4af429192** (B-NG2; head 79726997, tree 6c011ee9, mergedAt 06:18:24Z; CI
-  40069305383 with **8006 passed, equal to the local exact-head gate**, build 40069305391; main's push runs CI
-  40069681482 and build 40069681516). M16's expected merge tree was computed independently
-  (`git merge-tree --write-tree M15 79726997`), because once main advances a merge tree is no longer the branch's
-  tree and the check would otherwise be vacuous. Record: .work/bng2_20261024/T3_PACKAGE_BATCH_20261024.md.
-- **B-NG2 PART 1 (T1, dormant; M16 be53b55c):** `scripts/quant_ng_fit.py` with `tests/scripts/test_quant_ng_fit.py`, one
-  dormancy test and one inventory row — the only part of B-NG2 that depends on no open decision. Before any future
-  fit may run it proves the rows are admissible: it refuses a corpus whose rows mature at or after the plan's cutoff,
-  refuses any row overlapping a consumed span, refuses network, process events and any file write or filesystem
-  change outside its output folder, and writes one read-only `ARTIFACT.json` whose bytes repeat exactly on a rerun.
-  Every input is pinned by digest, a path may never be a symlink or carry a protected name, and the two consumed
-  one-shot output folders and both research trees are refused by name.
-  - **Deliberately absent, with the decision status stated exactly:** no estimator and no fitted constant — OD-NG-2
-    is ruled **DEFER**, so Option B is not built, and OD-NG-7 is **not ruled** (no constant approved); no universe
-    membership rule and no archive fetch — OD-NG-5 is **not ruled** (no universe fetch). There is no real-data mode
-    and no flag that could create one. The tool's own artifact string says "pending OD-NG-2 and OD-NG-7", which is
-    loose about OD-NG-2 being ruled DEFER; the behaviour is right either way and the published bytes are left alone.
-  - **Deliberately not built, as it would be hollow today:** `research/ng_scale/` "with its own lock" (there is no
-    archived code to lock: the research code is git-ignored scratch and publishing it is unauthorized) and
-    `.github/workflows/ng-fixture-rebuild.yml` (enabling a workflow is T3, and there are no external fixtures to
-    rebuild — the quant_ng goldens are hand-worked inline). Both are recorded as blocked, not done.
-  - Codex task 965 delivered it; its BLOCKED report named a lint wrap, but the real gate failure was the repository's
-    own tooling-inventory guard: a new file under `scripts/` must be declared in `docs/TOOLING_INVENTORY.md`. Claude
-    then read the diff and made one consolidated repair covering five defects, **three of them caused by Claude's own
-    task spec or its own test**: the artifact had been built from the audit hook's opened paths, so its content depended on the
-    checkout (a repository whose virtualenv sits inside it would have recorded hundreds of unrelated files); the spec
-    had demanded in-repository inputs *and* temporary-folder tests, so the tests were writing into the working tree;
-    a failed write left the output folder poisoned; recording code was duplicated; and a new in-process guard test
-    installed an audit hook, which cannot be uninstalled, so pytest's own cleanup then failed.
-  - A fresh independent review then returned **PASS** (no blocker, no major; 6 minor and 4 notes, all folded): it
-    confirmed the artifact is byte-identical across two locations, and that a symlinked output folder and a symlink
-    inside it are both refused. Its findings closed the documented exit-code contract (three exceptions had escaped
-    as tracebacks), made the rollback unwind every folder it created, stopped the test loader caching bytecode inside
-    the repository, gave every refusal test its exact reason and all four forbidden trees a test, widened the guard
-    to the filesystem-changing events the inventory row claimed, and refused a duplicated JSON key instead of
-    silently keeping the last one. Results:
-    `.work/bng2_20261024/REVIEW_BNG2_FIT_GUARD_RESULT.md`, with Claude's own earlier review in `CLAUDE_REVIEW_965.md`.
-  - This record was itself reviewed independently before its PR, as the owner required
-    (`.work/bng2_20261024/REVIEW_STATE_20261024_RESULT.md`): **FINDINGS** — 1 blocker, 4 major, 4 minor, 1 note, all
-    folded before the commit. The blocker was Claude's: `LOOP_STATE` had been rewritten while the rest of the
-    recovery block stayed two batches stale, and `NEXT_ACTION` still told a successor to build and run the
-    evaluation that is already consumed. Seven fields were refreshed. The review also found that this record had
-    omitted its own batch's publication verification, the `verify_pr` base slip, the third disclosed data slip and
-    the note owed to the UOR peer; and Claude found, while folding, that the record had repeated "OD-NG-1…8 are
-    open" — an error a previous record had already corrected.
-  - Gates: `VERIFY=PASS` 8006 with scanners 3/3 before the commit, and again at the exact head; 39 net new tests.
-- **THE CHANGELOG (M15 6dd705dd):** one entry recording **#280** (the writer runbook's clipboard step). Per the file's own
-  convention it records neither #279 nor #281, the CHANGELOG and STATE PRs. Documentation only, +14/−0; gate
-  `VERIFY=PASS` 7967 at the exact head. Claude fact-checked its one substantive claim: the renewal card's revision 1
-  already carried "Clear the clipboard" as its own step, while the runbook's renewal paragraph gained it only in
-  #280.
-- Process: one Codex delegation (965) and Claude for the repair and the folds; GPT sidecar consultations 0; paid API
-  $0. One execution slip, caught by the check that exists for it: #283's first `verify_pr` call FAILED on `base`,
-  because merging #282 had moved main to M15 while the call still named M14; the head and all 949 changed lines
-  matched on that same call, and re-running with the correct base passed. In a sequential batch the expected base is
-  the previous PR's merge commit. Two lanes, as the owner bounded. Lessons recorded in `.work/p7/LANE_RECORD.md`: a spec that contradicts itself
-  produces exactly the defect it describes; an audit hook cannot be uninstalled, so its decision must be a pure
-  function a test can call; and a `shasum -c` of an output manifest that lists its inputs by path re-reads those
-  inputs (disclosed, low severity, nothing displayed).
-- **A THIRD DISCLOSED SLIP OF CLAUDE'S, after the two the owner ruled INCIDENT=A on:** while verifying the consumed
-  evidence on 2026-10-23, Claude said it would check S1 by metadata only and then ran `shasum -a 256 -c
-  MANIFEST.sha256` inside the evaluation's output folder. That manifest lists the two candle files, S1_RESULT.json
-  and the S1 MANIFEST **by absolute path**, so the check opened and hashed all four — a byte read of the 1D DEV data
-  outside an authorized run, contrary to the discipline Claude had just stated. Six of six lines verified OK; only
-  "OK" was displayed; the digests equal values already recorded in the plan, the manifest and STATE, so no new
-  information about any price was produced; the data is the owner-allowlisted 1D DEV set, not F3 or §5A; nothing was
-  consumed (the one evaluation was already complete) and nothing was modified — S1's files remain 0444 with
-  unchanged size, time and mode. The output-only check is
-  `grep -v '/' MANIFEST.sha256 | shasum -a 256 -c -`, and CONSUMED_EVIDENCE.md now warns against the other form.
-- Nothing else changed: no fetch, no data read beyond that disclosed check, no migration, no claim activation, no claim-acceptance change, no
-  H2/F3/§5A change, no A4C reseal, no HF write, no production query, no workflow dispatch, no secret, no model
-  promotion, and no rerun of anything.
-- CARRIED OVER, still open: the **not-ruled** NGA decisions OD-NG-1, OD-NG-3, OD-NG-4b, OD-NG-5 and OD-NG-7, with
-  their defaults unchanged (NGA stays PROPOSED; OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD and OD-NG-6 YES were ruled on
-  2026-10-22 and OD-NG-8 on 2026-09-26 — this record does **not** repeat the earlier "OD-NG-1…8 are open", which a
-  previous record had already corrected); the next writer-token renewal by **2026-11-20** and the passive
-  confirmation of this one from the next genuine save; **the one-line note owed to the UOR peer session for this
-  batch** (the new main sha and the PR numbers, for its entry 34); `chore/state-1d-eval`, this batch's two branches
-  and the older merged ones as cleanup candidates for a future T3; and the GPT succession unchanged
-  (PREDECESSOR_RETIREMENT = NOT_YET).
-- This record is the batch's last publish. Before it: #283.)
+Updated: 2026-10-24, later (**VIETNAM TIME IS IN THE UI (#285 → M18 b23cf94c). THE TWO CLOCK DISPLAYS RENDER
+ASIA/HO_CHI_MINH EXPLICITLY, AND UNDER THE OWNER'S RULING UI=B A VIETNAM ROW SITS IMMEDIATELY BEFORE EACH OF THE FIVE
+VERBATIM UTC ROWS IN DETAIL, SAVED AND BATCH. IT IS NOT A DEPLOY: frontend/app.js IS A DECLARED RUNTIME DELTA UNTIL
+THE NEXT RELEASE. OD-NG-5(a) IS UNRULED AND ITS RULE IS AT REVISION 2; OD-NG-2 STAYS DEFER; OD-NG-7 IS UNRULED. NGA
+IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN.
+PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION
+IS REACHABLE.**
+- The owner (verbatim below), in order: "Verify M17. Accelerate NGA in ≤2 independent safe T0–T2 lanes" — one decision
+  pack for OD-NG-5/7 and OD-NG-2 DEFER, and an audit of Vietnam-time UI changes "where pins permit"; then "OWNER
+  UI=B", the request for the exact OD-NG-5(a) rule, "OD2 stays DEFER, OD7 unruled"; then the T3 for #285 and a
+  revision of the OD-NG-5(a) rule on seven named points.
+- **M17 / #284 VERIFIED** (read-only): HEAD = local main = refs/remotes/origin/main = the remote's main =
+  b92bddb6e44c0b3f3cb535da1d2017707d62cd64; tree 3601a225; parents be53b55c and 33a6de3d; STATE.md only, +193/−169.
+- **PUBLISHED: #285 → M18 b23cf94cdefacf035b1c138f1dfebf761a7af5e4** (feat/vn-time-display @ b19f5f78, the two commits
+  f9e2d33f and b19f5f78 as the owner batched them; tree 0d2d45a7; mergedAt 2026-10-24T10:03:56Z). In order: the
+  package's own digests checked (all OK), a drift check, the exact SHA pushed, `PR_VERIFY=PASS` (67 files, +810/−16,
+  all 826 changed lines byte-identical to the authorized diff), 4 of 4 checks on the exact head read from GitHub's
+  check-runs API (CI 40083942604 with **8016 passed, equal to the local exact-head gate**; reproducible build
+  40083942642), a second drift check, the expected merge tree computed independently (`git merge-tree --write-tree`
+  = 0d2d45a7), a merge with `--match-head-commit`, `MERGE_VERIFY=PASS`, and main's push runs on M18 green (CI
+  40084426318; reproducible build 40084426324). Record: .work/vn_time_20261024/T3_PACKAGE_VN_TIME.md.
+- **What the operator now sees:**
+  - **f9e2d33f — the two clocks.** "Last refreshed at …" and the Recent list used `toLocaleTimeString`/
+    `toLocaleString`, which take both the time zone **and** the locale from the viewer's machine, so one screen read
+    differently on two computers. They now render Asia/Ho_Chi_Minh explicitly, assembled from `formatToParts` by part
+    type; a review verified byte-identical output across 25 time-zone × locale combinations.
+  - **b19f5f78 — UI=B.** A Vietnam row immediately **before** each of the five UTC rows (Detail ×2, Saved ×2,
+    Batch ×1). Every UTC label and value is byte-identical, so the row an operator checks a receipt against is
+    unchanged, and the test asserting the UTC row **equals** the backend's string passes unaltered. A value the record
+    does not hold reads "Not kept in saved history." on both rows, never a 1970 time; a string with no zone is
+    refused, because it would be read in the viewer's own zone and render hours out beside the UTC value it came from.
+  - Display only: no API field, stored record, hash, candle boundary or evidence changed, and nothing is recomputed —
+    each Vietnam value is the same instant as the UTC row beside it, reformatted (product invariant 2).
+- **THE OWNER'S DP-A/DP-F SCOPE AMENDMENT, recorded explicitly:** the information order of governing plan §14.1-§14.2
+  is not written in docs/; its only in-repository statement is the docstring of `test_frontend_static.py`'s
+  decisionViewRows test, which now names the owner's amendment of 2026-10-24 and what it changed. DP-A's separate
+  clause ("local only … until the UOR qualification episode closes") was checked and was already met:
+  QUAL-EP-20261010-01 closed on 2026-10-10 (BLOCKED / NOT_PROVEN — a closing is not a pass). All 56 golden screens
+  were regenerated by their own tool and **the golden diff removes zero lines**; the UX comprehension card (a DP-A
+  artifact) was regenerated by `scripts/ux_comprehension/card.py --write`, because the panel it mirrors gained rows.
+- **A DECLARED RUNTIME DELTA, NOT A DEPLOY:** frontend/app.js is a deployed runtime file, so `CURRENT_DELTA_PATHS`
+  declares it, written by `scripts/release.py`'s own `set_guard_delta`. Main's runtime now differs from production
+  until a release re-pins the baseline; a release is T4 and is not authorized.
+- **Reviews:** both commits were reviewed independently before the PR, each **PASS**, every minor finding folded
+  (`.work/vn_time_20261024/REVIEW_VN_TIME_RESULT.md`, `REVIEW_UI_B_RESULT.md`). Worth keeping: `new Date(null)`
+  renders **UTC+08**, Saigon's true 1970 offset, which is why the offset is read from the formatter rather than
+  hardcoded; a dead "hour 24" guard was also wrong (an engine returning hour 24 also returns the previous day); a
+  stored 0 rendered the epoch; and the time-scanner guard in `test_fullscreen_goldens.py` was amended to admit each
+  fixture instant's Vietnam rendering, computed independently with zoneinfo, so a time from anywhere else still fails.
+- **Defects and Claude's own mis-steps, as they happened:**
+  - The first task's scope missed that frontend/app.js is guarded as a runtime file; Codex correctly refused to edit
+    outside its allowed paths, and Claude declared the delta — first by hand, which broke the release tool's
+    `DELTA_BLOCK_RE`, then through the tool itself.
+  - Claude called Codex's `typeof … === "function"` fallbacks "dead code"; they were load-bearing for two existing
+    cut-list tests, and removing them failed the gate. Removing them was still right (their output lacked the
+    "(UTC+07)" suffix); the correct fix was to extend those cut-lists.
+  - The same class — a function gains a formatter dependency, and every place that cuts it out of app.js must cut
+    the formatter too — broke the lane **three times**, the third in `scripts/ux_comprehension/card.py`'s own
+    function list. Claude stopped delegating and did the root cause, a consumer scan and a regression guard that
+    reads the dependency set from app.js. Claude then called that guard "proven to bite"; the review **disproved**
+    it (it searched whole files, not cut-lists), and it was tightened and mutation-tested against two separate sites.
+  - Claude's fix for the zone-less string first reintroduced the same class (two top-level regex constants); they are
+    now function-local. One lint slip (E501) was caught by the gate.
+  - **A correction to the previous record (#284):** it said "OD-NG-1…8 are open" was corrected "in three places", and
+    it was — but the same sentence survived in LOOP_STATE, the field a successor reads first. It is corrected here.
+    A scan found no other live instance; the remaining ones sit in dated history, where they were true when written.
+- **OD-NG DECISIONS:** the decision pack (`.work/nga/master/OWNER_DECISION_PACK_OD5_OD7_OD2.md`, sha256 6c359122…) was
+  delivered; the owner ruled OD-NG-2 stays DEFER and OD-NG-7 stays unruled, and left **OD-NG-5(a) UNRULED**. The as-of
+  universe rule is at **revision 2** (`.work/nga/master/OD_NG_5_PART_A_UNIVERSE_RULE.md`, sha256 f5780fae…; revision 1
+  kept read-only beside it, d81dd67c…). Both were renamed from `OD5A_…`, contents unchanged apart from revision 2's
+  pointer to its sibling: "5A" in a file name collides with the protected-path rule, so the review of this record —
+  following that rule correctly — could not open them. Revision 2 corrects two provenance errors of revision 1 — 365
+  days is v1d's memory for **1D only** (15m/1H/4H use 7/28/28 days, window needs 678/678/174 bars), and the
+  inventory's "50-symbol universe" line warns about a **serving lattice's** storage, so it never supported a research
+  universe of 50 — and restates F3 from ruling 2: BTCUSDT/ETHUSDT are not universe candidates (the cell table governs
+  them separately and the universe row reads "(no F3)"), so no snapshot can reach F3, and a calendar ceiling for other
+  symbols is a separate protection (F-A, F-B or F-C; protective default F-B). It also makes freshness per cell,
+  requires closed bars only, refuses any condition that cannot be decided as-of, and makes (b) stop unless the archive
+  is proven to keep delisted symbols. Seven numbered choices, R1–R7. No fetch; inert on data.
+- Process: Codex delegations 966 and 967, both returning BLOCKED for reasons outside their allowed paths, both
+  correctly; Claude made the repairs and folds. GPT sidecar consultations 0; paid API $0. **Model:** the earlier lanes
+  ran on Opus 5 at XHIGH (the owner's first two instructions of this batch say XHIGH); the owner's T3 selected Opus
+  HIGH, and this record and the T3 ran on Opus 5.5 at HIGH — recorded here because CLAUDE.md asks that any model
+  change be recorded. The two published feature commits carry their original co-author line, unchanged, because the T3
+  named their exact SHAs.
+- Nothing else changed: no `src/`, schema, migration, workflow, deploy, HF push, production read or write, database
+  write, secret, fetch, F3 or §5A access, and no rerun of anything.
+- CARRIED OVER, still open: OD-NG-5(a), awaiting one ruling on R1–R7; the other unruled NGA decisions (OD-NG-1,
+  OD-NG-3, OD-NG-4b, OD-NG-5(b), OD-NG-7) with defaults unchanged — OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD and OD-NG-6 YES
+  stand, OD-NG-8 is ruled; the next writer-token renewal by **2026-11-20** (expiry 2026-11-23), and the passive
+  confirmation of the 2026-10-24 renewal from the next genuine save, still **not independently confirmed**; the
+  runtime delta `frontend/app.js` until a release; CHANGELOG entries for #283 and #285 (none written yet; their
+  publication would be a new T3); the merged branches as cleanup candidates (feat/vn-time-display,
+  chore/state-20261024, feat/ng-bng2-fit-guard, docs/changelog-280, chore/state-1d-eval and older); the one-line
+  note to the UOR peer for this batch; and the GPT succession unchanged (PREDECESSOR_RETIREMENT = NOT_YET).
+- This record is the batch's last publish. Before it: #285.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-10-24), verbatim — the T3 for #285, and the revision of the OD-NG-5(a) rule:**
+```text
+CONTINUE CURRENT (Opus HIGH), UCPE. T3 GitHub-only AUTHORIZE exact .work/vn_time_20261024/T3_PACKAGE_VN_TIME.md @b19f5f78: exact PR diff, 4/4 checks, merge/main CI, STATE-last fresh gate/review, UOR relay; HOLD on drift. OD-NG-5(a) remains UNRULED: revise 365d/new listings, N=50/20, exclusions, historical as-of evidence, closed bars, freshness and F3 scope. Continue safe T0–T2. No fetch, T4/deploy, production or consumed reruns.
+```
+- **The owner (2026-10-24), verbatim — UI=B, the OD-NG-5(a) rule, OD-NG-2 DEFER and OD-NG-7 unruled:**
+```text
+CONTINUE CURRENT (Opus XHIGH), UCPE. OWNER UI=B: add Vietnam-time rows beside verbatim UTC in Detail/Saved/Batch, Vietnam first; preserve UTC evidence and product invariants. Amend DP-A/F scope explicitly; update goldens with full tests/fresh review, then prepare batched T3 with f9e2d33f, no push/deploy yet. For OD5(a), prepare the exact as-of universe rule and provenance for one owner ruling, no fetch. OD2 stays DEFER, OD7 unruled. Exhaust safe T0–T2; no F3/§5A or production changes.
+```
+- **The owner (2026-10-24), verbatim — verify M17; the decision pack and the Vietnam-time audit:**
+```text
+CONTINUE CURRENT (Opus XHIGH), UCPE. Verify M17. Accelerate NGA in ≤2 independent safe T0–T2 lanes: prepare one owner decision pack for OD-NG-5/7 and OD-NG-2 DEFER; audit and prepare Vietnam-time UI changes (Asia/Ho_Chi_Minh) where pins permit. Keep UTC API/storage, candle boundaries, hashes and evidence unchanged. Full gates, UX tests and T2 review; batch T3. No fetch/refit, F3/§5A, T3/T4, deploy or unruled choices. Return only at a real owner boundary.
+```
 - **The owner (2026-10-24), verbatim — the T3 for this batch:**
 ```text
 CONTINUE CURRENT (Opus HIGH), UCPE. T3 GitHub-only AUTHORIZE exact .work/bng2_20261024/T3_PACKAGE_BATCH_20261024.md: CHANGELOG, B-NG2, then STATE-last on updated main; verify exact diffs, PR checks 4/4, merge commits and main CI/build. Fresh-gate/review STATE; correct stale LOOP_STATE and mark JWT renewal owner-reported until genuine save. HOLD on drift. Relay to UOR, exhaust safe T0–T2. No reruns, F3/§5A, T4/prod or unruled NGA decisions.
@@ -3208,28 +3208,39 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE WRITER TOKEN IS RENEWED (expiry 2026-11-23; **NEXT RENEWAL DUE BY 2026-11-20** — it is the writer's
-  only credential, so an expiry fails every save). B-NG2's first piece is on main, dormant: the fit tool's
-  precondition gate, with no estimator, no universe rule and no real-data mode. The CHANGELOG records #280. Main is
-  M16 be53b55c; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005.
+LOOP_STATE=VIETNAM TIME IS IN THE UI (#285 → M18 b23cf94c): the two clock displays render Asia/Ho_Chi_Minh
+  explicitly, and a Vietnam row sits immediately before each of the five verbatim UTC rows (the owner's UI=B). It is
+  NOT deployed: frontend/app.js is a declared runtime delta until a release, which is T4 and unauthorized. Main is
+  M18 b23cf94c before this record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at
+  R 27682005. The next writer-token renewal is due by **2026-11-20** (expiry 2026-11-23 — the writer's only
+  credential, so an expiry fails every save); the 2026-10-24 renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data: metadata only for S1, and never `shasum -c` on an output
     MANIFEST, which lists its inputs by path and would re-read them.
-  - NGA is PROPOSED, not adopted. OD-NG-1…8 are open, and B-NG2's remaining parts depend on them: the estimator
-    (OD-NG-2, OD-NG-7), the universe membership rule and the archive fetch (OD-NG-5). Nothing may be fitted,
-    adopted or wired without the owner's step.
-  - The 1D evaluation's result, against the expectation registered BEFORE it ran: v1d's POOLED Brier is worse in 5 of
-    6 cells, better in 1, every pooled |mean Δ| ≤ 0.0124, while the 48 deployment cells swing −0.1158 … +0.0837 on 8
-    or 9 overlapping rows each, so no single cell is a finding. The registered log-loss +∞ tilt toward v1d did NOT
-    materialise. Audit item M5 measured 0 on all 230 rows and therefore still stands. Write-up:
-    .work/v1d_1w_20261023/eval/RESULTS.md.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md,
-    .work/bng2_20261024/ (the B-NG2 lane, its reviews and gates) and .work/nga/master/MASTER_PLAN.md §H.3/§J for what
-    B-NG2 still owes.
+  - NGA is PROPOSED, not adopted. RULED: OD-NG-2 DEFER (confirmed again 2026-10-24), OD-NG-4 KEEP_HOLD, OD-NG-6 YES
+    (2026-10-22) and OD-NG-8 (2026-09-26). UNRULED, defaults unchanged: OD-NG-1, OD-NG-3, OD-NG-4b, OD-NG-5 (both
+    halves) and OD-NG-7. Do not write "OD-NG-1…8 are open": it is wrong, it was corrected once before, and a
+    survivor of it in this very field had to be corrected again on 2026-10-24.
+  - OD-NG-5(a)'s as-of universe rule is at REVISION 2, awaiting one ruling on R1–R7:
+    .work/nga/master/OD_NG_5_PART_A_UNIVERSE_RULE.md (sha256 f5780fae…; revision 1 read-only beside it). Never give a
+    new file a name containing a protected fragment ("OD5A" did): processes that follow the rule cannot open it.
+    Nothing may be built against it, and nothing fetched, until the owner rules.
+  - FRONTEND RULES LEARNED THE HARD WAY: every place that cuts a function out of app.js must cut what it calls
+    (`tests/frontend/test_vietnam_time_display.py` now enforces it for the Vietnam formatters, reading the dependency
+    set from app.js); `scripts/ux_comprehension/card.py` keeps its own function list; keep any new regex or constant
+    function-local; regenerate goldens and the UX card only with their own tools; and declare a runtime delta only
+    through `scripts/release.py`'s `set_guard_delta`.
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/vn_time_20261024/ (this batch's
+    package, audit, reviews and gates), .work/nga/master/ (the decision pack and the rule) and
+    .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md.
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename; never grep or hash
     across .work; run a folder-wide command with an absolute cd in its own command. The owner's ruling INCIDENT=A
     released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: THE WRITER TOKEN WAS RENEWED (owner-reported 2026-10-24; expiry 2026-11-23). B-NG2's first piece reached
+  main, dormant (#283 → M16 be53b55c), the CHANGELOG recorded #280 (#282 → M15 6dd705dd) and that batch's record was
+  published last (#284 → M17 b92bddb6); it also disclosed a third data-discipline slip of Claude's (a `shasum -c`
+  that re-read four S1 files through a manifest listing them by path; nothing displayed, consumed or modified).
   Before it: THE ONE 1D DEVELOPMENT EVALUATION OF v1d RAN ONCE AND PASSED (2026-10-23T18:03:18Z): CONSUMED, NEVER
   RERUN — development characterization only, NOT a §5A acceptance, NOT a model promotion, v1d still unwired;
   #279 → M12, #280 → M13 and #281 → M14 bfbc5bb2 published; main was bfbc5bb2 before this record.
@@ -5987,7 +5998,16 @@ LOOP_STATE=THE WRITER TOKEN IS RENEWED (expiry 2026-11-23; **NEXT RENEWAL DUE BY
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND B-NG2 PART 1 (2026-10-24):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, B-NG2 PART 1 AND VIETNAM TIME IN THE UI (2026-10-24):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
+    frontend/app.js (the Vietnam-time UI, #285), until the next release.
+  - The owner's UI=B (2026-10-24): a Vietnam row immediately before each verbatim UTC row in Detail, Saved and Batch,
+    with the DP-A/DP-F scope amended explicitly. Built, reviewed and published as #285.
+  - NGA v2 is PROPOSED, not adopted. Ruled: OD-NG-2 DEFER (2026-10-22, confirmed 2026-10-24), OD-NG-4 KEEP_HOLD,
+    OD-NG-6 YES and OD-NG-8. Unruled, defaults unchanged: OD-NG-1, OD-NG-3, OD-NG-4b, OD-NG-5 and OD-NG-7. The rest of
+    B-NG2 waits on OD-NG-5 and OD-NG-7; OD-NG-5(a)'s rule is at revision 2.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND B-NG2 PART 1 (2026-10-24):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad.
   - NGA v2 is PROPOSED, not adopted. Ruled: OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD (the reference hidden), OD-NG-6 YES
     (v1d, development only) on 2026-10-22, and OD-NG-8 on 2026-09-26. NOT ruled, defaults unchanged: OD-NG-1 (F3
@@ -6313,7 +6333,13 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND B-NG2 PART 1 (2
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-20261024 (this record, on main M16 be53b55c). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-vntime-20261024 (this record, on main M18 b23cf94c). Merged on origin in this batch:
+  - feat/vn-time-display @ b19f5f78 (#285 → M18 b23cf94c). It, chore/state-20261024, feat/ng-bng2-fit-guard,
+    docs/changelog-280, chore/state-1d-eval and the older merged branches can be deleted on the owner's word; no
+    cleanup was authorized in this batch. Local worktrees from this batch, likewise candidates: .work/wt-vntime and
+    .work/wt-state-vntime (and the older ones `git worktree list` shows; some hold scratch research, so none is
+    removed without looking first).
+  Before it: chore/state-20261024 (this record, on main M16 be53b55c). Merged on origin in this batch:
   - docs/changelog-280 @ 47309ca5 (#282 -> M15 6dd705dd) and feat/ng-bng2-fit-guard @ 79726997 (#283 -> M16
     be53b55c). They, chore/state-1d-eval @ 34fe44e5 (#281) and the older merged branches can be deleted on the
     owner's word; no cleanup was authorized in this batch.
@@ -6621,7 +6647,14 @@ CURRENT_BRANCH=chore/state-20261024 (this record, on main M16 be53b55c). Merged 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=be53b55c (main M16, #283: B-NG2 part 1; the last merge before this record). Its 4 PR checks on the
+LAST_GREEN_SHA=b23cf94c (main M18, #285: Vietnam time in the UI; the last merge before this record). Its 4 PR checks
+  on the exact head b19f5f78 (CI 40083942604, 8016 passed; reproducible build 40083942642) and main's two push runs on
+  M18 (CI 40084426318; reproducible build 40084426324) are green.
+  Before it: b92bddb6 (main M17, #284: the previous STATE record). Its 4 PR checks on the exact head 33a6de3d (CI
+  40071004029, 8006 passed; reproducible build 40071004034) and main's push runs on M17 (CI 40071516987, 8006
+  passed; reproducible build 40071516889) are green; so are M16's (CI 40069681482, 8006 passed; build 40069681516),
+  which the previous record could only call pending.
+  Before it: be53b55c (main M16, #283: B-NG2 part 1; the last merge before this record). Its 4 PR checks on the
   exact head 79726997 (CI 40069305383, 8006 passed; reproducible build 40069305391) and main's two push runs on M16
   (CI 40069681482; reproducible build 40069681516) are green. Before it in this batch: M15 6dd705dd (#282), 4 of 4
   on head 47309ca5 (CI 40068671355, 7967 passed; build 40068671362), push runs CI 40069119455 and build 40069119458.
@@ -6932,7 +6965,13 @@ LAST_GREEN_SHA=be53b55c (main M16, #283: B-NG2 part 1; the last merge before thi
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-24, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-24 (later), scanners 3/3 each:
+  - The exact-head gates: f9e2d33f 8012 (the two clocks), b19f5f78 8016 (UI=B, the PR head), and this record's own
+    8016 at its exact head (a record cannot name its own commit, whose SHA depends on its content: the PR's head is
+    it). A correction: the previous record named "a5412347 8006 (this record)", but a5412347 was its head before
+    the review folds were amended in; the head published as #284 was 33a6de3d, also gated at 8006.
+  - CI on the PR head b19f5f78: 8016 passed — equal to the local gate. Main's push runs on M18: green.
+  Before it: PASS 2026-10-24, scanners 3/3 each:
   - The exact-head gates: 47309ca5 7967 (the CHANGELOG), 79726997 8006 (B-NG2), a5412347 8006 (this record).
   - CI on the PR heads: 47309ca5 7967, 79726997 8006 — equal to the local gates. Main's push runs: M15 7967, M16
     pending at the time of writing and green before the merge of this record.
@@ -7255,7 +7294,12 @@ LAST_VERIFY=PASS 2026-10-24, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-24). One delegation in this batch: task 965 (B-NG2 part 1), finished, none pending. Its
+CODEX_PENDING=NONE (2026-10-24, later). Two delegations in this batch, both finished, none pending: task 966 (the two
+  clocks), BLOCKED because frontend/app.js is a guarded runtime file outside its allowed paths, and task 967 (UI=B),
+  BLOCKED because `scripts/ux_comprehension/card.py` assembles its own cut of app.js, also outside its paths. Both
+  stops were correct. Claude made the repairs, the consumer scan and the regression guard itself. No API key, no paid
+  fallback, $0.
+  Before it: NONE (2026-10-24). One delegation in this batch: task 965 (B-NG2 part 1), finished, none pending. Its
   BLOCKED report named a lint wrap and was inaccurate: the real gate failure was the repository's tooling-inventory
   guard. Claude made the consolidated repair and all review folds itself. No API key, no paid fallback, $0.
   Previously:
@@ -7420,7 +7464,15 @@ CODEX_PENDING=NONE (2026-10-24). One delegation in this batch: task 965 (B-NG2 p
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-24, after this batch's T3). Nothing is urgent until the next
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-24, after #285 and this record). Nothing is urgent until the next
+  writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
+  UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
+  0. Done: the owner's T3 of 2026-10-24 for #285 (published, this record last) and, before it, #282 → M15, #283 → M16
+     and #284 → M17.
+  1. Open: OD-NG-5(a) — one ruling on R1–R7 of the revised rule; OD-NG-1, OD-NG-3, OD-NG-4b, OD-NG-5(b) and OD-NG-7
+     (defaults unchanged); a release to deploy the Vietnam-time UI (T4, not authorized); branch cleanup; and the
+     passive confirmation of the token renewal from the next genuine save.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-24, after this batch's T3). Nothing is urgent until the next
   writer-token renewal, due by **2026-11-20** (the token expires 2026-11-23 and is the writer's only credential).
   Production is D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read
   or change.
@@ -8754,7 +8806,13 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-24, after this batch's T3). N
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, the open NGA
+NEXT_ACTION=The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, OD-NG-5(a)'s R1–R7,
+  the other open NGA decisions, a release for the UI change, and branch cleanup. Claude: **the 1D evaluation and the
+  S1 build are CONSUMED — never rebuild or rerun either, and never read their output folders' bytes**; send the UOR
+  peer the one-line note for this batch if it has not gone yet; prepare the CHANGELOG entries for #283 and #285 on
+  their own branch (their publication is a new T3); then LOCAL safe T0–T2 only until the next owner boundary. No push
+  without a T3; no T4 or deploy.
+  Before it: The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, the open NGA
   decisions (OD-NG-5 and OD-NG-7 gate the rest of B-NG2) and branch cleanup. Claude: **the 1D evaluation and the S1
   build are CONSUMED — never rebuild or rerun either, and never read their output folders' bytes** (see
   .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md for how to verify them without reading the data); send the UOR peer
