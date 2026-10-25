@@ -2,6 +2,29 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-25 - Vietnam time beside UTC in the UI, and the fit tool's precondition gate, dormant (on main, not released)
+
+It records #283 and #285. Nothing in this entry is released.
+
+Changed:
+- #285: the web UI shows Vietnam time (Asia/Ho_Chi_Minh) beside the UTC values it derives from. "last
+  refreshed at ..." and the Recent list now render Vietnam time explicitly, where they used to take
+  both the time zone and the locale from the viewer's own computer, so one screen read differently on
+  two machines. Detail, Saved and Batch each show a Vietnam row immediately before each UTC row; every
+  UTC row keeps its label and the backend's verbatim value. A value the record does not hold reads
+  "Not kept in saved history." on both rows, never an invented time.
+- #283: `scripts/quant_ng_fit.py`, with tests, adds the next-generation fit tool's precondition gate:
+  it checks a fit plan's inputs, spans and cutoff, and refuses a plan that breaks any of its rules.
+  It has no estimator, no universe rule and no real-data mode, and nothing in the product imports it.
+
+Notes:
+- #285 is display only: no API field, stored record, hash, candle boundary or evidence changes, and
+  nothing is recomputed. Its owner ruling amended the detail view's row order to add the Vietnam rows.
+- #285 changes `frontend/app.js`, a deployed file, so the running app differs from main until the
+  next release; this entry is not that release.
+- #283 is dormant: nothing in the product imports it, it has never been run on market data, and
+  it fits nothing, because the estimator is deliberately absent.
+
 ## 2026-10-24 - Clearing the clipboard after each writer-token renewal (on main, not released)
 
 It records #280. Nothing in this entry is released.
