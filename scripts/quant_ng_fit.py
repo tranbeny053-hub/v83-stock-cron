@@ -12,8 +12,12 @@ What it deliberately does NOT do, because the owner has not decided it yet:
   open decisions (OD-NG-2 and OD-NG-7), so the artifact records
   ``"estimator": "NOT_IMPLEMENTED_PENDING_OD_NG_2_AND_OD_NG_7"`` and carries no
   number from a fit.
-* **No universe membership rule.** The as-of universe snapshot is an input the plan
-  names and pins by digest; deriving membership is OD-NG-5.
+* **Snapshot validation without row membership checks.** The snapshot must carry the
+  ruled builder's identity — its id, status, ruled rule digest and firewall. Those are
+  identity fields only: they do not prove the builder produced the file, and its
+  members and evidence are not re-checked. This tool does not check that each row's
+  symbol is a member of the snapshot. A fit spanning several quarters needs several
+  snapshots, and how a plan names them is an open design question.
 * **No network and no real-data mode.** There is no fetch and no flag that enables
   one. The consumed one-shot output folders and the research trees are refused by
   name, wherever they resolve.
@@ -33,8 +37,7 @@ beginning there is not.
 
 The corpus is ``{"rows": [{"symbol", "timeframe", "predicted_at_utc",
 "horizon_end_utc", "label"}]}`` with ``label`` in {UP, DOWN, TIMEOUT}. The universe
-snapshot is pinned and parsed as JSON, but its shape is intentionally not constrained
-(OD-NG-5 above).
+snapshot is pinned and checked against the ruled snapshot identity.
 
 A plan may name an input anywhere on disk: the digest pin, not the location, fixes the
 bytes. What a path may never be is a symlink, a protected name, or inside a forbidden
@@ -76,6 +79,8 @@ PIN_KEYS = {"path", "sha256"}
 SPAN_KEYS = {"label", "start_utc", "end_utc"}
 ROW_KEYS = {"symbol", "timeframe", "predicted_at_utc", "horizon_end_utc", "label"}
 LABELS = ("UP", "DOWN", "TIMEOUT")
+# Digest of the owner-ruled ops/quant_ng/UNIVERSE_RULE_v1.json, also pinned by quant_ng_corpus.py.
+UNIVERSE_RULE_V1_SHA256 = "1f81113bb00983a17fa5924569c30a9982efac83676f9495c106cd5bf3cfbb39"
 PROTECTED = ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
 # Consumed one-shot outputs and the research trees: never an input to this tool.
 # These are deliberately absolute, not relative to the checkout: the data they protect exists at
@@ -356,7 +361,17 @@ def run(plan_arg: str) -> dict[str, Any]:
         raise Refusal("invalid plan")
     cutoff = _instant(plan["cutoff_utc"])
     corpus_path, corpus, corpus_sha = _digested_input(plan, "corpus")
-    universe_path, _, universe_sha = _digested_input(plan, "universe_snapshot")
+    universe_path, universe, universe_sha = _digested_input(plan, "universe_snapshot")
+    if not isinstance(universe, dict):
+        raise Refusal("universe snapshot is not a ruled snapshot")
+    if universe.get("snapshot_id") != "ucpe.universe.asof.v2":
+        raise Refusal("universe snapshot id is not ucpe.universe.asof.v2")
+    if universe.get("status") != "SYNTHETIC":
+        raise Refusal("universe snapshot status is not SYNTHETIC")
+    if universe.get("rule_sha256") != UNIVERSE_RULE_V1_SHA256:
+        raise Refusal("universe snapshot was not built under the ruled spec")
+    if universe.get("f3_firewall") != "F-C":
+        raise Refusal("universe snapshot firewall is not F-C")
     spans = _spans(plan)
 
     output = _path(plan["output_dir"])
@@ -404,6 +419,9 @@ def run(plan_arg: str) -> dict[str, Any]:
         "plan_sha256": plan_sha,
         "corpus_sha256": corpus_sha,
         "universe_snapshot_sha256": universe_sha,
+        "universe_snapshot_id": universe["snapshot_id"],
+        "universe_status": universe["status"],
+        "universe_rule_sha256": universe["rule_sha256"],
         "cutoff_utc": plan["cutoff_utc"],
         "consumed_spans": [span for span, _, _ in spans],
         "rows_total": len(rows),
@@ -419,8 +437,8 @@ def run(plan_arg: str) -> dict[str, Any]:
             "tool": tool_path.name,
             "universe_snapshot": universe_path.name,
         },
-        "tool_version": "1",
-        "schema_version": "1",
+        "tool_version": "2",
+        "schema_version": "2",
     }
     created = _make_output(output)
     try:

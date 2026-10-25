@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,14 @@ SCRIPT = ROOT / "scripts/quant_ng_fit.py"
 INSTANT = "2025-01-01T00:00:00Z"
 LATER = "2025-01-01T00:00:01Z"
 CUTOFF = "2025-01-02T00:00:00Z"
+RULE = ROOT / "ops/quant_ng/UNIVERSE_RULE_v1.json"
+RULE_SHA = hashlib.sha256(RULE.read_bytes()).hexdigest()
+VALID_UNIVERSE = {
+    "snapshot_id": "ucpe.universe.asof.v2",
+    "status": "SYNTHETIC",
+    "rule_sha256": RULE_SHA,
+    "f3_firewall": "F-C",
+}
 ROW = {
     "symbol": "BTCUSDT",
     "timeframe": "1h",
@@ -54,7 +63,7 @@ EXPECTED_REASON = {
 }
 
 
-def _load_module(name: str):
+def _load_module(name: str, path: Path = SCRIPT):
     """Import the tool by path without writing bytecode beside it.
 
     verify.sh runs pytest without -B, and exec_module on a file path would cache a .pyc in
@@ -62,7 +71,7 @@ def _load_module(name: str):
     """
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location(name, SCRIPT)
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     previous = sys.dont_write_bytecode
@@ -85,7 +94,7 @@ def invoke(plan: Path) -> subprocess.CompletedProcess[str]:
 
 
 def case(
-    base: Path, *, rows=None, spans=None, output_name="out", extra=None, universe=b'{"as_of":"x"}'
+    base: Path, *, rows=None, spans=None, output_name="out", extra=None, universe=None
 ) -> tuple[Path, Path, dict]:
     """Write a synthetic plan with its corpus and universe snapshot under base; return the paths."""
     base.mkdir(parents=True, exist_ok=True)
@@ -93,6 +102,8 @@ def case(
         {"rows": [ROW] if rows is None else rows}, separators=(",", ":")
     ).encode()
     (base / "corpus.json").write_bytes(corpus_bytes)
+    if universe is None:
+        universe = json.dumps(VALID_UNIVERSE, separators=(",", ":")).encode()
     (base / "universe.json").write_bytes(universe)
     plan = {
         "plan_id": "ucpe.quant_ng.fit.v1",
@@ -136,6 +147,9 @@ def test_pass_writes_a_complete_read_only_artifact(tmp_path: Path) -> None:
         "plan_sha256": plan_sha,
         "corpus_sha256": corpus_sha,
         "universe_snapshot_sha256": universe_sha,
+        "universe_snapshot_id": "ucpe.universe.asof.v2",
+        "universe_status": "SYNTHETIC",
+        "universe_rule_sha256": RULE_SHA,
         "cutoff_utc": CUTOFF,
         "consumed_spans": [],
         "rows_total": 1,
@@ -149,8 +163,8 @@ def test_pass_writes_a_complete_read_only_artifact(tmp_path: Path) -> None:
             "tool": "quant_ng_fit.py",
             "universe_snapshot": "universe.json",
         },
-        "tool_version": "1",
-        "schema_version": "1",
+        "tool_version": "2",
+        "schema_version": "2",
     }
     assert os.stat(output / "ARTIFACT.json").st_mode & 0o777 == 0o444
     assert sorted(p.name for p in output.iterdir()) == ["ARTIFACT.json"]
@@ -271,6 +285,141 @@ def test_every_refusal_creates_nothing(tmp_path: Path, mutation: str) -> None:
         assert sorted(p.name for p in output.iterdir()) == ["already-here"]
     else:
         assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "universe,reason",
+    [
+        (b"[]", "universe snapshot is not a ruled snapshot"),
+        (
+            json.dumps({**VALID_UNIVERSE, "snapshot_id": "wrong"}).encode(),
+            "universe snapshot id is not ucpe.universe.asof.v2",
+        ),
+        (
+            json.dumps({**VALID_UNIVERSE, "status": "DECIDED"}).encode(),
+            "universe snapshot status is not SYNTHETIC",
+        ),
+        (
+            json.dumps({**VALID_UNIVERSE, "rule_sha256": "0" * 64}).encode(),
+            "universe snapshot was not built under the ruled spec",
+        ),
+        (
+            json.dumps({**VALID_UNIVERSE, "f3_firewall": "other"}).encode(),
+            "universe snapshot firewall is not F-C",
+        ),
+    ],
+)
+def test_unruled_snapshot_refusals_leave_no_output(
+    tmp_path: Path, universe: bytes, reason: str
+) -> None:
+    plan_path, output, _ = case(tmp_path / "snapshot", universe=universe)
+    completed = invoke(plan_path)
+    assert completed.returncode == 2
+    assert json.loads(completed.stdout) == {"status": "REFUSAL", "reason": reason}
+    assert not output.exists()
+
+
+def test_fit_rule_digest_matches_spec_and_corpus_pin() -> None:
+    fit = _load_module("quant_ng_fit_digest")
+    corpus = _load_module("quant_ng_corpus_digest", ROOT / "scripts/quant_ng_corpus.py")
+    assert fit.UNIVERSE_RULE_V1_SHA256 == hashlib.sha256(RULE.read_bytes()).hexdigest()
+    assert fit.UNIVERSE_RULE_V1_SHA256 == corpus.UNIVERSE_RULE_V1_SHA256
+
+
+@pytest.mark.parametrize(
+    "wrong_fields,reason",
+    [
+        (("snapshot_id", "status"), "universe snapshot id is not ucpe.universe.asof.v2"),
+        (("status", "rule_sha256"), "universe snapshot status is not SYNTHETIC"),
+        (("rule_sha256", "f3_firewall"), "universe snapshot was not built under the ruled spec"),
+    ],
+)
+def test_snapshot_checks_are_ordered(tmp_path: Path, wrong_fields, reason: str) -> None:
+    universe = dict(VALID_UNIVERSE)
+    for field in wrong_fields:
+        universe[field] = "wrong"
+    plan_path, output, _ = case(
+        tmp_path / "snapshot-order", universe=json.dumps(universe).encode()
+    )
+    completed = invoke(plan_path)
+    assert completed.returncode == 2
+    assert json.loads(completed.stdout)["reason"] == reason
+    assert not output.exists()
+
+
+def test_corpus_builder_snapshot_passes_fit_gate(tmp_path: Path) -> None:
+    """An actual ruled snapshot from the corpus CLI is accepted by the fit gate."""
+    corpus_script = ROOT / "scripts/quant_ng_corpus.py"
+    digest = "a" * 64
+    prov = {
+        "source": "synthetic",
+        "sha256": digest,
+        "official_checksum": digest,
+        "available_from_utc": "2025-01-01T00:00:00Z",
+        "revisions": [{"sha256": digest, "available_from_utc": "2025-01-01T00:00:00Z"}],
+        "revision_history_complete": True,
+    }
+    as_of = datetime(2025, 6, 1, tzinfo=UTC)
+    bars = [
+        {
+            "open_utc": (as_of - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "quote_volume": str(days),
+        }
+        for days in range(90, 0, -1)
+    ]
+    candidate = {
+        "symbol": "XYZUSDT",
+        "base": "XYZ",
+        "quote": "USDT",
+        "lineage": None,
+        "listing": {"first_daily_bar_open_utc": "2024-01-01T00:00:00Z", "provenance": prov},
+        "daily_quote_volume": {"bars": bars, "provenance": prov},
+        "coverage": {
+            tf: {"present_in_window": count, "provenance": prov}
+            for tf, count in {"15m": 678, "1H": 678, "4H": 174}.items()
+        },
+    }
+    evidence = {
+        "evidence_id": "ucpe.quant_ng.universe_evidence.v1",
+        "source": "synthetic",
+        "candidates": [candidate],
+        "exclusion_verification": [],
+        "not_leveraged_verification": [],
+        "freshness": [],
+    }
+    evidence_bytes = json.dumps(evidence, separators=(",", ":")).encode()
+    evidence_path = tmp_path / "evidence.json"
+    evidence_path.write_bytes(evidence_bytes)
+    corpus_plan = {
+        "plan_id": "ucpe.quant_ng.universe.v1",
+        "as_of_utc": "2025-06-01T00:00:00Z",
+        "evidence": {
+            "path": str(evidence_path),
+            "sha256": hashlib.sha256(evidence_bytes).hexdigest(),
+        },
+        "operating_period_start": {"utc": None, "provenance": None},
+        "completeness": {"threshold": 0.9, "ruling": "SYNTHETIC_TEST_ONLY"},
+        "output_dir": str(tmp_path / "universe-out"),
+    }
+    corpus_plan_path = tmp_path / "universe-plan.json"
+    corpus_plan_path.write_text(json.dumps(corpus_plan, separators=(",", ":")), encoding="utf-8")
+    built = subprocess.run(
+        [sys.executable, "-I", "-B", str(corpus_script), str(corpus_plan_path)],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    snapshot_bytes = (tmp_path / "universe-out/UNIVERSE_SNAPSHOT.json").read_bytes()
+    fit_plan, output, _ = case(tmp_path / "fit", universe=snapshot_bytes)
+    fit_result = invoke(fit_plan)
+    assert fit_result.returncode == 0, fit_result.stdout + fit_result.stderr
+    artifact = json.loads((output / "ARTIFACT.json").read_bytes())
+    snapshot = json.loads(snapshot_bytes)
+    assert artifact["universe_snapshot_id"] == snapshot["snapshot_id"]
+    assert artifact["universe_status"] == snapshot["status"]
+    assert artifact["universe_rule_sha256"] == snapshot["rule_sha256"]
 
 
 def test_the_forbidden_tree_refusal_reads_no_byte_of_it(tmp_path: Path) -> None:
