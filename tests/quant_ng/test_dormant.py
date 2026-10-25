@@ -130,3 +130,18 @@ def test_src_does_not_import_quant_ng_fit() -> None:
         if imports_fit:
             violations.append(str(path.relative_to(ROOT)))
     assert violations == []
+
+
+def test_src_does_not_import_quant_ng_corpus() -> None:
+    """The synthetic snapshot tool stays outside every product import path."""
+    violations = []
+    src = ROOT / "src"
+    for path in src.rglob("*.py"):
+        names = _imported_module_names(path.read_text(encoding="utf-8"), _module_path(path, src))
+        imports_corpus = any(
+            _matches(name, "scripts.quant_ng_corpus") or _matches(name, "quant_ng_corpus")
+            for name in names
+        )
+        if imports_corpus:
+            violations.append(str(path.relative_to(ROOT)))
+    assert violations == []
