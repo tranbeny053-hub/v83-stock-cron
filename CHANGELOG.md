@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-25 - The dormant as-of universe snapshot builder, synthetic-only (on main, not released)
+
+It records #288. Nothing in this entry is released.
+
+Changed:
+- #288: `scripts/quant_ng_corpus.py`, with tests, builds one read-only as-of universe snapshot from
+  pinned synthetic evidence, under the owner's ruling of OD-NG-5(a). The ruled values are in
+  `ops/quant_ng/UNIVERSE_RULE_v1.json`, pinned by digest. It refuses any evidence that is not
+  marked synthetic, and refuses to run without a completeness threshold marked as a synthetic test
+  value, because that threshold is still unruled. BTCUSDT and ETHUSDT are never candidates.
+
+Notes:
+- #288 is dormant: nothing in the product imports it, it has no network or fetch, and it has never
+  read market data. Real use waits on two further owner decisions, OD-NG-5(b) and OD-NG-7.
+- It changes no deployed file, so the running app is unaffected.
+
 ## 2026-10-25 - Vietnam time beside UTC in the UI, and the fit tool's precondition gate, dormant (on main, not released)
 
 It records #283 and #285. Nothing in this entry is released.
