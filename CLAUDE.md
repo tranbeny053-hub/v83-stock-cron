@@ -3,9 +3,12 @@
 Ultimate Crypto Probability Engine. **Analysis-only.** Operator is a non-coder.
 Canonical doctrine: `docs/OPERATING_DOCTRINE.md` — read once per session; it is short.
 
-## Model routing and effort (Opus 5)
-**HIGH** — routine judgment, review, orchestration. **XHIGH** — hard architecture, security,
-methodology. **MAX** — genuinely critical quant, model, or validation reasoning.
+## Model routing and effort
+The master picks its model and effort per milestone: the minimum sufficient, with a margin,
+escalating when the task needs it. **Opus Medium** — routine docs, Git inspection, mechanical
+checks. **Opus High** — execution, operational review. **Opus XHIGH** — architecture, security,
+contract reconciliation, high-risk review. **Fable XHIGH** — frontier quant, leakage, statistical
+validation. **Fable Max** — exceptional unresolved scientific ambiguity.
 **Codex** for mechanical work: implementation, tests, repo search, debugging, bounded repair.
 **GPT sidecar** only when materially valuable and never in the loop (see below).
 Owner-facing doctrine — Quant North Star, free-resource discipline, safe learning, whole-product
@@ -95,6 +98,9 @@ in a file.
 
 ## Anti-regrowth
 Six process artifacts maximum: `CLAUDE.md` `AGENTS.md` `STATE.md` `verify.sh` `delegate.sh`
-`docs/OPERATING_DOCTRINE.md`. No orchestrator, no control plane, no agent team, no parallel
-subagents, no recurring evidence machinery. If they exceed ten, **delete the excess — do
-not refactor it.**
+`docs/OPERATING_DOCTRINE.md`. No orchestrator, no control plane, no recurring evidence
+machinery. If they exceed ten, **delete the excess — do not refactor it.**
+Workers: at most two lanes, each a genuine independent Claude Code session or native agent-team
+teammate whose session ID, model and effort are verified before it gets work — never an ordinary
+background subagent standing in for one. If none can be created, the master continues alone and
+records any required independent review as pending; it never self-certifies one.
