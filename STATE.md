@@ -1,70 +1,67 @@
 # STATE
 
-Updated: 2026-10-28 (**THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → M24 e03fdbf0), AND THE
-CHANGELOG RECORDS #288 (#290 → M23 13429144). THE OWNER RULED F-RUN = (b1) ONLY: OFFLINE, MOCKED AND SYNTHETIC
-TOOLING FOR OD-NG-5(b), NO NETWORK. EVERY OTHER CHOICE IN THE OD-NG-5(b)/OD-NG-7 DECISION PACK AWAITS THE OWNER;
-OD-NG-2 STAYS DEFER; NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST
-NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR
-DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), in order: "Verify M22; keep CHANGELOG@80d4d985 for the next substantive T3. Prepare one
-  owner-ready OD-NG-5(b)/7 decision pack … Exhaust safe read-only/synthetic T0–T2"; then the T3 for this batch, with
-  "OWNER F-RUN=(b1) only: mocked/synthetic offline tooling, no network" and the model routing.
-- **M22 VERIFIED** (read-only, on 2026-10-25 and again on 2026-10-28): HEAD = local main = origin/main =
-  ed402eb1745947df46fed5f2a1a307b9992c7711, clean. A usage limit paused the session from 2026-10-25 to 2026-10-28; it
-  resumed with no drift and nothing half-done.
-- **PUBLISHED IN THIS BATCH**, each with the package's own digests checked, the exact head pushed, a byte-identical
-  diff (`PR_VERIFY=PASS`), 4 of 4 checks on that head from the check-runs API, a drift check, an independently
-  computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green:
-  - **#290 → M23 1342914413756d6a5eb587fe1b6bdffc2106f089** — the CHANGELOG entry for #288. Head 80d4d985, tree
-    6706ffd6, mergedAt 2026-10-28T12:16:17Z, 16 changed lines. CI 40685427339 with **8116 passed, equal to the local
-    exact-head gate**; build 40685427205. M23's push runs: CI 40686443307, 8116 passed; build 40686443294.
-  - **#291 → M24 e03fdbf07c4ee66f3f42132f11dd2dc9847089ab** — the fit gate. Head d3c9dfab, base the sequential M23,
-    tree 97ecad66 computed against M23, mergedAt 2026-10-28T12:25:36Z, 193 changed lines. CI 40686643344 with **8126
-    passed, equal to the local exact-head gate**; build 40686643230. M24's push runs: CI 40687705491, 8126 passed; build 40687705406.
-  Record: .work/fit_snapshot_20261025/T3_PACKAGE_BATCH_FIT_20261028.md, with the checks in its exec/ folder.
-- **What #291 does:** `scripts/quant_ng_fit.py` refuses, before creating any output, a universe snapshot that is not a
-  JSON object, or whose id is not `ucpe.universe.asof.v2`, status not `SYNTHETIC`, rule digest not the ruled spec's
-  (pinned in the tool, and tested equal to the builder's pin and to the spec file) or firewall not F-C, in that order.
-  The artifact records the three identity fields, and its versions are "2". **Identity fields only:** they do not
-  prove the builder produced the file, and row membership is not checked; how a multi-quarter plan names several
-  snapshots is open. Dormant and synthetic. Codex tasks 971–973; a mutation sweep caught 12 of 14, with the two
-  survivors declared (one allowed by the spec, one equivalent); **one independent reviewer, two rounds** (findings,
-  then PASS).
-- **THE OD-NG-5(b)/OD-NG-7 DECISION PACK** (`.work/nga/master/OD_NG_5_PART_B_AND_OD_NG_7_DECISION_PACK.md`, revision
-  4, sha256 a3948bf8…; revisions 1–3 frozen read-only beside it). **One independent reviewer, four rounds:** FINDINGS
-  (7 MAJOR), FINDINGS (2 MAJOR), PASS (8 MINOR, folded), and PASS on those folds (1 MINOR and 2 NOTEs, folded after
-  that PASS and **not re-reviewed**). Its main findings:
-  - (b) alone does not make the corpus usable. The builder's synthetic-only gate is in its code, and real use also
-    needs a provenance contract for real data (F-PROV), evidence for the exclusions (F-EVID; without it heavily traded
-    pegged pairs stay unverified contenders, and the 15m universe is undecidable at likely every T) and a membership
-    completeness threshold (7.1b);
-  - OD-NG-7's "completeness 90 %" is EXP-09's lattice completeness. Revision 2 §4.7's mapping of it onto the builder
-    was Claude's, so 7.1 is split into 7.1a and 7.1b;
-  - the BTC/ETH proxies (wrapped and leveraged tokens) need their own rule (F-PROXY);
-  - **F-CONFIRM:** ten rules of OD-NG-5(a)'s revision 2 were labelled PROPOSED there, and neither the owner's ruling
-    nor the ruled record names them. Revision 2 §12 had said "Everything else is QUOTED, a REPO FACT, or follows from
-    these seven", which was not accurate, and its §10 ("no bars for any candidate") was wrong for five development
-    symbols. The pack's own revision 1 called four of those rules "ruled", and §6.1 too. All are Claude's errors, now
-    corrected and put to the owner. (The T3 package names revision 3; the pack reached revision 4, its folds of the
-    third and fourth review rounds, before the owner's T3.)
-- **THE OWNER'S RULINGS OF 2026-10-28:** F-RUN = (b1) only — offline, mocked and synthetic tooling, no network, no
-  (b2) or (b3). **MODEL ROUTING:** Opus Medium for routine work, Opus High for execution, Opus XHIGH for complex work;
-  Fable at XHIGH or Max for frontier quant. CLAUDE.md's routing section still reads differently; aligning it is a
+Updated: 2026-10-28 (**OD-NG-5(b) STEP (b1) IS ON MAIN: THE OFFLINE FETCH EXECUTOR, MOCK ARCHIVE ONLY, NO
+NETWORK CODE (#294 → M27 5a2b321d), AND THE CHANGELOG RECORDS #291 (#293 → M26 52013676). EVERY OTHER CHOICE IN THE
+OD-NG-5(b)/OD-NG-7 DECISION PACK AWAITS THE OWNER; NO (b2) OR (b3); OD-NG-2 STAYS DEFER; NGA IS STILL PROPOSED, NOT
+ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED:
+D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below): the T3 for this batch, GitHub-only, "CHANGELOG@41dbe6f9, b1@3bd6fe7, STATE-last; full
+  gates, reviews, main CI, UOR relay; HOLD on drift", with a model-routing instruction.
+- **PUBLISHED IN THIS BATCH**, each with the package's nine digests checked first, the exact head pushed, a
+  byte-identical diff (`PR_VERIFY=PASS`), 4 of 4 checks on that head from the check-runs API, a drift check, an
+  independently computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs
+  green before the next merge. No drift at any point, so no HOLD:
+  - **#293 → M26 52013676dda59c9185c40cd01bc761cd9c8ba0cf** — the CHANGELOG entry for #291. Head 41dbe6f9, tree
+    e7535adf, mergedAt 2026-10-28T15:18:53Z, 18 changed lines. CI 40713220107 with **8126 passed, equal to the local
+    exact-head gate**; build 40713220110. M26's push runs: CI 40714678128, 8126 passed; build 40714678464.
+  - **#294 → M27 5a2b321d6f706c167f93835cde6529b9a6cd215c** — (b1). Head 3bd6fe75, base the sequential M26, tree
+    66d555d3 computed against M26, mergedAt 2026-10-28T15:35:18Z, 844 changed lines. CI 40715839784 with **8170
+    passed, equal to the local exact-head gate**; build 40715839603. M27's push runs: CI 40717483175, 8170 passed;
+    build 40717483132. (M27's leading "5a" is two hex digits of a commit SHA, not a protected path fragment.)
+  Record: .work/fetch_offline_20261028/T3_PACKAGE_BATCH_B1_20261028.md, with the checks in its exec/ folder. A usage
+  limit paused the batch after #294 merged and before this record was written; the owner resumed it at STATE-last
+  (2026-10-28, verbatim below), and the resume found no drift (origin/main = M27, both worktrees clean, no open PR).
+- **What #294 does:** `scripts/quant_ng_fetch.py` reads a plan's file list from a local mock archive folder, its only
+  transport, and contains no networking code at all. Before reading any archive byte it validates the whole plan and
+  refuses a path outside the kline layout (a non-ASCII digit included), BTCUSDT or ETHUSDT, a refused base, a
+  protected fragment, and a plan over its request cap. Each file is classed ok, mismatch, checksum_malformed or
+  missing; every byte string read is kept 0444 under its digest; a deterministic manifest (status `MOCK`) is written;
+  above the unverified-share cap it refuses, leaving nothing the run created. It does not fetch, parse klines or build
+  evidence. Dormant: nothing in the product imports it, and it runs under the fit tool's write guard. Codex tasks
+  974, 975 and 976 each ended BLOCKED; Claude made two hand repairs: after 975 it reverted that task's widening of
+  the guard and corrected the test, and after 976 it gave the tests explicit ids (auto-ids built from hex digests
+  carried a protected fragment). A mutation sweep caught 30 of 34; the reviewer confirmed the four survivors
+  equivalent, checked on CPython 3.13.14 only (and the chmod-000 test would not hold if run as root). **One
+  independent reviewer, two rounds** (findings, then PASS).
+- **THE OWNER'S MODEL ROUTING OF THIS T3** (verbatim below): the master selects its own model and effort per
+  milestone and routes independent workers with verified individual configurations, Fable at XHIGH or Max when
+  warranted, at most two safe lanes. This batch: the master ran Opus 5.5 at High, as the T3 named; its one worker,
+  this record's reviewer, was launched with model Opus and effort High set on its own call (High because a STATE
+  record of a T3 is execution evidence, not routine work; nothing here warranted Fable). The reviewer reported its
+  model ID as claude-opus-5-5; its effort is as requested and is not observable from inside it. It sits beside the
+  routing of earlier on 2026-10-28; CLAUDE.md's routing section still reads differently, and aligning it is a
   separate change.
-- Process: Codex delegations 971, 972 and 973, all DONE, none pending; GPT sidecar consultations 0; paid API $0.
-  **Model:** Opus 5.5 throughout — XHIGH for the pack and the fit-gate lane, as the owner's instruction asked, and High
-  for this T3.
+- Process: no Codex delegation in this batch, none pending; GPT sidecar consultations 0; paid API $0.
 - Nothing else changed: no fetch, network, real data, fit or estimator, no OD-NG-7 constant, no `src/`, schema,
   migration, workflow or deployed file, no production read or write, no F3 or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: every pack choice except F-RUN; OD-NG-1, OD-NG-3 and OD-NG-4b with defaults unchanged;
-  OD-NG-2 DEFER; the writer-token renewal by **2026-11-20** (expiry 2026-11-23) and the passive confirmation of the
-  2026-10-24 renewal, still **not independently confirmed**; the runtime delta `frontend/app.js` until a release; a
-  CHANGELOG entry for #291 (none written yet; publishing it would be a new T3); the merged branches and local worktrees
-  as cleanup candidates; the one-line note to the UOR peer; and the GPT succession unchanged (PREDECESSOR_RETIREMENT =
-  NOT_YET).
-- This record is the batch's last publish. Before it: #291.)
+- CARRIED OVER, still open: every pack choice except F-RUN (Part C, F-CONFIRM first); whether (b1) may ever contain
+  network code that does not run (Claude's reading of "no network" is none, unanswered); OD-NG-1, OD-NG-3 and
+  OD-NG-4b with defaults unchanged; OD-NG-2 DEFER; amending B1–B9; the writer-token renewal by **2026-11-20**
+  (expiry 2026-11-23) and the passive confirmation of the 2026-10-24 renewal, still **not independently confirmed**;
+  the runtime delta `frontend/app.js` until a release; the CHANGELOG entry for #294, prepared LOCAL on
+  docs/changelog-294 @ 70f0cad7 (gate `VERIFY=PASS` 8170; publishing it is a new T3); the merged branches and
+  local worktrees as cleanup candidates; and the GPT succession unchanged (PREDECESSOR_RETIREMENT = NOT_YET).
+- This record is the batch's last publish. Before it: #294.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
-- **The owner (2026-10-28), verbatim — the T3 for this batch, F-RUN = (b1) only, and the model routing:**
+- **The owner (2026-10-28, the third), verbatim — resume the (b1) T3 at STATE-last:**
+```text
+CONTINUE CURRENT (Opus High), UCPE. Resume the already-authorized B1 T3 at STATE-last. Verify M27 main CI/build and exact Git/worktree state; complete all STATE recovery fields, fresh gate and independent review, then publish and verify STATE PR, main CI, local fast-forward and UOR relay. HOLD on drift. Keep CHANGELOG@70f0cad7 local for next authorized T3. No reruns, T4, deploy or new scope.
+```
+- **The owner (2026-10-28, the second), verbatim — the T3 for the (b1) batch, and the model routing:**
+```text
+CONTINUE CURRENT (Opus High), UCPE. T3 GitHub-only AUTHORIZE .work/fetch_offline_20261028/T3_PACKAGE_BATCH_B1_20261028.md: CHANGELOG@41dbe6f9, b1@3bd6fe7, STATE-last; full gates, reviews, main CI, UOR relay; HOLD on drift. Master dynamically selects its own model/effort per milestone and routes independent workers with verified individual configurations, using Fable XHIGH/Max when warranted. ≤2 safe lanes. No network, F3/§5A, T4/deploy, paid API or consumed reruns.
+```
+- **The owner (2026-10-28), verbatim — the T3 for the fit batch, F-RUN = (b1) only, and the model routing:**
 ```text
 CONTINUE CURRENT (Opus High), UCPE. OWNER T3 AUTHORIZE exact .work/fit_snapshot_20261025/T3_PACKAGE_BATCH_FIT_20261028.md: CHANGELOG@80d4d985, fit@d3c9dfab, STATE-last; full checks, HOLD on drift. OWNER F-RUN=(b1) only: mocked/synthetic offline tooling, no network. Record model routing: Opus Medium routine, High execution, XHIGH complex; Fable XHIGH/Max for frontier quant. Keep all gates/reviews. No b2/b3, F3/§5A, T4, deploy, reruns or paid API.
 ```
@@ -3195,12 +3192,12 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → M24 e03fdbf0), and the CHANGELOG
-  records #288 (#290 → M23 13429144). The owner ruled F-RUN = (b1) only on 2026-10-28: offline, mocked and synthetic
-  tooling for OD-NG-5(b), no network. Every other choice in the decision pack (revision 4) awaits the owner. Main is
-  M24 e03fdbf0 before this record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at
-  R 27682005, with one declared runtime delta on main (frontend/app.js, #285) until a release. The next writer-token
-  renewal is due by **2026-11-20** (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=OD-NG-5(b) STEP (b1) IS ON MAIN (#294 → M27 5a2b321d): the offline fetch executor, mock archive only,
+  no network code; the CHANGELOG records #291 (#293 → M26 52013676). Every other choice in the decision pack
+  (revision 4) awaits the owner; no (b2) or (b3). Main is M27 5a2b321d before this record; production is
+  unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with one declared runtime delta on main
+  (frontend/app.js, #285) until a release. The next writer-token renewal is due by **2026-11-20** (expiry
+  2026-11-23); the 2026-10-24 renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
@@ -3212,16 +3209,22 @@ LOOP_STATE=THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → 
     code change, never a flag. Its rules: .work/nga/master/OD_NG_5_PART_A_RULED.md (B1–B9); its mutation sweep:
     .work/corpus_20261025/MUTATION_SWEEP.py (48 of 48 caught) — rerun it in a worktree after any change to the
     builder; it rewrites the builder in place and restores it.
-  - (b1) IS OFFLINE TOOLING ONLY. The owner (2026-10-28): "mocked/synthetic offline tooling, no network"; no (b2) or
-    (b3). Claude reads that strictly, failing closed: no transport but a local mock archive and no network code at
-    all, although the pack's (b1) foresaw a tool that contains network code. That reading is Claude's, put to the
-    owner. Stop before anything an unruled pack choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY, F-EVID).
+  - (b1) IS OFFLINE TOOLING ONLY, and it is on main as scripts/quant_ng_fetch.py (#294). The owner (2026-10-28):
+    "mocked/synthetic offline tooling, no network"; no (b2) or (b3). Claude reads that strictly, failing closed: no
+    transport but a local mock archive and no network code at all, although the pack's (b1) foresaw a tool that
+    contains network code. That reading is Claude's, still put to the owner. Stop before anything an unruled pack
+    choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY, F-EVID). Its mutation sweep:
+    .work/fetch_offline_20261028/MUTATION_SWEEP_FETCH.py (30 of 34, four equivalent on CPython 3.13.14) — rerun it
+    in a worktree after any change to the tool; it rewrites the tool in place and restores it. Never widen the fit
+    tool's write guard to make a test pass: a new parent of the output folder is refused by design.
   - MODEL ROUTING (owner, 2026-10-28): Opus Medium for routine work, Opus High for execution, Opus XHIGH for complex
-    work; Fable at XHIGH or Max for frontier quant. CLAUDE.md's routing section still reads differently; aligning it
-    is a separate change.
+    work; Fable at XHIGH or Max for frontier quant. Then, with the (b1) T3: the master selects its own model and
+    effort per milestone and routes independent workers with verified individual configurations, Fable at XHIGH or
+    Max when warranted; at most two safe lanes. CLAUDE.md's routing section still reads differently; aligning it is
+    a separate change.
   - COUNT REVIEWERS AND ROUNDS SEPARATELY: the decision pack had ONE independent reviewer in FOUR rounds, the last
-    round's three small items folded after its PASS and not re-reviewed; the fit gate (#291) had ONE other
-    independent reviewer in TWO rounds; the builder had ONE in THREE rounds. #286's PR body
+    round's three small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in
+    TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body
     ("Reviewed independently twice") and a56f80c7's message ("a second review passed") overstate theirs and are
     immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
@@ -3233,12 +3236,16 @@ LOOP_STATE=THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → 
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/fit_snapshot_20261025/ (this batch's
-    package, reviews, sweeps, gates and exec records), .work/nga/master/ (the decision pack, revision 4, with its
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/fetch_offline_20261028/ (this
+    batch's package, review, sweep, gates and exec records), .work/fit_snapshot_20261025/ (the fit batch),
+    .work/nga/master/ (the decision pack, revision 4, with its
     frozen revisions) and .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md.
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → M24 e03fdbf0) after the CHANGELOG for
+  #288 (#290 → M23 13429144); the owner ruled F-RUN = (b1) only (2026-10-28), and that batch's record was published
+  last (#292 → M25 6978182f).
   Before it: THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY (2026-10-25); the dormant as-of universe snapshot builder
   reached main (#288 → M21 b5d78342) after the CHANGELOG for #283 and #285 (#287 → M20), and that batch's record
   was published last (#289 → M22 ed402eb1).
@@ -6006,7 +6013,15 @@ LOOP_STATE=THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER AND THE FIT GATE'S
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER, THE FIT GATE'S
+  SNAPSHOT IDENTITY AND OD-NG-5(b) STEP (b1) (2026-10-28):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
+    frontend/app.js (#285), until a release.
+  - OD-NG-5(a) RULED synthetic-only; the dormant builder (#288), the fit gate's identity check (#291) and the offline
+    fetch executor (#294, mock archive only) are on main. OD-NG-5(b): F-RUN = (b1) only; every other choice in the
+    pack awaits the owner. OD-NG-7 is unruled.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER AND THE FIT GATE'S
   SNAPSHOT IDENTITY (2026-10-28):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
     frontend/app.js (#285), until a release.
@@ -6354,7 +6369,12 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-fit-20261028 (this record, on main M24 e03fdbf0). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-b1-20261028 (this record, on main M27 5a2b321d). Merged on origin in this batch:
+  - docs/changelog-291 @ 41dbe6f9 (#293 → M26) and feat/ng-fetch-offline @ 3bd6fe75 (#294 → M27). They and the
+    earlier merged branches can be deleted on the owner's word; no cleanup was authorized. Local worktrees from this
+    batch, likewise candidates: .work/wt-changelog-291, .work/wt-fetch-offline and .work/wt-state-b1
+    (.work/wt-changelog-294 holds the unpublished CHANGELOG entry for #294).
+  Before it: chore/state-fit-20261028 (this record, on main M24 e03fdbf0). Merged on origin in this batch:
   - docs/changelog-288 @ 80d4d985 (#290 → M23) and feat/ng-fit-snapshot-identity @ d3c9dfab (#291 → M24). They and
     the earlier merged branches can be deleted on the owner's word; no cleanup was authorized. Local worktrees from
     this batch, likewise candidates: .work/wt-changelog-288, .work/wt-fit-snapshot and .work/wt-state-fit.
@@ -6677,7 +6697,14 @@ CURRENT_BRANCH=chore/state-fit-20261028 (this record, on main M24 e03fdbf0). Mer
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=e03fdbf0 (main M24, #291: the fit gate's snapshot identity; the last merge before this record). Its 4
+LAST_GREEN_SHA=5a2b321d (main M27, #294: (b1), the offline fetch executor; the last merge before this record). Its 4
+  PR checks on the exact head 3bd6fe75 (CI 40715839784, 8170 passed; reproducible build 40715839603) and main's push
+  runs on M27 (CI 40717483175, 8170 passed; build 40717483132) are green.
+  Before it: 52013676 (main M26, #293: the CHANGELOG for #291). Its 4 PR checks on 41dbe6f9 (CI 40713220107, 8126
+  passed; build 40713220110) and main's push runs on M26 (CI 40714678128, 8126 passed; build 40714678464) are green.
+  Before it: 6978182f (main M25, #292: the previous STATE record). Main's push runs on M25 (CI 40692182502, 8126
+  passed; build 40692182462) are green.
+  Before it: e03fdbf0 (main M24, #291: the fit gate's snapshot identity; the last merge before this record). Its 4
   PR checks on the exact head d3c9dfab (CI 40686643344, 8126 passed; reproducible build 40686643230) and main's push
   runs on M24 (CI 40687705491, 8126 passed; build 40687705406) are green.
   Before it: 13429144 (main M23, #290: the CHANGELOG for #288). Its 4 PR checks on 80d4d985 (CI 40685427339, 8116
@@ -7007,7 +7034,12 @@ LAST_GREEN_SHA=e03fdbf0 (main M24, #291: the fit gate's snapshot identity; the l
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-28, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-28 (the (b1) batch), scanners 3/3 each:
+  - The exact-head gates: 41dbe6f9 8126 (the CHANGELOG), 3bd6fe75 8170 ((b1)), and this record's own, 8170 at its
+    exact head (a record cannot name its own commit, whose SHA depends on its content).
+  - CI on the PR heads: 41dbe6f9 8126 and 3bd6fe75 8170, each equal to its local gate. Main's push runs: M26 8126,
+    M27 8170.
+  Before it: PASS 2026-10-28, scanners 3/3 each:
   - The exact-head gates: 80d4d985 8116 (the CHANGELOG, gated 2026-10-25), d3c9dfab 8126 (the fit gate), and this
     record's own, 8126 at its exact head (a record cannot name its own commit, whose SHA depends on its content).
   - CI on the PR heads: 80d4d985 8116 and d3c9dfab 8126, each equal to its local gate. Main's push runs: M23 8116,
@@ -7346,7 +7378,12 @@ LAST_VERIFY=PASS 2026-10-28, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-28). Three delegations in this batch, all DONE, none pending: 971 (the fit gate's snapshot
+CODEX_PENDING=NONE (2026-10-28, the (b1) batch). No delegation in the T3 itself. (b1) was built before it, under the
+  owner's F-RUN ruling: 974, 975 and 976, each ended BLOCKED and none is pending. 974 had no mutation proof; after 975
+  Claude reverted its widening of the fit tool's write guard and corrected the test; after 976 (the review's folds)
+  Claude gave the tests explicit ids. Claude read every diff and ran its own mutation sweep. No API key, no paid
+  fallback, $0.
+  Before it: NONE (2026-10-28). Three delegations in this batch, all DONE, none pending: 971 (the fit gate's snapshot
   checks), 972 (a test repair: the unreadable-spec branch was untested) and 973 (the independent review's folds: the
   digest pinned, the docstring narrowed, order tests). Claude read every diff and ran two mutation sweeps of its own.
   No API key, no paid fallback, $0.
@@ -7525,7 +7562,18 @@ CODEX_PENDING=NONE (2026-10-28). Three delegations in this batch, all DONE, none
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-28, after #290, #291 and this record). Nothing is urgent until the
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-28, after #293, #294 and this record). Nothing is urgent until the
+  writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
+  UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
+  0. Done: the owner's GitHub-only T3 of 2026-10-28 for (b1) (#293 → M26, #294 → M27, this record last); the
+     model routing, recorded.
+  1. Open: every other choice in the OD-NG-5(b)/OD-NG-7 decision pack (its Part C, F-CONFIRM first); whether (b1)
+     may contain network code that never runs (Claude reads "no network" as none); (b2) and (b3); OD-NG-1, OD-NG-3
+     and OD-NG-4b; Claude's mechanical rules B1–B9, offered for amendment; a release for the UI change (T4, not
+     authorized); aligning CLAUDE.md's routing section with the owner's routing (a repository change that needs a
+     T3); publishing the CHANGELOG entry for #294, LOCAL @ 70f0cad7 (a new T3); branch and worktree cleanup; and
+     the passive confirmation of the token renewal from the next genuine save.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-28, after #290, #291 and this record). Nothing is urgent until the
   writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
   UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
   0. Done: the owner's T3 of 2026-10-28 (#290 → M23, #291 → M24, this record last); F-RUN = (b1) only; the model
@@ -8886,6 +8934,14 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-28, after #290, #291 and this
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, the decision pack's
+  remaining choices (F-CONFIRM first), the network-code question, any amendment of B1–B9, a release for the UI change,
+  and cleanup. Claude: **the 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and verify
+  them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says: S1 by metadata, the evaluation's outputs by the
+  output-only check**; the builder stays synthetic-only and (b1) stays offline with no network code; send the UOR
+  peer the one-line note for this batch if it has not gone yet; the CHANGELOG entry for #294 is prepared LOCAL
+  (docs/changelog-294 @ 70f0cad7), and its publication is a new T3. No push without a T3; no (b2), (b3), T4 or
+  deploy.
+  Before it: The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, the decision pack's
   remaining choices, any amendment of B1–B9, a release for the UI change, and cleanup. Claude: **the 1D evaluation and the S1 build are
   CONSUMED — never rebuild or rerun either, and verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says:
   S1 by metadata, the evaluation's outputs by the output-only check**; the builder stays synthetic-only; send the UOR
