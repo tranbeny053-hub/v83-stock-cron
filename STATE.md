@@ -1,83 +1,77 @@
 # STATE
 
-Updated: 2026-10-25 (**THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY, AND THE DORMANT AS-OF UNIVERSE SNAPSHOT BUILDER IS
-ON MAIN (#288 → M21 b5d78342), WITH THE RULING AS DATA IN ops/quant_ng/UNIVERSE_RULE_v1.json. IT READS SYNTHETIC
-EVIDENCE ONLY: NO FETCH, NO REAL DATA, NO NETWORK, NO FIT. THE CHANGELOG RECORDS #283 AND #285 (#287 → M20).
-OD-NG-5(b) AND OD-NG-7 ARE UNRULED; OD-NG-2 STAYS DEFER; NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE
-S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO
-FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), in order: the ruling of OD-NG-5(a) and "Build/review dormant corpus T0–T2 only … Batch
-  CHANGELOG 396f8582 with next substantive T3"; then the T3 for this batch, with "First correct review provenance to
-  one reviewer/three rounds; refresh package digests"; then, after a pause, "Resume existing authorized T3 at
-  provenance correction … document immutable #286 PR-body and a56f80c7 message overclaims in STATE, without rewriting
-  commits."
-- **THE RULING (2026-10-25, synthetic-only):** R1 a 90-day ranking window; R2 30 symbols at 15m; R3 no cap at 1H and
-  4H; R4 exclusions as drafted, applied only where verified as of the snapshot instant; R5 F1's 4H cells unspent but
-  eligibility unproven; R6 the protective reading of production history; R7 F3 option F-C with an artifact and
-  methodology firewall; historical availability and revision provenance required, UNKNOWN fail-closed. The ruling in
-  words, with Claude's mechanical rules B1–B9 labelled as Claude's for the owner to amend:
-  `.work/nga/master/OD_NG_5_PART_A_RULED.md`.
-- **PUBLISHED IN THIS BATCH**, each with the exact head, a byte-identical diff, 4 of 4 checks on that head, a drift
-  check, a merge commit with the head lease, an independently computed merge tree, and main's push runs green:
-  - **#287 → M20 c5c8a24e26032d8b1c6417730be03742f06a2b3f** — the CHANGELOG entry for #283 and #285. Head 396f8582,
-    tree e7e04852, mergedAt 2026-10-25T06:52:02Z. CI 40169064277 with **8016 passed**, build 40169064251; M20's
-    push runs CI 40170637157 (8016) and build 40170637137.
-  - **#288 → M21 b5d78342c9eb8544437c2a437c86ed6992d4f046** — the builder: 86890bc (the spec as data) and a56f80c7
-    (the code, its tests, a dormancy test, two inventory rows). Head a56f80c7, mergedAt 2026-10-25T07:21:13Z. CI
-    40170673474 with **8116 passed, equal to the local exact-head gate**. Its PR was verified against the
-    **sequential base M20**, not M19, and its merge tree was **computed against M20** (`799aab05`), which differs
-    from the branch's own tree, so the check was not vacuous.
-- **What the builder is:** `scripts/quant_ng_corpus.py` writes one read-only, deterministic as-of universe snapshot
-  from pinned synthetic evidence; every ruled value comes from the spec file, pinned by digest `1f81113b…`; any source
-  other than `"synthetic"` is refused; BTCUSDT and ETHUSDT are not candidates under any spelling, because a symbol
-  must be exactly its canonical base and the quote; the completeness threshold is OD-NG-7's and unruled, so it refuses
-  to run without a value marked `SYNTHETIC_TEST_ONLY`; the arithmetic is exact. It reuses the fit tool's guard and
-  path discipline by import and leaves `scripts/quant_ng_fit.py` unchanged; nothing in the product imports it.
-- **REVIEW PROVENANCE, STATED EXACTLY, and two immutable overclaims documented rather than rewritten** (the owner's
-  instruction):
-  - The builder had **one independent reviewer, in three rounds**: round 1 FINDINGS (a fail-open BLOCKER — no check
-    that a symbol is its canonical base plus the quote, so `btcusdt` and `"ETHUSDT "` were admitted and `adausdt` came
-    out 4H fresh — plus 2 major, 5 minor and 2 notes); round 2 PASS with 4 minor findings and notes; round 3 PASS with
-    none. Rounds 2 and 3 were re-verification by the same reviewer. The batch's T3 package first said "three
-    independent reviews"; it was corrected and its digests refreshed before anything was published.
-  - **#286's published PR body** says "Reviewed independently twice before this PR, PASS both times". It was one
-    independent reviewer in two rounds. #286's STATE text itself refers only to "the review", so the overclaim is in
-    the PR body alone.
-  - **a56f80c7's commit message**, published in #288, says "a second review passed". That was the same reviewer's
-    second round, not a second independent review. The commit is the exact SHA the owner authorized, so it is not
-    rewritten.
-- **How the builder was made, defects included:**
-  - Codex delegations 968 (the first build), 969 and 970 (repairs). Claude T2-read each diff — but see below: one
-    test it mapped as covered from its name alone.
-  - **Claude's own specification had two errors and one gap**: it extended B8 to every provenance date, contradicting
-    B5; it let the operating-period overlay mask F1's 4H marker; and it never required canonical symbols, which is
-    the root of the BLOCKER. Each is corrected and marked as Claude's in the ruled document.
-  - In Claude's own T2 reading of task 968, two fail-open paths — freshness depended on the order of entries, and a
-    new listing was judged from an unverified date — and one ordering that failed closed but was wrong in principle:
-    unknowns were checked before known disqualifiers.
-  - **Claude mapped one test as covered from its name without reading it.** The test named for "known before unknown"
-    could not tell the two orders apart, and Claude's own mutation run found it.
-  - Tests that did not pin their rules recurred four times before Claude stopped delegating. **The failure rule called
-    for stopping at the first repeat; Claude stopped at the fourth**, then made one consolidated repair, with tests
-    driven by mutations. The final **sweep of 48 mutations**, each
-    breaking one ruled behaviour, has all 48 caught (`.work/corpus_20261025/MUTATION_SWEEP.py`).
-  - Claude forgot the inventory row for the spec file; Codex's gate caught it.
-- **A pause, recorded:** while correcting the package, the auto-mode safety classifier returned no verdict five times
-  in a row. Claude stopped rather than work around it, with nothing pushed and nothing half-done, and resumed on the
-  owner's next instruction.
-- Process: GPT sidecar consultations 0; paid API $0. **Model:** Opus 5.5 throughout — XHIGH for the ruling's build
-  lane, as the owner's instruction asked, and HIGH for this T3.
-- Nothing else changed: no fetch, no real data, no fit or estimator, no OD-NG-7 constant, no `src/`, schema,
+Updated: 2026-10-28 (**THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → M24 e03fdbf0), AND THE
+CHANGELOG RECORDS #288 (#290 → M23 13429144). THE OWNER RULED F-RUN = (b1) ONLY: OFFLINE, MOCKED AND SYNTHETIC
+TOOLING FOR OD-NG-5(b), NO NETWORK. EVERY OTHER CHOICE IN THE OD-NG-5(b)/OD-NG-7 DECISION PACK AWAITS THE OWNER;
+OD-NG-2 STAYS DEFER; NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST
+NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR
+DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), in order: "Verify M22; keep CHANGELOG@80d4d985 for the next substantive T3. Prepare one
+  owner-ready OD-NG-5(b)/7 decision pack … Exhaust safe read-only/synthetic T0–T2"; then the T3 for this batch, with
+  "OWNER F-RUN=(b1) only: mocked/synthetic offline tooling, no network" and the model routing.
+- **M22 VERIFIED** (read-only, on 2026-10-25 and again on 2026-10-28): HEAD = local main = origin/main =
+  ed402eb1745947df46fed5f2a1a307b9992c7711, clean. A usage limit paused the session from 2026-10-25 to 2026-10-28; it
+  resumed with no drift and nothing half-done.
+- **PUBLISHED IN THIS BATCH**, each with the package's own digests checked, the exact head pushed, a byte-identical
+  diff (`PR_VERIFY=PASS`), 4 of 4 checks on that head from the check-runs API, a drift check, an independently
+  computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green:
+  - **#290 → M23 1342914413756d6a5eb587fe1b6bdffc2106f089** — the CHANGELOG entry for #288. Head 80d4d985, tree
+    6706ffd6, mergedAt 2026-10-28T12:16:17Z, 16 changed lines. CI 40685427339 with **8116 passed, equal to the local
+    exact-head gate**; build 40685427205. M23's push runs: CI 40686443307, 8116 passed; build 40686443294.
+  - **#291 → M24 e03fdbf07c4ee66f3f42132f11dd2dc9847089ab** — the fit gate. Head d3c9dfab, base the sequential M23,
+    tree 97ecad66 computed against M23, mergedAt 2026-10-28T12:25:36Z, 193 changed lines. CI 40686643344 with **8126
+    passed, equal to the local exact-head gate**; build 40686643230. M24's push runs: CI 40687705491, 8126 passed; build 40687705406.
+  Record: .work/fit_snapshot_20261025/T3_PACKAGE_BATCH_FIT_20261028.md, with the checks in its exec/ folder.
+- **What #291 does:** `scripts/quant_ng_fit.py` refuses, before creating any output, a universe snapshot that is not a
+  JSON object, or whose id is not `ucpe.universe.asof.v2`, status not `SYNTHETIC`, rule digest not the ruled spec's
+  (pinned in the tool, and tested equal to the builder's pin and to the spec file) or firewall not F-C, in that order.
+  The artifact records the three identity fields, and its versions are "2". **Identity fields only:** they do not
+  prove the builder produced the file, and row membership is not checked; how a multi-quarter plan names several
+  snapshots is open. Dormant and synthetic. Codex tasks 971–973; a mutation sweep caught 12 of 14, with the two
+  survivors declared (one allowed by the spec, one equivalent); **one independent reviewer, two rounds** (findings,
+  then PASS).
+- **THE OD-NG-5(b)/OD-NG-7 DECISION PACK** (`.work/nga/master/OD_NG_5_PART_B_AND_OD_NG_7_DECISION_PACK.md`, revision
+  4, sha256 a3948bf8…; revisions 1–3 frozen read-only beside it). **One independent reviewer, four rounds:** FINDINGS
+  (7 MAJOR), FINDINGS (2 MAJOR), PASS (8 MINOR, folded), and PASS on those folds (1 MINOR and 2 NOTEs, folded after
+  that PASS and **not re-reviewed**). Its main findings:
+  - (b) alone does not make the corpus usable. The builder's synthetic-only gate is in its code, and real use also
+    needs a provenance contract for real data (F-PROV), evidence for the exclusions (F-EVID; without it heavily traded
+    pegged pairs stay unverified contenders, and the 15m universe is undecidable at likely every T) and a membership
+    completeness threshold (7.1b);
+  - OD-NG-7's "completeness 90 %" is EXP-09's lattice completeness. Revision 2 §4.7's mapping of it onto the builder
+    was Claude's, so 7.1 is split into 7.1a and 7.1b;
+  - the BTC/ETH proxies (wrapped and leveraged tokens) need their own rule (F-PROXY);
+  - **F-CONFIRM:** ten rules of OD-NG-5(a)'s revision 2 were labelled PROPOSED there, and neither the owner's ruling
+    nor the ruled record names them. Revision 2 §12 had said "Everything else is QUOTED, a REPO FACT, or follows from
+    these seven", which was not accurate, and its §10 ("no bars for any candidate") was wrong for five development
+    symbols. The pack's own revision 1 called four of those rules "ruled", and §6.1 too. All are Claude's errors, now
+    corrected and put to the owner. (The T3 package names revision 3; the pack reached revision 4, its folds of the
+    third and fourth review rounds, before the owner's T3.)
+- **THE OWNER'S RULINGS OF 2026-10-28:** F-RUN = (b1) only — offline, mocked and synthetic tooling, no network, no
+  (b2) or (b3). **MODEL ROUTING:** Opus Medium for routine work, Opus High for execution, Opus XHIGH for complex work;
+  Fable at XHIGH or Max for frontier quant. CLAUDE.md's routing section still reads differently; aligning it is a
+  separate change.
+- Process: Codex delegations 971, 972 and 973, all DONE, none pending; GPT sidecar consultations 0; paid API $0.
+  **Model:** Opus 5.5 throughout — XHIGH for the pack and the fit-gate lane, as the owner's instruction asked, and High
+  for this T3.
+- Nothing else changed: no fetch, network, real data, fit or estimator, no OD-NG-7 constant, no `src/`, schema,
   migration, workflow or deployed file, no production read or write, no F3 or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: OD-NG-5(b) (the fetch) and OD-NG-7 (the completeness threshold and the fresh-symbol count,
-  which the builder references and does not fix); OD-NG-1, OD-NG-3 and OD-NG-4b with defaults unchanged; OD-NG-2
-  DEFER; the writer-token renewal by **2026-11-20** (expiry 2026-11-23) and the passive confirmation of the 2026-10-24
-  renewal, still **not independently confirmed**; the runtime delta `frontend/app.js` until a release; a CHANGELOG
-  entry for #288 (none written yet; publishing it would be a new T3); the merged branches and local worktrees as
-  cleanup candidates; the one-line note to the UOR peer; and the GPT succession unchanged (PREDECESSOR_RETIREMENT =
+- CARRIED OVER, still open: every pack choice except F-RUN; OD-NG-1, OD-NG-3 and OD-NG-4b with defaults unchanged;
+  OD-NG-2 DEFER; the writer-token renewal by **2026-11-20** (expiry 2026-11-23) and the passive confirmation of the
+  2026-10-24 renewal, still **not independently confirmed**; the runtime delta `frontend/app.js` until a release; a
+  CHANGELOG entry for #291 (none written yet; publishing it would be a new T3); the merged branches and local worktrees
+  as cleanup candidates; the one-line note to the UOR peer; and the GPT succession unchanged (PREDECESSOR_RETIREMENT =
   NOT_YET).
-- This record is the batch's last publish. Before it: #288.)
+- This record is the batch's last publish. Before it: #291.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-10-28), verbatim — the T3 for this batch, F-RUN = (b1) only, and the model routing:**
+```text
+CONTINUE CURRENT (Opus High), UCPE. OWNER T3 AUTHORIZE exact .work/fit_snapshot_20261025/T3_PACKAGE_BATCH_FIT_20261028.md: CHANGELOG@80d4d985, fit@d3c9dfab, STATE-last; full checks, HOLD on drift. OWNER F-RUN=(b1) only: mocked/synthetic offline tooling, no network. Record model routing: Opus Medium routine, High execution, XHIGH complex; Fable XHIGH/Max for frontier quant. Keep all gates/reviews. No b2/b3, F3/§5A, T4, deploy, reruns or paid API.
+```
+- **The owner (2026-10-25), verbatim — verify M22, and the OD-NG-5(b)/OD-NG-7 decision pack:**
+```text
+CONTINUE CURRENT (Opus XHIGH), UCPE. Verify M22; keep CHANGELOG@80d4d985 for the next substantive T3. Prepare one owner-ready OD-NG-5(b)/7 decision pack: exact data scope, free-tier/storage, as-of provenance, delisting, F3/§5A safeguards, each threshold's evidence and STOP rules. Exhaust safe read-only/synthetic T0–T2. No fetch, real-data read, fit, T3/T4, deploy or consumed reruns. Return at a genuine owner boundary.
+```
 - **The owner (2026-10-25), verbatim — resume the authorized T3 at the provenance correction:**
 ```text
 CONTINUE CURRENT (Opus HIGH), UCPE. Resume existing authorized T3 at provenance correction: one independent reviewer, three rounds. Fix package/digests; document immutable #286 PR-body and a56f80c7 message overclaims in STATE, without rewriting commits. Then publish CHANGELOG 396f8582, corpus a56f80c7, STATE-last with fresh review, PR 4/4, main CI and UOR relay. HOLD on drift/denial. No bypass, fetch, F3/§5A, T4, production or reruns.
@@ -3201,23 +3195,33 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY (2026-10-25), and the dormant as-of universe snapshot builder
-  is on main (#288 → M21 b5d78342), with the ruling as data in ops/quant_ng/UNIVERSE_RULE_v1.json, pinned by digest.
-  It reads synthetic evidence only: no fetch, no real data, no network, no fit. Main is M21 b5d78342 before this
-  record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with one declared
-  runtime delta on main (frontend/app.js, #285) until a release. The next writer-token renewal is due by
-  **2026-11-20** (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=THE FIT GATE CHECKS THE UNIVERSE SNAPSHOT'S RULED IDENTITY (#291 → M24 e03fdbf0), and the CHANGELOG
+  records #288 (#290 → M23 13429144). The owner ruled F-RUN = (b1) only on 2026-10-28: offline, mocked and synthetic
+  tooling for OD-NG-5(b), no network. Every other choice in the decision pack (revision 4) awaits the owner. Main is
+  M24 e03fdbf0 before this record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at
+  R 27682005, with one declared runtime delta on main (frontend/app.js, #285) until a release. The next writer-token
+  renewal is due by **2026-11-20** (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
-  - NGA is PROPOSED, not adopted. RULED: OD-NG-5(a) (2026-10-25, synthetic-only), OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD,
-    OD-NG-6 YES, OD-NG-8. UNRULED, defaults unchanged: OD-NG-1, OD-NG-3, OD-NG-4b, **OD-NG-5(b) (the fetch)** and
-    **OD-NG-7 (the constants the builder references and does not fix)**. Do not write "OD-NG-1…8 are open".
+  - NGA is PROPOSED, not adopted. RULED: OD-NG-5(a) (2026-10-25, synthetic-only), OD-NG-5(b)'s F-RUN = (b1) only
+    (2026-10-28), OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD, OD-NG-6 YES, OD-NG-8. UNRULED, defaults unchanged: OD-NG-1,
+    OD-NG-3, OD-NG-4b, **every other choice of OD-NG-5(b)** (the decision pack's Part C, F-CONFIRM included) and
+    **OD-NG-7**. Do not write "OD-NG-1…8 are open".
   - THE BUILDER MUST STAY SYNTHETIC-ONLY until OD-NG-5(b) and OD-NG-7 are ruled: lifting either gate is a reviewed
     code change, never a flag. Its rules: .work/nga/master/OD_NG_5_PART_A_RULED.md (B1–B9); its mutation sweep:
     .work/corpus_20261025/MUTATION_SWEEP.py (48 of 48 caught) — rerun it in a worktree after any change to the
     builder; it rewrites the builder in place and restores it.
-  - COUNT REVIEWERS AND ROUNDS SEPARATELY: the builder had ONE independent reviewer in THREE rounds. #286's PR body
+  - (b1) IS OFFLINE TOOLING ONLY. The owner (2026-10-28): "mocked/synthetic offline tooling, no network"; no (b2) or
+    (b3). Claude reads that strictly, failing closed: no transport but a local mock archive and no network code at
+    all, although the pack's (b1) foresaw a tool that contains network code. That reading is Claude's, put to the
+    owner. Stop before anything an unruled pack choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY, F-EVID).
+  - MODEL ROUTING (owner, 2026-10-28): Opus Medium for routine work, Opus High for execution, Opus XHIGH for complex
+    work; Fable at XHIGH or Max for frontier quant. CLAUDE.md's routing section still reads differently; aligning it
+    is a separate change.
+  - COUNT REVIEWERS AND ROUNDS SEPARATELY: the decision pack had ONE independent reviewer in FOUR rounds, the last
+    round's three small items folded after its PASS and not re-reviewed; the fit gate (#291) had ONE other
+    independent reviewer in TWO rounds; the builder had ONE in THREE rounds. #286's PR body
     ("Reviewed independently twice") and a56f80c7's message ("a second review passed") overstate theirs and are
     immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
@@ -3229,11 +3233,15 @@ LOOP_STATE=THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY (2026-10-25), and the dorm
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/corpus_20261025/ (this batch's
-    package, reviews, sweep and gates), .work/nga/master/ and .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md.
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/fit_snapshot_20261025/ (this batch's
+    package, reviews, sweeps, gates and exec records), .work/nga/master/ (the decision pack, revision 4, with its
+    frozen revisions) and .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md.
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY (2026-10-25); the dormant as-of universe snapshot builder
+  reached main (#288 → M21 b5d78342) after the CHANGELOG for #283 and #285 (#287 → M20), and that batch's record
+  was published last (#289 → M22 ed402eb1).
   Before it: VIETNAM TIME REACHED THE UI (#285 → M18 b23cf94c; the owner's UI=B), NOT DEPLOYED — frontend/app.js a
   declared runtime delta — and that batch's record was published last (#286 → M19 e7bd736f), correcting #284's
   surviving "OD-NG-1…8 are open" and its pre-amend self-citation.
@@ -5998,7 +6006,14 @@ LOOP_STATE=THE OWNER RULED OD-NG-5(a), SYNTHETIC-ONLY (2026-10-25), and the dorm
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME AND THE OD-NG-5(a) BUILDER (2026-10-25):
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER AND THE FIT GATE'S
+  SNAPSHOT IDENTITY (2026-10-28):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
+    frontend/app.js (#285), until a release.
+  - OD-NG-5(a) RULED synthetic-only; the dormant builder (#288) and the fit gate's identity check (#291) are on main.
+    OD-NG-5(b): F-RUN = (b1) only, offline; every other choice in the pack awaits the owner. OD-NG-7 is unruled.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME AND THE OD-NG-5(a) BUILDER (2026-10-25):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
     frontend/app.js (#285), until a release.
   - OD-NG-5(a) RULED synthetic-only (R1–R7); the dormant builder is on main (#288). NGA v2 stays PROPOSED; OD-NG-5(b)
@@ -6339,7 +6354,11 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME AND T
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-corpus-20261025 (this record, on main M21 b5d78342). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-fit-20261028 (this record, on main M24 e03fdbf0). Merged on origin in this batch:
+  - docs/changelog-288 @ 80d4d985 (#290 → M23) and feat/ng-fit-snapshot-identity @ d3c9dfab (#291 → M24). They and
+    the earlier merged branches can be deleted on the owner's word; no cleanup was authorized. Local worktrees from
+    this batch, likewise candidates: .work/wt-changelog-288, .work/wt-fit-snapshot and .work/wt-state-fit.
+  Before it: chore/state-corpus-20261025 (this record, on main M21 b5d78342). Merged on origin in this batch:
   - docs/changelog-283-285 @ 396f8582 (#287 → M20) and feat/ng-corpus-asof @ a56f80c7 (#288 → M21). They and the
     earlier merged branches can be deleted on the owner's word; no cleanup was authorized. Local worktrees from this
     batch, likewise candidates: .work/wt-corpus, .work/wt-changelog-283, .work/wt-state-corpus (some older ones hold
@@ -6658,7 +6677,14 @@ CURRENT_BRANCH=chore/state-corpus-20261025 (this record, on main M21 b5d78342). 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=b5d78342 (main M21, #288: the OD-NG-5(a) builder; the last merge before this record). Its 4 PR checks
+LAST_GREEN_SHA=e03fdbf0 (main M24, #291: the fit gate's snapshot identity; the last merge before this record). Its 4
+  PR checks on the exact head d3c9dfab (CI 40686643344, 8126 passed; reproducible build 40686643230) and main's push
+  runs on M24 (CI 40687705491, 8126 passed; build 40687705406) are green.
+  Before it: 13429144 (main M23, #290: the CHANGELOG for #288). Its 4 PR checks on 80d4d985 (CI 40685427339, 8116
+  passed; build 40685427205) and main's push runs on M23 (CI 40686443307, 8116 passed; build 40686443294) are green.
+  Before it: ed402eb1 (main M22, #289: the previous STATE record). Main's push runs on M22 (CI 40176840396, 8116
+  passed; build 40176840389) are green.
+  Before it: b5d78342 (main M21, #288: the OD-NG-5(a) builder; the last merge before this record). Its 4 PR checks
   on the exact head a56f80c7 (CI 40170673474, 8116 passed; reproducible build 40170673477) and main's push runs on M21
   (CI 40172446783, 8116 passed; reproducible build 40172446777) are green.
   Before it: c5c8a24e (main M20, #287: the CHANGELOG). Its 4 PR checks on 396f8582 (CI 40169064277, 8016 passed;
@@ -6981,7 +7007,12 @@ LAST_GREEN_SHA=b5d78342 (main M21, #288: the OD-NG-5(a) builder; the last merge 
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-25, scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-28, scanners 3/3 each:
+  - The exact-head gates: 80d4d985 8116 (the CHANGELOG, gated 2026-10-25), d3c9dfab 8126 (the fit gate), and this
+    record's own, 8126 at its exact head (a record cannot name its own commit, whose SHA depends on its content).
+  - CI on the PR heads: 80d4d985 8116 and d3c9dfab 8126, each equal to its local gate. Main's push runs: M23 8116,
+    M24 8126.
+  Before it: PASS 2026-10-25, scanners 3/3 each:
   - The exact-head gates: 396f8582 8016 (the CHANGELOG), a56f80c7 8116 (the builder), and this record's own, 8116
     at its exact head (a record cannot name its own commit, whose SHA depends on its content).
   - CI on the PR heads: 396f8582 8016 and a56f80c7 8116 — each equal to its local gate. Main's push runs: M20 8016,
@@ -7315,7 +7346,11 @@ LAST_VERIFY=PASS 2026-10-25, scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-25). Three delegations in this batch, all finished, none pending: 968 (the first build,
+CODEX_PENDING=NONE (2026-10-28). Three delegations in this batch, all DONE, none pending: 971 (the fit gate's snapshot
+  checks), 972 (a test repair: the unreadable-spec branch was untested) and 973 (the independent review's folds: the
+  digest pinned, the docstring narrowed, order tests). Claude read every diff and ran two mutation sweeps of its own.
+  No API key, no paid fallback, $0.
+  Before it: NONE (2026-10-25). Three delegations in this batch, all finished, none pending: 968 (the first build,
   DONE but with thin tests, two fail-open paths and one wrong-in-principle ordering), 969 (the repair, BLOCKED
   honestly with work left) and 970 (DONE). Claude stopped delegating only after the test-gap class had shown for the
   fourth time — the failure rule called for stopping at the first repeat — and made the consolidated repair itself. No
@@ -7490,7 +7525,18 @@ CODEX_PENDING=NONE (2026-10-25). Three delegations in this batch, all finished, 
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-25, after #287, #288 and this record). Nothing is urgent until the
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-28, after #290, #291 and this record). Nothing is urgent until the
+  writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
+  UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
+  0. Done: the owner's T3 of 2026-10-28 (#290 → M23, #291 → M24, this record last); F-RUN = (b1) only; the model
+     routing, recorded.
+  1. Open: every other choice in the OD-NG-5(b)/OD-NG-7 decision pack (its Part C, F-CONFIRM first); whether (b1)
+     may contain network code that never runs (Claude reads "no network" as none); OD-NG-1, OD-NG-3 and OD-NG-4b;
+     Claude's mechanical rules B1–B9, offered for amendment; a release for the UI change (T4, not authorized);
+     aligning CLAUDE.md's routing section
+     with the owner's routing (a repository change that needs a T3); branch and worktree cleanup; and the passive
+     confirmation of the token renewal from the next genuine save.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-25, after #287, #288 and this record). Nothing is urgent until the
   writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
   UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
   0. Done: the owner's T3 of 2026-10-25 (#287 → M20, #288 → M21, this record last); OD-NG-5(a) ruled.
@@ -8839,7 +8885,15 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-25, after #287, #288 and this
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, OD-NG-5(b) and
+NEXT_ACTION=The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, the decision pack's
+  remaining choices, any amendment of B1–B9, a release for the UI change, and cleanup. Claude: **the 1D evaluation and the S1 build are
+  CONSUMED — never rebuild or rerun either, and verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says:
+  S1 by metadata, the evaluation's outputs by the output-only check**; the builder stays synthetic-only; send the UOR
+  peer the one-line note for this batch if it has not gone yet; build (b1) — offline, mocked and synthetic, with no
+  transport but a local mock archive, gated, mutation-tested and independently reviewed — and stop before anything an
+  unruled pack choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY, F-EVID); prepare the CHANGELOG entry for #291 on its
+  own branch (its publication is a new T3). No push without a T3; no (b2), (b3), T4 or deploy.
+  Before it: The owner: nothing until the writer-token renewal due by 2026-11-20; then, if wanted, OD-NG-5(b) and
   OD-NG-7, any amendment of B1–B9, a release for the UI change, and cleanup. Claude: **the 1D evaluation and the S1
   build are CONSUMED — never rebuild or rerun either, and verify them only as
   .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says: S1 by metadata, the evaluation's outputs by the output-only
