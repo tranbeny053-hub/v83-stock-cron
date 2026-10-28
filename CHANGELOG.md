@@ -2,6 +2,24 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-28 - The fit gate checks the universe snapshot's ruled identity (on main, not released)
+
+It records #291. Nothing in this entry is released.
+
+Changed:
+- #291: `scripts/quant_ng_fit.py`, the dormant fit precondition gate, now refuses, before creating
+  any output, a universe snapshot that is not a JSON object, or that lacks the ruled builder's id
+  (`ucpe.universe.asof.v2`), status (`SYNTHETIC`), rule digest or F-C firewall. The ruled digest is
+  pinned in the tool and tested equal to the builder's pin. The artifact records the snapshot's id,
+  status and rule digest, and its tool and schema versions are now "2".
+
+Notes:
+- These are identity fields only: they do not prove the builder produced the file, and a row's
+  symbol is not yet checked against the snapshot's membership.
+- #291 is dormant and synthetic-only: nothing in the product imports it, and it has no network or
+  fetch.
+- It changes no deployed file, so the running app is unaffected.
+
 ## 2026-10-25 - The dormant as-of universe snapshot builder, synthetic-only (on main, not released)
 
 It records #288. Nothing in this entry is released.
