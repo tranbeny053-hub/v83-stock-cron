@@ -2,6 +2,25 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-28 - The offline fetch executor for OD-NG-5(b) step (b1), mock archive only (on main, not released)
+
+It records #294. Nothing in this entry is released.
+
+Added:
+- #294: `scripts/quant_ng_fetch.py`, a dormant executor that reads a plan's file list from a local
+  mock archive folder, its only transport. Before reading any archive byte it validates the whole
+  plan, refusing a path outside the archive's kline layout (a non-ASCII digit included), BTCUSDT or
+  ETHUSDT, a refused base, a protected path fragment, and a plan over its request cap. Each file is
+  classed ok, mismatch, checksum_malformed or missing against its official checksum; every byte
+  string read is kept read-only under its digest, and a deterministic manifest (status `MOCK`) is
+  written. Above the plan's unverified share it refuses, leaving nothing the run created.
+
+Notes:
+- It contains no networking code, under the owner's ruling F-RUN = (b1) only: offline, mocked and
+  synthetic tooling. It does not fetch, parse klines or build evidence.
+- Nothing in the product imports it, and it runs under the fit tool's write guard.
+- It changes no deployed file, so the running app is unaffected.
+
 ## 2026-10-28 - The fit gate checks the universe snapshot's ruled identity (on main, not released)
 
 It records #291. Nothing in this entry is released.
