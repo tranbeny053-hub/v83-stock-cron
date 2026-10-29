@@ -103,4 +103,6 @@ machinery. If they exceed ten, **delete the excess — do not refactor it.**
 Workers: at most two lanes, each a genuine independent Claude Code session or native agent-team
 teammate whose session ID, model and effort are verified before it gets work — never an ordinary
 background subagent standing in for one. If none can be created, the master continues alone and
-records any required independent review as pending; it never self-certifies one.
+records any required independent review as pending; it never self-certifies one. Codex
+execution through `./delegate.sh` is not a Claude worker: this rule neither forbids nor replaces
+it, and the Loop above still governs it.
