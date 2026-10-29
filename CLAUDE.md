@@ -3,9 +3,12 @@
 Ultimate Crypto Probability Engine. **Analysis-only.** Operator is a non-coder.
 Canonical doctrine: `docs/OPERATING_DOCTRINE.md` — read once per session; it is short.
 
-## Model routing and effort (Opus 5)
-**HIGH** — routine judgment, review, orchestration. **XHIGH** — hard architecture, security,
-methodology. **MAX** — genuinely critical quant, model, or validation reasoning.
+## Model routing and effort
+The master picks its model and effort per milestone: the minimum sufficient, with a margin,
+escalating when the task needs it. **Opus Medium** — routine docs, Git inspection, mechanical
+checks. **Opus High** — execution, operational review. **Opus XHIGH** — architecture, security,
+contract reconciliation, high-risk review. **Fable XHIGH** — frontier quant, leakage, statistical
+validation. **Fable Max** — exceptional unresolved scientific ambiguity.
 **Codex** for mechanical work: implementation, tests, repo search, debugging, bounded repair.
 **GPT sidecar** only when materially valuable and never in the loop (see below).
 Owner-facing doctrine — Quant North Star, free-resource discipline, safe learning, whole-product
@@ -95,6 +98,13 @@ in a file.
 
 ## Anti-regrowth
 Six process artifacts maximum: `CLAUDE.md` `AGENTS.md` `STATE.md` `verify.sh` `delegate.sh`
-`docs/OPERATING_DOCTRINE.md`. No orchestrator, no control plane, no agent team, no parallel
-subagents, no recurring evidence machinery. If they exceed ten, **delete the excess — do
-not refactor it.**
+`docs/OPERATING_DOCTRINE.md`. No orchestrator, no control plane, no recurring evidence
+machinery. If they exceed ten, **delete the excess — do not refactor it.**
+Workers: at most two active safe lanes in total, counting the master's own work, Codex, subagents
+and other sessions; no two writers on one file, no parallel STATE edits, no overlapping T3/T4.
+Ordinary subagents may do bounded work at the master's model and effort, including adversarial
+probes and optional reviews, but never count as a review the owner requires to be independent.
+That review needs a separate Claude Code session whose ID, model and effort the master verifies
+before it gets work; without one, the master continues all other safe work and records the
+review as pending, never self-certified. Codex execution through `./delegate.sh` is not a
+Claude worker: this rule neither forbids nor replaces it, and the Loop above still governs it.
