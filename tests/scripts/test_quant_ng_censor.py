@@ -114,6 +114,7 @@ def invoke(tmp_path: Path, data: dict, *, horizon=2, output_name="out", plan_cha
         ("delisting", [(T - DELTA, T)], T, T + timedelta(days=3), None, "CENSORED", "delisting"),
         ("reuse", [(T - DELTA, T)], T, T + timedelta(days=90), None, "CENSORED", "unknown"),
         ("recent", [(T - DELTA, T), (T, T + DELTA)], T, T + 2 * DELTA, None, "CENSORED", "unknown"),
+        ("exact_silence", [(T - DELTA, T)], T, T + 2 * DELTA, None, "CENSORED", "unknown"),
         (
             "maintenance",
             [(T - DELTA, T), (T + DELTA, T + 2 * DELTA - timedelta(seconds=1))],
@@ -153,6 +154,7 @@ def invoke(tmp_path: Path, data: dict, *, horizon=2, output_name="out", plan_cha
         "delisting",
         "reuse",
         "recent",
+        "exact silence",
         "maintenance",
         "irregular after",
         "span precedence",
@@ -284,6 +286,8 @@ def test_reference_instant_must_be_inside_quarter(tmp_path: Path, offset: int):
         "digest",
         "uppercase_digest",
         "duplicate_bar",
+        "empty_bar",
+        "inverted_bar",
         "bar_after_end",
         "off_grid",
         "nonmember",
@@ -300,6 +304,8 @@ def test_reference_instant_must_be_inside_quarter(tmp_path: Path, offset: int):
         "digest mismatch",
         "uppercase digest",
         "duplicate bar",
+        "empty bar",
+        "inverted bar",
         "bar after end",
         "off grid",
         "nonmember",
@@ -344,6 +350,11 @@ def test_refusals(tmp_path: Path, case: str):
     elif case == "duplicate_bar":
         data["series"][0]["bars"].append(data["series"][0]["bars"][0])
         expected = "duplicate bar"
+    elif case in {"empty_bar", "inverted_bar"}:
+        close = T + DELTA if case == "empty_bar" else T + DELTA - timedelta(seconds=1)
+        data["series"][0]["bars"].append(
+            {"open_utc": stamp(T + DELTA), "close_utc": stamp(close)}
+        )
     elif case == "bar_after_end":
         data["corpus_end_utc"] = stamp(T + DELTA)
         data["series"][0]["bars"].append(

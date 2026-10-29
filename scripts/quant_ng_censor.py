@@ -6,9 +6,9 @@ Bars use end-exclusive close instants: a bar opened at ``o`` closes at
 has that exact close. Classification never reads a bar closing after
 ``min(corpus end, quarter end)``. Censor reasons are tested in this exact
 order: ``h > E`` gives ``span_end``; a later regular bar gives ``halt``; a
-later irregular bar gives ``unknown``; ticker reuse gives ``unknown``; recent
-last visible bar gives ``unknown``; otherwise ``delisting``. No network or
-real data is supported. Refusals include:
+later irregular bar gives ``unknown``; ticker reuse gives ``unknown``; a last
+visible bar at most one horizon before the read limit gives ``unknown``;
+otherwise ``delisting``. No network or real data is supported. Refusals include:
 invalid plan, invalid input, source must be synthetic, input digest mismatch,
 horizon requires SYNTHETIC_TEST_ONLY, output folder is not empty, as of is not
 UTC midnight, corpus ends before the quarter, member has no series, series is
@@ -389,6 +389,8 @@ def run(plan_arg: str) -> dict[str, Any]:
             if op in opens:
                 raise Refusal("duplicate bar")
             opens.add(op)
+            if cl <= op:
+                raise Refusal("invalid input")
             if cl > end:
                 raise Refusal("bar after corpus end")
             regular = _micros(op) % (delta_s * 1_000_000) == 0 and cl == op + delta
@@ -469,7 +471,7 @@ def run(plan_arg: str) -> dict[str, Any]:
         else:
             visible_closes = [close for _, close, _ in bars if close <= read_limit]
             latest = max(visible_closes, default=EPOCH)
-            reason = "unknown" if read_limit - latest < horizon["bars"] * delta else "delisting"
+            reason = "unknown" if read_limit - latest <= horizon["bars"] * delta else "delisting"
         parsed_rows.append(
             {
                 "symbol": key[0],
