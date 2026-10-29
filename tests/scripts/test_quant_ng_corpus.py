@@ -1151,3 +1151,59 @@ def test_a_median_beyond_exact_precision_is_a_named_refusal(tmp_path: Path):
     path, out, _ = case(tmp_path / "trial", evidence=bundle([c]))
     assert _refusal(path) == "volume beyond exact precision"
     assert not out.exists()
+
+
+def test_a_daily_bar_may_carry_only_open_time_and_quote_volume(tmp_path: Path):
+    """A daily bar carries only its open time and quote volume; any other field, a price
+    included, is refused."""
+    c = candidate()
+    c["daily_quote_volume"]["bars"][0]["close"] = "1.0"
+    path, out, _ = case(tmp_path / "trial", evidence=bundle([c]))
+    assert _refusal(path) == "malformed daily bar"
+    assert not out.exists()
+
+
+def test_a_candidate_may_not_carry_an_unrecognized_key(tmp_path: Path):
+    """A candidate's keys are closed, so a field such as a later delisting date is refused."""
+    c = candidate()
+    c["delisted_utc"] = "2025-07-01T00:00:00Z"
+    path, out, _ = case(tmp_path / "trial", evidence=bundle([c]))
+    assert _refusal(path) == "malformed candidate"
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    "timeframe,count",
+    [("15m", 679), ("1H", 679), ("4H", 175)],
+    ids=["fifteen_minute", "one_hour", "four_hour"],
+)
+def test_coverage_count_may_not_exceed_its_history_window(tmp_path: Path, timeframe, count):
+    """A coverage count above its timeframe's history window is refused."""
+    counts = {"15m": 678, "1H": 678, "4H": 174}
+    counts[timeframe] = count
+    path, out, _ = case(tmp_path / timeframe, evidence=bundle([candidate(coverage_counts=counts)]))
+    assert _refusal(path) == "invalid coverage count"
+    assert not out.exists()
+
+
+def test_missing_freshness_entries_are_reported_as_unknown(tmp_path: Path):
+    """With a known operating-period start and no freshness entry, every timeframe is unknown
+    (B2)."""
+    path, out, _ = case(
+        tmp_path / "trial",
+        plan_changes={
+            "operating_period_start": {
+                "utc": "2025-12-01T00:00:00Z",
+                "provenance": "synthetic",
+            }
+        },
+    )
+    result = invoke(path)
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["status"] == "PASS"
+    snapshot = json.loads((out / "UNIVERSE_SNAPSHOT.json").read_bytes())
+    assert snapshot["symbols"][0]["freshness"] == {
+        "15m": "unknown",
+        "1H": "unknown",
+        "4H": "unknown",
+    }
