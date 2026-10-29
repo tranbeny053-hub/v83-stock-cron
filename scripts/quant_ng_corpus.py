@@ -41,6 +41,7 @@ B5 — historical availability and revision provenance checks.
 B6 — synthetic-only completeness threshold requirement.
 B7 — top-30 undecidability and the contenders that actually block it.
 B8 — refusal of membership bars and listing dates at or after T.
+G-1 (a′) — trading at T, synthetic-only.
 """
 
 from __future__ import annotations
@@ -551,6 +552,10 @@ def build(
             for dt, v in row["bars"]
             if cutoff - timedelta(days=rule["ranking"]["window_days"]) <= dt < cutoff
         ]
+        trading_at_t = any(
+            dt == cutoff - timedelta(days=1) and quote_volume > Decimal(0)
+            for dt, quote_volume in row["bars"]
+        )
         completeness_1d = Decimal(len(bars))
         window_days = Decimal(rule["ranking"]["window_days"])
         threshold_decimal = Decimal(str(threshold))
@@ -560,6 +565,8 @@ def build(
             reason = None
             if terminal_reason:
                 reason = terminal_reason
+            elif row["volume_usable"] and not trading_at_t:
+                reason = "not_trading_at_t"
             elif row["volume_usable"] and completeness_1d < _exact_product(
                 threshold_decimal, window_days
             ):
@@ -690,6 +697,10 @@ def build(
             "R5": rule["freshness"]["known_not_fresh"],
             "R6": rule["freshness"]["operating_period"],
             "R7": rule["f3"]["firewall"],
+            "G1": (
+                "a_prime: daily bar [T-1d, T) present with quote volume > 0; "
+                "owner-ruled 2026-10-29; SYNTHETIC_ONLY"
+            ),
         },
         "completeness": plan["completeness"],
         "operating_period_start": plan["operating_period_start"],
