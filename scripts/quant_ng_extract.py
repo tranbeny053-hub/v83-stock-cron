@@ -101,9 +101,15 @@ def _dt(micros: int) -> datetime:
 def _period_start(row: dict[str, Any]) -> datetime:
     try:
         if row["granularity"] == "monthly":
-            year, month = (int(part) for part in row["period"].split("-"))
+            period = row["period"]
+            if not isinstance(period, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}", period):
+                raise ValueError("noncanonical monthly period")
+            year, month = (int(part) for part in period.split("-"))
             return datetime(year, month, 1, tzinfo=UTC)
-        return datetime.combine(date.fromisoformat(row["period"]), time(), UTC)
+        period = row["period"]
+        if not isinstance(period, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", period):
+            raise ValueError("noncanonical daily period")
+        return datetime.combine(date.fromisoformat(period), time(), UTC)
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         raise Refusal("invalid manifest") from exc
 
@@ -314,6 +320,7 @@ def run(plan_arg: str) -> dict[str, Any]:
     _check_symlinks(fetch_dir)
     cutoff_us = _micros(cutoff)
     # Verify every pre-cutoff object before parsing any series.
+    verified_blobs: dict[str, bytes] = {}
     for row in rows:
         if row["class"] == "ok" and _period_start(row) < cutoff:
             digest, official = row["sha256"], row["official_checksum"]
@@ -324,10 +331,13 @@ def run(plan_arg: str) -> dict[str, Any]:
                 or not HEX_RE.fullmatch(official)
             ):
                 raise Refusal("object does not match the manifest")
-            try:
-                blob = (fetch_dir / "objects" / digest).read_bytes()
-            except OSError as exc:
-                raise Refusal("object does not match the manifest") from exc
+            if digest not in verified_blobs:
+                try:
+                    blob = (fetch_dir / "objects" / digest).read_bytes()
+                except OSError as exc:
+                    raise Refusal("object does not match the manifest") from exc
+                verified_blobs[digest] = blob
+            blob = verified_blobs[digest]
             actual = hashlib.sha256(blob).hexdigest()
             if actual != digest or actual != official:
                 raise Refusal("object does not match the manifest")
@@ -367,7 +377,7 @@ def run(plan_arg: str) -> dict[str, Any]:
             reason = None
             for row in series_rows:
                 digest = row["sha256"]
-                blob = (fetch_dir / "objects" / digest).read_bytes()
+                blob = verified_blobs[digest]
                 start = _period_start(row)
                 end = _row_period_end(start, row)
                 try:

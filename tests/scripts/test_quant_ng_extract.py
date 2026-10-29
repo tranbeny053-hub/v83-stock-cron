@@ -817,3 +817,97 @@ def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert json.loads(result.stdout)["reason"] == "invalid manifest"
     assert not output.exists()
+
+
+def test_parses_the_bytes_verified_during_the_upfront_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(
+        tmp_path,
+        "1d",
+        "2025-03",
+        [row(TMS - 86400000, TMS - 1, volume="2.50")],
+        granularity="monthly",
+    )
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    original_read = Path.read_bytes
+    reads = 0
+
+    def read_and_replace(path: Path) -> bytes:
+        nonlocal reads
+        content = original_read(path)
+        if path == object_path:
+            reads += 1
+            if reads == 1:
+                object_path.chmod(0o600)
+                object_path.write_bytes(
+                    zip_blob(
+                        "AAAUSDT-1d-2025-03.zip",
+                        [row(TMS - 86400000, TMS - 1, volume="9.00")],
+                    )
+                )
+                object_path.chmod(0o444)
+        return content
+
+    monkeypatch.setattr(Path, "read_bytes", read_and_replace)
+    spec = importlib.util.spec_from_file_location("extract_verified_bytes", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    plan = {
+        "plan_id": "ucpe.quant_ng.extract.v1",
+        "fetch_output_dir": str(fetched),
+        "cutoff_utc": T,
+        "output_dir": str(tmp_path / "parsed"),
+    }
+    plan_path = tmp_path / "localplan.json"
+    plan_path.write_text(json.dumps(plan))
+
+    assert module.run(str(plan_path))["status"] == "PASS"
+    assert reads == 1
+    parsed = json.loads((tmp_path / "parsed" / "PARSE.json").read_bytes())
+    assert parsed["symbols"][0]["daily"]["bars"][0]["quote_volume"] == "2.50"
+
+
+@pytest.mark.parametrize(
+    "granularity,period",
+    [
+        ("monthly", "2025-3"),
+        ("monthly", "2025-+3"),
+        ("monthly", " 2025-03"),
+        ("monthly", "2025-０3"),
+        ("monthly", "2025-13"),
+        ("daily", "2025-02-30"),
+        ("daily", "20250331"),
+    ],
+    ids=[
+        "short-month",
+        "signed-month",
+        "spaced-month",
+        "unicode-month",
+        "bad-month",
+        "bad-day",
+        "basic-format-day",
+    ],
+)
+def test_noncanonical_manifest_period_is_refused(
+    tmp_path: Path, granularity: str, period: str
+) -> None:
+    if granularity == "monthly":
+        fetched = make_series(tmp_path, "15m", "2025-03", granularity="monthly")
+    else:
+        fetched = make_series(tmp_path, "15m", "2025-03-31", granularity="daily")
+    manifest_path = fetched / "MANIFEST.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    entry = manifest["files"][0]
+    filename = f'{entry["symbol"]}-{entry["interval"]}-{period}.zip'
+    entry["period"] = period
+    entry["path"] = entry["path"].rsplit("/", 1)[0] + "/" + filename
+    manifest_path.chmod(0o600)
+    manifest_path.write_text(json.dumps(manifest))
+    manifest_path.chmod(0o444)
+
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "invalid manifest"
+    assert not output.exists()
