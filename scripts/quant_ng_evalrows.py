@@ -284,7 +284,7 @@ def run(plan_arg: str) -> dict[str, Any]:
             }
         )
     scheduled, labelled = len(rows), sum(labels.values())
-    unlabelled = scheduled - labelled
+    unlabelled = sum(row["label"] is None for row in rows)
     if scheduled != labelled + unlabelled or labelled != sum(labels.values()):
         raise Refusal("accounting identity failed")
     censor_input = {

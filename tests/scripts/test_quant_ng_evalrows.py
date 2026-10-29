@@ -25,9 +25,14 @@ def stamp(value):
     return value.isoformat().replace("+00:00", "Z")
 
 
-def defaults(tf="1H", horizon=2, cadence=1, band="0.010"):
+def _when(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def defaults(tf="1H", horizon=2, cadence=1, band="0.010", end_days=90):
     delta = timedelta(seconds={"15m": 900, "1H": 3600, "4H": 14400, "1D": 86400}[tf])
     q = T + timedelta(days=90)
+    end = T + timedelta(days=end_days)
     members = [{"symbol": "AAA", "lineage": "ONE"}]
     forecasts = []
     for j in range(0, 90 * 24, cadence):
@@ -45,7 +50,7 @@ def defaults(tf="1H", horizon=2, cadence=1, band="0.010"):
         )
     bars = []
     slot = T
-    while slot <= q:
+    while slot <= end:
         bars.append(
             {"open_utc": stamp(slot - delta), "close_utc": stamp(slot), "close_price": "100"}
         )
@@ -54,7 +59,7 @@ def defaults(tf="1H", horizon=2, cadence=1, band="0.010"):
         "input_id": "ucpe.quant_ng.censor_input.v1",
         "source": "synthetic",
         "quarter_as_of_utc": stamp(T),
-        "corpus_end_utc": stamp(q),
+        "corpus_end_utc": stamp(end),
         "timeframe": tf,
         "members": members,
         "series": [{"symbol": "AAA", "lineage": "ONE", "bars": bars}],
@@ -145,7 +150,105 @@ def test_labels_match_strict_exact_rule(tmp_path):
     assert checked >= 200
 
 
-def test_missing_and_irregular_resolution_is_unlabelled_and_irregular_price_hidden(tmp_path):
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing reference",
+        "maintenance reference",
+        "off grid reference",
+        "missing terminal",
+        "maintenance terminal",
+        "off grid terminal",
+        "past quarter",
+        "at quarter",
+    ],
+    ids=[
+        "missing reference", "maintenance reference", "off grid reference", "missing terminal",
+        "maintenance terminal", "off grid terminal", "past quarter", "at quarter",
+    ],
+)
+def test_resolution_requires_regular_bars_within_quarter(tmp_path, case):
+    d = defaults(horizon=1, end_days=91 if case == "past quarter" else 90)
+    quarter_case = case in ("past quarter", "at quarter")
+    if not quarter_case:
+        d["forecasts"] = [d["forecasts"][0]]
+    delta = timedelta(hours=1)
+    t0 = T if case not in ("past quarter", "at quarter") else T + timedelta(days=90) - delta
+    horizon = 2 if case == "past quarter" else 1
+    h = t0 + horizon * delta
+    forecast = next((f for f in d["forecasts"] if f["reference_close_utc"] == stamp(t0)), None)
+    if forecast is None:
+        d["forecasts"] = [f for f in d["forecasts"] if f["reference_close_utc"] == stamp(t0)]
+    bars = []
+    if case not in ("missing reference", "maintenance reference", "off grid reference"):
+        bars.append({"open_utc": stamp(t0 - delta), "close_utc": stamp(t0), "close_price": "100"})
+    if case == "maintenance reference":
+        bars.append(
+            {
+                "open_utc": stamp(t0 - delta),
+                "close_utc": stamp(t0 - timedelta(seconds=1)),
+                "close_price": "1",
+            }
+        )
+    if case == "off grid reference":
+        bars.append(
+            {
+                "open_utc": stamp(t0 - delta + timedelta(minutes=7)),
+                "close_utc": stamp(t0),
+                "close_price": "1",
+            }
+        )
+    if case not in ("missing terminal", "maintenance terminal", "off grid terminal"):
+        bars.append({"open_utc": stamp(h - delta), "close_utc": stamp(h), "close_price": "500"})
+    if case == "maintenance terminal":
+        bars.append(
+            {
+                "open_utc": stamp(h - delta),
+                "close_utc": stamp(h - timedelta(seconds=1)),
+                "close_price": "500",
+            }
+        )
+    if case == "off grid terminal":
+        bars.append(
+            {
+                "open_utc": stamp(h - delta + timedelta(minutes=7)),
+                "close_utc": stamp(h),
+                "close_price": "500",
+            }
+        )
+    d["series"][0]["bars"] = bars
+    p, out = invoke(
+        tmp_path,
+        d,
+        params={
+            "horizon_bars": horizon,
+            "cadence_bars": 1 if quarter_case else 2160,
+            "band_frac": "0.01",
+            "ruling": "SYNTHETIC_TEST_ONLY",
+        },
+        output_name="case",
+    )
+    assert p.returncode == 0, p.stdout + p.stderr
+    row = next(
+        r
+        for r in json.loads((out / "CENSOR_INPUT.json").read_bytes())["rows"]
+        if r["reference_close_utc"] == stamp(t0)
+    )
+    assert row["label"] == ("UP" if case == "at quarter" else None)
+
+
+def test_record_counts_match_censor_input(tmp_path):
+    p, out = invoke(tmp_path)
+    assert p.returncode == 0, p.stdout + p.stderr
+    rows = json.loads((out / "CENSOR_INPUT.json").read_bytes())["rows"]
+    counts = json.loads((out / "EVALROWS_RECORD.json").read_bytes())["counts"]
+    labels = [row["label"] for row in rows]
+    assert counts["labelled"] == sum(label is not None for label in labels)
+    assert counts["unlabelled"] == sum(label is None for label in labels)
+    assert counts["labels"] == {label: labels.count(label) for label in ("UP", "DOWN", "TIMEOUT")}
+
+
+def test_irregular_bar_price_does_not_change_output(tmp_path):
     d = defaults(horizon=1)
     d["forecasts"] = [d["forecasts"][0]]
     d["series"][0]["bars"] = [
@@ -156,33 +259,17 @@ def test_missing_and_irregular_resolution_is_unlabelled_and_irregular_price_hidd
             "close_price": "1",
         },
     ]
-    p, a = invoke(
-        tmp_path,
-        d,
-        params={
-            "horizon_bars": 1,
-            "cadence_bars": 2160,
-            "band_frac": "0.01",
-            "ruling": "SYNTHETIC_TEST_ONLY",
-        },
-        output_name="a",
-    )
-    assert p.returncode == 0
+    params = {
+        "horizon_bars": 1,
+        "cadence_bars": 2160,
+        "band_frac": "0.01",
+        "ruling": "SYNTHETIC_TEST_ONLY",
+    }
+    p, a = invoke(tmp_path, d, params=params, output_name="a")
     raw = (a / "CENSOR_INPUT.json").read_bytes()
     d["series"][0]["bars"][1]["close_price"] = "99999"
-    p, b = invoke(
-        tmp_path,
-        d,
-        params={
-            "horizon_bars": 1,
-            "cadence_bars": 2160,
-            "band_frac": "0.01",
-            "ruling": "SYNTHETIC_TEST_ONLY",
-        },
-        output_name="b",
-    )
+    p, b = invoke(tmp_path, d, params=params, output_name="b")
     assert p.returncode == 0 and (b / "CENSOR_INPUT.json").read_bytes() == raw
-    assert json.loads(raw)["rows"][0]["label"] is None
 
 
 @pytest.mark.parametrize("cadence", [1, 3], ids=["every bar", "every third bar"])
@@ -227,12 +314,14 @@ def test_daily_timeframe_schedule(tmp_path):
 
 
 def test_composition_with_censor_randomized(tmp_path):
+    observed = set()
     for seed in range(25):
         rng = random.Random(seed)
-        tf = "1H"
-        horizon = rng.randint(1, 5)
+        tf = "1H" if seed % 2 else "4H"
+        delta = timedelta(seconds=3600 if tf == "1H" else 14400)
+        horizon = rng.randint(1, 6)
         cadence = rng.randint(1, 12)
-        d = defaults(tf=tf, horizon=horizon, cadence=cadence)
+        d = defaults(tf=tf, horizon=horizon, cadence=cadence, end_days=60 if seed % 2 else 100)
         d["corpus_end_utc"] = stamp(T + timedelta(days=60 if seed % 2 else 100))
         corpus_end = T + timedelta(days=60 if seed % 2 else 100)
         d["series"][0]["bars"] = [
@@ -240,18 +329,56 @@ def test_composition_with_censor_randomized(tmp_path):
             for b in d["series"][0]["bars"]
             if datetime.fromisoformat(b["close_utc"].replace("Z", "+00:00")) <= corpus_end
         ]
-        # Add deterministic gaps and irregular maintenance closes to vary the corpus.
+        # Random positive closes exercise each outcome across the fixed seed set.
+        for bar in d["series"][0]["bars"]:
+            bar["close_price"] = str(rng.randint(50, 150))
+        # Add deterministic gaps, maintenance closes and off-grid bars.
         bars = d["series"][0]["bars"]
         d["series"][0]["bars"] = [b for i, b in enumerate(bars) if i % 17 != 0]
         for i in range(1, 5):
-            op = T + timedelta(hours=i * 100, minutes=7)
+            op_grid = T + i * 100 * delta
+            d["series"][0]["bars"] = [
+                b for b in d["series"][0]["bars"] if b["open_utc"] != stamp(op_grid)
+            ]
             d["series"][0]["bars"].append(
                 {
-                    "open_utc": stamp(op),
-                    "close_utc": stamp(op + timedelta(minutes=59)),
+                    "open_utc": stamp(op_grid),
+                    "close_utc": stamp(op_grid + delta - timedelta(seconds=1)),
                     "close_price": str(rng.randint(1, 300)),
                 }
             )
+            op = T + i * 100 * delta + timedelta(minutes=7)
+            d["series"][0]["bars"].append(
+                {
+                    "open_utc": stamp(op),
+                    "close_utc": stamp(op + delta - timedelta(minutes=1)),
+                    "close_price": str(rng.randint(1, 300)),
+                }
+            )
+        # Reuse one ticker across two non-overlapping lineages and include a
+        # separate series with a halt followed by resumed bars.
+        scheduled_forecasts = d["forecasts"]
+        members = [("AAA", "OLD"), ("AAA", "NEW"), ("BBB", "ONE")]
+        reuse_date = T + timedelta(days=20)
+        old_bars = [b for b in d["series"][0]["bars"] if _when(b["close_utc"]) <= reuse_date]
+        new_bars = [b for b in d["series"][0]["bars"] if _when(b["close_utc"]) > reuse_date]
+        halt_start = T + timedelta(days=10)
+        halt_end = halt_start + 2 * delta
+        bbb_bars = [
+            b for b in d["series"][0]["bars"]
+            if not halt_start < _when(b["close_utc"]) <= halt_end
+        ]
+        d["members"] = [{"symbol": s, "lineage": line} for s, line in members]
+        d["series"] = [
+            {"symbol": "AAA", "lineage": "OLD", "bars": old_bars},
+            {"symbol": "AAA", "lineage": "NEW", "bars": new_bars},
+            {"symbol": "BBB", "lineage": "ONE", "bars": bbb_bars},
+        ]
+        d["forecasts"] = [
+            {**f, "symbol": symbol, "lineage": lineage}
+            for f in scheduled_forecasts
+            for symbol, lineage in members
+        ]
         p, o = invoke(
             tmp_path,
             d,
@@ -297,6 +424,7 @@ def test_composition_with_censor_randomized(tmp_path):
             for r in rows
             if r["label"] is not None
         }
+        observed.update(labelled.values())
         assert resolved == labelled
         assert account["counts"]["instants"] == len(rows)
         assert (
@@ -305,6 +433,7 @@ def test_composition_with_censor_randomized(tmp_path):
         )
         assert b"close_price" not in (o / "CENSOR_INPUT.json").read_bytes()
         assert b"close_price" not in (o / "EVALROWS_RECORD.json").read_bytes()
+    assert observed == {"UP", "DOWN", "TIMEOUT"}
 
 
 @pytest.mark.parametrize(
