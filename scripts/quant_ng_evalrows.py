@@ -4,6 +4,10 @@
 This dormant producer accepts synthetic data only, uses test-only horizon,
 cadence and band parameters, and writes the censor tool's input. It assigns no
 censor reason; quant_ng_censor.py remains the accounting and bounds authority.
+Synthetic choices: schedule anchored at the quarter as-of T; every scheduled
+instant needs both arms' forecasts, and one missing forecast refuses the run
+with no missed-instant accounting; one band applies to the whole run, while the
+product's band is per row.
 Refusals include: invalid plan, invalid input, source must be synthetic,
 parameters require SYNTHETIC_TEST_ONLY, input digest mismatch, output folder is
 not empty, as of is not UTC midnight, corpus ends before the quarter, member has
@@ -65,6 +69,7 @@ INPUT_ID = _CENSOR.INPUT_ID
 _no_duplicate_keys = _CENSOR._FIT._no_duplicate_keys
 
 PLAN_ID = "ucpe.quant_ng.evalrows.v1"
+EVALROWS_INPUT_ID = "ucpe.quant_ng.evalrows_input.v1"
 RECORD_ID = "ucpe.quant_ng.evalrows_record.v1"
 RULING = "SYNTHETIC_TEST_ONLY"
 BAND_RE = re.compile(r"^0\.[0-9]+$")
@@ -146,7 +151,11 @@ def run(plan_arg: str) -> dict[str, Any]:
         "series",
         "forecasts",
     }
-    if not isinstance(data, dict) or set(data) != keys or data.get("input_id") != INPUT_ID:
+    if (
+        not isinstance(data, dict)
+        or set(data) != keys
+        or data.get("input_id") != EVALROWS_INPUT_ID
+    ):
         raise _invalid()
     try:
         asof, end = _instant(data["quarter_as_of_utc"]), _instant(data["corpus_end_utc"])
@@ -307,6 +316,14 @@ def run(plan_arg: str) -> dict[str, Any]:
             "parameters": {
                 k: params[k] for k in ("horizon_bars", "cadence_bars", "band_frac", "ruling")
             },
+            "synthetic_choices": [
+                "schedule anchored at the quarter as-of T",
+                (
+                    "every scheduled instant needs both arms' forecasts; one missing refuses "
+                    "the run (no missed-instant accounting)"
+                ),
+                "one band for the whole run (the product's band is per row)",
+            ],
             "target": "TERMINAL_CLOSE_VS_BAND_3STATE / EXACT_TERMINAL_BAR_SAME_VENUE",
         },
         "input_sha256": hashlib.sha256(raw).hexdigest(),

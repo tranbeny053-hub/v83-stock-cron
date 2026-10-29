@@ -56,7 +56,7 @@ def defaults(tf="1H", horizon=2, cadence=1, band="0.010", end_days=90):
         )
         slot += delta
     return {
-        "input_id": "ucpe.quant_ng.censor_input.v1",
+        "input_id": "ucpe.quant_ng.evalrows_input.v1",
         "source": "synthetic",
         "quarter_as_of_utc": stamp(T),
         "corpus_end_utc": stamp(end),
@@ -241,7 +241,16 @@ def test_record_counts_match_censor_input(tmp_path):
     p, out = invoke(tmp_path)
     assert p.returncode == 0, p.stdout + p.stderr
     rows = json.loads((out / "CENSOR_INPUT.json").read_bytes())["rows"]
-    counts = json.loads((out / "EVALROWS_RECORD.json").read_bytes())["counts"]
+    record = json.loads((out / "EVALROWS_RECORD.json").read_bytes())
+    counts = record["counts"]
+    assert record["ruling"]["synthetic_choices"] == [
+        "schedule anchored at the quarter as-of T",
+        (
+            "every scheduled instant needs both arms' forecasts; one missing refuses "
+            "the run (no missed-instant accounting)"
+        ),
+        "one band for the whole run (the product's band is per row)",
+    ]
     labels = [row["label"] for row in rows]
     assert counts["labelled"] == sum(label is not None for label in labels)
     assert counts["unlabelled"] == sum(label is None for label in labels)
@@ -440,6 +449,7 @@ def test_composition_with_censor_randomized(tmp_path):
     "kind,reason",
     [
         ("source", "source must be synthetic"),
+        ("censor input id", "invalid input"),
         ("ruling", "parameters require SYNTHETIC_TEST_ONLY"),
         ("digest", "input digest mismatch"),
         ("missing", "missing forecast"),
@@ -458,6 +468,7 @@ def test_composition_with_censor_randomized(tmp_path):
     ],
     ids=[
         "real source",
+        "censor input id",
         "wrong ruling",
         "digest mismatch",
         "missing forecast",
@@ -486,6 +497,8 @@ def test_refusals(tmp_path, kind, reason):
     edits = {}
     if kind == "source":
         d["source"] = "real"
+    if kind == "censor input id":
+        d["input_id"] = "ucpe.quant_ng.censor_input.v1"
     if kind == "ruling":
         params["ruling"] = "OTHER"
     if kind == "digest":
