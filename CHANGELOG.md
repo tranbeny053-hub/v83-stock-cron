@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-29 - Test pins for the dormant universe builder, and the model routing and worker rule in CLAUDE.md (on main, not released)
+
+It records #297 and #298. Nothing in this entry is released.
+
+Added:
+- #297: four tests in `tests/scripts/test_quant_ng_corpus.py` pin refusals that the dormant
+  universe builder already makes: a daily bar carrying any field but its open time and quote
+  volume, a price included; a candidate carrying an unrecognised key, such as a delisting date; a
+  coverage count above its history window, at 15m, 1H and 4H; and, with no freshness entry at all,
+  every timeframe reported `unknown`, never fresh. The builder itself is unchanged.
+
+Changed:
+- #298: `CLAUDE.md` now carries the owner's model routing (the model and effort are chosen per
+  milestone, from Opus Medium, High and XHIGH and Fable XHIGH and Max) and a worker rule. The rule
+  allows at most two active safe lanes in total. Ordinary subagents may do bounded work but never
+  count as a review the owner requires to be independent, which needs a separate, verified
+  session. Codex execution through `./delegate.sh` is unchanged.
+
+Notes:
+- Neither change touches a deployed file, so the running app is unaffected.
+
 ## 2026-10-28 - The offline fetch executor for OD-NG-5(b) step (b1), mock archive only (on main, not released)
 
 It records #294. Nothing in this entry is released.
