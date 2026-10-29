@@ -790,7 +790,9 @@ def test_unverified_rank_only_blocks_when_it_can_change_the_cap(tmp_path: Path):
 
 @pytest.mark.parametrize("count,expected", [(81, None), (80, "incomplete_1d")])
 def test_one_day_completeness_boundary(tmp_path: Path, count, expected):
-    c = candidate(bars=candidate()["daily_quote_volume"]["bars"][:count])
+    bars = candidate()["daily_quote_volume"]["bars"]
+    selected = [*bars[: count - 1], bars[-1]]
+    c = candidate(bars=selected)
     path, out, _ = case(tmp_path / str(count), evidence=bundle([c]))
     assert invoke(path).returncode == 0
     snap = json.loads((out / "UNIVERSE_SNAPSHOT.json").read_bytes())
@@ -798,12 +800,106 @@ def test_one_day_completeness_boundary(tmp_path: Path, count, expected):
 
 
 def test_incomplete_one_day_volume_is_known_without_listing_provenance(tmp_path: Path):
-    c = candidate(bars=candidate()["daily_quote_volume"]["bars"][:80])
+    bars = candidate()["daily_quote_volume"]["bars"]
+    c = candidate(bars=[*bars[:79], bars[-1]])
     c["listing"]["provenance"]["official_checksum"] = "b" * 64
     path, out, _ = case(tmp_path / "trial", evidence=bundle([c]))
     assert invoke(path).returncode == 0
     snap = json.loads((out / "UNIVERSE_SNAPSHOT.json").read_bytes())
     assert snap["symbols"][0]["timeframes"]["15m"]["reason"] == "incomplete_1d"
+
+
+@pytest.mark.parametrize(
+    "boundary,expected",
+    [
+        ("absent", "not_trading_at_t"),
+        ("zero", "not_trading_at_t"),
+        ("fraction", "not_trading_at_t"),
+        ("positive", None),
+    ],
+    ids=["absent", "zero", "fraction", "positive"],
+)
+def test_trading_at_t_requires_positive_boundary_volume(tmp_path: Path, boundary, expected):
+    bars = candidate()["daily_quote_volume"]["bars"]
+    if boundary == "absent":
+        bars = bars[:-1]
+    elif boundary == "zero":
+        bars[-1]["quote_volume"] = "0"
+    elif boundary == "fraction":
+        bars[-1]["quote_volume"] = "0.000"
+    path, out, _ = case(tmp_path / boundary, evidence=bundle([candidate(bars=bars)]))
+    snap = _snapshot(path, out)
+    rec = snap["symbols"][0]
+    for tf in ("15m", "1H", "4H"):
+        assert rec["timeframes"][tf]["reason"] == expected
+        if expected:
+            assert rec["timeframes"][tf]["status"] == "not_admitted: not_trading_at_t"
+            assert {
+                "symbol": "XYZUSDT",
+                "reason": "not_trading_at_t",
+                "timeframe": tf,
+            } in snap["not_admitted"]
+    if expected:
+        assert not any(item["symbol"] == "XYZUSDT" for item in snap["excluded"])
+    else:
+        assert rec["timeframes"]["15m"]["status"] == "member"
+
+
+def test_trading_at_t_reason_precedence(tmp_path: Path):
+    bars = candidate()["daily_quote_volume"]["bars"]
+    bars[-1]["quote_volume"] = "0"
+    bars = bars[:70] + bars[-1:]
+    incomplete = candidate("LOWUSDT", "LOW", bars=bars)
+    recent = candidate("NEWUSDT", "NEW")
+    recent["listing"]["first_daily_bar_open_utc"] = (T - timedelta(days=30)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    recent["daily_quote_volume"]["bars"][-1]["quote_volume"] = "0"
+    unknown = candidate("UNKUSDT", "UNK")
+    unknown["daily_quote_volume"]["bars"][-1]["quote_volume"] = "0"
+    unknown["daily_quote_volume"]["provenance"]["official_checksum"] = "b" * 64
+    path, out, _ = case(tmp_path / "precedence", evidence=bundle([incomplete, recent, unknown]))
+    snap = _snapshot(path, out)
+    reasons = {rec["symbol"]: rec["timeframes"]["15m"]["reason"] for rec in snap["symbols"]}
+    assert reasons == {
+        "LOWUSDT": "not_trading_at_t",
+        "NEWUSDT": "new_listing",
+        "UNKUSDT": "provenance_unknown",
+    }
+
+
+def test_trading_at_t_failure_is_removed_before_the_rank_cap(tmp_path: Path):
+    coins = []
+    phantom = candidate("TOPUSDT", "TOP")
+    for bar in phantom["daily_quote_volume"]["bars"]:
+        bar["quote_volume"] = "1000"
+    phantom["daily_quote_volume"]["bars"][-1]["quote_volume"] = "0"
+    coins.append(phantom)
+    for index in range(30):
+        coins.append(candidate(f"C{index:02d}USDT", f"C{index:02d}"))
+    path, out, _ = case(tmp_path / "rank", evidence=bundle(coins))
+    snap = _snapshot(path, out)
+    assert snap["members"]["15m"]["status"] == "DECIDED"
+    assert len(snap["members"]["15m"]["symbols"]) == 30
+    assert "TOPUSDT" not in snap["members"]["15m"]["symbols"]
+    assert snap["symbols"][0]["timeframes"]["15m"]["reason"] == "not_trading_at_t"
+    assert {
+        "symbol": "TOPUSDT",
+        "reason": "not_trading_at_t",
+        "timeframe": "15m",
+    } in snap["not_admitted"]
+    assert not any(
+        item["symbol"] == "TOPUSDT" and item["reason"] == "cap" for item in snap["not_admitted"]
+    )
+
+
+def test_zero_volume_earlier_in_window_still_counts_for_completeness(tmp_path: Path):
+    bars = candidate()["daily_quote_volume"]["bars"]
+    bars[0]["quote_volume"] = "0"
+    path, out, _ = case(tmp_path / "coverage", evidence=bundle([candidate(bars=bars)]))
+    snap = _snapshot(path, out)
+    assert snap["symbols"][0]["timeframes"]["1H"]["reason"] is None
+    assert snap["members"]["1H"] == {"status": "DECIDED", "symbols": ["XYZUSDT"]}
 
 
 # --- The consolidated repair after the independent review (Claude, 2026-10-25) -----------------
@@ -1012,6 +1108,10 @@ def test_the_snapshot_carries_the_ruling_and_a_clean_methodology(tmp_path: Path)
     assert snap["rule_sha256"] == m.UNIVERSE_RULE_V1_SHA256
     assert snap["ruling"]["R1"] == 90 and snap["ruling"]["R2"] == 30
     assert snap["ruling"]["R3"] == {"1H": None, "4H": None} and snap["ruling"]["R7"] == "F-C"
+    assert snap["ruling"]["G1"] == (
+        "a_prime: daily bar [T-1d, T) present with quote volume > 0; "
+        "owner-ruled 2026-10-29; SYNTHETIC_ONLY"
+    )
     assert snap["methodology"]["f3_clean"] is True and snap["f3_firewall"] == "F-C"
     assert snap["f3_calendar_overlap"] is False and m.f3_judgment_admissible(snap)
     assert snap["members"]["1H"] == {"status": "DECIDED", "symbols": ["XYZUSDT"]}
