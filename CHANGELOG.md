@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-29 - The parse layer for OD-NG-5(b) step (b1), MOCK fetch outputs only (on main, not released)
+
+It records #301. Nothing in this entry is released.
+
+Added:
+- #301: `scripts/quant_ng_extract.py`, a dormant parser. It turns the archive kline files that
+  the (b1) fetch tool verified into parsed daily bars and per-timeframe window counts at a
+  UTC-midnight cutoff T. It reads only each row's open time, close time and quote-asset volume,
+  never a price. Rows and files dated at or after T are discarded before any data check. Only
+  files the manifest classes `ok` are parsed, each read once and re-hashed against the manifest.
+  Off-grid bars fill no slot and add no volume; zero-volume regular bars count as present. Only
+  a MOCK manifest is accepted, BTCUSDT and ETHUSDT are refused, and a refusal leaves nothing
+  behind.
+
+Notes:
+- It writes no provenance record, so its output is not evidence the universe builder can use;
+  the provenance contract is still unruled. It contains no networking code.
+- Nothing in the product imports it, and it changes no deployed file, so the running app is
+  unaffected.
+
 ## 2026-10-29 - Test pins for the dormant universe builder, and the model routing and worker rule in CLAUDE.md (on main, not released)
 
 It records #297 and #298. Nothing in this entry is released.
