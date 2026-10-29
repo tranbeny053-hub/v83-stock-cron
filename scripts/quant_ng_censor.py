@@ -3,7 +3,12 @@
 
 Bars use end-exclusive close instants: a bar opened at ``o`` closes at
 ``o + timeframe``. A bar fills a slot only when it is on the epoch grid and
-has that exact close. No network or real data is supported. Refusals include:
+has that exact close. Classification never reads a bar closing after
+``min(corpus end, quarter end)``. Censor reasons are tested in this exact
+order: ``h > E`` gives ``span_end``; a later regular bar gives ``halt``; a
+later irregular bar gives ``unknown``; ticker reuse gives ``unknown``; recent
+last visible bar gives ``unknown``; otherwise ``delisting``. No network or
+real data is supported. Refusals include:
 invalid plan, invalid input, source must be synthetic, input digest mismatch,
 horizon requires SYNTHETIC_TEST_ONLY, output folder is not empty, as of is not
 UTC midnight, corpus ends before the quarter, member has no series, series is
@@ -303,7 +308,7 @@ def run(plan_arg: str) -> dict[str, Any]:
         raise Refusal("invalid input") from exc
     if isinstance(data, dict) and data.get("source") != "synthetic":
         raise Refusal("source must be synthetic")
-    if hashlib.sha256(input_bytes).hexdigest().lower() != inp["sha256"].lower():
+    if hashlib.sha256(input_bytes).hexdigest() != inp["sha256"]:
         raise Refusal("input digest mismatch")
     if (
         not isinstance(data, dict)
@@ -336,6 +341,7 @@ def run(plan_arg: str) -> dict[str, Any]:
     delta = timedelta(seconds=TIMEFRAMES[tf])
     delta_s = TIMEFRAMES[tf]
     quarter = asof + timedelta(days=90)
+    read_limit = min(end, quarter)
     members_raw, series_raw, rows_raw = data["members"], data["series"], data["rows"]
     if not all(isinstance(x, list) for x in (members_raw, series_raw, rows_raw)):
         raise Refusal("invalid input")
@@ -454,14 +460,16 @@ def run(plan_arg: str) -> dict[str, Any]:
             raise Refusal("label on an unresolved row")
         if h > end:
             reason = "span_end"
-        elif any(reg and close > h for _, close, reg in bars):
+        elif any(reg and h < close <= read_limit for _, close, reg in bars):
             reason = "halt"
+        elif any(not reg and h < close <= read_limit for _, close, reg in bars):
+            reason = "unknown"
         elif any(symbol == key[0] and lineage != key[1] for symbol, lineage in members):
             reason = "unknown"
         else:
-            regular_closes = [close for _, close, reg in bars if reg]
-            latest = max(regular_closes, default=EPOCH)
-            reason = "unknown" if end - latest < horizon["bars"] * delta else "delisting"
+            visible_closes = [close for _, close, _ in bars if close <= read_limit]
+            latest = max(visible_closes, default=EPOCH)
+            reason = "unknown" if read_limit - latest < horizon["bars"] * delta else "delisting"
         parsed_rows.append(
             {
                 "symbol": key[0],
@@ -525,6 +533,7 @@ def run(plan_arg: str) -> dict[str, Any]:
         "timeframe": tf,
         "quarter_as_of_utc": _utc_text(asof),
         "quarter_end_utc": _utc_text(quarter),
+        "classification_read_limit_utc": _utc_text(read_limit),
         "corpus_end_utc": _utc_text(end),
         "counts": {
             "instants": len(rows_raw),

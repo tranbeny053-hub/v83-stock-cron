@@ -89,8 +89,9 @@ def invoke(tmp_path: Path, data: dict, *, horizon=2, output_name="out", plan_cha
     return proc, output
 
 
-def test_taxonomy_and_order(tmp_path: Path):
-    cases = [
+@pytest.mark.parametrize(
+    "name,bars,t0,end,label,status,reason",
+    [
         (
             "resolved",
             [(T - DELTA, T), (T + DELTA, T + 2 * DELTA)],
@@ -122,6 +123,18 @@ def test_taxonomy_and_order(tmp_path: Path):
             "CENSORED",
             "delisting",
         ),
+        (
+            "irregular_after",
+            [
+                (T - DELTA, T),
+                (T + 2 * DELTA, T + 3 * DELTA - timedelta(seconds=1)),
+            ],
+            T,
+            T + timedelta(days=90),
+            None,
+            "CENSORED",
+            "unknown",
+        ),
         ("span_precedence", [(T - DELTA, T)], T, T + DELTA, None, "CENSORED", "span_end"),
         (
             "halt_precedence",
@@ -132,28 +145,43 @@ def test_taxonomy_and_order(tmp_path: Path):
             "CENSORED",
             "halt",
         ),
-    ]
-    for index, (name, bars, t0, end, label, status, reason) in enumerate(cases):
-        members = [{"symbol": "AAA", "lineage": "ONE"}]
-        if name in {"reuse", "halt_precedence"}:
-            members.append({"symbol": "AAA", "lineage": "TWO"})
-            series = [
-                {
-                    "symbol": "AAA",
-                    "lineage": "ONE",
-                    "bars": [{"open_utc": stamp(a), "close_utc": stamp(b)} for a, b in bars],
-                },
-                {"symbol": "AAA", "lineage": "TWO", "bars": []},
-            ]
-        else:
-            series = None
-        data = base_input(
-            bars=bars, rows=[instant(t0, label=label)], members=members, series=series, end=end
-        )
-        proc, output = invoke(tmp_path, data, output_name=f"out{index}")
-        assert proc.returncode == 0, proc.stdout + proc.stderr
-        row = json.loads((output / "CENSOR_ACCOUNTING.json").read_bytes())["rows"][0]
-        assert (row["status"], row["censor_reason"]) == (status, reason), name
+    ],
+    ids=[
+        "resolved",
+        "span end",
+        "halt",
+        "delisting",
+        "reuse",
+        "recent",
+        "maintenance",
+        "irregular after",
+        "span precedence",
+        "halt precedence",
+    ],
+)
+def test_taxonomy_and_order(
+    tmp_path: Path, name, bars, t0, end, label, status, reason
+):
+    members = [{"symbol": "AAA", "lineage": "ONE"}]
+    if name in {"reuse", "halt_precedence", "span_precedence"}:
+        members.append({"symbol": "AAA", "lineage": "TWO"})
+        series = [
+            {
+                "symbol": "AAA",
+                "lineage": "ONE",
+                "bars": [{"open_utc": stamp(a), "close_utc": stamp(b)} for a, b in bars],
+            },
+            {"symbol": "AAA", "lineage": "TWO", "bars": []},
+        ]
+    else:
+        series = None
+    data = base_input(
+        bars=bars, rows=[instant(t0, label=label)], members=members, series=series, end=end
+    )
+    proc, output = invoke(tmp_path, data)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    row = json.loads((output / "CENSOR_ACCOUNTING.json").read_bytes())["rows"][0]
+    assert (row["status"], row["censor_reason"]) == (status, reason), name
 
 
 def test_quarter_partition_and_no_rows(tmp_path: Path):
@@ -188,6 +216,48 @@ def test_quarter_partition_and_no_rows(tmp_path: Path):
     assert counts["rows"] == counts["resolved"] + counts["censored"]
     assert counts["censored"] == sum(counts["censored_by_reason"].values())
     assert body["no_rows_in_quarter"] == [{"symbol": "BBB", "lineage": "ONE"}]
+
+
+def test_classification_read_limit(tmp_path: Path):
+    q = T + timedelta(days=90)
+    t0 = q - 2 * DELTA
+    # The bar after the quarter is invisible; the latest visible close is
+    # within H * delta of Q, so censoring stays unknown instead of halt.
+    data = base_input(
+        rows=[instant(t0)],
+        bars=[
+            (t0 - DELTA, t0),
+            (q - DELTA, q - DELTA + timedelta(seconds=1)),
+            (q, q + DELTA),
+        ],
+        end=q + timedelta(days=2),
+    )
+    proc, output = invoke(tmp_path, data, horizon=2)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    body = json.loads((output / "CENSOR_ACCOUNTING.json").read_bytes())
+    assert body["classification_read_limit_utc"] == stamp(q)
+    assert body["rows"][0]["censor_reason"] == "unknown"
+
+    # A later regular close inside W still identifies a halt.
+    t0 = q - 5 * DELTA
+    data = base_input(
+        rows=[instant(t0)],
+        bars=[(t0 - DELTA, t0), (t0 + 3 * DELTA, t0 + 4 * DELTA)],
+        end=q + timedelta(days=2),
+    )
+    proc, output = invoke(tmp_path, data, horizon=2, output_name="inside")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    body = json.loads((output / "CENSOR_ACCOUNTING.json").read_bytes())
+    assert body["rows"][0]["censor_reason"] == "halt"
+    assert body["classification_read_limit_utc"] == stamp(q)
+
+    # When corpus end precedes quarter end, W is E.
+    e = T + timedelta(days=3)
+    data = base_input(rows=[instant(T)], bars=[(T - DELTA, T)], end=e)
+    proc, output = invoke(tmp_path, data, horizon=2, output_name="corpus")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    body = json.loads((output / "CENSOR_ACCOUNTING.json").read_bytes())
+    assert body["classification_read_limit_utc"] == stamp(e)
 
 
 @pytest.mark.parametrize("offset", [-1, 90], ids=["before quarter", "at quarter"])
