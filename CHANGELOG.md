@@ -2,6 +2,32 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-29 - C10 (A+) censoring accounting and G-1 (a′) trading at T, synthetic only (on main, not released)
+
+It records #304. Nothing in this entry is released.
+
+Added:
+- #304: `scripts/quant_ng_censor.py`, a dormant accounting tool for the future evaluation-row
+  stage, reading synthetic input only, with its horizon a test-only parameter. A row resolves only
+  if the regular bar closing exactly at its horizon end exists. Every other row is counted with
+  one reason, in this order: span end, halt, unknown, then confirmed delisting. Unknown is never
+  pooled with delisting. Rows end by the quarter's end, and classification reads no bar closing
+  after the earlier of the corpus end and the quarter end. Score bounds use exact fractions and
+  one shared label per censored row for both arms. A claim holds only at the adverse end.
+
+Changed:
+- #304: the dormant universe builder, `scripts/quant_ng_corpus.py`, now admits a symbol at T only
+  if its daily bar for the day before T exists with quote volume above zero. Otherwise the symbol
+  is `not_admitted: not_trading_at_t`. The completeness rule and the universe rule file are
+  unchanged.
+
+Notes:
+- Both follow the owner's 2026-10-29 rulings and are synthetic-only. They make no claim that
+  real data is admissible; the provenance, availability and revision contracts are still unruled.
+  Neither contains networking code.
+- Nothing in the product imports either file, and no deployed file changes, so the running app is
+  unaffected.
+
 ## 2026-10-29 - The parse layer for OD-NG-5(b) step (b1), MOCK fetch outputs only (on main, not released)
 
 It records #301. Nothing in this entry is released.
