@@ -124,6 +124,26 @@ def symbols_bytes(path: Path) -> bytes:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()[:end]
 
 
+def _identity_rows(fetched: Path, symbol: str, interval: str) -> list[dict]:
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
+    rows = [
+        row
+        for row in manifest["files"]
+        if row["symbol"] == symbol and row["interval"] == interval
+        and row["period"] < "2025-04"
+    ]
+    ordered = sorted(rows, key=lambda row: row["path"])
+    return [{field: row[field] for field in fields} for row in ordered]
+
+
+def _write_manifest(fetched: Path, manifest: dict) -> None:
+    path = fetched / "MANIFEST.json"
+    path.chmod(0o600)
+    path.write_text(json.dumps(manifest))
+    path.chmod(0o444)
+
+
 def make_series(
     tmp_path: Path,
     interval: str = "15m",
@@ -179,7 +199,11 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         {"status": "PASS", "parse_sha256": hashlib.sha256(raw).hexdigest()}, separators=(",", ":")
     )
     assert (output / "PARSE.json").stat().st_mode & 0o777 == 0o444
-    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v1" and body["status"] == "MOCK"
+    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v2" and body["status"] == "MOCK"
+    assert body["note"] == (
+        "parsed bars with per-file identities, not builder evidence: availability, revision "
+        "and provenance policy are unruled"
+    )
     assert body["cutoff_utc"] == T and body["files_after_cutoff"] == 0
     assert body["windows"] == {"daily_days": 90, "history_bars": {"15m": 678, "1H": 678, "4H": 174}}
     assert (
@@ -203,6 +227,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert symbol["daily"] == {
         "usable": True,
         "reason": None,
+        "objects": _identity_rows(fetched, "AAAUSDT", "1d"),
         "bars": [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}],
         "first_open_utc": "2025-03-31T00:00:00Z",
         "off_grid": 0,
@@ -213,6 +238,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         "15m": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "15m"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
@@ -221,6 +247,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         "1H": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "1h"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
@@ -229,6 +256,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         "4H": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "4h"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
@@ -267,8 +295,15 @@ def test_allowlist_and_after_cutoff_rows(tmp_path: Path) -> None:
     fetched2 = fetch(tmp_path / "other", [path])
     result2, out2 = invoke(tmp_path / "other", fetched2)
     assert result2.returncode == 0
-    # Compare only the symbols block; manifest and tool digests necessarily differ by input.
-    assert symbols_bytes(out / "PARSE.json") == symbols_bytes(out2 / "PARSE.json")
+    # The parsed values match; per-file identities reflect each distinct manifest.
+    symbols_one = json.loads(symbols_bytes(out / "PARSE.json"))
+    symbols_two = json.loads(symbols_bytes(out2 / "PARSE.json"))
+    for symbols in (symbols_one, symbols_two):
+        for item in symbols:
+            item["daily"].pop("objects")
+            for series in item["coverage"].values():
+                series.pop("objects")
+    assert symbols_one == symbols_two
 
 
 def test_a_short_row_dated_after_cutoff_is_discarded(tmp_path: Path) -> None:
@@ -805,6 +840,85 @@ def test_symbol_with_only_after_cutoff_rows_is_omitted(tmp_path: Path) -> None:
     assert body["files_after_cutoff"] == 1 and body["symbols"] == []
 
 
+def test_objects_list_pre_cutoff_rows_in_path_order(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    paths = [
+        archive(
+            root,
+            "15m",
+            "2025-03",
+            zip_blob("AAAUSDT-15m-2025-03.zip", [row(TMS - 3 * 86400000)]),
+            granularity="monthly",
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-03-30",
+            zip_blob("AAAUSDT-15m-2025-03-30.zip", [row(TMS - 2 * 86400000)]),
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-03-31",
+            zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-04-01",
+            zip_blob("AAAUSDT-15m-2025-04-01.zip", [row(TMS)]),
+        ),
+    ]
+    fetched = fetch(tmp_path, paths)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    body = json.loads((output / "PARSE.json").read_bytes())
+    coverage = body["symbols"][0]["coverage"]["15m"]
+    assert coverage["objects"] == _identity_rows(fetched, "AAAUSDT", "15m")
+    assert len(coverage["objects"]) == 3
+    assert body["files_after_cutoff"] == 1
+    assert all(entry["period"] != "2025-04-01" for entry in coverage["objects"])
+
+
+@pytest.mark.parametrize(
+    "object_class",
+    ["missing", "mismatch"],
+    ids=["missing-file", "mismatched-file"],
+)
+def test_unusable_series_still_lists_object_identities(
+    tmp_path: Path, object_class: str
+) -> None:
+    root = tmp_path / "archive"
+    good = archive(
+        root,
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+    )
+    bad = archive(
+        root,
+        "15m",
+        "2025-03-30",
+        zip_blob("AAAUSDT-15m-2025-03-30.zip", [row(TMS - 2 * 86400000)]),
+        check="0" * 64 if object_class == "mismatch" else None,
+    )
+    fetched = fetch(tmp_path, [good, bad])
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    manifest_bad = next(item for item in manifest["files"] if item["path"] == bad)
+    if object_class == "missing":
+        manifest_bad["class"] = "missing"
+        manifest_bad["sha256"] = None
+        manifest_bad["official_checksum"] = None
+        manifest_bad["size"] = None
+    _write_manifest(fetched, manifest)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    coverage = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
+    assert coverage["usable"] is False
+    assert object_class in [entry["class"] for entry in coverage["objects"]]
+    assert coverage["objects"] == _identity_rows(fetched, "AAAUSDT", "15m")
+
+
 def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:
     fetched = make_series(tmp_path)
     manifest_path = fetched / "MANIFEST.json"
@@ -819,7 +933,7 @@ def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:
     assert not output.exists()
 
 
-def test_parses_the_bytes_verified_during_the_upfront_pass(
+def test_an_object_changed_after_verification_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fetched = make_series(
@@ -832,23 +946,21 @@ def test_parses_the_bytes_verified_during_the_upfront_pass(
     manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
     object_path = fetched / "objects" / manifest["files"][0]["sha256"]
     original_read = Path.read_bytes
-    reads = 0
+    changed = False
 
     def read_and_replace(path: Path) -> bytes:
-        nonlocal reads
-        content = original_read(path)
+        nonlocal changed
         if path == object_path:
-            reads += 1
-            if reads == 1:
-                object_path.chmod(0o600)
-                object_path.write_bytes(
-                    zip_blob(
-                        "AAAUSDT-1d-2025-03.zip",
-                        [row(TMS - 86400000, TMS - 1, volume="9.00")],
-                    )
+            changed = True
+            object_path.chmod(0o600)
+            object_path.write_bytes(
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(TMS - 86400000, TMS - 1, volume="9.00")],
                 )
-                object_path.chmod(0o444)
-        return content
+            )
+            object_path.chmod(0o444)
+        return original_read(path)
 
     monkeypatch.setattr(Path, "read_bytes", read_and_replace)
     spec = importlib.util.spec_from_file_location("extract_verified_bytes", SCRIPT)
@@ -863,10 +975,98 @@ def test_parses_the_bytes_verified_during_the_upfront_pass(
     plan_path = tmp_path / "localplan.json"
     plan_path.write_text(json.dumps(plan))
 
-    assert module.run(str(plan_path))["status"] == "PASS"
-    assert reads == 1
-    parsed = json.loads((tmp_path / "parsed" / "PARSE.json").read_bytes())
+    with pytest.raises(module.Refusal, match="object changed after verification"):
+        module.run(str(plan_path))
+    assert changed
+    assert not (tmp_path / "parsed" / "PARSE.json").exists()
+    assert not (tmp_path / "parsed").exists()
+
+
+def test_verified_object_parses_its_original_value(tmp_path: Path) -> None:
+    fetched = make_series(
+        tmp_path,
+        "1d",
+        "2025-03",
+        [row(TMS - 86400000, TMS - 1, volume="2.50")],
+        granularity="monthly",
+    )
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    parsed = json.loads((output / "PARSE.json").read_bytes())
     assert parsed["symbols"][0]["daily"]["bars"][0]["quote_volume"] == "2.50"
+
+
+def test_upfront_hash_streams_and_parse_reads_each_object_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    original_read_bytes = Path.read_bytes
+    original_open = Path.open
+    reads: list[Path] = []
+    streamed: list[Path] = []
+
+    def watched_read_bytes(path: Path) -> bytes:
+        if path == object_path:
+            reads.append(path)
+        return original_read_bytes(path)
+
+    def watched_open(path: Path, *args, **kwargs):
+        if path == object_path:
+            streamed.append(path)
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", watched_read_bytes)
+    monkeypatch.setattr(Path, "open", watched_open)
+    spec = importlib.util.spec_from_file_location("extract_streamed_hash", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    plan_path = tmp_path / "stream-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "streamed"),
+            }
+        )
+    )
+    assert module.run(str(plan_path))["status"] == "PASS"
+    assert len(streamed) == 2
+    assert reads == [object_path]
+
+
+def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
+    import random
+
+    rng = random.Random(42)
+    fields = ["".join(rng.choices("abcdef0123456789", k=150000)) for _ in range(9)]
+    csv_row = ",".join(
+        [str(TMS - 900000), *fields[:5], str(TMS - 1), "2.50", *fields[5:]]
+    )
+    member = "AAAUSDT-15m-2025-03-31.csv"
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr(member, csv_row + "\n")
+    blob = stream.getvalue()
+    assert len(blob) > 1024 * 1024
+    path = archive(tmp_path / "archive", "15m", "2025-03-31", blob)
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched, "large-good")
+    assert result.returncode == 0
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    object_path.chmod(0o600)
+    changed = bytearray(object_path.read_bytes())
+    changed[-1] ^= 1
+    object_path.write_bytes(changed)
+    object_path.chmod(0o444)
+    refused, bad_output = invoke(tmp_path, fetched, "large-tail-change")
+    assert refused.returncode == 2
+    assert json.loads(refused.stdout)["reason"] == "object does not match the manifest"
+    assert not bad_output.exists()
 
 
 @pytest.mark.parametrize(

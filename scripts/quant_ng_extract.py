@@ -2,15 +2,16 @@
 """Parse verified local MOCK kline archive objects for OD-NG-5(b), step (b1).
 
 This offline tool reads only a fetch manifest and its verified zip objects. It
-produces parsed bars and window counts, not builder evidence, and writes no
-provenance record. Every refusal is printed as JSON with exit 2 and leaves no
-output behind. Refusals include: unreadable or invalid plan, cutoff not UTC
-midnight, invalid path, nonempty output, unreadable or invalid manifest, a
-non-MOCK manifest, reserved BTCUSDT or ETHUSDT, symlinks below the fetch output,
-object does not match the manifest, no files, file not verified, malformed
-archive file, malformed row, invalid timestamp, malformed volume, bar outside
-its file period, and duplicate bar. Guard refusals include filesystem change
-outside the output folder: <event>. Unexpected errors are reported as
+produces parsed bars and window counts, not builder evidence, and writes
+per-file identities, not provenance records. Every refusal is printed as JSON
+with exit 2 and leaves no output behind. Refusals include: unreadable or
+invalid plan, cutoff not UTC midnight, invalid path, nonempty output,
+unreadable or invalid manifest, a non-MOCK manifest, reserved BTCUSDT or ETHUSDT,
+symlinks below the fetch output,
+object does not match the manifest, object changed after verification, no files,
+file not verified, malformed archive file, malformed row, invalid timestamp,
+malformed volume, bar outside its file period, and duplicate bar. Guard refusals
+include filesystem change outside the output folder: <event>. Unexpected errors are reported as
 run failed: <Type>.
 
 Usage: ``python -I -B scripts/quant_ng_extract.py <plan.json>``.
@@ -70,6 +71,7 @@ OUTPUT_INTERVALS = {"15m": "15m", "1h": "1H", "4h": "4H", "1d": "1D"}
 HISTORY_BARS = {"15m": 678, "1H": 678, "4H": 174}
 DAILY_DAYS = 90
 MAX_MEMBER_SIZE = 64 * 1024 * 1024
+HASH_CHUNK_SIZE = 1024 * 1024
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
@@ -118,6 +120,14 @@ def _row_period_end(start: datetime, row: dict[str, Any]) -> datetime:
     if row["granularity"] == "monthly":
         return datetime(start.year + (start.month == 12), start.month % 12 + 1, 1, tzinfo=UTC)
     return start + timedelta(days=1)
+
+
+def _object_identities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
+    return [
+        {field: row[field] for field in fields}
+        for row in sorted(rows, key=lambda item: item["path"])
+    ]
 
 
 def _micros(value: datetime) -> int:
@@ -320,7 +330,7 @@ def run(plan_arg: str) -> dict[str, Any]:
     _check_symlinks(fetch_dir)
     cutoff_us = _micros(cutoff)
     # Verify every pre-cutoff object before parsing any series.
-    verified_blobs: dict[str, bytes] = {}
+    verified_digests: set[str] = set()
     for row in rows:
         if row["class"] == "ok" and _period_start(row) < cutoff:
             digest, official = row["sha256"], row["official_checksum"]
@@ -331,16 +341,17 @@ def run(plan_arg: str) -> dict[str, Any]:
                 or not HEX_RE.fullmatch(official)
             ):
                 raise Refusal("object does not match the manifest")
-            if digest not in verified_blobs:
-                try:
-                    blob = (fetch_dir / "objects" / digest).read_bytes()
-                except OSError as exc:
-                    raise Refusal("object does not match the manifest") from exc
-                verified_blobs[digest] = blob
-            blob = verified_blobs[digest]
-            actual = hashlib.sha256(blob).hexdigest()
+            try:
+                hasher = hashlib.sha256()
+                with (fetch_dir / "objects" / digest).open("rb") as stream:
+                    while chunk := stream.read(HASH_CHUNK_SIZE):
+                        hasher.update(chunk)
+                actual = hasher.hexdigest()
+            except OSError as exc:
+                raise Refusal("object does not match the manifest") from exc
             if actual != digest or actual != official:
                 raise Refusal("object does not match the manifest")
+            verified_digests.add(digest)
     _OUTPUT_HOLDER[0] = output
     created = _make_output(output)
     try:
@@ -377,18 +388,27 @@ def run(plan_arg: str) -> dict[str, Any]:
             reason = None
             for row in series_rows:
                 digest = row["sha256"]
-                blob = verified_blobs[digest]
+                if digest not in verified_digests:
+                    raise Refusal("object does not match the manifest")
+                try:
+                    blob = (fetch_dir / "objects" / digest).read_bytes()
+                except OSError as exc:
+                    raise Refusal("object changed after verification") from exc
+                if hashlib.sha256(blob).hexdigest() != digest:
+                    raise Refusal("object changed after verification")
                 start = _period_start(row)
                 end = _row_period_end(start, row)
                 try:
                     bars, *counts = _read_archive(
                         blob, row, cutoff_us, INTERVALS[key[1]], start, end
                     )
-                    all_bars.extend(bars)
-                    counters = [a + b for a, b in zip(counters, counts, strict=True)]
                 except Refusal as exc:
                     reason = str(exc)
                     break
+                finally:
+                    del blob
+                all_bars.extend(bars)
+                counters = [a + b for a, b in zip(counters, counts, strict=True)]
             if reason:
                 parsed[key] = {"usable": False, "reason": reason}
                 continue
@@ -396,7 +416,24 @@ def run(plan_arg: str) -> dict[str, Any]:
             if len(opens) != len(set(opens)):
                 parsed[key] = {"usable": False, "reason": "duplicate bar"}
                 continue
-            parsed[key] = {"usable": True, "reason": None, "bars": all_bars, "counts": counters}
+            if key[1] == "1d":
+                parsed[key] = {
+                    "usable": True,
+                    "reason": None,
+                    "bars": all_bars,
+                    "counts": counters,
+                }
+            else:
+                window_start = cutoff_us - (
+                    HISTORY_BARS[OUTPUT_INTERVALS[key[1]]] * INTERVALS[key[1]]
+                )
+                parsed[key] = {
+                    "usable": True,
+                    "reason": None,
+                    "present": sum(window_start <= t < cutoff_us for t, _ in all_bars),
+                    "counts": counters,
+                }
+                del all_bars, opens
         daily_start_us = cutoff_us - DAILY_DAYS * 24 * 60 * 60 * 1_000_000
         output_symbols = []
         for symbol in sorted(symbols):
@@ -408,6 +445,7 @@ def run(plan_arg: str) -> dict[str, Any]:
                 daily_out = {
                     "usable": True,
                     "reason": None,
+                    "objects": _object_identities(groups.get((symbol, "1d"), [])),
                     "bars": [
                         {"open_utc": _utc_text(_dt(t)), "quote_volume": v}
                         for t, v in sorted(window)
@@ -421,6 +459,7 @@ def run(plan_arg: str) -> dict[str, Any]:
                 daily_out = {
                     "usable": False,
                     "reason": daily["reason"],
+                    "objects": _object_identities(groups.get((symbol, "1d"), [])),
                     "bars": None,
                     "first_open_utc": None,
                     "off_grid": None,
@@ -432,13 +471,12 @@ def run(plan_arg: str) -> dict[str, Any]:
                 series = parsed[(symbol, interval)]
                 out_name = OUTPUT_INTERVALS[interval]
                 if series["usable"]:
-                    start_us = cutoff_us - HISTORY_BARS[out_name] * INTERVALS[interval]
-                    present = sum(start_us <= t < cutoff_us for t, _ in series["bars"])
                     counts = series["counts"]
                     coverage[out_name] = {
                         "usable": True,
                         "reason": None,
-                        "present_in_window": present,
+                        "present_in_window": series["present"],
+                        "objects": _object_identities(groups.get((symbol, interval), [])),
                         "off_grid": counts[0],
                         "zero_volume": counts[1],
                         "close_time_anomalies": counts[2],
@@ -448,16 +486,18 @@ def run(plan_arg: str) -> dict[str, Any]:
                         "usable": False,
                         "reason": series["reason"],
                         "present_in_window": None,
+                        "objects": _object_identities(groups.get((symbol, interval), [])),
                         "off_grid": None,
                         "zero_volume": None,
                         "close_time_anomalies": None,
                     }
             output_symbols.append({"symbol": symbol, "daily": daily_out, "coverage": coverage})
         result = {
-            "parse_id": "ucpe.quant_ng.extract_parse.v1",
+            "parse_id": "ucpe.quant_ng.extract_parse.v2",
             "status": "MOCK",
             "note": (
-                "parsed bars only, not builder evidence: no provenance records (F-PROV is unruled)"
+                "parsed bars with per-file identities, not builder evidence: "
+                "availability, revision and provenance policy are unruled"
             ),
             "cutoff_utc": _utc_text(cutoff),
             "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
