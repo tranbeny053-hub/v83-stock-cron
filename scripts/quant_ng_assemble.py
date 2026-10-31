@@ -5,7 +5,8 @@ Every refusal is printed as JSON with exit 2 and leaves no output behind.
 Refusals include invalid plans or input digests, non-MOCK manifests, parse bytes
 not derived from the manifest, invalid policy or non-market evidence, and a
 nonempty output folder. MOCK only; not admissible to the builder until change
-4b; no policy interpreted. MOCK has no lineage source, so candidate lineage is
+4b. D8 CT-2 and CT-3 interpretations are INFERRED from the bound policy text.
+MOCK has no lineage source, so candidate lineage is
 always null, meaning unknown and never "no ticker reuse". An unusable series is
 null, never zero. Per-file provenance carries identities only; policy-derived
 fields are explicitly pending change 3.
@@ -297,21 +298,60 @@ def evidence(
     revision = policy["parameters"]["D5_revision"]["value"]
     if revision in {"RP-1", "RP-2", "RP-3+RP-1"}:
         raise Refusal("policy detail unruled: capture time")
+    close_time_option = policy["parameters"]["D8_close_time"]["value"]
+    evidence_option = policy["parameters"]["D3_evidence"]["value"]
+    if evidence_option == "E-1":
+        raise Refusal("policy option not built: E-1")
+    if evidence_option == "E-2":
+        raise Refusal("policy option not built: E-2")
+    if evidence_option == "E-3" and (
+        non_market["exclusion_verification"]
+        or non_market["not_leveraged_verification"]
+    ):
+        raise Refusal("invalid non-market evidence: E-3 holds no exclusion documents")
     candidates = []
     for symbol_data in parse["symbols"]:
         symbol = symbol_data["symbol"]
         if not isinstance(symbol, str) or not symbol.endswith("USDT"):
             raise Refusal("invalid parse symbol")
         daily = symbol_data["daily"]
-        daily_provenance = _provenance(daily, policy_sha256, availability, revision, changelog)
+        daily_unusable = (
+            close_time_option == "CT-3"
+            and daily["usable"]
+            and daily["close_time_anomalies_all"] > 0
+        )
+        daily_usable = daily["usable"] and not daily_unusable
+        daily_series = (
+            {**daily, "usable": False, "reason": "close-time anomaly"}
+            if daily_unusable
+            else daily
+        )
+        daily_provenance = _provenance(
+            daily_series, policy_sha256, availability, revision, changelog
+        )
         coverage = {}
         for name in ("15m", "1H", "4H"):
             series = symbol_data["coverage"][name]
+            series_unusable = (
+                close_time_option == "CT-3"
+                and series["usable"]
+                and series["close_time_anomalies_all"] > 0
+            )
+            series_usable = series["usable"] and not series_unusable
+            effective_series = (
+                {**series, "usable": False, "reason": "close-time anomaly"}
+                if series_unusable
+                else series
+            )
             coverage[name] = {
                 "present_in_window": (
-                    series["present_in_window"] if series["usable"] else None
+                    series["present_in_window"] - series["close_time_anomalies"]
+                    if series_usable and close_time_option == "CT-2"
+                    else series["present_in_window"] if series_usable else None
                 ),
-                "provenance": _provenance(series, policy_sha256, availability, revision, changelog),
+                "provenance": _provenance(
+                    effective_series, policy_sha256, availability, revision, changelog
+                ),
             }
         candidates.append(
             {
@@ -320,15 +360,20 @@ def evidence(
                 "quote": "USDT",
                 "lineage": None,
                 "listing": {
-                    "first_daily_bar_open_utc": daily["first_open_utc"],
+                    "first_daily_bar_open_utc": (
+                        daily["first_unflagged_open_utc"]
+                        if close_time_option == "CT-2" and daily_usable
+                        else daily["first_open_utc"] if daily_usable else None
+                    ),
                     "provenance": daily_provenance,
                 },
                 "daily_quote_volume": {
                     "bars": [
                         {key: value for key, value in bar.items() if key != "close_time_anomaly"}
                         for bar in daily["bars"]
+                        if close_time_option != "CT-2" or not bar["close_time_anomaly"]
                     ]
-                    if daily["usable"]
+                    if daily_usable
                     else None,
                     "provenance": daily_provenance,
                 },

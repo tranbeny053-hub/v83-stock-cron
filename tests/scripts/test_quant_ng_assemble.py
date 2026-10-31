@@ -74,6 +74,91 @@ def assembled_inputs(tmp_path: Path, *, extra_paths: list[str] | None = None):
     return fetched, parse_path, policy, non_market
 
 
+def anomalous_assembled_inputs(tmp_path: Path, *, close_time="CT-1", evidence="E-3",
+                               non_market_changes=None):
+    day = 86_400_000
+    root = tmp_path / "archive"
+    paths = [
+        HELPERS.archive(
+            root,
+            "1d",
+            "2024-12",
+            HELPERS.zip_blob(
+                "AAAUSDT-1d-2024-12.zip",
+                [HELPERS.row(HELPERS.TMS - 91 * day, HELPERS.TMS - 91 * day + day - 2)],
+            ),
+            granularity="monthly",
+        ),
+        HELPERS.archive(
+            root,
+            "1d",
+            "2025-03",
+            HELPERS.zip_blob(
+                "AAAUSDT-1d-2025-03.zip",
+                [
+                    HELPERS.row(
+                        HELPERS.TMS - 2 * day,
+                        HELPERS.TMS - day - 1,
+                        volume="7.00",
+                    ),
+                    HELPERS.row(HELPERS.TMS - day, HELPERS.TMS - 2, volume="8.00"),
+                ],
+            ),
+            granularity="monthly",
+        ),
+        HELPERS.archive(
+            root,
+            "15m",
+            "2025-03-31",
+            HELPERS.zip_blob(
+                "AAAUSDT-15m-2025-03-31.zip",
+                [HELPERS.row(HELPERS.TMS - 900_000, HELPERS.TMS - 2)],
+            ),
+        ),
+    ]
+    fetched = HELPERS.fetch(tmp_path, paths)
+    parse_dir = tmp_path / "parsed"
+    parse_plan = {
+        "plan_id": "ucpe.quant_ng.extract.v1",
+        "fetch_output_dir": str(fetched),
+        "cutoff_utc": T,
+        "output_dir": str(parse_dir),
+    }
+    parse_plan_path = tmp_path / "parse-plan.json"
+    json_file(parse_plan_path, parse_plan)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", str(EXTRACT), str(parse_plan_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    parse_path = parse_dir / "PARSE.json"
+    policy, non_market = tmp_path / "policy.json", tmp_path / "non-market.json"
+    value = {
+        "evidence_id": "ucpe.quant_ng.non_market_evidence.v1",
+        "source": "mock",
+        "exclusion_verification": [],
+        "not_leveraged_verification": [],
+        "freshness": [],
+    }
+    value.update(non_market_changes or {})
+    json_file(non_market, value)
+    helpers_spec = importlib.util.spec_from_file_location(
+        "policy_anomaly_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    policy_helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(policy_helpers)
+    policy_value = policy_helpers.policy()
+    policy_value["parameters"]["D3_evidence"].update(
+        value=evidence, non_market_sha256=sha(non_market)
+    )
+    policy_value["parameters"]["D8_close_time"]["value"] = close_time
+    json_file(policy, policy_value)
+    return fetched, parse_path, policy, non_market
+
+
 def write_policy(policy: Path, non_market: Path) -> None:
     policy_helpers = importlib.util.spec_from_file_location(
         "policy_test_helpers_for_assemble", ROOT / "tests/scripts/test_quant_ng_policy.py"
@@ -82,6 +167,7 @@ def write_policy(policy: Path, non_market: Path) -> None:
     policy_module = importlib.util.module_from_spec(policy_helpers)
     policy_helpers.loader.exec_module(policy_module)
     policy_value = policy_module.policy()
+    policy_value["parameters"]["D3_evidence"]["value"] = "E-3"
     policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = sha(non_market)
     json_file(policy, policy_value)
 
@@ -395,6 +481,7 @@ def test_bound_input_refusals(tmp_path: Path, case: str, expected: str) -> None:
     policy_module = importlib.util.module_from_spec(policy_helpers)
     policy_helpers.loader.exec_module(policy_module)
     policy = policy_module.policy()
+    policy["parameters"]["D3_evidence"]["value"] = "E-3"
     policy["parameters"]["D3_evidence"]["non_market_sha256"] = sha(non_market)
     changes = {}
     changelog = {
@@ -520,6 +607,128 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
     )
     assert invoke(second_plan).returncode == 0
     assert (second_output / "EVIDENCE.json").read_bytes() == raw
+
+
+@pytest.mark.parametrize(
+    "option,expected_bars,expected_listing,expected_daily_usable,expected_daily_reason,"
+    "expected_15m_count,expected_15m_usable,expected_15m_reason",
+    [
+        (
+            "CT-1",
+            [
+                {"open_utc": "2025-03-30T00:00:00Z", "quote_volume": "7.00"},
+                {"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "8.00"},
+            ],
+            "2024-12-31T00:00:00Z",
+            True,
+            None,
+            1,
+            True,
+            None,
+        ),
+        (
+            "CT-2",
+            [{"open_utc": "2025-03-30T00:00:00Z", "quote_volume": "7.00"}],
+            "2025-03-30T00:00:00Z",
+            True,
+            None,
+            0,
+            True,
+            None,
+        ),
+        ("CT-3", None, None, False, "close-time anomaly", None, False, "close-time anomaly"),
+    ],
+    ids=["CT-1", "CT-2", "CT-3"],
+)
+def test_d8_close_time_policy_derives_exact_evidence(
+    tmp_path: Path,
+    option,
+    expected_bars,
+    expected_listing,
+    expected_daily_usable,
+    expected_daily_reason,
+    expected_15m_count,
+    expected_15m_usable,
+    expected_15m_reason,
+) -> None:
+    fetched, parse_path, policy, non_market = anomalous_assembled_inputs(
+        tmp_path, close_time=option
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    bundle = json.loads((output / "EVIDENCE.json").read_bytes())
+    candidate = bundle["candidates"][0]
+    daily = candidate["daily_quote_volume"]
+    assert daily["bars"] == expected_bars
+    assert candidate["listing"]["first_daily_bar_open_utc"] == expected_listing
+    assert daily["provenance"]["series_usable"] is expected_daily_usable
+    assert daily["provenance"]["series_reason"] == expected_daily_reason
+    coverage = candidate["coverage"]["15m"]
+    assert coverage["present_in_window"] == expected_15m_count
+    assert coverage["provenance"]["series_usable"] is expected_15m_usable
+    assert coverage["provenance"]["series_reason"] == expected_15m_reason
+    corpus_spec = importlib.util.spec_from_file_location(
+        "corpus_for_d8_verify", ROOT / "scripts/quant_ng_corpus.py"
+    )
+    assert corpus_spec and corpus_spec.loader
+    corpus = importlib.util.module_from_spec(corpus_spec)
+    corpus_spec.loader.exec_module(corpus)
+    corpus.verify_derived(bundle)
+
+
+def test_d8_ct4_remains_refused(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = anomalous_assembled_inputs(
+        tmp_path, close_time="CT-4"
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "policy detail unruled: close-time direction"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "option,non_market_changes,expected_reason",
+    [
+        ("E-1", None, "policy option not built: E-1"),
+        ("E-2", None, "policy option not built: E-2"),
+        (
+            "E-3",
+            {"exclusion_verification": [{"synthetic": True}]},
+            "invalid non-market evidence: E-3 holds no exclusion documents",
+        ),
+    ],
+    ids=["E-1-refused", "E-2-refused", "E-3-exclusion-refused"],
+)
+def test_d3_evidence_policy_refusals(tmp_path: Path, option, non_market_changes, expected_reason):
+    fetched, parse_path, policy, non_market = anomalous_assembled_inputs(
+        tmp_path, evidence=option, non_market_changes=non_market_changes
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == expected_reason
+    assert not output.exists()
+
+
+def test_d3_e3_accepts_freshness_and_verifies_output(tmp_path: Path) -> None:
+    freshness = [{"synthetic": "freshness remains separate"}]
+    fetched, parse_path, policy, non_market = anomalous_assembled_inputs(
+        tmp_path, evidence="E-3", non_market_changes={"freshness": freshness}
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    bundle = json.loads((output / "EVIDENCE.json").read_bytes())
+    assert bundle["freshness"] == freshness
+    corpus_spec = importlib.util.spec_from_file_location(
+        "corpus_for_e3_verify", ROOT / "scripts/quant_ng_corpus.py"
+    )
+    assert corpus_spec and corpus_spec.loader
+    corpus = importlib.util.module_from_spec(corpus_spec)
+    corpus_spec.loader.exec_module(corpus)
+    corpus.verify_derived(bundle)
 
 
 def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> None:

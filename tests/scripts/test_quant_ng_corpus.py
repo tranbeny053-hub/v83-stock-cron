@@ -288,6 +288,7 @@ def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes
     policy_helpers = importlib.util.module_from_spec(policy_spec)
     policy_spec.loader.exec_module(policy_helpers)
     policy_value = policy_helpers.policy()
+    policy_value["parameters"]["D3_evidence"]["value"] = "E-3"
     policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
         non_market_path.read_bytes()
     ).hexdigest()
@@ -363,6 +364,7 @@ def _revision_proxy_bundle(tmp_path: Path):
     changelog_digest = hashlib.sha256(changelog_path.read_bytes()).hexdigest()
     windows_digest = hashlib.sha256(windows_path.read_bytes()).hexdigest()
     policy = policy_helpers.policy()
+    policy["parameters"]["D3_evidence"]["value"] = "E-3"
     policy["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
         non_market_path.read_bytes()
     ).hexdigest()
