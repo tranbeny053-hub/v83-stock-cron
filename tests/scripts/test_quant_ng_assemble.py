@@ -460,7 +460,14 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
     candidate = evidence["candidates"][0]
     source = parsed["symbols"][0]
     assert candidate["symbol"] == source["symbol"]
-    assert candidate["daily_quote_volume"]["bars"] == source["daily"]["bars"]
+    assert candidate["daily_quote_volume"]["bars"] == [
+        {key: value for key, value in bar.items() if key != "close_time_anomaly"}
+        for bar in source["daily"]["bars"]
+    ]
+    assert all(
+        "close_time_anomaly" not in bar
+        for bar in candidate["daily_quote_volume"]["bars"]
+    )
     assert candidate["listing"]["first_daily_bar_open_utc"] == source["daily"]["first_open_utc"]
     assert candidate["listing"]["provenance"]["files"] == [
         {
@@ -578,7 +585,12 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
                     "provenance": daily_provenance,
                 },
                 "daily_quote_volume": {
-                    "bars": source["daily"]["bars"] if source["daily"]["usable"] else None,
+                    "bars": [
+                        {key: value for key, value in bar.items() if key != "close_time_anomaly"}
+                        for bar in source["daily"]["bars"]
+                    ]
+                    if source["daily"]["usable"]
+                    else None,
                     "provenance": daily_provenance,
                 },
                 "coverage": {

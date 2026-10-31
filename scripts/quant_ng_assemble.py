@@ -324,7 +324,12 @@ def evidence(
                     "provenance": daily_provenance,
                 },
                 "daily_quote_volume": {
-                    "bars": daily["bars"] if daily["usable"] else None,
+                    "bars": [
+                        {key: value for key, value in bar.items() if key != "close_time_anomaly"}
+                        for bar in daily["bars"]
+                    ]
+                    if daily["usable"]
+                    else None,
                     "provenance": daily_provenance,
                 },
                 "coverage": coverage,

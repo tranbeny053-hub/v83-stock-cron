@@ -181,7 +181,7 @@ def _read_archive(
     interval_us: int,
     start: datetime,
     end: datetime,
-) -> tuple[list[tuple[int, str]], int, int, int]:
+) -> tuple[list[tuple[int, str, bool]], int, int, int, int]:
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
             if archive.comment != MOCK_MARKER:
@@ -203,9 +203,9 @@ def _read_archive(
     lines = content.split(b"\n")
     if content.endswith(b"\n"):
         lines.pop()
-    bars: list[tuple[int, str]] = []
+    bars: list[tuple[int, str, bool]] = []
     widths: set[int] = set()
-    off_grid = zero_volume = close_anomalies = 0
+    off_grid = zero_volume = close_anomalies = close_anomalies_all = 0
     history = HISTORY_BARS.get(OUTPUT_INTERVALS.get(row["interval"], ""))
     window_start = cutoff_us - (
         DAILY_DAYS * 86400_000_000 if row["interval"] == "1d" else (history or 0) * interval_us
@@ -254,14 +254,17 @@ def _read_archive(
             if open_us >= window_start:
                 off_grid += 1
             continue
-        if open_us >= window_start and close_us != open_us + interval_us - (
+        close_time_anomaly = close_us != open_us + interval_us - (
             1000 if open_width == 13 else 1
-        ):
-            close_anomalies += 1
+        )
+        if close_time_anomaly:
+            close_anomalies_all += 1
+            if open_us >= window_start:
+                close_anomalies += 1
         if open_us >= window_start and not fields[7].replace(".", "").strip("0"):
             zero_volume += 1
-        bars.append((open_us, fields[7]))
-    return bars, off_grid, zero_volume, close_anomalies
+        bars.append((open_us, fields[7], close_time_anomaly))
+    return bars, off_grid, zero_volume, close_anomalies, close_anomalies_all
 
 
 def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
@@ -385,9 +388,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
         if any(not _verifiable(row, cutoff) for row in series_rows):
             parsed[key] = {"usable": False, "reason": "file not verified"}
             continue
-        all_bars: list[tuple[int, str]] = []
+        all_bars: list[tuple[int, str, bool]] = []
         object_last_opens: dict[str, int] = {}
-        counters = [0, 0, 0]
+        counters = [0, 0, 0, 0]
         reason = None
         for row in series_rows:
             digest = row["sha256"]
@@ -412,7 +415,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 del blob
             all_bars.extend(bars)
             if bars:
-                object_last_opens[row["path"]] = max(open_us for open_us, _ in bars)
+                object_last_opens[row["path"]] = max(open_us for open_us, _, _ in bars)
             counters = [a + b for a, b in zip(counters, counts, strict=True)]
         if reason:
             parsed[key] = {"usable": False, "reason": reason}
@@ -439,7 +442,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             parsed[key] = {
                 "usable": True,
                 "reason": None,
-                "present": sum(window_start <= t < cutoff_us for t, _ in all_bars),
+                "present": sum(window_start <= t < cutoff_us for t, _, _ in all_bars),
                 "counts": counters,
                 "last_bar_closes": {
                     path: _utc_text(_dt(open_us + INTERVALS[key[1]]))
@@ -453,8 +456,8 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
         daily = parsed[(symbol, "1d")]
         if daily["usable"]:
             bars = daily["bars"]
-            window = [(t, v) for t, v in bars if daily_start_us <= t < cutoff_us]
-            first = min((t for t, _ in bars), default=None)
+            window = [(t, v, anomaly) for t, v, anomaly in bars if daily_start_us <= t < cutoff_us]
+            first = min((t for t, _, _ in bars), default=None)
             daily_out = {
                 "usable": True,
                 "reason": None,
@@ -462,13 +465,18 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                     groups.get((symbol, "1d"), []), daily["last_bar_closes"]
                 ),
                 "bars": [
-                    {"open_utc": _utc_text(_dt(t)), "quote_volume": v}
-                    for t, v in sorted(window)
+                    {
+                        "open_utc": _utc_text(_dt(t)),
+                        "quote_volume": v,
+                        "close_time_anomaly": anomaly,
+                    }
+                    for t, v, anomaly in sorted(window)
                 ],
                 "first_open_utc": _utc_text(_dt(first)) if first is not None else None,
                 "off_grid": daily["counts"][0],
                 "zero_volume": daily["counts"][1],
                 "close_time_anomalies": daily["counts"][2],
+                "close_time_anomalies_all": daily["counts"][3],
             }
         else:
             daily_out = {
@@ -480,6 +488,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 "off_grid": None,
                 "zero_volume": None,
                 "close_time_anomalies": None,
+                "close_time_anomalies_all": None,
             }
         coverage = {}
         for interval in ("15m", "1h", "4h"):
@@ -497,6 +506,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                     "off_grid": counts[0],
                     "zero_volume": counts[1],
                     "close_time_anomalies": counts[2],
+                    "close_time_anomalies_all": counts[3],
                 }
             else:
                 coverage[out_name] = {
@@ -507,10 +517,11 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                     "off_grid": None,
                     "zero_volume": None,
                     "close_time_anomalies": None,
+                    "close_time_anomalies_all": None,
                 }
         output_symbols.append({"symbol": symbol, "daily": daily_out, "coverage": coverage})
     result = {
-        "parse_id": "ucpe.quant_ng.extract_parse.v3",
+        "parse_id": "ucpe.quant_ng.extract_parse.v4",
         "status": "MOCK",
         "note": (
             "parsed bars with per-file identities, not builder evidence: "

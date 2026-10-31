@@ -235,7 +235,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         {"status": "PASS", "parse_sha256": hashlib.sha256(raw).hexdigest()}, separators=(",", ":")
     )
     assert (output / "PARSE.json").stat().st_mode & 0o777 == 0o444
-    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v3" and body["status"] == "MOCK"
+    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v4" and body["status"] == "MOCK"
     assert body["note"] == (
         "parsed bars with per-file identities, not builder evidence: availability, revision "
         "and provenance policy are unruled"
@@ -254,7 +254,13 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert [entry["symbol"] for entry in body["symbols"]] == ["AAAUSDT", "BBBUSDT"]
     symbol = body["symbols"][0]
     assert symbol["symbol"] == "AAAUSDT"
-    assert symbol["daily"]["bars"] == [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}]
+    assert symbol["daily"]["bars"] == [
+        {
+            "open_utc": "2025-03-31T00:00:00Z",
+            "quote_volume": "2.50",
+            "close_time_anomaly": True,
+        }
+    ]
     assert symbol["daily"]["first_open_utc"] == "2025-03-31T00:00:00Z"
     assert symbol["daily"]["objects"][0]["last_bar_close_utc"] == T
     assert symbol["coverage"]["15m"]["present_in_window"] == 1
@@ -265,11 +271,18 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         "usable": True,
         "reason": None,
         "objects": _identity_rows(fetched, "AAAUSDT", "1d"),
-        "bars": [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}],
+        "bars": [
+            {
+                "open_utc": "2025-03-31T00:00:00Z",
+                "quote_volume": "2.50",
+                "close_time_anomaly": True,
+            }
+        ],
         "first_open_utc": "2025-03-31T00:00:00Z",
         "off_grid": 0,
         "zero_volume": 0,
         "close_time_anomalies": 1,
+        "close_time_anomalies_all": 1,
     }
     assert symbol["coverage"] == {
         "15m": {
@@ -280,6 +293,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 0,
+            "close_time_anomalies_all": 0,
         },
         "1H": {
             "usable": True,
@@ -289,6 +303,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 1,
+            "close_time_anomalies_all": 1,
         },
         "4H": {
             "usable": True,
@@ -298,6 +313,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 1,
+            "close_time_anomalies_all": 1,
         },
     }
     assert body["symbols"][1]["symbol"] == "BBBUSDT"
@@ -630,6 +646,64 @@ def test_off_grid_zero_and_close_anomaly(tmp_path: Path) -> None:
         series["zero_volume"],
         series["close_time_anomalies"],
     ) == (2, 1, 1, 1)
+
+
+@pytest.mark.parametrize("case", ["anomalies"], ids=["daily"])
+def test_daily_close_time_anomaly_flags_and_all_count(tmp_path: Path, case: str) -> None:
+    root = tmp_path / "archive"
+    day = 86_400_000
+    paths = [
+        archive(
+            root,
+            "1d",
+            "2024-12",
+            zip_blob(
+                "AAAUSDT-1d-2024-12.zip",
+                [row(TMS - 91 * day, TMS - 91 * day + day - 2)],
+            ),
+            granularity="monthly",
+        ),
+        archive(
+            root,
+            "1d",
+            "2025-03",
+            zip_blob(
+                "AAAUSDT-1d-2025-03.zip",
+                [row(TMS - day, TMS - 2)],
+            ),
+            granularity="monthly",
+        ),
+    ]
+    fetched = fetch(tmp_path, paths)
+    result, out = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    daily = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["daily"]
+    assert daily["bars"] == [
+        {
+            "open_utc": "2025-03-31T00:00:00Z",
+            "quote_volume": "2.50",
+            "close_time_anomaly": True,
+        }
+    ]
+    assert daily["close_time_anomalies"] == 1
+    assert daily["close_time_anomalies_all"] == 2
+
+
+@pytest.mark.parametrize("case", ["history"], ids=["fifteen-minute"])
+def test_coverage_close_time_all_count_includes_before_window(
+    tmp_path: Path, case: str
+) -> None:
+    open_ms = TMS - 679 * 900_000
+    fetched = make_series(
+        tmp_path,
+        period="2025-03-24",
+        rows=[row(open_ms, open_ms + 899_998)],
+    )
+    result, out = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    series = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
+    assert series["close_time_anomalies"] == 0
+    assert series["close_time_anomalies_all"] == 1
 
 
 @pytest.mark.parametrize(
@@ -1124,6 +1198,7 @@ def test_unusable_series_still_lists_object_identities(
     assert result.returncode == 0
     coverage = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
     assert coverage["usable"] is False
+    assert coverage["close_time_anomalies_all"] is None
     assert object_class in [entry["class"] for entry in coverage["objects"]]
     expected = _identity_rows(fetched, "AAAUSDT", "15m")
     assert [
