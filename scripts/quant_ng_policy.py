@@ -3,6 +3,10 @@
 This module is the policy schema and does not interpret the policy or compute
 provenance. ``CORPUS_POLICY_SCHEMA_v1.json`` is intentionally not created: a
 separate schema file would create a second source of truth.
+
+F3 and the proxies can only be checked where the sample is used. ``load``
+takes an already-validated path; the caller applies ``_path``. Consumers must
+translate this module's ``Refusal``, which is the parser's fit instance's class.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ import json
 import re
 import sys
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +73,11 @@ def _ruling(value: Any) -> str:
 def _decimal(value: Any) -> bool:
     if not isinstance(value, str) or not DECIMAL_RE.fullmatch(value):
         return False
-    return float(value) > 0
+    try:
+        decimal_value = Decimal(value)
+    except InvalidOperation:
+        return False
+    return Decimal(0) < decimal_value <= Decimal(1)
 
 
 def _sample(value: Any) -> None:
@@ -88,10 +97,27 @@ def _sample(value: Any) -> None:
         raise Refusal("invalid policy")
     if value["size"] != len(paths):
         raise Refusal("invalid policy")
+    if len(set(paths)) != len(paths):
+        raise Refusal("invalid policy")
+    for path in paths:
+        match = _EXTRACT.LAYOUT_RE.fullmatch(path)
+        if not match:
+            raise Refusal("invalid policy")
+        _granularity, symbol, interval, file_symbol, file_interval, _period = match.groups()
+        if (
+            symbol != file_symbol
+            or interval != file_interval
+            or symbol in {"BTCUSDT", "ETHUSDT"}
+        ):
+            raise Refusal("invalid policy")
     exclusions = value["exclusions"]
     if not isinstance(exclusions, list) or any(not isinstance(item, str) for item in exclusions):
         raise Refusal("invalid policy")
-    if not REQUIRED_EXCLUSIONS.issubset(exclusions):
+    if len(set(exclusions)) != len(exclusions) or not set(exclusions).issubset(
+        REQUIRED_EXCLUSIONS
+    ):
+        raise Refusal("invalid policy")
+    if set(exclusions) != REQUIRED_EXCLUSIONS:
         raise Refusal("policy detail unruled: sample exclusions")
     if type(value["interval_days"]) is not int or value["interval_days"] < 1:
         raise Refusal("invalid policy")
@@ -123,12 +149,30 @@ def _value(name: str, detail: Any) -> str | tuple[str, str]:
         if not isinstance(value, str) or value not in {"P-1", "P-2"}:
             raise Refusal("invalid policy")
     elif name == "D5_revision":
-        if not _closed(detail, {"value", "ruling", "sample"}):
+        if not isinstance(detail, dict) or set(detail) not in (
+            {"value", "ruling", "sample"},
+            {"value", "ruling", "sample", "changelog_sha256"},
+        ):
             raise Refusal("invalid policy")
         value = detail["value"]
         if value == "RP-1′":
             raise Refusal("policy option refused: RP-1′ (it reads retained research data)")
         if not isinstance(value, str) or value not in {"RP-0", "RP-1", "RP-2", "RP-3", "RP-3+RP-1"}:
+            raise Refusal("invalid policy")
+        needs_changelog = value in {"RP-3", "RP-3+RP-1"}
+        if "changelog_sha256" not in detail:
+            if needs_changelog:
+                raise Refusal("policy detail unruled: changelog")
+            raise Refusal("invalid policy")
+        changelog_sha256 = detail["changelog_sha256"]
+        if needs_changelog:
+            if changelog_sha256 is None:
+                raise Refusal("policy detail unruled: changelog")
+            if not isinstance(changelog_sha256, str) or not SHA256_RE.fullmatch(
+                changelog_sha256
+            ):
+                raise Refusal("invalid policy")
+        elif changelog_sha256 is not None:
             raise Refusal("invalid policy")
         needs_sample = value in {"RP-1", "RP-2", "RP-3+RP-1"}
         if needs_sample and detail["sample"] is None:
@@ -138,10 +182,27 @@ def _value(name: str, detail: Any) -> str | tuple[str, str]:
         if needs_sample:
             _sample(detail["sample"])
     elif name == "D6_proxy":
-        if not _closed(detail, {"value", "ruling"}):
+        if not isinstance(detail, dict) or set(detail) not in (
+            {"value", "ruling"},
+            {"value", "ruling", "windows_sha256"},
+        ):
             raise Refusal("invalid policy")
         value = detail["value"]
         if not isinstance(value, str) or value not in {"PX-1", "PX-2"}:
+            raise Refusal("invalid policy")
+        if "windows_sha256" not in detail:
+            if value == "PX-2":
+                raise Refusal("policy detail unruled: proxy windows")
+            raise Refusal("invalid policy")
+        windows_sha256 = detail["windows_sha256"]
+        if value == "PX-2":
+            if windows_sha256 is None:
+                raise Refusal("policy detail unruled: proxy windows")
+            if not isinstance(windows_sha256, str) or not SHA256_RE.fullmatch(
+                windows_sha256
+            ):
+                raise Refusal("invalid policy")
+        elif windows_sha256 is not None:
             raise Refusal("invalid policy")
     elif name == "D7_completeness":
         if not _closed(detail, {"value", "ruling"}):
@@ -186,9 +247,15 @@ def _value(name: str, detail: Any) -> str | tuple[str, str]:
                         datetime.fromisoformat(item_value[:-1] + "+00:00")
                     except ValueError as exc:
                         raise Refusal("invalid policy") from exc
-            elif item_value is not None and (not isinstance(item_value, str) or not item_value):
+            elif item_value is not None and (
+                not isinstance(item_value, str) or not item_value.strip()
+            ):
                 raise Refusal("invalid policy")
             _ruling(item["ruling"])
+        utc_value = detail["utc"]["value"]
+        provenance_value = detail["provenance"]["value"]
+        if (utc_value is None) != (provenance_value is None):
+            raise Refusal("invalid policy")
         return _ruling(detail["utc"]["ruling"]), _ruling(detail["provenance"]["ruling"])
     ruling = _ruling(detail["ruling"])
     if name == "D3_evidence" and value == "E-2" and ruling == "OWNER_RULED":
@@ -197,7 +264,11 @@ def _value(name: str, detail: Any) -> str | tuple[str, str]:
 
 
 def load(path: Path, expected_sha256: str) -> dict:
-    """Read once, verify the pin, and return a closed validated policy object."""
+    """Read an already-validated path once, verify its pin, and validate policy.
+
+    The caller applies ``_path``. Consumers must translate this module's
+    ``Refusal``, which is the parser's fit instance's class.
+    """
     try:
         raw = path.read_bytes()
     except OSError as exc:

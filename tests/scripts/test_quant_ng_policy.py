@@ -26,7 +26,10 @@ def module():
 def sample():
     return {
         "size": 1,
-        "selection": {"method": "LISTED", "paths": ["listed-one"]},
+        "selection": {
+            "method": "LISTED",
+            "paths": ["data/spot/monthly/klines/ADAUSDT/1h/ADAUSDT-1h-2025-01.zip"],
+        },
         "exclusions": ["F3", "BTCUSDT", "ETHUSDT", "BTC_ETH_PROXIES"],
         "interval_days": 30,
     }
@@ -48,8 +51,13 @@ def policy():
                 "value": "RP-0",
                 "ruling": "SYNTHETIC_TEST_ONLY",
                 "sample": None,
+                "changelog_sha256": None,
             },
-            "D6_proxy": {"value": "PX-1", "ruling": "SYNTHETIC_TEST_ONLY"},
+            "D6_proxy": {
+                "value": "PX-1",
+                "ruling": "SYNTHETIC_TEST_ONLY",
+                "windows_sha256": None,
+            },
             "D7_completeness": {
                 "value": {"shape": "ONE", "values": {"all": "0.5"}},
                 "ruling": "SYNTHETIC_TEST_ONLY",
@@ -134,6 +142,10 @@ def test_each_accepted_option_loads(tmp_path: Path, name: str, value: str):
         detail["value"] = value
         if name == "D5_revision" and value in {"RP-1", "RP-2", "RP-3+RP-1"}:
             detail["sample"] = sample()
+        if name == "D5_revision" and value in {"RP-3", "RP-3+RP-1"}:
+            detail["changelog_sha256"] = "a" * 64
+        if name == "D6_proxy" and value == "PX-2":
+            detail["windows_sha256"] = "b" * 64
     path, digest = store(tmp_path, body)
     assert module().load(path, digest) == body
 
@@ -179,6 +191,20 @@ def test_refusal_order_is_stable_across_hash_seeds(tmp_path: Path):
         ("evidence-amendment", "policy option refused: E-2 amends ruled R4"),
         ("missing-sample", "policy detail unruled: sample"),
         ("missing-exclusions", "policy detail unruled: sample exclusions"),
+        ("extra-exclusion", "invalid policy"),
+        ("duplicate-exclusion", "invalid policy"),
+        ("missing-changelog", "policy detail unruled: changelog"),
+        ("null-changelog", "policy detail unruled: changelog"),
+        ("bad-changelog", "invalid policy"),
+        ("unexpected-changelog", "invalid policy"),
+        ("missing-proxy-windows", "policy detail unruled: proxy windows"),
+        ("null-proxy-windows", "policy detail unruled: proxy windows"),
+        ("bad-proxy-windows", "invalid policy"),
+        ("unexpected-proxy-windows", "invalid policy"),
+        ("duplicate-sample-path", "invalid policy"),
+        ("bad-sample-path", "invalid policy"),
+        ("sample-btc-path", "invalid policy"),
+        ("sample-path-mismatch", "invalid policy"),
         ("bad-size", "invalid policy"),
         ("sample-not-allowed", "invalid policy"),
         ("bad-decimal", "invalid policy"),
@@ -191,6 +217,20 @@ def test_refusal_order_is_stable_across_hash_seeds(tmp_path: Path):
         "evidence-refused",
         "sample-unruled",
         "exclusions-unruled",
+        "exclusion-unknown",
+        "exclusion-duplicate",
+        "changelog-missing",
+        "changelog-null",
+        "changelog-format",
+        "changelog-unexpected",
+        "proxy-windows-missing",
+        "proxy-windows-null",
+        "proxy-windows-format",
+        "proxy-windows-unexpected",
+        "sample-path-duplicate",
+        "sample-path-layout",
+        "sample-path-btc",
+        "sample-path-mismatch",
         "sample-size",
         "sample-forbidden",
         "decimal-format",
@@ -219,6 +259,61 @@ def test_specific_and_detail_refusals(tmp_path: Path, change: str, reason: str):
     elif change == "missing-exclusions":
         params["D5_revision"].update(value="RP-1", sample=sample())
         params["D5_revision"]["sample"]["exclusions"] = ["F3"]
+    elif change in {"extra-exclusion", "duplicate-exclusion"}:
+        params["D5_revision"].update(value="RP-1", sample=sample())
+        exclusions = params["D5_revision"]["sample"]["exclusions"]
+        exclusions.append("OTHER" if change == "extra-exclusion" else "F3")
+    elif change in {
+        "missing-changelog",
+        "null-changelog",
+        "bad-changelog",
+        "unexpected-changelog",
+    }:
+        revision = params["D5_revision"]
+        revision["value"] = "RP-3"
+        if change == "missing-changelog":
+            del revision["changelog_sha256"]
+        elif change == "null-changelog":
+            revision["changelog_sha256"] = None
+        elif change == "bad-changelog":
+            revision["changelog_sha256"] = "A" * 64
+        else:
+            revision["value"] = "RP-0"
+            revision["changelog_sha256"] = "a" * 64
+    elif change in {
+        "missing-proxy-windows",
+        "null-proxy-windows",
+        "bad-proxy-windows",
+        "unexpected-proxy-windows",
+    }:
+        proxy = params["D6_proxy"]
+        proxy["value"] = "PX-2"
+        if change == "missing-proxy-windows":
+            del proxy["windows_sha256"]
+        elif change == "null-proxy-windows":
+            proxy["windows_sha256"] = None
+        elif change == "bad-proxy-windows":
+            proxy["windows_sha256"] = "A" * 64
+        else:
+            proxy["value"] = "PX-1"
+            proxy["windows_sha256"] = "b" * 64
+    elif change in {
+        "duplicate-sample-path",
+        "bad-sample-path",
+        "sample-btc-path",
+        "sample-path-mismatch",
+    }:
+        params["D5_revision"].update(value="RP-1", sample=sample())
+        paths = params["D5_revision"]["sample"]["selection"]["paths"]
+        if change == "duplicate-sample-path":
+            paths.append(paths[0])
+            params["D5_revision"]["sample"]["size"] = 2
+        elif change == "bad-sample-path":
+            paths[0] = "listed-one"
+        elif change == "sample-btc-path":
+            paths[0] = "data/spot/monthly/klines/BTCUSDT/1h/BTCUSDT-1h-2025-01.zip"
+        else:
+            paths[0] = "data/spot/monthly/klines/ADAUSDT/1h/ADAUSDT-4h-2025-01.zip"
     elif change == "bad-size":
         params["D5_revision"].update(value="RP-1", sample=sample())
         params["D5_revision"]["sample"]["size"] = 2
@@ -226,8 +321,12 @@ def test_specific_and_detail_refusals(tmp_path: Path, change: str, reason: str):
         params["D5_revision"]["sample"] = sample()
     elif change == "bad-decimal":
         params["D7_completeness"]["value"]["values"]["all"] = ".5"
-    else:
+    elif change == "zero-decimal":
         params["D7_completeness"]["value"]["values"]["all"] = "0.0"
+    else:
+        params["D7_completeness"]["value"]["values"]["all"] = (
+            "0.0000000000000000000000000000000000000001"
+        )
     expect(tmp_path, body, reason)
 
 
@@ -402,6 +501,31 @@ def test_operating_period_rejects_non_ascii_digits(tmp_path: Path):
         "٢٠٢٥-04-01T00:00:00Z"
     )
     expect(tmp_path, body, "invalid policy")
+
+
+@pytest.mark.parametrize(
+    "utc_value,provenance_value,accepted",
+    [
+        (None, None, True),
+        ("2025-04-01T00:00:00Z", "owner supplied", True),
+        (None, "owner supplied", False),
+        ("2025-04-01T00:00:00Z", None, False),
+        ("2025-04-01T00:00:00Z", "  ", False),
+    ],
+    ids=["null-null", "date-text", "null-text", "date-null", "date-blank"],
+)
+def test_operating_period_builder_combinations(
+    tmp_path: Path, utc_value, provenance_value, accepted: bool
+):
+    body = policy()
+    period = body["parameters"]["operating_period_start"]
+    period["utc"]["value"] = utc_value
+    period["provenance"]["value"] = provenance_value
+    if accepted:
+        path, digest = store(tmp_path, body)
+        assert module().load(path, digest) == body
+    else:
+        expect(tmp_path, body, "invalid policy")
 
 
 def test_load_writes_nothing(tmp_path: Path, monkeypatch):
