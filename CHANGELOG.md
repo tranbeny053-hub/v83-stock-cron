@@ -2,6 +2,31 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-31 - (b2) MOCK/OFFLINE engineering for the archive chain (on main, not released)
+
+It records #310. Nothing in this entry is released.
+
+Added:
+- #310: MOCK-only engineering for the archive fetch chain, under the owner's ruling that (b2) is
+  mock and offline work only. The fetch tool accepts only mock archives carrying a mock marker.
+  The parser verifies each file while streaming it, re-checks its digest when it parses it, and
+  records each file's identity, its latest bar close before the cutoff and any close-time
+  anomalies. A new policy validator (`scripts/quant_ng_policy.py`) reads a digest-pinned policy
+  file in which every unruled real-data choice is an explicit, tested parameter with no silent
+  default; a policy marked owner-ruled is refused unless its digest is in an allowlist that is
+  empty. A new assembler (`scripts/quant_ng_assemble.py`) re-derives the parse from the verified
+  files and binds the policy and evidence files by digest. The universe builder accepts a mock
+  bundle only after re-deriving it, and stamps the result MOCK: never F3-clean, never
+  admissible, and refused by the fit tool.
+
+Notes:
+- Options that are unruled or cannot yet be built are refused by name, for example the
+  revision checks that need recorded capture times, document evidence for exclusions, a
+  proxy-names list, per-window completeness thresholds and one close-time option.
+- Nothing in the product imports these tools, and no deployed file changes, so the running app
+  is unaffected. No real data, network or download path exists, and no scientific validity is
+  claimed from mock tests. The synthetic builder's output is unchanged.
+
 ## 2026-10-30 - The C10 evaluation-row producer, synthetic only (on main, not released)
 
 It records #307. Nothing in this entry is released.
