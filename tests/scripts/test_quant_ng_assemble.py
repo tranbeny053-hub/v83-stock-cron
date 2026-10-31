@@ -130,7 +130,7 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
         {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
         for item in source["daily"]["objects"]
     ]
-    assert candidate["coverage"]["15m"]["present_in_window"] == 0
+    assert candidate["coverage"]["15m"]["present_in_window"] is None
     assert (
         candidate["coverage"]["15m"]["provenance"]["files"] == source["coverage"]["15m"]["objects"]
     )
@@ -182,7 +182,7 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
                     "provenance": daily_provenance,
                 },
                 "daily_quote_volume": {
-                    "bars": source["daily"]["bars"] if source["daily"]["usable"] else [],
+                    "bars": source["daily"]["bars"] if source["daily"]["usable"] else None,
                     "provenance": daily_provenance,
                 },
                 "coverage": {
@@ -190,7 +190,7 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
                         "present_in_window": (
                             source["coverage"][name]["present_in_window"]
                             if source["coverage"][name]["usable"]
-                            else 0
+                            else None
                         ),
                         "provenance": provenance(source["coverage"][name]),
                     }
@@ -209,11 +209,39 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
             "parse_sha256": sha(parse_path),
             "manifest_sha256": parsed["manifest_sha256"],
             "policy_sha256": sha(policy),
+            "policy_path": str(policy.resolve()),
             "non_market_sha256": sha(non_market),
+            "non_market_path": str(non_market.resolve()),
             "assemble_tool_sha256": sha(SCRIPT),
         },
     }
-    assert json.loads((output / "EVIDENCE.json").read_bytes()) == expected
+    written = json.loads((output / "EVIDENCE.json").read_bytes())
+    assert written == expected
+
+    module = load_assembler()
+    assert module.evidence(
+        parsed,
+        fetch_dir=fetched.resolve(),
+        parse_sha256=sha(parse_path),
+        policy_path=policy.resolve(),
+        policy_sha256=sha(policy),
+        non_market_path=non_market.resolve(),
+        non_market_sha256=sha(non_market),
+        non_market=json.loads(non_market.read_bytes()),
+    ) == written
+    invalid_parse = dict(parsed)
+    invalid_parse["symbols"] = [dict(parsed["symbols"][0], symbol="AAABTC")]
+    with pytest.raises(module.Refusal, match="invalid parse symbol"):
+        module.evidence(
+            invalid_parse,
+            fetch_dir=fetched.resolve(),
+            parse_sha256=sha(parse_path),
+            policy_path=policy.resolve(),
+            policy_sha256=sha(policy),
+            non_market_path=non_market.resolve(),
+            non_market_sha256=sha(non_market),
+            non_market=json.loads(non_market.read_bytes()),
+        )
 
 
 def test_binding_has_exact_keys_and_plan_fetch_directory(tmp_path: Path) -> None:
@@ -228,10 +256,14 @@ def test_binding_has_exact_keys_and_plan_fetch_directory(tmp_path: Path) -> None
         "parse_sha256",
         "manifest_sha256",
         "policy_sha256",
+        "policy_path",
         "non_market_sha256",
+        "non_market_path",
         "assemble_tool_sha256",
     }
     assert binding["fetch_output_dir"] == str(fetched)
+    assert binding["policy_path"] == str(policy.resolve())
+    assert binding["non_market_path"] == str(non_market.resolve())
 
 
 @pytest.mark.parametrize(
@@ -351,7 +383,7 @@ def test_source_has_no_network_or_process_imports() -> None:
     assert imported.isdisjoint(forbidden)
 
 
-def test_non_mock_manifest_refuses(tmp_path: Path) -> None:
+def test_non_mock_manifest_refuses_with_parser_reason(tmp_path: Path) -> None:
     fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
     manifest_path = fetched / "MANIFEST.json"
     body = json.loads(manifest_path.read_bytes())
@@ -363,6 +395,16 @@ def test_non_mock_manifest_refuses(tmp_path: Path) -> None:
     result = invoke(plan)
     assert result.returncode == 2
     assert json.loads(result.stdout)["reason"] == "only a mock manifest is accepted"
+    assert not output.exists()
+
+
+def test_unreadable_manifest_refuses_with_parser_reason(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
+    (fetched / "MANIFEST.json").unlink()
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "manifest unreadable"
     assert not output.exists()
 
 
@@ -435,7 +477,7 @@ def test_nonempty_output_refuses(tmp_path: Path) -> None:
     assert (output / "keep.txt").read_text() == "occupied"
 
 
-def test_unusable_series_keeps_identities_and_zero_count(tmp_path: Path) -> None:
+def test_unusable_coverage_is_unknown_and_keeps_identities(tmp_path: Path) -> None:
     missing = "data/spot/daily/klines/AAAUSDT/15m/AAAUSDT-15m-2025-03-31.zip"
     hourly = HELPERS.archive(
         tmp_path / "archive",
@@ -455,11 +497,62 @@ def test_unusable_series_keeps_identities_and_zero_count(tmp_path: Path) -> None
     assert result.returncode == 0, result.stdout + result.stderr
     candidate = json.loads((output / "EVIDENCE.json").read_bytes())["candidates"][0]
     series = candidate["coverage"]["15m"]
-    assert series["present_in_window"] == 0
+    assert series["present_in_window"] is None
     assert series["provenance"]["series_usable"] is False
     assert series["provenance"]["files"][0]["class"] == "missing"
     assert candidate["coverage"]["1H"]["present_in_window"] == 1
     assert candidate["coverage"]["1H"]["provenance"]["series_usable"] is True
+
+
+def test_unusable_daily_is_unknown(tmp_path: Path) -> None:
+    hourly = HELPERS.archive(
+        tmp_path / "archive",
+        "1h",
+        "2025-03",
+        HELPERS.zip_blob(
+            "AAAUSDT-1h-2025-03.zip",
+            [HELPERS.row(HELPERS.TMS - 3_600_000)],
+        ),
+        granularity="monthly",
+    )
+    missing_daily = "data/spot/daily/klines/AAAUSDT/1d/AAAUSDT-1d-2025-03-31.zip"
+    fetched = HELPERS.fetch(tmp_path, [hourly, missing_daily])
+    parse_dir = tmp_path / "parsed"
+    parse_plan = {
+        "plan_id": "ucpe.quant_ng.extract.v1",
+        "fetch_output_dir": str(fetched),
+        "cutoff_utc": T,
+        "output_dir": str(parse_dir),
+    }
+    parse_plan_path = tmp_path / "parse-plan.json"
+    json_file(parse_plan_path, parse_plan)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", str(EXTRACT), str(parse_plan_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    parse_path = parse_dir / "PARSE.json"
+    policy = tmp_path / "policy.json"
+    json_file(policy, {"policy_id": "ucpe.quant_ng.corpus_policy.v1", "status": "MOCK"})
+    non_market = tmp_path / "non-market.json"
+    json_file(
+        non_market,
+        {
+            "evidence_id": "ucpe.quant_ng.non_market_evidence.v1",
+            "source": "mock",
+            "exclusion_verification": [],
+            "not_leveraged_verification": [],
+            "freshness": [],
+        },
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    candidate = json.loads((output / "EVIDENCE.json").read_bytes())["candidates"][0]
+    assert candidate["daily_quote_volume"]["bars"] is None
+    assert candidate["listing"]["first_daily_bar_open_utc"] is None
 
 
 def test_after_cutoff_count_does_not_change_candidates(

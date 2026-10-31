@@ -6,8 +6,9 @@ Refusals include invalid plans or input digests, non-MOCK manifests, parse bytes
 not derived from the manifest, invalid policy or non-market evidence, and a
 nonempty output folder. MOCK only; not admissible to the builder until change
 4b; no policy interpreted. MOCK has no lineage source, so candidate lineage is
-always null. Per-file provenance carries identities only; policy-derived fields
-are explicitly pending change 3.
+always null, meaning unknown and never "no ticker reuse". An unusable series is
+null, never zero. Per-file provenance carries identities only; policy-derived
+fields are explicitly pending change 3.
 
 Usage: ``python -I -B scripts/quant_ng_assemble.py <plan.json>``.
 """
@@ -104,24 +105,31 @@ def _provenance(series: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _evidence(
+def evidence(
     parse: dict[str, Any],
+    *,
     fetch_dir: Path,
-    parse_sha: str,
-    policy_sha: str,
-    non_market_sha: str,
+    parse_sha256: str,
+    policy_path: Path,
+    policy_sha256: str,
+    non_market_path: Path,
+    non_market_sha256: str,
     non_market: dict[str, Any],
 ) -> dict[str, Any]:
     candidates = []
     for symbol_data in parse["symbols"]:
         symbol = symbol_data["symbol"]
+        if not isinstance(symbol, str) or not symbol.endswith("USDT"):
+            raise Refusal("invalid parse symbol")
         daily = symbol_data["daily"]
         daily_provenance = _provenance(daily)
         coverage = {}
         for name in ("15m", "1H", "4H"):
             series = symbol_data["coverage"][name]
             coverage[name] = {
-                "present_in_window": (series["present_in_window"] if series["usable"] else 0),
+                "present_in_window": (
+                    series["present_in_window"] if series["usable"] else None
+                ),
                 "provenance": _provenance(series),
             }
         candidates.append(
@@ -135,7 +143,7 @@ def _evidence(
                     "provenance": daily_provenance,
                 },
                 "daily_quote_volume": {
-                    "bars": daily["bars"] if daily["usable"] else [],
+                    "bars": daily["bars"] if daily["usable"] else None,
                     "provenance": daily_provenance,
                 },
                 "coverage": coverage,
@@ -151,10 +159,12 @@ def _evidence(
         "binding": {
             "fetch_output_dir": str(fetch_dir),
             "cutoff_utc": parse["cutoff_utc"],
-            "parse_sha256": parse_sha,
+            "parse_sha256": parse_sha256,
             "manifest_sha256": parse["manifest_sha256"],
-            "policy_sha256": policy_sha,
-            "non_market_sha256": non_market_sha,
+            "policy_sha256": policy_sha256,
+            "policy_path": str(policy_path),
+            "non_market_sha256": non_market_sha256,
+            "non_market_path": str(non_market_path),
             "assemble_tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         },
     }
@@ -196,14 +206,10 @@ def run(plan_arg: str) -> dict[str, Any]:
 
     # Pin every supplied input before interpreting any of them.
     parse_path, parse_raw, parse_sha = _pin(plan["parse"])
-    _, policy_raw, policy_sha = _pin(plan["policy"])
-    _, non_market_raw, non_market_sha = _pin(plan["non_market_evidence"])
+    policy_path, policy_raw, policy_sha = _pin(plan["policy"])
+    non_market_path, non_market_raw, non_market_sha = _pin(plan["non_market_evidence"])
 
     fetch_dir = _path(plan["fetch_output_dir"])
-    _, manifest = _json_bytes(fetch_dir / "MANIFEST.json", "invalid manifest")
-    if not isinstance(manifest, dict) or manifest.get("status") != "MOCK":
-        raise Refusal("only a mock manifest is accepted")
-
     cutoff = _instant(plan["cutoff_utc"])
     if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
         raise Refusal("cutoff is not UTC midnight")
@@ -214,7 +220,7 @@ def run(plan_arg: str) -> dict[str, Any]:
         parse = _json(parse_raw)
     except (UnicodeError, ValueError, TypeError) as exc:
         raise Refusal("parse not derived from manifest") from exc
-    if not isinstance(parse, dict) or hashlib.sha256(derived).hexdigest() != parse_sha:
+    if not isinstance(parse, dict):
         raise Refusal("parse not derived from manifest")
     try:
         policy = _json(policy_raw)
@@ -246,7 +252,16 @@ def run(plan_arg: str) -> dict[str, Any]:
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise Refusal("output folder is not empty")
     payload = _output_bytes(
-        _evidence(parse, fetch_dir, parse_sha, policy_sha, non_market_sha, non_market)
+        evidence(
+            parse,
+            fetch_dir=fetch_dir,
+            parse_sha256=parse_sha,
+            policy_path=policy_path,
+            policy_sha256=policy_sha,
+            non_market_path=non_market_path,
+            non_market_sha256=non_market_sha,
+            non_market=non_market,
+        )
     )
     _OUTPUT_HOLDER[0] = output
     created = _make_output(output)
