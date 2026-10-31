@@ -1857,6 +1857,18 @@ def test_fixed_synthetic_snapshot_bytes_match_the_base_digest(tmp_path: Path):
     )
 
 
+def test_proxy_windows_match_parser_history_windows():
+    parser_spec = importlib.util.spec_from_file_location(
+        "quant_ng_extract_window_constants", ROOT / "scripts/quant_ng_extract.py"
+    )
+    assert parser_spec and parser_spec.loader
+    parser = importlib.util.module_from_spec(parser_spec)
+    parser_spec.loader.exec_module(parser)
+    rule = json.loads(RULE.read_bytes())
+    assert rule["history_window_bars"] == parser.HISTORY_BARS
+    assert rule["ranking"]["window_days"] == parser.DAILY_DAYS == 90
+
+
 def test_null_listing_date_without_daily_bars_refuses_as_malformed_instant(tmp_path: Path):
     c = candidate(bars=[])
     c["listing"]["first_daily_bar_open_utc"] = None
@@ -1873,7 +1885,6 @@ def test_null_listing_date_without_daily_bars_refuses_as_malformed_instant(tmp_p
         ("threshold", "completeness threshold not bound"),
         ("operating", "operating period not bound"),
         ("px1", "policy detail unruled: proxy names"),
-        ("px2", "policy option not built: PX-2"),
     ],
 )
 def test_mock_plan_policy_bindings_refuse_by_name(monkeypatch, change, expected):

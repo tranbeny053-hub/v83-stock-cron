@@ -35,7 +35,7 @@ def run(script: str, plan: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_mock_chain_reaches_the_builder_and_refuses_deferred_px2(tmp_path: Path) -> None:
+def test_mock_chain_happy_path_accepts_px2_and_fit_refuses_mock(tmp_path: Path) -> None:
     fetch_helpers = load_helpers("mock_fetch_chain_helpers", "tests/scripts/test_quant_ng_fetch.py")
     extract_helpers = load_helpers(
         "mock_extract_chain_helpers", "tests/scripts/test_quant_ng_extract.py"
@@ -83,6 +83,19 @@ def test_mock_chain_reaches_the_builder_and_refuses_deferred_px2(tmp_path: Path)
         },
     )
     windows = tmp_path / "windows.json"
+    changelog = tmp_path / "changelog.json"
+    write(
+        changelog,
+        {
+            "changelog_id": "ucpe.quant_ng.mock_changelog.v1",
+            "source": "mock",
+            "assumption": (
+                "This format is an assumption until the owner authorizes reading "
+                "the venue's real files."
+            ),
+            "entries": [],
+        },
+    )
     write(
         windows,
         {"windows_id": "ucpe.quant_ng.mock_proxy_windows.v1", "source": "mock", "bases": []},
@@ -92,6 +105,9 @@ def test_mock_chain_reaches_the_builder_and_refuses_deferred_px2(tmp_path: Path)
         value="E-3", non_market_sha256=hashlib.sha256(non_market.read_bytes()).hexdigest()
     )
     policy["parameters"]["D4_availability"]["value"] = "P-2"
+    policy["parameters"]["D5_revision"].update(
+        value="RP-3", changelog_sha256=hashlib.sha256(changelog.read_bytes()).hexdigest()
+    )
     policy["parameters"]["D6_proxy"].update(
         value="PX-2", windows_sha256=hashlib.sha256(windows.read_bytes()).hexdigest()
     )
@@ -118,7 +134,10 @@ def test_mock_chain_reaches_the_builder_and_refuses_deferred_px2(tmp_path: Path)
                 "path": str(non_market),
                 "sha256": hashlib.sha256(non_market.read_bytes()).hexdigest(),
             },
-            "changelog": None,
+            "changelog": {
+                "path": str(changelog),
+                "sha256": hashlib.sha256(changelog.read_bytes()).hexdigest(),
+            },
             "proxy_windows": {
                 "path": str(windows),
                 "sha256": hashlib.sha256(windows.read_bytes()).hexdigest(),
@@ -147,11 +166,31 @@ def test_mock_chain_reaches_the_builder_and_refuses_deferred_px2(tmp_path: Path)
         },
     )
     result = run("quant_ng_corpus.py", builder_plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    snapshot = json.loads(
+        (tmp_path / "snapshot" / "UNIVERSE_SNAPSHOT.json").read_bytes()
+    )
+    assert snapshot["status"] == "MOCK"
+    assert snapshot["methodology"]["f3_clean"] is False
+    assert snapshot["methodology"]["f3_clean_basis"] == "MOCK"
+    assert snapshot["methodology"]["policy_sha256"] == hashlib.sha256(
+        policy_path.read_bytes()
+    ).hexdigest()
+    assert not load_helpers(
+        "mock_chain_corpus_firewall", "scripts/quant_ng_corpus.py"
+    ).f3_judgment_admissible(snapshot)
+
+    fit_helpers = load_helpers("mock_chain_fit_helpers", "tests/scripts/test_quant_ng_fit.py")
+    plan_path, output, _ = fit_helpers.case(
+        tmp_path / "fit", universe=json.dumps(snapshot, separators=(",", ":")).encode()
+    )
+    result = fit_helpers.invoke(plan_path)
     assert result.returncode == 2
     assert json.loads(result.stdout) == {
         "status": "REFUSAL",
-        "reason": "policy option not built: PX-2",
+        "reason": "universe snapshot status is not SYNTHETIC",
     }
+    assert not output.exists()
 
 
 def test_mock_snapshot_is_not_admissible_and_fit_requires_synthetic(tmp_path: Path) -> None:

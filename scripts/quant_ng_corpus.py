@@ -815,15 +815,51 @@ def build(
         proxy = policy["parameters"]["D6_proxy"]["value"]
         if proxy == "PX-1":
             raise Refusal("policy detail unruled: proxy names")
-        # PX-2 support is intentionally deferred to change 4b-2.
-        if proxy == "PX-2":
-            raise Refusal("policy option not built: PX-2")
     allowed_source = "mock" if mock else "synthetic"
     expected_policy_sha256 = evidence["binding"]["policy_sha256"] if mock else None
     threshold = plan["completeness"]["threshold"]
     operating_raw = plan["operating_period_start"]["utc"]
     operating = None if operating_raw is None else instant(operating_raw)
     candidates = _candidate_rows(evidence, rule, cutoff)
+    if mock and proxy == "PX-2":
+        windows = verified["proxy_windows"]
+        by_base = {item["base"]: item for item in windows["bases"]}
+        timeframe_order = {"15m": 0, "1H": 1, "4H": 2, "1D": 3}
+        intervals = {"15m": 15 * 60, "1H": 60 * 60, "4H": 4 * 60 * 60}
+        daily_start = cutoff - timedelta(days=rule["ranking"]["window_days"])
+        for row in candidates:
+            window = by_base.get(row["base"])
+            if window is None:
+                continue
+            refused_from = instant(window["refused_from_utc"])
+            daily_refused = refused_from < cutoff or any(
+                timeframe_order[seam["timeframe"]] >= timeframe_order["1D"]
+                and instant(seam["from_utc"]) < cutoff
+                and instant(seam["to_utc"]) > daily_start
+                for seam in window["seams"]
+            )
+            if daily_refused:
+                row["listing_usable"] = False
+                row["volume_usable"] = False
+                row["listing_input"] = None
+                row["volume_input"] = None
+            for tf, cell in row["coverage"].items():
+                window_start = (
+                    daily_start
+                    if tf == "1D"
+                    else cutoff - timedelta(
+                        seconds=rule["history_window_bars"][tf] * intervals[tf]
+                    )
+                )
+                refused = refused_from < cutoff or any(
+                    timeframe_order[seam["timeframe"]] >= timeframe_order[tf]
+                    and instant(seam["from_utc"]) < cutoff
+                    and instant(seam["to_utc"]) > window_start
+                    for seam in window["seams"]
+                )
+                if refused:
+                    cell["usable"] = False
+                    cell["input"] = None
     for item in evidence["freshness"]:
         if not isinstance(item, dict) or set(item) != {
             "symbol",
