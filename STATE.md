@@ -1,70 +1,86 @@
 # STATE
 
-Updated: 2026-10-29 (**THE OWNER RULED C10 = (A+), WITH `unknown` SEPARATE FROM CONFIRMED DELISTING, AND G-1 = (a′),
-SYNTHETIC-ONLY; BOTH ARE ON MAIN AS DORMANT SYNTHETIC TOOLING (#304 → M37 c6468be2); THE CHANGELOG RECORDS #301 (#303
-→ M36 aa3c6f17). F-AVAIL, F-REV, F-PROV AND EVERY OTHER CHOICE IN THE OD-NG-5(b)/OD-NG-7 DECISION PACK AWAIT THE
-OWNER; NO REAL-DATA ADMISSIBILITY CLAIM; NO (b2) OR (b3). NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND
-THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A.
-NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below): the C10/G-1 ruling; then the T3 for this batch, GitHub-only, "CHANGELOG@6588ff70,
-  C10/G-1@ff37767, STATE-last", HOLD on drift, covering only the packaged T3.
-- **PUBLISHED IN THIS BATCH**, each with the package's nine digests checked first, the exact head pushed, a
+Updated: 2026-10-30 (**THE C10 EVALUATION-ROW PRODUCER IS ON MAIN AS DORMANT SYNTHETIC TOOLING (#307 → M40 03e7dc41);
+THE CHANGELOG RECORDS #304 (#306 → M39 bdc2d3f5). THE OWNER RULED OD-NG-5(b) D1 = O-1: (b2) IS AUTHORIZED AS
+MOCK/OFFLINE ENGINEERING ONLY, WITH D2–D8 UNRULED FOR REAL DATA AND BUILT AS EXPLICIT, TESTED, DIGEST-PINNED
+PARAMETERS; REAL DATA STAYS FAIL-CLOSED. NO (b3a) OR (b3b), NO DOWNLOAD, NO REAL-DATA ADMISSION. NGA IS STILL
+PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS
+UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below): on 2026-10-29, the producer and the decision pack's revision 5; on 2026-10-30, the T3
+  for this batch, GitHub-only, "CHANGELOG@11519689, evalrows@602aba88, STATE-last", HOLD on drift, and D1 = O-1 for
+  (b2), MOCK/OFFLINE only.
+- **PUBLISHED IN THIS BATCH**, each with the package's eleven digests checked first, the exact head pushed, a
   byte-identical diff (`PR_VERIFY=PASS`), 4 of 4 checks on that head, a drift check, an independently computed merge
   tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green before the next merge. No
   drift at any point, so no HOLD.
-  - **#303 → M36 aa3c6f170c19adbf9b9d90966413360ee0656251** — the CHANGELOG entry for #301. Head 6588ff70, base M35,
-    tree 1cf27396, mergedAt 2026-10-29T13:45:46Z, 20 changed lines. CI 40884049574 with **8239 passed**; build
-    40884049279. M36's push runs: CI 40884923553, 8239 passed; build 40884923625.
-  - **#304 → M37 c6468be220200afe02be678df9462a51cd2ebfb3** — C10 (A+) and G-1 (a′), synthetic only. Head ff37767
-    (built on M35), base the sequential M36, tree 9c638639 computed against M36, mergedAt 2026-10-29T15:34:01Z, 1434
-    changed lines. CI 40901728459 with **8281 passed**; build 40901729139. M37's push runs: CI 40902868446, 8281
-    passed; build 40902869068.
-  Record: .work/c10g1_t3_20261029/T3_PACKAGE_C10_G1_BATCH_20261029.md (its digests in
-  .work/c10g1_review_20261029/SHA256SUMS_C10_G1_IMPL.txt), with the checks in its exec/ folder.
-- **The ruling** (.work/nga/master/C10_G1_RULED.md): C10 = (A+) on the reviewed ruling sheet
-  (.work/c10g1_review_20261029/C10_G1_RULING_SHEET.md; one independent reviewer, one round, PASS_WITH_AMENDMENTS).
-  The terminal-close target is unchanged: a row resolves only if the regular bar closing exactly at its horizon end
-  exists. Censored rows are counted, one reason each, in the order span_end → halt → unknown → confirmed delisting,
-  and `unknown` is never pooled with delisting. Bounds use one shared label per censored row; a claim holds only at
-  the adverse end. Quarter rows end by T + 90 d. G-1 = (a′): membership at T needs the daily bar for [T − 1 d, T)
-  with quote volume > 0, synthetic-only. Still unruled: F-AVAIL, F-REV, F-PROV, the 5 % censored-share flag, H and
-  row cadence for NG rows, strata, IPCW and the partial-observation diagnostic.
-- **What #304 does:** `scripts/quant_ng_censor.py` (new) is the evaluation-row stage's accounting core: synthetic
-  input only, the horizon a SYNTHETIC_TEST_ONLY parameter, the fit tool's write guard, a 0444 deterministic
-  CENSOR_ACCOUNTING.json. Its classification reads no bar closing after min(corpus end, quarter end); a silence of at
-  most one horizon before that limit is `unknown`; a bar must close after it opens. Bounds are exact Fractions:
-  one-arm Brier and ECE and paired Brier exact, paired ECE by the conservative corner. `scripts/quant_ng_corpus.py`
-  gains G-1 (`not_admitted: not_trading_at_t`, after terminal_reason and before incomplete_1d, only with usable
-  volume provenance), stamped `ruling.G1` in the snapshot; C7, the rule file and its digest pin are unchanged.
-  Nothing in the product imports either file; neither has network code.
-- **How it was built and checked:** Codex 982, 984, 983 and 985, each gpt-6-luna at effort high (log headers), DONE;
-  the change's budget of four delegations was then spent, so Claude made the last repair by hand (ff37767: an
-  inclusive one-horizon silence, and close after open). The bounds are tested against an independent brute-force
-  enumeration of every shared label assignment (at least 25 seeds) and cross-checked against the product's
-  `brier_score` and ECE. Mutation probes: 6 of 6 killed at 47972d5
-  (.work/c10g1_review_20261029/MUTATION_PROBES_47972d5.txt), 2 of 2 on the hand repair. Exact-head gate on ff37767:
-  8281, scanners 3/3. **One independent reviewer, three rounds** (session local_6aa4983c-16db-489b-a68f-bc93d69e1b80,
-  configured claude-fable-5-1 at effort xhigh and read back with get_session; static only, because its session's
-  rules forbid running tests): PASS_WITH_AMENDMENTS (four amendments, applied), PASS_WITH_AMENDMENTS (one minor and
-  one note, applied), then PASS (.work/c10g1_review_20261029/REVIEW_C10_G1_IMPL_R1.md, _R2.md, _R3.md). The session
-  was then reset to claude-opus-5-5 at effort high.
+  - **#306 → M39 bdc2d3f5d88d6dd7ecbfd56cee7b91e3db6aafb8** — the CHANGELOG entry for #304. Head 11519689 (on M36),
+    base M38, tree 70638c80, mergedAt 2026-10-30T00:47:14Z, 26 changed lines. CI 40981292676 with **8281 passed** (it
+    tested the merge with M38; the branch's own gate counted 8239 on M36); build 40981292744. M39's push runs: CI
+    40981871323, 8281 passed; build 40981871314.
+  - **#307 → M40 03e7dc41c78e810358bd1e294e2e37cd51ba57e1** — the C10 evaluation-row producer, synthetic only. Head
+    602aba88 (on M38), base the sequential M39, tree 1a8ca633 computed against M39, mergedAt 2026-10-30T02:05:20Z,
+    963 changed lines. CI 40988941208 with **8314 passed**; build 40988941203. M40's push runs: CI 40989631440, 8314
+    passed; build 40989631480.
+  Record: .work/evalrows_20261029/T3_PACKAGE_EVALROWS_BATCH_20261030.md (SHA256SUMS_EVALROWS_BATCH.txt), with the
+  checks in its exec/ folder.
+- **What #307 does:** `scripts/quant_ng_evalrows.py` schedules instants (t0 = T + j·cadence·Δ < T + 90 d per member),
+  requires both arms' forecasts at every scheduled instant, labels exactly the instants the censor tool calls
+  RESOLVED (h ≤ Q; regular bars closing exactly at t0 and h) with the product's strict rule (UP iff r > band, DOWN
+  iff r < −band, else TIMEOUT) in exact Fractions, and writes the censor tool's input (no price leaves it) and a
+  record stamped SYNTHETIC, its horizon, cadence and band `SYNTHETIC_TEST_ONLY`, with three named synthetic choices
+  (the anchor at T; a missing forecast refuses the run; one band per run). Classification, accounting and bounds stay
+  in `scripts/quant_ng_censor.py`, unchanged. Nothing in the product imports it.
+- **How it was built and checked:** Codex 986, 987 and 988, gpt-6-luna at effort high (log headers), DONE. Codex 988
+  reported 8389 tests; the exact-head gate counted 8314, the figure of record. Mutation probes: 6 of 9 at first
+  (three test gaps, repaired by 987), then 10 of 10. **One independent reviewer, two rounds** (session
+  local_6aa4983c, claude-opus-5-5 at effort high, read back with get_session; static only): PASS_WITH_AMENDMENTS
+  (applied by 988), then PASS (.work/evalrows_20261029/REVIEW_EVALROWS_R1.md, _R2.md).
+- **The decision pack, revision 5** (.work/nga/master/OD_NG_5_PART_B_AND_OD_NG_7_DECISION_PACK.md, sha256 c27cbf43…;
+  LOCAL, not published): written by an ordinary subagent (not independent), then **one independent reviewer in two
+  rounds** (FINDINGS, then PASS_WITH_AMENDMENTS; the last two small folds are the master's and not re-reviewed). Its
+  new fact: the venue's public-data README says archived files may be updated, lists a 2022-08-08 kline update and
+  calls its list exhaustive, so revision 4's "RP-1 with P-2" read is withdrawn. The owner then ruled D1 = O-1 only;
+  D2–D8 stay unruled for real data.
+- **(b2) since the ruling, LOCAL** (`feat/ng-b2-core` @ e3022239, .work/wt-b2, on M38): the parser's common core —
+  streamed verification, a parse-time re-hash that refuses `object changed after verification`, per-file identities
+  in PARSE.json v2 (Codex 989, gpt-6-luna high, DONE; gate 8287; probes 7/7; the parser's standing sweep, adapted as
+  R3, 27/30 with the three known equivalents). The engineering contract for the next changes,
+  .work/b2_20261030/B2_CONTRACT_v1.md, is under an Opus XHIGH independent review (round 1: FINDINGS, three MAJOR —
+  bind by re-derivation, never stamp a MOCK snapshot F3-clean, a MOCK content marker — folded into
+  .work/b2_20261030/B2_CONTRACT_v2.md, which awaits a delta review before change 2's code).
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort high (read again with get_session before this review),
   reviewed this filled record. The master ran Opus 5.5 at High, as the T3 named.
-- Process: Codex 982–985 before the T3 (DONE), none pending, none in the T3; GPT sidecar consultations 0; paid API
-  $0.
-- Nothing else changed: no fetch, network, real data, fit or estimator, no OD-NG-7 constant, no `src/`, schema,
-  migration, workflow or deployed file, no production read or write, no F3 or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: every other pack choice (F-PROV, F-EVID, F-AVAIL, F-REV, F-PROXY, F-END, F-FRESH, F-CAP,
-  F-SCOPE, F-SURV) and OD-NG-7; C10's unruled remainder (above); OD-NG-1, OD-NG-3 and OD-NG-4b with defaults
-  unchanged; OD-NG-2 DEFER; amending B1–B9; the writer-token renewal by **2026-11-20** (expiry 2026-11-23) and the
-  passive confirmation of the 2026-10-24 renewal, still **not independently confirmed**; the runtime delta
-  `frontend/app.js` until a release; a CHANGELOG entry for #304 (LOCAL docs/changelog-304 @ 11519689, VERIFY=PASS
-  8239 on M36, a new T3); the merged branches and local worktrees as cleanup candidates; and the GPT succession
-  unchanged (PREDECESSOR_RETIREMENT = NOT_YET). Claude's map of what each open ruling unlocks, unreviewed:
-  .work/nga/master/NGA_CRITICAL_PATH_CARD_20261029.md.
-- This record is the batch's last publish. Before it: #304.)
+- Process: Codex 986–989 (DONE), none in the T3; GPT sidecar consultations 0; paid API $0. One erratum: the C10/G-1
+  batch's execution record called a failed push "transient"; the cause was Claude's shell syntax (zsh read `$H:r` as
+  a filename modifier), and the push of the same exact SHA then landed.
+- Nothing else changed: no fetch, network, download, real data, fit or estimator, no OD-NG-7 constant, no `src/`,
+  schema, migration, workflow or deployed file, no production read or write, no F3 or §5A access, no deploy, no
+  rerun.
+- CARRIED OVER, still open: D2–D8 for real data (F-PROV, F-EVID, F-AVAIL, F-REV, F-PROXY, 7.1b, close-time anomalies)
+  and the other pack choices (F-SCOPE, F-END, F-FRESH, F-CAP, F-SURV); OD-NG-7; C10's unruled remainder; OD-NG-1,
+  OD-NG-3 and OD-NG-4b with defaults unchanged; OD-NG-2 DEFER; amending B1–B9; the writer-token renewal by
+  **2026-11-20** (expiry 2026-11-23); the runtime delta `frontend/app.js` until a release; a CHANGELOG entry for #307
+  (a new T3); the merged branches and local worktrees as cleanup candidates; the GPT succession unchanged
+  (PREDECESSOR_RETIREMENT = NOT_YET). The read-only (b3a) STOP S1 preflight plan
+  (.work/nga/master/B3A_S1_PREFLIGHT_PLAN_20261030.md) makes no request.
+- This record is the batch's last publish. Before it: #307.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-10-30, the second), verbatim — the T3 for the evaluation-row batch and D1 = O-1 for (b2)**
+  (the second and third paragraphs of .work/p7/redesign/handoff/owner_t3_evalrows_b2_20261030.txt, sha256
+  b8cf38d4…; the rest, on lanes, reviews and limits, is kept whole there):
+```text
+OWNER AUTHORIZE GitHub-only T3 exact `.work/evalrows_20261029/T3_PACKAGE_EVALROWS_BATCH_20261030.md`: CHANGELOG@11519689, evalrows@602aba88, STATE-last. Verify drift, exact diffs, 4/4 checks, computed merge trees, main CI, fresh independent STATE review and UOR relay. HOLD on drift; no T4/deploy.
+
+OWNER D1=O-1: authorize (b2) T0–T2 MOCK/OFFLINE engineering only. Do not rule D2–D8 for real data. Implement them as explicit, tested, digest-pinned policy parameters with no silent defaults; real-data execution must remain fail-closed until every applicable owner ruling and provenance requirement is satisfied. Do not infer scientific validity from MOCK tests.
+```
+- **The owner (2026-10-29, the ninth), verbatim — the producer and the decision pack's revision 5** (the second
+  and third paragraphs of .work/p7/redesign/handoff/owner_evalrow_and_pack_20261029.txt, sha256 604f2ac4…):
+```text
+OWNER AUTHORIZE T0–T2 only: build a dormant synthetic-only evaluation-row producer for C10, using test-only horizon, cadence and band. Keep terminal-close semantics, exact regular-bar resolution, censor accounting, quarter boundaries and shared-label bounds. No real-data paths, claims or unruled methodology.
+
+In a second independent safe lane, finalize one evidence-based OD-NG-5(b)/7.1b decision pack, including F-PROV, F-EVID, F-REV, F-AVAIL, F-PROXY, close-time anomalies, and the b3a-first STOP S1 option. Public-documentation research for E-1 is allowed read-only; no archive listing or market-data download. Distinguish proven facts, assumptions, and missing evidence. Do not preselect unsupported numeric thresholds.
+```
 - **The owner (2026-10-29, the eighth), verbatim — the T3 for the C10/G-1 batch** (the first two lines of
   .work/p7/redesign/handoff/owner_directive_speed_20261029.txt, sha256 0716a40b…; the rest is a standing
   directive on execution speed, kept whole there):
@@ -3243,42 +3259,47 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=C10 = (A+) AND G-1 = (a′) ARE RULED (2026-10-29) AND ON MAIN AS DORMANT SYNTHETIC TOOLING (#304 → M37
-  c6468be2); the CHANGELOG records #301 (#303 → M36 aa3c6f17). F-AVAIL, F-REV, F-PROV and every other choice in the
-  decision pack (revision 4) await the owner; no real-data admissibility claim; no (b2) or (b3); (b1) has no network
-  code. Main is M37 c6468be2 before this record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A,
-  re-pinned at R 27682005, with one declared runtime delta on main (frontend/app.js, #285) until a release. The next
-  writer-token renewal is due by **2026-11-20** (expiry 2026-11-23); the 2026-10-24 renewal is still only
-  owner-reported.
+LOOP_STATE=THE C10 EVALUATION-ROW PRODUCER IS ON MAIN AS DORMANT SYNTHETIC TOOLING (#307 → M40 03e7dc41); the
+  CHANGELOG records #304 (#306 → M39 bdc2d3f5). OD-NG-5(b) D1 = O-1 (2026-10-30): (b2) is MOCK/OFFLINE engineering
+  only, LOCAL on feat/ng-b2-core; D2–D8 and the other pack choices await the owner for real data; no (b3a) or (b3b);
+  no download; (b1) has no network code. Main is M40 03e7dc41 before this record; production is unchanged: D 27edbcad
+  / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with one declared runtime delta on main (frontend/app.js,
+  #285) until a release. The next writer-token renewal is due by **2026-11-20** (expiry 2026-11-23); the 2026-10-24
+  renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
   - NGA is PROPOSED, not adopted. RULED: OD-NG-5(a) (2026-10-25, synthetic-only), OD-NG-5(b)'s F-RUN = (b1) only
     (2026-10-28), F-CONFIRM (2026-10-29: C1 clarified, C2–C9, C10's accounting floor only, G-1 deferred), C10 = (A+)
     with `unknown` separate from confirmed delisting and G-1 = (a′) synthetic-only (2026-10-29, later:
-    .work/nga/master/C10_G1_RULED.md), OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD, OD-NG-6 YES, OD-NG-8. UNRULED, defaults
-    unchanged: OD-NG-1, OD-NG-3, OD-NG-4b, **every other choice of OD-NG-5(b)** (the decision pack's Part C) and
-    **OD-NG-7**. Do not write "OD-NG-1…8 are open".
+    .work/nga/master/C10_G1_RULED.md), OD-NG-5(b) D1 = O-1 (2026-10-30: (b2) MOCK/OFFLINE engineering only, D2–D8
+    built as explicit, tested, digest-pinned parameters and unruled for real data), OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD,
+    OD-NG-6 YES, OD-NG-8. UNRULED, defaults unchanged: OD-NG-1, OD-NG-3, OD-NG-4b, **every other choice of
+    OD-NG-5(b)** (the decision pack's Part C) and **OD-NG-7**. Do not write "OD-NG-1…8 are open".
   - THE BUILDER MUST STAY SYNTHETIC-ONLY until OD-NG-5(b) and OD-NG-7 are ruled: lifting either gate is a reviewed
     code change, never a flag. Its rules: .work/nga/master/OD_NG_5_PART_A_RULED.md (B1–B9); its mutation sweep:
     .work/corpus_20261025/MUTATION_SWEEP.py (48 of 48 caught) — rerun it in a worktree after any change to the
     builder; it rewrites the builder in place and restores it. G-1 (a′) is in the builder since #304. C10 (A+) is on
     main as scripts/quant_ng_censor.py (#304): synthetic input only, its horizon SYNTHETIC_TEST_ONLY; its
     mutation-probe record (hand mutations, each reverted; not a script):
-    .work/c10g1_review_20261029/MUTATION_PROBES_47972d5.txt — probe again by hand after any change to the tool.
+    .work/c10g1_review_20261029/MUTATION_PROBES_47972d5.txt — probe again by hand after any change to the tool. Its
+    input producer is on main as scripts/quant_ng_evalrows.py (#307): synthetic only, horizon, cadence and band
+    SYNTHETIC_TEST_ONLY; its probe record: .work/evalrows_20261029/MUTATION_PROBES_EVALROWS_R2.txt (10 of 10).
   - (b1) IS OFFLINE TOOLING ONLY, and it is on main as scripts/quant_ng_fetch.py (#294). The owner (2026-10-28):
     "mocked/synthetic offline tooling, no network"; no (b2) or (b3). Claude reads that strictly, failing closed: no
     transport but a local mock archive and no network code at all, although the pack's (b1) foresaw a tool that
     contains network code. The owner (2026-10-29): "No network code or network use in (b1)." F-CONFIRM's C5 and C7
     bind its parse layer, on main since #301 (scripts/quant_ng_extract.py: offline, MOCK manifests only, not builder
     evidence). The parser's mutation sweep: .work/extract_parse_20261029/MUTATION_SWEEP_EXTRACT_R2.py (27 of 30,
-    three equivalent) — rerun it in a worktree after any change to the parser; it rewrites the parser in place and
-    restores it. The (b2) contract notes from its review: .work/extract_parse_20261029/REVIEW_EXTRACT_R1.md and
-    REVIEW_EXTRACT_R2.md. Stop before anything an unruled pack choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY,
-    F-EVID). Its mutation sweep: .work/fetch_offline_20261028/MUTATION_SWEEP_FETCH.py (30 of 34, four equivalent on
-    CPython 3.13.14) — rerun it in a worktree after any change to the tool; it rewrites the tool in place and
-    restores it. Never widen the fit tool's write guard to make a test pass: a new parent of the output folder is
-    refused by design.
+    three equivalent) on main's parser; for the LOCAL (b2) parser use .work/b2_20261030/MUTATION_SWEEP_EXTRACT_R3.py
+    (M08 moved, M29 replaced by M29b) — rerun the matching one in a worktree after any change to the parser; it
+    rewrites the parser in place and restores it. (b2) is now authorized as MOCK/OFFLINE engineering only (D1 = O-1):
+    real data stays refused at every entry point, and no policy value is ruled for real use. The (b2) contract notes
+    from its review: .work/extract_parse_20261029/REVIEW_EXTRACT_R1.md and REVIEW_EXTRACT_R2.md. Stop before anything
+    an unruled pack choice decides (F-PROV, F-AVAIL, F-SCOPE, F-PROXY, F-EVID). Its mutation sweep:
+    .work/fetch_offline_20261028/MUTATION_SWEEP_FETCH.py (30 of 34, four equivalent on CPython 3.13.14) — rerun it in
+    a worktree after any change to the tool; it rewrites the tool in place and restores it. Never widen the fit
+    tool's write guard to make a test pass: a new parent of the output folder is refused by design.
   - MODEL ROUTING (owner, 2026-10-28): Opus Medium for routine work, Opus High for execution, Opus XHIGH for complex
     work; Fable at XHIGH or Max for frontier quant. Then, with the (b1) T3: the master selects its own model and
     effort per milestone and routes independent workers with verified individual configurations, Fable at XHIGH or
@@ -3286,16 +3307,19 @@ LOOP_STATE=C10 = (A+) AND G-1 = (a′) ARE RULED (2026-10-29) AND ON MAIN AS DOR
     aligned it to the Desktop bootstrap: ordinary subagents for bounded work within two lanes in total, never as a
     required independent review; Codex execution is not a Claude worker.
   - COUNT REVIEWERS AND ROUNDS SEPARATELY: F-CONFIRM's sheet and the contract-gaps note had NO independent review
-    (Claude's self-audit only); C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static only;
-    PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE round; this record had ONE
-    independent reviewer, the same session, in one round on this filled record; the parse batch's record (#302) had
-    ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO rounds (static only;
-    FINDINGS, then PASS), after one read-only probe by an ordinary subagent (not independent); the F-CONFIRM batch's
-    record (#299) had ONE in THREE rounds; the decision pack had ONE independent reviewer in FOUR rounds, the last
-    round's three small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in
-    TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body
-    ("Reviewed independently twice") and a56f80c7's message ("a second review passed") overstate theirs and are
-    immutable, so this record documents them instead.
+    (Claude's self-audit only); the evaluation-row producer (#307) had ONE independent reviewer in TWO rounds (static
+    only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS, then
+    PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds not re-reviewed);
+    this record had ONE independent reviewer, the same session, in one round on this filled record; the C10/G-1
+    batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static
+    only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE round; the parse batch's
+    record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO
+    rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary subagent (not independent);
+    the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had ONE independent reviewer in
+    FOUR rounds, the last round's three small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE
+    independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE
+    rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's message ("a second review passed")
+    overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3305,17 +3329,22 @@ LOOP_STATE=C10 = (A+) AND G-1 = (a′) ARE RULED (2026-10-29) AND ON MAIN AS DOR
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/c10g1_t3_20261029/ (this batch's
-    package and exec records), .work/c10g1_review_20261029/ (the C10/G-1 ruling sheet, implementation reviews,
-    mutation probes and gates), .work/nga/master/C10_G1_RULED.md, .work/parse_t3_20261029/ (the parse batch's package
-    and exec records), .work/extract_parse_20261029/ (the parse layer's reviews, sweeps and gates),
-    .work/fconfirm_20261029/ (the F-CONFIRM batch's package, re-pins, gates, mutation check and exec records),
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/evalrows_20261029/ (this batch's
+    package, reviews, probes, gates and exec records), .work/b2_20261030/ ((b2): the contract, its review, probes and
+    gates; worktree .work/wt-b2), .work/nga/master/OD_NG_5_PART_B_AND_OD_NG_7_DECISION_PACK.md (revision 5, its
+    reviews REVIEW_PACK_REV5_R1.md and _R2.md beside it), .work/c10g1_t3_20261029/ (the C10/G-1 batch's package and
+    exec records), .work/c10g1_review_20261029/ (the C10/G-1 ruling sheet, implementation reviews, mutation probes
+    and gates), .work/nga/master/C10_G1_RULED.md, .work/parse_t3_20261029/ (the parse batch's package and exec
+    records), .work/extract_parse_20261029/ (the parse layer's reviews, sweeps and gates), .work/fconfirm_20261029/
+    (the F-CONFIRM batch's package, re-pins, gates, mutation check and exec records),
     .work/nga/master/F_CONFIRM_RULED.md, .work/fetch_offline_20261028/ (the (b1) batch's package, review, sweep,
     gates and exec records), .work/fit_snapshot_20261025/ (the fit batch), .work/nga/master/ (the decision pack,
     revision 4, with its frozen revisions) and .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md.
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: C10 = (A+) AND G-1 = (a′) REACHED MAIN (#304 → M37 c6468be2), with the CHANGELOG for #301 (#303 → M36
+  aa3c6f17), and that batch's record was published last (#305 → M38 30296c5a).
   Before it: THE (b1) PARSE LAYER REACHED MAIN (#301 → M34 960d16b9), with the CHANGELOG for #297 and #298 (#300 →
   M33 6de15e9f), and that batch's record was published last (#302 → M35 fb234ece).
   Before it: THE OWNER RULED F-CONFIRM (2026-10-29); the CHANGELOG for #294 (#296 → M29 707cda36), the builder's test
@@ -6095,6 +6124,16 @@ LOOP_STATE=C10 = (A+) AND G-1 = (a′) ARE RULED (2026-10-29) AND ON MAIN AS DOR
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER, THE FIT GATE'S
+  SNAPSHOT IDENTITY, OD-NG-5(b) STEPS (b1) AND (b2)-MOCK, F-CONFIRM, C10 (A+) / G-1 (a′) AND THE EVALUATION-ROW
+  PRODUCER (2026-10-30):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
+    frontend/app.js (#285), until a release.
+  - On main, all synthetic or MOCK only, with no network code: the dormant builder (#288, #297, G-1 since #304), the
+    fit gate's identity check (#291), the offline fetch executor (#294), its parse layer (#301), the C10 accounting
+    tool (#304) and its evaluation-row producer (#307). OD-NG-5(b): F-RUN = (b1), then D1 = O-1 ((b2) MOCK/OFFLINE
+    only, LOCAL); F-CONFIRM, C10 and G-1 ruled; D2–D8 unruled for real data. OD-NG-7 is unruled.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER, THE FIT GATE'S
   SNAPSHOT IDENTITY, OD-NG-5(b) STEP (b1) WITH ITS PARSE LAYER, F-CONFIRM, AND C10 (A+) / G-1 (a′) (2026-10-29):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
     frontend/app.js (#285), until a release.
@@ -6477,7 +6516,12 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-c10-g1-20261029 (this record, on main M37 c6468be2). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-evalrows-20261030 (this record, on main M40 03e7dc41). Merged on origin in this batch:
+  - docs/changelog-304 @ 11519689 (#306 → M39) and feat/ng-evalrows-synthetic @ 602aba88 (#307 → M40). They and the
+    earlier merged branches can be deleted on the owner's word; no cleanup was authorized. LOCAL, unpublished:
+    feat/ng-b2-core @ e3022239 (.work/wt-b2, on M38). Local worktrees from this batch, cleanup candidates:
+    .work/wt-changelog-304, .work/wt-evalrows and .work/wt-state-evalrows.
+  Before it: chore/state-c10-g1-20261029 (this record, on main M37 c6468be2). Merged on origin in this batch:
   - docs/changelog-301 @ 6588ff70 (#303 → M36) and feat/ng-c10-g1-synthetic @ ff37767 (#304 → M37). They and the
     earlier merged branches can be deleted on the owner's word; no cleanup was authorized. Local worktrees, likewise
     candidates: .work/wt-c10-g1 and .work/wt-state-c10g1, with the earlier batches'.
@@ -6820,7 +6864,14 @@ CURRENT_BRANCH=chore/state-c10-g1-20261029 (this record, on main M37 c6468be2). 
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=c6468be2 (main M37, #304: C10 (A+) and G-1 (a′); the last merge before this record). Its 4 PR checks
+LAST_GREEN_SHA=03e7dc41 (main M40, #307: the evaluation-row producer; the last merge before this record). Its 4 PR
+  checks on the exact head 602aba88 (CI 40988941208, 8314 passed; reproducible build 40988941203) and main's push
+  runs on M40 (CI 40989631440, 8314 passed; build 40989631480) are green.
+  Before it: bdc2d3f5 (main M39, #306: the CHANGELOG for #304). Its 4 PR checks on 11519689 (CI 40981292676, 8281
+  passed; build 40981292744) and main's push runs on M39 (CI 40981871323, 8281 passed; build 40981871314) are green.
+  Before it: 30296c5a (main M38, #305: the previous STATE record). Main's push runs on M38 (CI 40906740346, 8281
+  passed; build 40906739867) are green.
+  Before it: c6468be2 (main M37, #304: C10 (A+) and G-1 (a′); the last merge before this record). Its 4 PR checks
   on the exact head ff37767 (CI 40901728459, 8281 passed; reproducible build 40901729139) and main's push runs on M37
   (CI 40902868446, 8281 passed; build 40902869068) are green.
   Before it: aa3c6f17 (main M36, #303: the CHANGELOG for #301). Its 4 PR checks on 6588ff70 (CI 40884049574, 8239
@@ -7182,7 +7233,13 @@ LAST_GREEN_SHA=c6468be2 (main M37, #304: C10 (A+) and G-1 (a′); the last merge
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-10-29 (the C10/G-1 batch), scanners 3/3 each:
+LAST_VERIFY=PASS 2026-10-30 (the evaluation-row batch), scanners 3/3 each:
+  - The exact-head gates: 11519689 8239 (the CHANGELOG, on M36), 602aba88 8314 (the producer), e3022239 8287 (LOCAL
+    (b2) core, not published), and this record's own, 8314 at its exact head (a record cannot name its own commit,
+    whose SHA depends on its content).
+  - CI on the PR heads: 11519689 8281 (CI tested its merge with M38) and 602aba88 8314. Main's push runs: M39 8281,
+    M40 8314.
+  Before it: PASS 2026-10-29 (the C10/G-1 batch), scanners 3/3 each:
   - The exact-head gates: 6588ff70 8239 (the CHANGELOG), ff37767 8281 (C10/G-1, gated at its exact head), and this
     record's own, 8281 at its exact head (a record cannot name its own commit, whose SHA depends on its content).
   - CI on the PR heads: 6588ff70 8239 and ff37767 8281, each equal to its local exact-head gate (CI tested each
@@ -7544,7 +7601,10 @@ LAST_VERIFY=PASS 2026-10-29 (the C10/G-1 batch), scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-10-29, the C10/G-1 batch). No delegation in the T3 itself. Before it: 982, 984, 983 and 985,
+CODEX_PENDING=NONE (2026-10-30, the evaluation-row batch). No delegation in the T3 itself. Before it: 986, 987 and
+  988 (the producer) and 989 ((b2) core, LOCAL), all DONE, gpt-6-luna at effort high (log headers). The next (b2)
+  delegations wait for the contract's independent review. No API key, no paid fallback, $0.
+  Before it: NONE (2026-10-29, the C10/G-1 batch). No delegation in the T3 itself. Before it: 982, 984, 983 and 985,
   all DONE, gpt-6-luna at effort high (log headers); the change's budget of four was spent, so Claude made the last
   repair by hand. No API key, no paid fallback, $0.
   Before it: NONE (2026-10-29, the parse batch). No delegation in the T3 itself. After the previous record: 981 (the
@@ -7742,7 +7802,17 @@ CODEX_PENDING=NONE (2026-10-29, the C10/G-1 batch). No delegation in the T3 itse
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-29, after #303, #304 and this record). Nothing is urgent until the
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-30, after #306, #307 and this record). Nothing is urgent until the
+  writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
+  UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
+  0. Done: the owner's GitHub-only T3 for this batch (#306 → M39, #307 → M40, this record last), and D1 = O-1 for
+     (b2), MOCK/OFFLINE only.
+  1. Open: D2–D8 for real data and the other pack choices (revision 5, Part C); a T3 for the (b2) changes when they
+     are built and reviewed; any (b3a) step (the S1 preflight plan needs its own rulings); OD-NG-7; C10's unruled
+     remainder; OD-NG-1, OD-NG-3 and OD-NG-4b; OD-NG-2 (DEFER) and OD-NG-4 (KEEP_HOLD); B1–B9; a release for the UI
+     change (T4, not authorized); the CHANGELOG entry for #307 (a new T3); branch and worktree cleanup; and the
+     passive confirmation of the token renewal from the next genuine save.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-10-29, after #303, #304 and this record). Nothing is urgent until the
   writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is D 27edbcad /
   UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005; this batch made no production read or change.
   0. Done: C10 = (A+) and G-1 = (a′) ruled, and the owner's GitHub-only T3 for this batch (#303 → M36, #304 → M37,
@@ -9148,7 +9218,16 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-10-29, after #303, #304 and this
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=The owner: the (b2) set of the decision pack when wanted, then the rest; the writer-token renewal by
+NEXT_ACTION=Claude: continue (b2) as MOCK/OFFLINE engineering in .work/wt-b2 under
+  .work/b2_20261030/B2_CONTRACT_v2.md (v1's review folded; a delta review of v2 comes before change 2's code), in the
+  reviewed order: 1b (the MOCK content marker), 2 (binding by re-derivation), 4a (the builder's per-file provenance
+  and re-derivation check, still refusing non-synthetic), 3 (the policy file), 4b (MOCK acceptance), each with an
+  exact-head gate, mutation probes and an independent review; prepare the CHANGELOG entry for #307; send the UOR peer
+  the one-line note for this batch if it has not gone yet. **The 1D evaluation and the S1 build are CONSUMED — never
+  rebuild or rerun either, and verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** The owner:
+  D2–D8 for real data when wanted; the writer-token renewal by 2026-11-20. No push without a T3; no (b3a), (b3b),
+  download, real data, T4 or deploy.
+  Before it: The owner: the (b2) set of the decision pack when wanted, then the rest; the writer-token renewal by
   2026-11-20. Claude: **the 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and verify
   them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says: S1 by metadata, the evaluation's outputs by the
   output-only check**; the builder and the C10 tool stay synthetic-only and (b1) stays offline with no network code;
