@@ -74,8 +74,13 @@ def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: P
         "official_checksum",
         "class",
         "last_bar_close_utc",
+        "source",
+        "available_from_utc",
+        "revisions",
+        "revision_history_complete",
     }
-    assert mod._prov(raw, T)[0] is False
+    with pytest.raises(mod.Refusal, match="^source must be synthetic$"):
+        mod._prov(raw, T)
 
 
 def test_full_file_provenance_uses_single_record_validation():
@@ -105,8 +110,13 @@ def test_non_synthetic_record_in_file_provenance_refuses(source):
 
 @pytest.mark.parametrize(
     "policy_fields,expected",
-    [("PENDING_CHANGE_3", False), ("complete", False), ({"policy_sha256": "a" * 64}, True)],
-    ids=["pending", "complete", "allow-listed"],
+    [
+        ("PENDING_CHANGE_3", False),
+        ("complete", False),
+        (["policy_sha256"], False),
+        ({"policy_sha256": "a" * 64}, True),
+    ],
+    ids=["pending", "complete", "list-valued", "allow-listed"],
 )
 def test_series_policy_marker_alone_decides_file_provenance(policy_fields, expected):
     mod = module()
@@ -334,7 +344,12 @@ def test_non_normal_bound_path_is_refused(tmp_path: Path, field):
 
 def test_invalid_bound_policy_is_refused_by_policy_validator(tmp_path: Path):
     mod = module()
-    bundle, _ = _assembled_bundle(tmp_path, policy_changes={"close_time": "CT-4"})
+    bundle, _ = _assembled_bundle(tmp_path)
+    policy_path = Path(bundle["binding"]["policy_path"])
+    policy = json.loads(policy_path.read_bytes())
+    policy["parameters"]["D8_close_time"]["value"] = "CT-4"
+    policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
+    bundle["binding"]["policy_sha256"] = hashlib.sha256(policy_path.read_bytes()).hexdigest()
 
     with pytest.raises(mod.Refusal, match="^policy detail unruled: close-time direction$"):
         mod.verify_derived(bundle)

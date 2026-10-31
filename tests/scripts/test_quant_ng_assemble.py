@@ -95,6 +95,8 @@ def plan_for(
         "parse": {"path": str(parse), "sha256": sha(parse)},
         "policy": {"path": str(policy), "sha256": sha(policy)},
         "non_market_evidence": {"path": str(non_market), "sha256": sha(non_market)},
+        "changelog": None,
+        "proxy_windows": None,
         "output_dir": str(tmp_path / outname),
     }
     value.update(changes or {})
@@ -117,6 +119,220 @@ def load_assembler():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize(
+    "availability,revision,held,entry,expected_revisions,complete,available",
+    [
+        ("P-1", "RP-0", "a", None, [], False, None),
+        ("P-1", "RP-3", "a", None, [], False, None),
+        (
+            "P-2", "RP-0", "a", None,
+            [{"sha256": "a" * 64, "available_from_utc": "2025-04-01T00:00:00Z"}],
+            False, "2025-04-01T00:00:00Z",
+        ),
+        (
+            "P-2", "RP-3", "b", None,
+            [{"sha256": "b" * 64, "available_from_utc": "2025-04-01T00:00:00Z"}],
+            True, "2025-04-01T00:00:00Z",
+        ),
+        (
+            "P-2", "RP-3", "b", "replacement",
+            [
+                {"sha256": "a" * 64, "available_before_utc": "2025-05-01T00:00:00Z"},
+                {"sha256": "b" * 64, "available_from_utc": "2025-05-01T00:00:00Z"},
+            ], True, "2025-05-01T00:00:00Z",
+        ),
+        (
+            "P-2", "RP-3", "a", "replaced-before",
+            [
+                {"sha256": "a" * 64, "available_from_utc": "2025-04-01T00:00:00Z"},
+                {"sha256": "b" * 64, "available_from_utc": "2025-05-01T00:00:00Z"},
+            ], True, "2025-04-01T00:00:00Z",
+        ),
+        ("P-1", "RP-3", "b", "replacement", [], False, None),
+        ("P-1", "RP-3", "a", "replaced-before", [], False, None),
+        ("P-1", "RP-3", "a", "replaced-after", [], False, None),
+    ],
+    ids=[
+        "P-1-RP-0", "P-1-RP-3", "P-2-RP-0", "P-2-RP-3-unlisted",
+        "P-2-held-replacement", "P-2-held-replaced-before", "P-1-held-replacement",
+        "P-1-held-replaced-before", "P-1-held-replaced-no-A-check",
+    ],
+)
+def test_file_provenance_cells_and_cutoff_usability(
+    availability, revision, held, entry, expected_revisions, complete, available
+):
+    assemble = load_assembler()
+    corpus = importlib.util.spec_from_file_location(
+        "corpus_for_provenance_cells", ROOT / "scripts/quant_ng_corpus.py"
+    )
+    assert corpus and corpus.loader
+    builder = importlib.util.module_from_spec(corpus)
+    corpus.loader.exec_module(builder)
+    held_digest = held * 64
+    case = entry
+    item = {
+        "path": "AAAUSDT-1d-2025-03-31.zip",
+        "sha256": held_digest,
+        "official_checksum": held_digest,
+        "last_bar_close_utc": "2025-04-01T00:00:00Z",
+    }
+    if entry == "replacement":
+        entry = {
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": held_digest,
+            "updated_utc": "2025-05-01T00:00:00Z",
+        }
+    elif entry in {"replaced-before", "replaced-after"}:
+        updated = (
+            "2025-05-01T00:00:00Z"
+            if entry == "replaced-before"
+            else "2025-03-01T00:00:00Z"
+        )
+        entry = {
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": "b" * 64,
+            "updated_utc": updated,
+        }
+    record = assemble._file_provenance(item, availability, revision, entry)
+    assert {
+        key: record[key]
+        for key in (
+            "source", "sha256", "official_checksum", "available_from_utc",
+            "revisions", "revision_history_complete",
+        )
+    } == {
+        "source": "mock", "sha256": held_digest, "official_checksum": held_digest,
+        "available_from_utc": available, "revisions": expected_revisions,
+        "revision_history_complete": complete,
+    }
+    synthetic = {**record, "source": "synthetic"}
+    expectations = [False, False, False]
+    if availability == "P-2" and revision == "RP-3":
+        if case == "replacement":
+            expectations = [False, True, True]
+        elif case == "replaced-before":
+            expectations = [True, False, False]
+        else:
+            expectations = [True, True, True]
+    for at, expected in zip(
+        ("2025-04-30T23:59:59Z", "2025-05-01T00:00:00Z", "2025-05-02T00:00:00Z"),
+        expectations,
+        strict=True,
+    ):
+        assert builder._prov(synthetic, builder.instant(at))[0] is expected
+
+
+@pytest.mark.parametrize(
+    "availability,updated,held_digest,reason",
+    [
+        ("P-2", "2025-04-01T00:00:00Z", "a" * 64, "invalid changelog"),
+        ("P-1", "2025-04-01T00:00:00Z", "c" * 64, "STOP S5: unlisted revision"),
+        ("P-2", "2025-04-01T00:00:00Z", "c" * 64, "STOP S5: unlisted revision"),
+    ],
+    ids=["held-replaced-A-not-before-U", "held-neither-P-1", "held-neither-P-2"],
+)
+def test_rp3_refusal_cases(availability, updated, held_digest, reason):
+    assemble = load_assembler()
+    item = {
+        "sha256": held_digest,
+        "official_checksum": held_digest,
+        "last_bar_close_utc": "2025-04-01T00:00:00Z",
+    }
+    entry = {"replaced_sha256": "a" * 64, "replacement_sha256": "b" * 64, "updated_utc": updated}
+    with pytest.raises(assemble.Refusal, match=f"^{reason}$"):
+        assemble._file_provenance(item, availability, "RP-3", entry)
+
+
+@pytest.mark.parametrize(
+    "revision", ["RP-1", "RP-2", "RP-3+RP-1"],
+    ids=["RP-1", "RP-2", "RP-3-plus-RP-1"],
+)
+def test_capture_time_policies_refuse(revision):
+    assemble = load_assembler()
+    with pytest.raises(assemble.Refusal, match="^policy detail unruled: capture time$"):
+        assemble.evidence(
+            {}, fetch_dir=Path("fetch"), parse_sha256="a" * 64,
+            policy_path=Path("policy"), policy_sha256="b" * 64,
+            non_market_path=Path("non-market"), non_market_sha256="c" * 64,
+            non_market={}, policy={"parameters": {
+                "D4_availability": {"value": "P-2"},
+                "D5_revision": {"value": revision},
+            }},
+        )
+
+
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        ("digest-mismatch", "input digest mismatch"),
+        ("digest-not-policy-named", "invalid policy"),
+        ("present-when-unnamed", "invalid policy"),
+        ("named-but-absent", "policy detail unruled: changelog"),
+        ("invalid-changelog", "invalid changelog"),
+        ("invalid-proxy-windows", "invalid proxy windows"),
+    ],
+    ids=[
+        "digest-mismatch", "digest-not-policy-named", "present-when-unnamed",
+        "named-but-absent", "invalid-changelog", "invalid-proxy-windows",
+    ],
+)
+def test_bound_input_refusals(tmp_path: Path, case: str, expected: str) -> None:
+    fetched, parse_path, policy_path, non_market = assembled_inputs(tmp_path)
+    policy_helpers = importlib.util.spec_from_file_location(
+        "policy_input_refusal_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_helpers and policy_helpers.loader
+    policy_module = importlib.util.module_from_spec(policy_helpers)
+    policy_helpers.loader.exec_module(policy_module)
+    policy = policy_module.policy()
+    policy["parameters"]["D3_evidence"]["non_market_sha256"] = sha(non_market)
+    changes = {}
+    changelog = {
+        "changelog_id": "ucpe.quant_ng.mock_changelog.v1",
+        "source": "mock",
+        "assumption": (
+            "This format is an assumption until the owner authorizes reading "
+            "the venue's real files."
+        ),
+        "entries": [],
+    }
+    windows = {"windows_id": "ucpe.quant_ng.mock_proxy_windows.v1", "source": "mock", "bases": []}
+    changelog_path, windows_path = tmp_path / "changelog.json", tmp_path / "windows.json"
+    json_file(changelog_path, changelog)
+    json_file(windows_path, windows)
+    changelog_hash, windows_hash = sha(changelog_path), sha(windows_path)
+    if case in {"digest-not-policy-named", "named-but-absent"}:
+        policy["parameters"]["D5_revision"].update(
+            value="RP-3",
+            changelog_sha256=("e" * 64 if case == "digest-not-policy-named" else changelog_hash),
+        )
+        if case != "named-but-absent":
+            changes["changelog"] = {"path": str(changelog_path), "sha256": changelog_hash}
+    elif case == "digest-mismatch":
+        policy["parameters"]["D5_revision"].update(value="RP-3", changelog_sha256=changelog_hash)
+        changes["changelog"] = {"path": str(changelog_path), "sha256": "d" * 64}
+    elif case == "present-when-unnamed":
+        changes["changelog"] = {"path": str(changelog_path), "sha256": changelog_hash}
+    elif case == "invalid-changelog":
+        json_file(changelog_path, {"invalid": True})
+        # Re-pin the invalid bytes and make the policy name those exact bytes.
+        changelog_hash = sha(changelog_path)
+        policy["parameters"]["D5_revision"].update(
+            value="RP-3", changelog_sha256=changelog_hash
+        )
+        changes["changelog"] = {"path": str(changelog_path), "sha256": changelog_hash}
+    elif case == "invalid-proxy-windows":
+        json_file(windows_path, {"invalid": True})
+        windows_hash = sha(windows_path)
+        policy["parameters"]["D6_proxy"].update(value="PX-2", windows_sha256=windows_hash)
+        changes["proxy_windows"] = {"path": str(windows_path), "sha256": windows_hash}
+    policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
+    plan, _ = plan_for(tmp_path, fetched, parse_path, policy_path, non_market, changes=changes)
+    result = invoke(plan)
+    assert result.returncode != 0
+    assert json.loads(result.stdout)["reason"] == expected
 
 
 def test_assembler_uses_parser_refusal_class() -> None:
@@ -148,6 +364,11 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
                 "class",
                 "last_bar_close_utc",
             )
+        } | {
+            "source": "mock",
+            "available_from_utc": None,
+            "revisions": [],
+            "revision_history_complete": False,
         }
         for item in source["daily"]["objects"]
     ]
@@ -164,6 +385,11 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
                     "class",
                     "last_bar_close_utc",
                 )
+            } | {
+                "source": "mock",
+                "available_from_utc": None,
+                "revisions": [],
+                "revision_history_complete": False,
             }
             for item in source["coverage"]["15m"]["objects"]
         ]
@@ -191,6 +417,9 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
     source = parsed["symbols"][0]
 
     def provenance(series: dict) -> dict:
+        policy_value = json.loads(policy.read_bytes())
+        availability = policy_value["parameters"]["D4_availability"]["value"]
+        revision = policy_value["parameters"]["D5_revision"]["value"]
         return {
             "files": [
                 {
@@ -202,6 +431,22 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
                         "class",
                         "last_bar_close_utc",
                     )
+                } | {
+                    "source": "mock",
+                    "available_from_utc": (
+                        item["last_bar_close_utc"] if availability == "P-2" else None
+                    ),
+                    "revisions": (
+                        [{
+                            "sha256": item["sha256"],
+                            "available_from_utc": (
+                                item["last_bar_close_utc"] if availability == "P-2" else None
+                            ),
+                        }]
+                        if revision == "RP-0" and availability == "P-2"
+                        else []
+                    ),
+                    "revision_history_complete": False,
                 }
                 for item in series["objects"]
             ],
@@ -255,6 +500,10 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
             "policy_path": str(policy.resolve()),
             "non_market_sha256": sha(non_market),
             "non_market_path": str(non_market.resolve()),
+            "changelog_path": None,
+            "changelog_sha256": None,
+            "proxy_windows_path": None,
+            "proxy_windows_sha256": None,
             "assemble_tool_sha256": sha(SCRIPT),
         },
     }
@@ -302,6 +551,10 @@ def test_binding_has_exact_keys_and_plan_fetch_directory(tmp_path: Path) -> None
         "policy_path",
         "non_market_sha256",
         "non_market_path",
+        "changelog_path",
+        "changelog_sha256",
+        "proxy_windows_path",
+        "proxy_windows_sha256",
         "assemble_tool_sha256",
     }
     assert binding["fetch_output_dir"] == str(fetched)

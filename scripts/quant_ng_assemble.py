@@ -10,6 +10,11 @@ always null, meaning unknown and never "no ticker reuse". An unusable series is
 null, never zero. Per-file provenance carries identities only; policy-derived
 fields are explicitly pending change 3.
 
+The MOCK changelog limitation is documented below: paths must be unique, so a
+file updated twice cannot be represented. This format is an assumption until
+the owner authorizes reading the venue's real files. Proxy timeframe 1D names
+the parser's daily block.
+
 Usage: ``python -I -B scripts/quant_ng_assemble.py <plan.json>``.
 """
 
@@ -31,6 +36,8 @@ PLAN_KEYS = {
     "parse",
     "policy",
     "non_market_evidence",
+    "changelog",
+    "proxy_windows",
     "output_dir",
 }
 PIN_KEYS = {"path", "sha256"}
@@ -42,6 +49,9 @@ NON_MARKET_KEYS = {
     "not_leveraged_verification",
     "freshness",
 }
+CHANGELOG_ASSUMPTION = (
+    "This format is an assumption until the owner authorizes reading the venue's real files."
+)
 _OUTPUT_HOLDER: list[Path | None] = [None]
 
 
@@ -126,7 +136,121 @@ def check_non_market(obj: Any) -> None:
         raise Refusal("invalid non-market evidence")
 
 
-def _provenance(series: dict[str, Any], policy_sha256: str) -> dict[str, Any]:
+def check_changelog(obj: Any) -> None:
+    if (
+        not isinstance(obj, dict)
+        or set(obj) != {"changelog_id", "source", "assumption", "entries"}
+        or obj.get("changelog_id") != "ucpe.quant_ng.mock_changelog.v1"
+        or obj.get("source") != "mock"
+        or obj.get("assumption") != CHANGELOG_ASSUMPTION
+        or not isinstance(obj.get("entries"), list)
+    ):
+        raise Refusal("invalid changelog")
+    paths = set()
+    for entry in obj["entries"]:
+        if not isinstance(entry, dict) or set(entry) != {
+            "path", "replaced_sha256", "replacement_sha256", "updated_utc"
+        }:
+            raise Refusal("invalid changelog")
+        path = entry.get("path")
+        if not isinstance(path, str) or not path or path in paths:
+            raise Refusal("invalid changelog")
+        paths.add(path)
+        if any(
+            not isinstance(entry.get(key), str) or not HEX_RE.fullmatch(entry[key])
+            for key in ("replaced_sha256", "replacement_sha256")
+        ):
+            raise Refusal("invalid changelog")
+        try:
+            _instant(entry.get("updated_utc"))
+        except Refusal as exc:
+            raise Refusal("invalid changelog") from exc
+
+
+def check_proxy_windows(obj: Any) -> None:
+    if (
+        not isinstance(obj, dict)
+        or set(obj) != {"windows_id", "source", "bases"}
+        or obj.get("windows_id") != "ucpe.quant_ng.mock_proxy_windows.v1"
+        or obj.get("source") != "mock"
+        or not isinstance(obj.get("bases"), list)
+    ):
+        raise Refusal("invalid proxy windows")
+    bases = set()
+    for item in obj["bases"]:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"base", "refused_from_utc", "seams"}
+            or not isinstance(item.get("base"), str)
+            or not re.fullmatch(r"^[A-Z0-9]+$", item["base"])
+            or item["base"] in bases
+            or not isinstance(item.get("seams"), list)
+        ):
+            raise Refusal("invalid proxy windows")
+        bases.add(item["base"])
+        try:
+            _instant(item.get("refused_from_utc"))
+            for seam in item["seams"]:
+                if (
+                    not isinstance(seam, dict)
+                    or set(seam) != {"from_utc", "to_utc", "timeframe"}
+                    or seam.get("timeframe") not in {"15m", "1H", "4H", "1D"}
+                    or _instant(seam.get("from_utc")) >= _instant(seam.get("to_utc"))
+                ):
+                    raise Refusal("invalid proxy windows")
+        except Refusal as exc:
+            raise Refusal("invalid proxy windows") from exc
+
+
+def _file_provenance(item, availability, revision, changelog_entry):
+    digest = item["sha256"]
+    available = item["last_bar_close_utc"] if availability == "P-2" else None
+    revisions = []
+    complete = False
+    if revision == "RP-0" and availability == "P-2":
+        revisions = [{"sha256": digest, "available_from_utc": available}]
+    elif revision == "RP-3":
+        if changelog_entry is None:
+            revisions = [{"sha256": digest, "available_from_utc": available}]
+            complete = True
+        else:
+            old = changelog_entry["replaced_sha256"]
+            new = changelog_entry["replacement_sha256"]
+            updated = changelog_entry["updated_utc"]
+            if digest == new:
+                complete = True
+                revisions = [
+                    {"sha256": old, "available_before_utc": updated},
+                    {"sha256": new, "available_from_utc": updated},
+                ]
+                available = updated
+            elif digest == old:
+                if availability == "P-2" and (
+                    available is None or _instant(available) >= _instant(updated)
+                ):
+                    raise Refusal("invalid changelog")
+                complete = True
+                revisions = [
+                    {"sha256": old, "available_from_utc": available},
+                    {"sha256": new, "available_from_utc": updated},
+                ]
+            else:
+                raise Refusal("STOP S5: unlisted revision")
+    if availability == "P-1":
+        available, revisions, complete = None, [], False
+    return {
+        "source": "mock",
+        "sha256": digest,
+        "official_checksum": item["official_checksum"],
+        "available_from_utc": available,
+        "revisions": revisions,
+        "revision_history_complete": complete,
+    }
+
+
+def _provenance(series: dict[str, Any], policy_sha256: str, availability: str,
+                revision: str, changelog: dict[str, Any] | None) -> dict[str, Any]:
+    entries = {entry["path"]: entry for entry in (changelog or {}).get("entries", [])}
     return {
         "files": [
             {
@@ -138,7 +262,7 @@ def _provenance(series: dict[str, Any], policy_sha256: str) -> dict[str, Any]:
                     "class",
                     "last_bar_close_utc",
                 )
-            }
+            } | _file_provenance(item, availability, revision, entries.get(item["path"]))
             for item in series["objects"]
         ],
         "series_usable": series["usable"],
@@ -157,14 +281,23 @@ def evidence(
     non_market_path: Path,
     non_market_sha256: str,
     non_market: dict[str, Any],
+    policy: dict[str, Any] | None = None,
+    changelog: dict[str, Any] | None = None,
+    proxy_windows: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if policy is None:
+        policy = _POLICY.load(policy_path, policy_sha256)
+    availability = policy["parameters"]["D4_availability"]["value"]
+    revision = policy["parameters"]["D5_revision"]["value"]
+    if revision in {"RP-1", "RP-2", "RP-3+RP-1"}:
+        raise Refusal("policy detail unruled: capture time")
     candidates = []
     for symbol_data in parse["symbols"]:
         symbol = symbol_data["symbol"]
         if not isinstance(symbol, str) or not symbol.endswith("USDT"):
             raise Refusal("invalid parse symbol")
         daily = symbol_data["daily"]
-        daily_provenance = _provenance(daily, policy_sha256)
+        daily_provenance = _provenance(daily, policy_sha256, availability, revision, changelog)
         coverage = {}
         for name in ("15m", "1H", "4H"):
             series = symbol_data["coverage"][name]
@@ -172,7 +305,7 @@ def evidence(
                 "present_in_window": (
                     series["present_in_window"] if series["usable"] else None
                 ),
-                "provenance": _provenance(series, policy_sha256),
+                "provenance": _provenance(series, policy_sha256, availability, revision, changelog),
             }
         candidates.append(
             {
@@ -207,6 +340,10 @@ def evidence(
             "policy_path": str(policy_path),
             "non_market_sha256": non_market_sha256,
             "non_market_path": str(non_market_path),
+            "changelog_path": None if changelog is None else changelog["path"],
+            "changelog_sha256": None if changelog is None else changelog["sha256"],
+            "proxy_windows_path": None if proxy_windows is None else proxy_windows["path"],
+            "proxy_windows_sha256": None if proxy_windows is None else proxy_windows["sha256"],
             "assemble_tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         },
     }
@@ -250,6 +387,46 @@ def run(plan_arg: str) -> dict[str, Any]:
     parse_path, parse_raw, parse_sha = _pin(plan["parse"])
     policy_path, policy_raw, policy_sha = _pin(plan["policy"])
     non_market_path, non_market_raw, non_market_sha = _pin(plan["non_market_evidence"])
+    try:
+        policy_header = _POLICY.load(policy_path, policy_sha)
+    except _POLICY.Refusal as exc:
+        raise Refusal(str(exc)) from exc
+    named_changelog = policy_header["parameters"]["D5_revision"]["changelog_sha256"]
+    named_windows = policy_header["parameters"]["D6_proxy"]["windows_sha256"]
+    changelog_input = plan["changelog"]
+    windows_input = plan["proxy_windows"]
+    if named_changelog is None and changelog_input is not None:
+        raise Refusal("invalid policy")
+    if named_windows is None and windows_input is not None:
+        raise Refusal("invalid policy")
+    changelog_meta = windows_meta = None
+    changelog = windows = None
+    for input_value, named, label in (
+        (changelog_input, named_changelog, "changelog"),
+        (windows_input, named_windows, "proxy windows"),
+    ):
+        if named is not None and input_value is None:
+            raise Refusal(f"policy detail unruled: {label}")
+    if changelog_input is not None:
+        changelog_path, changelog_raw, changelog_sha = _pin(changelog_input)
+        if changelog_sha != named_changelog:
+            raise Refusal("invalid policy")
+        try:
+            changelog = _json(changelog_raw)
+        except (UnicodeError, ValueError, TypeError) as exc:
+            raise Refusal("invalid changelog") from exc
+        check_changelog(changelog)
+        changelog_meta = {"path": str(changelog_path), "sha256": changelog_sha, **changelog}
+    if windows_input is not None:
+        windows_path, windows_raw, windows_sha = _pin(windows_input)
+        if windows_sha != named_windows:
+            raise Refusal("invalid policy")
+        try:
+            windows = _json(windows_raw)
+        except (UnicodeError, ValueError, TypeError) as exc:
+            raise Refusal("invalid proxy windows") from exc
+        check_proxy_windows(windows)
+        windows_meta = {"path": str(windows_path), "sha256": windows_sha, **windows}
 
     fetch_dir = _path(plan["fetch_output_dir"])
     cutoff = _instant(plan["cutoff_utc"])
@@ -289,6 +466,9 @@ def run(plan_arg: str) -> dict[str, Any]:
             non_market_path=non_market_path,
             non_market_sha256=non_market_sha,
             non_market=non_market,
+            policy=policy,
+            changelog=changelog_meta,
+            proxy_windows=windows_meta,
         )
     )
     _OUTPUT_HOLDER[0] = output

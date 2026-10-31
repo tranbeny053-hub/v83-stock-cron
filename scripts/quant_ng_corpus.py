@@ -114,6 +114,10 @@ ASSEMBLE_BINDING_KEYS = {
     "policy_path",
     "non_market_sha256",
     "non_market_path",
+    "changelog_path",
+    "changelog_sha256",
+    "proxy_windows_path",
+    "proxy_windows_sha256",
     "assemble_tool_sha256",
 }
 HEX_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -308,6 +312,19 @@ def verify_derived(bundle: dict) -> None:
         ):
             if not isinstance(binding.get(key), str) or not HEX_RE.fullmatch(binding[key]):
                 raise Refusal("evidence not bound")
+        for path_key, digest_key in (
+            ("changelog_path", "changelog_sha256"),
+            ("proxy_windows_path", "proxy_windows_sha256"),
+        ):
+            path_value, digest_value = binding.get(path_key), binding.get(digest_key)
+            if (path_value is None) != (digest_value is None):
+                raise Refusal("evidence not bound")
+            if path_value is not None and (
+                not isinstance(path_value, str)
+                or not isinstance(digest_value, str)
+                or not HEX_RE.fullmatch(digest_value)
+            ):
+                raise Refusal("evidence not bound")
         try:
             fetch_dir = _path(binding["fetch_output_dir"])
             policy_path = _path(binding["policy_path"])
@@ -346,6 +363,52 @@ def verify_derived(bundle: dict) -> None:
             policy = policy_module.load(policy_path, binding["policy_sha256"])
         except policy_module.Refusal as exc:
             raise Refusal(str(exc)) from exc
+        named_values = (
+            (
+                "changelog_path",
+                "changelog_sha256",
+                policy["parameters"]["D5_revision"]["changelog_sha256"],
+                "changelog",
+            ),
+            (
+                "proxy_windows_path",
+                "proxy_windows_sha256",
+                policy["parameters"]["D6_proxy"]["windows_sha256"],
+                "proxy windows",
+            ),
+        )
+        extra_inputs = {}
+        for path_key, digest_key, named, label in named_values:
+            path_value, digest_value = binding[path_key], binding[digest_key]
+            if named is None:
+                if path_value is not None or digest_value is not None:
+                    raise Refusal("evidence not bound")
+                extra_inputs[label] = None
+                continue
+            if path_value is None:
+                raise Refusal(f"policy detail unruled: {label}")
+            if digest_value != named:
+                raise Refusal("evidence not bound")
+            try:
+                extra_path = _path(path_value)
+                if str(extra_path) != path_value:
+                    raise Refusal("evidence not bound")
+                extra_raw = extra_path.read_bytes()
+            except (OSError, Refusal) as exc:
+                raise Refusal("evidence not bound") from exc
+            if hashlib.sha256(extra_raw).hexdigest() != digest_value:
+                raise Refusal("evidence not bound")
+            try:
+                extra_obj = assembler._json(extra_raw)
+                checker = (
+                    assembler.check_changelog
+                    if label == "changelog"
+                    else assembler.check_proxy_windows
+                )
+                checker(extra_obj)
+            except assembler.Refusal as exc:
+                raise Refusal(str(exc)) from exc
+            extra_inputs[label] = {"path": path_value, "sha256": digest_value, **extra_obj}
         if (
             policy["parameters"]["D3_evidence"]["non_market_sha256"]
             != binding["non_market_sha256"]
@@ -369,6 +432,9 @@ def verify_derived(bundle: dict) -> None:
             non_market_path=non_market_path,
             non_market_sha256=binding["non_market_sha256"],
             non_market=non_market,
+            policy=policy,
+            changelog=extra_inputs["changelog"],
+            proxy_windows=extra_inputs["proxy windows"],
         )
         compare_bundle = dict(bundle)
         compare_bundle["binding"] = dict(binding)
