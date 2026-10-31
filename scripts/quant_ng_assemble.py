@@ -161,6 +161,8 @@ def check_changelog(obj: Any) -> None:
             for key in ("replaced_sha256", "replacement_sha256")
         ):
             raise Refusal("invalid changelog")
+        if entry["replaced_sha256"] == entry["replacement_sha256"]:
+            raise Refusal("invalid changelog")
         try:
             _instant(entry.get("updated_utc"))
         except Refusal as exc:
@@ -218,12 +220,18 @@ def _file_provenance(item, availability, revision, changelog_entry):
             new = changelog_entry["replacement_sha256"]
             updated = changelog_entry["updated_utc"]
             if digest == new:
+                if (
+                    availability == "P-2"
+                    and available is not None
+                    and _instant(available) >= _instant(updated)
+                ):
+                    raise Refusal("invalid changelog")
                 complete = True
                 revisions = [
                     {"sha256": old, "available_before_utc": updated},
                     {"sha256": new, "available_from_utc": updated},
                 ]
-                available = updated
+                available = updated if available is not None else None
             elif digest == old:
                 if availability == "P-2" and (
                     available is None or _instant(available) >= _instant(updated)
@@ -281,12 +289,10 @@ def evidence(
     non_market_path: Path,
     non_market_sha256: str,
     non_market: dict[str, Any],
-    policy: dict[str, Any] | None = None,
+    policy: dict[str, Any],
     changelog: dict[str, Any] | None = None,
     proxy_windows: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if policy is None:
-        policy = _POLICY.load(policy_path, policy_sha256)
     availability = policy["parameters"]["D4_availability"]["value"]
     revision = policy["parameters"]["D5_revision"]["value"]
     if revision in {"RP-1", "RP-2", "RP-3+RP-1"}:
@@ -388,11 +394,11 @@ def run(plan_arg: str) -> dict[str, Any]:
     policy_path, policy_raw, policy_sha = _pin(plan["policy"])
     non_market_path, non_market_raw, non_market_sha = _pin(plan["non_market_evidence"])
     try:
-        policy_header = _POLICY.load(policy_path, policy_sha)
+        policy = _POLICY.load(policy_path, policy_sha)
     except _POLICY.Refusal as exc:
         raise Refusal(str(exc)) from exc
-    named_changelog = policy_header["parameters"]["D5_revision"]["changelog_sha256"]
-    named_windows = policy_header["parameters"]["D6_proxy"]["windows_sha256"]
+    named_changelog = policy["parameters"]["D5_revision"]["changelog_sha256"]
+    named_windows = policy["parameters"]["D6_proxy"]["windows_sha256"]
     changelog_input = plan["changelog"]
     windows_input = plan["proxy_windows"]
     if named_changelog is None and changelog_input is not None:
@@ -441,10 +447,6 @@ def run(plan_arg: str) -> dict[str, Any]:
         raise Refusal("parse not derived from manifest") from exc
     if not isinstance(parse, dict):
         raise Refusal("parse not derived from manifest")
-    try:
-        policy = _POLICY.load(policy_path, policy_sha)
-    except _POLICY.Refusal as exc:
-        raise Refusal(str(exc)) from exc
     try:
         non_market = _json(non_market_raw)
     except (UnicodeError, ValueError, TypeError) as exc:

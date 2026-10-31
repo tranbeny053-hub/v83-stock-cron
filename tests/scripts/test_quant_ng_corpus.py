@@ -319,6 +319,7 @@ def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes
         non_market_path=non_market_path,
         non_market_sha256=hashlib.sha256(non_market_path.read_bytes()).hexdigest(),
         non_market=non_market,
+        policy=policy_value,
     )
     return bundle, non_market_path
 

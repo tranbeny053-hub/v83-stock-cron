@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import inspect
 import json
 import subprocess
 import sys
@@ -243,6 +244,113 @@ def test_rp3_refusal_cases(availability, updated, held_digest, reason):
     entry = {"replaced_sha256": "a" * 64, "replacement_sha256": "b" * 64, "updated_utc": updated}
     with pytest.raises(assemble.Refusal, match=f"^{reason}$"):
         assemble._file_provenance(item, availability, "RP-3", entry)
+
+
+@pytest.mark.parametrize("last_bar_close", ["2025-05-01T00:00:00Z", "2025-05-02T00:00:00Z"])
+def test_held_replacement_refuses_bar_close_at_or_after_update(last_bar_close):
+    assemble = load_assembler()
+    digest = "b" * 64
+    item = {
+        "sha256": digest,
+        "official_checksum": digest,
+        "last_bar_close_utc": last_bar_close,
+    }
+    entry = {
+        "replaced_sha256": "a" * 64,
+        "replacement_sha256": digest,
+        "updated_utc": "2025-05-01T00:00:00Z",
+    }
+    with pytest.raises(assemble.Refusal, match="^invalid changelog$"):
+        assemble._file_provenance(item, "P-2", "RP-3", entry)
+
+
+def test_held_replacement_with_unknown_bar_close_stays_unusable():
+    assemble = load_assembler()
+    corpus = importlib.util.spec_from_file_location(
+        "corpus_for_unknown_held_replacement", ROOT / "scripts/quant_ng_corpus.py"
+    )
+    assert corpus and corpus.loader
+    builder = importlib.util.module_from_spec(corpus)
+    corpus.loader.exec_module(builder)
+    digest = "b" * 64
+    record = assemble._file_provenance(
+        {
+            "sha256": digest,
+            "official_checksum": digest,
+            "last_bar_close_utc": None,
+        },
+        "P-2",
+        "RP-3",
+        {
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": digest,
+            "updated_utc": "2025-05-01T00:00:00Z",
+        },
+    )
+    assert record["available_from_utc"] is None
+    synthetic = {
+        **record,
+        "source": "synthetic",
+        "path": "synthetic/archive.csv",
+        "class": "ok",
+        "last_bar_close_utc": None,
+    }
+    series = {
+        "files": [synthetic],
+        "series_usable": True,
+        "series_reason": "verified",
+        "policy_fields": {"policy_sha256": "c" * 64},
+    }
+    assert builder._prov(series, builder.instant("2025-06-01T00:00:00Z"), "c" * 64)[0] is False
+
+
+def test_changelog_rejects_identical_replaced_and_replacement_hashes():
+    assemble = load_assembler()
+    value = {
+        "changelog_id": "ucpe.quant_ng.mock_changelog.v1",
+        "source": "mock",
+        "assumption": assemble.CHANGELOG_ASSUMPTION,
+        "entries": [{
+            "path": "synthetic/archive.csv",
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": "a" * 64,
+            "updated_utc": "2025-05-01T00:00:00Z",
+        }],
+    }
+    with pytest.raises(assemble.Refusal, match="^invalid changelog$"):
+        assemble.check_changelog(value)
+
+
+def test_evidence_requires_policy_argument():
+    assemble = load_assembler()
+    policy_parameter = inspect.signature(assemble.evidence).parameters["policy"]
+    assert policy_parameter.default is inspect.Parameter.empty
+
+
+def test_run_loads_policy_once_and_uses_it_for_evidence(tmp_path: Path, monkeypatch) -> None:
+    fetched, parse_path, policy_path, non_market = assembled_inputs(tmp_path)
+    plan, _ = plan_for(tmp_path, fetched, parse_path, policy_path, non_market)
+    assemble = load_assembler()
+    original_load = assemble._POLICY.load
+    original_evidence = assemble.evidence
+    loaded = []
+    passed = []
+
+    def load_once(path, digest):
+        policy = original_load(path, digest)
+        loaded.append(policy)
+        return policy
+
+    def record_evidence(*args, **kwargs):
+        passed.append(kwargs["policy"])
+        return original_evidence(*args, **kwargs)
+
+    monkeypatch.setattr(assemble._POLICY, "load", load_once)
+    monkeypatch.setattr(assemble, "evidence", record_evidence)
+    result = assemble.run(str(plan))
+    assert result["status"] == "PASS"
+    assert len(loaded) == 1
+    assert passed == loaded
 
 
 @pytest.mark.parametrize(
@@ -520,6 +628,7 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
         non_market_path=non_market.resolve(),
         non_market_sha256=sha(non_market),
         non_market=json.loads(non_market.read_bytes()),
+        policy=json.loads(policy.read_bytes()),
     ) == written
     invalid_parse = dict(parsed)
     invalid_parse["symbols"] = [dict(parsed["symbols"][0], symbol="AAABTC")]
@@ -533,6 +642,7 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
             non_market_path=non_market.resolve(),
             non_market_sha256=sha(non_market),
             non_market=json.loads(non_market.read_bytes()),
+            policy=json.loads(policy.read_bytes()),
         )
 
 
