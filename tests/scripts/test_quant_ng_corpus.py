@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import importlib.util
 import json
@@ -56,7 +57,7 @@ def _series_provenance(files=None, **changes):
         "files": [_file_provenance()] if files is None else files,
         "series_usable": True,
         "series_reason": "verified",
-        "policy_fields": "complete",
+        "policy_fields": {"policy_sha256": "a" * 64},
     }
     raw.update(changes)
     return raw
@@ -97,8 +98,8 @@ def test_non_synthetic_record_in_file_provenance_refuses(source):
 
 @pytest.mark.parametrize(
     "policy_fields,expected",
-    [("PENDING_CHANGE_3", False), ("complete", True)],
-    ids=["pending", "complete"],
+    [("PENDING_CHANGE_3", False), ("complete", False), ({"policy_sha256": "a" * 64}, True)],
+    ids=["pending", "complete", "allow-listed"],
 )
 def test_series_policy_marker_alone_decides_file_provenance(policy_fields, expected):
     mod = module()
@@ -121,6 +122,42 @@ def test_series_provenance_requires_true_and_exact_series_keys():
     missing = _series_provenance()
     del missing["series_reason"]
     assert mod._prov(missing, T)[0] is False
+
+
+def test_synthetic_build_does_not_load_assembler(tmp_path: Path, monkeypatch):
+    mod = module()
+    monkeypatch.setattr(
+        mod,
+        "_load_assembler",
+        lambda: (_ for _ in ()).throw(AssertionError("assembler loaded during build")),
+    )
+    plan = {
+        "as_of_utc": T_STR,
+        "completeness": {"threshold": 0.9, "ruling": "SYNTHETIC_TEST_ONLY"},
+        "operating_period_start": {"utc": None, "provenance": None},
+    }
+    result = mod.build(plan, bundle(), json.loads(RULE.read_bytes()), "evidence", "tool")
+    assert result["status"] == "SYNTHETIC"
+
+
+def test_per_file_provenance_stamp_is_kept_in_snapshot(tmp_path: Path):
+    item = _file_provenance()
+    provenance = _series_provenance(files=[item])
+    candidate_row = candidate()
+    candidate_row["listing"]["provenance"] = provenance
+    candidate_row["daily_quote_volume"]["provenance"] = provenance
+    path, out, _ = case(tmp_path / "trial", evidence=bundle([candidate_row]))
+    snapshot = _snapshot(path, out)
+    stamped = {
+        "files": [
+            {
+                "sha256": item["sha256"],
+                "available_from_utc": item["available_from_utc"],
+            }
+        ]
+    }
+    assert snapshot["inputs"]["XYZUSDT:listing_input"] == stamped
+    assert snapshot["inputs"]["XYZUSDT:volume_input"] == stamped
 
 
 @pytest.mark.parametrize(
@@ -221,6 +258,13 @@ def _assembled_bundle(tmp_path: Path):
     helpers = importlib.util.module_from_spec(helper_spec)
     helper_spec.loader.exec_module(helpers)
     fetched, parse_path, policy, non_market_path = helpers.assembled_inputs(tmp_path)
+    policy_spec = importlib.util.spec_from_file_location(
+        "policy_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_spec and policy_spec.loader
+    policy_helpers = importlib.util.module_from_spec(policy_spec)
+    policy_spec.loader.exec_module(policy_helpers)
+    policy.write_text(json.dumps(policy_helpers.policy(), separators=(",", ":")), encoding="utf-8")
     assembler = module()._ASSEMBLE
     parse_raw = parse_path.read_bytes()
     parse = assembler._json(parse_raw)
@@ -242,6 +286,49 @@ def test_derived_evidence_is_reproducible(tmp_path: Path):
     mod = module()
     bundle, _ = _assembled_bundle(tmp_path)
     mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize("field", ["policy_path", "fetch_output_dir"], ids=["policy", "fetch"])
+def test_protected_binding_path_is_refused_before_read(tmp_path: Path, monkeypatch, field):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    protected = "hold" + "out"
+    target = (tmp_path / protected / "never-created.json").resolve()
+    bundle["binding"][field] = str(target)
+
+    original_read_bytes = Path.read_bytes
+    original_open = builtins.open
+
+    def reject_protected_read(path):
+        if protected in os.fspath(path).lower():
+            raise AssertionError("protected binding path was read")
+        return original_read_bytes(path)
+
+    def reject_protected_open(file, *args, **kwargs):
+        if protected in os.fspath(file).lower():
+            raise AssertionError("protected binding path was opened")
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_protected_read)
+    monkeypatch.setattr(builtins, "open", reject_protected_open)
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_cutoff_text_must_match_the_parser_binding(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"]["cutoff_utc"] = "2025-04-01T00:00:00.000Z"
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_bundle_comparison_preserves_json_number_types(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["candidates"][0]["listing"]["provenance"]["series_usable"] = 1
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
 
 
 def test_edited_market_field_is_not_derived_from_parse(tmp_path: Path):

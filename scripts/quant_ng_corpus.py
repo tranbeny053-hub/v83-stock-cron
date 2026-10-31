@@ -30,7 +30,11 @@ Evidence schema::
 Each provenance value has source, sha256, official_checksum, available_from_utc,
 revisions, and revision_history_complete. Candidate listing and volume values
 pair their fields with provenance; coverage maps each timeframe to a present bar
-count and provenance.
+count and provenance. Per-file provenance uses ``{"files": [...], ...}`` and
+requires ``policy_fields`` to contain exactly ``policy_sha256`` with a lowercase
+SHA-256 value. A bound revision records the old digest with
+``available_before_utc`` and the held digest with its exact
+``available_from_utc`` replacement instant.
 
 Rules implemented from OD_NG_5_PART_A_RULED.md §2:
 B1 — verified as-of exclusions and leveraged-token trigger verification.
@@ -153,7 +157,26 @@ def _load_assembler():
     return module
 
 
-_ASSEMBLE = _load_assembler()
+def _load_policy():
+    spec = importlib.util.spec_from_file_location(
+        "quant_ng_policy_corpus", Path(__file__).with_name("quant_ng_policy.py")
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load policy")
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+def __getattr__(name: str):
+    if name == "_ASSEMBLE":
+        return _load_assembler()
+    raise AttributeError(name)
 
 
 def load_rule(path: Path) -> dict[str, Any]:
@@ -185,7 +208,10 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
             raw.get("series_usable") is not True
             or not isinstance(files, list)
             or not files
-            or raw.get("policy_fields") == "PENDING_CHANGE_3"
+            or not isinstance(raw.get("policy_fields"), dict)
+            or set(raw["policy_fields"]) != {"policy_sha256"}
+            or not isinstance(raw["policy_fields"].get("policy_sha256"), str)
+            or not HEX_RE.fullmatch(raw["policy_fields"]["policy_sha256"])
         ):
             return False, {}
         # The assembler's pending policy fields keep its MOCK series fail-closed.
@@ -252,6 +278,7 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
 
 def verify_derived(bundle: dict) -> None:
     """Verify assembler evidence against its bound source files and parser output."""
+    assembler = None
     try:
         binding = bundle.get("binding") if isinstance(bundle, dict) else None
         if not isinstance(binding, dict) or set(binding) != ASSEMBLE_BINDING_KEYS:
@@ -269,9 +296,26 @@ def verify_derived(bundle: dict) -> None:
             if not isinstance(binding.get(key), str) or not HEX_RE.fullmatch(binding[key]):
                 raise Refusal("evidence not bound")
         try:
-            policy_raw = Path(binding["policy_path"]).read_bytes()
-            non_market_raw = Path(binding["non_market_path"]).read_bytes()
-            manifest_raw = (Path(binding["fetch_output_dir"]) / "MANIFEST.json").read_bytes()
+            fetch_dir = _path(binding["fetch_output_dir"])
+            policy_path = _path(binding["policy_path"])
+            non_market_path = _path(binding["non_market_path"])
+        except Refusal as exc:
+            raise Refusal("evidence not bound") from exc
+        if any(
+            str(path) != binding[key]
+            for path, key in (
+                (fetch_dir, "fetch_output_dir"),
+                (policy_path, "policy_path"),
+                (non_market_path, "non_market_path"),
+            )
+        ):
+            raise Refusal("evidence not bound")
+        assembler = _load_assembler()
+        policy_module = _load_policy()
+        try:
+            policy_raw = policy_path.read_bytes()
+            non_market_raw = non_market_path.read_bytes()
+            manifest_raw = (fetch_dir / "MANIFEST.json").read_bytes()
         except OSError as exc:
             raise Refusal("evidence not bound") from exc
         if (
@@ -280,23 +324,31 @@ def verify_derived(bundle: dict) -> None:
             or hashlib.sha256(manifest_raw).hexdigest() != binding["manifest_sha256"]
         ):
             raise Refusal("evidence not bound")
+        try:
+            non_market = assembler._json(non_market_raw)
+            assembler.check_non_market(non_market)
+        except assembler.Refusal as exc:
+            raise Refusal(str(exc)) from exc
+        try:
+            policy_module.load(policy_path, binding["policy_sha256"])
+        except policy_module.Refusal as exc:
+            raise Refusal(str(exc)) from exc
         cutoff = instant(binding["cutoff_utc"])
         if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
             raise Refusal("evidence not bound")
-        parse_raw = _ASSEMBLE._EXTRACT.derive(Path(binding["fetch_output_dir"]), cutoff)
+        parse_raw = assembler._EXTRACT.derive(fetch_dir, cutoff)
         if hashlib.sha256(parse_raw).hexdigest() != binding["parse_sha256"]:
             raise Refusal("parse not derived from manifest")
-        parse = _ASSEMBLE._json(parse_raw)
+        parse = assembler._json(parse_raw)
         if not isinstance(parse, dict) or parse.get("cutoff_utc") != binding["cutoff_utc"]:
             raise Refusal("evidence not bound")
-        non_market = _ASSEMBLE._json(non_market_raw)
-        recomputed = _ASSEMBLE.evidence(
+        recomputed = assembler.evidence(
             parse,
-            fetch_dir=Path(binding["fetch_output_dir"]),
+            fetch_dir=fetch_dir,
             parse_sha256=binding["parse_sha256"],
-            policy_path=Path(binding["policy_path"]),
+            policy_path=policy_path,
             policy_sha256=binding["policy_sha256"],
-            non_market_path=Path(binding["non_market_path"]),
+            non_market_path=non_market_path,
             non_market_sha256=binding["non_market_sha256"],
             non_market=non_market,
         )
@@ -304,14 +356,16 @@ def verify_derived(bundle: dict) -> None:
         compare_bundle["binding"] = dict(binding)
         compare_bundle["binding"].pop("assemble_tool_sha256")
         recomputed["binding"].pop("assemble_tool_sha256")
-        if compare_bundle != recomputed:
+        if assembler._output_bytes(compare_bundle) != assembler._output_bytes(recomputed):
             raise Refusal("evidence not derived from parse")
-    except _ASSEMBLE.Refusal as exc:
-        raise Refusal(str(exc)) from exc
     except Refusal:
         raise
-    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-        raise Refusal("evidence not bound") from exc
+    except Exception as exc:
+        if assembler is not None and isinstance(exc, assembler.Refusal):
+            raise Refusal(str(exc)) from exc
+        if isinstance(exc, (OSError, ValueError, TypeError, KeyError, AttributeError)):
+            raise Refusal("evidence not bound") from exc
+        raise
 
 
 def _canonical_symbol(symbol: Any, quote: str) -> bool:

@@ -93,6 +93,20 @@ def _json(raw: bytes) -> Any:
     return json.loads(raw, object_pairs_hook=_EXTRACT._FIT._no_duplicate_keys)
 
 
+def check_non_market(obj: Any) -> None:
+    if (
+        not isinstance(obj, dict)
+        or set(obj) != NON_MARKET_KEYS
+        or obj.get("evidence_id") != "ucpe.quant_ng.non_market_evidence.v1"
+        or obj.get("source") != "mock"
+        or any(
+            not isinstance(obj.get(key), list)
+            for key in ("exclusion_verification", "not_leveraged_verification", "freshness")
+        )
+    ):
+        raise Refusal("invalid non-market evidence")
+
+
 def _provenance(series: dict[str, Any]) -> dict[str, Any]:
     return {
         "files": [
@@ -236,17 +250,7 @@ def run(plan_arg: str) -> dict[str, Any]:
         or policy.get("status") != "MOCK"
     ):
         raise Refusal("invalid policy")
-    if (
-        not isinstance(non_market, dict)
-        or set(non_market) != NON_MARKET_KEYS
-        or non_market.get("evidence_id") != "ucpe.quant_ng.non_market_evidence.v1"
-        or non_market.get("source") != "mock"
-        or any(
-            not isinstance(non_market.get(key), list)
-            for key in ("exclusion_verification", "not_leveraged_verification", "freshness")
-        )
-    ):
-        raise Refusal("invalid non-market evidence")
+    check_non_market(non_market)
 
     output = _path(plan["output_dir"])
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
