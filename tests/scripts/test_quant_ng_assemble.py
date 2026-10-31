@@ -159,6 +159,91 @@ def anomalous_assembled_inputs(tmp_path: Path, *, close_time="CT-1", evidence="E
     return fetched, parse_path, policy, non_market
 
 
+def pre_window_anomaly_inputs(tmp_path: Path, *, series_name: str, close_time: str):
+    day = 86_400_000
+    root = tmp_path / "archive"
+    paths = []
+    if series_name == "daily":
+        paths.append(
+            HELPERS.archive(
+                root,
+                "1d",
+                "2024-12",
+                HELPERS.zip_blob(
+                    "AAAUSDT-1d-2024-12.zip",
+                    [HELPERS.row(HELPERS.TMS - 91 * day, HELPERS.TMS - 91 * day + day - 2)],
+                ),
+                granularity="monthly",
+            )
+        )
+    else:
+        paths.extend(
+            [
+                HELPERS.archive(
+                    root,
+                    "1d",
+                    "2025-03",
+                    HELPERS.zip_blob(
+                        "AAAUSDT-1d-2025-03.zip",
+                        [HELPERS.row(HELPERS.TMS - day, volume="8.00")],
+                    ),
+                    granularity="monthly",
+                ),
+                HELPERS.archive(
+                    root,
+                    "15m",
+                    "2025-03-24",
+                    HELPERS.zip_blob(
+                        "AAAUSDT-15m-2025-03-24.zip",
+                        [HELPERS.row(HELPERS.TMS - 8 * day, HELPERS.TMS - 8 * day + 900_000 - 2)],
+                    ),
+                ),
+            ]
+        )
+    fetched = HELPERS.fetch(tmp_path, paths)
+    parse_dir = tmp_path / "parsed"
+    parse_plan = {
+        "plan_id": "ucpe.quant_ng.extract.v1",
+        "fetch_output_dir": str(fetched),
+        "cutoff_utc": T,
+        "output_dir": str(parse_dir),
+    }
+    parse_plan_path = tmp_path / "parse-plan.json"
+    json_file(parse_plan_path, parse_plan)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", str(EXTRACT), str(parse_plan_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    parse_path = parse_dir / "PARSE.json"
+    policy, non_market = tmp_path / "policy.json", tmp_path / "non-market.json"
+    json_file(
+        non_market,
+        {
+            "evidence_id": "ucpe.quant_ng.non_market_evidence.v1",
+            "source": "mock",
+            "exclusion_verification": [],
+            "not_leveraged_verification": [],
+            "freshness": [],
+        },
+    )
+    helpers_spec = importlib.util.spec_from_file_location(
+        "policy_pre_window_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    policy_helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(policy_helpers)
+    policy_value = policy_helpers.policy()
+    policy_value["parameters"]["D3_evidence"].update(
+        value="E-3", non_market_sha256=sha(non_market)
+    )
+    policy_value["parameters"]["D8_close_time"]["value"] = close_time
+    json_file(policy, policy_value)
+    return fetched, parse_path, policy, non_market
+
+
 def write_policy(policy: Path, non_market: Path) -> None:
     policy_helpers = importlib.util.spec_from_file_location(
         "policy_test_helpers_for_assemble", ROOT / "tests/scripts/test_quant_ng_policy.py"
@@ -675,6 +760,55 @@ def test_d8_close_time_policy_derives_exact_evidence(
     corpus = importlib.util.module_from_spec(corpus_spec)
     corpus_spec.loader.exec_module(corpus)
     corpus.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "series_name,option",
+    [
+        ("daily", "CT-3"),
+        ("daily", "CT-1"),
+        ("15m", "CT-3"),
+        ("15m", "CT-1"),
+    ],
+    ids=[
+        "daily-before-window-ct3",
+        "daily-before-window-ct1",
+        "fifteen-minute-before-history-ct3",
+        "fifteen-minute-before-history-ct1",
+    ],
+)
+def test_close_time_policy_rejects_anomalies_before_series_window(
+    tmp_path: Path, series_name: str, option: str
+) -> None:
+    fetched, parse_path, policy, non_market = pre_window_anomaly_inputs(
+        tmp_path, series_name=series_name, close_time=option
+    )
+    parsed = json.loads(parse_path.read_bytes())
+    source = parsed["symbols"][0]
+    raw_series = source["daily"] if series_name == "daily" else source["coverage"]["15m"]
+    assert raw_series["close_time_anomalies"] == 0
+    assert raw_series["close_time_anomalies_all"] == 1
+
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    candidate = json.loads((output / "EVIDENCE.json").read_bytes())["candidates"][0]
+    should_be_usable = option == "CT-1"
+    reason = None if should_be_usable else "close-time anomaly"
+
+    if series_name == "daily":
+        daily = candidate["daily_quote_volume"]
+        assert daily["provenance"]["series_usable"] is should_be_usable
+        assert daily["provenance"]["series_reason"] == reason
+        assert candidate["listing"]["first_daily_bar_open_utc"] == (
+            "2024-12-31T00:00:00Z" if should_be_usable else None
+        )
+        assert daily["bars"] == ([] if should_be_usable else None)
+    else:
+        coverage = candidate["coverage"]["15m"]
+        assert coverage["provenance"]["series_usable"] is should_be_usable
+        assert coverage["provenance"]["series_reason"] == reason
+        assert coverage["present_in_window"] == (0 if should_be_usable else None)
 
 
 def test_d8_ct4_remains_refused(tmp_path: Path) -> None:
