@@ -136,10 +136,28 @@ def test_empty_p0_is_an_early_run_stop_for_every_source_and_applicable_ruling():
                     )
                     out = s1.decide(p, o)
                     assert out["run_outcome"] == "STOP-inconclusive"
-                    assert out["run_stops"] == ["empty P0"]
+                    expected_stops = ["empty P0"]
+                    if source == "c":
+                        expected_stops.append("K = 0")
+                        expected_stops.append("unexpected folder")
+                    if source == "d" and c13 == "b":
+                        expected_stops.append("empty (c) part")
+                    assert out["run_stops"] == expected_stops
                     assert out["probes"] == []
                     assert out["K"] == (0 if source == "c" else len(p["probes"]))
                     assert out["cap"] == 20
+
+
+def test_empty_p0_and_redirect_collect_both_stops_with_normal_result_shape():
+    p = plan()
+    o = observation(["BTCUSDT", "ETHUSDT"])
+    o["flags"]["redirect"] = True
+
+    out = s1.decide(p, o)
+    normal_result = s1.decide(plan(), observation())
+
+    assert out["run_stops"] == ["redirect", "empty P0"]
+    assert set(out) == set(normal_result)
 
 
 @pytest.mark.parametrize(
@@ -577,7 +595,7 @@ def test_s1_13_empty_c_is_only_reachable_through_empty_p0(empty_rule, draw):
     o = observation([], folders={"AAAUSDT": folder(["AAAUSDT-1d-2026-02-28.zip"])})
     out = s1.decide(p, o)
     assert out["run_outcome"] == "STOP-inconclusive"
-    assert out["run_stops"] == ["empty P0"]
+    assert out["run_stops"] == ["empty P0"] + (["empty (c) part"] if empty_rule == "b" else [])
     assert out["probes"] == []
 
 

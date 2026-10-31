@@ -262,40 +262,6 @@ def decide(plan: dict, observation: dict, *, _digest_ok: bool = False) -> dict:
                 duplicate = True
             else:
                 p0_names.append(name)
-    if not p0_names:
-        r = plan["rulings"]
-        theta = 31 if r["S1-7"] == "D" else 32
-        empty_k = len(plan["probes"]) if r["S1-4"] in {"a", "b", "d"} else 0
-        if r["S1-3"] == "b":
-            pages0 = observation["p0"]["pages"]
-            if len(pages0) <= 1 or pages0[0]["page_size"] is None:
-                cap = plan["cap"]["H"]
-            else:
-                page_size = pages0[0]["page_size"]
-                cap = min(
-                    plan["cap"]["H"],
-                    len(pages0)
-                    + empty_k * ((2 * plan["cap"]["F"] + page_size - 1) // page_size)
-                    + plan["cap"]["m"],
-                )
-        else:
-            cap = plan["cap"]["number"]
-        return {
-            "schema": "ucpe.s1_decision.v1",
-            "status": "MOCK",
-            "run_outcome": "STOP-inconclusive",
-            "run_stops": ["empty P0"],
-            "probes": [],
-            "consequence": _consequence("STOP-inconclusive", r["S1-5"]),
-            "cap": cap,
-            "theta": theta,
-            "dropped": dropped,
-            "K": empty_k,
-            "residual_risk": (
-                "a symbol halted, not delisted, for more than 30 days also passes; "
-                "S1 cannot tell them apart"
-            ),
-        }
     draw_names: list[str] = []
     if plan["draw"] is not None:
         ordered = sorted(p0_names)
@@ -327,6 +293,8 @@ def decide(plan: dict, observation: dict, *, _digest_ok: bool = False) -> dict:
         stops.append("cap reached")
     if duplicate:
         stops.append("duplicate name")
+    if not p0_names:
+        stops.append("empty P0")
     if r["S1-4"] == "c" and not draw_names:
         stops.append("K = 0")
     if r["S1-4"] == "d" and not draw_names and r["S1-13"] == "b":
