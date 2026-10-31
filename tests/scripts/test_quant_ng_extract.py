@@ -279,6 +279,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
             }
         ],
         "first_open_utc": "2025-03-31T00:00:00Z",
+        "first_unflagged_open_utc": None,
         "off_grid": 0,
         "zero_volume": 0,
         "close_time_anomalies": 1,
@@ -521,7 +522,63 @@ def test_first_open_reaches_before_the_daily_window(tmp_path: Path) -> None:
     assert result.returncode == 0
     daily = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["daily"]
     assert daily["first_open_utc"] == "2024-12-22T00:00:00Z"
+    assert daily["first_unflagged_open_utc"] == "2024-12-22T00:00:00Z"
     assert [bar["open_utc"] for bar in daily["bars"]] == ["2025-03-31T00:00:00Z"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["before-window", "all-anomalous", "unusable"],
+    ids=["before-window", "all-anomalous", "unusable"],
+)
+def test_first_unflagged_daily_open(case: str, tmp_path: Path) -> None:
+    day = 86_400_000
+    root = tmp_path / "archive"
+    if case == "before-window":
+        early = TMS - 100 * day
+        next_day = early + day
+        paths = [
+            archive(
+                root,
+                "1d",
+                "2024-12",
+                zip_blob(
+                    "AAAUSDT-1d-2024-12.zip",
+                    [row(early, early + day - 2), row(next_day, next_day + day - 1)],
+                ),
+                granularity="monthly",
+            )
+        ]
+        fetched = fetch(tmp_path, paths)
+        expected_first = "2024-12-22T00:00:00Z"
+        expected_unflagged = "2024-12-23T00:00:00Z"
+    elif case == "all-anomalous":
+        early = TMS - 2 * day
+        paths = [
+            archive(
+                root,
+                "1d",
+                "2025-03",
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(early, early + day - 2), row(TMS - day, TMS - 2)],
+                ),
+                granularity="monthly",
+            )
+        ]
+        fetched = fetch(tmp_path, paths)
+        expected_first = "2025-03-30T00:00:00Z"
+        expected_unflagged = None
+    else:
+        fetched = make_series(tmp_path, interval="1h", rows=[row(TMS - 3_600_000)])
+        expected_first = None
+        expected_unflagged = None
+
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0, result.stdout + result.stderr
+    daily = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["daily"]
+    assert daily["first_open_utc"] == expected_first
+    assert daily["first_unflagged_open_utc"] == expected_unflagged
 
 
 def test_a_cutoff_off_midnight_by_an_hour_is_refused(tmp_path: Path) -> None:

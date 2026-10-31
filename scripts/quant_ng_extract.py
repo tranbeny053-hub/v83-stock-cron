@@ -17,6 +17,7 @@ folder: <event>. Unexpected errors are reported as run failed: <Type>.
 Usage: ``python -I -B scripts/quant_ng_extract.py <plan.json>``.
 
 ``derive`` returns the exact PARSE.json bytes and writes nothing; ``run`` writes them.
+PARSE v4 is unpublished; ``daily.first_unflagged_open_utc`` is additive within v4.
 """
 
 from __future__ import annotations
@@ -458,6 +459,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             bars = daily["bars"]
             window = [(t, v, anomaly) for t, v, anomaly in bars if daily_start_us <= t < cutoff_us]
             first = min((t for t, _, _ in bars), default=None)
+            first_unflagged = min(
+                (t for t, _, anomaly in bars if not anomaly), default=None
+            )
             daily_out = {
                 "usable": True,
                 "reason": None,
@@ -473,6 +477,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                     for t, v, anomaly in sorted(window)
                 ],
                 "first_open_utc": _utc_text(_dt(first)) if first is not None else None,
+                "first_unflagged_open_utc": (
+                    _utc_text(_dt(first_unflagged)) if first_unflagged is not None else None
+                ),
                 "off_grid": daily["counts"][0],
                 "zero_volume": daily["counts"][1],
                 "close_time_anomalies": daily["counts"][2],
@@ -485,6 +492,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 "objects": _object_identities(groups.get((symbol, "1d"), [])),
                 "bars": None,
                 "first_open_utc": None,
+                "first_unflagged_open_utc": None,
                 "off_grid": None,
                 "zero_volume": None,
                 "close_time_anomalies": None,
