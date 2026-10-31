@@ -58,7 +58,6 @@ def assembled_inputs(tmp_path: Path, *, extra_paths: list[str] | None = None):
     assert result.returncode == 0, result.stdout + result.stderr
     parse_path = parse_dir / "PARSE.json"
     policy = tmp_path / "policy.json"
-    json_file(policy, {"policy_id": "ucpe.quant_ng.corpus_policy.v1", "status": "MOCK"})
     non_market = tmp_path / "non-market.json"
     json_file(
         non_market,
@@ -70,7 +69,20 @@ def assembled_inputs(tmp_path: Path, *, extra_paths: list[str] | None = None):
             "freshness": [],
         },
     )
+    write_policy(policy, non_market)
     return fetched, parse_path, policy, non_market
+
+
+def write_policy(policy: Path, non_market: Path) -> None:
+    policy_helpers = importlib.util.spec_from_file_location(
+        "policy_test_helpers_for_assemble", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_helpers and policy_helpers.loader
+    policy_module = importlib.util.module_from_spec(policy_helpers)
+    policy_helpers.loader.exec_module(policy_module)
+    policy_value = policy_module.policy()
+    policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = sha(non_market)
+    json_file(policy, policy_value)
 
 
 def plan_for(
@@ -164,7 +176,7 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
             ],
             "series_usable": series["usable"],
             "series_reason": series["reason"],
-            "policy_fields": "PENDING_CHANGE_3",
+            "policy_fields": {"policy_sha256": sha(policy)},
         }
 
     daily_provenance = provenance(source["daily"])
@@ -331,6 +343,18 @@ def test_invalid_policy_refuses(tmp_path: Path, case: str) -> None:
     fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
     body = json.loads(policy.read_bytes())
     body["policy_id" if case == "wrong id" else "status"] = "wrong"
+    json_file(policy, body)
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "invalid policy"
+    assert not output.exists()
+
+
+def test_policy_non_market_digest_mismatch_refuses(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
+    body = json.loads(policy.read_bytes())
+    body["parameters"]["D3_evidence"]["non_market_sha256"] = "b" * 64
     json_file(policy, body)
     plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
     result = invoke(plan)
@@ -535,7 +559,6 @@ def test_unusable_daily_is_unknown(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     parse_path = parse_dir / "PARSE.json"
     policy = tmp_path / "policy.json"
-    json_file(policy, {"policy_id": "ucpe.quant_ng.corpus_policy.v1", "status": "MOCK"})
     non_market = tmp_path / "non-market.json"
     json_file(
         non_market,
@@ -547,6 +570,7 @@ def test_unusable_daily_is_unknown(tmp_path: Path) -> None:
             "freshness": [],
         },
     )
+    write_policy(policy, non_market)
     plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
     result = invoke(plan)
     assert result.returncode == 0, result.stdout + result.stderr

@@ -72,6 +72,25 @@ _make_output = _EXTRACT._FIT._make_output
 _unwind = _EXTRACT._FIT._unwind
 
 
+def _load_policy():
+    spec = importlib.util.spec_from_file_location(
+        "quant_ng_policy_assemble", Path(__file__).with_name("quant_ng_policy.py")
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load policy")
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+_POLICY = _load_policy()
+
+
 def _pin(value: Any) -> tuple[Path, bytes, str]:
     if not isinstance(value, dict) or set(value) != PIN_KEYS:
         raise Refusal("invalid plan")
@@ -107,7 +126,7 @@ def check_non_market(obj: Any) -> None:
         raise Refusal("invalid non-market evidence")
 
 
-def _provenance(series: dict[str, Any]) -> dict[str, Any]:
+def _provenance(series: dict[str, Any], policy_sha256: str) -> dict[str, Any]:
     return {
         "files": [
             {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
@@ -115,7 +134,7 @@ def _provenance(series: dict[str, Any]) -> dict[str, Any]:
         ],
         "series_usable": series["usable"],
         "series_reason": series["reason"],
-        "policy_fields": "PENDING_CHANGE_3",
+        "policy_fields": {"policy_sha256": policy_sha256},
     }
 
 
@@ -136,7 +155,7 @@ def evidence(
         if not isinstance(symbol, str) or not symbol.endswith("USDT"):
             raise Refusal("invalid parse symbol")
         daily = symbol_data["daily"]
-        daily_provenance = _provenance(daily)
+        daily_provenance = _provenance(daily, policy_sha256)
         coverage = {}
         for name in ("15m", "1H", "4H"):
             series = symbol_data["coverage"][name]
@@ -144,7 +163,7 @@ def evidence(
                 "present_in_window": (
                     series["present_in_window"] if series["usable"] else None
                 ),
-                "provenance": _provenance(series),
+                "provenance": _provenance(series, policy_sha256),
             }
         candidates.append(
             {
@@ -237,20 +256,16 @@ def run(plan_arg: str) -> dict[str, Any]:
     if not isinstance(parse, dict):
         raise Refusal("parse not derived from manifest")
     try:
-        policy = _json(policy_raw)
-    except (UnicodeError, ValueError, TypeError) as exc:
-        raise Refusal("invalid policy") from exc
+        policy = _POLICY.load(policy_path, policy_sha)
+    except _POLICY.Refusal as exc:
+        raise Refusal(str(exc)) from exc
     try:
         non_market = _json(non_market_raw)
     except (UnicodeError, ValueError, TypeError) as exc:
         raise Refusal("invalid non-market evidence") from exc
-    if (
-        not isinstance(policy, dict)
-        or policy.get("policy_id") != "ucpe.quant_ng.corpus_policy.v1"
-        or policy.get("status") != "MOCK"
-    ):
-        raise Refusal("invalid policy")
     check_non_market(non_market)
+    if policy["parameters"]["D3_evidence"]["non_market_sha256"] != non_market_sha:
+        raise Refusal("invalid policy")
 
     output = _path(plan["output_dir"])
     if output.exists() and (not output.is_dir() or any(output.iterdir())):

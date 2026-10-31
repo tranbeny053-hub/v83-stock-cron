@@ -195,7 +195,9 @@ def load_rule(path: Path) -> dict[str, Any]:
     return parsed
 
 
-def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
+def _prov(
+    raw: Any, cutoff: datetime, expected_policy_sha256: str | None = None
+) -> tuple[bool, dict[str, Any]]:
     # The synthetic-only gate comes first, so a non-synthetic record is refused even when it is
     # also malformed, instead of being quietly treated as unknown.
     if isinstance(raw, dict) and "source" in raw and raw["source"] != "synthetic":
@@ -204,6 +206,13 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
         if set(raw) != {"files", "series_usable", "series_reason", "policy_fields"}:
             return False, {}
         files = raw.get("files")
+        if isinstance(files, list) and any(
+            isinstance(item, dict)
+            and "source" in item
+            and item["source"] != "synthetic"
+            for item in files
+        ):
+            raise Refusal("source must be synthetic")
         if (
             raw.get("series_usable") is not True
             or not isinstance(files, list)
@@ -212,11 +221,15 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
             or set(raw["policy_fields"]) != {"policy_sha256"}
             or not isinstance(raw["policy_fields"].get("policy_sha256"), str)
             or not HEX_RE.fullmatch(raw["policy_fields"]["policy_sha256"])
+            or expected_policy_sha256 is None
+            or raw["policy_fields"]["policy_sha256"] != expected_policy_sha256
         ):
             return False, {}
         # The assembler's pending policy fields keep its MOCK series fail-closed.
         metadata = []
         for item in files:
+            if isinstance(item, dict) and "source" in item and item["source"] != "synthetic":
+                raise Refusal("source must be synthetic")
             if not isinstance(item, dict) or set(item) != PROV_KEYS | {"path", "class"}:
                 return False, {}
             if item["class"] != "ok":
@@ -330,9 +343,14 @@ def verify_derived(bundle: dict) -> None:
         except assembler.Refusal as exc:
             raise Refusal(str(exc)) from exc
         try:
-            policy_module.load(policy_path, binding["policy_sha256"])
+            policy = policy_module.load(policy_path, binding["policy_sha256"])
         except policy_module.Refusal as exc:
             raise Refusal(str(exc)) from exc
+        if (
+            policy["parameters"]["D3_evidence"]["non_market_sha256"]
+            != binding["non_market_sha256"]
+        ):
+            raise Refusal("evidence not bound")
         cutoff = instant(binding["cutoff_utc"])
         if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
             raise Refusal("evidence not bound")

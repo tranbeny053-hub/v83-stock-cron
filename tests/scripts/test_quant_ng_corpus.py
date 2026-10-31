@@ -67,7 +67,7 @@ def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: P
     mod = module()
     bundle, _ = _assembled_bundle(tmp_path)
     raw = bundle["candidates"][0]["listing"]["provenance"]
-    assert raw["policy_fields"] == "PENDING_CHANGE_3"
+    assert raw["policy_fields"] == {"policy_sha256": bundle["binding"]["policy_sha256"]}
     assert set(raw["files"][0]) == {"path", "sha256", "official_checksum", "class"}
     assert mod._prov(raw, T)[0] is False
 
@@ -75,7 +75,8 @@ def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: P
 def test_full_file_provenance_uses_single_record_validation():
     mod = module()
     raw = _series_provenance()
-    assert mod._prov(raw, T) == (True, {"files": [{
+    expected_digest = raw["policy_fields"]["policy_sha256"]
+    assert mod._prov(raw, T, expected_digest) == (True, {"files": [{
         "sha256": "a" * 64,
         "available_from_utc": "2025-01-01T00:00:00Z",
     }]})
@@ -84,7 +85,7 @@ def test_full_file_provenance_uses_single_record_validation():
     assert mod._prov(bad_class, T)[0] is False
 
     mismatched = _file_provenance(official_checksum="b" * 64)
-    assert mod._prov(_series_provenance(files=[mismatched]), T)[0] is False
+    assert mod._prov(_series_provenance(files=[mismatched]), T, expected_digest)[0] is False
 
 
 @pytest.mark.parametrize("source", ["mock"], ids=["mock"])
@@ -112,7 +113,14 @@ def test_series_policy_marker_alone_decides_file_provenance(policy_fields, expec
     )
     raw = _series_provenance(files=[first, second], policy_fields=policy_fields)
     assert all(mod._prov({key: item[key] for key in mod.PROV_KEYS}, T)[0] for item in raw["files"])
-    assert mod._prov(raw, T)[0] is expected
+    assert mod._prov(raw, T, "a" * 64)[0] is expected
+
+
+def test_series_provenance_requires_matching_expected_policy_digest():
+    mod = module()
+    raw = _series_provenance()
+    assert mod._prov(raw, T, "b" * 64)[0] is False
+    assert mod._prov(raw, T, None)[0] is False
 
 
 def test_series_provenance_requires_true_and_exact_series_keys():
@@ -126,11 +134,9 @@ def test_series_provenance_requires_true_and_exact_series_keys():
 
 def test_synthetic_build_does_not_load_assembler(tmp_path: Path, monkeypatch):
     mod = module()
-    monkeypatch.setattr(
-        mod,
-        "_load_assembler",
-        lambda: (_ for _ in ()).throw(AssertionError("assembler loaded during build")),
-    )
+    calls = []
+    monkeypatch.setattr(mod, "_load_assembler", lambda: calls.append("assembler"))
+    monkeypatch.setattr(mod, "_load_policy", lambda: calls.append("policy"))
     plan = {
         "as_of_utc": T_STR,
         "completeness": {"threshold": 0.9, "ruling": "SYNTHETIC_TEST_ONLY"},
@@ -138,9 +144,12 @@ def test_synthetic_build_does_not_load_assembler(tmp_path: Path, monkeypatch):
     }
     result = mod.build(plan, bundle(), json.loads(RULE.read_bytes()), "evidence", "tool")
     assert result["status"] == "SYNTHETIC"
+    assert calls == []
 
 
-def test_per_file_provenance_stamp_is_kept_in_snapshot(tmp_path: Path):
+def test_per_file_provenance_is_unusable_without_a_bound_policy(tmp_path: Path):
+    # A synthetic build binds no policy, so a per-file provenance is unusable and stamps
+    # nothing (contract v6).
     item = _file_provenance()
     provenance = _series_provenance(files=[item])
     candidate_row = candidate()
@@ -148,16 +157,8 @@ def test_per_file_provenance_stamp_is_kept_in_snapshot(tmp_path: Path):
     candidate_row["daily_quote_volume"]["provenance"] = provenance
     path, out, _ = case(tmp_path / "trial", evidence=bundle([candidate_row]))
     snapshot = _snapshot(path, out)
-    stamped = {
-        "files": [
-            {
-                "sha256": item["sha256"],
-                "available_from_utc": item["available_from_utc"],
-            }
-        ]
-    }
-    assert snapshot["inputs"]["XYZUSDT:listing_input"] == stamped
-    assert snapshot["inputs"]["XYZUSDT:volume_input"] == stamped
+    assert "XYZUSDT:listing_input" not in snapshot["inputs"]
+    assert "XYZUSDT:volume_input" not in snapshot["inputs"]
 
 
 @pytest.mark.parametrize(
@@ -174,7 +175,7 @@ def test_file_bound_revision_is_validated_at_cutoff(at, expected):
             {"sha256": held, "available_from_utc": "2025-04-01T00:00:00Z"},
         ],
     )
-    assert mod._prov(_series_provenance(files=[entry]), mod.instant(at))[0] is expected
+    assert mod._prov(_series_provenance(files=[entry]), mod.instant(at), "a" * 64)[0] is expected
 
 
 def test_prov_file_branch_does_not_infer_availability_from_period():
@@ -265,8 +266,18 @@ def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes
     policy_helpers = importlib.util.module_from_spec(policy_spec)
     policy_spec.loader.exec_module(policy_helpers)
     policy_value = policy_helpers.policy()
+    policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
+        non_market_path.read_bytes()
+    ).hexdigest()
     if policy_changes:
-        policy_value["parameters"]["D8_close_time"]["value"] = policy_changes["close_time"]
+        if "close_time" in policy_changes:
+            policy_value["parameters"]["D8_close_time"]["value"] = policy_changes[
+                "close_time"
+            ]
+        if "non_market_sha256" in policy_changes:
+            policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = policy_changes[
+                "non_market_sha256"
+            ]
     policy.write_text(json.dumps(policy_value, separators=(",", ":")), encoding="utf-8")
     assembler = module()._ASSEMBLE
     parse_raw = parse_path.read_bytes()
@@ -328,6 +339,13 @@ def test_invalid_bound_non_market_file_is_refused(tmp_path: Path):
     bundle, _ = _assembled_bundle(tmp_path, non_market_changes={"source": "real"})
 
     with pytest.raises(mod.Refusal, match="^invalid non-market evidence$"):
+        mod.verify_derived(bundle)
+
+
+def test_policy_non_market_digest_mismatch_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path, policy_changes={"non_market_sha256": "b" * 64})
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
         mod.verify_derived(bundle)
 
 
