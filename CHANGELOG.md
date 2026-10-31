@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-10-30 - The C10 evaluation-row producer, synthetic only (on main, not released)
+
+It records #307. Nothing in this entry is released.
+
+Added:
+- #307: `scripts/quant_ng_evalrows.py`, a dormant tool that schedules evaluation instants and
+  labels exactly the resolvable ones for the C10 censoring tool. A row is labelled only when
+  regular bars close exactly at its start and at its horizon end within the quarter, using the
+  product's strict rule (up only above the band, down only below it, otherwise a timeout) in exact
+  fractions. Every scheduled instant needs both arms' forecasts; one missing refuses the run. It
+  writes the censoring tool's input, which never carries a price, and a record stamped synthetic.
+  Its horizon, cadence and band are test-only settings, and three synthetic choices are named in
+  the record: instants start at the quarter's first day, a missing forecast refuses the run, and
+  one band applies to the whole run.
+
+Notes:
+- Classification, counting and score bounds stay in the C10 censoring tool, which is unchanged.
+- Nothing in the product imports it, and no deployed file changes, so the running app is
+  unaffected. No real-data path exists, and no scientific validity is claimed from synthetic
+  tests.
+
 ## 2026-10-29 - C10 (A+) censoring accounting and G-1 (a′) trading at T, synthetic only (on main, not released)
 
 It records #304. Nothing in this entry is released.
