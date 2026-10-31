@@ -86,6 +86,25 @@ def test_full_file_provenance_uses_single_record_validation():
     assert mod._prov(_series_provenance(files=[mismatched]), T)[0] is False
 
 
+@pytest.mark.parametrize(
+    "policy_fields,expected",
+    [("PENDING_CHANGE_3", False), ("complete", True)],
+    ids=["pending", "complete"],
+)
+def test_series_policy_marker_alone_decides_file_provenance(policy_fields, expected):
+    mod = module()
+    first = _file_provenance(path="AAAUSDT-1d-2025-03-31.zip")
+    second = _file_provenance(
+        path="BBBUSDT-1d-2025-03-31.zip",
+        sha256="b" * 64,
+        official_checksum="b" * 64,
+        revisions=[{"sha256": "b" * 64, "available_from_utc": "2025-01-01T00:00:00Z"}],
+    )
+    raw = _series_provenance(files=[first, second], policy_fields=policy_fields)
+    assert all(mod._prov({key: item[key] for key in mod.PROV_KEYS}, T)[0] for item in raw["files"])
+    assert mod._prov(raw, T)[0] is expected
+
+
 def test_series_provenance_requires_true_and_exact_series_keys():
     mod = module()
     assert mod._prov(_series_provenance(series_usable=False), T)[0] is False
@@ -162,6 +181,29 @@ def test_bound_revision_does_not_match_an_unlisted_held_copy(held, at):
     assert mod._prov(raw, mod.instant(at))[0] is False
 
 
+@pytest.mark.parametrize(
+    "revision,expected",
+    [
+        (
+            {
+                "sha256": "a" * 64,
+                "available_from_utc": "2025-01-01T00:00:00Z",
+                "available_before_utc": "2025-02-01T00:00:00Z",
+            },
+            False,
+        ),
+        ({"sha256": "a" * 64, "available_from_utc": "2025-01-01T00:00:00Z"}, True),
+        ({"sha256": "a" * 64, "available_before_utc": "2024-12-31T00:00:00Z"}, True),
+    ],
+    ids=["both_bounds", "from_bound", "before_bound"],
+)
+def test_revision_entry_has_one_availability_bound(revision, expected):
+    mod = module()
+    raw = prov()
+    raw["revisions"] = [raw["revisions"][0], revision]
+    assert mod._prov(raw, T)[0] is expected
+
+
 def _assembled_bundle(tmp_path: Path):
     helper_spec = importlib.util.spec_from_file_location(
         "assemble_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_assemble.py"
@@ -214,6 +256,19 @@ def test_replaced_non_market_file_is_not_bound(tmp_path: Path):
     bundle, non_market_path = _assembled_bundle(tmp_path)
     non_market_path.chmod(0o600)
     non_market_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_json_identical_non_market_file_with_different_bytes_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, non_market_path = _assembled_bundle(tmp_path)
+    original = json.loads(non_market_path.read_bytes())
+    rewritten = json.dumps(original, ensure_ascii=False, indent=2).encode() + b"\n"
+    assert json.loads(rewritten) == original
+    assert rewritten != non_market_path.read_bytes()
+    non_market_path.chmod(0o600)
+    non_market_path.write_bytes(rewritten)
     with pytest.raises(mod.Refusal, match="^evidence not bound$"):
         mod.verify_derived(bundle)
 
