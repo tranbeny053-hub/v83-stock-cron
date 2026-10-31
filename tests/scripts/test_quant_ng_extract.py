@@ -1070,6 +1070,25 @@ def test_off_grid_only_object_has_no_last_bar_close(tmp_path: Path, case: str) -
     ] is None
 
 
+def test_latest_regular_bar_sets_last_bar_close(tmp_path: Path) -> None:
+    opens = [TMS - 4 * 900000, TMS - 3 * 900000, TMS - 900000]
+    rows = [row(open_ms) for open_ms in opens]
+    rows.append(row(TMS + 1))
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", rows),
+    )
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads((output / "PARSE.json").read_bytes())
+    assert body["symbols"][0]["coverage"]["15m"]["objects"][0][
+        "last_bar_close_utc"
+    ] == "2025-04-01T00:00:00Z"
+
+
 @pytest.mark.parametrize(
     "object_class",
     ["missing", "mismatch"],

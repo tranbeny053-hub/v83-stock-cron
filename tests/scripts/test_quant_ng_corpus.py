@@ -99,6 +99,12 @@ def test_full_file_provenance_uses_single_record_validation():
     assert mod._prov(_series_provenance(files=[mismatched]), T, expected_digest)[0] is False
 
 
+def test_list_policy_fields_make_file_provenance_unusable():
+    mod = module()
+    raw = _series_provenance(policy_fields=["policy_sha256"])
+    assert mod._prov(raw, T, "a" * 64)[0] is False
+
+
 @pytest.mark.parametrize("source", ["mock"], ids=["mock"])
 def test_non_synthetic_record_in_file_provenance_refuses(source):
     mod = module()
@@ -317,10 +323,170 @@ def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes
     return bundle, non_market_path
 
 
+def _revision_proxy_bundle(tmp_path: Path):
+    helpers_spec = importlib.util.spec_from_file_location(
+        "assemble_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(helpers)
+    fetched, parse_path, policy_path, non_market_path = helpers.assembled_inputs(tmp_path)
+    policy_spec = importlib.util.spec_from_file_location(
+        "policy_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_spec and policy_spec.loader
+    policy_helpers = importlib.util.module_from_spec(policy_spec)
+    policy_spec.loader.exec_module(policy_helpers)
+    changelog = {
+        "changelog_id": "ucpe.quant_ng.mock_changelog.v1",
+        "source": "mock",
+        "assumption": (
+            "This format is an assumption until the owner authorizes reading "
+            "the venue's real files."
+        ),
+        "entries": [{
+            "path": "synthetic/archive.csv",
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": "b" * 64,
+            "updated_utc": "2025-05-01T00:00:00Z",
+        }],
+    }
+    windows = {
+        "windows_id": "ucpe.quant_ng.mock_proxy_windows.v1",
+        "source": "mock",
+        "bases": [],
+    }
+    changelog_path, windows_path = tmp_path / "changelog.json", tmp_path / "windows.json"
+    changelog_path.write_text(json.dumps(changelog, separators=(",", ":")), encoding="utf-8")
+    windows_path.write_text(json.dumps(windows, separators=(",", ":")), encoding="utf-8")
+    changelog_digest = hashlib.sha256(changelog_path.read_bytes()).hexdigest()
+    windows_digest = hashlib.sha256(windows_path.read_bytes()).hexdigest()
+    policy = policy_helpers.policy()
+    policy["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
+        non_market_path.read_bytes()
+    ).hexdigest()
+    policy["parameters"]["D4_availability"]["value"] = "P-2"
+    policy["parameters"]["D5_revision"].update(value="RP-3", changelog_sha256=changelog_digest)
+    policy["parameters"]["D6_proxy"].update(value="PX-2", windows_sha256=windows_digest)
+    policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
+    assembler = module()._ASSEMBLE
+    parse_raw = parse_path.read_bytes()
+    non_market_raw = non_market_path.read_bytes()
+    bundle = assembler.evidence(
+        assembler._json(parse_raw),
+        fetch_dir=fetched,
+        parse_sha256=hashlib.sha256(parse_raw).hexdigest(),
+        policy_path=policy_path,
+        policy_sha256=hashlib.sha256(policy_path.read_bytes()).hexdigest(),
+        non_market_path=non_market_path,
+        non_market_sha256=hashlib.sha256(non_market_raw).hexdigest(),
+        non_market=assembler._json(non_market_raw),
+        policy=policy,
+        changelog={"path": str(changelog_path.resolve()), "sha256": changelog_digest, **changelog},
+        proxy_windows={"path": str(windows_path.resolve()), "sha256": windows_digest, **windows},
+    )
+    return bundle, changelog_path, windows_path
+
+
 def test_derived_evidence_is_reproducible(tmp_path: Path):
     mod = module()
     bundle, _ = _assembled_bundle(tmp_path)
     mod.verify_derived(bundle)
+
+
+def test_bound_revision_and_proxy_inputs_rederive(tmp_path: Path):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(tmp_path)
+    mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["changelog", "proxy_windows"],
+    ids=["changelog", "proxy-windows"],
+)
+def test_bound_auxiliary_input_requires_exact_bytes(tmp_path: Path, kind):
+    mod = module()
+    bundle, changelog_path, windows_path = _revision_proxy_bundle(tmp_path)
+    path = changelog_path if kind == "changelog" else windows_path
+    original = json.loads(path.read_bytes())
+    rewritten = json.dumps(original, ensure_ascii=False, indent=2).encode() + b"\n"
+    assert json.loads(rewritten) == original
+    assert rewritten != path.read_bytes()
+    path.write_bytes(rewritten)
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["changelog", "proxy_windows"],
+    ids=["changelog", "proxy-windows"],
+)
+def test_auxiliary_policy_digest_cannot_be_rebound_after_edit(tmp_path: Path, kind):
+    mod = module()
+    bundle, changelog_path, windows_path = _revision_proxy_bundle(tmp_path)
+    path = changelog_path if kind == "changelog" else windows_path
+    binding = bundle["binding"]
+    digest_field = "changelog_sha256" if kind == "changelog" else "proxy_windows_sha256"
+    if kind == "changelog":
+        value = json.loads(path.read_bytes())
+        value["entries"][0]["updated_utc"] = "2025-05-02T00:00:00Z"
+    else:
+        value = json.loads(path.read_bytes())
+        value["bases"].append({
+            "base": "SYNTH",
+            "refused_from_utc": "2025-05-01T00:00:00Z",
+            "seams": [],
+        })
+    path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
+    new_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    binding[digest_field] = new_digest
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("changelog_path", "missing"),
+        ("changelog_sha256", "a" * 64),
+    ],
+    ids=["changelog-path-without-digest", "changelog-digest-without-path"],
+)
+def test_unpaired_changelog_binding_is_not_bound(tmp_path: Path, field, value):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"][field] = value
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_unexpected_changelog_binding_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    path = tmp_path / "unrequested.json"
+    path.write_text("{}", encoding="utf-8")
+    bundle["binding"]["changelog_path"] = str(path.resolve())
+    bundle["binding"]["changelog_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("proxy_windows_path", "missing"),
+        ("proxy_windows_sha256", "a" * 64),
+    ],
+    ids=["windows-path-without-digest", "windows-digest-without-path"],
+)
+def test_unpaired_proxy_windows_binding_is_not_bound(tmp_path: Path, field, value):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"][field] = value
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
 
 
 @pytest.mark.parametrize(
