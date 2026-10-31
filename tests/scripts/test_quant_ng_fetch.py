@@ -234,6 +234,19 @@ def test_markerless_zip_payload_refuses_without_writing(tmp_path: Path) -> None:
     assert not output.exists()
 
 
+def test_non_zip_marker_tail_refuses_without_writing(tmp_path: Path) -> None:
+    payload = b"arbitrary bytes here!!" + b"\x0c\x00UCPE-MOCK-v1"
+    assert len(payload) == 36
+    path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
+    root, output = tmp_path / "archive", tmp_path / "out"
+    archive(root, path, payload)
+    result, actual_output = invoke(tmp_path, plan_for(root, output, [path]))
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "object is not a mock object"
+    assert actual_output == output
+    assert not output.exists()
+
+
 @pytest.mark.parametrize(
     "path,reason",
     [

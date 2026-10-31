@@ -1144,6 +1144,51 @@ def test_parse_time_comment_mismatch_refuses_the_parse_run(
     assert not (tmp_path / "parse-marker-output").exists()
 
 
+@pytest.mark.parametrize("bad_tail", ["missing marker", "wrong length"], ids=["missing", "length"])
+def test_upfront_marker_refusal_precedes_parse_pass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_tail: str,
+) -> None:
+    fetched = make_series(tmp_path)
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    blob = object_path.read_bytes()
+    if bad_tail == "missing marker":
+        blob = zip_blob(
+            "AAAUSDT-15m-2025-03-31.zip",
+            [row(TMS - 900000)],
+            comment=b"NOT-MOCK-v1!",
+        )
+    else:
+        damaged = bytearray(blob)
+        damaged[-14:-12] = b"\x0d\x00"
+        blob = bytes(damaged)
+    _replace_fetched_object(fetched, blob)
+    spec = importlib.util.spec_from_file_location("extract_upfront_marker", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def parse_must_not_run(*args, **kwargs):
+        pytest.fail("parse pass ran before upfront marker refusal")
+
+    monkeypatch.setattr(module, "_read_archive", parse_must_not_run)
+    plan_path = tmp_path / "upfront-marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "upfront-marker-output"),
+            }
+        )
+    )
+    with pytest.raises(module.Refusal, match="object is not a mock object"):
+        module.run(str(plan_path))
+    assert not (tmp_path / "upfront-marker-output").exists()
+
+
 def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
     import random
 
