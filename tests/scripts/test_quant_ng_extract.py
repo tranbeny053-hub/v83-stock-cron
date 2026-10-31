@@ -316,6 +316,39 @@ def test_derive_writes_nothing(
     assert isinstance(module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC)), bytes)
 
 
+def test_parse_reads_only_objects_hashed_upfront(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_shared_filter", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    object_dir = fetched / "objects"
+    hashed: set[Path] = set()
+    parsed: set[Path] = set()
+    original_open = Path.open
+    original_read_bytes = Path.read_bytes
+
+    def recording_open(path: Path, *args, **kwargs):
+        if path.parent == object_dir and args and args[0] == "rb":
+            hashed.add(path)
+        return original_open(path, *args, **kwargs)
+
+    def recording_read_bytes(path: Path) -> bytes:
+        if path.parent == object_dir:
+            parsed.add(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "open", recording_open)
+    monkeypatch.setattr(Path, "read_bytes", recording_read_bytes)
+
+    module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC))
+
+    assert parsed
+    assert parsed <= hashed
+
+
 @pytest.mark.parametrize("case", ["object swap"], ids=["changed bytes"])
 def test_derive_refusal_leaves_output_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
@@ -1192,8 +1225,15 @@ def test_unmarked_object_refuses_the_parse_run(
     spec = importlib.util.spec_from_file_location("extract_marker_check", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    with pytest.raises(module.Refusal, match="object is not a mock object"):
-        module.run(str(plan_path))
+    assert issubclass(module.NotMockObject, module.Refusal)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", str(SCRIPT), str(plan_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert result.stdout == '{"status":"REFUSAL","reason":"object is not a mock object"}\n'
     assert not (tmp_path / "marker-output").exists()
 
 

@@ -48,6 +48,13 @@ finally:
     sys.dont_write_bytecode = _PREVIOUS_BYTECODE
 
 Refusal = _FIT.Refusal
+
+
+class NotMockObject(Refusal):
+    def __init__(self) -> None:
+        super().__init__("object is not a mock object")
+
+
 _path = _FIT._path
 _json_bytes = _FIT._json_bytes
 create_readonly = _FIT.create_readonly
@@ -142,6 +149,11 @@ def _object_identities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _verifiable(row: dict[str, Any], cutoff: datetime) -> bool:
+    # Both verification and parse selection must use the same filter.
+    return row["class"] == "ok" and _period_start(row) < cutoff
+
+
 def _micros(value: datetime) -> int:
     delta = value - EPOCH
     return (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
@@ -169,7 +181,7 @@ def _read_archive(
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
             if archive.comment != MOCK_MARKER:
-                raise Refusal("object is not a mock object")
+                raise NotMockObject()
             members = archive.infolist()
             expected = Path(row["path"]).name[:-4] + ".csv"
             if (
@@ -318,7 +330,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
     cutoff_us = _micros(cutoff)
     # Verify every pre-cutoff object before parsing any series.
     for row in rows:
-        if row["class"] == "ok" and _period_start(row) < cutoff:
+        if _verifiable(row, cutoff):
             digest, official = row["sha256"], row["official_checksum"]
             if (
                 not isinstance(digest, str)
@@ -340,7 +352,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             if actual != digest or actual != official:
                 raise Refusal("object does not match the manifest")
             if not _has_mock_marker(tail):
-                raise Refusal("object is not a mock object")
+                raise NotMockObject()
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     symbols: set[str] = set()
     after = 0
@@ -366,7 +378,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
         if not series_rows:
             parsed[key] = {"usable": False, "reason": "no files"}
             continue
-        if any(row["class"] != "ok" for row in series_rows):
+        if any(not _verifiable(row, cutoff) for row in series_rows):
             parsed[key] = {"usable": False, "reason": "file not verified"}
             continue
         all_bars: list[tuple[int, str]] = []
@@ -386,9 +398,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 bars, *counts = _read_archive(
                     blob, row, cutoff_us, INTERVALS[key[1]], start, end
                 )
+            except NotMockObject:
+                raise
             except Refusal as exc:
-                if str(exc) == "object is not a mock object":
-                    raise
                 reason = str(exc)
                 break
             finally:
