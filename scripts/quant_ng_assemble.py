@@ -5,11 +5,10 @@ Every refusal is printed as JSON with exit 2 and leaves no output behind.
 Refusals include invalid plans or input digests, non-MOCK manifests, parse bytes
 not derived from the manifest, invalid policy or non-market evidence, and a
 nonempty output folder. MOCK only; not admissible to the builder until change
-4b. D8 CT-2 and CT-3 interpretations are INFERRED from the bound policy text.
+4b. D8 CT-2 and CT-3 interpretations are INFERRED from the pack's wording.
 MOCK has no lineage source, so candidate lineage is
 always null, meaning unknown and never "no ticker reuse". An unusable series is
-null, never zero. Per-file provenance carries identities only; policy-derived
-fields are explicitly pending change 3.
+null, never zero.
 
 The MOCK changelog limitation is documented below: paths must be unique, so a
 file updated twice cannot be represented. This format is an assumption until

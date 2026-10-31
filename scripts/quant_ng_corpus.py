@@ -200,12 +200,14 @@ def load_rule(path: Path) -> dict[str, Any]:
 
 
 def _prov(
-    raw: Any, cutoff: datetime, expected_policy_sha256: str | None = None
+    raw: Any, cutoff: datetime, expected_policy_sha256: str | None = None,
+    allowed_source: str = "synthetic",
 ) -> tuple[bool, dict[str, Any]]:
     # The synthetic-only gate comes first, so a non-synthetic record is refused even when it is
     # also malformed, instead of being quietly treated as unknown.
-    if isinstance(raw, dict) and "source" in raw and raw["source"] != "synthetic":
-        raise Refusal("source must be synthetic")
+    source_reason = f"source must be {allowed_source}"
+    if isinstance(raw, dict) and "source" in raw and raw["source"] != allowed_source:
+        raise Refusal(source_reason)
     if isinstance(raw, dict) and "files" in raw:
         if set(raw) != {"files", "series_usable", "series_reason", "policy_fields"}:
             return False, {}
@@ -213,10 +215,10 @@ def _prov(
         if isinstance(files, list) and any(
             isinstance(item, dict)
             and "source" in item
-            and item["source"] != "synthetic"
+            and item["source"] != allowed_source
             for item in files
         ):
-            raise Refusal("source must be synthetic")
+            raise Refusal(source_reason)
         if (
             raw.get("series_usable") is not True
             or not isinstance(files, list)
@@ -232,13 +234,17 @@ def _prov(
         # The assembler's pending policy fields keep its MOCK series fail-closed.
         metadata = []
         for item in files:
-            if isinstance(item, dict) and "source" in item and item["source"] != "synthetic":
-                raise Refusal("source must be synthetic")
+            if isinstance(item, dict) and "source" in item and item["source"] != allowed_source:
+                raise Refusal(source_reason)
             if not isinstance(item, dict) or set(item) != PROV_KEYS | {"path", "class"}:
                 return False, {}
             if item["class"] != "ok":
                 return False, {}
-            usable, stamp = _prov({key: item[key] for key in PROV_KEYS}, cutoff)
+            usable, stamp = _prov(
+                {key: item[key] for key in PROV_KEYS}, cutoff,
+                expected_policy_sha256=expected_policy_sha256,
+                allowed_source=allowed_source,
+            )
             if not usable:
                 return False, {}
             metadata.append(stamp)
@@ -293,7 +299,7 @@ def _prov(
     return usable, {"sha256": sha, "available_from_utc": raw["available_from_utc"]}
 
 
-def verify_derived(bundle: dict) -> None:
+def verify_derived(bundle: dict) -> dict[str, Any]:
     """Verify assembler evidence against its bound source files and parser output."""
     assembler = None
     try:
@@ -442,6 +448,11 @@ def verify_derived(bundle: dict) -> None:
         recomputed["binding"].pop("assemble_tool_sha256")
         if assembler._output_bytes(compare_bundle) != assembler._output_bytes(recomputed):
             raise Refusal("evidence not derived from parse")
+        return {
+            "policy": policy,
+            "changelog": extra_inputs["changelog"],
+            "proxy_windows": extra_inputs["proxy windows"],
+        }
     except Refusal:
         raise
     except Exception as exc:
@@ -472,7 +483,8 @@ def _span_covers(start: datetime, end: datetime | None, at: datetime) -> bool:
 
 
 def _prov_entries(
-    raw: Any, cutoff: datetime, expected: set[str]
+    raw: Any, cutoff: datetime, expected: set[str], *,
+    allowed_source: str = "synthetic", expected_policy_sha256: str | None = None,
 ) -> list[tuple[dict[str, Any], bool]]:
     if not isinstance(raw, list):
         raise Refusal("malformed verification list")
@@ -480,7 +492,9 @@ def _prov_entries(
     for item in raw:
         if not isinstance(item, dict) or set(item) != expected:
             raise Refusal("malformed verification entry")
-        usable, _ = _prov(item.get("provenance"), cutoff)
+        usable, _ = _prov(item.get("provenance"), cutoff,
+                          expected_policy_sha256=expected_policy_sha256,
+                          allowed_source=allowed_source)
         start = instant(item.get("valid_from_utc"))
         end = None if item.get("valid_to_utc") is None else instant(item["valid_to_utc"])
         if end is not None and end <= start:
@@ -489,7 +503,19 @@ def _prov_entries(
     return out
 
 
-def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list[dict[str, Any]]:
+def _candidate_rows(
+    bundle: Any, rule: dict[str, Any], cutoff: datetime,
+    verified: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if not isinstance(bundle, dict):
+        raise Refusal("malformed evidence")
+    source = bundle.get("source")
+    if source == "mock" and verified is None:
+        verified = verify_derived(bundle)
+    allowed_source = "mock" if source == "mock" else "synthetic"
+    expected_policy_sha256 = (
+        bundle["binding"]["policy_sha256"] if allowed_source == "mock" else None
+    )
     if not isinstance(bundle, dict) or set(bundle) != {
         "evidence_id",
         "source",
@@ -501,9 +527,13 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
         raise Refusal("malformed evidence")
     if (
         bundle.get("evidence_id") != "ucpe.quant_ng.universe_evidence.v1"
-        or bundle.get("source") != "synthetic"
+        or source not in {"synthetic", "mock"}
     ):
-        raise Refusal("source must be synthetic")
+        if source not in {"synthetic", "mock"}:
+            raise Refusal("source must be synthetic")
+        raise Refusal("malformed evidence")
+    if source == "mock" and verified is None:
+        raise Refusal("evidence not bound")
     if not all(
         isinstance(bundle.get(k), list)
         for k in ("candidates", "exclusion_verification", "not_leveraged_verification", "freshness")
@@ -513,11 +543,13 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
         bundle["exclusion_verification"],
         cutoff,
         {"base", "class", "valid_from_utc", "valid_to_utc", "provenance"},
+        allowed_source=allowed_source, expected_policy_sha256=expected_policy_sha256,
     )
     not_lev = _prov_entries(
         bundle["not_leveraged_verification"],
         cutoff,
         {"base", "valid_from_utc", "valid_to_utc", "provenance"},
+        allowed_source=allowed_source, expected_policy_sha256=expected_policy_sha256,
     )
     for item, _ in exclusions:
         if (
@@ -572,8 +604,8 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
             raise Refusal("listing date is not UTC midnight")
         if first >= cutoff:
             raise Refusal("evidence date at or after T")
-        lu, lp = _prov(listing["provenance"], cutoff)
-        vu, vp = _prov(volume["provenance"], cutoff)
+        lu, lp = _prov(listing["provenance"], cutoff, expected_policy_sha256, allowed_source)
+        vu, vp = _prov(volume["provenance"], cutoff, expected_policy_sha256, allowed_source)
         bars = volume["bars"]
         if not isinstance(bars, list):
             raise Refusal("malformed daily bars")
@@ -609,7 +641,7 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
                 or count > rule["history_window_bars"][tf]
             ):
                 raise Refusal("invalid coverage count")
-            usable, prov = _prov(cell["provenance"], cutoff)
+            usable, prov = _prov(cell["provenance"], cutoff, expected_policy_sha256, allowed_source)
             cov[tf] = {"count": count, "usable": usable, "input": prov}
         rows.append(
             {
@@ -664,6 +696,8 @@ def _freshness(
     operating: datetime | None,
     rule: dict[str, Any],
     cutoff: datetime,
+    allowed_source: str = "synthetic",
+    expected_policy_sha256: str | None = None,
 ) -> str:
     known = rule["freshness"]["known_not_fresh"]
     for entry in known:
@@ -684,7 +718,7 @@ def _freshness(
             "provenance",
         }:
             raise Refusal("malformed freshness entry")
-        usable, _ = _prov(item["provenance"], cutoff)
+        usable, _ = _prov(item["provenance"], cutoff, expected_policy_sha256, allowed_source)
         a, b = instant(item["span_start_utc"]), instant(item["span_end_utc"])
         if b <= a:
             raise Refusal("malformed freshness span")
@@ -724,10 +758,38 @@ def build(
     tool_sha: str,
 ) -> dict[str, Any]:
     cutoff = instant(plan["as_of_utc"])
+    verified = None
+    mock = isinstance(evidence, dict) and evidence.get("source") == "mock"
+    if mock:
+        verified = verify_derived(evidence)
+        binding = evidence["binding"]
+        policy = verified["policy"]
+        if plan["as_of_utc"] != binding["cutoff_utc"]:
+            raise Refusal("evidence cutoff not bound")
+        d7 = policy["parameters"]["D7_completeness"]["value"]
+        if d7["shape"] != "ONE":
+            raise Refusal("policy detail unruled: per-window completeness")
+        if Decimal(str(plan["completeness"]["threshold"])) != Decimal(str(d7["values"]["all"])):
+            raise Refusal("completeness threshold not bound")
+        policy_op = policy["parameters"]["operating_period_start"]
+        if (
+            plan["operating_period_start"]["utc"] != policy_op["utc"]["value"]
+            or plan["operating_period_start"]["provenance"]
+            != policy_op["provenance"]["value"]
+        ):
+            raise Refusal("operating period not bound")
+        proxy = policy["parameters"]["D6_proxy"]["value"]
+        if proxy == "PX-1":
+            raise Refusal("policy detail unruled: proxy names")
+        # PX-2 support is intentionally deferred to change 4b-2.
+        if proxy == "PX-2":
+            raise Refusal("policy option not built: PX-2")
+    allowed_source = "mock" if mock else "synthetic"
+    expected_policy_sha256 = evidence["binding"]["policy_sha256"] if mock else None
     threshold = plan["completeness"]["threshold"]
     operating_raw = plan["operating_period_start"]["utc"]
     operating = None if operating_raw is None else instant(operating_raw)
-    candidates = _candidate_rows(evidence, rule, cutoff)
+    candidates = _candidate_rows(evidence, rule, cutoff, verified=verified)
     for item in evidence["freshness"]:
         if not isinstance(item, dict) or set(item) != {
             "symbol",
@@ -740,7 +802,7 @@ def build(
             raise Refusal("malformed freshness entry")
         span_start = instant(item["span_start_utc"])
         span_end = instant(item["span_end_utc"])
-        _prov(item["provenance"], cutoff)
+        _prov(item["provenance"], cutoff, expected_policy_sha256, allowed_source)
         if (
             not _canonical_symbol(item["symbol"], rule["quote"])
             or item["timeframe"] not in rule["history_window_bars"]
@@ -761,15 +823,15 @@ def build(
     new_listings, excluded, not_admitted = [], [], []
     records = []
     for index, item in enumerate(evidence["exclusion_verification"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"exclusion:{index}"] = metadata
     for index, item in enumerate(evidence["not_leveraged_verification"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"not_leveraged:{index}"] = metadata
     for index, item in enumerate(evidence["freshness"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"freshness:{index}"] = metadata
     for row in candidates:
@@ -939,6 +1001,8 @@ def build(
                 operating,
                 rule,
                 cutoff,
+                allowed_source,
+                expected_policy_sha256,
             )
     f3 = instant(rule["f3"]["calendar_start_utc"])
 
@@ -951,9 +1015,23 @@ def build(
         )
         or any(row["first"] >= f3 for row in candidates)
     )
+    methodology = {
+        "rule_sha256": UNIVERSE_RULE_V1_SHA256,
+        "tool_sha256": tool_sha,
+        "f3_clean": not mock,
+        "basis": (
+            "Source is MOCK evidence under a bound MOCK policy."
+            if mock
+            else "ruled 2026-10-25 by the owner from documents only; "
+                 "this tool reads synthetic evidence only"
+        ),
+    }
+    if mock:
+        methodology["f3_clean_basis"] = "MOCK"
+        methodology["policy_sha256"] = expected_policy_sha256
     return {
         "snapshot_id": "ucpe.universe.asof.v2",
-        "status": "SYNTHETIC",
+        "status": "MOCK" if mock else "SYNTHETIC",
         "as_of_utc": plan["as_of_utc"],
         "rule_sha256": UNIVERSE_RULE_V1_SHA256,
         "evidence_sha256": evidence_sha,
@@ -975,15 +1053,7 @@ def build(
         "operating_period_start": plan["operating_period_start"],
         "f3_firewall": rule["f3"]["firewall"],
         "f3_calendar_overlap": overlap,
-        "methodology": {
-            "rule_sha256": UNIVERSE_RULE_V1_SHA256,
-            "tool_sha256": tool_sha,
-            "f3_clean": True,
-            "basis": (
-                "ruled 2026-10-25 by the owner from documents only; "
-                "this tool reads synthetic evidence only"
-            ),
-        },
+        "methodology": methodology,
         "members": members,
         "symbols": records,
         "new_listings": new_listings,

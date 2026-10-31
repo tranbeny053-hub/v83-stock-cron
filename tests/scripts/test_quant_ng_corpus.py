@@ -1748,6 +1748,82 @@ def test_the_snapshot_carries_the_ruling_and_a_clean_methodology(tmp_path: Path)
     assert snap["symbols"][0]["median_daily_quote_volume"] == "45.5"
 
 
+def test_fixed_synthetic_snapshot_bytes_match_the_base_digest(tmp_path: Path):
+    """The base tool digest is pinned inside the snapshot for a fixed legacy fixture."""
+    path, _, plan = case(tmp_path / "fixed")
+    evidence = json.loads(Path(plan["evidence"]["path"]).read_bytes())
+    m = module()
+    rule = m.load_rule(ROOT / "ops/quant_ng/UNIVERSE_RULE_v1.json")
+    snapshot = m.build(
+        plan,
+        evidence,
+        rule,
+        plan["evidence"]["sha256"],
+        "9cc793c6c8109f9325ff4e6c453b76c3bdfe33372d9a995609b211474be83c4f",
+    )
+    encoded = json.dumps(
+        snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ) + "\n"
+    raw = encoded.encode()
+    assert hashlib.sha256(raw).hexdigest() == (
+        "43a4e2c40829af2f2a7658d453b1df4945245f0f77f7902ef46035fbbb0faa36"
+    )
+
+
+def test_null_listing_date_without_daily_bars_refuses_as_malformed_instant(tmp_path: Path):
+    c = candidate(bars=[])
+    c["listing"]["first_daily_bar_open_utc"] = None
+    path, output, _ = case(tmp_path / "null-listing", evidence=bundle([c]))
+    assert _refusal(path) == "malformed instant"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "change,expected",
+    [
+        ("cutoff", "evidence cutoff not bound"),
+        ("per_window", "policy detail unruled: per-window completeness"),
+        ("threshold", "completeness threshold not bound"),
+        ("operating", "operating period not bound"),
+        ("px1", "policy detail unruled: proxy names"),
+        ("px2", "policy option not built: PX-2"),
+    ],
+)
+def test_mock_plan_policy_bindings_refuse_by_name(monkeypatch, change, expected):
+    m = module()
+    policy = {
+        "parameters": {
+            "D7_completeness": {"value": {"shape": "ONE", "values": {"all": "0.5"}}},
+            "operating_period_start": {
+                "utc": {"value": None}, "provenance": {"value": None}
+            },
+            "D6_proxy": {"value": "PX-2"},
+        }
+    }
+    plan = {
+        "as_of_utc": T_STR,
+        "completeness": {"threshold": 0.5},
+        "operating_period_start": {"utc": None, "provenance": None},
+    }
+    binding = {"cutoff_utc": T_STR, "policy_sha256": "a" * 64}
+    evidence = {"source": "mock", "binding": binding}
+    if change == "cutoff":
+        binding["cutoff_utc"] = "2025-12-01T00:00:00Z"
+    elif change == "per_window":
+        policy["parameters"]["D7_completeness"]["value"] = {
+            "shape": "PER_WINDOW", "values": {}
+        }
+    elif change == "threshold":
+        policy["parameters"]["D7_completeness"]["value"]["values"]["all"] = "0.6"
+    elif change == "operating":
+        policy["parameters"]["operating_period_start"]["utc"]["value"] = T_STR
+    elif change == "px1":
+        policy["parameters"]["D6_proxy"]["value"] = "PX-1"
+    monkeypatch.setattr(m, "verify_derived", lambda _bundle: {"policy": policy})
+    with pytest.raises(m.Refusal, match=f"^{expected}$"):
+        m.build(plan, evidence, {}, "b" * 64, "c" * 64)
+
+
 def test_a_fresh_entry_starting_after_t_does_not_cover_the_quarter(tmp_path: Path):
     entry = {
         "symbol": "XYZUSDT",
