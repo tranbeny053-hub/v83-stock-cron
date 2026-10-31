@@ -45,6 +45,221 @@ def prov():
     }
 
 
+def _file_provenance(**changes):
+    entry = {**prov(), "path": "AAAUSDT-1d-2025-03-31.zip", "class": "ok"}
+    entry.update(changes)
+    return entry
+
+
+def _series_provenance(files=None, **changes):
+    raw = {
+        "files": [_file_provenance()] if files is None else files,
+        "series_usable": True,
+        "series_reason": "verified",
+        "policy_fields": "complete",
+    }
+    raw.update(changes)
+    return raw
+
+
+def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    raw = bundle["candidates"][0]["listing"]["provenance"]
+    assert raw["policy_fields"] == "PENDING_CHANGE_3"
+    assert set(raw["files"][0]) == {"path", "sha256", "official_checksum", "class"}
+    assert mod._prov(raw, T)[0] is False
+
+
+def test_full_file_provenance_uses_single_record_validation():
+    mod = module()
+    raw = _series_provenance()
+    assert mod._prov(raw, T) == (True, {"files": [{
+        "sha256": "a" * 64,
+        "available_from_utc": "2025-01-01T00:00:00Z",
+    }]})
+
+    bad_class = _series_provenance(files=[_file_provenance(**{"class": "bad"})])
+    assert mod._prov(bad_class, T)[0] is False
+
+    mismatched = _file_provenance(official_checksum="b" * 64)
+    assert mod._prov(_series_provenance(files=[mismatched]), T)[0] is False
+
+
+def test_series_provenance_requires_true_and_exact_series_keys():
+    mod = module()
+    assert mod._prov(_series_provenance(series_usable=False), T)[0] is False
+    assert mod._prov(_series_provenance(extra=True), T)[0] is False
+    missing = _series_provenance()
+    del missing["series_reason"]
+    assert mod._prov(missing, T)[0] is False
+
+
+@pytest.mark.parametrize(
+    "at,expected",
+    [("2025-03-31T23:59:59Z", False), ("2025-04-01T00:00:00Z", True)],
+)
+def test_file_bound_revision_is_validated_at_cutoff(at, expected):
+    mod = module()
+    held, old = "a" * 64, "b" * 64
+    entry = _file_provenance(
+        available_from_utc="2025-04-01T00:00:00Z",
+        revisions=[
+            {"sha256": old, "available_before_utc": "2025-04-01T00:00:00Z"},
+            {"sha256": held, "available_from_utc": "2025-04-01T00:00:00Z"},
+        ],
+    )
+    assert mod._prov(_series_provenance(files=[entry]), mod.instant(at))[0] is expected
+
+
+def test_prov_file_branch_does_not_infer_availability_from_period():
+    mod = module()
+    source = __import__("inspect").getsource(mod._prov)
+    assert "period +" not in source
+    assert '"T00:00:00Z"' not in source
+
+
+@pytest.mark.parametrize(
+    "at,expected",
+    [
+        ("2025-03-31T23:59:59Z", False),
+        ("2025-04-01T00:00:00Z", True),
+        ("2025-04-02T00:00:00Z", True),
+    ],
+)
+def test_bound_revision_is_current_only_from_replacement_instant(at, expected):
+    mod = module()
+    old, held = "b" * 64, "a" * 64
+    raw = prov()
+    raw["sha256"] = raw["official_checksum"] = held
+    raw["available_from_utc"] = "2025-04-01T00:00:00Z"
+    raw["revisions"] = [
+        {"sha256": old, "available_before_utc": "2025-04-01T00:00:00Z"},
+        {"sha256": held, "available_from_utc": "2025-04-01T00:00:00Z"},
+    ]
+    assert mod._prov(raw, mod.instant(at))[0] is expected
+
+
+@pytest.mark.parametrize(
+    "held,at",
+    [
+        ("a" * 64, "2025-03-31T23:59:59Z"),
+        ("a" * 64, "2025-04-01T00:00:00Z"),
+        ("a" * 64, "2025-04-02T00:00:00Z"),
+        ("b" * 64, "2025-03-31T23:59:59Z"),
+        ("b" * 64, "2025-04-01T00:00:00Z"),
+        ("b" * 64, "2025-04-02T00:00:00Z"),
+    ],
+)
+def test_bound_revision_does_not_match_an_unlisted_held_copy(held, at):
+    mod = module()
+    raw = prov()
+    raw["sha256"] = raw["official_checksum"] = held
+    raw["revisions"] = [
+        {"sha256": "a" * 64, "available_before_utc": "2025-04-01T00:00:00Z"},
+        {"sha256": "d" * 64, "available_from_utc": "2025-04-01T00:00:00Z"},
+    ]
+    assert mod._prov(raw, mod.instant(at))[0] is False
+
+
+def _assembled_bundle(tmp_path: Path):
+    helper_spec = importlib.util.spec_from_file_location(
+        "assemble_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helper_spec and helper_spec.loader
+    helpers = importlib.util.module_from_spec(helper_spec)
+    helper_spec.loader.exec_module(helpers)
+    fetched, parse_path, policy, non_market_path = helpers.assembled_inputs(tmp_path)
+    assembler = module()._ASSEMBLE
+    parse_raw = parse_path.read_bytes()
+    parse = assembler._json(parse_raw)
+    non_market = assembler._json(non_market_path.read_bytes())
+    bundle = assembler.evidence(
+        parse,
+        fetch_dir=fetched,
+        parse_sha256=hashlib.sha256(parse_raw).hexdigest(),
+        policy_path=policy,
+        policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
+        non_market_path=non_market_path,
+        non_market_sha256=hashlib.sha256(non_market_path.read_bytes()).hexdigest(),
+        non_market=non_market,
+    )
+    return bundle, non_market_path
+
+
+def test_derived_evidence_is_reproducible(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    mod.verify_derived(bundle)
+
+
+def test_edited_market_field_is_not_derived_from_parse(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["candidates"][0]["lineage"] = "AAA"
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
+
+
+def test_edited_non_market_field_is_not_derived_from_parse(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["freshness"].append({"edited": True})
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
+
+
+def test_replaced_non_market_file_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, non_market_path = _assembled_bundle(tmp_path)
+    non_market_path.chmod(0o600)
+    non_market_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_edited_parse_with_its_new_digest_is_not_derived(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    parse_raw = mod._ASSEMBLE._EXTRACT.derive(
+        Path(bundle["binding"]["fetch_output_dir"]), mod.instant(bundle["binding"]["cutoff_utc"])
+    )
+    edited = json.loads(parse_raw)
+    edited["symbols"][0]["daily"]["bars"][0]["quote_volume"] = "99"
+    edited_raw = (
+        json.dumps(edited, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+        + b"\n"
+    )
+    bundle["binding"]["parse_sha256"] = hashlib.sha256(edited_raw).hexdigest()
+    with pytest.raises(mod.Refusal, match="^parse not derived from manifest$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize("edit", ["missing", "extra"])
+def test_binding_requires_exactly_its_fields(tmp_path: Path, edit):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    if edit == "missing":
+        del bundle["binding"]["manifest_sha256"]
+    else:
+        bundle["binding"]["extra"] = "value"
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_changed_object_keeps_the_parser_refusal_reason(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    obj_dir = Path(bundle["binding"]["fetch_output_dir"]) / "objects"
+    manifest = json.loads((obj_dir.parent / "MANIFEST.json").read_bytes())
+    digest = next(row["sha256"] for row in manifest["files"] if row["class"] == "ok")
+    object_path = obj_dir / digest
+    object_path.chmod(0o600)
+    object_path.write_bytes(object_path.read_bytes() + b"changed")
+    with pytest.raises(mod.Refusal, match="^object does not match the manifest$"):
+        mod.verify_derived(bundle)
+
+
 def candidate(symbol="XYZUSDT", base="XYZ", bars=None, coverage_counts=None):
     bars = (
         bars
