@@ -61,6 +61,24 @@ targeted repair. On a repeat of the same causal class: stop delegating, do root-
 sibling scan → downstream-consumer scan → regression test → one consolidated repair. Bound
 at 2 attempts per causal class, then escalate. Never blind-retry.
 
+## Review routing — risk-based (owner, 2026-11-01)
+Classify every task first: T-tier, irreversibility, security or evidence exposure, scientific risk. Then pick:
+- **T0 docs, ordinary T1 mechanical changes:** deterministic checks, the right tests, master audit. No automatic
+  independent review unless a ruling, contract or demonstrated risk requires one.
+- **Sensitive T1 (data boundary, security) and T2+ contract or quant changes:** review the actual diff and its
+  consumers, independently wherever required. Review a complex spec before an expensive build.
+- **Rounds:** consolidate causal defects and sibling gaps before the next submission. One focused review of stable
+  code, then a narrow delta check of substantive findings only. Cosmetic-only deltas may use a deterministic
+  exact-delta check where governance permits. Never reopen a full review on unchanged bytes, re-review closed
+  findings, replay consumed evidence or rerun broad research.
+- **Honesty:** never call a post-review change reviewed without the delta check it needs. NOT_RUN, SKIPPED or
+  WAIVED is never PASS.
+- **Fact checks are separate from code review:** give the reviewer bounded URLs, exact claims and required outputs.
+- **Stalls:** watch reviewer progress. If a turn stalls or keeps compacting without evidence, checkpoint, stop it
+  safely and rebrief narrowly. An optional review never holds a lane for hours.
+This narrows how reviews are chosen. It never removes a mandatory independent review, full gate, safety scanner,
+mutation requirement, STATE-last or owner gate.
+
 ## GPT sidecar — exceptional, never in the loop
 Routing is unchanged: **deterministic tool > Codex > Opus > owner.** GPT-5.6 Sol is a
 sidecar reached only through the owner's logged-in ChatGPT Plus web UI via Claude Code
