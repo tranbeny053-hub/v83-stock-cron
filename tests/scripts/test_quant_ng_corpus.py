@@ -86,6 +86,15 @@ def test_full_file_provenance_uses_single_record_validation():
     assert mod._prov(_series_provenance(files=[mismatched]), T)[0] is False
 
 
+@pytest.mark.parametrize("source", ["mock"], ids=["mock"])
+def test_non_synthetic_record_in_file_provenance_refuses(source):
+    mod = module()
+    raw = _series_provenance(files=[_file_provenance(source=source)])
+
+    with pytest.raises(mod.Refusal, match="^source must be synthetic$"):
+        mod._prov(raw, T)
+
+
 @pytest.mark.parametrize(
     "policy_fields,expected",
     [("PENDING_CHANGE_3", False), ("complete", True)],
@@ -1345,6 +1354,18 @@ def test_a_non_synthetic_provenance_is_refused_even_when_malformed(tmp_path: Pat
     c["listing"]["provenance"]["extra"] = 1
     path, _, _ = case(tmp_path / "trial", evidence=bundle([c]))
     assert _refusal(path) == "source must be synthetic"
+
+
+@pytest.mark.parametrize("source", ["mock"], ids=["mock"])
+def test_run_refuses_non_synthetic_record_in_file_provenance(source, tmp_path: Path):
+    c = candidate()
+    c["coverage"]["15m"]["provenance"] = _series_provenance(
+        files=[_file_provenance(source=source)]
+    )
+    path, output, _ = case(tmp_path / "trial", evidence=bundle([c]))
+
+    assert _refusal(path) == "source must be synthetic"
+    assert not output.exists()
 
 
 def test_a_listing_date_is_a_utc_midnight(tmp_path: Path):
