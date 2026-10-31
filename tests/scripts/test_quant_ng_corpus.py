@@ -68,7 +68,13 @@ def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: P
     bundle, _ = _assembled_bundle(tmp_path)
     raw = bundle["candidates"][0]["listing"]["provenance"]
     assert raw["policy_fields"] == {"policy_sha256": bundle["binding"]["policy_sha256"]}
-    assert set(raw["files"][0]) == {"path", "sha256", "official_checksum", "class"}
+    assert set(raw["files"][0]) == {
+        "path",
+        "sha256",
+        "official_checksum",
+        "class",
+        "last_bar_close_utc",
+    }
     assert mod._prov(raw, T)[0] is False
 
 

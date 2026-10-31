@@ -139,12 +139,34 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
     assert candidate["daily_quote_volume"]["bars"] == source["daily"]["bars"]
     assert candidate["listing"]["first_daily_bar_open_utc"] == source["daily"]["first_open_utc"]
     assert candidate["listing"]["provenance"]["files"] == [
-        {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
+        {
+            key: item[key]
+            for key in (
+                "path",
+                "sha256",
+                "official_checksum",
+                "class",
+                "last_bar_close_utc",
+            )
+        }
         for item in source["daily"]["objects"]
     ]
     assert candidate["coverage"]["15m"]["present_in_window"] is None
     assert (
-        candidate["coverage"]["15m"]["provenance"]["files"] == source["coverage"]["15m"]["objects"]
+        candidate["coverage"]["15m"]["provenance"]["files"]
+        == [
+            {
+                key: item[key]
+                for key in (
+                    "path",
+                    "sha256",
+                    "official_checksum",
+                    "class",
+                    "last_bar_close_utc",
+                )
+            }
+            for item in source["coverage"]["15m"]["objects"]
+        ]
     )
     assert evidence["binding"]["parse_sha256"] == sha(parse_path)
     assert evidence["binding"]["manifest_sha256"] == parsed["manifest_sha256"]
@@ -171,7 +193,16 @@ def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> Non
     def provenance(series: dict) -> dict:
         return {
             "files": [
-                {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
+                {
+                    key: item[key]
+                    for key in (
+                        "path",
+                        "sha256",
+                        "official_checksum",
+                        "class",
+                        "last_bar_close_utc",
+                    )
+                }
                 for item in series["objects"]
             ],
             "series_usable": series["usable"],

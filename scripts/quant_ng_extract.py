@@ -141,12 +141,16 @@ def _row_period_end(start: datetime, row: dict[str, Any]) -> datetime:
     return start + timedelta(days=1)
 
 
-def _object_identities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _object_identities(
+    rows: list[dict[str, Any]], last_bar_closes: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
-    return [
-        {field: row[field] for field in fields}
-        for row in sorted(rows, key=lambda item: item["path"])
-    ]
+    result = []
+    for row in sorted(rows, key=lambda item: item["path"]):
+        item = {field: row[field] for field in fields}
+        item["last_bar_close_utc"] = (last_bar_closes or {}).get(row["path"])
+        result.append(item)
+    return result
 
 
 def _verifiable(row: dict[str, Any], cutoff: datetime) -> bool:
@@ -382,6 +386,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             parsed[key] = {"usable": False, "reason": "file not verified"}
             continue
         all_bars: list[tuple[int, str]] = []
+        object_last_opens: dict[str, int] = {}
         counters = [0, 0, 0]
         reason = None
         for row in series_rows:
@@ -406,6 +411,8 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             finally:
                 del blob
             all_bars.extend(bars)
+            if bars:
+                object_last_opens[row["path"]] = max(open_us for open_us, _ in bars)
             counters = [a + b for a, b in zip(counters, counts, strict=True)]
         if reason:
             parsed[key] = {"usable": False, "reason": reason}
@@ -420,6 +427,10 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 "reason": None,
                 "bars": all_bars,
                 "counts": counters,
+                "last_bar_closes": {
+                    path: _utc_text(_dt(open_us + INTERVALS[key[1]]))
+                    for path, open_us in object_last_opens.items()
+                },
             }
         else:
             window_start = cutoff_us - (
@@ -430,6 +441,10 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 "reason": None,
                 "present": sum(window_start <= t < cutoff_us for t, _ in all_bars),
                 "counts": counters,
+                "last_bar_closes": {
+                    path: _utc_text(_dt(open_us + INTERVALS[key[1]]))
+                    for path, open_us in object_last_opens.items()
+                },
             }
             del all_bars, opens
     daily_start_us = cutoff_us - DAILY_DAYS * 24 * 60 * 60 * 1_000_000
@@ -443,7 +458,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
             daily_out = {
                 "usable": True,
                 "reason": None,
-                "objects": _object_identities(groups.get((symbol, "1d"), [])),
+                "objects": _object_identities(
+                    groups.get((symbol, "1d"), []), daily["last_bar_closes"]
+                ),
                 "bars": [
                     {"open_utc": _utc_text(_dt(t)), "quote_volume": v}
                     for t, v in sorted(window)
@@ -474,7 +491,9 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                     "usable": True,
                     "reason": None,
                     "present_in_window": series["present"],
-                    "objects": _object_identities(groups.get((symbol, interval), [])),
+                    "objects": _object_identities(
+                        groups.get((symbol, interval), []), series["last_bar_closes"]
+                    ),
                     "off_grid": counts[0],
                     "zero_volume": counts[1],
                     "close_time_anomalies": counts[2],
@@ -491,7 +510,7 @@ def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
                 }
         output_symbols.append({"symbol": symbol, "daily": daily_out, "coverage": coverage})
     result = {
-        "parse_id": "ucpe.quant_ng.extract_parse.v2",
+        "parse_id": "ucpe.quant_ng.extract_parse.v3",
         "status": "MOCK",
         "note": (
             "parsed bars with per-file identities, not builder evidence: "

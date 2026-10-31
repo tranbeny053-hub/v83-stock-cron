@@ -134,6 +134,12 @@ def symbols_bytes(path: Path) -> bytes:
 def _identity_rows(fetched: Path, symbol: str, interval: str) -> list[dict]:
     manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
     fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
+    interval_us = {
+        "15m": 900_000_000,
+        "1h": 3_600_000_000,
+        "4h": 14_400_000_000,
+        "1d": 86_400_000_000,
+    }
     rows = [
         row
         for row in manifest["files"]
@@ -141,7 +147,30 @@ def _identity_rows(fetched: Path, symbol: str, interval: str) -> list[dict]:
         and row["period"] < "2025-04"
     ]
     ordered = sorted(rows, key=lambda row: row["path"])
-    return [{field: row[field] for field in fields} for row in ordered]
+    identities = []
+    for row in ordered:
+        item = {field: row[field] for field in fields}
+        opens = []
+        if row["class"] == "ok":
+            with zipfile.ZipFile(fetched / "objects" / row["sha256"]) as archive:
+                content = archive.read(archive.infolist()[0]).decode()
+            for line in content.splitlines():
+                try:
+                    open_us = int(line.split(",", 1)[0]) * 1000
+                except ValueError:
+                    continue
+                if open_us < TMS * 1000 and open_us % interval_us[interval] == 0:
+                    opens.append(open_us)
+        close_us = max(opens) + interval_us[interval] if opens else None
+        item["last_bar_close_utc"] = (
+            datetime.fromtimestamp(close_us / 1_000_000, UTC)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+            if close_us is not None
+            else None
+        )
+        identities.append(item)
+    return identities
 
 
 def _write_manifest(fetched: Path, manifest: dict) -> None:
@@ -206,7 +235,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         {"status": "PASS", "parse_sha256": hashlib.sha256(raw).hexdigest()}, separators=(",", ":")
     )
     assert (output / "PARSE.json").stat().st_mode & 0o777 == 0o444
-    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v2" and body["status"] == "MOCK"
+    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v3" and body["status"] == "MOCK"
     assert body["note"] == (
         "parsed bars with per-file identities, not builder evidence: availability, revision "
         "and provenance policy are unruled"
@@ -227,6 +256,7 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert symbol["symbol"] == "AAAUSDT"
     assert symbol["daily"]["bars"] == [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}]
     assert symbol["daily"]["first_open_utc"] == "2025-03-31T00:00:00Z"
+    assert symbol["daily"]["objects"][0]["last_bar_close_utc"] == T
     assert symbol["coverage"]["15m"]["present_in_window"] == 1
     assert symbol["coverage"]["1H"]["present_in_window"] == 1
     assert symbol["coverage"]["4H"]["present_in_window"] == 1
@@ -988,7 +1018,7 @@ def test_objects_list_pre_cutoff_rows_in_path_order(tmp_path: Path) -> None:
             root,
             "15m",
             "2025-03",
-            zip_blob("AAAUSDT-15m-2025-03.zip", [row(TMS - 3 * 86400000)]),
+            zip_blob("AAAUSDT-15m-2025-03.zip", [row(TMS - 900000)]),
             granularity="monthly",
         ),
         archive(
@@ -1001,7 +1031,7 @@ def test_objects_list_pre_cutoff_rows_in_path_order(tmp_path: Path) -> None:
             root,
             "15m",
             "2025-03-31",
-            zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+            zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 1800000)]),
         ),
         archive(
             root,
@@ -1019,6 +1049,25 @@ def test_objects_list_pre_cutoff_rows_in_path_order(tmp_path: Path) -> None:
     assert len(coverage["objects"]) == 3
     assert body["files_after_cutoff"] == 1
     assert all(entry["period"] != "2025-04-01" for entry in coverage["objects"])
+    monthly = next(entry for entry in coverage["objects"] if entry["period"] == "2025-03")
+    assert monthly["last_bar_close_utc"] == T
+
+
+@pytest.mark.parametrize("case", ["off-grid"], ids=["off-grid"])
+def test_off_grid_only_object_has_no_last_bar_close(tmp_path: Path, case: str) -> None:
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000 + 1)]),
+    )
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    body = json.loads((output / "PARSE.json").read_bytes())
+    assert body["symbols"][0]["coverage"]["15m"]["objects"][0][
+        "last_bar_close_utc"
+    ] is None
 
 
 @pytest.mark.parametrize(
@@ -1057,7 +1106,15 @@ def test_unusable_series_still_lists_object_identities(
     coverage = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
     assert coverage["usable"] is False
     assert object_class in [entry["class"] for entry in coverage["objects"]]
-    assert coverage["objects"] == _identity_rows(fetched, "AAAUSDT", "15m")
+    expected = _identity_rows(fetched, "AAAUSDT", "15m")
+    assert [
+        {key: value for key, value in item.items() if key != "last_bar_close_utc"}
+        for item in coverage["objects"]
+    ] == [
+        {key: value for key, value in item.items() if key != "last_bar_close_utc"}
+        for item in expected
+    ]
+    assert all(item["last_bar_close_utc"] is None for item in coverage["objects"])
 
 
 def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:

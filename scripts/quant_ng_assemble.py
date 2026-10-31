@@ -129,7 +129,16 @@ def check_non_market(obj: Any) -> None:
 def _provenance(series: dict[str, Any], policy_sha256: str) -> dict[str, Any]:
     return {
         "files": [
-            {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
+            {
+                key: item[key]
+                for key in (
+                    "path",
+                    "sha256",
+                    "official_checksum",
+                    "class",
+                    "last_bar_close_utc",
+                )
+            }
             for item in series["objects"]
         ],
         "series_usable": series["usable"],
