@@ -250,7 +250,7 @@ def test_revision_entry_has_one_availability_bound(revision, expected):
     assert mod._prov(raw, T)[0] is expected
 
 
-def _assembled_bundle(tmp_path: Path):
+def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes=None):
     helper_spec = importlib.util.spec_from_file_location(
         "assemble_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_assemble.py"
     )
@@ -264,11 +264,19 @@ def _assembled_bundle(tmp_path: Path):
     assert policy_spec and policy_spec.loader
     policy_helpers = importlib.util.module_from_spec(policy_spec)
     policy_spec.loader.exec_module(policy_helpers)
-    policy.write_text(json.dumps(policy_helpers.policy(), separators=(",", ":")), encoding="utf-8")
+    policy_value = policy_helpers.policy()
+    if policy_changes:
+        policy_value["parameters"]["D8_close_time"]["value"] = policy_changes["close_time"]
+    policy.write_text(json.dumps(policy_value, separators=(",", ":")), encoding="utf-8")
     assembler = module()._ASSEMBLE
     parse_raw = parse_path.read_bytes()
     parse = assembler._json(parse_raw)
     non_market = assembler._json(non_market_path.read_bytes())
+    if non_market_changes:
+        non_market.update(non_market_changes)
+        non_market_path.write_text(
+            json.dumps(non_market, separators=(",", ":")), encoding="utf-8"
+        )
     bundle = assembler.evidence(
         parse,
         fetch_dir=fetched,
@@ -286,6 +294,41 @@ def test_derived_evidence_is_reproducible(tmp_path: Path):
     mod = module()
     bundle, _ = _assembled_bundle(tmp_path)
     mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["policy_path", "non_market_path", "fetch_output_dir"],
+    ids=["policy", "non_market", "fetch"],
+)
+def test_non_normal_bound_path_is_refused(tmp_path: Path, field):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    original = bundle["binding"][field]
+    if field == "fetch_output_dir":
+        bundle["binding"][field] = original + "/./"
+    else:
+        parent, name = original.rsplit("/", 1)
+        bundle["binding"][field] = parent + "/./" + name
+
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_invalid_bound_policy_is_refused_by_policy_validator(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path, policy_changes={"close_time": "CT-4"})
+
+    with pytest.raises(mod.Refusal, match="^policy detail unruled: close-time direction$"):
+        mod.verify_derived(bundle)
+
+
+def test_invalid_bound_non_market_file_is_refused(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path, non_market_changes={"source": "real"})
+
+    with pytest.raises(mod.Refusal, match="^invalid non-market evidence$"):
+        mod.verify_derived(bundle)
 
 
 @pytest.mark.parametrize("field", ["policy_path", "fetch_output_dir"], ids=["policy", "fetch"])
