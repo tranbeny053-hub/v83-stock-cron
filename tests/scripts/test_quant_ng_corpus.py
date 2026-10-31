@@ -412,14 +412,50 @@ def _assembled_bundle(
     return bundle, non_market_path
 
 
-def _revision_proxy_bundle(tmp_path: Path):
+def _revision_proxy_bundle(tmp_path: Path, *, bases=None, empty_changelog=False):
     helpers_spec = importlib.util.spec_from_file_location(
         "assemble_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_assemble.py"
     )
     assert helpers_spec and helpers_spec.loader
     helpers = importlib.util.module_from_spec(helpers_spec)
     helpers_spec.loader.exec_module(helpers)
-    fetched, parse_path, policy_path, non_market_path = helpers.assembled_inputs(tmp_path)
+    coverage_paths = [
+        helpers.HELPERS.archive(
+            tmp_path / "archive",
+            "15m",
+            "2025-03-31",
+            helpers.HELPERS.zip_blob(
+                "AAAUSDT-15m-2025-03-31.zip",
+                [
+                    helpers.HELPERS.row(
+                        helpers.HELPERS.TMS - 900_000,
+                        helpers.HELPERS.TMS - 1_000,
+                    )
+                ],
+            ),
+        ),
+    ]
+    for interval, duration in (("1h", 3_600_000), ("4h", 4 * 3_600_000)):
+        coverage_paths.append(
+            helpers.HELPERS.archive(
+                tmp_path / "archive",
+                interval,
+                "2025-03",
+                helpers.HELPERS.zip_blob(
+                    f"AAAUSDT-{interval}-2025-03.zip",
+                    [
+                        helpers.HELPERS.row(
+                            helpers.HELPERS.TMS - duration,
+                            helpers.HELPERS.TMS - 1_000,
+                        )
+                    ],
+                ),
+                granularity="monthly",
+            )
+        )
+    fetched, parse_path, policy_path, non_market_path = helpers.assembled_inputs(
+        tmp_path, extra_paths=coverage_paths
+    )
     policy_spec = importlib.util.spec_from_file_location(
         "policy_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
     )
@@ -433,7 +469,7 @@ def _revision_proxy_bundle(tmp_path: Path):
             "This format is an assumption until the owner authorizes reading "
             "the venue's real files."
         ),
-        "entries": [{
+        "entries": [] if empty_changelog else [{
             "path": "synthetic/archive.csv",
             "replaced_sha256": "a" * 64,
             "replacement_sha256": "b" * 64,
@@ -443,7 +479,7 @@ def _revision_proxy_bundle(tmp_path: Path):
     windows = {
         "windows_id": "ucpe.quant_ng.mock_proxy_windows.v1",
         "source": "mock",
-        "bases": [],
+        "bases": bases or [],
     }
     changelog_path, windows_path = tmp_path / "changelog.json", tmp_path / "windows.json"
     changelog_path.write_text(json.dumps(changelog, separators=(",", ":")), encoding="utf-8")
@@ -461,9 +497,10 @@ def _revision_proxy_bundle(tmp_path: Path):
     policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
     assembler = module()._ASSEMBLE
     parse_raw = parse_path.read_bytes()
+    parse = assembler._json(parse_raw)
     non_market_raw = non_market_path.read_bytes()
     bundle = assembler.evidence(
-        assembler._json(parse_raw),
+        parse,
         fetch_dir=fetched,
         parse_sha256=hashlib.sha256(parse_raw).hexdigest(),
         policy_path=policy_path,
@@ -476,6 +513,203 @@ def _revision_proxy_bundle(tmp_path: Path):
         proxy_windows={"path": str(windows_path.resolve()), "sha256": windows_digest, **windows},
     )
     return bundle, changelog_path, windows_path
+
+
+def _px2_snapshot(tmp_path: Path, bases):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(
+        tmp_path, bases=bases, empty_changelog=True
+    )
+    verified = mod.verify_derived(bundle)
+    candidate_rows = {}
+    candidate_rows_fn = mod._candidate_rows
+
+    def capture_rows(*args, **kwargs):
+        rows = candidate_rows_fn(*args, **kwargs)
+        cutoff = mod.instant(bundle["binding"]["cutoff_utc"])
+        for row in rows:
+            row["first"] = cutoff - timedelta(days=365)
+            row["listing_usable"] = True
+            row["volume_usable"] = True
+            row["listing_input"] = {"files": []}
+            row["volume_input"] = {"files": []}
+            row["bars"] = [
+                (cutoff - timedelta(days=days), mod.Decimal("100"))
+                for days in range(90, 0, -1)
+            ]
+            for tf, cell in row["coverage"].items():
+                cell["usable"] = True
+                cell["count"] = rule["history_window_bars"][tf]
+                cell["input"] = {"files": []}
+        candidate_rows["rows"] = rows
+        return rows
+
+    mod._candidate_rows = capture_rows
+    policy = verified["policy"]
+    operating = policy["parameters"]["operating_period_start"]
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {
+            "threshold": policy["parameters"]["D7_completeness"]["value"]["values"]["all"]
+        },
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    rule = json.loads(RULE.read_bytes())
+    snapshot = mod.build(plan, bundle, rule, "a" * 64, "b" * 64)
+    return snapshot, candidate_rows["rows"][0]
+
+
+def test_px2_refused_from_boundary_controls_all_timeframes(tmp_path: Path):
+    before, before_row = _px2_snapshot(
+        tmp_path / "before",
+        [{"base": "AAA", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    after, after_row = _px2_snapshot(
+        tmp_path / "after",
+        [{"base": "AAA", "refused_from_utc": "2025-04-01T00:00:01Z", "seams": []}],
+    )
+    before_symbol = before["symbols"][0]
+    after_symbol = after["symbols"][0]
+    assert all(not before_row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H"))
+    assert not before_row["listing_usable"] and not before_row["volume_usable"]
+    assert all(
+        after_row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H")
+    )
+    assert after_row["listing_usable"] and after_row["volume_usable"]
+    assert before_symbol["listing"]["first_daily_bar_open_utc"] is not None
+    assert after_symbol["listing"]["first_daily_bar_open_utc"] is not None
+
+
+@pytest.mark.parametrize(
+    "from_offset,to_offset,seam_tf,expected",
+    [
+        (
+            timedelta(days=-1),
+            timedelta(hours=-1),
+            "1H",
+            {"15m": "provenance_unknown", "1H": "provenance_unknown", "4H": None},
+        ),
+        (
+            timedelta(days=-20),
+            timedelta(days=-19),
+            "1H",
+            {"15m": None, "1H": "provenance_unknown", "4H": None},
+        ),
+        (
+            timedelta(days=-30),
+            timedelta(hours=-678),
+            "1H",
+            {"15m": None, "1H": None, "4H": None},
+        ),
+        (
+            timedelta(days=-1),
+            timedelta(hours=-23),
+            "1D",
+            {"15m": "provenance_unknown", "1H": "provenance_unknown",
+             "4H": "provenance_unknown"},
+        ),
+    ],
+    ids=[
+        "one_hour_seam_inside_hour_and_fifteen_minute",
+        "one_hour_seam_overlaps_hour_only",
+        "seam_ending_at_hour_window_start_is_half_open",
+        "daily_seam_overlaps_every_window",
+    ],
+)
+def test_px2_seam_refusal_respects_timeframe_window(
+    tmp_path: Path, from_offset, to_offset, seam_tf, expected
+):
+    cutoff = datetime(2025, 4, 1, tzinfo=UTC)
+
+    def stamp(value):
+        return (cutoff + value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    seam = {
+        "from_utc": stamp(from_offset),
+        "to_utc": stamp(to_offset),
+        "timeframe": seam_tf,
+    }
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "AAA", "refused_from_utc": "2025-04-01T00:00:00Z", "seams": [seam]}],
+    )
+    actual = {tf: row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H")}
+    assert actual == {tf: reason is None for tf, reason in expected.items()}
+    assert (row["listing_usable"] and row["volume_usable"]) == (seam_tf != "1D")
+
+
+def test_px2_refused_proxy_remains_a_b7_contender(tmp_path: Path):
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "AAA", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    assert not row["coverage"]["15m"]["usable"]
+    assert snapshot["members"]["15m"]["status"] == "UNDECIDABLE"
+
+
+def test_px2_does_not_touch_an_unlisted_base(tmp_path: Path):
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "OTHER", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    assert all(row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H"))
+    assert row["listing_usable"] and row["volume_usable"]
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("coverage_count", "invalid coverage count"),
+        ("listing_date", "malformed instant"),
+        ("daily_bars", "malformed daily bars"),
+    ],
+    ids=["null_coverage_count", "null_listing_date", "null_daily_bars"],
+)
+def test_null_count_with_usable_per_file_provenance_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field, expected
+):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(tmp_path, empty_changelog=True)
+    verify_source = mod.verify_derived
+    verified = verify_source(bundle)
+    malformed = json.loads(json.dumps(bundle))
+    candidate_row = malformed["candidates"][0]
+    if field == "coverage_count":
+        candidate_row["coverage"]["15m"]["present_in_window"] = None
+        provenance = candidate_row["coverage"]["15m"]["provenance"]
+    elif field == "listing_date":
+        candidate_row["listing"]["first_daily_bar_open_utc"] = None
+        provenance = candidate_row["listing"]["provenance"]
+    else:
+        candidate_row["daily_quote_volume"]["bars"] = None
+        provenance = candidate_row["daily_quote_volume"]["provenance"]
+    assert provenance["series_usable"] is True
+    # This shape cannot be emitted by the assembler. Keep the independently verified
+    # genuine chain bundle as the source of policy verification, then probe the builder's
+    # malformed-bundle refusal path with its candidate row changed.
+    def verify_genuine_source(evidence):
+        assert evidence is malformed
+        assert verify_source(bundle) == verified
+        return verified
+
+    monkeypatch.setattr(mod, "verify_derived", verify_genuine_source)
+    policy = verified["policy"]
+    operating = policy["parameters"]["operating_period_start"]
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {
+            "threshold": policy["parameters"]["D7_completeness"]["value"]["values"]["all"]
+        },
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    with pytest.raises(mod.Refusal, match=f"^{expected}$"):
+        mod.build(plan, malformed, json.loads(RULE.read_bytes()), "a" * 64, "b" * 64)
 
 
 def test_derived_evidence_is_reproducible(tmp_path: Path):
