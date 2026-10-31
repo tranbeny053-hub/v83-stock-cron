@@ -8,11 +8,11 @@ with exit 2 and leaves no output behind. Refusals include: unreadable or
 invalid plan, cutoff not UTC midnight, invalid path, nonempty output,
 unreadable or invalid manifest, a non-MOCK manifest, reserved BTCUSDT or ETHUSDT,
 symlinks below the fetch output,
-object does not match the manifest, object changed after verification, no files,
-file not verified, malformed archive file, malformed row, invalid timestamp,
-malformed volume, bar outside its file period, and duplicate bar. Guard refusals
-include filesystem change outside the output folder: <event>. Unexpected errors are reported as
-run failed: <Type>.
+object does not match the manifest, object is not a mock object, object changed
+after verification, no files, file not verified, malformed archive file,
+malformed row, invalid timestamp, malformed volume, bar outside its file period,
+and duplicate bar. Guard refusals include filesystem change outside the output
+folder: <event>. Unexpected errors are reported as run failed: <Type>.
 
 Usage: ``python -I -B scripts/quant_ng_extract.py <plan.json>``.
 """
@@ -72,7 +72,17 @@ HISTORY_BARS = {"15m": 678, "1H": 678, "4H": 174}
 DAILY_DAYS = 90
 MAX_MEMBER_SIZE = 64 * 1024 * 1024
 HASH_CHUNK_SIZE = 1024 * 1024
+MOCK_MARKER = b"UCPE-MOCK-v1"
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _has_mock_marker(tail: bytes) -> bool:
+    return (
+        len(tail) == 34
+        and tail[:4] == b"PK\x05\x06"
+        and tail[-14:-12] == b"\x0c\x00"
+        and tail[-12:] == MOCK_MARKER
+    )
 
 
 def _output_bytes(value: dict[str, Any]) -> bytes:
@@ -156,6 +166,8 @@ def _read_archive(
 ) -> tuple[list[tuple[int, str]], int, int, int]:
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            if archive.comment != MOCK_MARKER:
+                raise Refusal("object is not a mock object")
             members = archive.infolist()
             expected = Path(row["path"]).name[:-4] + ".csv"
             if (
@@ -330,7 +342,6 @@ def run(plan_arg: str) -> dict[str, Any]:
     _check_symlinks(fetch_dir)
     cutoff_us = _micros(cutoff)
     # Verify every pre-cutoff object before parsing any series.
-    verified_digests: set[str] = set()
     for row in rows:
         if row["class"] == "ok" and _period_start(row) < cutoff:
             digest, official = row["sha256"], row["official_checksum"]
@@ -343,15 +354,18 @@ def run(plan_arg: str) -> dict[str, Any]:
                 raise Refusal("object does not match the manifest")
             try:
                 hasher = hashlib.sha256()
+                tail = b""
                 with (fetch_dir / "objects" / digest).open("rb") as stream:
                     while chunk := stream.read(HASH_CHUNK_SIZE):
                         hasher.update(chunk)
+                        tail = (tail + chunk)[-34:]
                 actual = hasher.hexdigest()
             except OSError as exc:
                 raise Refusal("object does not match the manifest") from exc
             if actual != digest or actual != official:
                 raise Refusal("object does not match the manifest")
-            verified_digests.add(digest)
+            if not _has_mock_marker(tail):
+                raise Refusal("object is not a mock object")
     _OUTPUT_HOLDER[0] = output
     created = _make_output(output)
     try:
@@ -388,8 +402,6 @@ def run(plan_arg: str) -> dict[str, Any]:
             reason = None
             for row in series_rows:
                 digest = row["sha256"]
-                if digest not in verified_digests:
-                    raise Refusal("object does not match the manifest")
                 try:
                     blob = (fetch_dir / "objects" / digest).read_bytes()
                 except OSError as exc:
@@ -403,6 +415,8 @@ def run(plan_arg: str) -> dict[str, Any]:
                         blob, row, cutoff_us, INTERVALS[key[1]], start, end
                     )
                 except Refusal as exc:
+                    if str(exc) == "object is not a mock object":
+                        raise
                     reason = str(exc)
                     break
                 finally:

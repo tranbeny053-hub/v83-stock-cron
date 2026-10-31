@@ -3,15 +3,18 @@ from __future__ import annotations
 import ast
 import hashlib
 import importlib.util
+import io
 import json
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/quant_ng_fetch.py"
+MOCK_MARKER = b"UCPE-MOCK-v1"
 FORBIDDEN = {
     "socket",
     "ssl",
@@ -25,9 +28,18 @@ FORBIDDEN = {
 }
 
 
+def zip_blob(content: bytes = b"") -> bytes:
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as mock:
+        mock.comment = MOCK_MARKER
+        mock.writestr("payload", content)
+    return stream.getvalue()
+
+
 def archive(
-    root: Path, path: str, content: bytes = b"zip bytes", checksum: bytes | None = None
+    root: Path, path: str, content: bytes | None = None, checksum: bytes | None = None
 ) -> None:
+    content = zip_blob() if content is None else content
     target = root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
@@ -75,10 +87,10 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
         "data/spot/daily/klines/CCCUSDT/4h/CCCUSDT-4h-2025-01-03.zip",
         "data/spot/monthly/klines/DDDUSDT/1d/DDDUSDT-1d-2025-02.zip",
     ]
-    archive(root, paths[0], b"shared")
-    archive(root, paths[1], b"shared")
-    archive(root, paths[2], b"wrong", b"0" * 64 + b"  CCCUSDT-4h-2025-01-03.zip\n")
-    archive(root, paths[3], b"malformed", b"nope\n")
+    archive(root, paths[0], zip_blob(b"shared"))
+    archive(root, paths[1], zip_blob(b"shared"))
+    archive(root, paths[2], zip_blob(b"wrong"), b"0" * 64 + b"  CCCUSDT-4h-2025-01-03.zip\n")
+    archive(root, paths[3], zip_blob(b"malformed"), b"nope\n")
     paths.append("data/spot/daily/klines/EEEUSDT/1h/EEEUSDT-1h-2025-01-04.zip")
     plan = plan_for(root, tmp_path / "out1", paths)
     # Missing case is the final path; all four archive content classes are represented.
@@ -104,11 +116,12 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
                 "granularity": "monthly",
                 "period": "2025-01",
                 "class": "ok",
-                "sha256": hashlib.sha256(b"shared").hexdigest(),
-                "size": 6,
-                "official_checksum": hashlib.sha256(b"shared").hexdigest(),
+                "sha256": hashlib.sha256(zip_blob(b"shared")).hexdigest(),
+                "size": len(zip_blob(b"shared")),
+                "official_checksum": hashlib.sha256(zip_blob(b"shared")).hexdigest(),
                 "checksum_file_sha256": hashlib.sha256(
-                    hashlib.sha256(b"shared").hexdigest().encode() + b"  AAAUSDT-1h-2025-01.zip\n"
+                    hashlib.sha256(zip_blob(b"shared")).hexdigest().encode()
+                    + b"  AAAUSDT-1h-2025-01.zip\n"
                 ).hexdigest(),
             },
             {
@@ -119,11 +132,11 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
                 "granularity": "daily",
                 "period": "2025-01-02",
                 "class": "ok",
-                "sha256": hashlib.sha256(b"shared").hexdigest(),
-                "size": 6,
-                "official_checksum": hashlib.sha256(b"shared").hexdigest(),
+                "sha256": hashlib.sha256(zip_blob(b"shared")).hexdigest(),
+                "size": len(zip_blob(b"shared")),
+                "official_checksum": hashlib.sha256(zip_blob(b"shared")).hexdigest(),
                 "checksum_file_sha256": hashlib.sha256(
-                    hashlib.sha256(b"shared").hexdigest().encode()
+                    hashlib.sha256(zip_blob(b"shared")).hexdigest().encode()
                     + b"  BBBUSDT-15m-2025-01-02.zip\n"
                 ).hexdigest(),
             },
@@ -135,8 +148,8 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
                 "granularity": "daily",
                 "period": "2025-01-03",
                 "class": "mismatch",
-                "sha256": hashlib.sha256(b"wrong").hexdigest(),
-                "size": 5,
+                "sha256": hashlib.sha256(zip_blob(b"wrong")).hexdigest(),
+                "size": len(zip_blob(b"wrong")),
                 "official_checksum": "0" * 64,
                 "checksum_file_sha256": hashlib.sha256(
                     b"0" * 64 + b"  CCCUSDT-4h-2025-01-03.zip\n"
@@ -150,8 +163,8 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
                 "granularity": "monthly",
                 "period": "2025-02",
                 "class": "checksum_malformed",
-                "sha256": hashlib.sha256(b"malformed").hexdigest(),
-                "size": 9,
+                "sha256": hashlib.sha256(zip_blob(b"malformed")).hexdigest(),
+                "size": len(zip_blob(b"malformed")),
                 "official_checksum": None,
                 "checksum_file_sha256": hashlib.sha256(b"nope\n").hexdigest(),
             },
@@ -182,18 +195,22 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
     )
     objects = list((output / "objects").iterdir())
     expected_blobs = [
-        b"shared",
-        (hashlib.sha256(b"shared").hexdigest().encode() + b"  AAAUSDT-1h-2025-01.zip\n"),
-        (hashlib.sha256(b"shared").hexdigest().encode() + b"  BBBUSDT-15m-2025-01-02.zip\n"),
-        b"wrong",
+        zip_blob(b"shared"),
+        (hashlib.sha256(zip_blob(b"shared")).hexdigest().encode() + b"  AAAUSDT-1h-2025-01.zip\n"),
+        (
+            hashlib.sha256(zip_blob(b"shared")).hexdigest().encode()
+            + b"  BBBUSDT-15m-2025-01-02.zip\n"
+        ),
+        zip_blob(b"wrong"),
         b"0" * 64 + b"  CCCUSDT-4h-2025-01-03.zip\n",
-        b"malformed",
+        zip_blob(b"malformed"),
         b"nope\n",
     ]
     assert {p.name for p in objects} == {hashlib.sha256(x).hexdigest() for x in expected_blobs}
     assert all(p.stat().st_mode & 0o777 == 0o444 for p in objects)
     assert (output / "MANIFEST.json").stat().st_mode & 0o777 == 0o444
-    assert len([p for p in objects if p.name == hashlib.sha256(b"shared").hexdigest()]) == 1
+    shared_digest = hashlib.sha256(zip_blob(b"shared")).hexdigest()
+    assert len([p for p in objects if p.name == shared_digest]) == 1
     assert str(tmp_path) not in (output / "MANIFEST.json").read_text()
     # Recreate a fresh destination with identical plan bytes and compare exact bytes.
     saved = tmp_path / "saved-output"
@@ -201,6 +218,20 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
     result2, output2 = invoke(tmp_path / "run2", plan, pbytes)
     assert result2.returncode == 0
     assert (output2 / "MANIFEST.json").read_bytes() == (saved / "MANIFEST.json").read_bytes()
+
+
+def test_markerless_zip_payload_refuses_without_writing(tmp_path: Path) -> None:
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as mock:
+        mock.writestr("payload", b"data")
+    path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
+    root, output = tmp_path / "archive", tmp_path / "out"
+    archive(root, path, stream.getvalue())
+    result, actual_output = invoke(tmp_path, plan_for(root, output, [path]))
+    assert result.returncode == 2
+    assert json.loads(result.stdout)["reason"] == "object is not a mock object"
+    assert actual_output == output
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(
@@ -332,8 +363,8 @@ def test_nonempty_output_refusal_preserves_existing_content(tmp_path: Path) -> N
 def test_checksum_line_for_another_file_is_malformed(tmp_path: Path) -> None:
     path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
     root = tmp_path / "archive"
-    checksum = hashlib.sha256(b"payload").hexdigest().encode() + b"  other.zip\n"
-    archive(root, path, b"payload", checksum)
+    checksum = hashlib.sha256(zip_blob(b"payload")).hexdigest().encode() + b"  other.zip\n"
+    archive(root, path, zip_blob(b"payload"), checksum)
     plan = plan_for(root, tmp_path / "out", [path])
     result, output = invoke(tmp_path, plan)
     assert result.returncode == 0
@@ -357,8 +388,8 @@ def test_checksum_malformed_line_formats(tmp_path_factory, ending) -> None:
     tmp_path = tmp_path_factory.mktemp("checksum-cases")
     path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
     root = tmp_path / "archive"
-    checksum = ending(hashlib.sha256(b"payload").hexdigest(), Path(path).name.encode())
-    archive(root, path, b"payload", checksum)
+    checksum = ending(hashlib.sha256(zip_blob(b"payload")).hexdigest(), Path(path).name.encode())
+    archive(root, path, zip_blob(b"payload"), checksum)
     plan = plan_for(root, tmp_path / "out", [path])
     result, output = invoke(tmp_path, plan)
     assert result.returncode == 0
@@ -446,7 +477,7 @@ def test_a_new_parent_folder_is_refused_before_anything_is_made(tmp_path: Path) 
 def test_unverified_share_boundary_and_archive_symlink(tmp_path: Path) -> None:
     root = tmp_path / "archive"
     path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
-    archive(root, path, b"x", b"bad")
+    archive(root, path, zip_blob(b"x"), b"bad")
     plan = plan_for(root, tmp_path / "equal", [path], unverified_share_max=1)
     result, output = invoke(tmp_path / "equalcase", plan)
     assert result.returncode == 0 and output.exists()

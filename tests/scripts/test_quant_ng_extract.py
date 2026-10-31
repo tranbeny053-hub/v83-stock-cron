@@ -31,9 +31,15 @@ T = "2025-04-01T00:00:00Z"
 TMS = 1743465600000
 
 
-def zip_blob(name: str, rows: list[str], extra: list[tuple[str, bytes]] | None = None) -> bytes:
+def zip_blob(
+    name: str,
+    rows: list[str],
+    extra: list[tuple[str, bytes]] | None = None,
+    comment: bytes = b"UCPE-MOCK-v1",
+) -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.comment = comment
         archive.writestr(name[:-4] + ".csv", "\n".join(rows) + "\n")
         for member, data in extra or []:
             archive.writestr(member, data)
@@ -486,6 +492,7 @@ def test_archive_and_row_failures(tmp_path: Path, case: str, reason: str) -> Non
     elif case == "wrong-member":
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as zf:
+            zf.comment = b"UCPE-MOCK-v1"
             zf.writestr("wrong.csv", row(TMS - 900000))
         blob = stream.getvalue()
     elif case == "inner-empty":
@@ -574,7 +581,13 @@ def test_period_after_cutoff_skips_unverified_file(
 
 
 def test_series_unverified_and_missing_files(tmp_path: Path) -> None:
-    path = archive(tmp_path / "archive", "15m", "2025-03-31", b"not a zip", check="0" * 64)
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+        check="0" * 64,
+    )
     fetched = fetch(tmp_path, [path])
     result, out = invoke(tmp_path, fetched)
     assert result.returncode == 0
@@ -742,6 +755,7 @@ def test_midmonth_discards_undecodable_rows_and_allows_no_final_newline(tmp_path
     filename = "AAAUSDT-15m-2025-04.zip"
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.comment = b"UCPE-MOCK-v1"
         zf.writestr(filename[:-4] + ".csv", payload)
     path = archive(tmp_path / "archive", "15m", "2025-04", stream.getvalue(), granularity="monthly")
     result, output = invoke(tmp_path, fetch(tmp_path, [path]), cutoff="2025-04-15T00:00:00Z")
@@ -1004,17 +1018,16 @@ def test_upfront_hash_streams_and_parse_reads_each_object_once(
     object_path = fetched / "objects" / manifest["files"][0]["sha256"]
     original_read_bytes = Path.read_bytes
     original_open = Path.open
-    reads: list[Path] = []
-    streamed: list[Path] = []
+    events: list[tuple[str, Path]] = []
 
     def watched_read_bytes(path: Path) -> bytes:
         if path == object_path:
-            reads.append(path)
+            events.append(("read", path))
         return original_read_bytes(path)
 
     def watched_open(path: Path, *args, **kwargs):
         if path == object_path:
-            streamed.append(path)
+            events.append(("stream", path))
         return original_open(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "read_bytes", watched_read_bytes)
@@ -1034,8 +1047,101 @@ def test_upfront_hash_streams_and_parse_reads_each_object_once(
         )
     )
     assert module.run(str(plan_path))["status"] == "PASS"
-    assert len(streamed) == 2
-    assert reads == [object_path]
+    first_read = next(i for i, (event, _) in enumerate(events) if event == "read")
+    assert all(event == "stream" for event, _ in events[:first_read])
+    assert [event for event, _ in events].count("stream") == 2
+    assert [event for event, _ in events].count("read") == 1
+
+
+def _replace_fetched_object(fetched: Path, blob: bytes) -> None:
+    manifest_path = fetched / "MANIFEST.json"
+    manifest_path.chmod(0o600)
+    manifest = json.loads(manifest_path.read_bytes())
+    row = manifest["files"][0]
+    old_path = fetched / "objects" / row["sha256"]
+    old_path.chmod(0o600)
+    old_path.unlink()
+    digest = hashlib.sha256(blob).hexdigest()
+    (fetched / "objects" / digest).write_bytes(blob)
+    (fetched / "objects" / digest).chmod(0o444)
+    row["sha256"] = digest
+    row["official_checksum"] = digest
+    row["size"] = len(blob)
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")) + "\n")
+    manifest_path.chmod(0o444)
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [b"", b"NOT-MOCK-v1!", b"UCPE-MOCK-v1!"],
+    ids=["no-marker", "different-comment", "long-comment"],
+)
+def test_unmarked_object_refuses_the_parse_run(
+    tmp_path: Path, comment: bytes
+) -> None:
+    fetched = make_series(tmp_path)
+    _replace_fetched_object(
+        fetched,
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)], comment=comment),
+    )
+    plan_path = tmp_path / "marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "marker-output"),
+            }
+        )
+    )
+    spec = importlib.util.spec_from_file_location("extract_marker_check", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(module.Refusal, match="object is not a mock object"):
+        module.run(str(plan_path))
+    assert not (tmp_path / "marker-output").exists()
+
+
+def test_parse_time_comment_mismatch_refuses_the_parse_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_parse_marker_check", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original_zipfile = module.zipfile.ZipFile
+
+    class WrongCommentArchive:
+        def __init__(self, *args, **kwargs):
+            self.archive = original_zipfile(*args, **kwargs)
+            self.comment = b"NOT-MOCK-v1!"
+
+        def __enter__(self):
+            self.archive.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.archive.__exit__(*args)
+
+        def __getattr__(self, name):
+            return getattr(self.archive, name)
+
+    monkeypatch.setattr(module.zipfile, "ZipFile", WrongCommentArchive)
+    plan_path = tmp_path / "parse-marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "parse-marker-output"),
+            }
+        )
+    )
+    with pytest.raises(module.Refusal, match="object is not a mock object"):
+        module.run(str(plan_path))
+    assert not (tmp_path / "parse-marker-output").exists()
 
 
 def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
@@ -1049,6 +1155,7 @@ def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
     member = "AAAUSDT-15m-2025-03-31.csv"
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.comment = b"UCPE-MOCK-v1"
         zf.writestr(member, csv_row + "\n")
     blob = stream.getvalue()
     assert len(blob) > 1024 * 1024
