@@ -1,6 +1,6 @@
-"""Pure MOCK S1 listing decision over parsed observations; P0's P1-phase cap is handled here.
-
-The P0-phase cap is outside this engine; S1-3(c)'s supplied number is the P1-phase cap.
+"""Make a pure MOCK/OFFLINE S1 decision over parsed listing observations; it contains no network
+code.
+Under S1-3(c), the supplied number is the P1-phase cap; the P0-phase cap is outside this engine.
 """
 
 from __future__ import annotations
@@ -263,8 +263,6 @@ def decide(plan: dict, observation: dict) -> dict:
                 probes.append(symbol)
                 kinds[symbol] = "c"
     K = len(probes)
-    if r["S1-4"] == "c" and not draw_names:
-        pass
     if r["S1-3"] == "b":
         pages0 = observation["p0"]["pages"]
         if len(pages0) <= 1 or pages0[0]["page_size"] is None:
@@ -412,17 +410,15 @@ def decide(plan: dict, observation: dict) -> dict:
 def _consequence(outcome: str, ruling: dict) -> str:
     if outcome == "PASS":
         return "pass: some delisted symbols are kept; never proves complete survivorship"
-    if outcome == "STOP-evidence":
+    if outcome in {"STOP-evidence", "STOP-inconclusive"} and (
+        outcome == "STOP-evidence" or ruling["stop_inconclusive"] == "consume"
+    ):
         return (
             "route ends"
             if ruling["stop_evidence"] == "a"
             else "survivor panel only; no historical-universe claim"
         )
-    return (
-        "route ends"
-        if ruling["stop_inconclusive"] == "consume"
-        else "this run only; a new plan may be authorized"
-    )
+    return "this run only; a new plan may be authorized"
 
 
 def run(plan_path: str | Path, plan_sha256: str, observation_path: str | Path) -> dict:

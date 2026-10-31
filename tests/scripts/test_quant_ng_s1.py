@@ -295,6 +295,26 @@ def test_every_run_level_stop_omits_probe_outcomes(stop):
 
 
 @pytest.mark.parametrize(
+    ("form_level", "run_stop"), [("a", True), ("b", False)],
+    ids=["run_stop", "probe_inconclusive"],
+)
+def test_repeated_name_within_p1_folder_is_form_fault(form_level, run_stop):
+    p = plan(rulings={"S1-9": "a", "S1-10": form_level})
+    repeated = "AAAUSDT-1d-2026-01-29.zip"
+    obs = observation(folders={"AAAUSDT": folder([repeated, repeated])})
+
+    result = s1.decide(p, obs)
+
+    if run_stop:
+        assert result["run_outcome"] == "STOP-inconclusive"
+        assert result["run_stops"] == ["form fault"]
+        assert result["probes"] == []
+    else:
+        assert result["probes"][0]["outcome"] == "inconclusive"
+        assert result["probes"][0]["reason"] == "form fault"
+
+
+@pytest.mark.parametrize(
     ("selection", "observation_change"),
     [
         (["a", "b"], lambda o: o["p0"]["pages"][0].update({"date_header": None})),
@@ -331,6 +351,42 @@ def test_threshold_boundaries(reading, delta, passes):
     result = s1.decide(p, obs)
     assert (result["probes"][0]["outcome"] == "PASS") is passes
     assert result["probes"][0]["delta"] == delta
+
+
+def test_capture_date_is_earliest_across_p1_pages():
+    p = plan(rulings={"S1-7": "D+1"})
+    obs = observation(
+        folders={
+            "AAAUSDT": {
+                "pages": [
+                    page(["AAAUSDT-1d-2026-01-29.zip"], capture="2026-03-01T00:00:00Z"),
+                    page([], capture="2026-03-02T00:00:00Z"),
+                ]
+            }
+        }
+    )
+
+    row = s1.decide(p, obs)["probes"][0]
+
+    assert row["C"] == "2026-03-01"
+    assert row["delta"] == 31
+    assert row["outcome"] == "inconclusive"
+
+
+def test_latest_counted_date_is_used_for_d_x():
+    obs = observation(
+        folders={
+            "AAAUSDT": folder(
+                ["AAAUSDT-1d-2026-01-01.zip", "AAAUSDT-1d-2026-02-28.zip"]
+            )
+        }
+    )
+
+    row = s1.decide(plan(), obs)["probes"][0]
+
+    assert row["D"] == "2026-02-28"
+    assert row["delta"] == 1
+    assert row["outcome"] == "inconclusive"
 
 
 @pytest.mark.parametrize(
@@ -505,19 +561,24 @@ def test_caps(mode, pages, page_size, expected):
         ("PASS", "a", "pass: some delisted symbols are kept; never proves complete survivorship"),
         ("STOP-evidence", "a", "route ends"),
         ("STOP-evidence", "b", "survivor panel only; no historical-universe claim"),
-        ("STOP-inconclusive", "consume", "route ends"),
+        ("STOP-inconclusive", "a", "route ends"),
+        ("STOP-inconclusive", "b", "survivor panel only; no historical-universe claim"),
         ("STOP-inconclusive", "run_only", "this run only; a new plan may be authorized"),
     ],
     ids=[
         "pass",
         "evidence_ends",
         "evidence_survivor_panel",
-        "inconclusive_consumes",
+        "inconclusive_consume_route_ends",
+        "inconclusive_consume_survivor_panel",
         "inconclusive_run_only",
     ],
 )
 def test_consequences(outcome, choice, expected):
-    ruling = {"stop_evidence": choice, "stop_inconclusive": choice}
+    ruling = {
+        "stop_evidence": choice,
+        "stop_inconclusive": "consume" if choice in {"a", "b"} else choice,
+    }
     assert s1._consequence(outcome, ruling) == expected
 
 
