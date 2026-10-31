@@ -319,10 +319,18 @@ def evidence(
             and daily["usable"]
             and daily["close_time_anomalies_all"] > 0
         )
-        daily_usable = daily["usable"] and not daily_unusable
+        daily_listing = (
+            daily["first_unflagged_open_utc"]
+            if close_time_option == "CT-2"
+            else daily["first_open_utc"]
+        )
+        daily_no_listing = daily["usable"] and daily_listing is None
+        daily_usable = daily["usable"] and not daily_unusable and not daily_no_listing
         daily_series = (
             {**daily, "usable": False, "reason": "close-time anomaly"}
             if daily_unusable
+            else {**daily, "usable": False, "reason": "no listing date"}
+            if daily_no_listing
             else daily
         )
         daily_provenance = _provenance(
@@ -360,9 +368,7 @@ def evidence(
                 "lineage": None,
                 "listing": {
                     "first_daily_bar_open_utc": (
-                        daily["first_unflagged_open_utc"]
-                        if close_time_option == "CT-2" and daily_usable
-                        else daily["first_open_utc"] if daily_usable else None
+                        daily_listing if daily_usable else None
                     ),
                     "provenance": daily_provenance,
                 },

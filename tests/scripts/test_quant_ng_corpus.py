@@ -83,6 +83,89 @@ def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: P
         mod._prov(raw, T)
 
 
+def test_candidate_rows_accepts_genuine_mock_bundle_and_always_verifies(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    cutoff = mod.instant(bundle["binding"]["cutoff_utc"])
+    rule = json.loads(RULE.read_bytes())
+    rows = mod._candidate_rows(bundle, rule, cutoff)
+    assert rows[0]["symbol"] == bundle["candidates"][0]["symbol"]
+
+    def refuse(_bundle):
+        raise mod.Refusal("verification required")
+
+    mod.verify_derived = refuse
+    with pytest.raises(mod.Refusal, match="^verification required$"):
+        mod._candidate_rows(
+            {"source": "mock", "binding": {"handmade": True}}, rule, cutoff
+        )
+
+
+def test_unusable_mock_series_nulls_become_unknown_only_with_series_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    mod = module()
+    helpers_spec = importlib.util.spec_from_file_location(
+        "assemble_unusable_series_helpers", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(helpers)
+    day = 86_400_000
+    daily_path = helpers.HELPERS.archive(
+        tmp_path / "archive",
+        "1d",
+        "2025-03",
+        helpers.HELPERS.zip_blob(
+            "BBBUSDT-1d-2025-03.zip",
+            [helpers.HELPERS.row(helpers.HELPERS.TMS - day, helpers.HELPERS.TMS - 2)],
+        ),
+        symbol="BBBUSDT",
+        granularity="monthly",
+    )
+    bundle, _ = _assembled_bundle(
+        tmp_path, policy_changes={"close_time": "CT-2"}, extra_paths=[daily_path]
+    )
+    verified = mod.verify_derived
+    real_result = verified(bundle)
+    candidates = {item["symbol"]: item for item in bundle["candidates"]}
+    assert candidates["AAAUSDT"]["coverage"]["15m"]["present_in_window"] is None
+    assert candidates["AAAUSDT"]["coverage"]["15m"]["provenance"]["series_usable"] is False
+    assert candidates["BBBUSDT"]["listing"]["first_daily_bar_open_utc"] is None
+    assert candidates["BBBUSDT"]["daily_quote_volume"]["bars"] is None
+    assert (
+        candidates["BBBUSDT"]["daily_quote_volume"]["provenance"]["series_reason"]
+        == "no listing date"
+    )
+    policy_value = real_result["policy"]["parameters"]["D7_completeness"]["value"]["values"]["all"]
+    operating = real_result["policy"]["parameters"]["operating_period_start"]
+
+    def test_only_verify(evidence):
+        assert evidence is bundle
+        result = verified(evidence)
+        result["policy"]["parameters"]["D6_proxy"]["value"] = None
+        return result
+
+    monkeypatch.setattr(mod, "verify_derived", test_only_verify)
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {"threshold": policy_value},
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    # D6 is bypassed in this test-only verifier shim; PX-2 is implemented by the next task.
+    rule = json.loads(RULE.read_bytes())
+    snapshot = mod.build(plan, bundle, rule, "a" * 64, "b" * 64)
+    by_symbol = {item["symbol"]: item for item in snapshot["symbols"]}
+    assert by_symbol["AAAUSDT"]["timeframes"]["15m"]["reason"] == "provenance_unknown"
+    assert by_symbol["BBBUSDT"]["listing"]["first_daily_bar_open_utc"] is None
+    assert by_symbol["BBBUSDT"]["timeframes"]["15m"]["reason"] == "provenance_unknown"
+    assert snapshot["members"]["15m"]["status"] == "UNDECIDABLE"
+    assert snapshot["members"]["15m"]["blocking"] == ["AAAUSDT", "BBBUSDT"]
+
+
 def test_full_file_provenance_uses_single_record_validation():
     mod = module()
     raw = _series_provenance()
@@ -273,14 +356,18 @@ def test_revision_entry_has_one_availability_bound(revision, expected):
     assert mod._prov(raw, T)[0] is expected
 
 
-def _assembled_bundle(tmp_path: Path, *, policy_changes=None, non_market_changes=None):
+def _assembled_bundle(
+    tmp_path: Path, *, policy_changes=None, non_market_changes=None, extra_paths=None
+):
     helper_spec = importlib.util.spec_from_file_location(
         "assemble_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_assemble.py"
     )
     assert helper_spec and helper_spec.loader
     helpers = importlib.util.module_from_spec(helper_spec)
     helper_spec.loader.exec_module(helpers)
-    fetched, parse_path, policy, non_market_path = helpers.assembled_inputs(tmp_path)
+    fetched, parse_path, policy, non_market_path = helpers.assembled_inputs(
+        tmp_path, extra_paths=extra_paths
+    )
     policy_spec = importlib.util.spec_from_file_location(
         "policy_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_policy.py"
     )

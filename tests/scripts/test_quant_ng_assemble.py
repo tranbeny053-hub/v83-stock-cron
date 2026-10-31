@@ -74,8 +74,14 @@ def assembled_inputs(tmp_path: Path, *, extra_paths: list[str] | None = None):
     return fetched, parse_path, policy, non_market
 
 
-def anomalous_assembled_inputs(tmp_path: Path, *, close_time="CT-1", evidence="E-3",
-                               non_market_changes=None):
+def anomalous_assembled_inputs(
+    tmp_path: Path,
+    *,
+    close_time="CT-1",
+    evidence="E-3",
+    non_market_changes=None,
+    all_daily_flagged=False,
+):
     day = 86_400_000
     root = tmp_path / "archive"
     paths = [
@@ -85,7 +91,12 @@ def anomalous_assembled_inputs(tmp_path: Path, *, close_time="CT-1", evidence="E
             "2024-12",
             HELPERS.zip_blob(
                 "AAAUSDT-1d-2024-12.zip",
-                [HELPERS.row(HELPERS.TMS - 91 * day, HELPERS.TMS - 91 * day + day - 2)],
+                [
+                    HELPERS.row(
+                        HELPERS.TMS - 91 * day,
+                        HELPERS.TMS - 91 * day + day - 2,
+                    )
+                ],
             ),
             granularity="monthly",
         ),
@@ -98,10 +109,14 @@ def anomalous_assembled_inputs(tmp_path: Path, *, close_time="CT-1", evidence="E
                 [
                     HELPERS.row(
                         HELPERS.TMS - 2 * day,
-                        HELPERS.TMS - day - 1,
+                        HELPERS.TMS - 2 * day + day - (2 if all_daily_flagged else 1),
                         volume="7.00",
                     ),
-                    HELPERS.row(HELPERS.TMS - day, HELPERS.TMS - 2, volume="8.00"),
+                    HELPERS.row(
+                        HELPERS.TMS - day,
+                        HELPERS.TMS - day + day - 2 if all_daily_flagged else HELPERS.TMS - 2,
+                        volume="8.00",
+                    ),
                 ],
             ),
             granularity="monthly",
@@ -820,6 +835,20 @@ def test_d8_ct4_remains_refused(tmp_path: Path) -> None:
     assert result.returncode == 2
     assert json.loads(result.stdout)["reason"] == "policy detail unruled: close-time direction"
     assert not output.exists()
+
+
+def test_ct2_daily_without_an_admissible_bar_is_unusable(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = anomalous_assembled_inputs(
+        tmp_path, close_time="CT-2", all_daily_flagged=True
+    )
+    plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan)
+    assert result.returncode == 0, result.stdout + result.stderr
+    candidate = json.loads((output / "EVIDENCE.json").read_bytes())["candidates"][0]
+    assert candidate["listing"]["first_daily_bar_open_utc"] is None
+    assert candidate["daily_quote_volume"]["bars"] is None
+    assert candidate["daily_quote_volume"]["provenance"]["series_usable"] is False
+    assert candidate["daily_quote_volume"]["provenance"]["series_reason"] == "no listing date"
 
 
 @pytest.mark.parametrize(

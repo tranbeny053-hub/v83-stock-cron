@@ -503,28 +503,43 @@ def _prov_entries(
     return out
 
 
+def _unusable_series_provenance(raw: Any) -> bool:
+    return (
+        isinstance(raw, dict)
+        and set(raw) == {"files", "series_usable", "series_reason", "policy_fields"}
+        and raw.get("series_usable") is False
+        and isinstance(raw.get("files"), list)
+        and isinstance(raw.get("policy_fields"), dict)
+        and set(raw["policy_fields"]) == {"policy_sha256"}
+        and isinstance(raw["policy_fields"].get("policy_sha256"), str)
+        and HEX_RE.fullmatch(raw["policy_fields"]["policy_sha256"]) is not None
+    )
+
+
 def _candidate_rows(
     bundle: Any, rule: dict[str, Any], cutoff: datetime,
-    verified: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     if not isinstance(bundle, dict):
         raise Refusal("malformed evidence")
     source = bundle.get("source")
-    if source == "mock" and verified is None:
-        verified = verify_derived(bundle)
+    if source == "mock":
+        verify_derived(bundle)
     allowed_source = "mock" if source == "mock" else "synthetic"
-    expected_policy_sha256 = (
-        bundle["binding"]["policy_sha256"] if allowed_source == "mock" else None
-    )
-    if not isinstance(bundle, dict) or set(bundle) != {
+    expected_bundle_keys = {
         "evidence_id",
         "source",
         "candidates",
         "exclusion_verification",
         "not_leveraged_verification",
         "freshness",
-    }:
+    }
+    if source == "mock":
+        expected_bundle_keys.add("binding")
+    if set(bundle) != expected_bundle_keys:
         raise Refusal("malformed evidence")
+    expected_policy_sha256 = (
+        bundle["binding"]["policy_sha256"] if allowed_source == "mock" else None
+    )
     if (
         bundle.get("evidence_id") != "ucpe.quant_ng.universe_evidence.v1"
         or source not in {"synthetic", "mock"}
@@ -532,8 +547,6 @@ def _candidate_rows(
         if source not in {"synthetic", "mock"}:
             raise Refusal("source must be synthetic")
         raise Refusal("malformed evidence")
-    if source == "mock" and verified is None:
-        raise Refusal("evidence not bound")
     if not all(
         isinstance(bundle.get(k), list)
         for k in ("candidates", "exclusion_verification", "not_leveraged_verification", "freshness")
@@ -599,15 +612,29 @@ def _candidate_rows(
             or set(volume) != {"bars", "provenance"}
         ):
             raise Refusal("malformed listing or volume")
-        first = instant(listing["first_daily_bar_open_utc"])
-        if first.hour or first.minute or first.second or first.microsecond:
+        listing_provenance = listing["provenance"]
+        volume_provenance = volume["provenance"]
+        listing_unknown = (
+            source == "mock"
+            and listing["first_daily_bar_open_utc"] is None
+            and _unusable_series_provenance(listing_provenance)
+        )
+        volume_unknown = (
+            source == "mock"
+            and volume["bars"] is None
+            and _unusable_series_provenance(volume_provenance)
+        )
+        first = None if listing_unknown else instant(listing["first_daily_bar_open_utc"])
+        if first is not None and (first.hour or first.minute or first.second or first.microsecond):
             raise Refusal("listing date is not UTC midnight")
-        if first >= cutoff:
+        if first is not None and first >= cutoff:
             raise Refusal("evidence date at or after T")
         lu, lp = _prov(listing["provenance"], cutoff, expected_policy_sha256, allowed_source)
         vu, vp = _prov(volume["provenance"], cutoff, expected_policy_sha256, allowed_source)
         bars = volume["bars"]
-        if not isinstance(bars, list):
+        if bars is None and volume_unknown:
+            bars = []
+        elif not isinstance(bars, list):
             raise Refusal("malformed daily bars")
         parsed_bars = []
         for bar in bars:
@@ -634,7 +661,14 @@ def _candidate_rows(
             if not isinstance(cell, dict) or set(cell) != {"present_in_window", "provenance"}:
                 raise Refusal("malformed coverage")
             count = cell["present_in_window"]
-            if (
+            count_unknown = (
+                source == "mock"
+                and count is None
+                and _unusable_series_provenance(cell["provenance"])
+            )
+            if count_unknown:
+                count = 0
+            elif (
                 isinstance(count, bool)
                 or not isinstance(count, int)
                 or count < 0
@@ -789,7 +823,7 @@ def build(
     threshold = plan["completeness"]["threshold"]
     operating_raw = plan["operating_period_start"]["utc"]
     operating = None if operating_raw is None else instant(operating_raw)
-    candidates = _candidate_rows(evidence, rule, cutoff, verified=verified)
+    candidates = _candidate_rows(evidence, rule, cutoff)
     for item in evidence["freshness"]:
         if not isinstance(item, dict) or set(item) != {
             "symbol",
@@ -870,7 +904,7 @@ def build(
             excluded_state = "exclusion_unverified"
         else:
             excluded_state = None
-        age_days = (cutoff - row["first"]).days
+        age_days = (cutoff - row["first"]).days if row["first"] is not None else None
         if (
             terminal_reason is None
             and row["listing_usable"]
@@ -920,7 +954,11 @@ def build(
             {
                 "symbol": symbol,
                 "listing": {
-                    "first_daily_bar_open_utc": row["first"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                    "first_daily_bar_open_utc": (
+                        row["first"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                        if row["first"] is not None
+                        else None
+                    )
                 },
                 "median_daily_quote_volume": _decimal_string(median),
                 "rank_15m": None,
@@ -1013,7 +1051,7 @@ def build(
             for row in candidates
             for dt, _ in row["bars"]
         )
-        or any(row["first"] >= f3 for row in candidates)
+        or any(row["first"] is not None and row["first"] >= f3 for row in candidates)
     )
     methodology = {
         "rule_sha256": UNIVERSE_RULE_V1_SHA256,
