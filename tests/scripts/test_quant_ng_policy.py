@@ -4,6 +4,9 @@ import ast
 import hashlib
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,6 +142,32 @@ def test_complete_mock_policy_loads(tmp_path: Path):
     body = policy()
     path, digest = store(tmp_path, body)
     assert module().load(path, digest) == body
+
+
+def test_refusal_order_is_stable_across_hash_seeds(tmp_path: Path):
+    body = policy()
+    body["parameters"]["D2_provenance"]["value"] = "FP-0"
+    body["parameters"]["D8_close_time"]["value"] = "CT-4"
+    path, digest = store(tmp_path, body)
+    code = (
+        "import importlib.util, pathlib, sys; "
+        "spec = importlib.util.spec_from_file_location('quant_ng_policy', sys.argv[1]); "
+        "module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+        "module.load(pathlib.Path(sys.argv[2]), sys.argv[3])"
+    )
+
+    for seed in ("0", "1", "2"):
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = seed
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(SCRIPT), str(path), digest],
+            capture_output=True,
+            check=False,
+            env=env,
+            text=True,
+        )
+        assert result.returncode != 0
+        assert "policy option refused: FP-0" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -365,6 +394,14 @@ def test_digest_checked_and_refusal_identity(tmp_path: Path):
         mod.load(path, "0" * 64)
     assert str(caught.value) == "policy digest mismatch"
     assert mod.Refusal is mod._EXTRACT._FIT.Refusal
+
+
+def test_operating_period_rejects_non_ascii_digits(tmp_path: Path):
+    body = policy()
+    body["parameters"]["operating_period_start"]["utc"]["value"] = (
+        "٢٠٢٥-04-01T00:00:00Z"
+    )
+    expect(tmp_path, body, "invalid policy")
 
 
 def test_load_writes_nothing(tmp_path: Path, monkeypatch):

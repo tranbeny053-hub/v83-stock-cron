@@ -36,7 +36,7 @@ OWNER_RULED_POLICY_SHA256 = frozenset()
 
 POLICY_ID = "ucpe.quant_ng.corpus_policy.v1"
 RULINGS = {"SYNTHETIC_TEST_ONLY", "OWNER_RULED"}
-PARAMETER_NAMES = {
+PARAMETER_ORDER = (
     "D2_provenance",
     "D3_evidence",
     "D4_availability",
@@ -45,10 +45,13 @@ PARAMETER_NAMES = {
     "D7_completeness",
     "D8_close_time",
     "operating_period_start",
-}
+)
+PARAMETER_NAMES = set(PARAMETER_ORDER)
 DECIMAL_RE = re.compile(r"^(?:0\.[0-9]+|1(?:\.0+)?)$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-UTC_INSTANT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$")
+UTC_INSTANT_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$"
+)
 REQUIRED_EXCLUSIONS = {"F3", "BTCUSDT", "ETHUSDT", "BTC_ETH_PROXIES"}
 
 
@@ -218,7 +221,7 @@ def load(path: Path, expected_sha256: str) -> dict:
     if not _closed(parameters, PARAMETER_NAMES):
         raise Refusal("invalid policy")
     rulings = []
-    for name in PARAMETER_NAMES:
+    for name in PARAMETER_ORDER:
         result = _value(name, parameters[name])
         rulings.extend(result if isinstance(result, tuple) else (result,))
     expected_ruling = "SYNTHETIC_TEST_ONLY" if policy["status"] == "MOCK" else "OWNER_RULED"
