@@ -45,6 +45,18 @@ _FLAGS = {
 _PROTECTED = {"BTCUSDT", "ETHUSDT"}
 
 
+def _unique_object(label: str):
+    def hook(pairs: list[tuple[str, Any]]) -> dict:
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise Refusal(f"malformed {label}: duplicate key")
+            result[key] = value
+        return result
+
+    return hook
+
+
 def _shape(value: Any, keys: set[str], label: str) -> None:
     if not isinstance(value, dict):
         raise Refusal(f"malformed {label}: {label}")
@@ -82,14 +94,15 @@ def _instant(value: Any) -> datetime | None:
         raise Refusal("malformed instant") from exc
 
 
-def _validate_plan(plan: dict) -> None:
+def _validate_plan(plan: dict, *, _digest_ok: bool = False) -> None:
     _shape(plan, _PLAN_KEYS, "plan")
     if plan["schema"] != "ucpe.s1_plan.v1":
         raise Refusal("malformed plan: schema")
     if not isinstance(plan["status"], str) or plan["status"] not in {"MOCK", "OWNER_RULED"}:
         raise Refusal("malformed plan: status")
-    if plan["status"] == "OWNER_RULED":
-        raise Refusal("plan not owner-ruled")
+    # OWNER_RULED dictionaries have no file digest; only run() can authorize one.
+    if plan["status"] == "OWNER_RULED" and not _digest_ok:
+        raise Refusal("owner-ruled plans are decided only through run")
     rulings = plan["rulings"]
     _shape(rulings, _RULING_KEYS, "plan")
     choices = {
@@ -233,9 +246,9 @@ def _valid_name(symbol: str, name: str, suffix: str) -> date | None:
         return None
 
 
-def decide(plan: dict, observation: dict) -> dict:
+def decide(plan: dict, observation: dict, *, _digest_ok: bool = False) -> dict:
     """Return a deterministic decision without mutating either input."""
-    _validate_plan(plan)
+    _validate_plan(plan, _digest_ok=_digest_ok)
     _validate_observation(observation)
     r = plan["rulings"]
     p0_names: list[str] = []
@@ -249,6 +262,40 @@ def decide(plan: dict, observation: dict) -> dict:
                 duplicate = True
             else:
                 p0_names.append(name)
+    if not p0_names:
+        r = plan["rulings"]
+        theta = 31 if r["S1-7"] == "D" else 32
+        empty_k = len(plan["probes"]) if r["S1-4"] in {"a", "b", "d"} else 0
+        if r["S1-3"] == "b":
+            pages0 = observation["p0"]["pages"]
+            if len(pages0) <= 1 or pages0[0]["page_size"] is None:
+                cap = plan["cap"]["H"]
+            else:
+                page_size = pages0[0]["page_size"]
+                cap = min(
+                    plan["cap"]["H"],
+                    len(pages0)
+                    + empty_k * ((2 * plan["cap"]["F"] + page_size - 1) // page_size)
+                    + plan["cap"]["m"],
+                )
+        else:
+            cap = plan["cap"]["number"]
+        return {
+            "schema": "ucpe.s1_decision.v1",
+            "status": "MOCK",
+            "run_outcome": "STOP-inconclusive",
+            "run_stops": ["empty P0"],
+            "probes": [],
+            "consequence": _consequence("STOP-inconclusive", r["S1-5"]),
+            "cap": cap,
+            "theta": theta,
+            "dropped": dropped,
+            "K": empty_k,
+            "residual_risk": (
+                "a symbol halted, not delisted, for more than 30 days also passes; "
+                "S1 cannot tell them apart"
+            ),
+        }
     draw_names: list[str] = []
     if plan["draw"] is not None:
         ordered = sorted(p0_names)
@@ -362,14 +409,10 @@ def decide(plan: dict, observation: dict) -> dict:
             dates = probe_forms[symbol][1]
             D = max(dates).isoformat()
             captures = [_instant(p["capture_utc"]) for p in observation["p1"][symbol]["pages"]]
-            C = min(captures).date().isoformat() if captures else None
-            if C is None:
-                reason = "no counting name"
-                D = None
-            else:
-                delta = (date.fromisoformat(C) - date.fromisoformat(D)).days
-                if delta >= theta:
-                    outcome, reason = "PASS", "delta meets threshold"
+            C = min(captures).date().isoformat()
+            delta = (date.fromisoformat(C) - date.fromisoformat(D)).days
+            if delta >= theta:
+                outcome, reason = "PASS", "delta meets threshold"
         rows.append(
             {
                 "symbol": symbol,
@@ -422,17 +465,30 @@ def _consequence(outcome: str, ruling: dict) -> str:
 
 
 def run(plan_path: str | Path, plan_sha256: str, observation_path: str | Path) -> dict:
-    plan_bytes = Path(plan_path).read_bytes()
+    try:
+        plan_bytes = Path(plan_path).read_bytes()
+        observation_bytes = Path(observation_path).read_bytes()
+    except (OSError, UnicodeDecodeError) as exc:
+        raise Refusal("unreadable input") from exc
     if hashlib.sha256(plan_bytes).hexdigest() != plan_sha256:
         raise Refusal("plan digest mismatch")
     try:
-        plan = json.loads(plan_bytes)
+        plan = json.loads(plan_bytes, object_pairs_hook=_unique_object("plan"))
+    except UnicodeDecodeError as exc:
+        raise Refusal("unreadable input") from exc
     except json.JSONDecodeError as exc:
         raise Refusal("malformed plan: JSON") from exc
     try:
-        observation = json.loads(Path(observation_path).read_bytes())
+        observation = json.loads(observation_bytes, object_pairs_hook=_unique_object("observation"))
+    except UnicodeDecodeError as exc:
+        raise Refusal("unreadable input") from exc
     except json.JSONDecodeError as exc:
         raise Refusal("malformed observation: JSON") from exc
+    digest = hashlib.sha256(plan_bytes).hexdigest()
+    if isinstance(plan, dict) and plan.get("status") == "OWNER_RULED":
+        if digest not in OWNER_RULED_S1_PLAN_SHA256:
+            raise Refusal("plan not owner-ruled")
+        return decide(plan, observation, _digest_ok=True)
     return decide(plan, observation)
 
 

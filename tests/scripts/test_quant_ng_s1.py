@@ -2,7 +2,8 @@ import ast
 import copy
 import hashlib
 import json
-from datetime import date, timedelta
+import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,33 @@ def test_refuses_malformed_plan_and_observation_shapes():
         s1.decide(plan(), o)
 
 
+def test_empty_p0_is_an_early_run_stop_for_every_source_and_applicable_ruling():
+    for source in "abcd":
+        c3_options = ("n/a",) if source in "ab" else ("a", "b")
+        c13_options = ("n/a",) if source != "d" else ("a", "b")
+        for absence in ("a", "b"):
+            for c3 in c3_options:
+                for c13 in c13_options:
+                    p = plan(
+                        source,
+                        rulings={
+                            "S1-8": absence,
+                            "S1-12": c3,
+                            "S1-13": c13,
+                        },
+                    )
+                    o = observation(
+                        ["BTCUSDT", "ETHUSDT"],
+                        folders={"AAAUSDT": folder(["malformed but not evaluated"])},
+                    )
+                    out = s1.decide(p, o)
+                    assert out["run_outcome"] == "STOP-inconclusive"
+                    assert out["run_stops"] == ["empty P0"]
+                    assert out["probes"] == []
+                    assert out["K"] == (0 if source == "c" else len(p["probes"]))
+                    assert out["cap"] == 20
+
+
 @pytest.mark.parametrize(
     ("change", "expected"),
     [
@@ -157,12 +185,26 @@ def test_refuses_non_mock_observation_host():
         s1.decide(plan(), obs)
 
 
-def test_refuses_owner_ruled_even_with_empty_allowlist():
+def test_owner_ruled_requires_allowlist_digest_and_run_path(tmp_path, monkeypatch):
     p = plan()
     p["status"] = "OWNER_RULED"
     assert not s1.OWNER_RULED_S1_PLAN_SHA256
     with pytest.raises(s1.Refusal, match="plan not owner-ruled"):
+        plan_path = tmp_path / "plan.json"
+        obs_path = tmp_path / "obs.json"
+        plan_path.write_text(json.dumps(p))
+        obs_path.write_text(json.dumps(observation()))
+        s1.run(plan_path, hashlib.sha256(plan_path.read_bytes()).hexdigest(), obs_path)
+    with pytest.raises(s1.Refusal, match="owner-ruled plans are decided only through run"):
         s1.decide(p, observation())
+
+    plan_path = tmp_path / "plan.json"
+    obs_path = tmp_path / "obs.json"
+    plan_path.write_text(json.dumps(p))
+    obs_path.write_text(json.dumps(observation()))
+    digest = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+    monkeypatch.setattr(s1, "OWNER_RULED_S1_PLAN_SHA256", frozenset({digest}))
+    assert s1.run(plan_path, digest, obs_path)["schema"] == "ucpe.s1_decision.v1"
 
 
 @pytest.mark.parametrize(
@@ -200,6 +242,61 @@ def test_run_refuses_digest_mismatch(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("plan_json", "observation_json", "message"),
+    [
+        (
+            '{"schema":"first","schema":"second"}',
+            json.dumps(observation()),
+            "malformed plan: duplicate key",
+        ),
+        (
+            json.dumps(plan()),
+            '{"source":"mock","source":"mock"}',
+            "malformed observation: duplicate key",
+        ),
+        (
+            json.dumps(plan()),
+            '{"schema":"ucpe.s1_observation.v1","source":"mock","marker":"UCPE-MOCK-v1",'
+            '"run_start_utc":null,"run_end_utc":null,"flags":{"redirect":false,"redirect":false}}',
+            "malformed observation: duplicate key",
+        ),
+    ],
+    ids=["plan_top_level", "observation_top_level", "observation_nested"],
+)
+def test_run_rejects_duplicate_json_keys(tmp_path, plan_json, observation_json, message):
+    p, o = tmp_path / "plan.json", tmp_path / "obs.json"
+    p.write_text(plan_json)
+    o.write_text(observation_json)
+    with pytest.raises(s1.Refusal, match=message):
+        s1.run(p, hashlib.sha256(p.read_bytes()).hexdigest(), o)
+
+
+@pytest.mark.parametrize(
+    ("input_file", "content"),
+    [
+        ("plan", None),
+        ("observation", None),
+        ("plan", b"\xff"),
+        ("observation", b"\xff"),
+    ],
+    ids=["missing_plan", "missing_observation", "invalid_utf8_plan", "invalid_utf8_observation"],
+)
+def test_main_refuses_unreadable_inputs(tmp_path, capsys, input_file, content):
+    p, o = tmp_path / "plan.json", tmp_path / "obs.json"
+    p.write_text(json.dumps(plan()))
+    o.write_text(json.dumps(observation()))
+    target = p if input_file == "plan" else o
+    if content is None:
+        target.unlink()
+    else:
+        target.write_bytes(content)
+    digest = hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else "0" * 64
+
+    assert s1.main([str(p), digest, str(o)]) == 2
+    assert capsys.readouterr().err.startswith("REFUSED: unreadable input")
+
+
+@pytest.mark.parametrize(
     "field,value", [("source", "live"), ("marker", "other")], ids=["source", "marker"]
 )
 def test_refuses_non_mock_observation(field, value):
@@ -227,8 +324,6 @@ def test_refuses_malformed_instant():
         "protected_fragment",
         "cap reached",
         "duplicate name",
-        "K = 0",
-        "empty (c) part",
         "host mismatch",
         "unreadable clock",
         "unexpected folder",
@@ -244,8 +339,6 @@ def test_refuses_malformed_instant():
         "protected_fragment",
         "cap",
         "duplicate",
-        "zero_k",
-        "empty_c_part",
         "host_mismatch",
         "clock_capture",
         "unexpected_folder",
@@ -261,15 +354,6 @@ def test_every_run_level_stop_omits_probe_outcomes(stop):
         obs["requests_used"] = 21
     elif stop == "duplicate name":
         obs["p0"]["pages"][0]["names"].append("AAAUSDT")
-    elif stop == "K = 0":
-        p = plan("c", draw={"kind": "sorted_first_k", "k": 1})
-        obs["p0"]["pages"][0]["names"] = []
-        obs["p1"] = {}
-    elif stop == "empty (c) part":
-        p = plan("d", draw={"kind": "sorted_first_k", "k": 1})
-        p["rulings"]["S1-13"] = "b"
-        obs["p0"]["pages"][0]["names"] = []
-        obs["p1"] = {}
     elif stop == "host mismatch":
         obs["p0"]["pages"][0]["host"] = "wrong.invalid"
     elif stop == "unreadable clock":
@@ -412,7 +496,9 @@ def test_latest_counted_date_is_used_for_d_x():
 )
 def test_per_probe_rows(absence, pairing, fault_level, names, expected, reason):
     p = plan(rulings={"S1-8": absence, "S1-9": pairing, "S1-10": fault_level})
-    obs = observation([] if not names else ["AAAUSDT"], folders={"AAAUSDT": folder(names)})
+    p0_names = ["BBBUSDT"] if not names else ["AAAUSDT"]
+    folders = {} if not names else {"AAAUSDT": folder(names)}
+    obs = observation(p0_names, folders=folders)
     if names and "CHECKSUM" in names[0] and pairing == "b":
         names = ["AAAUSDT-1d-2026-01-29.zip.CHECKSUM", "AAAUSDT-1d-2026-01-29.zip"]
         obs["p1"] = {"AAAUSDT": folder(names)}
@@ -477,26 +563,28 @@ def test_s1_12_full_sweep_requirement(source, s11, s12, folder_names, form_level
     assert out["run_outcome"] == expected
 
 
+@pytest.mark.parametrize("empty_rule", ["a", "b"], ids=["continue_a", "stop_empty_c_part"])
 @pytest.mark.parametrize(
-    ("empty_rule", "outcome", "probes"),
-    [("a", "STOP-inconclusive", ["AAAUSDT"]), ("b", "STOP-inconclusive", [])],
-    ids=["continue_a_probes", "stop_empty_c_part"],
+    "draw", [
+        {"kind": "sorted_first_k", "k": 1},
+        {"kind": "every", "k": None},
+    ],
+    ids=["sorted_first_k", "every"],
 )
-def test_s1_13_empty_c_part(empty_rule, outcome, probes):
-    p = plan("d", draw={"kind": "sorted_first_k", "k": 1}, rulings={"S1-13": empty_rule})
+def test_s1_13_empty_c_is_only_reachable_through_empty_p0(empty_rule, draw):
+    """Both valid draw kinds are non-empty for non-empty P0; empty P0 now stops before S1-13."""
+    p = plan("d", draw=draw, rulings={"S1-13": empty_rule})
     o = observation([], folders={"AAAUSDT": folder(["AAAUSDT-1d-2026-02-28.zip"])})
     out = s1.decide(p, o)
-    assert out["run_outcome"] == outcome
-    if empty_rule == "a":
-        assert [row["symbol"] for row in out["probes"]] == probes
-    else:
-        assert out["probes"] == []
+    assert out["run_outcome"] == "STOP-inconclusive"
+    assert out["run_stops"] == ["empty P0"]
+    assert out["probes"] == []
 
 
 @pytest.mark.parametrize(
     ("p0_names", "folders", "s11", "expected"),
     [
-        ([], {}, "a", "STOP-evidence"),
+        (["BBBUSDT"], {}, "a", "STOP-evidence"),
         (
             ["BBBUSDT"],
             {"BBBUSDT": folder([]), "AAAUSDT": folder([])},
@@ -514,7 +602,7 @@ def test_s1_13_empty_c_part(empty_rule, outcome, probes):
     ids=["all_evidence", "some_evidence_unanimity", "some_evidence_any", "no_evidence"],
 )
 def test_case_check_evidence_branches(p0_names, folders, s11, expected):
-    probes = (
+    probes = ["AAAUSDT", "CCCUSDT"] if p0_names == ["BBBUSDT"] and not folders else (
         ["AAAUSDT", "BBBUSDT"]
         if s11 == "a" or len(p0_names) == 1 and expected == "STOP-evidence"
         else ["AAAUSDT"]
@@ -522,6 +610,27 @@ def test_case_check_evidence_branches(p0_names, folders, s11, expected):
     p = plan("b", probes=probes, rulings={"S1-8": "b", "S1-11": s11})
     out = s1.decide(p, observation(p0_names, folders))
     assert out["run_outcome"] == expected
+
+
+def test_s1_11_aggregation_differs_with_absent_and_present_recent_probes():
+    outcomes = {}
+    for rule in ("a", "b"):
+        p = plan(
+            "b",
+            probes=["AAAUSDT", "BBBUSDT"],
+            rulings={"S1-8": "b", "S1-11": rule},
+        )
+        o = observation(
+            ["BBBUSDT"],
+            {"BBBUSDT": folder(["BBBUSDT-1d-2026-02-28.zip"])},
+        )
+        out = s1.decide(p, o)
+        outcomes[rule] = out["run_outcome"]
+        assert [row["outcome"] for row in out["probes"]] == [
+            "STOP-evidence",
+            "inconclusive",
+        ]
+    assert outcomes == {"a": "STOP-inconclusive", "b": "STOP-evidence"}
 
 
 @pytest.mark.parametrize(
@@ -629,14 +738,73 @@ def test_decision_is_deterministic_and_does_not_mutate_inputs():
     assert (p, o) == before
 
 
+def _independently_passing_probes(p, o):
+    p0_names = {
+        name
+        for source_page in o["p0"]["pages"]
+        for name in source_page["names"]
+        if name not in {"BTCUSDT", "ETHUSDT"}
+    }
+    probes = list(p["probes"])
+    if p["rulings"]["S1-4"] in {"c", "d"}:
+        draw = sorted(p0_names)
+        if p["draw"]["kind"] == "sorted_first_k":
+            draw = draw[: p["draw"]["k"]]
+        for name in draw:
+            if name not in probes:
+                probes.append(name)
+    theta = 31 if p["rulings"]["S1-7"] == "D" else 32
+    passing = set()
+    for symbol in probes:
+        if symbol not in p0_names or symbol not in o["p1"]:
+            continue
+        pages = o["p1"][symbol]["pages"]
+        names = [name for source_page in pages for name in source_page["names"]]
+        fault = len(names) != len(set(names))
+        counted, companions = [], []
+        for name in names:
+            pattern = rf"{re.escape(symbol)}-1d-(\d{{4}})-(\d{{2}})-(\d{{2}})\.zip(\.CHECKSUM)?"
+            match = re.fullmatch(pattern, name)
+            if not match:
+                fault = True
+                continue
+            try:
+                counted_date = date(*(int(part) for part in match.groups()[:3]))
+            except ValueError:
+                fault = True
+                continue
+            (companions if match.group(4) else counted).append(counted_date)
+        if p["rulings"]["S1-9"] == "b":
+            if any(
+                counted.count(day) != companions.count(day)
+                for day in set(counted + companions)
+            ):
+                fault = True
+        if fault or not counted:
+            continue
+        latest_counted = max(counted)
+        earliest_capture = min(
+            datetime.strptime(page["capture_utc"], "%Y-%m-%dT%H:%M:%SZ") for page in pages
+        )
+        delta = (earliest_capture.date() - latest_counted).days
+        if delta >= theta:
+            passing.add(symbol)
+    return passing
+
+
 def test_exhaustive_ruling_product_invariants():
     scenarios = [
         ("old", ["AAAUSDT"], {"AAAUSDT": folder(["AAAUSDT-1d-2026-01-29.zip"])}),
         ("recent", ["AAAUSDT"], {"AAAUSDT": folder(["AAAUSDT-1d-2026-02-28.zip"])}),
-        ("absent", ["AAAUSDT"], {}),
+        ("absent", ["BBBUSDT"], {}),
         ("fault", ["AAAUSDT"], {"AAAUSDT": folder(["odd"])}),
         ("companion", ["AAAUSDT"], {"AAAUSDT": folder(["AAAUSDT-1d-2026-01-29.zip.CHECKSUM"])}),
         ("flag", ["AAAUSDT"], {"AAAUSDT": folder(["AAAUSDT-1d-2026-01-29.zip"])}),
+        (
+            "two_probe_mixed",
+            ["BBBUSDT"],
+            {"BBBUSDT": folder(["BBBUSDT-1d-2026-02-28.zip"])},
+        ),
     ]
     for source in "abcd":
         for threshold in ("D", "D+1"):
@@ -663,6 +831,8 @@ def test_exhaustive_ruling_product_invariants():
                                             p["draw"] = {"kind": "every", "k": None}
                                         if source in "bd":
                                             p["probes"] = ["AAAUSDT"]
+                                        if scenario == "two_probe_mixed" and source in "abd":
+                                            p["probes"] = ["AAAUSDT", "BBBUSDT"]
                                         o = observation(p0names, copy.deepcopy(folders))
                                         if scenario == "flag":
                                             o["flags"]["redirect"] = True
@@ -681,10 +851,8 @@ def test_exhaustive_ruling_product_invariants():
                                                 and not out["probes"]
                                             )
                                         else:
-                                            assert (out["run_outcome"] == "PASS") == any(
-                                                row["outcome"] == "PASS"
-                                                and row["delta"] >= out["theta"]
-                                                for row in out["probes"]
+                                            assert (out["run_outcome"] == "PASS") == bool(
+                                                _independently_passing_probes(p, o)
                                             )
                                         if absence == "a":
                                             assert all(
@@ -693,6 +861,10 @@ def test_exhaustive_ruling_product_invariants():
                                             )
                                         assert all(
                                             row["symbol"] in p["probes"] or row["symbol"] in p0names
+                                            for row in out["probes"]
+                                        )
+                                        assert all(
+                                            row["outcome"] != "PASS" or row["symbol"] in p0names
                                             for row in out["probes"]
                                         )
                                         assert not any(
