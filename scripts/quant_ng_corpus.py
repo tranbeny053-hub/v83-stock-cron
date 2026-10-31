@@ -30,7 +30,11 @@ Evidence schema::
 Each provenance value has source, sha256, official_checksum, available_from_utc,
 revisions, and revision_history_complete. Candidate listing and volume values
 pair their fields with provenance; coverage maps each timeframe to a present bar
-count and provenance.
+count and provenance. Per-file provenance uses ``{"files": [...], ...}`` and
+requires ``policy_fields`` to contain exactly ``policy_sha256`` with a lowercase
+SHA-256 value. A bound revision records the old digest with
+``available_before_utc`` and the held digest with its exact
+``available_from_utc`` replacement instant.
 
 Rules implemented from OD_NG_5_PART_A_RULED.md §2:
 B1 — verified as-of exclusions and leveraged-token trigger verification.
@@ -101,6 +105,21 @@ PROV_KEYS = {
     "revisions",
     "revision_history_complete",
 }
+ASSEMBLE_BINDING_KEYS = {
+    "fetch_output_dir",
+    "cutoff_utc",
+    "parse_sha256",
+    "manifest_sha256",
+    "policy_sha256",
+    "policy_path",
+    "non_market_sha256",
+    "non_market_path",
+    "changelog_path",
+    "changelog_sha256",
+    "proxy_windows_path",
+    "proxy_windows_sha256",
+    "assemble_tool_sha256",
+}
 HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 # A base asset is upper-case letters and digits only, and a symbol is exactly its base followed by
 # the ruled quote. Anything else — lower case, padding, a declared base that is not the symbol's —
@@ -121,6 +140,49 @@ def instant(value: Any) -> datetime:
         raise Refusal("malformed instant") from exc
 
 
+def _load_assembler():
+    spec = importlib.util.spec_from_file_location(
+        "quant_ng_assemble_corpus", Path(__file__).with_name("quant_ng_assemble.py")
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load assembler")
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    previous_fit = sys.modules.get("quant_ng_fit")
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+        if previous_fit is not None:
+            sys.modules["quant_ng_fit"] = previous_fit
+        else:
+            sys.modules.pop("quant_ng_fit", None)
+    return module
+
+
+def _load_policy():
+    spec = importlib.util.spec_from_file_location(
+        "quant_ng_policy_corpus", Path(__file__).with_name("quant_ng_policy.py")
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load policy")
+    module = importlib.util.module_from_spec(spec)
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+def __getattr__(name: str):
+    if name == "_ASSEMBLE":
+        return _load_assembler()
+    raise AttributeError(name)
+
+
 def load_rule(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_bytes()
@@ -137,11 +199,56 @@ def load_rule(path: Path) -> dict[str, Any]:
     return parsed
 
 
-def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
+def _prov(
+    raw: Any, cutoff: datetime, expected_policy_sha256: str | None = None,
+    allowed_source: str = "synthetic",
+) -> tuple[bool, dict[str, Any]]:
     # The synthetic-only gate comes first, so a non-synthetic record is refused even when it is
     # also malformed, instead of being quietly treated as unknown.
-    if isinstance(raw, dict) and "source" in raw and raw["source"] != "synthetic":
-        raise Refusal("source must be synthetic")
+    source_reason = f"source must be {allowed_source}"
+    if isinstance(raw, dict) and "source" in raw and raw["source"] != allowed_source:
+        raise Refusal(source_reason)
+    if isinstance(raw, dict) and "files" in raw:
+        if set(raw) != {"files", "series_usable", "series_reason", "policy_fields"}:
+            return False, {}
+        files = raw.get("files")
+        if isinstance(files, list) and any(
+            isinstance(item, dict)
+            and "source" in item
+            and item["source"] != allowed_source
+            for item in files
+        ):
+            raise Refusal(source_reason)
+        if (
+            raw.get("series_usable") is not True
+            or not isinstance(files, list)
+            or not files
+            or not isinstance(raw.get("policy_fields"), dict)
+            or set(raw["policy_fields"]) != {"policy_sha256"}
+            or not isinstance(raw["policy_fields"].get("policy_sha256"), str)
+            or not HEX_RE.fullmatch(raw["policy_fields"]["policy_sha256"])
+            or expected_policy_sha256 is None
+            or raw["policy_fields"]["policy_sha256"] != expected_policy_sha256
+        ):
+            return False, {}
+        # The assembler's pending policy fields keep its MOCK series fail-closed.
+        metadata = []
+        for item in files:
+            if isinstance(item, dict) and "source" in item and item["source"] != allowed_source:
+                raise Refusal(source_reason)
+            if not isinstance(item, dict) or set(item) != PROV_KEYS | {"path", "class"}:
+                return False, {}
+            if item["class"] != "ok":
+                return False, {}
+            usable, stamp = _prov(
+                {key: item[key] for key in PROV_KEYS}, cutoff,
+                expected_policy_sha256=expected_policy_sha256,
+                allowed_source=allowed_source,
+            )
+            if not usable:
+                return False, {}
+            metadata.append(stamp)
+        return True, {"files": metadata}
     if not isinstance(raw, dict) or set(raw) != PROV_KEYS:
         return False, {}
     sha = raw.get("sha256")
@@ -162,11 +269,20 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
         return False, {}
     checked = []
     for item in revisions:
-        if not isinstance(item, dict) or set(item) != {"sha256", "available_from_utc"}:
+        if not isinstance(item, dict) or set(item) not in (
+            {"sha256", "available_from_utc"},
+            {"sha256", "available_before_utc"},
+        ):
             return False, {}
         digest = item.get("sha256")
         if not isinstance(digest, str) or not HEX_RE.fullmatch(digest):
             return False, {}
+        if "available_before_utc" in item:
+            try:
+                instant(item.get("available_before_utc"))
+            except Refusal:
+                return False, {}
+            continue
         try:
             date = instant(item.get("available_from_utc"))
         except Refusal:
@@ -181,6 +297,170 @@ def _prov(raw: Any, cutoff: datetime) -> tuple[bool, dict[str, Any]]:
     at_latest = {digest for date, digest in current if date == latest}
     usable = sha == official and at_latest == {sha} and available <= cutoff
     return usable, {"sha256": sha, "available_from_utc": raw["available_from_utc"]}
+
+
+def verify_derived(bundle: dict) -> dict[str, Any]:
+    """Verify assembler evidence against its bound source files and parser output."""
+    assembler = None
+    try:
+        binding = bundle.get("binding") if isinstance(bundle, dict) else None
+        if not isinstance(binding, dict) or set(binding) != ASSEMBLE_BINDING_KEYS:
+            raise Refusal("evidence not bound")
+        for key in ("fetch_output_dir", "cutoff_utc", "policy_path", "non_market_path"):
+            if not isinstance(binding.get(key), str):
+                raise Refusal("evidence not bound")
+        for key in (
+            "parse_sha256",
+            "manifest_sha256",
+            "policy_sha256",
+            "non_market_sha256",
+            "assemble_tool_sha256",
+        ):
+            if not isinstance(binding.get(key), str) or not HEX_RE.fullmatch(binding[key]):
+                raise Refusal("evidence not bound")
+        for path_key, digest_key in (
+            ("changelog_path", "changelog_sha256"),
+            ("proxy_windows_path", "proxy_windows_sha256"),
+        ):
+            path_value, digest_value = binding.get(path_key), binding.get(digest_key)
+            if (path_value is None) != (digest_value is None):
+                raise Refusal("evidence not bound")
+            if path_value is not None and (
+                not isinstance(path_value, str)
+                or not isinstance(digest_value, str)
+                or not HEX_RE.fullmatch(digest_value)
+            ):
+                raise Refusal("evidence not bound")
+        try:
+            fetch_dir = _path(binding["fetch_output_dir"])
+            policy_path = _path(binding["policy_path"])
+            non_market_path = _path(binding["non_market_path"])
+        except Refusal as exc:
+            raise Refusal("evidence not bound") from exc
+        if any(
+            str(path) != binding[key]
+            for path, key in (
+                (fetch_dir, "fetch_output_dir"),
+                (policy_path, "policy_path"),
+                (non_market_path, "non_market_path"),
+            )
+        ):
+            raise Refusal("evidence not bound")
+        assembler = _load_assembler()
+        policy_module = _load_policy()
+        try:
+            policy_raw = policy_path.read_bytes()
+            non_market_raw = non_market_path.read_bytes()
+            manifest_raw = (fetch_dir / "MANIFEST.json").read_bytes()
+        except OSError as exc:
+            raise Refusal("evidence not bound") from exc
+        if (
+            hashlib.sha256(policy_raw).hexdigest() != binding["policy_sha256"]
+            or hashlib.sha256(non_market_raw).hexdigest() != binding["non_market_sha256"]
+            or hashlib.sha256(manifest_raw).hexdigest() != binding["manifest_sha256"]
+        ):
+            raise Refusal("evidence not bound")
+        try:
+            non_market = assembler._json(non_market_raw)
+            assembler.check_non_market(non_market)
+        except assembler.Refusal as exc:
+            raise Refusal(str(exc)) from exc
+        try:
+            policy = policy_module.load(policy_path, binding["policy_sha256"])
+        except policy_module.Refusal as exc:
+            raise Refusal(str(exc)) from exc
+        named_values = (
+            (
+                "changelog_path",
+                "changelog_sha256",
+                policy["parameters"]["D5_revision"]["changelog_sha256"],
+                "changelog",
+            ),
+            (
+                "proxy_windows_path",
+                "proxy_windows_sha256",
+                policy["parameters"]["D6_proxy"]["windows_sha256"],
+                "proxy windows",
+            ),
+        )
+        extra_inputs = {}
+        for path_key, digest_key, named, label in named_values:
+            path_value, digest_value = binding[path_key], binding[digest_key]
+            if named is None:
+                if path_value is not None or digest_value is not None:
+                    raise Refusal("evidence not bound")
+                extra_inputs[label] = None
+                continue
+            if path_value is None:
+                raise Refusal(f"policy detail unruled: {label}")
+            if digest_value != named:
+                raise Refusal("evidence not bound")
+            try:
+                extra_path = _path(path_value)
+                if str(extra_path) != path_value:
+                    raise Refusal("evidence not bound")
+                extra_raw = extra_path.read_bytes()
+            except (OSError, Refusal) as exc:
+                raise Refusal("evidence not bound") from exc
+            if hashlib.sha256(extra_raw).hexdigest() != digest_value:
+                raise Refusal("evidence not bound")
+            try:
+                extra_obj = assembler._json(extra_raw)
+                checker = (
+                    assembler.check_changelog
+                    if label == "changelog"
+                    else assembler.check_proxy_windows
+                )
+                checker(extra_obj)
+            except assembler.Refusal as exc:
+                raise Refusal(str(exc)) from exc
+            extra_inputs[label] = {"path": path_value, "sha256": digest_value, **extra_obj}
+        if (
+            policy["parameters"]["D3_evidence"]["non_market_sha256"]
+            != binding["non_market_sha256"]
+        ):
+            raise Refusal("evidence not bound")
+        cutoff = instant(binding["cutoff_utc"])
+        if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
+            raise Refusal("evidence not bound")
+        parse_raw = assembler._EXTRACT.derive(fetch_dir, cutoff)
+        if hashlib.sha256(parse_raw).hexdigest() != binding["parse_sha256"]:
+            raise Refusal("parse not derived from manifest")
+        parse = assembler._json(parse_raw)
+        if not isinstance(parse, dict) or parse.get("cutoff_utc") != binding["cutoff_utc"]:
+            raise Refusal("evidence not bound")
+        recomputed = assembler.evidence(
+            parse,
+            fetch_dir=fetch_dir,
+            parse_sha256=binding["parse_sha256"],
+            policy_path=policy_path,
+            policy_sha256=binding["policy_sha256"],
+            non_market_path=non_market_path,
+            non_market_sha256=binding["non_market_sha256"],
+            non_market=non_market,
+            policy=policy,
+            changelog=extra_inputs["changelog"],
+            proxy_windows=extra_inputs["proxy windows"],
+        )
+        compare_bundle = dict(bundle)
+        compare_bundle["binding"] = dict(binding)
+        compare_bundle["binding"].pop("assemble_tool_sha256")
+        recomputed["binding"].pop("assemble_tool_sha256")
+        if assembler._output_bytes(compare_bundle) != assembler._output_bytes(recomputed):
+            raise Refusal("evidence not derived from parse")
+        return {
+            "policy": policy,
+            "changelog": extra_inputs["changelog"],
+            "proxy_windows": extra_inputs["proxy windows"],
+        }
+    except Refusal:
+        raise
+    except Exception as exc:
+        if assembler is not None and isinstance(exc, assembler.Refusal):
+            raise Refusal(str(exc)) from exc
+        if isinstance(exc, (OSError, ValueError, TypeError, KeyError, AttributeError)):
+            raise Refusal("evidence not bound") from exc
+        raise
 
 
 def _canonical_symbol(symbol: Any, quote: str) -> bool:
@@ -203,7 +483,8 @@ def _span_covers(start: datetime, end: datetime | None, at: datetime) -> bool:
 
 
 def _prov_entries(
-    raw: Any, cutoff: datetime, expected: set[str]
+    raw: Any, cutoff: datetime, expected: set[str], *,
+    allowed_source: str = "synthetic", expected_policy_sha256: str | None = None,
 ) -> list[tuple[dict[str, Any], bool]]:
     if not isinstance(raw, list):
         raise Refusal("malformed verification list")
@@ -211,7 +492,9 @@ def _prov_entries(
     for item in raw:
         if not isinstance(item, dict) or set(item) != expected:
             raise Refusal("malformed verification entry")
-        usable, _ = _prov(item.get("provenance"), cutoff)
+        usable, _ = _prov(item.get("provenance"), cutoff,
+                          expected_policy_sha256=expected_policy_sha256,
+                          allowed_source=allowed_source)
         start = instant(item.get("valid_from_utc"))
         end = None if item.get("valid_to_utc") is None else instant(item["valid_to_utc"])
         if end is not None and end <= start:
@@ -220,21 +503,50 @@ def _prov_entries(
     return out
 
 
-def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list[dict[str, Any]]:
-    if not isinstance(bundle, dict) or set(bundle) != {
+def _unusable_series_provenance(raw: Any) -> bool:
+    return (
+        isinstance(raw, dict)
+        and set(raw) == {"files", "series_usable", "series_reason", "policy_fields"}
+        and raw.get("series_usable") is False
+        and isinstance(raw.get("files"), list)
+        and isinstance(raw.get("policy_fields"), dict)
+        and set(raw["policy_fields"]) == {"policy_sha256"}
+        and isinstance(raw["policy_fields"].get("policy_sha256"), str)
+        and HEX_RE.fullmatch(raw["policy_fields"]["policy_sha256"]) is not None
+    )
+
+
+def _candidate_rows(
+    bundle: Any, rule: dict[str, Any], cutoff: datetime,
+) -> list[dict[str, Any]]:
+    if not isinstance(bundle, dict):
+        raise Refusal("malformed evidence")
+    source = bundle.get("source")
+    if source == "mock":
+        verify_derived(bundle)
+    allowed_source = "mock" if source == "mock" else "synthetic"
+    expected_bundle_keys = {
         "evidence_id",
         "source",
         "candidates",
         "exclusion_verification",
         "not_leveraged_verification",
         "freshness",
-    }:
+    }
+    if source == "mock":
+        expected_bundle_keys.add("binding")
+    if set(bundle) != expected_bundle_keys:
         raise Refusal("malformed evidence")
+    expected_policy_sha256 = (
+        bundle["binding"]["policy_sha256"] if allowed_source == "mock" else None
+    )
     if (
         bundle.get("evidence_id") != "ucpe.quant_ng.universe_evidence.v1"
-        or bundle.get("source") != "synthetic"
+        or source not in {"synthetic", "mock"}
     ):
-        raise Refusal("source must be synthetic")
+        if source not in {"synthetic", "mock"}:
+            raise Refusal("source must be synthetic")
+        raise Refusal("malformed evidence")
     if not all(
         isinstance(bundle.get(k), list)
         for k in ("candidates", "exclusion_verification", "not_leveraged_verification", "freshness")
@@ -244,11 +556,13 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
         bundle["exclusion_verification"],
         cutoff,
         {"base", "class", "valid_from_utc", "valid_to_utc", "provenance"},
+        allowed_source=allowed_source, expected_policy_sha256=expected_policy_sha256,
     )
     not_lev = _prov_entries(
         bundle["not_leveraged_verification"],
         cutoff,
         {"base", "valid_from_utc", "valid_to_utc", "provenance"},
+        allowed_source=allowed_source, expected_policy_sha256=expected_policy_sha256,
     )
     for item, _ in exclusions:
         if (
@@ -298,15 +612,29 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
             or set(volume) != {"bars", "provenance"}
         ):
             raise Refusal("malformed listing or volume")
-        first = instant(listing["first_daily_bar_open_utc"])
-        if first.hour or first.minute or first.second or first.microsecond:
+        listing_provenance = listing["provenance"]
+        volume_provenance = volume["provenance"]
+        listing_unknown = (
+            source == "mock"
+            and listing["first_daily_bar_open_utc"] is None
+            and _unusable_series_provenance(listing_provenance)
+        )
+        volume_unknown = (
+            source == "mock"
+            and volume["bars"] is None
+            and _unusable_series_provenance(volume_provenance)
+        )
+        first = None if listing_unknown else instant(listing["first_daily_bar_open_utc"])
+        if first is not None and (first.hour or first.minute or first.second or first.microsecond):
             raise Refusal("listing date is not UTC midnight")
-        if first >= cutoff:
+        if first is not None and first >= cutoff:
             raise Refusal("evidence date at or after T")
-        lu, lp = _prov(listing["provenance"], cutoff)
-        vu, vp = _prov(volume["provenance"], cutoff)
+        lu, lp = _prov(listing["provenance"], cutoff, expected_policy_sha256, allowed_source)
+        vu, vp = _prov(volume["provenance"], cutoff, expected_policy_sha256, allowed_source)
         bars = volume["bars"]
-        if not isinstance(bars, list):
+        if bars is None and volume_unknown:
+            bars = []
+        elif not isinstance(bars, list):
             raise Refusal("malformed daily bars")
         parsed_bars = []
         for bar in bars:
@@ -333,14 +661,21 @@ def _candidate_rows(bundle: Any, rule: dict[str, Any], cutoff: datetime) -> list
             if not isinstance(cell, dict) or set(cell) != {"present_in_window", "provenance"}:
                 raise Refusal("malformed coverage")
             count = cell["present_in_window"]
-            if (
+            count_unknown = (
+                source == "mock"
+                and count is None
+                and _unusable_series_provenance(cell["provenance"])
+            )
+            if count_unknown:
+                count = 0
+            elif (
                 isinstance(count, bool)
                 or not isinstance(count, int)
                 or count < 0
                 or count > rule["history_window_bars"][tf]
             ):
                 raise Refusal("invalid coverage count")
-            usable, prov = _prov(cell["provenance"], cutoff)
+            usable, prov = _prov(cell["provenance"], cutoff, expected_policy_sha256, allowed_source)
             cov[tf] = {"count": count, "usable": usable, "input": prov}
         rows.append(
             {
@@ -395,6 +730,8 @@ def _freshness(
     operating: datetime | None,
     rule: dict[str, Any],
     cutoff: datetime,
+    allowed_source: str = "synthetic",
+    expected_policy_sha256: str | None = None,
 ) -> str:
     known = rule["freshness"]["known_not_fresh"]
     for entry in known:
@@ -415,7 +752,7 @@ def _freshness(
             "provenance",
         }:
             raise Refusal("malformed freshness entry")
-        usable, _ = _prov(item["provenance"], cutoff)
+        usable, _ = _prov(item["provenance"], cutoff, expected_policy_sha256, allowed_source)
         a, b = instant(item["span_start_utc"]), instant(item["span_end_utc"])
         if b <= a:
             raise Refusal("malformed freshness span")
@@ -455,10 +792,74 @@ def build(
     tool_sha: str,
 ) -> dict[str, Any]:
     cutoff = instant(plan["as_of_utc"])
+    verified = None
+    mock = isinstance(evidence, dict) and evidence.get("source") == "mock"
+    if mock:
+        verified = verify_derived(evidence)
+        binding = evidence["binding"]
+        policy = verified["policy"]
+        if plan["as_of_utc"] != binding["cutoff_utc"]:
+            raise Refusal("evidence cutoff not bound")
+        d7 = policy["parameters"]["D7_completeness"]["value"]
+        if d7["shape"] != "ONE":
+            raise Refusal("policy detail unruled: per-window completeness")
+        if Decimal(str(plan["completeness"]["threshold"])) != Decimal(str(d7["values"]["all"])):
+            raise Refusal("completeness threshold not bound")
+        policy_op = policy["parameters"]["operating_period_start"]
+        if (
+            plan["operating_period_start"]["utc"] != policy_op["utc"]["value"]
+            or plan["operating_period_start"]["provenance"]
+            != policy_op["provenance"]["value"]
+        ):
+            raise Refusal("operating period not bound")
+        proxy = policy["parameters"]["D6_proxy"]["value"]
+        if proxy == "PX-1":
+            raise Refusal("policy detail unruled: proxy names")
+    allowed_source = "mock" if mock else "synthetic"
+    expected_policy_sha256 = evidence["binding"]["policy_sha256"] if mock else None
     threshold = plan["completeness"]["threshold"]
     operating_raw = plan["operating_period_start"]["utc"]
     operating = None if operating_raw is None else instant(operating_raw)
     candidates = _candidate_rows(evidence, rule, cutoff)
+    if mock and proxy == "PX-2":
+        windows = verified["proxy_windows"]
+        by_base = {item["base"]: item for item in windows["bases"]}
+        timeframe_order = {"15m": 0, "1H": 1, "4H": 2, "1D": 3}
+        intervals = {"15m": 15 * 60, "1H": 60 * 60, "4H": 4 * 60 * 60}
+        daily_start = cutoff - timedelta(days=rule["ranking"]["window_days"])
+        for row in candidates:
+            window = by_base.get(row["base"])
+            if window is None:
+                continue
+            refused_from = instant(window["refused_from_utc"])
+            daily_refused = refused_from < cutoff or any(
+                timeframe_order[seam["timeframe"]] >= timeframe_order["1D"]
+                and instant(seam["from_utc"]) < cutoff
+                and instant(seam["to_utc"]) > daily_start
+                for seam in window["seams"]
+            )
+            if daily_refused:
+                row["listing_usable"] = False
+                row["volume_usable"] = False
+                row["listing_input"] = None
+                row["volume_input"] = None
+            for tf, cell in row["coverage"].items():
+                window_start = (
+                    daily_start
+                    if tf == "1D"
+                    else cutoff - timedelta(
+                        seconds=rule["history_window_bars"][tf] * intervals[tf]
+                    )
+                )
+                refused = refused_from < cutoff or any(
+                    timeframe_order[seam["timeframe"]] >= timeframe_order[tf]
+                    and instant(seam["from_utc"]) < cutoff
+                    and instant(seam["to_utc"]) > window_start
+                    for seam in window["seams"]
+                )
+                if refused:
+                    cell["usable"] = False
+                    cell["input"] = None
     for item in evidence["freshness"]:
         if not isinstance(item, dict) or set(item) != {
             "symbol",
@@ -471,7 +872,7 @@ def build(
             raise Refusal("malformed freshness entry")
         span_start = instant(item["span_start_utc"])
         span_end = instant(item["span_end_utc"])
-        _prov(item["provenance"], cutoff)
+        _prov(item["provenance"], cutoff, expected_policy_sha256, allowed_source)
         if (
             not _canonical_symbol(item["symbol"], rule["quote"])
             or item["timeframe"] not in rule["history_window_bars"]
@@ -492,15 +893,15 @@ def build(
     new_listings, excluded, not_admitted = [], [], []
     records = []
     for index, item in enumerate(evidence["exclusion_verification"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"exclusion:{index}"] = metadata
     for index, item in enumerate(evidence["not_leveraged_verification"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"not_leveraged:{index}"] = metadata
     for index, item in enumerate(evidence["freshness"]):
-        _, metadata = _prov(item.get("provenance"), cutoff)
+        _, metadata = _prov(item.get("provenance"), cutoff, expected_policy_sha256, allowed_source)
         if metadata:
             inputs[f"freshness:{index}"] = metadata
     for row in candidates:
@@ -539,7 +940,7 @@ def build(
             excluded_state = "exclusion_unverified"
         else:
             excluded_state = None
-        age_days = (cutoff - row["first"]).days
+        age_days = (cutoff - row["first"]).days if row["first"] is not None else None
         if (
             terminal_reason is None
             and row["listing_usable"]
@@ -589,7 +990,11 @@ def build(
             {
                 "symbol": symbol,
                 "listing": {
-                    "first_daily_bar_open_utc": row["first"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                    "first_daily_bar_open_utc": (
+                        row["first"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                        if row["first"] is not None
+                        else None
+                    )
                 },
                 "median_daily_quote_volume": _decimal_string(median),
                 "rank_15m": None,
@@ -670,6 +1075,8 @@ def build(
                 operating,
                 rule,
                 cutoff,
+                allowed_source,
+                expected_policy_sha256,
             )
     f3 = instant(rule["f3"]["calendar_start_utc"])
 
@@ -680,11 +1087,25 @@ def build(
             for row in candidates
             for dt, _ in row["bars"]
         )
-        or any(row["first"] >= f3 for row in candidates)
+        or any(row["first"] is not None and row["first"] >= f3 for row in candidates)
     )
+    methodology = {
+        "rule_sha256": UNIVERSE_RULE_V1_SHA256,
+        "tool_sha256": tool_sha,
+        "f3_clean": not mock,
+        "basis": (
+            "Source is MOCK evidence under a bound MOCK policy."
+            if mock
+            else "ruled 2026-10-25 by the owner from documents only; "
+                 "this tool reads synthetic evidence only"
+        ),
+    }
+    if mock:
+        methodology["f3_clean_basis"] = "MOCK"
+        methodology["policy_sha256"] = expected_policy_sha256
     return {
         "snapshot_id": "ucpe.universe.asof.v2",
-        "status": "SYNTHETIC",
+        "status": "MOCK" if mock else "SYNTHETIC",
         "as_of_utc": plan["as_of_utc"],
         "rule_sha256": UNIVERSE_RULE_V1_SHA256,
         "evidence_sha256": evidence_sha,
@@ -706,15 +1127,7 @@ def build(
         "operating_period_start": plan["operating_period_start"],
         "f3_firewall": rule["f3"]["firewall"],
         "f3_calendar_overlap": overlap,
-        "methodology": {
-            "rule_sha256": UNIVERSE_RULE_V1_SHA256,
-            "tool_sha256": tool_sha,
-            "f3_clean": True,
-            "basis": (
-                "ruled 2026-10-25 by the owner from documents only; "
-                "this tool reads synthetic evidence only"
-            ),
-        },
+        "methodology": methodology,
         "members": members,
         "symbols": records,
         "new_listings": new_listings,

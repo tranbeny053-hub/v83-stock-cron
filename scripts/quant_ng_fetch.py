@@ -6,7 +6,8 @@ no kline parsing, and no evidence construction. Every refusal is printed as JSON
 with exit 2 and leaves no output behind. Refusals include: malformed or duplicate
 plan keys, unsupported transport, invalid archive paths/symbols/intervals/periods,
 reserved BTCUSDT or ETHUSDT, refused bases, protected paths, request cap exceeded,
-archive path escapes the root, archive unreadable, unreadable plan, nonempty output,
+archive path escapes the root, archive unreadable, object is not a mock object,
+unreadable plan, nonempty output,
 and unverified share above the cap. Guard refusals include filesystem change outside
 the output folder: <event>. Path refusals include path must be absolute, symlink path,
 protected path, forbidden tree, and invalid path. Unexpected run errors are reported
@@ -67,6 +68,17 @@ LAYOUT = re.compile(
 )
 BASE = re.compile(r"^[A-Z0-9]+$")
 CHECKSUM = re.compile(rb"^([0-9a-f]{64})  ([^\r\n]+)(?:\n)?$")
+MOCK_MARKER = b"UCPE-MOCK-v1"
+
+
+def _has_mock_marker(blob: bytes) -> bool:
+    tail = blob[-34:]
+    return (
+        len(blob) >= 34
+        and tail[:4] == b"PK\x05\x06"
+        and tail[-14:-12] == b"\x0c\x00"
+        and tail[-12:] == MOCK_MARKER
+    )
 
 
 def _manifest_bytes(value: dict[str, Any]) -> bytes:
@@ -203,6 +215,8 @@ def run(plan_arg: str) -> dict[str, Any]:
                 except OSError:
                     raise Refusal("archive unreadable") from None
             zdata, cdata = payloads
+            if zdata is not None and not _has_mock_marker(zdata):
+                raise Refusal("object is not a mock object")
             for blob in payloads:
                 if blob is not None:
                     digest = hashlib.sha256(blob).hexdigest()

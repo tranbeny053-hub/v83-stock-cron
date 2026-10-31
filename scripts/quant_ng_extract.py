@@ -2,18 +2,22 @@
 """Parse verified local MOCK kline archive objects for OD-NG-5(b), step (b1).
 
 This offline tool reads only a fetch manifest and its verified zip objects. It
-produces parsed bars and window counts, not builder evidence, and writes no
-provenance record. Every refusal is printed as JSON with exit 2 and leaves no
-output behind. Refusals include: unreadable or invalid plan, cutoff not UTC
-midnight, invalid path, nonempty output, unreadable or invalid manifest, a
-non-MOCK manifest, reserved BTCUSDT or ETHUSDT, symlinks below the fetch output,
-object does not match the manifest, no files, file not verified, malformed
-archive file, malformed row, invalid timestamp, malformed volume, bar outside
-its file period, and duplicate bar. Guard refusals include filesystem change
-outside the output folder: <event>. Unexpected errors are reported as
-run failed: <Type>.
+produces parsed bars and window counts, not builder evidence, and writes
+per-file identities, not provenance records. Every refusal is printed as JSON
+with exit 2 and leaves no output behind. Refusals include: unreadable or
+invalid plan, cutoff not UTC midnight, invalid path, nonempty output,
+unreadable or invalid manifest, a non-MOCK manifest, reserved BTCUSDT or ETHUSDT,
+symlinks below the fetch output,
+object does not match the manifest, object is not a mock object, object changed
+after verification, no files, file not verified, malformed archive file,
+malformed row, invalid timestamp, malformed volume, bar outside its file period,
+and duplicate bar. Guard refusals include filesystem change outside the output
+folder: <event>. Unexpected errors are reported as run failed: <Type>.
 
 Usage: ``python -I -B scripts/quant_ng_extract.py <plan.json>``.
+
+``derive`` returns the exact PARSE.json bytes and writes nothing; ``run`` writes them.
+PARSE v4 is unpublished; ``daily.first_unflagged_open_utc`` is additive within v4.
 """
 
 from __future__ import annotations
@@ -45,6 +49,13 @@ finally:
     sys.dont_write_bytecode = _PREVIOUS_BYTECODE
 
 Refusal = _FIT.Refusal
+
+
+class NotMockObject(Refusal):
+    def __init__(self) -> None:
+        super().__init__("object is not a mock object")
+
+
 _path = _FIT._path
 _json_bytes = _FIT._json_bytes
 create_readonly = _FIT.create_readonly
@@ -70,7 +81,18 @@ OUTPUT_INTERVALS = {"15m": "15m", "1h": "1H", "4h": "4H", "1d": "1D"}
 HISTORY_BARS = {"15m": 678, "1H": 678, "4H": 174}
 DAILY_DAYS = 90
 MAX_MEMBER_SIZE = 64 * 1024 * 1024
+HASH_CHUNK_SIZE = 1024 * 1024
+MOCK_MARKER = b"UCPE-MOCK-v1"
 EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _has_mock_marker(tail: bytes) -> bool:
+    return (
+        len(tail) == 34
+        and tail[:4] == b"PK\x05\x06"
+        and tail[-14:-12] == b"\x0c\x00"
+        and tail[-12:] == MOCK_MARKER
+    )
 
 
 def _output_bytes(value: dict[str, Any]) -> bytes:
@@ -120,6 +142,23 @@ def _row_period_end(start: datetime, row: dict[str, Any]) -> datetime:
     return start + timedelta(days=1)
 
 
+def _object_identities(
+    rows: list[dict[str, Any]], last_bar_closes: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
+    fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
+    result = []
+    for row in sorted(rows, key=lambda item: item["path"]):
+        item = {field: row[field] for field in fields}
+        item["last_bar_close_utc"] = (last_bar_closes or {}).get(row["path"])
+        result.append(item)
+    return result
+
+
+def _verifiable(row: dict[str, Any], cutoff: datetime) -> bool:
+    # Both verification and parse selection must use the same filter.
+    return row["class"] == "ok" and _period_start(row) < cutoff
+
+
 def _micros(value: datetime) -> int:
     delta = value - EPOCH
     return (delta.days * 86400 + delta.seconds) * 1_000_000 + delta.microseconds
@@ -143,9 +182,11 @@ def _read_archive(
     interval_us: int,
     start: datetime,
     end: datetime,
-) -> tuple[list[tuple[int, str]], int, int, int]:
+) -> tuple[list[tuple[int, str, bool]], int, int, int, int]:
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            if archive.comment != MOCK_MARKER:
+                raise NotMockObject()
             members = archive.infolist()
             expected = Path(row["path"]).name[:-4] + ".csv"
             if (
@@ -163,9 +204,9 @@ def _read_archive(
     lines = content.split(b"\n")
     if content.endswith(b"\n"):
         lines.pop()
-    bars: list[tuple[int, str]] = []
+    bars: list[tuple[int, str, bool]] = []
     widths: set[int] = set()
-    off_grid = zero_volume = close_anomalies = 0
+    off_grid = zero_volume = close_anomalies = close_anomalies_all = 0
     history = HISTORY_BARS.get(OUTPUT_INTERVALS.get(row["interval"], ""))
     window_start = cutoff_us - (
         DAILY_DAYS * 86400_000_000 if row["interval"] == "1d" else (history or 0) * interval_us
@@ -214,44 +255,20 @@ def _read_archive(
             if open_us >= window_start:
                 off_grid += 1
             continue
-        if open_us >= window_start and close_us != open_us + interval_us - (
+        close_time_anomaly = close_us != open_us + interval_us - (
             1000 if open_width == 13 else 1
-        ):
-            close_anomalies += 1
+        )
+        if close_time_anomaly:
+            close_anomalies_all += 1
+            if open_us >= window_start:
+                close_anomalies += 1
         if open_us >= window_start and not fields[7].replace(".", "").strip("0"):
             zero_volume += 1
-        bars.append((open_us, fields[7]))
-    return bars, off_grid, zero_volume, close_anomalies
+        bars.append((open_us, fields[7], close_time_anomaly))
+    return bars, off_grid, zero_volume, close_anomalies, close_anomalies_all
 
 
-def run(plan_arg: str) -> dict[str, Any]:
-    plan_path = _path(plan_arg)
-    try:
-        _, plan = _json_bytes(plan_path, "plan unreadable")
-    except Refusal as exc:
-        if str(exc) == "plan unreadable":
-            try:
-                json.loads(plan_path.read_bytes(), object_pairs_hook=_FIT._no_duplicate_keys)
-            except ValueError as parse_exc:
-                if "duplicate key" in str(parse_exc):
-                    raise Refusal("invalid plan") from parse_exc
-            except OSError:
-                pass
-        raise
-    if (
-        not isinstance(plan, dict)
-        or set(plan) != PLAN_KEYS
-        or plan.get("plan_id") != "ucpe.quant_ng.extract.v1"
-        or not all(isinstance(plan.get(key), str) for key in PLAN_KEYS - {"plan_id"})
-    ):
-        raise Refusal("invalid plan")
-    cutoff = _instant(plan["cutoff_utc"])
-    if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
-        raise Refusal("cutoff is not UTC midnight")
-    fetch_dir = _path(plan["fetch_output_dir"])
-    output = _path(plan["output_dir"])
-    if output.exists() and (not output.is_dir() or any(output.iterdir())):
-        raise Refusal("output folder is not empty")
+def derive(fetch_dir: Path, cutoff: datetime) -> bytes:
     manifest_file = fetch_dir / "MANIFEST.json"
     manifest_bytes, manifest = _json_bytes(manifest_file, "manifest unreadable")
     if (
@@ -320,9 +337,8 @@ def run(plan_arg: str) -> dict[str, Any]:
     _check_symlinks(fetch_dir)
     cutoff_us = _micros(cutoff)
     # Verify every pre-cutoff object before parsing any series.
-    verified_blobs: dict[str, bytes] = {}
     for row in rows:
-        if row["class"] == "ok" and _period_start(row) < cutoff:
+        if _verifiable(row, cutoff):
             digest, official = row["sha256"], row["official_checksum"]
             if (
                 not isinstance(digest, str)
@@ -331,142 +347,236 @@ def run(plan_arg: str) -> dict[str, Any]:
                 or not HEX_RE.fullmatch(official)
             ):
                 raise Refusal("object does not match the manifest")
-            if digest not in verified_blobs:
-                try:
-                    blob = (fetch_dir / "objects" / digest).read_bytes()
-                except OSError as exc:
-                    raise Refusal("object does not match the manifest") from exc
-                verified_blobs[digest] = blob
-            blob = verified_blobs[digest]
-            actual = hashlib.sha256(blob).hexdigest()
+            try:
+                hasher = hashlib.sha256()
+                tail = b""
+                with (fetch_dir / "objects" / digest).open("rb") as stream:
+                    while chunk := stream.read(HASH_CHUNK_SIZE):
+                        hasher.update(chunk)
+                        tail = (tail + chunk)[-34:]
+                actual = hasher.hexdigest()
+            except OSError as exc:
+                raise Refusal("object does not match the manifest") from exc
             if actual != digest or actual != official:
                 raise Refusal("object does not match the manifest")
-    _OUTPUT_HOLDER[0] = output
-    created = _make_output(output)
-    try:
-        groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        symbols: set[str] = set()
-        after = 0
-        for row in rows:
-            symbol, interval = row["symbol"], row["interval"]
-            if (
-                not isinstance(symbol, str)
-                or not isinstance(interval, str)
-                or interval not in INTERVALS
-            ):
-                raise Refusal("invalid manifest")
-            if symbol in {"BTCUSDT", "ETHUSDT"}:
-                raise Refusal("BTCUSDT and ETHUSDT are never parsed")
+            if not _has_mock_marker(tail):
+                raise NotMockObject()
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    symbols: set[str] = set()
+    after = 0
+    for row in rows:
+        symbol, interval = row["symbol"], row["interval"]
+        if (
+            not isinstance(symbol, str)
+            or not isinstance(interval, str)
+            or interval not in INTERVALS
+        ):
+            raise Refusal("invalid manifest")
+        if symbol in {"BTCUSDT", "ETHUSDT"}:
+            raise Refusal("BTCUSDT and ETHUSDT are never parsed")
+        start = _period_start(row)
+        if start >= cutoff:
+            after += 1
+            continue
+        symbols.add(symbol)
+        groups.setdefault((symbol, interval), []).append(row)
+    parsed: dict[tuple[str, str], dict[str, Any]] = {}
+    for key in sorted(set((symbol, interval) for symbol in symbols for interval in INTERVALS)):
+        series_rows = groups.get(key, [])
+        if not series_rows:
+            parsed[key] = {"usable": False, "reason": "no files"}
+            continue
+        if any(not _verifiable(row, cutoff) for row in series_rows):
+            parsed[key] = {"usable": False, "reason": "file not verified"}
+            continue
+        all_bars: list[tuple[int, str, bool]] = []
+        object_last_opens: dict[str, int] = {}
+        counters = [0, 0, 0, 0]
+        reason = None
+        for row in series_rows:
+            digest = row["sha256"]
+            try:
+                blob = (fetch_dir / "objects" / digest).read_bytes()
+            except OSError as exc:
+                raise Refusal("object changed after verification") from exc
+            if hashlib.sha256(blob).hexdigest() != digest:
+                raise Refusal("object changed after verification")
             start = _period_start(row)
-            if start >= cutoff:
-                after += 1
-                continue
-            symbols.add(symbol)
-            groups.setdefault((symbol, interval), []).append(row)
-        parsed: dict[tuple[str, str], dict[str, Any]] = {}
-        for key in sorted(set((symbol, interval) for symbol in symbols for interval in INTERVALS)):
-            series_rows = groups.get(key, [])
-            if not series_rows:
-                parsed[key] = {"usable": False, "reason": "no files"}
-                continue
-            if any(row["class"] != "ok" for row in series_rows):
-                parsed[key] = {"usable": False, "reason": "file not verified"}
-                continue
-            all_bars: list[tuple[int, str]] = []
-            counters = [0, 0, 0]
-            reason = None
-            for row in series_rows:
-                digest = row["sha256"]
-                blob = verified_blobs[digest]
-                start = _period_start(row)
-                end = _row_period_end(start, row)
-                try:
-                    bars, *counts = _read_archive(
-                        blob, row, cutoff_us, INTERVALS[key[1]], start, end
-                    )
-                    all_bars.extend(bars)
-                    counters = [a + b for a, b in zip(counters, counts, strict=True)]
-                except Refusal as exc:
-                    reason = str(exc)
-                    break
-            if reason:
-                parsed[key] = {"usable": False, "reason": reason}
-                continue
-            opens = [bar[0] for bar in all_bars]
-            if len(opens) != len(set(opens)):
-                parsed[key] = {"usable": False, "reason": "duplicate bar"}
-                continue
-            parsed[key] = {"usable": True, "reason": None, "bars": all_bars, "counts": counters}
-        daily_start_us = cutoff_us - DAILY_DAYS * 24 * 60 * 60 * 1_000_000
-        output_symbols = []
-        for symbol in sorted(symbols):
-            daily = parsed[(symbol, "1d")]
-            if daily["usable"]:
-                bars = daily["bars"]
-                window = [(t, v) for t, v in bars if daily_start_us <= t < cutoff_us]
-                first = min((t for t, _ in bars), default=None)
-                daily_out = {
+            end = _row_period_end(start, row)
+            try:
+                bars, *counts = _read_archive(
+                    blob, row, cutoff_us, INTERVALS[key[1]], start, end
+                )
+            except NotMockObject:
+                raise
+            except Refusal as exc:
+                reason = str(exc)
+                break
+            finally:
+                del blob
+            all_bars.extend(bars)
+            if bars:
+                object_last_opens[row["path"]] = max(open_us for open_us, _, _ in bars)
+            counters = [a + b for a, b in zip(counters, counts, strict=True)]
+        if reason:
+            parsed[key] = {"usable": False, "reason": reason}
+            continue
+        opens = [bar[0] for bar in all_bars]
+        if len(opens) != len(set(opens)):
+            parsed[key] = {"usable": False, "reason": "duplicate bar"}
+            continue
+        if key[1] == "1d":
+            parsed[key] = {
+                "usable": True,
+                "reason": None,
+                "bars": all_bars,
+                "counts": counters,
+                "last_bar_closes": {
+                    path: _utc_text(_dt(open_us + INTERVALS[key[1]]))
+                    for path, open_us in object_last_opens.items()
+                },
+            }
+        else:
+            window_start = cutoff_us - (
+                HISTORY_BARS[OUTPUT_INTERVALS[key[1]]] * INTERVALS[key[1]]
+            )
+            parsed[key] = {
+                "usable": True,
+                "reason": None,
+                "present": sum(window_start <= t < cutoff_us for t, _, _ in all_bars),
+                "counts": counters,
+                "last_bar_closes": {
+                    path: _utc_text(_dt(open_us + INTERVALS[key[1]]))
+                    for path, open_us in object_last_opens.items()
+                },
+            }
+            del all_bars, opens
+    daily_start_us = cutoff_us - DAILY_DAYS * 24 * 60 * 60 * 1_000_000
+    output_symbols = []
+    for symbol in sorted(symbols):
+        daily = parsed[(symbol, "1d")]
+        if daily["usable"]:
+            bars = daily["bars"]
+            window = [(t, v, anomaly) for t, v, anomaly in bars if daily_start_us <= t < cutoff_us]
+            first = min((t for t, _, _ in bars), default=None)
+            first_unflagged = min(
+                (t for t, _, anomaly in bars if not anomaly), default=None
+            )
+            daily_out = {
+                "usable": True,
+                "reason": None,
+                "objects": _object_identities(
+                    groups.get((symbol, "1d"), []), daily["last_bar_closes"]
+                ),
+                "bars": [
+                    {
+                        "open_utc": _utc_text(_dt(t)),
+                        "quote_volume": v,
+                        "close_time_anomaly": anomaly,
+                    }
+                    for t, v, anomaly in sorted(window)
+                ],
+                "first_open_utc": _utc_text(_dt(first)) if first is not None else None,
+                "first_unflagged_open_utc": (
+                    _utc_text(_dt(first_unflagged)) if first_unflagged is not None else None
+                ),
+                "off_grid": daily["counts"][0],
+                "zero_volume": daily["counts"][1],
+                "close_time_anomalies": daily["counts"][2],
+                "close_time_anomalies_all": daily["counts"][3],
+            }
+        else:
+            daily_out = {
+                "usable": False,
+                "reason": daily["reason"],
+                "objects": _object_identities(groups.get((symbol, "1d"), [])),
+                "bars": None,
+                "first_open_utc": None,
+                "first_unflagged_open_utc": None,
+                "off_grid": None,
+                "zero_volume": None,
+                "close_time_anomalies": None,
+                "close_time_anomalies_all": None,
+            }
+        coverage = {}
+        for interval in ("15m", "1h", "4h"):
+            series = parsed[(symbol, interval)]
+            out_name = OUTPUT_INTERVALS[interval]
+            if series["usable"]:
+                counts = series["counts"]
+                coverage[out_name] = {
                     "usable": True,
                     "reason": None,
-                    "bars": [
-                        {"open_utc": _utc_text(_dt(t)), "quote_volume": v}
-                        for t, v in sorted(window)
-                    ],
-                    "first_open_utc": _utc_text(_dt(first)) if first is not None else None,
-                    "off_grid": daily["counts"][0],
-                    "zero_volume": daily["counts"][1],
-                    "close_time_anomalies": daily["counts"][2],
+                    "present_in_window": series["present"],
+                    "objects": _object_identities(
+                        groups.get((symbol, interval), []), series["last_bar_closes"]
+                    ),
+                    "off_grid": counts[0],
+                    "zero_volume": counts[1],
+                    "close_time_anomalies": counts[2],
+                    "close_time_anomalies_all": counts[3],
                 }
             else:
-                daily_out = {
+                coverage[out_name] = {
                     "usable": False,
-                    "reason": daily["reason"],
-                    "bars": None,
-                    "first_open_utc": None,
+                    "reason": series["reason"],
+                    "present_in_window": None,
+                    "objects": _object_identities(groups.get((symbol, interval), [])),
                     "off_grid": None,
                     "zero_volume": None,
                     "close_time_anomalies": None,
+                    "close_time_anomalies_all": None,
                 }
-            coverage = {}
-            for interval in ("15m", "1h", "4h"):
-                series = parsed[(symbol, interval)]
-                out_name = OUTPUT_INTERVALS[interval]
-                if series["usable"]:
-                    start_us = cutoff_us - HISTORY_BARS[out_name] * INTERVALS[interval]
-                    present = sum(start_us <= t < cutoff_us for t, _ in series["bars"])
-                    counts = series["counts"]
-                    coverage[out_name] = {
-                        "usable": True,
-                        "reason": None,
-                        "present_in_window": present,
-                        "off_grid": counts[0],
-                        "zero_volume": counts[1],
-                        "close_time_anomalies": counts[2],
-                    }
-                else:
-                    coverage[out_name] = {
-                        "usable": False,
-                        "reason": series["reason"],
-                        "present_in_window": None,
-                        "off_grid": None,
-                        "zero_volume": None,
-                        "close_time_anomalies": None,
-                    }
-            output_symbols.append({"symbol": symbol, "daily": daily_out, "coverage": coverage})
-        result = {
-            "parse_id": "ucpe.quant_ng.extract_parse.v1",
-            "status": "MOCK",
-            "note": (
-                "parsed bars only, not builder evidence: no provenance records (F-PROV is unruled)"
-            ),
-            "cutoff_utc": _utc_text(cutoff),
-            "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-            "tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "windows": {"daily_days": DAILY_DAYS, "history_bars": HISTORY_BARS},
-            "files_after_cutoff": after,
-            "symbols": output_symbols,
-        }
-        payload = _output_bytes(result)
+        output_symbols.append({"symbol": symbol, "daily": daily_out, "coverage": coverage})
+    result = {
+        "parse_id": "ucpe.quant_ng.extract_parse.v4",
+        "status": "MOCK",
+        "note": (
+            "parsed bars with per-file identities, not builder evidence: "
+            "availability, revision and provenance policy are unruled"
+        ),
+        "cutoff_utc": _utc_text(cutoff),
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "tool_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "windows": {"daily_days": DAILY_DAYS, "history_bars": HISTORY_BARS},
+        "files_after_cutoff": after,
+        "symbols": output_symbols,
+    }
+    return _output_bytes(result)
+
+
+def run(plan_arg: str) -> dict[str, Any]:
+    plan_path = _path(plan_arg)
+    try:
+        _, plan = _json_bytes(plan_path, "plan unreadable")
+    except Refusal as exc:
+        if str(exc) == "plan unreadable":
+            try:
+                json.loads(plan_path.read_bytes(), object_pairs_hook=_FIT._no_duplicate_keys)
+            except ValueError as parse_exc:
+                if "duplicate key" in str(parse_exc):
+                    raise Refusal("invalid plan") from parse_exc
+            except OSError:
+                pass
+        raise
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != PLAN_KEYS
+        or plan.get("plan_id") != "ucpe.quant_ng.extract.v1"
+        or not all(isinstance(plan.get(key), str) for key in PLAN_KEYS - {"plan_id"})
+    ):
+        raise Refusal("invalid plan")
+    cutoff = _instant(plan["cutoff_utc"])
+    if cutoff.hour or cutoff.minute or cutoff.second or cutoff.microsecond:
+        raise Refusal("cutoff is not UTC midnight")
+    fetch_dir = _path(plan["fetch_output_dir"])
+    output = _path(plan["output_dir"])
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        raise Refusal("output folder is not empty")
+    payload = derive(fetch_dir, cutoff)
+    _OUTPUT_HOLDER[0] = output
+    created = _make_output(output)
+    try:
         create_readonly(output / "PARSE.json", payload)
         return {"status": "PASS", "parse_sha256": hashlib.sha256(payload).hexdigest()}
     except BaseException:

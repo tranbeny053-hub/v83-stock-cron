@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -31,9 +32,15 @@ T = "2025-04-01T00:00:00Z"
 TMS = 1743465600000
 
 
-def zip_blob(name: str, rows: list[str], extra: list[tuple[str, bytes]] | None = None) -> bytes:
+def zip_blob(
+    name: str,
+    rows: list[str],
+    extra: list[tuple[str, bytes]] | None = None,
+    comment: bytes = b"UCPE-MOCK-v1",
+) -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.comment = comment
         archive.writestr(name[:-4] + ".csv", "\n".join(rows) + "\n")
         for member, data in extra or []:
             archive.writestr(member, data)
@@ -124,6 +131,55 @@ def symbols_bytes(path: Path) -> bytes:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()[:end]
 
 
+def _identity_rows(fetched: Path, symbol: str, interval: str) -> list[dict]:
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    fields = ("path", "granularity", "period", "sha256", "official_checksum", "class")
+    interval_us = {
+        "15m": 900_000_000,
+        "1h": 3_600_000_000,
+        "4h": 14_400_000_000,
+        "1d": 86_400_000_000,
+    }
+    rows = [
+        row
+        for row in manifest["files"]
+        if row["symbol"] == symbol and row["interval"] == interval
+        and row["period"] < "2025-04"
+    ]
+    ordered = sorted(rows, key=lambda row: row["path"])
+    identities = []
+    for row in ordered:
+        item = {field: row[field] for field in fields}
+        opens = []
+        if row["class"] == "ok":
+            with zipfile.ZipFile(fetched / "objects" / row["sha256"]) as archive:
+                content = archive.read(archive.infolist()[0]).decode()
+            for line in content.splitlines():
+                try:
+                    open_us = int(line.split(",", 1)[0]) * 1000
+                except ValueError:
+                    continue
+                if open_us < TMS * 1000 and open_us % interval_us[interval] == 0:
+                    opens.append(open_us)
+        close_us = max(opens) + interval_us[interval] if opens else None
+        item["last_bar_close_utc"] = (
+            datetime.fromtimestamp(close_us / 1_000_000, UTC)
+            .isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+            if close_us is not None
+            else None
+        )
+        identities.append(item)
+    return identities
+
+
+def _write_manifest(fetched: Path, manifest: dict) -> None:
+    path = fetched / "MANIFEST.json"
+    path.chmod(0o600)
+    path.write_text(json.dumps(manifest))
+    path.chmod(0o444)
+
+
 def make_series(
     tmp_path: Path,
     interval: str = "15m",
@@ -179,7 +235,11 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
         {"status": "PASS", "parse_sha256": hashlib.sha256(raw).hexdigest()}, separators=(",", ":")
     )
     assert (output / "PARSE.json").stat().st_mode & 0o777 == 0o444
-    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v1" and body["status"] == "MOCK"
+    assert body["parse_id"] == "ucpe.quant_ng.extract_parse.v4" and body["status"] == "MOCK"
+    assert body["note"] == (
+        "parsed bars with per-file identities, not builder evidence: availability, revision "
+        "and provenance policy are unruled"
+    )
     assert body["cutoff_utc"] == T and body["files_after_cutoff"] == 0
     assert body["windows"] == {"daily_days": 90, "history_bars": {"15m": 678, "1H": 678, "4H": 174}}
     assert (
@@ -194,8 +254,15 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert [entry["symbol"] for entry in body["symbols"]] == ["AAAUSDT", "BBBUSDT"]
     symbol = body["symbols"][0]
     assert symbol["symbol"] == "AAAUSDT"
-    assert symbol["daily"]["bars"] == [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}]
+    assert symbol["daily"]["bars"] == [
+        {
+            "open_utc": "2025-03-31T00:00:00Z",
+            "quote_volume": "2.50",
+            "close_time_anomaly": True,
+        }
+    ]
     assert symbol["daily"]["first_open_utc"] == "2025-03-31T00:00:00Z"
+    assert symbol["daily"]["objects"][0]["last_bar_close_utc"] == T
     assert symbol["coverage"]["15m"]["present_in_window"] == 1
     assert symbol["coverage"]["1H"]["present_in_window"] == 1
     assert symbol["coverage"]["4H"]["present_in_window"] == 1
@@ -203,42 +270,183 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert symbol["daily"] == {
         "usable": True,
         "reason": None,
-        "bars": [{"open_utc": "2025-03-31T00:00:00Z", "quote_volume": "2.50"}],
+        "objects": _identity_rows(fetched, "AAAUSDT", "1d"),
+        "bars": [
+            {
+                "open_utc": "2025-03-31T00:00:00Z",
+                "quote_volume": "2.50",
+                "close_time_anomaly": True,
+            }
+        ],
         "first_open_utc": "2025-03-31T00:00:00Z",
+        "first_unflagged_open_utc": None,
         "off_grid": 0,
         "zero_volume": 0,
         "close_time_anomalies": 1,
+        "close_time_anomalies_all": 1,
     }
     assert symbol["coverage"] == {
         "15m": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "15m"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 0,
+            "close_time_anomalies_all": 0,
         },
         "1H": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "1h"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 1,
+            "close_time_anomalies_all": 1,
         },
         "4H": {
             "usable": True,
             "reason": None,
+            "objects": _identity_rows(fetched, "AAAUSDT", "4h"),
             "present_in_window": 1,
             "off_grid": 0,
             "zero_volume": 0,
             "close_time_anomalies": 1,
+            "close_time_anomalies_all": 1,
         },
     }
     assert body["symbols"][1]["symbol"] == "BBBUSDT"
     assert body["symbols"][1]["daily"]["zero_volume"] == 1
     _, output2 = invoke(tmp_path, fetched, "parsedagain")
     assert (output2 / "PARSE.json").read_bytes() == raw
+
+
+@pytest.mark.parametrize("case", ["same inputs"], ids=["matching"])
+def test_derive_returns_run_bytes(tmp_path: Path, case: str) -> None:
+    fetched = make_series(tmp_path)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    spec = importlib.util.spec_from_file_location("extract_derive_bytes", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    derived = module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC))
+    assert derived == (output / "PARSE.json").read_bytes()
+
+
+@pytest.mark.parametrize("case", ["read only"], ids=["no writes"])
+def test_derive_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_derive_read_only", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("derive attempted a write")
+
+    original_open = os.open
+    write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+
+    def guarded_open(path, flags, *args, **kwargs):
+        if flags & write_flags:
+            fail()
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module, "create_readonly", fail)
+    monkeypatch.setattr(Path, "mkdir", fail)
+    monkeypatch.setattr(Path, "write_bytes", fail)
+    monkeypatch.setattr(os, "open", guarded_open)
+    assert isinstance(module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC)), bytes)
+
+
+def test_parse_reads_only_objects_hashed_upfront(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_shared_filter", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    object_dir = fetched / "objects"
+    hashed: set[Path] = set()
+    parsed: set[Path] = set()
+    original_open = Path.open
+    original_read_bytes = Path.read_bytes
+
+    def recording_open(path: Path, *args, **kwargs):
+        if path.parent == object_dir and args and args[0] == "rb":
+            hashed.add(path)
+        return original_open(path, *args, **kwargs)
+
+    def recording_read_bytes(path: Path) -> bytes:
+        if path.parent == object_dir:
+            parsed.add(path)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "open", recording_open)
+    monkeypatch.setattr(Path, "read_bytes", recording_read_bytes)
+
+    module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC))
+
+    assert parsed
+    assert parsed <= hashed
+
+
+@pytest.mark.parametrize("case", ["object swap"], ids=["changed bytes"])
+def test_derive_refusal_leaves_output_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    fetched = make_series(
+        tmp_path,
+        "1d",
+        "2025-03",
+        [row(TMS - 86400000, TMS - 1, volume="2.50")],
+        granularity="monthly",
+    )
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    original_read = Path.read_bytes
+    changed = False
+
+    def read_and_replace(path: Path) -> bytes:
+        nonlocal changed
+        if path == object_path:
+            changed = True
+            object_path.chmod(0o600)
+            object_path.write_bytes(
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(TMS - 86400000, TMS - 1, volume="9.00")],
+                )
+            )
+            object_path.chmod(0o444)
+        return original_read(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_and_replace)
+    spec = importlib.util.spec_from_file_location("extract_derive_refusal", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    output = tmp_path / "parsed"
+    plan_path = tmp_path / "localplan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(output),
+            }
+        )
+    )
+
+    with pytest.raises(module.Refusal, match="object changed after verification"):
+        module.run(str(plan_path))
+    assert changed
+    assert not output.exists()
 
 
 def test_allowlist_and_after_cutoff_rows(tmp_path: Path) -> None:
@@ -267,8 +475,15 @@ def test_allowlist_and_after_cutoff_rows(tmp_path: Path) -> None:
     fetched2 = fetch(tmp_path / "other", [path])
     result2, out2 = invoke(tmp_path / "other", fetched2)
     assert result2.returncode == 0
-    # Compare only the symbols block; manifest and tool digests necessarily differ by input.
-    assert symbols_bytes(out / "PARSE.json") == symbols_bytes(out2 / "PARSE.json")
+    # The parsed values match; per-file identities reflect each distinct manifest.
+    symbols_one = json.loads(symbols_bytes(out / "PARSE.json"))
+    symbols_two = json.loads(symbols_bytes(out2 / "PARSE.json"))
+    for symbols in (symbols_one, symbols_two):
+        for item in symbols:
+            item["daily"].pop("objects")
+            for series in item["coverage"].values():
+                series.pop("objects")
+    assert symbols_one == symbols_two
 
 
 def test_a_short_row_dated_after_cutoff_is_discarded(tmp_path: Path) -> None:
@@ -307,7 +522,63 @@ def test_first_open_reaches_before_the_daily_window(tmp_path: Path) -> None:
     assert result.returncode == 0
     daily = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["daily"]
     assert daily["first_open_utc"] == "2024-12-22T00:00:00Z"
+    assert daily["first_unflagged_open_utc"] == "2024-12-22T00:00:00Z"
     assert [bar["open_utc"] for bar in daily["bars"]] == ["2025-03-31T00:00:00Z"]
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["before-window", "all-anomalous", "unusable"],
+    ids=["before-window", "all-anomalous", "unusable"],
+)
+def test_first_unflagged_daily_open(case: str, tmp_path: Path) -> None:
+    day = 86_400_000
+    root = tmp_path / "archive"
+    if case == "before-window":
+        early = TMS - 100 * day
+        next_day = early + day
+        paths = [
+            archive(
+                root,
+                "1d",
+                "2024-12",
+                zip_blob(
+                    "AAAUSDT-1d-2024-12.zip",
+                    [row(early, early + day - 2), row(next_day, next_day + day - 1)],
+                ),
+                granularity="monthly",
+            )
+        ]
+        fetched = fetch(tmp_path, paths)
+        expected_first = "2024-12-22T00:00:00Z"
+        expected_unflagged = "2024-12-23T00:00:00Z"
+    elif case == "all-anomalous":
+        early = TMS - 2 * day
+        paths = [
+            archive(
+                root,
+                "1d",
+                "2025-03",
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(early, early + day - 2), row(TMS - day, TMS - 2)],
+                ),
+                granularity="monthly",
+            )
+        ]
+        fetched = fetch(tmp_path, paths)
+        expected_first = "2025-03-30T00:00:00Z"
+        expected_unflagged = None
+    else:
+        fetched = make_series(tmp_path, interval="1h", rows=[row(TMS - 3_600_000)])
+        expected_first = None
+        expected_unflagged = None
+
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0, result.stdout + result.stderr
+    daily = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["daily"]
+    assert daily["first_open_utc"] == expected_first
+    assert daily["first_unflagged_open_utc"] == expected_unflagged
 
 
 def test_a_cutoff_off_midnight_by_an_hour_is_refused(tmp_path: Path) -> None:
@@ -434,6 +705,64 @@ def test_off_grid_zero_and_close_anomaly(tmp_path: Path) -> None:
     ) == (2, 1, 1, 1)
 
 
+@pytest.mark.parametrize("case", ["anomalies"], ids=["daily"])
+def test_daily_close_time_anomaly_flags_and_all_count(tmp_path: Path, case: str) -> None:
+    root = tmp_path / "archive"
+    day = 86_400_000
+    paths = [
+        archive(
+            root,
+            "1d",
+            "2024-12",
+            zip_blob(
+                "AAAUSDT-1d-2024-12.zip",
+                [row(TMS - 91 * day, TMS - 91 * day + day - 2)],
+            ),
+            granularity="monthly",
+        ),
+        archive(
+            root,
+            "1d",
+            "2025-03",
+            zip_blob(
+                "AAAUSDT-1d-2025-03.zip",
+                [row(TMS - day, TMS - 2)],
+            ),
+            granularity="monthly",
+        ),
+    ]
+    fetched = fetch(tmp_path, paths)
+    result, out = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    daily = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["daily"]
+    assert daily["bars"] == [
+        {
+            "open_utc": "2025-03-31T00:00:00Z",
+            "quote_volume": "2.50",
+            "close_time_anomaly": True,
+        }
+    ]
+    assert daily["close_time_anomalies"] == 1
+    assert daily["close_time_anomalies_all"] == 2
+
+
+@pytest.mark.parametrize("case", ["history"], ids=["fifteen-minute"])
+def test_coverage_close_time_all_count_includes_before_window(
+    tmp_path: Path, case: str
+) -> None:
+    open_ms = TMS - 679 * 900_000
+    fetched = make_series(
+        tmp_path,
+        period="2025-03-24",
+        rows=[row(open_ms, open_ms + 899_998)],
+    )
+    result, out = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    series = json.loads((out / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
+    assert series["close_time_anomalies"] == 0
+    assert series["close_time_anomalies_all"] == 1
+
+
 @pytest.mark.parametrize(
     "case,reason",
     [
@@ -451,6 +780,7 @@ def test_archive_and_row_failures(tmp_path: Path, case: str, reason: str) -> Non
     elif case == "wrong-member":
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as zf:
+            zf.comment = b"UCPE-MOCK-v1"
             zf.writestr("wrong.csv", row(TMS - 900000))
         blob = stream.getvalue()
     elif case == "inner-empty":
@@ -539,7 +869,13 @@ def test_period_after_cutoff_skips_unverified_file(
 
 
 def test_series_unverified_and_missing_files(tmp_path: Path) -> None:
-    path = archive(tmp_path / "archive", "15m", "2025-03-31", b"not a zip", check="0" * 64)
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+        check="0" * 64,
+    )
     fetched = fetch(tmp_path, [path])
     result, out = invoke(tmp_path, fetched)
     assert result.returncode == 0
@@ -707,6 +1043,7 @@ def test_midmonth_discards_undecodable_rows_and_allows_no_final_newline(tmp_path
     filename = "AAAUSDT-15m-2025-04.zip"
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.comment = b"UCPE-MOCK-v1"
         zf.writestr(filename[:-4] + ".csv", payload)
     path = archive(tmp_path / "archive", "15m", "2025-04", stream.getvalue(), granularity="monthly")
     result, output = invoke(tmp_path, fetch(tmp_path, [path]), cutoff="2025-04-15T00:00:00Z")
@@ -805,6 +1142,132 @@ def test_symbol_with_only_after_cutoff_rows_is_omitted(tmp_path: Path) -> None:
     assert body["files_after_cutoff"] == 1 and body["symbols"] == []
 
 
+def test_objects_list_pre_cutoff_rows_in_path_order(tmp_path: Path) -> None:
+    root = tmp_path / "archive"
+    paths = [
+        archive(
+            root,
+            "15m",
+            "2025-03",
+            zip_blob("AAAUSDT-15m-2025-03.zip", [row(TMS - 900000)]),
+            granularity="monthly",
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-03-30",
+            zip_blob("AAAUSDT-15m-2025-03-30.zip", [row(TMS - 2 * 86400000)]),
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-03-31",
+            zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 1800000)]),
+        ),
+        archive(
+            root,
+            "15m",
+            "2025-04-01",
+            zip_blob("AAAUSDT-15m-2025-04-01.zip", [row(TMS)]),
+        ),
+    ]
+    fetched = fetch(tmp_path, paths)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    body = json.loads((output / "PARSE.json").read_bytes())
+    coverage = body["symbols"][0]["coverage"]["15m"]
+    assert coverage["objects"] == _identity_rows(fetched, "AAAUSDT", "15m")
+    assert len(coverage["objects"]) == 3
+    assert body["files_after_cutoff"] == 1
+    assert all(entry["period"] != "2025-04-01" for entry in coverage["objects"])
+    monthly = next(entry for entry in coverage["objects"] if entry["period"] == "2025-03")
+    assert monthly["last_bar_close_utc"] == T
+
+
+@pytest.mark.parametrize("case", ["off-grid"], ids=["off-grid"])
+def test_off_grid_only_object_has_no_last_bar_close(tmp_path: Path, case: str) -> None:
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000 + 1)]),
+    )
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    body = json.loads((output / "PARSE.json").read_bytes())
+    assert body["symbols"][0]["coverage"]["15m"]["objects"][0][
+        "last_bar_close_utc"
+    ] is None
+
+
+def test_latest_regular_bar_sets_last_bar_close(tmp_path: Path) -> None:
+    opens = [TMS - 4 * 900000, TMS - 3 * 900000, TMS - 900000]
+    rows = [row(open_ms) for open_ms in opens]
+    rows.append(row(TMS + 1))
+    path = archive(
+        tmp_path / "archive",
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", rows),
+    )
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0, result.stdout + result.stderr
+    body = json.loads((output / "PARSE.json").read_bytes())
+    assert body["symbols"][0]["coverage"]["15m"]["objects"][0][
+        "last_bar_close_utc"
+    ] == "2025-04-01T00:00:00Z"
+
+
+@pytest.mark.parametrize(
+    "object_class",
+    ["missing", "mismatch"],
+    ids=["missing-file", "mismatched-file"],
+)
+def test_unusable_series_still_lists_object_identities(
+    tmp_path: Path, object_class: str
+) -> None:
+    root = tmp_path / "archive"
+    good = archive(
+        root,
+        "15m",
+        "2025-03-31",
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)]),
+    )
+    bad = archive(
+        root,
+        "15m",
+        "2025-03-30",
+        zip_blob("AAAUSDT-15m-2025-03-30.zip", [row(TMS - 2 * 86400000)]),
+        check="0" * 64 if object_class == "mismatch" else None,
+    )
+    fetched = fetch(tmp_path, [good, bad])
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    manifest_bad = next(item for item in manifest["files"] if item["path"] == bad)
+    if object_class == "missing":
+        manifest_bad["class"] = "missing"
+        manifest_bad["sha256"] = None
+        manifest_bad["official_checksum"] = None
+        manifest_bad["size"] = None
+    _write_manifest(fetched, manifest)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    coverage = json.loads((output / "PARSE.json").read_bytes())["symbols"][0]["coverage"]["15m"]
+    assert coverage["usable"] is False
+    assert coverage["close_time_anomalies_all"] is None
+    assert object_class in [entry["class"] for entry in coverage["objects"]]
+    expected = _identity_rows(fetched, "AAAUSDT", "15m")
+    assert [
+        {key: value for key, value in item.items() if key != "last_bar_close_utc"}
+        for item in coverage["objects"]
+    ] == [
+        {key: value for key, value in item.items() if key != "last_bar_close_utc"}
+        for item in expected
+    ]
+    assert all(item["last_bar_close_utc"] is None for item in coverage["objects"])
+
+
 def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:
     fetched = make_series(tmp_path)
     manifest_path = fetched / "MANIFEST.json"
@@ -819,7 +1282,7 @@ def test_manifest_path_must_match_its_row_fields(tmp_path: Path) -> None:
     assert not output.exists()
 
 
-def test_parses_the_bytes_verified_during_the_upfront_pass(
+def test_an_object_changed_after_verification_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fetched = make_series(
@@ -832,23 +1295,21 @@ def test_parses_the_bytes_verified_during_the_upfront_pass(
     manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
     object_path = fetched / "objects" / manifest["files"][0]["sha256"]
     original_read = Path.read_bytes
-    reads = 0
+    changed = False
 
     def read_and_replace(path: Path) -> bytes:
-        nonlocal reads
-        content = original_read(path)
+        nonlocal changed
         if path == object_path:
-            reads += 1
-            if reads == 1:
-                object_path.chmod(0o600)
-                object_path.write_bytes(
-                    zip_blob(
-                        "AAAUSDT-1d-2025-03.zip",
-                        [row(TMS - 86400000, TMS - 1, volume="9.00")],
-                    )
+            changed = True
+            object_path.chmod(0o600)
+            object_path.write_bytes(
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(TMS - 86400000, TMS - 1, volume="9.00")],
                 )
-                object_path.chmod(0o444)
-        return content
+            )
+            object_path.chmod(0o444)
+        return original_read(path)
 
     monkeypatch.setattr(Path, "read_bytes", read_and_replace)
     spec = importlib.util.spec_from_file_location("extract_verified_bytes", SCRIPT)
@@ -863,10 +1324,243 @@ def test_parses_the_bytes_verified_during_the_upfront_pass(
     plan_path = tmp_path / "localplan.json"
     plan_path.write_text(json.dumps(plan))
 
-    assert module.run(str(plan_path))["status"] == "PASS"
-    assert reads == 1
-    parsed = json.loads((tmp_path / "parsed" / "PARSE.json").read_bytes())
+    with pytest.raises(module.Refusal, match="object changed after verification"):
+        module.run(str(plan_path))
+    assert changed
+    assert not (tmp_path / "parsed" / "PARSE.json").exists()
+    assert not (tmp_path / "parsed").exists()
+
+
+def test_verified_object_parses_its_original_value(tmp_path: Path) -> None:
+    fetched = make_series(
+        tmp_path,
+        "1d",
+        "2025-03",
+        [row(TMS - 86400000, TMS - 1, volume="2.50")],
+        granularity="monthly",
+    )
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    parsed = json.loads((output / "PARSE.json").read_bytes())
     assert parsed["symbols"][0]["daily"]["bars"][0]["quote_volume"] == "2.50"
+
+
+def test_upfront_hash_streams_and_parse_reads_each_object_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    original_read_bytes = Path.read_bytes
+    original_open = Path.open
+    events: list[tuple[str, Path]] = []
+
+    def watched_read_bytes(path: Path) -> bytes:
+        if path == object_path:
+            events.append(("read", path))
+        return original_read_bytes(path)
+
+    def watched_open(path: Path, *args, **kwargs):
+        if path == object_path:
+            events.append(("stream", path))
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", watched_read_bytes)
+    monkeypatch.setattr(Path, "open", watched_open)
+    spec = importlib.util.spec_from_file_location("extract_streamed_hash", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    plan_path = tmp_path / "stream-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "streamed"),
+            }
+        )
+    )
+    assert module.run(str(plan_path))["status"] == "PASS"
+    first_read = next(i for i, (event, _) in enumerate(events) if event == "read")
+    assert all(event == "stream" for event, _ in events[:first_read])
+    assert [event for event, _ in events].count("stream") == 2
+    assert [event for event, _ in events].count("read") == 1
+
+
+def _replace_fetched_object(fetched: Path, blob: bytes) -> None:
+    manifest_path = fetched / "MANIFEST.json"
+    manifest_path.chmod(0o600)
+    manifest = json.loads(manifest_path.read_bytes())
+    row = manifest["files"][0]
+    old_path = fetched / "objects" / row["sha256"]
+    old_path.chmod(0o600)
+    old_path.unlink()
+    digest = hashlib.sha256(blob).hexdigest()
+    (fetched / "objects" / digest).write_bytes(blob)
+    (fetched / "objects" / digest).chmod(0o444)
+    row["sha256"] = digest
+    row["official_checksum"] = digest
+    row["size"] = len(blob)
+    manifest_path.write_text(json.dumps(manifest, separators=(",", ":")) + "\n")
+    manifest_path.chmod(0o444)
+
+
+@pytest.mark.parametrize(
+    "comment",
+    [b"", b"NOT-MOCK-v1!", b"UCPE-MOCK-v1!"],
+    ids=["no-marker", "different-comment", "long-comment"],
+)
+def test_unmarked_object_refuses_the_parse_run(
+    tmp_path: Path, comment: bytes
+) -> None:
+    fetched = make_series(tmp_path)
+    _replace_fetched_object(
+        fetched,
+        zip_blob("AAAUSDT-15m-2025-03-31.zip", [row(TMS - 900000)], comment=comment),
+    )
+    plan_path = tmp_path / "marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "marker-output"),
+            }
+        )
+    )
+    spec = importlib.util.spec_from_file_location("extract_marker_check", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert issubclass(module.NotMockObject, module.Refusal)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", str(SCRIPT), str(plan_path)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert result.stdout == '{"status":"REFUSAL","reason":"object is not a mock object"}\n'
+    assert not (tmp_path / "marker-output").exists()
+
+
+def test_parse_time_comment_mismatch_refuses_the_parse_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_parse_marker_check", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    original_zipfile = module.zipfile.ZipFile
+
+    class WrongCommentArchive:
+        def __init__(self, *args, **kwargs):
+            self.archive = original_zipfile(*args, **kwargs)
+            self.comment = b"NOT-MOCK-v1!"
+
+        def __enter__(self):
+            self.archive.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.archive.__exit__(*args)
+
+        def __getattr__(self, name):
+            return getattr(self.archive, name)
+
+    monkeypatch.setattr(module.zipfile, "ZipFile", WrongCommentArchive)
+    plan_path = tmp_path / "parse-marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "parse-marker-output"),
+            }
+        )
+    )
+    with pytest.raises(module.Refusal, match="object is not a mock object"):
+        module.run(str(plan_path))
+    assert not (tmp_path / "parse-marker-output").exists()
+
+
+@pytest.mark.parametrize("bad_tail", ["missing marker", "wrong length"], ids=["missing", "length"])
+def test_upfront_marker_refusal_precedes_parse_pass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bad_tail: str,
+) -> None:
+    fetched = make_series(tmp_path)
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    blob = object_path.read_bytes()
+    if bad_tail == "missing marker":
+        blob = zip_blob(
+            "AAAUSDT-15m-2025-03-31.zip",
+            [row(TMS - 900000)],
+            comment=b"NOT-MOCK-v1!",
+        )
+    else:
+        damaged = bytearray(blob)
+        damaged[-14:-12] = b"\x0d\x00"
+        blob = bytes(damaged)
+    _replace_fetched_object(fetched, blob)
+    spec = importlib.util.spec_from_file_location("extract_upfront_marker", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def parse_must_not_run(*args, **kwargs):
+        pytest.fail("parse pass ran before upfront marker refusal")
+
+    monkeypatch.setattr(module, "_read_archive", parse_must_not_run)
+    plan_path = tmp_path / "upfront-marker-plan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(tmp_path / "upfront-marker-output"),
+            }
+        )
+    )
+    with pytest.raises(module.Refusal, match="object is not a mock object"):
+        module.run(str(plan_path))
+    assert not (tmp_path / "upfront-marker-output").exists()
+
+
+def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
+    import random
+
+    rng = random.Random(42)
+    fields = ["".join(rng.choices("abcdef0123456789", k=150000)) for _ in range(9)]
+    csv_row = ",".join(
+        [str(TMS - 900000), *fields[:5], str(TMS - 1), "2.50", *fields[5:]]
+    )
+    member = "AAAUSDT-15m-2025-03-31.csv"
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_STORED) as zf:
+        zf.comment = b"UCPE-MOCK-v1"
+        zf.writestr(member, csv_row + "\n")
+    blob = stream.getvalue()
+    assert len(blob) > 1024 * 1024
+    path = archive(tmp_path / "archive", "15m", "2025-03-31", blob)
+    fetched = fetch(tmp_path, [path])
+    result, output = invoke(tmp_path, fetched, "large-good")
+    assert result.returncode == 0
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    object_path.chmod(0o600)
+    changed = bytearray(object_path.read_bytes())
+    changed[-1] ^= 1
+    object_path.write_bytes(changed)
+    object_path.chmod(0o444)
+    refused, bad_output = invoke(tmp_path, fetched, "large-tail-change")
+    assert refused.returncode == 2
+    assert json.loads(refused.stdout)["reason"] == "object does not match the manifest"
+    assert not bad_output.exists()
 
 
 @pytest.mark.parametrize(

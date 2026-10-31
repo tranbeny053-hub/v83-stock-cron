@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import importlib.util
 import json
@@ -43,6 +44,943 @@ def prov():
         "revisions": [{"sha256": digest, "available_from_utc": "2025-01-01T00:00:00Z"}],
         "revision_history_complete": True,
     }
+
+
+def _file_provenance(**changes):
+    entry = {**prov(), "path": "AAAUSDT-1d-2025-03-31.zip", "class": "ok"}
+    entry.update(changes)
+    return entry
+
+
+def _series_provenance(files=None, **changes):
+    raw = {
+        "files": [_file_provenance()] if files is None else files,
+        "series_usable": True,
+        "series_reason": "verified",
+        "policy_fields": {"policy_sha256": "a" * 64},
+    }
+    raw.update(changes)
+    return raw
+
+
+def test_assembler_provenance_with_pending_policy_fields_is_unusable(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    raw = bundle["candidates"][0]["listing"]["provenance"]
+    assert raw["policy_fields"] == {"policy_sha256": bundle["binding"]["policy_sha256"]}
+    assert set(raw["files"][0]) == {
+        "path",
+        "sha256",
+        "official_checksum",
+        "class",
+        "last_bar_close_utc",
+        "source",
+        "available_from_utc",
+        "revisions",
+        "revision_history_complete",
+    }
+    with pytest.raises(mod.Refusal, match="^source must be synthetic$"):
+        mod._prov(raw, T)
+
+
+def test_candidate_rows_accepts_genuine_mock_bundle_and_always_verifies(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    cutoff = mod.instant(bundle["binding"]["cutoff_utc"])
+    rule = json.loads(RULE.read_bytes())
+    rows = mod._candidate_rows(bundle, rule, cutoff)
+    assert rows[0]["symbol"] == bundle["candidates"][0]["symbol"]
+
+    def refuse(_bundle):
+        raise mod.Refusal("verification required")
+
+    mod.verify_derived = refuse
+    with pytest.raises(mod.Refusal, match="^verification required$"):
+        mod._candidate_rows(
+            {"source": "mock", "binding": {"handmade": True}}, rule, cutoff
+        )
+
+
+def test_unusable_mock_series_nulls_become_unknown_only_with_series_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    mod = module()
+    helpers_spec = importlib.util.spec_from_file_location(
+        "assemble_unusable_series_helpers", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(helpers)
+    day = 86_400_000
+    daily_path = helpers.HELPERS.archive(
+        tmp_path / "archive",
+        "1d",
+        "2025-03",
+        helpers.HELPERS.zip_blob(
+            "BBBUSDT-1d-2025-03.zip",
+            [helpers.HELPERS.row(helpers.HELPERS.TMS - day, helpers.HELPERS.TMS - 2)],
+        ),
+        symbol="BBBUSDT",
+        granularity="monthly",
+    )
+    bundle, _ = _assembled_bundle(
+        tmp_path, policy_changes={"close_time": "CT-2"}, extra_paths=[daily_path]
+    )
+    verified = mod.verify_derived
+    real_result = verified(bundle)
+    candidates = {item["symbol"]: item for item in bundle["candidates"]}
+    assert candidates["AAAUSDT"]["coverage"]["15m"]["present_in_window"] is None
+    assert candidates["AAAUSDT"]["coverage"]["15m"]["provenance"]["series_usable"] is False
+    assert candidates["BBBUSDT"]["listing"]["first_daily_bar_open_utc"] is None
+    assert candidates["BBBUSDT"]["daily_quote_volume"]["bars"] is None
+    assert (
+        candidates["BBBUSDT"]["daily_quote_volume"]["provenance"]["series_reason"]
+        == "no listing date"
+    )
+    policy_value = real_result["policy"]["parameters"]["D7_completeness"]["value"]["values"]["all"]
+    operating = real_result["policy"]["parameters"]["operating_period_start"]
+
+    def test_only_verify(evidence):
+        assert evidence is bundle
+        result = verified(evidence)
+        result["policy"]["parameters"]["D6_proxy"]["value"] = None
+        return result
+
+    monkeypatch.setattr(mod, "verify_derived", test_only_verify)
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {"threshold": policy_value},
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    # D6 is bypassed in this test-only verifier shim; PX-2 is implemented by the next task.
+    rule = json.loads(RULE.read_bytes())
+    snapshot = mod.build(plan, bundle, rule, "a" * 64, "b" * 64)
+    by_symbol = {item["symbol"]: item for item in snapshot["symbols"]}
+    assert by_symbol["AAAUSDT"]["timeframes"]["15m"]["reason"] == "provenance_unknown"
+    assert by_symbol["BBBUSDT"]["listing"]["first_daily_bar_open_utc"] is None
+    assert by_symbol["BBBUSDT"]["timeframes"]["15m"]["reason"] == "provenance_unknown"
+    assert snapshot["members"]["15m"]["status"] == "UNDECIDABLE"
+    assert snapshot["members"]["15m"]["blocking"] == ["AAAUSDT", "BBBUSDT"]
+
+
+def test_full_file_provenance_uses_single_record_validation():
+    mod = module()
+    raw = _series_provenance()
+    expected_digest = raw["policy_fields"]["policy_sha256"]
+    assert mod._prov(raw, T, expected_digest) == (True, {"files": [{
+        "sha256": "a" * 64,
+        "available_from_utc": "2025-01-01T00:00:00Z",
+    }]})
+
+    bad_class = _series_provenance(files=[_file_provenance(**{"class": "bad"})])
+    assert mod._prov(bad_class, T)[0] is False
+
+    mismatched = _file_provenance(official_checksum="b" * 64)
+    assert mod._prov(_series_provenance(files=[mismatched]), T, expected_digest)[0] is False
+
+
+def test_list_policy_fields_make_file_provenance_unusable():
+    mod = module()
+    raw = _series_provenance(policy_fields=["policy_sha256"])
+    assert mod._prov(raw, T, "a" * 64)[0] is False
+
+
+@pytest.mark.parametrize("source", ["mock"], ids=["mock"])
+def test_non_synthetic_record_in_file_provenance_refuses(source):
+    mod = module()
+    raw = _series_provenance(files=[_file_provenance(source=source)])
+
+    with pytest.raises(mod.Refusal, match="^source must be synthetic$"):
+        mod._prov(raw, T)
+
+
+@pytest.mark.parametrize(
+    "policy_fields,expected",
+    [
+        ("PENDING_CHANGE_3", False),
+        ("complete", False),
+        (["policy_sha256"], False),
+        ({"policy_sha256": "a" * 64}, True),
+    ],
+    ids=["pending", "complete", "list-valued", "allow-listed"],
+)
+def test_series_policy_marker_alone_decides_file_provenance(policy_fields, expected):
+    mod = module()
+    first = _file_provenance(path="AAAUSDT-1d-2025-03-31.zip")
+    second = _file_provenance(
+        path="BBBUSDT-1d-2025-03-31.zip",
+        sha256="b" * 64,
+        official_checksum="b" * 64,
+        revisions=[{"sha256": "b" * 64, "available_from_utc": "2025-01-01T00:00:00Z"}],
+    )
+    raw = _series_provenance(files=[first, second], policy_fields=policy_fields)
+    assert all(mod._prov({key: item[key] for key in mod.PROV_KEYS}, T)[0] for item in raw["files"])
+    assert mod._prov(raw, T, "a" * 64)[0] is expected
+
+
+def test_series_provenance_requires_matching_expected_policy_digest():
+    mod = module()
+    raw = _series_provenance()
+    assert mod._prov(raw, T, "b" * 64)[0] is False
+    assert mod._prov(raw, T, None)[0] is False
+
+
+def test_series_provenance_requires_true_and_exact_series_keys():
+    mod = module()
+    assert mod._prov(_series_provenance(series_usable=False), T)[0] is False
+    assert mod._prov(_series_provenance(extra=True), T)[0] is False
+    missing = _series_provenance()
+    del missing["series_reason"]
+    assert mod._prov(missing, T)[0] is False
+
+
+def test_synthetic_build_does_not_load_assembler(tmp_path: Path, monkeypatch):
+    mod = module()
+    calls = []
+    monkeypatch.setattr(mod, "_load_assembler", lambda: calls.append("assembler"))
+    monkeypatch.setattr(mod, "_load_policy", lambda: calls.append("policy"))
+    plan = {
+        "as_of_utc": T_STR,
+        "completeness": {"threshold": 0.9, "ruling": "SYNTHETIC_TEST_ONLY"},
+        "operating_period_start": {"utc": None, "provenance": None},
+    }
+    result = mod.build(plan, bundle(), json.loads(RULE.read_bytes()), "evidence", "tool")
+    assert result["status"] == "SYNTHETIC"
+    assert calls == []
+
+
+def test_per_file_provenance_is_unusable_without_a_bound_policy(tmp_path: Path):
+    # A synthetic build binds no policy, so a per-file provenance is unusable and stamps
+    # nothing (contract v6).
+    item = _file_provenance()
+    provenance = _series_provenance(files=[item])
+    candidate_row = candidate()
+    candidate_row["listing"]["provenance"] = provenance
+    candidate_row["daily_quote_volume"]["provenance"] = provenance
+    path, out, _ = case(tmp_path / "trial", evidence=bundle([candidate_row]))
+    snapshot = _snapshot(path, out)
+    assert "XYZUSDT:listing_input" not in snapshot["inputs"]
+    assert "XYZUSDT:volume_input" not in snapshot["inputs"]
+
+
+@pytest.mark.parametrize(
+    "at,expected",
+    [("2025-03-31T23:59:59Z", False), ("2025-04-01T00:00:00Z", True)],
+)
+def test_file_bound_revision_is_validated_at_cutoff(at, expected):
+    mod = module()
+    held, old = "a" * 64, "b" * 64
+    entry = _file_provenance(
+        available_from_utc="2025-04-01T00:00:00Z",
+        revisions=[
+            {"sha256": old, "available_before_utc": "2025-04-01T00:00:00Z"},
+            {"sha256": held, "available_from_utc": "2025-04-01T00:00:00Z"},
+        ],
+    )
+    assert mod._prov(_series_provenance(files=[entry]), mod.instant(at), "a" * 64)[0] is expected
+
+
+def test_prov_file_branch_does_not_infer_availability_from_period():
+    mod = module()
+    source = __import__("inspect").getsource(mod._prov)
+    assert "period +" not in source
+    assert '"T00:00:00Z"' not in source
+
+
+@pytest.mark.parametrize(
+    "at,expected",
+    [
+        ("2025-03-31T23:59:59Z", False),
+        ("2025-04-01T00:00:00Z", True),
+        ("2025-04-02T00:00:00Z", True),
+    ],
+)
+def test_bound_revision_is_current_only_from_replacement_instant(at, expected):
+    mod = module()
+    old, held = "b" * 64, "a" * 64
+    raw = prov()
+    raw["sha256"] = raw["official_checksum"] = held
+    raw["available_from_utc"] = "2025-04-01T00:00:00Z"
+    raw["revisions"] = [
+        {"sha256": old, "available_before_utc": "2025-04-01T00:00:00Z"},
+        {"sha256": held, "available_from_utc": "2025-04-01T00:00:00Z"},
+    ]
+    assert mod._prov(raw, mod.instant(at))[0] is expected
+
+
+@pytest.mark.parametrize(
+    "held,at",
+    [
+        ("a" * 64, "2025-03-31T23:59:59Z"),
+        ("a" * 64, "2025-04-01T00:00:00Z"),
+        ("a" * 64, "2025-04-02T00:00:00Z"),
+        ("b" * 64, "2025-03-31T23:59:59Z"),
+        ("b" * 64, "2025-04-01T00:00:00Z"),
+        ("b" * 64, "2025-04-02T00:00:00Z"),
+    ],
+)
+def test_bound_revision_does_not_match_an_unlisted_held_copy(held, at):
+    mod = module()
+    raw = prov()
+    raw["sha256"] = raw["official_checksum"] = held
+    raw["revisions"] = [
+        {"sha256": "a" * 64, "available_before_utc": "2025-04-01T00:00:00Z"},
+        {"sha256": "d" * 64, "available_from_utc": "2025-04-01T00:00:00Z"},
+    ]
+    assert mod._prov(raw, mod.instant(at))[0] is False
+
+
+@pytest.mark.parametrize(
+    "revision,expected",
+    [
+        (
+            {
+                "sha256": "a" * 64,
+                "available_from_utc": "2025-01-01T00:00:00Z",
+                "available_before_utc": "2025-02-01T00:00:00Z",
+            },
+            False,
+        ),
+        ({"sha256": "a" * 64, "available_from_utc": "2025-01-01T00:00:00Z"}, True),
+        ({"sha256": "a" * 64, "available_before_utc": "2024-12-31T00:00:00Z"}, True),
+    ],
+    ids=["both_bounds", "from_bound", "before_bound"],
+)
+def test_revision_entry_has_one_availability_bound(revision, expected):
+    mod = module()
+    raw = prov()
+    raw["revisions"] = [raw["revisions"][0], revision]
+    assert mod._prov(raw, T)[0] is expected
+
+
+def _assembled_bundle(
+    tmp_path: Path, *, policy_changes=None, non_market_changes=None, extra_paths=None
+):
+    helper_spec = importlib.util.spec_from_file_location(
+        "assemble_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helper_spec and helper_spec.loader
+    helpers = importlib.util.module_from_spec(helper_spec)
+    helper_spec.loader.exec_module(helpers)
+    fetched, parse_path, policy, non_market_path = helpers.assembled_inputs(
+        tmp_path, extra_paths=extra_paths
+    )
+    policy_spec = importlib.util.spec_from_file_location(
+        "policy_test_helpers_for_corpus", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_spec and policy_spec.loader
+    policy_helpers = importlib.util.module_from_spec(policy_spec)
+    policy_spec.loader.exec_module(policy_helpers)
+    policy_value = policy_helpers.policy()
+    policy_value["parameters"]["D3_evidence"]["value"] = "E-3"
+    policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
+        non_market_path.read_bytes()
+    ).hexdigest()
+    if policy_changes:
+        if "close_time" in policy_changes:
+            policy_value["parameters"]["D8_close_time"]["value"] = policy_changes[
+                "close_time"
+            ]
+        if "non_market_sha256" in policy_changes:
+            policy_value["parameters"]["D3_evidence"]["non_market_sha256"] = policy_changes[
+                "non_market_sha256"
+            ]
+    policy.write_text(json.dumps(policy_value, separators=(",", ":")), encoding="utf-8")
+    assembler = module()._ASSEMBLE
+    parse_raw = parse_path.read_bytes()
+    parse = assembler._json(parse_raw)
+    non_market = assembler._json(non_market_path.read_bytes())
+    if non_market_changes:
+        non_market.update(non_market_changes)
+        non_market_path.write_text(
+            json.dumps(non_market, separators=(",", ":")), encoding="utf-8"
+        )
+    bundle = assembler.evidence(
+        parse,
+        fetch_dir=fetched,
+        parse_sha256=hashlib.sha256(parse_raw).hexdigest(),
+        policy_path=policy,
+        policy_sha256=hashlib.sha256(policy.read_bytes()).hexdigest(),
+        non_market_path=non_market_path,
+        non_market_sha256=hashlib.sha256(non_market_path.read_bytes()).hexdigest(),
+        non_market=non_market,
+        policy=policy_value,
+    )
+    return bundle, non_market_path
+
+
+def _revision_proxy_bundle(tmp_path: Path, *, bases=None, empty_changelog=False):
+    helpers_spec = importlib.util.spec_from_file_location(
+        "assemble_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_assemble.py"
+    )
+    assert helpers_spec and helpers_spec.loader
+    helpers = importlib.util.module_from_spec(helpers_spec)
+    helpers_spec.loader.exec_module(helpers)
+    coverage_paths = [
+        helpers.HELPERS.archive(
+            tmp_path / "archive",
+            "15m",
+            "2025-03-31",
+            helpers.HELPERS.zip_blob(
+                "AAAUSDT-15m-2025-03-31.zip",
+                [
+                    helpers.HELPERS.row(
+                        helpers.HELPERS.TMS - 900_000,
+                        helpers.HELPERS.TMS - 1_000,
+                    )
+                ],
+            ),
+        ),
+    ]
+    for interval, duration in (("1h", 3_600_000), ("4h", 4 * 3_600_000)):
+        coverage_paths.append(
+            helpers.HELPERS.archive(
+                tmp_path / "archive",
+                interval,
+                "2025-03",
+                helpers.HELPERS.zip_blob(
+                    f"AAAUSDT-{interval}-2025-03.zip",
+                    [
+                        helpers.HELPERS.row(
+                            helpers.HELPERS.TMS - duration,
+                            helpers.HELPERS.TMS - 1_000,
+                        )
+                    ],
+                ),
+                granularity="monthly",
+            )
+        )
+    fetched, parse_path, policy_path, non_market_path = helpers.assembled_inputs(
+        tmp_path, extra_paths=coverage_paths
+    )
+    policy_spec = importlib.util.spec_from_file_location(
+        "policy_bound_test_helpers", ROOT / "tests/scripts/test_quant_ng_policy.py"
+    )
+    assert policy_spec and policy_spec.loader
+    policy_helpers = importlib.util.module_from_spec(policy_spec)
+    policy_spec.loader.exec_module(policy_helpers)
+    changelog = {
+        "changelog_id": "ucpe.quant_ng.mock_changelog.v1",
+        "source": "mock",
+        "assumption": (
+            "This format is an assumption until the owner authorizes reading "
+            "the venue's real files."
+        ),
+        "entries": [] if empty_changelog else [{
+            "path": "synthetic/archive.csv",
+            "replaced_sha256": "a" * 64,
+            "replacement_sha256": "b" * 64,
+            "updated_utc": "2025-05-01T00:00:00Z",
+        }],
+    }
+    windows = {
+        "windows_id": "ucpe.quant_ng.mock_proxy_windows.v1",
+        "source": "mock",
+        "bases": bases or [],
+    }
+    changelog_path, windows_path = tmp_path / "changelog.json", tmp_path / "windows.json"
+    changelog_path.write_text(json.dumps(changelog, separators=(",", ":")), encoding="utf-8")
+    windows_path.write_text(json.dumps(windows, separators=(",", ":")), encoding="utf-8")
+    changelog_digest = hashlib.sha256(changelog_path.read_bytes()).hexdigest()
+    windows_digest = hashlib.sha256(windows_path.read_bytes()).hexdigest()
+    policy = policy_helpers.policy()
+    policy["parameters"]["D3_evidence"]["value"] = "E-3"
+    policy["parameters"]["D3_evidence"]["non_market_sha256"] = hashlib.sha256(
+        non_market_path.read_bytes()
+    ).hexdigest()
+    policy["parameters"]["D4_availability"]["value"] = "P-2"
+    policy["parameters"]["D5_revision"].update(value="RP-3", changelog_sha256=changelog_digest)
+    policy["parameters"]["D6_proxy"].update(value="PX-2", windows_sha256=windows_digest)
+    policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
+    assembler = module()._ASSEMBLE
+    parse_raw = parse_path.read_bytes()
+    parse = assembler._json(parse_raw)
+    non_market_raw = non_market_path.read_bytes()
+    bundle = assembler.evidence(
+        parse,
+        fetch_dir=fetched,
+        parse_sha256=hashlib.sha256(parse_raw).hexdigest(),
+        policy_path=policy_path,
+        policy_sha256=hashlib.sha256(policy_path.read_bytes()).hexdigest(),
+        non_market_path=non_market_path,
+        non_market_sha256=hashlib.sha256(non_market_raw).hexdigest(),
+        non_market=assembler._json(non_market_raw),
+        policy=policy,
+        changelog={"path": str(changelog_path.resolve()), "sha256": changelog_digest, **changelog},
+        proxy_windows={"path": str(windows_path.resolve()), "sha256": windows_digest, **windows},
+    )
+    return bundle, changelog_path, windows_path
+
+
+def _px2_snapshot(tmp_path: Path, bases):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(
+        tmp_path, bases=bases, empty_changelog=True
+    )
+    verified = mod.verify_derived(bundle)
+    candidate_rows = {}
+    candidate_rows_fn = mod._candidate_rows
+
+    def capture_rows(*args, **kwargs):
+        rows = candidate_rows_fn(*args, **kwargs)
+        cutoff = mod.instant(bundle["binding"]["cutoff_utc"])
+        for row in rows:
+            row["first"] = cutoff - timedelta(days=365)
+            row["listing_usable"] = True
+            row["volume_usable"] = True
+            row["listing_input"] = {"files": []}
+            row["volume_input"] = {"files": []}
+            row["bars"] = [
+                (cutoff - timedelta(days=days), mod.Decimal("100"))
+                for days in range(90, 0, -1)
+            ]
+            for tf, cell in row["coverage"].items():
+                cell["usable"] = True
+                cell["count"] = rule["history_window_bars"][tf]
+                cell["input"] = {"files": []}
+        candidate_rows["rows"] = rows
+        return rows
+
+    mod._candidate_rows = capture_rows
+    policy = verified["policy"]
+    operating = policy["parameters"]["operating_period_start"]
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {
+            "threshold": policy["parameters"]["D7_completeness"]["value"]["values"]["all"]
+        },
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    rule = json.loads(RULE.read_bytes())
+    snapshot = mod.build(plan, bundle, rule, "a" * 64, "b" * 64)
+    return snapshot, candidate_rows["rows"][0]
+
+
+def test_px2_refused_from_boundary_controls_all_timeframes(tmp_path: Path):
+    before, before_row = _px2_snapshot(
+        tmp_path / "before",
+        [{"base": "AAA", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    after, after_row = _px2_snapshot(
+        tmp_path / "after",
+        [{"base": "AAA", "refused_from_utc": "2025-04-01T00:00:01Z", "seams": []}],
+    )
+    before_symbol = before["symbols"][0]
+    after_symbol = after["symbols"][0]
+    assert all(not before_row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H"))
+    assert not before_row["listing_usable"] and not before_row["volume_usable"]
+    assert all(
+        after_row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H")
+    )
+    assert after_row["listing_usable"] and after_row["volume_usable"]
+    assert before_symbol["listing"]["first_daily_bar_open_utc"] is not None
+    assert after_symbol["listing"]["first_daily_bar_open_utc"] is not None
+
+
+@pytest.mark.parametrize(
+    "from_offset,to_offset,seam_tf,expected",
+    [
+        (
+            timedelta(days=-1),
+            timedelta(hours=-1),
+            "1H",
+            {"15m": "provenance_unknown", "1H": "provenance_unknown", "4H": None},
+        ),
+        (
+            timedelta(days=-20),
+            timedelta(days=-19),
+            "1H",
+            {"15m": None, "1H": "provenance_unknown", "4H": None},
+        ),
+        (
+            timedelta(days=-30),
+            timedelta(hours=-678),
+            "1H",
+            {"15m": None, "1H": None, "4H": None},
+        ),
+        (
+            timedelta(days=-1),
+            timedelta(hours=-23),
+            "1D",
+            {"15m": "provenance_unknown", "1H": "provenance_unknown",
+             "4H": "provenance_unknown"},
+        ),
+    ],
+    ids=[
+        "one_hour_seam_inside_hour_and_fifteen_minute",
+        "one_hour_seam_overlaps_hour_only",
+        "seam_ending_at_hour_window_start_is_half_open",
+        "daily_seam_overlaps_every_window",
+    ],
+)
+def test_px2_seam_refusal_respects_timeframe_window(
+    tmp_path: Path, from_offset, to_offset, seam_tf, expected
+):
+    cutoff = datetime(2025, 4, 1, tzinfo=UTC)
+
+    def stamp(value):
+        return (cutoff + value).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    seam = {
+        "from_utc": stamp(from_offset),
+        "to_utc": stamp(to_offset),
+        "timeframe": seam_tf,
+    }
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "AAA", "refused_from_utc": "2025-04-01T00:00:00Z", "seams": [seam]}],
+    )
+    actual = {tf: row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H")}
+    assert actual == {tf: reason is None for tf, reason in expected.items()}
+    assert (row["listing_usable"] and row["volume_usable"]) == (seam_tf != "1D")
+
+
+def test_px2_refused_proxy_remains_a_b7_contender(tmp_path: Path):
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "AAA", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    assert not row["coverage"]["15m"]["usable"]
+    assert snapshot["members"]["15m"]["status"] == "UNDECIDABLE"
+
+
+def test_px2_does_not_touch_an_unlisted_base(tmp_path: Path):
+    snapshot, row = _px2_snapshot(
+        tmp_path,
+        [{"base": "OTHER", "refused_from_utc": "2025-03-31T23:59:59Z", "seams": []}],
+    )
+    assert all(row["coverage"][tf]["usable"] for tf in ("15m", "1H", "4H"))
+    assert row["listing_usable"] and row["volume_usable"]
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [
+        ("coverage_count", "invalid coverage count"),
+        ("listing_date", "malformed instant"),
+        ("daily_bars", "malformed daily bars"),
+    ],
+    ids=["null_coverage_count", "null_listing_date", "null_daily_bars"],
+)
+def test_null_count_with_usable_per_file_provenance_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field, expected
+):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(tmp_path, empty_changelog=True)
+    verify_source = mod.verify_derived
+    verified = verify_source(bundle)
+    malformed = json.loads(json.dumps(bundle))
+    candidate_row = malformed["candidates"][0]
+    if field == "coverage_count":
+        candidate_row["coverage"]["15m"]["present_in_window"] = None
+        provenance = candidate_row["coverage"]["15m"]["provenance"]
+    elif field == "listing_date":
+        candidate_row["listing"]["first_daily_bar_open_utc"] = None
+        provenance = candidate_row["listing"]["provenance"]
+    else:
+        candidate_row["daily_quote_volume"]["bars"] = None
+        provenance = candidate_row["daily_quote_volume"]["provenance"]
+    assert provenance["series_usable"] is True
+    # This shape cannot be emitted by the assembler. Keep the independently verified
+    # genuine chain bundle as the source of policy verification, then probe the builder's
+    # malformed-bundle refusal path with its candidate row changed.
+    def verify_genuine_source(evidence):
+        assert evidence is malformed
+        assert verify_source(bundle) == verified
+        return verified
+
+    monkeypatch.setattr(mod, "verify_derived", verify_genuine_source)
+    policy = verified["policy"]
+    operating = policy["parameters"]["operating_period_start"]
+    plan = {
+        "as_of_utc": bundle["binding"]["cutoff_utc"],
+        "completeness": {
+            "threshold": policy["parameters"]["D7_completeness"]["value"]["values"]["all"]
+        },
+        "operating_period_start": {
+            "utc": operating["utc"]["value"],
+            "provenance": operating["provenance"]["value"],
+        },
+    }
+    with pytest.raises(mod.Refusal, match=f"^{expected}$"):
+        mod.build(plan, malformed, json.loads(RULE.read_bytes()), "a" * 64, "b" * 64)
+
+
+def test_derived_evidence_is_reproducible(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    mod.verify_derived(bundle)
+
+
+def test_bound_revision_and_proxy_inputs_rederive(tmp_path: Path):
+    mod = module()
+    bundle, _, _ = _revision_proxy_bundle(tmp_path)
+    mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["changelog", "proxy_windows"],
+    ids=["changelog", "proxy-windows"],
+)
+def test_bound_auxiliary_input_requires_exact_bytes(tmp_path: Path, kind):
+    mod = module()
+    bundle, changelog_path, windows_path = _revision_proxy_bundle(tmp_path)
+    path = changelog_path if kind == "changelog" else windows_path
+    original = json.loads(path.read_bytes())
+    rewritten = json.dumps(original, ensure_ascii=False, indent=2).encode() + b"\n"
+    assert json.loads(rewritten) == original
+    assert rewritten != path.read_bytes()
+    path.write_bytes(rewritten)
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["changelog", "proxy_windows"],
+    ids=["changelog", "proxy-windows"],
+)
+def test_auxiliary_policy_digest_cannot_be_rebound_after_edit(tmp_path: Path, kind):
+    mod = module()
+    bundle, changelog_path, windows_path = _revision_proxy_bundle(tmp_path)
+    path = changelog_path if kind == "changelog" else windows_path
+    binding = bundle["binding"]
+    digest_field = "changelog_sha256" if kind == "changelog" else "proxy_windows_sha256"
+    if kind == "changelog":
+        value = json.loads(path.read_bytes())
+        value["entries"][0]["updated_utc"] = "2025-05-02T00:00:00Z"
+    else:
+        value = json.loads(path.read_bytes())
+        value["bases"].append({
+            "base": "SYNTH",
+            "refused_from_utc": "2025-05-01T00:00:00Z",
+            "seams": [],
+        })
+    path.write_text(json.dumps(value, separators=(",", ":")), encoding="utf-8")
+    new_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    binding[digest_field] = new_digest
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("changelog_path", "missing"),
+        ("changelog_sha256", "a" * 64),
+    ],
+    ids=["changelog-path-without-digest", "changelog-digest-without-path"],
+)
+def test_unpaired_changelog_binding_is_not_bound(tmp_path: Path, field, value):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"][field] = value
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_unexpected_changelog_binding_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    path = tmp_path / "unrequested.json"
+    path.write_text("{}", encoding="utf-8")
+    bundle["binding"]["changelog_path"] = str(path.resolve())
+    bundle["binding"]["changelog_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("proxy_windows_path", "missing"),
+        ("proxy_windows_sha256", "a" * 64),
+    ],
+    ids=["windows-path-without-digest", "windows-digest-without-path"],
+)
+def test_unpaired_proxy_windows_binding_is_not_bound(tmp_path: Path, field, value):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"][field] = value
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["policy_path", "non_market_path", "fetch_output_dir"],
+    ids=["policy", "non_market", "fetch"],
+)
+def test_non_normal_bound_path_is_refused(tmp_path: Path, field):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    original = bundle["binding"][field]
+    if field == "fetch_output_dir":
+        bundle["binding"][field] = original + "/./"
+    else:
+        parent, name = original.rsplit("/", 1)
+        bundle["binding"][field] = parent + "/./" + name
+
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_invalid_bound_policy_is_refused_by_policy_validator(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    policy_path = Path(bundle["binding"]["policy_path"])
+    policy = json.loads(policy_path.read_bytes())
+    policy["parameters"]["D8_close_time"]["value"] = "CT-4"
+    policy_path.write_text(json.dumps(policy, separators=(",", ":")), encoding="utf-8")
+    bundle["binding"]["policy_sha256"] = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+
+    with pytest.raises(mod.Refusal, match="^policy detail unruled: close-time direction$"):
+        mod.verify_derived(bundle)
+
+
+def test_invalid_bound_non_market_file_is_refused(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path, non_market_changes={"source": "real"})
+
+    with pytest.raises(mod.Refusal, match="^invalid non-market evidence$"):
+        mod.verify_derived(bundle)
+
+
+def test_policy_non_market_digest_mismatch_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path, policy_changes={"non_market_sha256": "b" * 64})
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize("field", ["policy_path", "fetch_output_dir"], ids=["policy", "fetch"])
+def test_protected_binding_path_is_refused_before_read(tmp_path: Path, monkeypatch, field):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    protected = "hold" + "out"
+    target = (tmp_path / protected / "never-created.json").resolve()
+    bundle["binding"][field] = str(target)
+
+    original_read_bytes = Path.read_bytes
+    original_open = builtins.open
+
+    def reject_protected_read(path):
+        if protected in os.fspath(path).lower():
+            raise AssertionError("protected binding path was read")
+        return original_read_bytes(path)
+
+    def reject_protected_open(file, *args, **kwargs):
+        if protected in os.fspath(file).lower():
+            raise AssertionError("protected binding path was opened")
+        return original_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_bytes", reject_protected_read)
+    monkeypatch.setattr(builtins, "open", reject_protected_open)
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_cutoff_text_must_match_the_parser_binding(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["binding"]["cutoff_utc"] = "2025-04-01T00:00:00.000Z"
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_bundle_comparison_preserves_json_number_types(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["candidates"][0]["listing"]["provenance"]["series_usable"] = 1
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
+
+
+def test_edited_market_field_is_not_derived_from_parse(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["candidates"][0]["lineage"] = "AAA"
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
+
+
+def test_edited_non_market_field_is_not_derived_from_parse(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    bundle["freshness"].append({"edited": True})
+    with pytest.raises(mod.Refusal, match="^evidence not derived from parse$"):
+        mod.verify_derived(bundle)
+
+
+def test_replaced_non_market_file_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, non_market_path = _assembled_bundle(tmp_path)
+    non_market_path.chmod(0o600)
+    non_market_path.write_text("{}", encoding="utf-8")
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_json_identical_non_market_file_with_different_bytes_is_not_bound(tmp_path: Path):
+    mod = module()
+    bundle, non_market_path = _assembled_bundle(tmp_path)
+    original = json.loads(non_market_path.read_bytes())
+    rewritten = json.dumps(original, ensure_ascii=False, indent=2).encode() + b"\n"
+    assert json.loads(rewritten) == original
+    assert rewritten != non_market_path.read_bytes()
+    non_market_path.chmod(0o600)
+    non_market_path.write_bytes(rewritten)
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_edited_parse_with_its_new_digest_is_not_derived(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    parse_raw = mod._ASSEMBLE._EXTRACT.derive(
+        Path(bundle["binding"]["fetch_output_dir"]), mod.instant(bundle["binding"]["cutoff_utc"])
+    )
+    edited = json.loads(parse_raw)
+    edited["symbols"][0]["daily"]["bars"][0]["quote_volume"] = "99"
+    edited_raw = (
+        json.dumps(edited, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+        + b"\n"
+    )
+    bundle["binding"]["parse_sha256"] = hashlib.sha256(edited_raw).hexdigest()
+    with pytest.raises(mod.Refusal, match="^parse not derived from manifest$"):
+        mod.verify_derived(bundle)
+
+
+@pytest.mark.parametrize("edit", ["missing", "extra"])
+def test_binding_requires_exactly_its_fields(tmp_path: Path, edit):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    if edit == "missing":
+        del bundle["binding"]["manifest_sha256"]
+    else:
+        bundle["binding"]["extra"] = "value"
+    with pytest.raises(mod.Refusal, match="^evidence not bound$"):
+        mod.verify_derived(bundle)
+
+
+def test_changed_object_keeps_the_parser_refusal_reason(tmp_path: Path):
+    mod = module()
+    bundle, _ = _assembled_bundle(tmp_path)
+    obj_dir = Path(bundle["binding"]["fetch_output_dir"]) / "objects"
+    manifest = json.loads((obj_dir.parent / "MANIFEST.json").read_bytes())
+    digest = next(row["sha256"] for row in manifest["files"] if row["class"] == "ok")
+    object_path = obj_dir / digest
+    object_path.chmod(0o600)
+    object_path.write_bytes(object_path.read_bytes() + b"changed")
+    with pytest.raises(mod.Refusal, match="^object does not match the manifest$"):
+        mod.verify_derived(bundle)
 
 
 def candidate(symbol="XYZUSDT", base="XYZ", bars=None, coverage_counts=None):
@@ -1077,6 +2015,18 @@ def test_a_non_synthetic_provenance_is_refused_even_when_malformed(tmp_path: Pat
     assert _refusal(path) == "source must be synthetic"
 
 
+@pytest.mark.parametrize("source", ["mock"], ids=["mock"])
+def test_run_refuses_non_synthetic_record_in_file_provenance(source, tmp_path: Path):
+    c = candidate()
+    c["coverage"]["15m"]["provenance"] = _series_provenance(
+        files=[_file_provenance(source=source)]
+    )
+    path, output, _ = case(tmp_path / "trial", evidence=bundle([c]))
+
+    assert _refusal(path) == "source must be synthetic"
+    assert not output.exists()
+
+
 def test_a_listing_date_is_a_utc_midnight(tmp_path: Path):
     c = candidate()
     c["listing"]["first_daily_bar_open_utc"] = "2024-03-02T23:00:00Z"
@@ -1117,6 +2067,93 @@ def test_the_snapshot_carries_the_ruling_and_a_clean_methodology(tmp_path: Path)
     assert snap["members"]["1H"] == {"status": "DECIDED", "symbols": ["XYZUSDT"]}
     # The default bars are 1 … 90: an even count, so the median is the mean of 45 and 46.
     assert snap["symbols"][0]["median_daily_quote_volume"] == "45.5"
+
+
+def test_fixed_synthetic_snapshot_bytes_match_the_base_digest(tmp_path: Path):
+    """The base tool digest is pinned inside the snapshot for a fixed legacy fixture."""
+    path, _, plan = case(tmp_path / "fixed")
+    evidence = json.loads(Path(plan["evidence"]["path"]).read_bytes())
+    m = module()
+    rule = m.load_rule(ROOT / "ops/quant_ng/UNIVERSE_RULE_v1.json")
+    snapshot = m.build(
+        plan,
+        evidence,
+        rule,
+        plan["evidence"]["sha256"],
+        "9cc793c6c8109f9325ff4e6c453b76c3bdfe33372d9a995609b211474be83c4f",
+    )
+    encoded = json.dumps(
+        snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ) + "\n"
+    raw = encoded.encode()
+    assert hashlib.sha256(raw).hexdigest() == (
+        "43a4e2c40829af2f2a7658d453b1df4945245f0f77f7902ef46035fbbb0faa36"
+    )
+
+
+def test_proxy_windows_match_parser_history_windows():
+    parser_spec = importlib.util.spec_from_file_location(
+        "quant_ng_extract_window_constants", ROOT / "scripts/quant_ng_extract.py"
+    )
+    assert parser_spec and parser_spec.loader
+    parser = importlib.util.module_from_spec(parser_spec)
+    parser_spec.loader.exec_module(parser)
+    rule = json.loads(RULE.read_bytes())
+    assert rule["history_window_bars"] == parser.HISTORY_BARS
+    assert rule["ranking"]["window_days"] == parser.DAILY_DAYS == 90
+
+
+def test_null_listing_date_without_daily_bars_refuses_as_malformed_instant(tmp_path: Path):
+    c = candidate(bars=[])
+    c["listing"]["first_daily_bar_open_utc"] = None
+    path, output, _ = case(tmp_path / "null-listing", evidence=bundle([c]))
+    assert _refusal(path) == "malformed instant"
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "change,expected",
+    [
+        ("cutoff", "evidence cutoff not bound"),
+        ("per_window", "policy detail unruled: per-window completeness"),
+        ("threshold", "completeness threshold not bound"),
+        ("operating", "operating period not bound"),
+        ("px1", "policy detail unruled: proxy names"),
+    ],
+)
+def test_mock_plan_policy_bindings_refuse_by_name(monkeypatch, change, expected):
+    m = module()
+    policy = {
+        "parameters": {
+            "D7_completeness": {"value": {"shape": "ONE", "values": {"all": "0.5"}}},
+            "operating_period_start": {
+                "utc": {"value": None}, "provenance": {"value": None}
+            },
+            "D6_proxy": {"value": "PX-2"},
+        }
+    }
+    plan = {
+        "as_of_utc": T_STR,
+        "completeness": {"threshold": 0.5},
+        "operating_period_start": {"utc": None, "provenance": None},
+    }
+    binding = {"cutoff_utc": T_STR, "policy_sha256": "a" * 64}
+    evidence = {"source": "mock", "binding": binding}
+    if change == "cutoff":
+        binding["cutoff_utc"] = "2025-12-01T00:00:00Z"
+    elif change == "per_window":
+        policy["parameters"]["D7_completeness"]["value"] = {
+            "shape": "PER_WINDOW", "values": {}
+        }
+    elif change == "threshold":
+        policy["parameters"]["D7_completeness"]["value"]["values"]["all"] = "0.6"
+    elif change == "operating":
+        policy["parameters"]["operating_period_start"]["utc"]["value"] = T_STR
+    elif change == "px1":
+        policy["parameters"]["D6_proxy"]["value"] = "PX-1"
+    monkeypatch.setattr(m, "verify_derived", lambda _bundle: {"policy": policy})
+    with pytest.raises(m.Refusal, match=f"^{expected}$"):
+        m.build(plan, evidence, {}, "b" * 64, "c" * 64)
 
 
 def test_a_fresh_entry_starting_after_t_does_not_cover_the_quarter(tmp_path: Path):
