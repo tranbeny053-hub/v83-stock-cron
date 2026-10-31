@@ -170,8 +170,12 @@ def _build_wheel(
     wheel = directory / f"{stem}-{tag}.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         for path, data in members.items():
-            archive.writestr(path, data)
-        archive.writestr(f"{dist_info}/RECORD", buffer.getvalue())
+            info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+            archive.writestr(info, data)
+        record_info = zipfile.ZipInfo(
+            f"{dist_info}/RECORD", date_time=(1980, 1, 1, 0, 0, 0)
+        )
+        archive.writestr(record_info, buffer.getvalue())
     return wheel
 
 

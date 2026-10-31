@@ -41,9 +41,15 @@ def zip_blob(
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.comment = comment
-        archive.writestr(name[:-4] + ".csv", "\n".join(rows) + "\n")
+        info = zipfile.ZipInfo(
+            name[:-4] + ".csv", date_time=(1980, 1, 1, 0, 0, 0)
+        )
+        info.compress_type = zipfile.ZIP_DEFLATED
+        archive.writestr(info, "\n".join(rows) + "\n")
         for member, data in extra or []:
-            archive.writestr(member, data)
+            info = zipfile.ZipInfo(member, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
     return stream.getvalue()
 
 
@@ -781,7 +787,8 @@ def test_archive_and_row_failures(tmp_path: Path, case: str, reason: str) -> Non
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, "w") as zf:
             zf.comment = b"UCPE-MOCK-v1"
-            zf.writestr("wrong.csv", row(TMS - 900000))
+            info = zipfile.ZipInfo("wrong.csv", date_time=(1980, 1, 1, 0, 0, 0))
+            zf.writestr(info, row(TMS - 900000))
         blob = stream.getvalue()
     elif case == "inner-empty":
         blob = zip_blob(name, [row(TMS - 900000), "", row(TMS - 1800000)])
@@ -1044,7 +1051,11 @@ def test_midmonth_discards_undecodable_rows_and_allows_no_final_newline(tmp_path
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.comment = b"UCPE-MOCK-v1"
-        zf.writestr(filename[:-4] + ".csv", payload)
+        info = zipfile.ZipInfo(
+            filename[:-4] + ".csv", date_time=(1980, 1, 1, 0, 0, 0)
+        )
+        info.compress_type = zipfile.ZIP_DEFLATED
+        zf.writestr(info, payload)
     path = archive(tmp_path / "archive", "15m", "2025-04", stream.getvalue(), granularity="monthly")
     result, output = invoke(tmp_path, fetch(tmp_path, [path]), cutoff="2025-04-15T00:00:00Z")
     assert result.returncode == 0
@@ -1543,7 +1554,9 @@ def test_large_object_stream_hash_checks_its_tail(tmp_path: Path) -> None:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_STORED) as zf:
         zf.comment = b"UCPE-MOCK-v1"
-        zf.writestr(member, csv_row + "\n")
+        info = zipfile.ZipInfo(member, date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_STORED
+        zf.writestr(info, csv_row + "\n")
     blob = stream.getvalue()
     assert len(blob) > 1024 * 1024
     path = archive(tmp_path / "archive", "15m", "2025-03-31", blob)

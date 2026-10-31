@@ -7,6 +7,7 @@ import io
 import json
 import subprocess
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -32,8 +33,15 @@ def zip_blob(content: bytes = b"") -> bytes:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as mock:
         mock.comment = MOCK_MARKER
-        mock.writestr("payload", content)
+        info = zipfile.ZipInfo("payload", date_time=(1980, 1, 1, 0, 0, 0))
+        mock.writestr(info, content)
     return stream.getvalue()
+
+
+def test_zip_blob_is_deterministic_across_dos_timestamp_boundaries() -> None:
+    first = zip_blob(b"x")
+    time.sleep(2.1)
+    assert zip_blob(b"x") == first
 
 
 def archive(
@@ -223,7 +231,8 @@ def test_pass_manifest_and_deterministic_objects(tmp_path: Path) -> None:
 def test_markerless_zip_payload_refuses_without_writing(tmp_path: Path) -> None:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as mock:
-        mock.writestr("payload", b"data")
+        info = zipfile.ZipInfo("payload", date_time=(1980, 1, 1, 0, 0, 0))
+        mock.writestr(info, b"data")
     path = "data/spot/daily/klines/AAAUSDT/1h/AAAUSDT-1h-2025-01-01.zip"
     root, output = tmp_path / "archive", tmp_path / "out"
     archive(root, path, stream.getvalue())
