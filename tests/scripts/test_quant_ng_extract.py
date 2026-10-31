@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import subprocess
 import sys
 import zipfile
@@ -273,6 +274,99 @@ def test_pass_fields_and_stable_bytes(tmp_path: Path) -> None:
     assert body["symbols"][1]["daily"]["zero_volume"] == 1
     _, output2 = invoke(tmp_path, fetched, "parsedagain")
     assert (output2 / "PARSE.json").read_bytes() == raw
+
+
+@pytest.mark.parametrize("case", ["same inputs"], ids=["matching"])
+def test_derive_returns_run_bytes(tmp_path: Path, case: str) -> None:
+    fetched = make_series(tmp_path)
+    result, output = invoke(tmp_path, fetched)
+    assert result.returncode == 0
+    spec = importlib.util.spec_from_file_location("extract_derive_bytes", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    derived = module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC))
+    assert derived == (output / "PARSE.json").read_bytes()
+
+
+@pytest.mark.parametrize("case", ["read only"], ids=["no writes"])
+def test_derive_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    fetched = make_series(tmp_path)
+    spec = importlib.util.spec_from_file_location("extract_derive_read_only", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("derive attempted a write")
+
+    original_open = os.open
+    write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+
+    def guarded_open(path, flags, *args, **kwargs):
+        if flags & write_flags:
+            fail()
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(module, "create_readonly", fail)
+    monkeypatch.setattr(Path, "mkdir", fail)
+    monkeypatch.setattr(Path, "write_bytes", fail)
+    monkeypatch.setattr(os, "open", guarded_open)
+    assert isinstance(module.derive(fetched, datetime(2025, 4, 1, tzinfo=UTC)), bytes)
+
+
+@pytest.mark.parametrize("case", ["object swap"], ids=["changed bytes"])
+def test_derive_refusal_leaves_output_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    fetched = make_series(
+        tmp_path,
+        "1d",
+        "2025-03",
+        [row(TMS - 86400000, TMS - 1, volume="2.50")],
+        granularity="monthly",
+    )
+    manifest = json.loads((fetched / "MANIFEST.json").read_bytes())
+    object_path = fetched / "objects" / manifest["files"][0]["sha256"]
+    original_read = Path.read_bytes
+    changed = False
+
+    def read_and_replace(path: Path) -> bytes:
+        nonlocal changed
+        if path == object_path:
+            changed = True
+            object_path.chmod(0o600)
+            object_path.write_bytes(
+                zip_blob(
+                    "AAAUSDT-1d-2025-03.zip",
+                    [row(TMS - 86400000, TMS - 1, volume="9.00")],
+                )
+            )
+            object_path.chmod(0o444)
+        return original_read(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_and_replace)
+    spec = importlib.util.spec_from_file_location("extract_derive_refusal", SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    output = tmp_path / "parsed"
+    plan_path = tmp_path / "localplan.json"
+    plan_path.write_text(
+        json.dumps(
+            {
+                "plan_id": "ucpe.quant_ng.extract.v1",
+                "fetch_output_dir": str(fetched),
+                "cutoff_utc": T,
+                "output_dir": str(output),
+            }
+        )
+    )
+
+    with pytest.raises(module.Refusal, match="object changed after verification"):
+        module.run(str(plan_path))
+    assert changed
+    assert not output.exists()
 
 
 def test_allowlist_and_after_cutoff_rows(tmp_path: Path) -> None:
