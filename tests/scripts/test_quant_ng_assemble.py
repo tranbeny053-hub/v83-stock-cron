@@ -147,6 +147,93 @@ def test_evidence_reproduces_parse_and_is_stable(tmp_path: Path) -> None:
     assert (second_output / "EVIDENCE.json").read_bytes() == raw
 
 
+def test_evidence_fields_match_documented_mapping_exactly(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
+    plan_path, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    parsed = json.loads(parse_path.read_bytes())
+    source = parsed["symbols"][0]
+
+    def provenance(series: dict) -> dict:
+        return {
+            "files": [
+                {key: item[key] for key in ("path", "sha256", "official_checksum", "class")}
+                for item in series["objects"]
+            ],
+            "series_usable": series["usable"],
+            "series_reason": series["reason"],
+            "policy_fields": "PENDING_CHANGE_3",
+        }
+
+    daily_provenance = provenance(source["daily"])
+    expected = {
+        "evidence_id": "ucpe.quant_ng.universe_evidence.v1",
+        "source": "mock",
+        "candidates": [
+            {
+                "symbol": source["symbol"],
+                "base": source["symbol"][:-4],
+                "quote": "USDT",
+                "lineage": None,
+                "listing": {
+                    "first_daily_bar_open_utc": source["daily"]["first_open_utc"],
+                    "provenance": daily_provenance,
+                },
+                "daily_quote_volume": {
+                    "bars": source["daily"]["bars"] if source["daily"]["usable"] else [],
+                    "provenance": daily_provenance,
+                },
+                "coverage": {
+                    name: {
+                        "present_in_window": (
+                            source["coverage"][name]["present_in_window"]
+                            if source["coverage"][name]["usable"]
+                            else 0
+                        ),
+                        "provenance": provenance(source["coverage"][name]),
+                    }
+                    for name in ("15m", "1H", "4H")
+                },
+            }
+        ],
+        "exclusion_verification": json.loads(non_market.read_bytes())["exclusion_verification"],
+        "not_leveraged_verification": json.loads(non_market.read_bytes())[
+            "not_leveraged_verification"
+        ],
+        "freshness": json.loads(non_market.read_bytes())["freshness"],
+        "binding": {
+            "fetch_output_dir": str(fetched),
+            "cutoff_utc": T,
+            "parse_sha256": sha(parse_path),
+            "manifest_sha256": parsed["manifest_sha256"],
+            "policy_sha256": sha(policy),
+            "non_market_sha256": sha(non_market),
+            "assemble_tool_sha256": sha(SCRIPT),
+        },
+    }
+    assert json.loads((output / "EVIDENCE.json").read_bytes()) == expected
+
+
+def test_binding_has_exact_keys_and_plan_fetch_directory(tmp_path: Path) -> None:
+    fetched, parse_path, policy, non_market = assembled_inputs(tmp_path)
+    plan_path, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
+    result = invoke(plan_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    binding = json.loads((output / "EVIDENCE.json").read_bytes())["binding"]
+    assert set(binding) == {
+        "fetch_output_dir",
+        "cutoff_utc",
+        "parse_sha256",
+        "manifest_sha256",
+        "policy_sha256",
+        "non_market_sha256",
+        "assemble_tool_sha256",
+    }
+    assert binding["fetch_output_dir"] == str(fetched)
+
+
 @pytest.mark.parametrize(
     "case", ["volume edit", "cutoff change"], ids=["edited parse", "other cutoff"]
 )
@@ -350,7 +437,19 @@ def test_nonempty_output_refuses(tmp_path: Path) -> None:
 
 def test_unusable_series_keeps_identities_and_zero_count(tmp_path: Path) -> None:
     missing = "data/spot/daily/klines/AAAUSDT/15m/AAAUSDT-15m-2025-03-31.zip"
-    fetched, parse_path, policy, non_market = assembled_inputs(tmp_path, extra_paths=[missing])
+    hourly = HELPERS.archive(
+        tmp_path / "archive",
+        "1h",
+        "2025-03",
+        HELPERS.zip_blob(
+            "AAAUSDT-1h-2025-03.zip",
+            [HELPERS.row(HELPERS.TMS - 3_600_000)],
+        ),
+        granularity="monthly",
+    )
+    fetched, parse_path, policy, non_market = assembled_inputs(
+        tmp_path, extra_paths=[missing, hourly]
+    )
     plan, output = plan_for(tmp_path, fetched, parse_path, policy, non_market)
     result = invoke(plan)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -359,6 +458,8 @@ def test_unusable_series_keeps_identities_and_zero_count(tmp_path: Path) -> None
     assert series["present_in_window"] == 0
     assert series["provenance"]["series_usable"] is False
     assert series["provenance"]["files"][0]["class"] == "missing"
+    assert candidate["coverage"]["1H"]["present_in_window"] == 1
+    assert candidate["coverage"]["1H"]["provenance"]["series_usable"] is True
 
 
 def test_after_cutoff_count_does_not_change_candidates(
