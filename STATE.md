@@ -1,71 +1,65 @@
 # STATE
 
-Updated: 2026-11-01 (**A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 → M46 7388ca2b); THE
-CHANGELOG RECORDS #310 (#312 → M45 e722ac00). IT HAS NO NETWORK CODE, ACCEPTS ONLY MOCK HOSTS AND REFUSES ANY
-OWNER-RULED PLAN (EMPTY ALLOWLIST). ALL REAL-RUN S1 VALUES ARE UNRULED; NO (b3a) OR (b3b), NO NETWORK, NO ARCHIVE
-REQUEST, NO REAL-DATA ADMISSION. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN
-CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY
-CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below): on 2026-10-31, the MOCK/OFFLINE S1 engine, the delisting-source check and one
-  recommended ruling; on 2026-11-01, the T3 for this batch, GitHub-only, "CHANGELOG@ba5c2d4, S1 MOCK engine@a43e2f7,
-  STATE-last", HOLD on drift, "not … network or S1 methodology amendments", and a risk-based review policy.
-- **PUBLISHED IN THIS BATCH**, each with the package's seven digests checked first, the exact head pushed, a
-  byte-identical diff (`PR_VERIFY=PASS`), 4 of 4 checks on that head, a drift check, an independently computed merge
-  tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green before the next merge. No
-  drift, so no HOLD.
-  - **#312 → M45 e722ac00a51aebb15c608ffec4262d69d947617b** — the CHANGELOG entry for #310. Head ba5c2d41 (on M43),
-    tree ff2cffee, mergedAt 2026-10-31T18:40:41Z, 25 changed lines. **Its first CI run FAILED** (run 41229256634,
-    attempt 1: 1 failed, 8563 passed:
-    tests/scripts/test_quant_ng_fetch.py::test_pass_manifest_and_deterministic_objects), from a time-dependent test
-    fixture on main, not from the PR (below); the failed job was re-run on the same exact head: attempt 2, 8564
-    passed; build 41229256582. M45's push runs: CI 41230576593, 8564 passed; build 41230576709.
-  - **#313 → M46 7388ca2b0f6eaad1d29099799197a4a711d70868** — the S1 MOCK decision engine. Head a43e2f7a (on M44, 4
-    commits), base the sequential M45, tree 5ef56542 (equal to the combined gate's tree), mergedAt
-    2026-10-31T18:48:21Z, 3 files, +1371. CI 41230658884 with **8661 passed**; build 41230658820. M46's push runs: CI
-    41231184039, 8661 passed; build 41231184030.
-  Record: .work/s1_engine_20261031/T3_PACKAGE_S1_ENGINE_BATCH_20261101.md (SHA256SUMS_S1_BATCH.txt), with the checks
-  in its exec/ folder.
-- **THE CI FLAKE.** `zip_blob` in tests/scripts/test_quant_ng_fetch.py writes zip members with a str name, so each
-  zip embeds the current time (2-second resolution); the test rebuilds the expected bytes after a subprocess run and
-  fails when the clock crosses a boundary (reproduced: the same call 2.1 s apart differs). It came with 06d188e ((b2)
-  change 1b, on main since #310) and passed earlier runs by timing. A fix is LOCAL, not in this batch:
-  `fix/test-zip-determinism` @ 7c9878a (.work/wt-zipfix; Codex 1026; tests only, fixed ZipInfo times in the fetch,
-  extract and runtime-isolation fixtures, one regression test; gate 8565) — a new T3. Record:
-  .work/s1_engine_20261031/exec/FLAKE_ROOT_CAUSE_PR312.md.
-- **What #313 does:** `scripts/quant_ng_s1.py` decides S1 from already-parsed MOCK listing observations under an
-  explicit plan for S1-1 … S1-13, in the FINAL S1 preflight's order (run-level stops, including an empty P0; per
-  probe, first match wins; aggregation). MOCK hosts (`.invalid`) only; closed key sets, duplicate JSON keys refused;
-  BTCUSDT/ETHUSDT dropped and never probed; a missing probe is never PASS; no network import (tested). It models the
-  LISTING route; the documented-checksum route (S1-0) is not built.
-- **How it was built and checked:** Codex 1022–1025, gpt-6-luna at effort high (log headers), DONE. Mutation sweep
-  .work/s1_engine_20261031/MUTATION_SWEEP_S1.py: 38 of 42 at first (three test gaps closed by 1023), then 45 of 46 at
-  a43e2f7 (M09 equivalent, confirmed by the reviewer). **One independent reviewer, two rounds** (session
-  local_6aa4983c, claude-opus-5-5 at effort xhigh, read back; static): FINDINGS (one MAJOR: an empty P0 gave
-  STOP-evidence from no evidence; closed by 1024/1025), then PASS (REVIEW_S1_ENGINE_R1.md, _R2.md). Gates: a43e2f7
-  8661; M44 + #312 + #313 merged 8661.
-- **LOCAL owner-decision documents (T0, nothing decided):** the public-documentation evidence
-  (.work/nga/master/S1_SOURCE_EVIDENCE_20261031.md and _READING2_20261101.md, two ordinary-subagent readings; the
-  reviewer's web check could not run), the recommended ruling (S1_RECOMMENDED_RULING_20261031.md, one independent
-  reviewer, two rounds) and the consolidated pack OWNER_DECISION_PACK_S1_NEXT_20261101.md, which supersedes the
-  ruling where they differ: a monthly-checksum existence probe (S1-0) is partial retention evidence only and C3 stays
-  unmet.
+Updated: 2026-11-01 (**THE CI FLAKE IS FIXED ON MAIN (#315 → M48 7d523d26), THE CHANGELOG RECORDS #313 (#316 → M49
+8e6ac7e3) AND CLAUDE.md CARRIES THE OWNER'S RISK-BASED REVIEW ROUTING (#317 → M50 d99e7364). NOTHING ON THE DATA PATH
+MOVED: NO NETWORK, NO ARCHIVE REQUEST, NO REAL-DATA ADMISSION; S1, D2–D8 AND OD-NG-7 ARE UNRULED. NGA IS STILL
+PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS
+UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), 2026-11-01: the T3 for this batch, GitHub-only, "CI-flake fix@7c9878a,
+  CHANGELOG@905a97b, review-routing@fa26067, STATE-last", HOLD on drift, and the critical-path objective.
+- **PUBLISHED IN THIS BATCH**, each with the package's six digests checked first, the exact head pushed, a
+  byte-identical diff (`PR_VERIFY=PASS`), 4 of 4 checks, a drift check, an independently computed merge tree, a merge
+  with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green before the next merge. No drift, no
+  HOLD, and every CI run of this batch passed on its first attempt.
+  - **#315 → M48 7d523d269f44d37a46e312f4c9a2e0f3ad271485** — the CI-flake fix (tests only). Head 7c9878a4 (on M44),
+    tree 13b87fae, mergedAt 2026-11-01T02:43:25Z. CI 41265944993, 8662 passed; build 41265944999. M48's push runs: CI
+    41266349403, 8662 passed; build 41266349420.
+  - **#316 → M49 8e6ac7e3a14e7349931a36abbcdfa768ed32aeaf** — the CHANGELOG entry for #313. Head 905a97b8 (on M47),
+    tree c81b4946, mergedAt 2026-11-01T03:57:53Z. CI 41270829146, 8662 passed; build 41270829166. M49's push runs: CI
+    41271197399, 8662 passed; build 41271197397.
+  - **#317 → M50 d99e7364b819877a4b74ddc86e10b18a1fe055ed** — CLAUDE.md, "Review routing — risk-based". Head fa260670
+    (on M47), tree a6424c77 (equal to the combined gate's tree), mergedAt 2026-11-01T05:42:33Z. CI 41277524755, 8662
+    passed; build 41277524749. M50's push runs: CI 41277968770, 8662 passed; build 41277968773.
+  Record: .work/s1_engine_20261031/T3_PACKAGE_NEXT_BATCH_20261101.md (SHA256SUMS_NEXT_BATCH.txt), with the checks in
+  .work/next_batch_20261101/.
+- **The flake, closed:** every test zip helper that is hashed or rebuilt now writes a fixed ZipInfo time (the fetch,
+  extract and runtime-isolation fixtures), plus one regression test; the two earlier failures (#312's PR CI and M47's
+  push CI, each diagnosed and re-run on the same commit) stay recorded as failures.
+- **The review routing (#317):** classify by tier, irreversibility, exposure and scientific risk before choosing a
+  reviewer; T0 read-only docs and ordinary T1 get deterministic checks and a master audit; sensitive T1 and T2+ get a
+  diff-and-consumer review, independent where required; consolidated rounds and narrow delta checks; bounded fact
+  checks; stalled reviewer turns stopped and rebriefed. It removes no risk-tier gate, mandatory independent review,
+  full gate, scanner, mutation requirement, STATE-last or owner gate. One independent reviewer, two rounds
+  (PASS_WITH_AMENDMENTS, folded; then a delta PASS).
+- **LOCAL owner-decision documents (T0, nothing decided):** the NGA critical-path map and decision pack
+  (.work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md: every B-NG bundle's state, two independent routes —
+  retrospective, blocked first by the licence fit and the survivorship path; prospective, blocked first by OD-NG-4
+  KEEP_HOLD and OD-NG-2 DEFER) and the data-source licensing evidence (DATA_SOURCE_LICENSING_EVIDENCE_20261101.md, an
+  ordinary subagent: no source officially documents keeping delisted pairs; every source whose terms were read is
+  non-commercial or personal-use; Kraken's, Bybit's and the Binance API's terms were not found or not loaded; the
+  Binance Terms of Use could not be read). Master audit only, by policy.
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort xhigh (read again with get_session before this
   review), reviewed this filled record. The master ran Opus 5.5 at High, as the T3 named.
-- Process: Codex 1022–1026 (DONE), none in the T3; GPT sidecar consultations 0; paid API $0. The UOR relay is still
-  NOT_DELIVERED (no verified permitted route).
+- Process: Codex none in this batch (1026 built the fix earlier); GPT sidecar consultations 0; paid API $0. The UOR
+  relay is still NOT_DELIVERED (no verified permitted route).
 - Nothing else changed: no fetch, network, download, real data, fit or estimator, no OD-NG-7 constant, no `src/`,
   schema, migration, workflow or deployed file, no production read or write, no F3 or §5A access, no deploy, no
   rerun.
-- CARRIED OVER, still open: S1 (the pack's path A/B/C, licence questions, S1-0 as a partial check), D2–D8 for real
-  data and the other pack choices (F-SCOPE, F-END, F-FRESH, F-CAP, F-SURV); OD-NG-7; C10's unruled remainder;
-  OD-NG-1, OD-NG-3 and OD-NG-4b with defaults unchanged; OD-NG-2 DEFER; amending B1–B9; the writer-token renewal by
-  **2026-11-20** (expiry 2026-11-23); the runtime delta `frontend/app.js` until a release; the CHANGELOG entry for
-  #313 and the flake fix (each a new T3); a local CLAUDE.md review-routing amendment (owner-requested, not
-  published); the merged branches and local worktrees as cleanup candidates; the GPT succession unchanged
-  (PREDECESSOR_RETIREMENT = NOT_YET).
-- This record is the batch's last publish. Before it: #313.)
+- CARRIED OVER, still open: the decision pack's #1 licence fit, #2 survivorship path (A/B/C), #3 the prospective
+  route (OD-NG-4/OD-NG-2); D2–D8; OD-NG-7; OD-NG-1, OD-NG-3, OD-NG-4b; B-NG0's EXP-08 specification and packet note
+  (F3-adjacent, not started); the writer-token renewal by **2026-11-20** (expiry 2026-11-23); the runtime delta
+  `frontend/app.js` until a release; the CHANGELOG entries for #315 and #317 (a new T3); cleanup candidates.
+- This record is the batch's last publish. Before it: #317.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-11-01, the second), verbatim — the T3 for this batch and the critical-path objective**
+  (the first three lines of .work/p7/redesign/handoff/owner_t3_next_batch_20261101.txt, sha256 5ac5f745…; the rest, on
+  the DAG, lanes, data research, review and limits, is kept whole there):
+```text
+CONTINUE CURRENT — UCPE (Opus High for this milestone).
+OWNER T3 GitHub-only AUTHORIZE exact `.work/s1_engine_20261031/T3_PACKAGE_NEXT_BATCH_20261101.md`: CI-flake fix@7c9878a, CHANGELOG@905a97b, review-routing@fa26067, STATE-last. Verify exact heads, sequential merge trees, required CI, main build and independent STATE review. HOLD on drift.
+PRIMARY OBJECTIVE: Minimize the total critical-path time to genuine NGA scientific and production acceptance, not the time to the next PR or bundle number.
+```
 - **The owner (2026-11-01), verbatim — the T3 for the S1-engine batch**
   (the first two lines of .work/p7/redesign/handoff/owner_t3_s1_engine_20261101.txt, sha256 02148c8d…; the rest, on the
   review policy, the work after the T3, routing and limits, is kept whole there):
@@ -3288,12 +3282,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 → M46 7388ca2b); the CHANGELOG records
-  #310 (#312 → M45 e722ac00). Real data stays refused at every entry point; S1, D2–D8 and the other pack choices
-  await the owner; no (b3a) or (b3b); no network code; no download. Main is M46 7388ca2b before this record;
-  production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with one declared runtime
-  delta on main (frontend/app.js, #285) until a release. The next writer-token renewal is due by **2026-11-20**
-  (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=THE CI FLAKE IS FIXED (#315 → M48 7d523d26); THE CHANGELOG RECORDS #313 (#316 → M49 8e6ac7e3); CLAUDE.md
+  CARRIES THE RISK-BASED REVIEW ROUTING (#317 → M50 d99e7364). Real data stays refused at every entry point; the
+  licence fit, the survivorship path, the prospective route (OD-NG-4/OD-NG-2), D2–D8 and OD-NG-7 await the owner; no
+  (b3a) or (b3b); no network code; no download. Main is M50 d99e7364 before this record; production is unchanged: D
+  27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with one declared runtime delta on main
+  (frontend/app.js, #285) until a release. The next writer-token renewal is due by **2026-11-20** (expiry
+  2026-11-23); the 2026-10-24 renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
@@ -3343,23 +3338,26 @@ LOOP_STATE=A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 �
     required independent review; Codex execution is not a Claude worker.
   - COUNT REVIEWERS AND ROUNDS SEPARATELY: F-CONFIRM's sheet and the contract-gaps note had NO independent review
     (Claude's self-audit only); (b2) (#310) had ONE independent reviewer in SIXTEEN recorded rounds (static only;
-    FINDINGS 4, PASS_WITH_AMENDMENTS 8, PASS 4; the last PASS); the S1 engine (#313) had ONE independent reviewer in
-    TWO rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds (FINDINGS, then
-    PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO independent review (master audit and
-    quote checks only); this record had ONE independent reviewer, the same session, in one round on this filled
-    record; the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row batch's record (#308) had ONE in
-    TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in TWO rounds (static only;
-    PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS, then
-    PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds not re-reviewed);
-    the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer in THREE
-    rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE round; the
-    parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had
-    ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary subagent (not
-    independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had ONE independent
-    reviewer in FOUR rounds, the last round's three small items folded after its PASS and not re-reviewed; (b1)
-    (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder
-    had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's message ("a second review
-    passed") overstate theirs and are immutable, so this record documents them instead.
+    FINDINGS 4, PASS_WITH_AMENDMENTS 8, PASS 4; the last PASS); the CLAUDE.md review routing (#317) had ONE
+    independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and
+    the licensing evidence had NO independent review (master audit, by the new policy); this record had ONE
+    independent reviewer, the same session, in one round on this filled record; the S1-engine batch's record (#314)
+    had ONE in ONE round; the S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then
+    PASS); the S1 recommended ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the
+    consolidated S1 decision pack had NO independent review (master audit and quote checks only); the (b2) batch's
+    record (#311) had ONE in TWO rounds; the evaluation-row batch's record (#308) had ONE in TWO rounds; the
+    evaluation-row producer (#307) had ONE independent reviewer in TWO rounds (static only; PASS_WITH_AMENDMENTS,
+    then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer
+    was an ordinary subagent, not independent; the last two folds not re-reviewed); the C10/G-1 batch's record (#305)
+    had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static only;
+    PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE round; the parse batch's record
+    (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO rounds
+    (static only; FINDINGS, then PASS), after one read-only probe by an ordinary subagent (not independent); the
+    F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had ONE independent reviewer in FOUR
+    rounds, the last round's three small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE
+    independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE
+    rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's message ("a second review passed")
+    overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3369,9 +3367,11 @@ LOOP_STATE=A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 �
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/s1_engine_20261031/ (this batch: the
-    engine's tasks, reviews, sweeps, gates, package and exec records, and the CI-flake root cause),
-    .work/nga/master/OWNER_DECISION_PACK_S1_NEXT_20261101.md (the consolidated S1 decision pack),
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/next_batch_20261101/ (this batch's PR
+    and merge checks), .work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md (the B-NG map and the decision pack),
+    .work/nga/master/DATA_SOURCE_LICENSING_EVIDENCE_20261101.md, .work/s1_engine_20261031/ (the S1-engine batch and
+    this batch's package: the engine's tasks, reviews, sweeps, gates, package and exec records, and the CI-flake root
+    cause), .work/nga/master/OWNER_DECISION_PACK_S1_NEXT_20261101.md (the consolidated S1 decision pack),
     .work/zipfix_20261101/ (the LOCAL flake fix), .work/b2_20261030/ (the (b2) batch: (b2)'s final contract, every
     review round, probes, sweeps, gates, the package and exec records),
     .work/nga/master/B3A_S1_PREFLIGHT_DECISION_READY_20261031.md and REALDATA_MIN_DECISIONS_20261031.md (the
@@ -3388,6 +3388,8 @@ LOOP_STATE=A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 �
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE REACHED MAIN (#313 → M46 7388ca2b), with the CHANGELOG
+  for #310 (#312 → M45 e722ac00), and that batch's record was published last (#314 → M47 2e9f910d).
   Before it: (b2) REACHED MAIN AS DORMANT MOCK/OFFLINE ENGINEERING (#310 → M43 e9392fa1), with the CHANGELOG for #307
   (#309 → M42 3f22cc0c), and that batch's record was published last (#311 → M44 c3cc67f9).
   Before it: THE C10 EVALUATION-ROW PRODUCER REACHED MAIN AS DORMANT SYNTHETIC TOOLING (#307 → M40 03e7dc41), with
@@ -6172,7 +6174,15 @@ LOOP_STATE=A DORMANT MOCK/OFFLINE S1 LISTING-DECISION ENGINE IS ON MAIN (#313 �
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER, THE FIT GATE'S
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING (OD-NG-5(a) BUILDER, FIT GATE,
+  (b1), (b2)-MOCK, C10, EVALUATION ROWS, S1 MOCK ENGINE), NOW WITH THE RISK-BASED REVIEW ROUTING (2026-11-01):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
+    frontend/app.js (#285), until a release.
+  - The NGA critical path (.work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md): no bundle advances without a ruling;
+    the retrospective route waits on the licence fit and the survivorship path, the prospective route on
+    OD-NG-4/OD-NG-2.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE OD-NG-5(a) BUILDER, THE FIT GATE'S
   SNAPSHOT IDENTITY, OD-NG-5(b) STEPS (b1) AND (b2)-MOCK, F-CONFIRM, C10 (A+) / G-1 (a′), THE EVALUATION-ROW PRODUCER
   AND THE S1 MOCK ENGINE (2026-11-01):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries one declared runtime delta,
@@ -6585,7 +6595,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL, VIETNAM TIME, THE 
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-s1-engine-20261101 (this record, on main M46 7388ca2b). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-next-batch-20261101 (this record, on main M50 d99e7364). Merged on origin in this batch:
+  fix/test-zip-determinism @ 7c9878a4 (#315), docs/changelog-313 @ 905a97b8 (#316), docs/claude-md-review-routing @
+  fa260670 (#317). Merged branches and local worktrees are cleanup candidates; no cleanup was authorized.
+  Before it: chore/state-s1-engine-20261101 (this record, on main M46 7388ca2b). Merged on origin in this batch:
   - docs/changelog-310 @ ba5c2d41 (#312 → M45) and feat/ng-s1-mock-engine @ a43e2f7a (#313 → M46). LOCAL,
     unpublished: fix/test-zip-determinism @ 7c9878a (.work/wt-zipfix). Merged branches and local worktrees are
     cleanup candidates; no cleanup was authorized.
@@ -6941,7 +6954,17 @@ CURRENT_BRANCH=chore/state-s1-engine-20261101 (this record, on main M46 7388ca2b
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=7388ca2b (main M46, #313: the S1 MOCK engine; the last merge before this record). Its 4 PR checks on
+LAST_GREEN_SHA=d99e7364 (main M50, #317; the last merge before this record). Its 4 PR checks on fa260670 (CI
+  41277524755, 8662 passed; build 41277524749) and main's push runs on M50 (CI 41277968770, 8662 passed; build
+  41277968773) are green.
+  Before it: 8e6ac7e3 (#316): PR CI 41270829146 (8662), build 41270829166; push CI 41271197399 (8662), build
+  41271197397.
+  Before it: 7d523d26 (#315): PR CI 41265944993 (8662), build 41265944999; push CI 41266349403 (8662), build
+  41266349420.
+  Before it: 2e9f910d (main M47, #314: the S1-engine batch's STATE record): push CI 41233053833 attempt 1 FAILED (1
+  failed, 8660 passed: the flaky fetch test, fixed since #315), attempt 2 passed 8661 after the diagnosis; build
+  41233053826 green.
+  Before it: 7388ca2b (main M46, #313: the S1 MOCK engine; the last merge before this record). Its 4 PR checks on
   a43e2f7a (CI 41230658884, 8661 passed; build 41230658820) and main's push runs on M46 (CI 41231184039, 8661 passed;
   build 41231184030) are green.
   Before it: e722ac00 (main M45, #312: the CHANGELOG for #310). Its 4 PR checks on ba5c2d41 (CI 41229256634 attempt
@@ -7325,7 +7348,10 @@ LAST_GREEN_SHA=7388ca2b (main M46, #313: the S1 MOCK engine; the last merge befo
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-01 (the S1-engine batch), scanners 3/3 each:
+LAST_VERIFY=PASS 2026-11-01 (this batch), scanners 3/3 each: exact heads 7c9878a4 8565 (on M44), 905a97b8 8661,
+  fa260670 8661; all three merged on M47 8662 (tree a6424c77); this record's own, 8662 at its exact head. CI: #315
+  8662, #316 8662, #317 8662; main's push runs M48 8662, M49 8662, M50 8662 — each on its first attempt.
+  Before it: PASS 2026-11-01 (the S1-engine batch), scanners 3/3 each:
   - The exact-head gates: ba5c2d41 8564 (the CHANGELOG), a43e2f7a 8661 (the engine), M44 + both merged 8661, 7c9878a
     8565 (LOCAL flake fix), and this record's own, 8661 at its exact head.
   - CI on the PR heads: ba5c2d41 8564 (attempt 2; attempt 1 failed on the flake) and a43e2f7a 8661. Main's push runs:
@@ -7704,7 +7730,8 @@ LAST_VERIFY=PASS 2026-11-01 (the S1-engine batch), scanners 3/3 each:
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE (2026-11-01, the S1-engine batch). No delegation in the T3 itself. Before it: 1022–1025 (the
+CODEX_PENDING=NONE (2026-11-01, this batch). No delegation in the T3. No API key, no paid fallback, $0.
+  Before it: NONE (2026-11-01, the S1-engine batch). No delegation in the T3 itself. Before it: 1022–1025 (the
   engine) and 1026 (the flake fix, LOCAL), all DONE, gpt-6-luna at effort high. No API key, no paid fallback, $0.
   Before it: NONE (2026-10-31, the (b2) batch). No delegation in the T3 itself. Before it: 989–1021 ((b2)), all DONE
   or repaired (992, 994, 1008 and 1010 BLOCKED, each repaired; 1019 completed by 1021), gpt-6-luna at effort high
@@ -7910,7 +7937,13 @@ CODEX_PENDING=NONE (2026-11-01, the S1-engine batch). No delegation in the T3 it
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-01, after #312, #313 and this record). Nothing is urgent until the
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-01, after #315–#317 and this record), from
+  .work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md §3: #1 the licence fit (is the NGA research personal
+  non-production research under the Dataset Terms §4.1; will results or models be shared?); #2 the survivorship path
+  A/B/C (.work/nga/master/OWNER_DECISION_PACK_S1_NEXT_20261101.md); #3 keep or re-open OD-NG-4 KEEP_HOLD and OD-NG-2
+  DEFER (the prospective route); then D2–D8, OD-NG-7, OD-NG-3, OD-NG-1. Also: the CHANGELOG entries for #315 and #317
+  (a new T3); the writer-token renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-01, after #312, #313 and this record). Nothing is urgent until the
   writer-token renewal, due by **2026-11-20** (expiry 2026-11-23). Production is unchanged; this batch made no
   production read or change.
   0. Done: the owner's GitHub-only T3 for this batch (#312 → M45, #313 → M46, this record last).
@@ -9346,7 +9379,11 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-01, after #312, #313 and this
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: after this record, prepare the local CLAUDE.md review-routing amendment (owner, 2026-11-01; not
+NEXT_ACTION=Claude: wait at the owner boundary; no ruling-free engineering remains (the EXP-08 specification is
+  F3-adjacent and waits for the owner's word). **The 1D evaluation and the S1 build are CONSUMED — never rebuild or
+  rerun either, and verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no
+  (b3a), (b3b), network, download, real data, T4 or deploy.
+  Before it: Claude: after this record, prepare the local CLAUDE.md review-routing amendment (owner, 2026-11-01; not
   published under this T3) and keep the S1 decision pack current; nothing on the network. **The 1D evaluation and the
   S1 build are CONSUMED — never rebuild or rerun either, and verify them only as
   .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** The owner: the S1 pack's rulings; the writer-token renewal by
