@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-01 - A MOCK/OFFLINE S1 listing-decision engine (on main, not released)
+
+It records #313. Nothing in this entry is released.
+
+Added:
+- #313: `scripts/quant_ng_s1.py`, a dormant tool that decides the archive survivorship check (S1)
+  from already-parsed mock listing observations, under an explicit plan that rules every S1
+  choice. It applies the reviewed order: run-level stops first (including an empty listing), then
+  each probe symbol's outcome, then the run's outcome. It accepts only mock hosts, refuses any plan
+  marked owner-ruled, refuses duplicate keys, never probes BTCUSDT or ETHUSDT, and never turns a
+  missing probe into a pass.
+
+Notes:
+- It contains no network code and reads only the two files it is given. Nothing in the product
+  imports it, and no deployed file changes, so the running app is unaffected. Every real-run S1
+  value is unruled, and no survivorship claim is made from mock tests.
+
 ## 2026-10-31 - (b2) MOCK/OFFLINE engineering for the archive chain (on main, not released)
 
 It records #310. Nothing in this entry is released.
