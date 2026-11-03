@@ -50,21 +50,18 @@ def run_pipeline_ng(
     registry: Mapping,
     cell: Mapping,
     now: datetime,
-    apply_gates=None,
     methodology_version: str = DEFAULT_METHODOLOGY_VERSION,
 ) -> dict:
     """Recompose the legacy pipeline and append a hidden-reference serving block."""
-    if apply_gates is None or not callable(apply_gates):
-        raise Refusal("apply_gates must be callable")
-    if cell.get("symbol") != snapshot.normalized_symbol:
-        raise Refusal("cell symbol does not match snapshot")
-    if cell.get("timeframe") != snapshot.timeframe:
-        raise Refusal("cell timeframe does not match snapshot")
-    if cell.get("methodology_version") != methodology_version:
-        raise Refusal("cell methodology_version does not match argument")
     if methodology_version not in {DEFAULT_METHODOLOGY_VERSION, DISTRIBUTIONAL_METHODOLOGY_VERSION}:
         raise ValueError(f"Unsupported methodology version: {methodology_version}")
     state = serving_state(registry, cell, now)
+    if cell["symbol"] != snapshot.normalized_symbol:
+        raise Refusal("cell symbol does not match snapshot")
+    if cell["timeframe"] != snapshot.timeframe:
+        raise Refusal("cell timeframe does not match snapshot")
+    if cell["methodology_version"] != methodology_version:
+        raise Refusal("cell methodology_version does not match argument")
 
     epistemic = assess_epistemic_sufficiency(snapshot)
     trend = compute_trend_mtf(snapshot.candles)

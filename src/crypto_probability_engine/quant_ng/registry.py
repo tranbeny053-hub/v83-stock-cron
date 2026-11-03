@@ -89,7 +89,7 @@ def _cell_key(cell: Mapping) -> tuple[object, ...]:
     )
 
 
-def _validate_cell(payload: object, *, serving_query: bool = False) -> Mapping:
+def _validate_cell(payload: object) -> Mapping:
     cell = _closed(payload, CELL_FIELDS, "cell")
     symbol = cell["symbol"]
     if not isinstance(symbol, str) or not _SYMBOL.fullmatch(symbol):
@@ -97,8 +97,6 @@ def _validate_cell(payload: object, *, serving_query: bool = False) -> Mapping:
     if not isinstance(cell["venue"], str) or cell["venue"] not in VENUES:
         raise Refusal("venue is unsupported")
     allowed_timeframe = isinstance(cell["timeframe"], str) and cell["timeframe"] in _TIMEFRAMES
-    if serving_query and cell["timeframe"] == "1M":
-        allowed_timeframe = True
     if not allowed_timeframe:
         raise Refusal("timeframe is unsupported")
     horizon = cell["horizon"]
@@ -174,9 +172,7 @@ class ServingState:
 def serving_state(registry: object, cell: object, now: datetime) -> ServingState:
     """Return the heuristic authority state; the reference remains hidden."""
     entries = validate_registry(registry)
-    # 1M may identify a caller's unregistered legacy snapshot, but is never admitted in
-    # registry entries and therefore can only resolve to NONE.
-    query_cell = _validate_cell(cell, serving_query=True)
+    query_cell = _validate_cell(cell)
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise Refusal("now must be a tz-aware UTC datetime")
     if now.utcoffset().total_seconds() != 0:

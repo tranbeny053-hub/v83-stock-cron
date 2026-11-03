@@ -42,6 +42,37 @@ def _module_path(path: Path, root: Path) -> str:
     return ".".join(path.relative_to(root).with_suffix("").parts)
 
 
+def _gate_import_is_violation(source: str, path: Path) -> bool:
+    """Allow exactly the direct composite gate import in the pipeline module."""
+    allowed_path = NG_DIR / "pipeline_ng.py"
+    tree = ast.parse(source)
+    allowed_imports = 0
+    has_gate_import = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(_matches(alias.name, FORBIDDEN[2]) for alias in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                names = _imported_module_names(ast.unparse(node), _module_path(path, ROOT / "src"))
+                if any(_matches(name, FORBIDDEN[2]) for name in names):
+                    return True
+                continue
+            if not _matches(node.module or "", FORBIDDEN[2]):
+                continue
+            has_gate_import = True
+            if not (
+                path == allowed_path
+                and node.module == "crypto_probability_engine.gates.composite"
+                and len(node.names) == 1
+                and node.names[0].name == "apply_composite_gates"
+                and node.names[0].asname is None
+            ):
+                return True
+            allowed_imports += 1
+    return has_gate_import and allowed_imports != 1
+
+
 def test_import_name_helper_resolves_absolute_and_relative_forms() -> None:
     cases = (
         ("import crypto_probability_engine.quant_ng.evidence", "consumer.mod",
@@ -100,45 +131,34 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
 
 
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
-    direct_gate_allowance = {
-        "crypto_probability_engine.gates.composite",
-        "crypto_probability_engine.gates.composite.apply_composite_gates",
-    }
     violations = []
     for path in NG_DIR.rglob("*.py"):
-        names = _imported_module_names(path.read_text(encoding="utf-8"),
-                                       _module_path(path, ROOT / "src"))
+        source = path.read_text(encoding="utf-8")
+        names = _imported_module_names(source, _module_path(path, ROOT / "src"))
+        if _gate_import_is_violation(source, path):
+            violations.append((str(path.relative_to(ROOT)), "crypto_probability_engine.gates"))
         for name in names:
-            forbidden = any(_matches(name, prefix) for prefix in FORBIDDEN)
-            allowed_gate = (
-                path.name == "pipeline_ng.py"
-                and name in direct_gate_allowance
-            )
-            if forbidden and not allowed_gate:
+            if any(_matches(name, prefix) for prefix in FORBIDDEN if prefix != FORBIDDEN[2]):
                 violations.append((str(path.relative_to(ROOT)), name))
     assert violations == []
 
 
 def test_direct_gate_allowance_is_narrow() -> None:
-    """Only pipeline_ng may import the composite gate and its function directly."""
-    allowed = {
-        "crypto_probability_engine.gates.composite",
-        "crypto_probability_engine.gates.composite.apply_composite_gates",
-    }
+    """Only the exact composite gate from-import in pipeline_ng is permitted."""
     path = NG_DIR / "pipeline_ng.py"
-    imported = _imported_module_names(path.read_text(encoding="utf-8"),
-                                      _module_path(path, ROOT / "src"))
-    assert allowed <= set(imported)
-    for other in NG_DIR.rglob("*.py"):
-        if other == path:
-            continue
-        names = _imported_module_names(other.read_text(encoding="utf-8"),
-                                       _module_path(other, ROOT / "src"))
-        assert not any(_matches(name, "crypto_probability_engine.gates") for name in names)
-    assert not any(
-        _matches(name, "crypto_probability_engine.gates") and name not in allowed
-        for name in imported
+    allowed = "from crypto_probability_engine.gates.composite import apply_composite_gates"
+    assert not _gate_import_is_violation(allowed, path)
+    rejected = (
+        "import crypto_probability_engine.gates.composite",
+        "from crypto_probability_engine.gates.composite import other_gate",
+        "from crypto_probability_engine.gates.composite import apply_composite_gates as gate",
+        "from ..gates.composite import apply_composite_gates",
+        f"{allowed}\n{allowed}",
+        allowed,
     )
+    for source in rejected:
+        rejected_path = NG_DIR / "registry.py" if source == allowed else path
+        assert _gate_import_is_violation(source, rejected_path), source
     dormant_modules = {
         f"{NG_PREFIX}.registry",
         f"{NG_PREFIX}.pipeline_ng",

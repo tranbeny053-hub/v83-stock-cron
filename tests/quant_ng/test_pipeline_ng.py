@@ -172,6 +172,7 @@ def test_generate_frozen_legacy_parity() -> None:
 def test_legacy_frozen_parity_and_ng_whole_result_identity() -> None:
     frozen = {row["id"]: row for row in json.loads(FIXTURE.read_text(encoding="utf-8"))}
     assert len(frozen) == 45
+    saw_nonempty_legacy_gate = False
     for case_id, snapshot, provider, method in _cases():
         legacy = run_quant_pipeline(snapshot, dict(provider), methodology_version=method)
         row = frozen[case_id]
@@ -187,25 +188,25 @@ def test_legacy_frozen_parity_and_ng_whole_result_identity() -> None:
             if key in legacy["gate_result"]
         }
         assert row["gate_result"] == expected_gate, case_id
+        saw_nonempty_legacy_gate = saw_nonempty_legacy_gate or bool(legacy["gate_result"])
         no_registry_cell = snapshot.timeframe == "1M"
+        if no_registry_cell:
+            continue
         ng = run_pipeline_ng(
             snapshot,
             dict(provider),
-            registry=(
-                _registry() if no_registry_cell else _registry(_entry(_cell(snapshot, method)))
-            ),
+            registry=_registry(_entry(_cell(snapshot, method))),
             cell=_cell(snapshot, method),
             now=NOW,
-            apply_gates=lambda **_: {},
             methodology_version=method,
         )
         assert ng["result"] == legacy, case_id
         assert _canonical(ng["result"]) == _canonical(legacy), case_id
-        expected_ng = EXPECTED_NG_NONE if no_registry_cell else EXPECTED_NG
-        assert ng == {"result": legacy, "ng": expected_ng}, case_id
+        assert ng == {"result": legacy, "ng": EXPECTED_NG}, case_id
         for horizon in legacy["probability_state"].get("horizons", {}).values():
             assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
         assert _timestamp_values(ng["result"]) == _timestamp_values(legacy)
+    assert saw_nonempty_legacy_gate
 
 
 def _timestamp_values(value):
@@ -216,6 +217,27 @@ def _timestamp_values(value):
     if isinstance(value, str) and ("T" in value and value.endswith(("Z", "+00:00"))):
         return value
     return None
+
+
+def test_run_pipeline_refuses_1m():
+    snap = make_snapshot(timeframe="1M")
+    with pytest.raises(Refusal, match="timeframe"):
+        run_pipeline_ng(snap, {"status": "OK"}, registry=_registry(), cell=_cell(snap), now=NOW)
+
+
+def test_non_mapping_cell_is_refused():
+    snap = make_snapshot()
+    with pytest.raises(Refusal):
+        run_pipeline_ng(snap, {"status": "OK"}, registry=_registry(), cell=[], now=NOW)
+
+
+def test_unsupported_argument_precedes_legacy_cell_validation():
+    snap = make_snapshot()
+    with pytest.raises(ValueError, match="^Unsupported methodology version: unknown$"):
+        run_pipeline_ng(
+            snap, {"status": "OK"}, registry=_registry(), cell=_cell(snap), now=NOW,
+            methodology_version="unknown",
+        )
 
 
 def test_serving_state_hidden_for_shadow_and_unregistered() -> None:
@@ -276,7 +298,6 @@ def test_unserved_methodology_uses_legacy_value_error(method):
             registry=_registry(),
             cell=cell,
             now=NOW,
-            apply_gates=lambda **_: {},
             methodology_version=method,
         )
 
@@ -289,7 +310,7 @@ def test_now_must_be_utc(bad_now):
         serving_state(_registry(), _cell(make_snapshot()), bad_now)
 
 
-def test_snapshot_mismatches_and_missing_gate_are_refused():
+def test_snapshot_mismatches_are_refused():
     snap = make_snapshot()
     cell = _cell(snap)
     for field, value in (
@@ -300,20 +321,18 @@ def test_snapshot_mismatches_and_missing_gate_are_refused():
         bad = dict(cell, **{field: value})
         with pytest.raises(Refusal, match=field):
             run_pipeline_ng(
-                snap,
-                {"status": "OK"},
-                registry=_registry(),
-                cell=bad,
-                now=NOW,
-                apply_gates=lambda **_: {},
+                snap, {"status": "OK"}, registry=_registry(), cell=bad, now=NOW
             )
-    for gate in (None, object()):
-        with pytest.raises(Refusal, match="apply_gates"):
-            run_pipeline_ng(
-                snap, {"status": "OK"}, registry=_registry(), cell=cell, now=NOW, apply_gates=gate
-            )
-    with pytest.raises(Refusal, match="apply_gates"):
-        run_pipeline_ng(snap, {"status": "OK"}, registry=_registry(), cell=cell, now=NOW)
+
+
+def test_gate_hook_is_not_an_injection_point():
+    snap = make_snapshot()
+    with pytest.raises(TypeError):
+        run_pipeline_ng(
+            snap, {"status": "OK"}, registry=_registry(), cell=_cell(snap), now=NOW,
+            apply_gates=lambda **_: {},
+        )
+
 
 
 @pytest.mark.parametrize(
@@ -338,7 +357,7 @@ def test_inputs_are_not_mutated_and_repeated_calls_are_deterministic():
     cell = _cell(snap)
     registry = _registry(_entry(cell))
     before = copy.deepcopy((snap, provider, cell, registry))
-    args = dict(registry=registry, cell=cell, now=NOW, apply_gates=lambda **_: {})
+    args = dict(registry=registry, cell=cell, now=NOW)
     first = run_pipeline_ng(snap, provider, **args)
     second = run_pipeline_ng(snap, provider, **args)
     assert first == second
