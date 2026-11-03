@@ -1,11 +1,12 @@
 """Parity coverage for the dormant NG1 wrapper.
 
-Frozen fixture generation (run once at the M51 base, never in CI):
+Frozen fixture generation (ran once at the M51 base; never part of the test suite):
 ```sh
-UCPE_GENERATE_NG_PARITY=1 .venv/bin/python -m pytest -q \\
-  tests/quant_ng/test_pipeline_ng.py::test_generate_frozen_legacy_parity
+UCPE_GENERATE_NG_PARITY=1 .venv/bin/python -c \\
+  "from tests.quant_ng.test_pipeline_ng import generate_frozen_legacy_parity as g; g()"
 ```
-The explicit environment flag is required; the normal test suite never writes the fixture.
+The generator is a plain function, not a test: the suite neither skips it nor counts it
+as passed, and it refuses to write without the explicit environment flag.
 """
 
 from __future__ import annotations
@@ -159,10 +160,10 @@ def _frozen_rows() -> list[dict]:
     return rows
 
 
-def test_generate_frozen_legacy_parity() -> None:
-    """Generate only with UCPE_GENERATE_NG_PARITY=1; normal CI must not write files."""
+def generate_frozen_legacy_parity() -> None:
+    """Write the frozen file; refuses without UCPE_GENERATE_NG_PARITY=1. Not a test."""
     if os.environ.get("UCPE_GENERATE_NG_PARITY") != "1":
-        return
+        raise RuntimeError("set UCPE_GENERATE_NG_PARITY=1 to regenerate the frozen parity file")
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
     FIXTURE.write_text(
         json.dumps(_frozen_rows(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -207,6 +208,20 @@ def test_legacy_frozen_parity_and_ng_whole_result_identity() -> None:
             assert horizon["p_up_frac"] + horizon["p_down_frac"] + horizon["p_timeout_frac"] == 1.0
         assert _timestamp_values(ng["result"]) == _timestamp_values(legacy)
     assert saw_nonempty_legacy_gate
+    assert len({row["gate_result"].get("action") for row in frozen.values()}) > 1
+
+
+def test_unregistered_cell_whole_return_identity() -> None:
+    snapshot = make_snapshot()
+    legacy = run_quant_pipeline(snapshot, {"status": "OK"})
+    ng = run_pipeline_ng(
+        snapshot,
+        {"status": "OK"},
+        registry=_registry(),
+        cell=_cell(snapshot),
+        now=NOW,
+    )
+    assert ng == {"result": legacy, "ng": EXPECTED_NG_NONE}
 
 
 def _timestamp_values(value):

@@ -121,6 +121,8 @@ def test_serving_state_is_always_hidden_and_heuristic():
     assert present.slot_policy == SLOT_POLICY
     with pytest.raises(Refusal, match="tier must be HEURISTIC"):
         ServingState("REFERENCE", "HIDDEN", "SHADOW", SLOT_POLICY, "reason")
+    with pytest.raises(Refusal, match="reference must be HIDDEN"):
+        ServingState("HEURISTIC", "SHOWN", "SHADOW", SLOT_POLICY, "reason")
 
 
 @pytest.mark.parametrize(
@@ -128,7 +130,9 @@ def test_serving_state_is_always_hidden_and_heuristic():
     [
         datetime(2026, 11, 3),
         datetime(2026, 11, 3, tzinfo=timezone(timedelta(hours=1))),
+        datetime(2026, 1, 15, tzinfo=timezone(timedelta(0), "GMT")),
     ],
+    ids=["naive", "plus-one-hour", "zero-offset-but-not-utc"],
 )
 def test_now_must_be_aware_utc(bad_now):
     with pytest.raises(Refusal, match="UTC"):

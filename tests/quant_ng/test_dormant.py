@@ -42,35 +42,41 @@ def _module_path(path: Path, root: Path) -> str:
     return ".".join(path.relative_to(root).with_suffix("").parts)
 
 
-def _gate_import_is_violation(source: str, path: Path) -> bool:
-    """Allow exactly the direct composite gate import in the pipeline module."""
-    allowed_path = NG_DIR / "pipeline_ng.py"
+ALLOWED_GATE_IMPORT = (
+    "crypto_probability_engine.gates.composite",
+    (("apply_composite_gates", None),),
+)
+
+
+def _forbidden_names(source: str, path: Path) -> list[str]:
+    """Every forbidden import name in a quant_ng file.
+
+    The name check covers every form the helper resolves (absolute, relative and parent-package
+    imports). The single exemption is exactly one statement,
+    ``from crypto_probability_engine.gates.composite import apply_composite_gates`` (no alias, no
+    other name), in the file ``NG_DIR / "pipeline_ng.py"``.
+    """
+    module_path = _module_path(path, ROOT / "src")
     tree = ast.parse(source)
-    allowed_imports = 0
-    has_gate_import = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            if any(_matches(alias.name, FORBIDDEN[2]) for alias in node.names):
-                return True
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                names = _imported_module_names(ast.unparse(node), _module_path(path, ROOT / "src"))
-                if any(_matches(name, FORBIDDEN[2]) for name in names):
-                    return True
-                continue
-            if not _matches(node.module or "", FORBIDDEN[2]):
-                continue
-            has_gate_import = True
-            if not (
-                path == allowed_path
-                and node.module == "crypto_probability_engine.gates.composite"
-                and len(node.names) == 1
-                and node.names[0].name == "apply_composite_gates"
-                and node.names[0].asname is None
-            ):
-                return True
-            allowed_imports += 1
-    return has_gate_import and allowed_imports != 1
+    imports = [node for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))]
+    exempt = [
+        node
+        for node in imports
+        if path == NG_DIR / "pipeline_ng.py"
+        and isinstance(node, ast.ImportFrom)
+        and node.level == 0
+        and (node.module, tuple((a.name, a.asname) for a in node.names)) == ALLOWED_GATE_IMPORT
+    ]
+    violations = []
+    if len(exempt) > 1:
+        violations.append("crypto_probability_engine.gates.composite (repeated)")
+    for node in imports:
+        if len(exempt) == 1 and node is exempt[0]:
+            continue
+        for name in _imported_module_names(ast.unparse(node), module_path):
+            if any(_matches(name, prefix) for prefix in FORBIDDEN):
+                violations.append(name)
+    return violations
 
 
 def test_import_name_helper_resolves_absolute_and_relative_forms() -> None:
@@ -133,32 +139,34 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
     violations = []
     for path in NG_DIR.rglob("*.py"):
-        source = path.read_text(encoding="utf-8")
-        names = _imported_module_names(source, _module_path(path, ROOT / "src"))
-        if _gate_import_is_violation(source, path):
-            violations.append((str(path.relative_to(ROOT)), "crypto_probability_engine.gates"))
-        for name in names:
-            if any(_matches(name, prefix) for prefix in FORBIDDEN if prefix != FORBIDDEN[2]):
-                violations.append((str(path.relative_to(ROOT)), name))
+        names = _forbidden_names(path.read_text(encoding="utf-8"), path)
+        violations.extend((str(path.relative_to(ROOT)), name) for name in names)
     assert violations == []
 
 
 def test_direct_gate_allowance_is_narrow() -> None:
-    """Only the exact composite gate from-import in pipeline_ng is permitted."""
+    """Only the exact composite gate from-import in pipeline_ng is exempt; all else is caught."""
     path = NG_DIR / "pipeline_ng.py"
     allowed = "from crypto_probability_engine.gates.composite import apply_composite_gates"
-    assert not _gate_import_is_violation(allowed, path)
+    assert _forbidden_names(allowed, path) == []
     rejected = (
-        "import crypto_probability_engine.gates.composite",
-        "from crypto_probability_engine.gates.composite import other_gate",
-        "from crypto_probability_engine.gates.composite import apply_composite_gates as gate",
-        "from ..gates.composite import apply_composite_gates",
-        f"{allowed}\n{allowed}",
-        allowed,
+        ("import crypto_probability_engine.gates.composite", path),
+        ("import crypto_probability_engine.gates", path),
+        ("from crypto_probability_engine import gates", path),
+        ("from crypto_probability_engine import gates as g", path),
+        ("from crypto_probability_engine.gates import composite", path),
+        ("from crypto_probability_engine.gates.composite import other_gate", path),
+        (f"{allowed} as gate", path),
+        (f"{allowed}, other_gate", path),
+        ("from ..gates.composite import apply_composite_gates", path),
+        ("from .. import gates", path),
+        (f"{allowed}\n{allowed}", path),
+        (f"{allowed}\nfrom crypto_probability_engine import gates", path),
+        (f"{allowed}\nfrom crypto_probability_engine import api", path),
+        (allowed, NG_DIR / "registry.py"),
     )
-    for source in rejected:
-        rejected_path = NG_DIR / "registry.py" if source == allowed else path
-        assert _gate_import_is_violation(source, rejected_path), source
+    for source, target in rejected:
+        assert _forbidden_names(source, target), (source, target.name)
     dormant_modules = {
         f"{NG_PREFIX}.registry",
         f"{NG_PREFIX}.pipeline_ng",

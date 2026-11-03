@@ -167,6 +167,8 @@ class ServingState:
     def __post_init__(self) -> None:
         if self.tier != "HEURISTIC":
             raise Refusal("tier must be HEURISTIC under KEEP_HOLD")
+        if self.reference != "HIDDEN":
+            raise Refusal("reference must be HIDDEN under KEEP_HOLD")
 
 
 def serving_state(registry: object, cell: object, now: datetime) -> ServingState:
@@ -175,7 +177,7 @@ def serving_state(registry: object, cell: object, now: datetime) -> ServingState
     query_cell = _validate_cell(cell)
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise Refusal("now must be a tz-aware UTC datetime")
-    if now.utcoffset().total_seconds() != 0:
+    if now.utcoffset().total_seconds() != 0 or now.tzname() != "UTC":
         raise Refusal("now must be a tz-aware UTC datetime")
     key = _cell_key(query_cell)
     status = "NONE"
