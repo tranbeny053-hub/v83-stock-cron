@@ -100,14 +100,62 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
 
 
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
+    direct_gate_allowance = {
+        "crypto_probability_engine.gates.composite",
+        "crypto_probability_engine.gates.composite.apply_composite_gates",
+    }
     violations = []
     for path in NG_DIR.rglob("*.py"):
         names = _imported_module_names(path.read_text(encoding="utf-8"),
                                        _module_path(path, ROOT / "src"))
         for name in names:
-            if any(_matches(name, prefix) for prefix in FORBIDDEN):
+            forbidden = any(_matches(name, prefix) for prefix in FORBIDDEN)
+            allowed_gate = (
+                path.name == "pipeline_ng.py"
+                and name in direct_gate_allowance
+            )
+            if forbidden and not allowed_gate:
                 violations.append((str(path.relative_to(ROOT)), name))
     assert violations == []
+
+
+def test_direct_gate_allowance_is_narrow() -> None:
+    """Only pipeline_ng may import the composite gate and its function directly."""
+    allowed = {
+        "crypto_probability_engine.gates.composite",
+        "crypto_probability_engine.gates.composite.apply_composite_gates",
+    }
+    path = NG_DIR / "pipeline_ng.py"
+    imported = _imported_module_names(path.read_text(encoding="utf-8"),
+                                      _module_path(path, ROOT / "src"))
+    assert allowed <= set(imported)
+    for other in NG_DIR.rglob("*.py"):
+        if other == path:
+            continue
+        names = _imported_module_names(other.read_text(encoding="utf-8"),
+                                       _module_path(other, ROOT / "src"))
+        assert not any(_matches(name, "crypto_probability_engine.gates") for name in names)
+    assert not any(
+        _matches(name, "crypto_probability_engine.gates") and name not in allowed
+        for name in imported
+    )
+    dormant_modules = {
+        f"{NG_PREFIX}.registry",
+        f"{NG_PREFIX}.pipeline_ng",
+    }
+    external_importers = []
+    for folder in (ROOT / "src", ROOT / "scripts"):
+        if not folder.exists():
+            continue
+        for candidate in folder.rglob("*.py"):
+            if NG_DIR == candidate or NG_DIR in candidate.parents:
+                continue
+            names = _imported_module_names(
+                candidate.read_text(encoding="utf-8"), _module_path(candidate, folder)
+            )
+            if any(_matches(name, module) for name in names for module in dormant_modules):
+                external_importers.append(str(candidate.relative_to(ROOT)))
+    assert external_importers == []
 
 
 def test_src_does_not_import_quant_ng_fit() -> None:
