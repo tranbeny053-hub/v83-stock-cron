@@ -2,6 +2,28 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-01 - A fix for a time-dependent test, and risk-based review routing in CLAUDE.md (on main, not released)
+
+It records #315 and #317. Nothing in this entry is released.
+
+Fixed:
+- #315: a test of the dormant fetch tool failed at random. Its helper built mock zip files that
+  embedded the current time, and the test rebuilt the expected bytes later, so it failed whenever
+  the clock crossed a two-second step in between. It failed two CI runs on 2026-10-31. Every test
+  zip helper whose bytes are hashed or rebuilt now uses a fixed time, and one new test checks that
+  a zip built twice, seconds apart, is identical. Tests only; no product code changed.
+
+Changed:
+- #317: `CLAUDE.md` now carries the owner's risk-based review routing. Each task is first
+  classified by tier, irreversibility, exposure and scientific risk. Read-only documents and
+  ordinary mechanical changes get deterministic checks and the master's audit; sensitive and
+  contract or quant changes get a review of the actual change and its consumers, independent
+  where required. Rounds are consolidated, later checks cover only what changed, and a stalled
+  review is stopped and re-briefed. No mandatory review, gate, scanner or owner step is removed.
+
+Notes:
+- Neither change touches a deployed file, so the running app is unaffected.
+
 ## 2026-11-01 - A MOCK/OFFLINE S1 listing-decision engine (on main, not released)
 
 It records #313. Nothing in this entry is released.
