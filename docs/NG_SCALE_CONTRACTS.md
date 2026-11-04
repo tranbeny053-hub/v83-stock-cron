@@ -46,9 +46,12 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 
 ## Deliberately absent
 
-There is no registry, pipeline, wiring, lattice, model constant, prior value, decision tolerance,
-F3 or look. The reference tier's priors and the candidate's constants are always the caller's;
-none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
+The NG1 registry and `pipeline_ng` now exist as dormant modules encoding KEEP_HOLD and DEFER;
+they do not wire into a serving path. `quant_ng` already depends on `gates` transitively through
+`quant.pipeline.stable_hash`; `pipeline_ng.py` has the one direct allowance for
+`gates.composite.apply_composite_gates`. There is still no wiring, lattice, model constant, prior
+value, decision tolerance, F3 or look. The reference tier's priors and the candidate's constants
+are always the caller's; none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
 implemented, and 1W under the owner's 2026-10-23 ruling (DEV-only, no F3 access). EXP-01 and
 EXP-02 ran once each under the owner's 2026-10-22 rulings (recorded in STATE); the parity
 tests here are synthetic. S-R2 revision evidence and
@@ -56,3 +59,8 @@ S-R4 retention (including never deleting claim evidence and capacity stop rules)
 rules with no code here. S-E3 freeze content and S-C1's maximum commit delay are protocol and
 owner matters; this code sets neither. These safeguards are executable proposals only; they do
 not select or serve a model.
+
+The dormant wrapper keeps NG metadata in a side `ng` block; adding it to the legacy result would
+change `analysis_hash` under HOLD. `candidate_shadow` and `h_extended_context` are omitted because
+NG3 response additions in §H.5 are not authorized. The band/staleness serving rule from §H.3 is
+not built: KEEP_HOLD always leaves the heuristic authoritative and the reference hidden.
