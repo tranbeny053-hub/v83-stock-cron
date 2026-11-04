@@ -84,8 +84,10 @@ from crypto_probability_engine.persistence.repository import (
 )
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
+from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng
+from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
-from crypto_probability_engine.targets.contract_v1 import stamp_v1
+from crypto_probability_engine.targets.contract_v1 import TARGET_VERSION_V1, VENUE_LABELS, stamp_v1
 from crypto_probability_engine.telemetry.events import (
     CURRENT_PROVIDER_STATS,
     CURRENT_REQUEST_ID,
@@ -101,6 +103,10 @@ from crypto_probability_engine.validation.market_data import (
 )
 
 _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ucpe-persist")
+# OFF by owner R3a (2026-11-04). Turning this on is activation: a reviewed code change, then T3/T4.
+# No environment variable, setting, header or request parameter reads or sets it.
+NG_PIPELINE_ENABLED = False
+NG_EMPTY_REGISTRY = {"schema": SCHEMA_ID, "slot_policy": SLOT_POLICY, "cells": []}
 _MAX_IN_FLIGHT_PERSISTENCE_JOBS = 8
 _PERSISTENCE_ADMISSION = threading.BoundedSemaphore(_MAX_IN_FLIGHT_PERSISTENCE_JOBS)
 _PENDING_PREDICTION_ROWS: dict[str, dict] = {}
@@ -350,11 +356,55 @@ def _analyze(
         if deterministic_identity
         else None
     )
-    quant_result = run_quant_pipeline(
-        snapshot,
-        provider_state,
-        methodology_version=methodology_version,
+    ng_serving = None
+    use_ng_pipeline = (
+        NG_PIPELINE_ENABLED and record_prediction and arm_context is None and pair_context is None
     )
+    if use_ng_pipeline:
+        venue = VENUE_LABELS.get(snapshot.provider)
+        if venue is None:
+            ng_serving = {
+                "schema": "quant-ng-serving.v1",
+                "status": "UNAVAILABLE",
+                "reason": "provider not mapped",
+            }
+        else:
+            cell = {
+                "symbol": snapshot.normalized_symbol,
+                "venue": venue,
+                "timeframe": request.timeframe,
+                "horizon": DEFAULT_PHASE1A.h_primary_bars,
+                "target_version": TARGET_VERSION_V1,
+                "methodology_version": methodology_version,
+            }
+            try:
+                ng_result = run_pipeline_ng(
+                    snapshot,
+                    provider_state,
+                    registry=NG_EMPTY_REGISTRY,
+                    cell=cell,
+                    now=snapshot.as_of_utc,
+                    methodology_version=methodology_version,
+                )
+            except (Refusal, ValueError) as exc:
+                ng_serving = {
+                    "schema": "quant-ng-serving.v1",
+                    "status": "UNAVAILABLE",
+                    "reason": str(exc),
+                }
+            else:
+                quant_result = ng_result["result"]
+                ng_serving = {
+                    **ng_result["ng"],
+                    "status": "SERVED_HIDDEN",
+                    "h_extended_context": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
+                }
+    if not use_ng_pipeline or ng_serving is None or ng_serving["status"] == "UNAVAILABLE":
+        quant_result = run_quant_pipeline(
+            snapshot,
+            provider_state,
+            methodology_version=methodology_version,
+        )
     clock.lap("quant_ms")
     core_computed_at = _stamp_clock()
     skill_evidence = (
@@ -473,6 +523,8 @@ def _analyze(
         },
         "analysis_hash": "",
     }
+    if use_ng_pipeline:
+        response["ng_serving"] = ng_serving
     if record_prediction and arm_context is None:
         # The one authoritative view (plan §14.1; owner rulings DP-A and DP-F), for every recorded
         # analysis; never for the isolated automation analysis or an OOS arm.
@@ -529,6 +581,8 @@ def _analyze(
     if "decision_view" not in response:
         # No view, no key: the automation analysis and OOS arms carry no decision_view at all.
         validated.pop("decision_view", None)
+    if "ng_serving" not in response:
+        validated.pop("ng_serving", None)
     derivatives_block = validated["derivatives_intelligence"]
     derivatives_snapshot_required = derivatives_block["block_status"] in {
         "ACTIVE",

@@ -170,8 +170,10 @@ def test_no_production_path_calls_the_history_capability() -> None:
     """Zero behaviour change: the first caller is a future, owner-authorized wiring.
 
     Outside the adapters, only the dormant distributional-v2 serving path names the capability,
-    and nothing imports that path. The dormant quant_ng package (NGA, unwired) may also name the
-    capability, and nothing outside quant_ng imports it.
+    and nothing imports that path. The dormant quant_ng package (NGA) may also name the capability.
+    Since NG3's dormant wiring (owner R3a, 2026-11-04) exactly one production module imports
+    quant_ng, api/analysis_service.py, and only the registry and pipeline_ng: neither calls the
+    window loader that fetches history, and the importer never names it.
     """
 
     package = ROOT / "src" / "crypto_probability_engine"
@@ -197,7 +199,16 @@ def test_no_production_path_calls_the_history_capability() -> None:
         for name, text in sources.items()
         if not name.startswith("quant_ng/") and "quant_ng" in text
     ]
-    assert quant_ng_importers == []
+    assert quant_ng_importers == ["api/analysis_service.py"]
+    service_ng_lines = [
+        line for line in sources["api/analysis_service.py"].splitlines() if "quant_ng" in line
+    ]
+    assert service_ng_lines == [
+        "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
+        "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal",
+    ]
+    for name in ("api/analysis_service.py", "quant_ng/registry.py", "quant_ng/pipeline_ng.py"):
+        assert "acquire_window" not in sources[name], name
 
 
 # --------------------------------------------------------------------------- request bounds

@@ -131,9 +131,30 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
                 continue
             names = _imported_module_names(path.read_text(encoding="utf-8"),
                                            _module_path(path, folder))
-            if any(_matches(name, NG_PREFIX) for name in names):
+            imports_ng = any(_matches(name, NG_PREFIX) for name in names)
+            if imports_ng and not _allowed_serving_imports(path):
                 violations.append(str(path.relative_to(ROOT)))
     assert violations == []
+
+
+def _allowed_serving_imports(path: Path) -> bool:
+    """The sole product importer is the two dormant imports in analysis_service."""
+    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+    if path != allowed_path:
+        return False
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level:
+            continue
+        names = tuple((item.name, item.asname) for item in node.names)
+        if node.module == f"{NG_PREFIX}.pipeline_ng":
+            found.append(names == (("run_pipeline_ng", None),))
+        elif node.module == f"{NG_PREFIX}.registry":
+            found.append(
+                set(names) == {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
+            )
+    return found == [True, True]
 
 
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
@@ -183,7 +204,40 @@ def test_direct_gate_allowance_is_narrow() -> None:
             )
             if any(_matches(name, module) for name in names for module in dormant_modules):
                 external_importers.append(str(candidate.relative_to(ROOT)))
-    assert external_importers == []
+    assert external_importers == ["src/crypto_probability_engine/api/analysis_service.py"]
+    assert _allowed_serving_imports(ROOT / external_importers[0])
+
+
+def test_external_ng_import_allowance_rejects_other_forms() -> None:
+    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+    rejected = (
+        ("import crypto_probability_engine.quant_ng.pipeline_ng", allowed_path),
+        (
+            "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng as run",
+            allowed_path,
+        ),
+        ("from crypto_probability_engine.quant_ng.registry import serving_state", allowed_path),
+        ("from crypto_probability_engine import quant_ng", allowed_path),
+        ("from crypto_probability_engine.quant_ng import pipeline_ng", allowed_path),
+        ("from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
+         ROOT / "src/crypto_probability_engine/api/errors.py"),
+    )
+    for source, path in rejected:
+        assert not _allowed_source(source, path)
+
+
+def _allowed_source(source: str, path: Path) -> bool:
+    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+    if path != allowed_path:
+        return False
+    tree = ast.parse(source)
+    statements = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
+    expected = {
+        (f"{NG_PREFIX}.pipeline_ng", (("run_pipeline_ng", None),)),
+        (f"{NG_PREFIX}.registry", (("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None))),
+    }
+    actual = {(node.module, tuple((a.name, a.asname) for a in node.names)) for node in statements}
+    return actual == expected and all(node.level == 0 for node in statements)
 
 
 def test_src_does_not_import_quant_ng_fit() -> None:

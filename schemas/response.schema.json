@@ -167,7 +167,112 @@
       }
     },
     "debug": { "type": "object" },
-    "analysis_hash": { "type": "string" }
+    "analysis_hash": { "type": "string" },
+    "ng_serving": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "serving_state",
+            "reference_state",
+            "evidence_status",
+            "slot_policy",
+            "policy_id",
+            "status",
+            "h_extended_context"
+          ],
+          "properties": {
+            "schema": {
+              "const": "quant-ng-serving.v1"
+            },
+            "serving_state": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "tier",
+                "reference",
+                "status",
+                "slot_policy",
+                "reason"
+              ],
+              "properties": {
+                "tier": {
+                  "const": "HEURISTIC"
+                },
+                "reference": {
+                  "const": "HIDDEN"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "slot_policy": {
+                  "const": "HOLD_HIDDEN_REFERENCE"
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "reference_state": {
+              "const": "HIDDEN"
+            },
+            "evidence_status": {
+              "const": "NONE"
+            },
+            "slot_policy": {
+              "const": "HOLD_HIDDEN_REFERENCE"
+            },
+            "policy_id": {
+              "type": "null"
+            },
+            "status": {
+              "const": "SERVED_HIDDEN"
+            },
+            "h_extended_context": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "reason"
+              ],
+              "properties": {
+                "status": {
+                  "const": "UNAVAILABLE"
+                },
+                "reason": {
+                  "const": "NOT_MODELED"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema",
+            "status",
+            "reason"
+          ],
+          "properties": {
+            "schema": {
+              "const": "quant-ng-serving.v1"
+            },
+            "status": {
+              "const": "UNAVAILABLE"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
   },
   "$defs": {
     "decisionView": {

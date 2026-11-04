@@ -60,7 +60,12 @@ rules with no code here. S-E3 freeze content and S-C1's maximum commit delay are
 owner matters; this code sets neither. These safeguards are executable proposals only; they do
 not select or serve a model.
 
-The dormant wrapper keeps NG metadata in a side `ng` block; adding it to the legacy result would
-change `analysis_hash` under HOLD. `candidate_shadow` and `h_extended_context` are omitted because
-NG3 response additions in §H.5 are not authorized. The band/staleness serving rule from §H.3 is
-not built: KEEP_HOLD always leaves the heuristic authoritative and the reference hidden.
+NG3 imports `pipeline_ng` in `analysis_service.py` behind the owner-approved, default-OFF constant;
+only the recorded human path can reach it, and OFF preserves the existing response and persistence
+bytes. ON adds one optional `ng_serving` object with HIDDEN/NONE/UNAVAILABLE states; the heuristic
+remains authoritative, and no candidate becomes authoritative. There is no lattice or
+`quant_ng/lattice.py`, no frontend display (OD5 shadow data remains out of the normal UI), no
+migration 0019 or writes to the new population/timing columns, and no fit, refit, activation, or
+serving rule from §H.3. The §H.5 fields are nested in `ng_serving`; `not_a_forecast` is omitted to
+preserve `probability_state`, and `candidate_shadow` is absent because KEEP_HOLD creates no
+candidate. `h_extended_context` is explicitly UNAVAILABLE/NOT_MODELED.
