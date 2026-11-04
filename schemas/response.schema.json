@@ -205,16 +205,16 @@
                   "const": "HIDDEN"
                 },
                 "status": {
-                  "type": "string"
+                  "enum": [
+                    "NONE",
+                    "SHADOW"
+                  ]
                 },
                 "slot_policy": {
                   "const": "HOLD_HIDDEN_REFERENCE"
                 },
                 "reason": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": "string"
                 }
               }
             },

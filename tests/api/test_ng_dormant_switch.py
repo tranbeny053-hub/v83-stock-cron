@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -156,6 +155,10 @@ def test_off_matches_frozen_golden(
     assert response["analysis_hash"] == row["analysis_hash"]
     assert _canonical_sha(response) == row["response_sha256"]
     assert _canonical_sha(prediction) == row["prediction_row_sha256"]
+    isolated, _none = _analyze(methodology, timeframe=timeframe, isolated=True)
+    row = GOLDEN["cases"][_case_id(timeframe, shape, provider_status, methodology) + "_isolated"]
+    assert isolated["analysis_hash"] == row["analysis_hash"]
+    assert _canonical_sha(isolated) == row["response_sha256"]
 
 
 @pytest.mark.parametrize(
@@ -276,38 +279,17 @@ def test_authoritative_gate_actions_vary_across_supported_cases(monkeypatch) -> 
     assert len(actions) >= 2
 
 
-def test_response_schema_is_only_additive_ng_serving_property() -> None:
-    base = json.loads(
-        subprocess.run(
-            ["git", "show", "8ab729a5:schemas/response.schema.json"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout
-    )
-    current_text = (ROOT / "schemas/response.schema.json").read_text()
-    current = json.loads(current_text)
-    assert "ng_serving" in current["properties"]
-    current["properties"].pop("ng_serving")
-    assert current == base
+# _canonical_sha (sort_keys, compact, ensure_ascii=False) of schemas/response.schema.json at M53
+# 8ab729a5.
+M53_RESPONSE_SCHEMA_SHA256 = "3b74a5ade30b0ae3db69f8ef7735470912ec7c8d084a3b7981c47471ae470b78"
 
-    diff = subprocess.run(
-        ["git", "diff", "--unified=0", "8ab729a5", "--", "schemas/response.schema.json"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    changed_lines = [
-        line
-        for line in diff
-        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
-    ]
-    hunks = [line for line in diff if line.startswith("@@")]
-    assert changed_lines
-    assert len(hunks) == 1 and hunks[0].startswith("@@ -170 +170,")
-    assert changed_lines[0] == '-    "analysis_hash": { "type": "string" }'
-    assert changed_lines[1] == '+    "analysis_hash": { "type": "string" },'
-    assert all(line.startswith("+") for line in changed_lines[2:])
+
+def test_response_schema_is_only_additive_ng_serving_property() -> None:
+    current = json.loads((ROOT / "schemas/response.schema.json").read_text())
+    assert "ng_serving" in current["properties"]
+    assert "ng_serving" not in current["required"]
+    current["properties"].pop("ng_serving")
+    assert _canonical_sha(current) == M53_RESPONSE_SCHEMA_SHA256
 
 
 def test_distributional_1d_is_same_legacy_error_with_switch_off_or_on(monkeypatch) -> None:
@@ -433,6 +415,11 @@ def generate_ng_off_parity_golden(path: Path | None = None) -> dict:
                 "prediction_row_sha256": _canonical_sha(prediction),
                 "response_sha256": _canonical_sha(response),
             }
+            isolated, _none = _analyze(method, timeframe=tf, isolated=True)
+            cases[_case_id(tf, shape, status, method) + "_isolated"] = {
+                "analysis_hash": isolated["analysis_hash"],
+                "response_sha256": _canonical_sha(isolated),
+            }
     data = {
         "cases": cases,
         "generated_from": "M53 8ab729a5 before NG3 code changes",
@@ -446,8 +433,9 @@ def test_golden_lists_exactly_the_supported_cases() -> None:
     expected = {
         _case_id(tf, shape, status, method) for tf, shape, _m, status, method in _off_cases()
     }
+    expected |= {case + "_isolated" for case in expected}
     assert set(GOLDEN["cases"]) == expected
-    assert len(expected) == 46
+    assert len(expected) == 92
 
 
 _SERVED_NG = {

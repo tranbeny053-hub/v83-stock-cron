@@ -129,32 +129,62 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
         for path in folder.rglob("*.py"):
             if NG_DIR == path or NG_DIR in path.parents:
                 continue
-            names = _imported_module_names(path.read_text(encoding="utf-8"),
-                                           _module_path(path, folder))
-            imports_ng = any(_matches(name, NG_PREFIX) for name in names)
-            if imports_ng and not _allowed_serving_imports(path):
-                violations.append(str(path.relative_to(ROOT)))
-    assert violations == []
-
-
-def _allowed_serving_imports(path: Path) -> bool:
-    """The sole product importer is the two dormant imports in analysis_service."""
-    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
-    if path != allowed_path:
-        return False
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    found = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom) or node.level:
-            continue
-        names = tuple((item.name, item.asname) for item in node.names)
-        if node.module == f"{NG_PREFIX}.pipeline_ng":
-            found.append(names == (("run_pipeline_ng", None),))
-        elif node.module == f"{NG_PREFIX}.registry":
-            found.append(
-                set(names) == {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
+            found, _used = _ng_import_violations(
+                path.read_text(encoding="utf-8"), path, _module_path(path, folder)
             )
-    return found == [True, True]
+            violations.extend((str(path.relative_to(ROOT)), name) for name in found)
+    assert violations == []
+    _found, used = _ng_import_violations(
+        SERVING_IMPORTER.read_text(encoding="utf-8"),
+        SERVING_IMPORTER,
+        _module_path(SERVING_IMPORTER, ROOT / "src"),
+    )
+    assert used == set(ALLOWED_NG_IMPORTS)
+
+
+SERVING_IMPORTER = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+# NG3's dormant wiring (owner R3a, 2026-11-04): the only product statements that may name quant_ng.
+ALLOWED_NG_IMPORTS = {
+    f"{NG_PREFIX}.pipeline_ng": frozenset({("run_pipeline_ng", None)}),
+    f"{NG_PREFIX}.registry": frozenset(
+        {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
+    ),
+}
+
+
+def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[list[str], set[str]]:
+    """Every quant_ng name a product file imports, and the allowed statements it used.
+
+    Every import statement's names are resolved by the helper (absolute, relative and
+    parent-package forms alike). The only exemption is each ALLOWED_NG_IMPORTS statement, exactly
+    (level 0, exactly those names, no alias), at most once, in SERVING_IMPORTER. The real-file
+    guard and the negative tests below call this one function.
+    """
+    violations: list[str] = []
+    used: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        names = [
+            name
+            for name in _imported_module_names(ast.unparse(node), module_path)
+            if _matches(name, NG_PREFIX)
+        ]
+        if not names:
+            continue
+        exempt = (
+            path == SERVING_IMPORTER
+            and isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module in ALLOWED_NG_IMPORTS
+            and node.module not in used
+            and frozenset((a.name, a.asname) for a in node.names) == ALLOWED_NG_IMPORTS[node.module]
+        )
+        if exempt:
+            used.add(node.module)
+        else:
+            violations.extend(names)
+    return violations, used
 
 
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
@@ -205,39 +235,40 @@ def test_direct_gate_allowance_is_narrow() -> None:
             if any(_matches(name, module) for name in names for module in dormant_modules):
                 external_importers.append(str(candidate.relative_to(ROOT)))
     assert external_importers == ["src/crypto_probability_engine/api/analysis_service.py"]
-    assert _allowed_serving_imports(ROOT / external_importers[0])
 
 
 def test_external_ng_import_allowance_rejects_other_forms() -> None:
-    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
-    rejected = (
-        ("import crypto_probability_engine.quant_ng.pipeline_ng", allowed_path),
-        (
-            "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng as run",
-            allowed_path,
-        ),
-        ("from crypto_probability_engine.quant_ng.registry import serving_state", allowed_path),
-        ("from crypto_probability_engine import quant_ng", allowed_path),
-        ("from crypto_probability_engine.quant_ng import pipeline_ng", allowed_path),
-        ("from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
-         ROOT / "src/crypto_probability_engine/api/errors.py"),
+    """The same function the real-file guard uses: only the two exact statements are exempt."""
+    module_path = _module_path(SERVING_IMPORTER, ROOT / "src")
+    pipeline = "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng"
+    registry = (
+        "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal"
     )
-    for source, path in rejected:
-        assert not _allowed_source(source, path)
-
-
-def _allowed_source(source: str, path: Path) -> bool:
-    allowed_path = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
-    if path != allowed_path:
-        return False
-    tree = ast.parse(source)
-    statements = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
-    expected = {
-        (f"{NG_PREFIX}.pipeline_ng", (("run_pipeline_ng", None),)),
-        (f"{NG_PREFIX}.registry", (("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None))),
-    }
-    actual = {(node.module, tuple((a.name, a.asname) for a in node.names)) for node in statements}
-    return actual == expected and all(node.level == 0 for node in statements)
+    allowed = f"{pipeline}\n{registry}"
+    assert _ng_import_violations(allowed, SERVING_IMPORTER, module_path) == (
+        [],
+        set(ALLOWED_NG_IMPORTS),
+    )
+    rejected = (
+        "import crypto_probability_engine.quant_ng.pipeline_ng",
+        "import crypto_probability_engine.quant_ng",
+        f"{pipeline} as run",
+        "from crypto_probability_engine.quant_ng.registry import serving_state",
+        "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY",
+        "from crypto_probability_engine import quant_ng",
+        "from crypto_probability_engine.quant_ng import pipeline_ng",
+        "from crypto_probability_engine.quant_ng.windows import acquire_window",
+        "from ..quant_ng.pipeline_ng import run_pipeline_ng",
+        "from .. import quant_ng",
+        f"{allowed}\n{pipeline}",
+        f"{allowed}\nimport crypto_probability_engine.quant_ng.windows",
+    )
+    for source in rejected:
+        found, _used = _ng_import_violations(source, SERVING_IMPORTER, module_path)
+        assert found, source
+    other = ROOT / "src/crypto_probability_engine/api/errors.py"
+    found, _used = _ng_import_violations(pipeline, other, _module_path(other, ROOT / "src"))
+    assert found
 
 
 def test_src_does_not_import_quant_ng_fit() -> None:
