@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-04 - NG1: the dormant registry and parallel pipeline (on main, not released)
+
+It records #320. Nothing in this entry is released.
+
+Added:
+- #320: `quant_ng/registry.py` and `quant_ng/pipeline_ng.py`, built to the owner's rulings of
+  2026-11-03. The registry encodes OD-NG-4 KEEP_HOLD (the heuristic stays authoritative and the
+  reference is hidden, as one explicit slot policy) and OD-NG-2 DEFER (no policy identity; the
+  recipe is the cohort); it admits no accepted cell, claim or authorization. The parallel pipeline
+  re-composes the legacy pipeline step for step and must equal it, analysis hash included, on 45
+  frozen cases; its own serving block sits outside the hashed result.
+
+Notes:
+- Nothing in the product imports either module in this release, so the running app is unaffected.
+- The dormancy guard gained one narrow, tested exemption: the pipeline's one import of the
+  composite gate function.
+
 ## 2026-11-01 - A fix for a time-dependent test, and risk-based review routing in CLAUDE.md (on main, not released)
 
 It records #315 and #317. Nothing in this entry is released.
