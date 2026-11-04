@@ -448,3 +448,78 @@ def test_golden_lists_exactly_the_supported_cases() -> None:
     }
     assert set(GOLDEN["cases"]) == expected
     assert len(expected) == 46
+
+
+_SERVED_NG = {
+    "schema": "quant-ng-serving.v1",
+    "serving_state": {
+        "tier": "HEURISTIC",
+        "reference": "HIDDEN",
+        "status": "NONE",
+        "slot_policy": "HOLD_HIDDEN_REFERENCE",
+        "reason": "OD-NG-4 KEEP_HOLD: the heuristic stays authoritative; the reference is hidden",
+    },
+    "reference_state": "HIDDEN",
+    "evidence_status": "NONE",
+    "slot_policy": "HOLD_HIDDEN_REFERENCE",
+    "policy_id": None,
+    "status": "SERVED_HIDDEN",
+    "h_extended_context": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
+}
+_UNAVAILABLE_NG = {
+    "schema": "quant-ng-serving.v1",
+    "status": "UNAVAILABLE",
+    "reason": "provider not mapped",
+}
+
+
+def _ng_validator() -> Draft202012Validator:
+    schema = json.loads((ROOT / "schemas/response.schema.json").read_text())
+    return Draft202012Validator(schema["properties"]["ng_serving"])
+
+
+def _with(base: dict, path: tuple[str, ...], value: object) -> dict:
+    copy = json.loads(json.dumps(base))
+    target = copy
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    return copy
+
+
+def test_ng_serving_schema_admits_exactly_the_two_shapes() -> None:
+    validator = _ng_validator()
+    assert validator.is_valid(_SERVED_NG)
+    assert validator.is_valid(_UNAVAILABLE_NG)
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("serving_state", "tier"), "REFERENCE"),
+        (("serving_state", "reference"), "SHOWN"),
+        (("serving_state", "slot_policy"), "REFERENCE_AUTHORITATIVE"),
+        (("reference_state",), "SHOWN"),
+        (("evidence_status",), "SUPPORTED"),
+        (("slot_policy",), "REFERENCE_AUTHORITATIVE"),
+        (("policy_id",), "option-b"),
+        (("status",), "SERVED"),
+        (("candidate_shadow",), {}),
+        (("h_extended_context", "status"), "AVAILABLE"),
+    ],
+    ids=[
+        "tier-not-heuristic",
+        "serving-reference-shown",
+        "serving-slot-policy-not-hold",
+        "reference-state-shown",
+        "evidence-status-not-none",
+        "slot-policy-not-hold",
+        "policy-id-set",
+        "unknown-status",
+        "extra-candidate-shadow-key",
+        "h-extended-available",
+    ],
+)
+def test_ng_serving_schema_refuses_any_unhidden_or_unruled_value(path, value) -> None:
+    assert not _ng_validator().is_valid(_with(_SERVED_NG, path, value))
+
