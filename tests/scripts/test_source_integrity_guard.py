@@ -24,8 +24,13 @@ DRIFT_SHA = "d" * 40
 # list) took both the time zone and the locale from the viewer's own machine, so one screen read
 # differently on two computers; they now render Asia/Ho_Chi_Minh explicitly. Display only: no API,
 # storage, candle boundary, hash or evidence change.
+# 2026-11-04: NG3's dormant wiring (owner R3a) adds analysis_service.py and response.schema.json: an
+# OFF switch and an optional, hidden ng_serving field. With the switch OFF every served byte is
+# unchanged (tests/api/test_ng_dormant_switch.py).
 CURRENT_DELTA_PATHS: list[str] = [
     "frontend/app.js",
+    "schemas/response.schema.json",
+    "src/crypto_probability_engine/api/analysis_service.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
