@@ -146,7 +146,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # the same pins. PostgreSQL 17.6 is a source tarball checked by sha256, not an action.
     # 98 -> 101 (DP-D's restore proof): its pull-request rehearsal adds the same three, at the
     # same pins.
-    assert len(refs) == 101
+    # 101 -> 104 (NG4's migration 0019, authored, not applied): its pull-request rehearsal adds the
+    # same three, at the same pins.
+    assert len(refs) == 104
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:

@@ -53,6 +53,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/migration_0016_rehearsal/` | REHEARSAL | migration-0016-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0016-rehearsal.yml. |
 | `scripts/migration_0017_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
 | `scripts/migration_0018_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
+| `scripts/migration_0019_rehearsal/` | REHEARSAL | migration-0019-rehearsal.yml | scratch PG | Scratch cluster driver and probes invoked by .github/workflows/migration-0019-rehearsal.yml (NG4; migration 0019 authored, not applied). |
 | `scripts/news_live_smoke.py` | ACTIVE_OWNER_TOOL | owner-local | external read-only | scripts/news_live_smoke.py documents or exercises this opt-in owner CLI. |
 | `scripts/persistence_rehearsal/` | REHEARSAL | persistence-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/persistence-rehearsal.yml. |
 | `scripts/privilege_rehearsal/` | REHEARSAL | privilege-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/privilege-rehearsal.yml. |
@@ -110,6 +111,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `.github/workflows/migration-0016-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0016-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0017-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0017-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0018-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0018-rehearsal.yml runs its checks on pull_request. |
+| `.github/workflows/migration-0019-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0019-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/oos-pair-evidence.yml` | HISTORICAL_REFERENCE | workflow_dispatch | production DB | .github/workflows/oos-pair-evidence.yml says the holdout closed and re-enabling collection is an owner decision. |
 | `.github/workflows/persistence-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/persistence-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/privilege-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/privilege-rehearsal.yml runs its checks on pull_request. |
