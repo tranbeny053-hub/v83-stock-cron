@@ -1,0 +1,66 @@
+name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
+
+# NG4 (owner NG4-D1/D2/D3, 2026-11-05): the dormant lattice's separate, append-only store, Route S. Runs on every pull
+# request that touches it. scripts/migration_0019_rehearsal/run_scratch.sh builds a private, socket-only PostgreSQL 16
+# cluster from every root migration (production's applied state) with Supabase-like roles, default privileges,
+# PostgREST's authenticator and a CREATEROLE non-superuser owner, then rehearse.py applies
+# migrations/authored/0019_lattice_evidence.sql and proves R-0..R-14 of the NG4 contract spec: first-apply refusals,
+# catalog identity outside ucpe_lattice, every role refused but the owner and the writer, the writer's
+# execute-only access, owner and bypass paths, capacity, duplicates, CHECK refusals, commit receipts and missed
+# instants. It runs twice: with track_commit_timestamp off (every receipt COMMIT_UNKNOWN) and on (the true commit time).
+# It references no secret and touches no real database. Migration 0019 is AUTHORED, NOT APPLIED: no apply route or
+# workflow exists, and scripts/apply_migrations.py refuses it.
+
+"on":
+  pull_request:
+    paths:
+      - migrations/**
+      - scripts/migration_0019_rehearsal/**
+      - scripts/migration_0013_rehearsal/**
+      - scripts/migration_0015_rehearsal/**
+      - scripts/migration_0016_rehearsal/**
+      - .github/workflows/migration-0019-rehearsal.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.11"
+
+      - name: Install the project dependencies
+        shell: bash
+        run: python -m pip install -r requirements.txt
+
+      - name: Rehearse migration 0019 with track_commit_timestamp off
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/migration_0019_rehearsal/run_scratch.sh /usr/lib/postgresql/16/bin \
+            "$RUNNER_TEMP/r19-off" migration-0019-commit-ts-off.json off
+
+      - name: Rehearse migration 0019 with track_commit_timestamp on
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/migration_0019_rehearsal/run_scratch.sh /usr/lib/postgresql/16/bin \
+            "$RUNNER_TEMP/r19-on" migration-0019-commit-ts-on.json on
+
+      - name: Upload the rehearsal reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: migration-0019-rehearsal-reports
+          path: migration-0019-commit-ts-*.json
+          if-no-files-found: warn

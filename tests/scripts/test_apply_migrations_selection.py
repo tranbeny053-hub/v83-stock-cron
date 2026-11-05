@@ -42,3 +42,13 @@ def test_an_unknown_name_is_refused_rather_than_ignored() -> None:
 
 def test_default_behaviour_is_unchanged_when_only_is_absent() -> None:
     assert apply_migrations.select_migrations(MIGRATIONS, []) == MIGRATIONS
+
+
+def test_0019_only_is_refused_before_environment_or_psycopg(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    monkeypatch.setattr(apply_migrations, "MIGRATIONS_DIR", Path("/missing"))
+    assert apply_migrations.main(["--only", "0019_lattice_evidence.sql"]) == 2
+    assert (
+        capsys.readouterr().out.strip()
+        == "REFUSED: 0019_lattice_evidence.sql is authored but not authorized to apply"
+    )
