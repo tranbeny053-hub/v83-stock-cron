@@ -1,78 +1,90 @@
 # STATE
 
-Updated: 2026-11-05 (**NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404), BUILT UNDER THE OWNER'S R3a OF
-2026-11-04: api/analysis_service.py IMPORTS pipeline_ng BEHIND NG_PIPELINE_ENABLED = False, A MODULE CONSTANT; THE
-SWITCH IS OFF, AND WITH IT OFF EVERY SERVED BYTE, HASH, GATE, TIMESTAMP AND STORED ROW IS UNCHANGED (92 FROZEN
-CASES). PUBLISHING IS NOT ACTIVATION. THE CHANGELOG RECORDS #320 (#322 → M55 8acccf04). THE OWNER DEFERRED MIGRATION
-0019 TO THE LATTICE MILESTONE (0019 = (c)); IT IS NOT AUTHORED. NO NETWORK, NO REAL DATA, NO LATTICE, NO REFIT. NGA
-IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN.
-PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION
-IS REACHABLE.**
-- The owner (verbatim below), 2026-11-05: the T3 for this batch, GitHub-only, "CHANGELOG@6c59eb84, NG3@8fd4d77,
-  STATE-last", HOLD on any drift, scope mismatch or failed mandatory check, the NG3 switch permanently OFF in this
-  batch; and 0019 = (c), deferred to the lattice milestone, with the conflicting enumerations to be resolved before
-  0019 is authored or applied.
-- **PUBLISHED IN THIS BATCH**, each with the package's twelve digests checked first (SHA256SUMS d22482c3…), the exact
-  head pushed, a byte-identical diff (`PR_VERIFY=PASS`, again just before the merge), every PR check green, a drift
-  check, an independently computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and main's
-  push runs green before the next merge. No drift, no HOLD; every CI run passed on its first attempt.
-  - **#322 → M55 8acccf04ab12226d81f430db3807fd6f26a0ecd5** — the CHANGELOG entry for #320. Head 6c59eb84 (on M54),
-    tree 1d93a6c3, mergedAt 2026-11-05T10:26:04Z, 1 file, +17/−0. 4 of 4 checks: CI 42009635894, 8713 passed; build
-    42009636031. M55's push runs: CI 42010672563, 8713 passed; build 42010672810.
-  - **#323 → M56 222aa40473eae395c8eafab3738e179e8ea4d88f** — NG3: dormant wiring of `pipeline_ng` behind an OFF
-    switch. Head 8fd4d77f (on M53, 3 commits), base the sequential M55, tree 75150bd4 (equal to the combined gate's
-    tree), mergedAt 2026-11-05T10:43:58Z, 9 files, +1217/−18. **12 of 12 checks**: the 4 standard ones (CI
-    42012149428, 8825 passed; build 42012149542: build-a, build-b, compare) and 8 that the changed paths start (the
-    scratch-PostgreSQL rehearsals of migrations 0014–0018, the persistence-fault rehearsal and both
-    privilege-rehearsal jobs; no secrets). One `gh pr checks --watch` ended on a network timeout, not a check; the
-    run was then watched to completion. M56's push runs: CI 42013144853, 8825 passed; build 42013144841.
-  Record: .work/ng3_20261104/T3_PACKAGE_NG3_BATCH_20261104.md (SHA256SUMS_NG3_BATCH.txt), with the checks in
-  .work/ng3_t3_20261105/.
-- **What #323 does:** `NG_PIPELINE_ENABLED = False` in api/analysis_service.py; no environment variable, setting,
-  header or request reads or sets it. Were it ON, only a recorded human analysis (never an OOS arm, a paired run or
-  the isolated path) would call `run_pipeline_ng` with the empty registry, so the forecast stays the legacy one plus
-  a hidden `ng_serving` object (reference HIDDEN, evidence NONE, `h_extended_context` UNAVAILABLE); 1M and an
-  unmapped provider fall back to legacy, labelled UNAVAILABLE with a reason. The response schema gains one optional,
-  closed `ng_serving` property (HIDDEN/NONE/UNAVAILABLE forms only, tier HEURISTIC only); the rest of the schema is
-  frozen by a digest of M53's (3b74a5ad…). `AnalysisResponse.ng_serving` defaults to None and is popped when absent.
-  **Parity:** the frozen OFF golden tests/api/fixtures/ng_off_parity_v1.json, 92 cases (46 human, 46 isolated;
-  15m/1H/4H/1D × fixture shapes × provider OK/DEGRADED × both methodologies, minus 1D × distributional, an identical
-  error ON and OFF): response sha, prediction-row sha and `analysis_hash`, generated once against clean M53 code by a
-  non-test function; ON adds only `ng_serving`, with probabilities, gates and disposition equal. A local browser
-  check (127.0.0.1, fixture data, no database, no network) read the main page and the 4H detail byte-identical OFF
-  and ON, with no NG text in the DOM. The dormancy guard allows exactly the two `quant_ng` imports in
-  analysis_service.py, by one shared function (12 rejected forms tested). `CURRENT_DELTA_PATHS` lists the two runtime
-  files.
-- **Narrower than the decision note, by design** (docs/NG_SCALE_CONTRACTS.md; spec
-  .work/ng3_20261104/task-1030.d3.md): no lattice and no resolver change; no frontend change (a deviation from §J's
-  "frontend fields (OD5)": nothing to show under KEEP_HOLD); no persistence code change; and no migration 0019, which
-  the owner has now deferred to the lattice milestone (its CHECK enumerations conflict: §H.1's E3_LATTICE_V1 /
-  SPACE_ISSUED vs quant_ng.evidence's Population and Timing; resolve those contracts first).
-- **How it was built and checked:** Codex 1030 (BLOCKED before any change: the spec's matrix included 1D ×
-  distributional, the master's spec error), 1031 (BLOCKED: gate diversity unreachable on the served path, and it
-  re-serialized the schema) and 1032 (BLOCKED on lint; the master fixed the imports and one long line), gpt-6-luna at
-  effort high; then one consolidated repair by the master (the guard-narrowness class had recurred, so one shared
-  function now serves the guard and its negative tests). Two local gate attempts FAILED and are preserved (680d1a0:
-  the candle-history import guard; 36cbe02: the schema digest computed with ensure_ascii=True). Exact head gate 8825;
-  both merged on M54 8825. Mutation sweep 13 of 16 (.work/ng3_20261104/MUTATION_SWEEP_NG3.py; N03/N04 equivalent
-  because `_oos_arm_context` is both-or-neither, N12 because the ValueError is re-raised identically). **One
-  independent reviewer:** the spec in THREE rounds (FINDINGS on d1; PASS on d2; PASS on d3) and the code in TWO
-  (FINDINGS with one MAJOR — a test that read git history, which a depth-1 CI checkout cannot; then a delta PASS).
+Updated: 2026-11-05 (**NG4'S DORMANT LATTICE IS ON MAIN (#326 → M59 5c5f6165), BUILT UNDER THE OWNER'S NG4-D1 (ROUTE
+S), NG4-D2 AND NG4-D3 OF 2026-11-05: quant_ng/lattice.py WITH LATTICE_ENABLED = False, A MODULE CONSTANT, NO CELL AND
+NO PRIOR, IMPORTED BY NOTHING; persistence/lattice_store.py; AND MIGRATION 0019 (SCHEMA ucpe_lattice, A SEPARATE
+APPEND-ONLY STORE) AUTHORED IN migrations/authored/ AND NOT APPLIED. NOTHING SERVED, STORED, PINNED OR GATED CHANGES.
+PUBLISHING IS NOT ACTIVATION. THE CHANGELOG RECORDS #323 (#325 → M58 7cacbc65). NO NETWORK, NO REAL DATA, NO PILOT,
+NO PRODUCTION DATABASE ACCESS (SCRATCH POSTGRESQL ONLY). NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND
+THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A.
+NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), 2026-11-05: the T3 for this batch, GitHub-only, "CHANGELOG@18b55da8, NG4@a4c461ac,
+  STATE-last, including the new PR-only migration-0019 rehearsal workflow", HOLD on drift, scope changes or failed
+  required checks; the PostgreSQL 16 scratch rehearsal must actually execute and PASS (the local PostgreSQL 17
+  rehearsal is no substitute); NG4 stays dormant, the lattice OFF, 0019 not applied.
+- **The build's authority** (not reproduced here): the owner's NG4-D1 with Route S, NG4-D2 and NG4-D3 of 2026-11-05,
+  .work/p7/redesign/handoff/owner_ng4_d1_d3_20261105.txt (sha256 2f3a4f3d…): "LOCAL T0–T2 design, code and tests
+  only. It does NOT authorize the pilot run, migration apply, database writes, deployment, collection, network access
+  or T3/T4"; its invariants (Route S isolation, no pinned edit and no new origin, TEST_ONLY never evidence, true
+  commit time or a HOLD, privilege tests, 0019 authored never applied, the switch a constant OFF) are met as
+  .work/ng4_20261105/NG4_BUILD_RECORD.md and the NG4 reviews record.
+- **PUBLISHED IN THIS BATCH**, each with the package's fifteen digests checked first (SHA256SUMS 20b06cc6…), the
+  exact head pushed, a byte-identical diff (`PR_VERIFY=PASS`, again just before the merge), every PR check green, a
+  drift check, an independently computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and
+  main's push runs green before the next merge. No drift, no HOLD; every CI run passed on its first attempt.
+  - **#325 → M58 7cacbc65cc0037a1c153f17c599138374d475850** — the CHANGELOG entry for #323. Head 18b55da8 (on M57),
+    tree 5faef755, mergedAt 2026-11-05T16:34:04Z, 1 file, +17/−0. 4 of 4 checks: CI 42064522722, 8825 passed; build
+    42064522744. M58's push runs: CI 42065778596, 8825 passed; build 42065778553.
+  - **#326 → M59 5c5f6165498dca0a9c8c79fafd508685820dce94** — NG4: the dormant lattice and its Route S store. Head
+    a4c461ac (on M57, 7 commits), base the sequential M58, tree e240b44b (equal to the combined gate's tree),
+    mergedAt 2026-11-05T16:40:56Z, 19 files, +2893/−3. **18 of 18 checks**: the 4 standard ones (CI 42065935480, 8891
+    passed; build 42065935359), the new migration-0019 rehearsal on the runner's PostgreSQL 16 (run 42065935477:
+    PostgreSQL 16.15, 23 of 23 checks in each commit-timestamp mode, PASS; the migration digest 8ae3c329… equals the
+    reviewed file's), and the rehearsals that `migrations/**` starts (migrations 0010 and 0013–0018, the
+    persistence-fault, privilege and restore-proof rehearsals and both A4 rehearsals; none sees the authored file).
+    M59's push runs: CI 42066944377, 8891 passed; build 42066944553.
+  Record: .work/ng4_20261105/T3_PACKAGE_NG4_BATCH_20261105.md (SHA256SUMS_NG4_BATCH.txt), with the checks in
+  .work/ng4_t3_20261105/.
+- **What #326 is:** schema `ucpe_lattice` (not exposed by PostgREST) with four append-only tables (rows, commit
+  receipts, missed instants, a capacity singleton), RLS enabled and forced with owner-only policies,
+  UPDATE/DELETE/TRUNCATE triggers that reject; roles `ucpe_lattice_owner` and `ucpe_lattice_writer` (NOLOGIN, no
+  power); three SECURITY DEFINER functions with an empty search_path are the only way in, and the writer holds only
+  USAGE and EXECUTE on them. Rows are TEST_ONLY E1_OPERATIONAL / NOT_APPLICABLE REF rows only, with tc-v1's clock
+  order and one-venue rule mirrored as CHECKs. Receipts carry PostgreSQL's true commit time
+  (`pg_xact_commit_timestamp`, only with track_commit_timestamp on, bounded by the insert clock, now and a 7-day
+  age), else COMMIT_UNKNOWN; never the insert or transaction-start time. First-apply refusals (PostgreSQL < 16,
+  existing schema/roles, no CREATEROLE, a non-superuser BYPASSRLS holder of the predefined data roles, a FOR ALL
+  TABLES publication) and a final ACL self-check. 0019 sits outside every migration glob; scripts/apply_migrations.py
+  refuses it by name; tests reserve it. The code: `LATTICE_ENABLED = False`, `DECLARED_CELLS = ()`, no prior;
+  payloads are the store's exact key sets (a test parses the migration). No pinned, runtime-critical or served file
+  changed.
+- **How it was built and checked:** Codex 1040 BLOCKED (its sandbox cannot start PostgreSQL) — the master wrote the
+  migration and the rehearsal; 1041 DONE with seven contract mismatches found in review, repaired by 1043; 1042
+  BLOCKED (it broke an uncommitted file; discarded). One local gate attempt FAILED and is preserved (be4924e:
+  registries). Exact head gate 8891; both merged on M57 8891 (tree e240b44b). Scratch rehearsal 23/23 in each
+  commit-timestamp mode locally (PostgreSQL 17.11) and 23/23 in each mode on PostgreSQL 16 in PR CI. Mutation sweep
+  28 of 28 (.work/ng4_20261105/MUTATION_SWEEP_NG4.py). **One independent reviewer:** the spec in TWO rounds
+  (FINDINGS; PASS) and the stable diff in TWO (PASS_WITH_AMENDMENTS; delta PASS).
+- **HOLDs for the pilot (none decided):** HOLD-1, production's track_commit_timestamp (unknown; checking it is a
+  production read, changing it a restart-level T4); HOLD-2, the frozen REF priors (none exist by design). The route
+  and the remaining inputs: .work/ng4_20261105/NG4_PILOT_ROUTE_20261105.md.
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort xhigh (read again with get_session before this
   review), reviewed this filled record in two rounds. The master ran Opus 5.5 at High, as the T3 named.
-- Process: Codex 1030–1032 (all three BLOCKED, repaired by the master), none in the T3; GPT sidecar consultations 0;
-  paid API $0. The UOR relay is still NOT_DELIVERED (no verified permitted route).
-- Nothing else changed: no activation (the switch stays OFF), no fetch, network, download, real data, fit or
-  estimator, no OD-NG-7 constant, no lattice, no migration authored or applied, no workflow or deployed file, no
-  production read or write, no F3 or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: the NG4/lattice readiness assessment (next, T0); NG3's activation (a reviewed code
-  change, then T3/T4); 0019 after the lattice's enumeration contract is resolved; the licence fit and the
-  survivorship path (the 2026-11-01 map); D2–D8; OD-NG-7; OD-NG-1, OD-NG-3, OD-NG-4b; B-NG0's EXP-08 specification
-  and packet note (F3-adjacent, not started); the writer-token renewal by **2026-11-20** (expiry 2026-11-23); the
-  runtime deltas until a release; the CHANGELOG entry for #323 (a new T3); cleanup candidates.
-- This record is the batch's last publish. Before it: #323.)
+- Process: Codex 1040–1043 (two BLOCKED), none in the T3; GPT sidecar consultations 0; paid API $0. The UOR relay is
+  still NOT_DELIVERED (no verified permitted route).
+- Nothing else changed: no activation (the switch stays OFF), no migration applied, no apply workflow, no database
+  read or write outside scratch PostgreSQL, no fetch, network, real data, fit or prior, no OD-NG-7 constant, no
+  credential, no F3 or §5A access, no deploy, no rerun.
+- CARRIED OVER, still open: the pilot's inputs (symbol, capacity, duration, the prior option, the writer hand-off)
+  and its T3/T4 chain (the route file above); the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-1,
+  OD-NG-3, OD-NG-4b; B-NG0's EXP-08 specification and packet note (F3-adjacent, not started); the writer-token
+  renewal by **2026-11-20** (expiry 2026-11-23); the runtime deltas until a release; the CHANGELOG entry for #326 (a
+  new T3); cleanup candidates.
+- This record is the batch's last publish. Before it: #326.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-11-05), verbatim — the T3 for this batch**
+  (the authorization and execution clauses of .work/p7/redesign/handoff/owner_t3_ng4_20261105.txt, sha256 59d291ce…,
+  replacing an abbreviated save eceac078…; its SPEED/REVIEW OPTIMIZATION clauses — evidence reuse for unchanged bytes
+  only, the HOLD on a PostgreSQL 16 incompatibility, two lanes — and the post-T3 pilot-route and NG5/NG6 objectives
+  are kept whole there):
+```text
+CONTINUE CURRENT (Opus High), UCPE.
+OWNER T3 GitHub-only AUTHORIZE exact `.work/ng4_20261105/T3_PACKAGE_NG4_BATCH_20261105.md` (SHA256SUMS 20b06cc6…): CHANGELOG@18b55da8, NG4@a4c461ac, STATE-last, including the new PR-only migration-0019 rehearsal workflow. HOLD on drift, scope changes or failed required checks.
+EXECUTION:
+Verify canonical STATE/Git, exact heads, package digests and existing review provenance. Publish sequentially with exact PR diffs, computed merge trees, required 4/4 checks and green main CI/build before each next merge. Require the PostgreSQL 16 scratch rehearsal to actually execute and PASS; do not substitute the PostgreSQL 17 local rehearsal. STATE last, with fresh gate and mandatory independent review.
+NG4 remains dormant. Lattice OFF; migration 0019 authored but NOT applied. No production database access, migration execution, credentials, network capture, pilot, T4 or deploy.
+```
 - **The owner (2026-11-05), verbatim — the T3 for this batch and 0019 = (c)**
   (the second to fourth paragraphs of .work/p7/redesign/handoff/owner_t3_ng3_odng0019c_20261105.txt, sha256 f5067f67…;
   the post-T3 NG4 readiness objective, lanes and limits are kept whole there):
@@ -3328,13 +3340,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_ENABLED = False, OFF; with it OFF
-  nothing served or stored changes); the CHANGELOG records #320 (#322 → M55 8acccf04). 0019 is DEFERRED to the
-  lattice milestone (owner, 2026-11-05). Real data stays refused at every entry point; no network code; no download.
-  Main is M56 222aa404 before this record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned
-  at R 27682005, with three declared runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and
-  api/analysis_service.py, #323) until a release. The next writer-token renewal is due by **2026-11-20** (expiry
-  2026-11-23); the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=NG4'S DORMANT LATTICE IS ON MAIN (#326 → M59 5c5f6165; LATTICE_ENABLED = False, OFF; migration 0019
+  AUTHORED, NOT APPLIED; nothing served, stored or pinned changes); the CHANGELOG records #323 (#325 → M58 7cacbc65).
+  Real data stays refused at every entry point; no network code; no download. Main is M59 5c5f6165 before this
+  record; production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with three
+  declared runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py,
+  #323) until a release. The next writer-token renewal is due by **2026-11-20** (expiry 2026-11-23); the 2026-10-24
+  renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
@@ -3376,7 +3388,12 @@ LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_E
     api/analysis_service.py imports them, behind NG_PIPELINE_ENABLED = False (a module constant: turning it on is
     activation, a reviewed code change and then T3/T4, never a flag); NG3's OFF golden
     tests/api/fixtures/ng_off_parity_v1.json (92 cases) is regenerated only by its non-test function and only against
-    base code; NG3's sweep: .work/ng3_20261104/MUTATION_SWEEP_NG3.py (13 of 16, three equivalent); their sweep:
+    base code; NG3's sweep: .work/ng3_20261104/MUTATION_SWEEP_NG3.py (13 of 16, three equivalent); NG4's dormant
+    lattice (#326): quant_ng/lattice.py (LATTICE_ENABLED = False, a module constant; no cell, no prior; nothing
+    imports it) and persistence/lattice_store.py, with migration 0019 AUTHORED in migrations/authored/ and NEVER
+    applied without its own apply route, T3 and T4 (scripts/apply_migrations.py refuses it by name); its rehearsal
+    scripts/migration_0019_rehearsal/run_scratch.sh needs a real PostgreSQL (Codex's sandbox cannot start one: the
+    master runs it); NG4's sweep: .work/ng4_20261105/MUTATION_SWEEP_NG4.py (28 of 28); their sweep:
     .work/ng1_registry_20261103/MUTATION_SWEEP_NG1.py (26 of 26); the legacy-parity fixture is regenerated only by
     its non-test function, and never by a skip (the repo forbids skips: tests/test_no_silent_skips.py). The S1 MOCK
     decision engine is on main as scripts/quant_ng_s1.py (#313): the listing route only, MOCK hosts, no network code;
@@ -3391,31 +3408,33 @@ LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_E
     required independent review; Codex execution is not a Claude worker.
   - COUNT REVIEWERS AND ROUNDS SEPARATELY: F-CONFIRM's sheet and the contract-gaps note had NO independent review
     (Claude's self-audit only); (b2) (#310) had ONE independent reviewer in SIXTEEN recorded rounds (static only;
-    FINDINGS 4, PASS_WITH_AMENDMENTS 8, PASS 4; the last PASS); NG3 (#323) had ONE independent reviewer: the spec in
-    THREE rounds (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); this record
-    had ONE independent reviewer, the same session, in two rounds on this filled record (PASS_WITH_AMENDMENTS, one
-    MINOR folded; then a delta PASS); NG1 (#320) had ONE independent reviewer: the spec in TWO rounds (FINDINGS;
-    delta FINDINGS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG1 batch's record (#321)
-    had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next batch's record (#318)
-    had ONE in TWO rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer in TWO rounds
-    (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and the licensing evidence had NO
-    independent review (master audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE round;
-    the S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then PASS); the S1 recommended
-    ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had
-    NO independent review (master audit and quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds;
-    the evaluation-row batch's record (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE
-    independent reviewer in TWO rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5
-    had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent;
-    the last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had
-    ONE independent reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its
-    ruling sheet ONE in ONE round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta
-    PASS); the (b1) parse layer (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only
-    probe by an ordinary subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the
-    decision pack had ONE independent reviewer in FOUR rounds, the last round's three small items folded after its
-    PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE
-    other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and
-    a56f80c7's message ("a second review passed") overstate theirs and are immutable, so this record documents them
-    instead.
+    FINDINGS 4, PASS_WITH_AMENDMENTS 8, PASS 4; the last PASS); NG4 (#326) had ONE independent reviewer: the spec in
+    TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta PASS); this record had
+    ONE independent reviewer, the same session, in two rounds on this filled record (PASS_WITH_AMENDMENTS: two MINOR
+    and three NOTE folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had ONE independent reviewer: the spec
+    in THREE rounds (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3
+    batch's record (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1
+    (#320) had ONE independent reviewer: the spec in TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds
+    (FINDINGS with one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS,
+    one MINOR folded; then a delta PASS); the next batch's record (#318) had ONE in TWO rounds; the CLAUDE.md review
+    routing (#317) had ONE independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the
+    critical-path map and the licensing evidence had NO independent review (master audit, by the new policy); the
+    S1-engine batch's record (#314) had ONE in ONE round; the S1 engine (#313) had ONE independent reviewer in TWO
+    rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds (FINDINGS, then
+    PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO independent review (master audit and
+    quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row batch's record
+    (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in TWO rounds
+    (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS,
+    then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds not
+    re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer
+    in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE
+    round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer
+    (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary
+    subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had
+    ONE independent reviewer in FOUR rounds, the last round's three small items folded after its PASS and not
+    re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO
+    rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's
+    message ("a second review passed") overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3425,11 +3444,15 @@ LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_E
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/ng3_t3_20261105/ (this batch's PR and
-    merge checks), .work/ng3_20261104/ (NG3's specs, reviews, sweep, gates, browser check and package),
-    .work/ng1_t3_20261104/ (the previous batch's PR and merge checks), .work/ng1_registry_20261103/ (NG1's specs,
-    reviews, sweep, gates and package), .work/nga/master/OD_NG_2_4_SCOPING_RULING_20261103.md and
-    NG3_DECISION_NOTE_20261103.md, .work/next_batch_20261101/ (the previous batch's PR and merge checks),
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/ng4_t3_20261105/ (this batch's PR and
+    merge checks), .work/ng4_20261105/ (NG4's spec, reviews, rehearsals, sweep, gates, build record, package and
+    NG4_PILOT_ROUTE_20261105.md), .work/nga/master/NG4_READINESS_ASSESSMENT_20261105.md,
+    NG5_NG6_PREP_ASSESSMENT_20261105.md and B_NG6_CLAIM_AUTHORIZATION_CONTRACT_20261105.md, .work/ng3_t3_20261105/
+    (the previous batch's PR and merge checks), .work/ng3_20261104/ (NG3's specs, reviews, sweep, gates, browser
+    check and package), .work/ng1_t3_20261104/ (the previous batch's PR and merge checks),
+    .work/ng1_registry_20261103/ (NG1's specs, reviews, sweep, gates and package),
+    .work/nga/master/OD_NG_2_4_SCOPING_RULING_20261103.md and NG3_DECISION_NOTE_20261103.md,
+    .work/next_batch_20261101/ (the previous batch's PR and merge checks),
     .work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md (the B-NG map and the decision pack),
     .work/nga/master/DATA_SOURCE_LICENSING_EVIDENCE_20261101.md, .work/s1_engine_20261031/ (the S1-engine batch and
     this batch's package: the engine's tasks, reviews, sweeps, gates, package and exec records, and the CI-flake root
@@ -3450,6 +3473,8 @@ LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_E
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: NG3'S DORMANT WIRING REACHED MAIN (#323 → M56 222aa404), THE CHANGELOG RECORDED #320 (#322 → M55), and
+  that batch's record was published last (#324 → M57 dbc20fa3).
   Before it: NG1'S DORMANT REGISTRY AND PIPELINE_NG REACHED MAIN (#320 → M53 8ab729a5), THE CHANGELOG RECORDED
   #315/#317 (#319 → M52), and that batch's record was published last (#321 → M54 3cb18d60).
   Before it: THE CI FLAKE WAS FIXED (#315 → M48), THE CHANGELOG RECORDED #313 (#316 → M49), CLAUDE.md GOT THE
@@ -6240,7 +6265,16 @@ LOOP_STATE=NG3'S DORMANT WIRING IS ON MAIN (#323 → M56 222aa404; NG_PIPELINE_E
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING, NOW WITH NG3'S DORMANT WIRING
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING, NOW WITH NG4'S DORMANT LATTICE
+  (2026-11-05):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries three declared runtime
+    deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323) until a
+    release.
+  - NGA: NG1, NG3 and NG4 complete on main (dormant; KEEP_HOLD/DEFER; both switches OFF; 0019 authored, not applied);
+    NG4's TEST_ONLY operations pilot waits on HOLD-1, HOLD-2 and the owner's pilot inputs; NG2's real corpus waits on
+    the licence fit and the survivorship path; NG5–NG7 wait on their rulings.
+  - The one 1D development evaluation and the one S1 build are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING, NOW WITH NG3'S DORMANT WIRING
   (2026-11-05):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries three declared runtime
     deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323) until a
@@ -6677,7 +6711,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOO
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-ng3-20261105 (this record, on main M56 222aa404). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-ng4-20261105 (this record, on main M59 5c5f6165). Merged on origin in this batch:
+  docs/changelog-323 @ 18b55da8 (#325) and feat/ng4-lattice-dormant @ a4c461ac (#326). Merged branches and local
+  worktrees are cleanup candidates; no cleanup was authorized.
+  Before it: chore/state-ng3-20261105 (this record, on main M56 222aa404). Merged on origin in this batch:
   docs/changelog-320 @ 6c59eb84 (#322) and feat/ng3-dormant-wiring @ 8fd4d77f (#323). Merged branches and local
   worktrees are cleanup candidates; no cleanup was authorized.
   Before it: chore/state-ng1-20261104 (this record, on main M53 8ab729a5). Merged on origin in this batch:
@@ -7043,7 +7080,14 @@ CURRENT_BRANCH=chore/state-ng3-20261105 (this record, on main M56 222aa404). Mer
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=222aa404 (main M56, #323; the last merge before this record). Its 12 PR checks on 8fd4d77f (CI
+LAST_GREEN_SHA=5c5f6165 (main M59, #326; the last merge before this record). Its 18 of 18 PR checks on a4c461ac (CI
+  42065935480, 8891 passed; build 42065935359; the PostgreSQL 16 0019 rehearsal; the path-triggered rehearsals) and
+  main's push runs on M59 (CI 42066944377, 8891 passed; build 42066944553) are green.
+  Before it: 7cacbc65 (#325): PR CI 42064522722 (8825), build 42064522744; push CI 42065778596 (8825), build
+  42065778553.
+  Before it: dbc20fa3 (main M57, #324: the NG3 batch's STATE record): push CI 42017177606 (8825), build 42017177715,
+  green, first attempt.
+  Before it: 222aa404 (main M56, #323; the last merge before this record). Its 12 PR checks on 8fd4d77f (CI
   42012149428, 8825 passed; build 42012149542; the 8 rehearsals) and main's push runs on M56 (CI 42013144853, 8825
   passed; build 42013144841) are green.
   Before it: 8acccf04 (#322): PR CI 42009635894 (8713), build 42009636031; push CI 42010672563 (8713), build
@@ -7449,7 +7493,10 @@ LAST_GREEN_SHA=222aa404 (main M56, #323; the last merge before this record). Its
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-05 (this batch), scanners 3/3 each: exact heads 6c59eb84 8713 and 8fd4d77f 8825; both merged
+LAST_VERIFY=PASS 2026-11-05 (this batch), scanners 3/3 each: exact heads 18b55da8 8825 and a4c461ac 8891; both merged
+  on M57 8891 (tree e240b44b); this record's own, 8891 at its exact head. CI: #325 8825, #326 8891; main's push runs
+  M58 8825, M59 8891 — each on its first attempt.
+  Before it: PASS 2026-11-05 (this batch), scanners 3/3 each: exact heads 6c59eb84 8713 and 8fd4d77f 8825; both merged
   on M54 8825 (tree 75150bd4); this record's own, 8825 at its exact head. CI: #322 8713, #323 8825; main's push runs
   M55 8713, M56 8825 — each on its first attempt.
   Before it: PASS 2026-11-04 (this batch), scanners 3/3 each: exact heads 93deb227 8662 and be1d4ddd 8713 (its tree
@@ -7837,7 +7884,10 @@ LAST_VERIFY=PASS 2026-11-05 (this batch), scanners 3/3 each: exact heads 6c59eb8
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. 1030, 1031 and 1032 (NG3) all ended BLOCKED and were repaired by the master (1030: a spec error,
+CODEX_PENDING=NONE. 1040 (BLOCKED: no PostgreSQL in its sandbox; .work/ng4_20261105/FIRST_CAUSAL_FAILURE_1040.json),
+  1041 (DONE; 7 contract mismatches repaired by 1043), 1042 (BLOCKED: broke an uncommitted file;
+  FIRST_CAUSAL_FAILURE_1042.json) and 1043 (DONE). No delegation in the T3. No API key, no paid fallback, $0.
+  Before it: NONE. 1030, 1031 and 1032 (NG3) all ended BLOCKED and were repaired by the master (1030: a spec error,
   the first causal failure in .work/ng3_20261104/FIRST_CAUSAL_FAILURE_1030.json; 1031:
   FIRST_CAUSAL_FAILURE_1031.json; 1032: lint). No delegation in the T3. No API key, no paid fallback, $0.
   Before it: 1031 (NG3, LOCAL, from the reviewed spec, draft 3) is running at the time of this record, gpt-6-luna at
@@ -8053,7 +8103,13 @@ CODEX_PENDING=NONE. 1030, 1031 and 1032 (NG3) all ended BLOCKED and were repaire
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-05, after #322, #323 and this record): what the NG4/lattice
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-05, after #325, #326 and this record): the NG4 pilot's inputs in
+  one message (.work/ng4_20261105/NG4_PILOT_ROUTE_20261105.md §5 step 1: the symbol and timeframes, capacity,
+  duration, the prior option and values, the writer hand-off W1/W2), which authorizes the local build of the pilot
+  change; then its T3 and the T4 chain (preflight read, commit-time setting, 0019 apply, switch ON, deploy). The
+  CHANGELOG entry for #326 (a new T3). Still open: the licence fit and the survivorship path; D2–D8; OD-NG-7;
+  OD-NG-3; OD-NG-1; OD-NG-4b; the writer-token renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-05, after #322, #323 and this record): what the NG4/lattice
   readiness assessment returns (the smallest decision set that unlocks NG4 safely); NG3's activation, separately (a
   reviewed code change, then T3/T4); the CHANGELOG entry for #323 (a new T3). Still open: the licence fit and the
   survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b; the writer-token renewal by **2026-11-20**; the UOR
@@ -9505,7 +9561,14 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-05, after #322, #323 and this
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: a bounded NG4/lattice readiness assessment (T0, read-only; the owner, 2026-11-05): the exact
+NEXT_ACTION=Claude: wait for the owner's pilot inputs; meanwhile only authorized T0–T2 preparation that encodes no
+  unruled value (the pilot route: .work/ng4_20261105/NG4_PILOT_ROUTE_20261105.md; the NG5/NG6 preparation assessment:
+  .work/nga/master/NG5_NG6_PREP_ASSESSMENT_20261105.md, an ordinary subagent's, not independent; the B-NG6 contract
+  note: .work/nga/master/B_NG6_CLAIM_AUTHORIZATION_CONTRACT_20261105.md, decisions NG6-D1…D3). **The 1D evaluation
+  and the S1 build are CONSUMED — never rebuild or rerun either, and verify them only as
+  .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no activation, 0019 apply, database
+  access, pilot, refit, network, download, real data, T4 or deploy.
+  Before it: Claude: a bounded NG4/lattice readiness assessment (T0, read-only; the owner, 2026-11-05): the exact
   OD-NG-1/3/4b/7 dependencies, the 0019 enumeration conflict, pilot preconditions, evidence protection, recovery and
   rollout order; complete only independent safe preparations; implement nothing that needs an unruled methodology or
   a protected boundary. **The 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and verify
