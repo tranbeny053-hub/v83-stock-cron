@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS_DIR = ROOT / "migrations"
+NOT_AUTHORIZED = frozenset({"0019_lattice_evidence.sql"})
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,6 +54,17 @@ def select_migrations(paths: list[Path], only: list[str] | None) -> list[Path] |
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    migration_paths = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    selected = select_migrations(migration_paths, args.only)
+    requested = set(args.only or ())
+    refused = sorted(
+        {path.name for path in (selected or []) if path.name in NOT_AUTHORIZED}
+        | (requested & NOT_AUTHORIZED)
+    )
+    if refused:
+        for name in refused:
+            print(f"REFUSED: {name} is authored but not authorized to apply")
+        return 2
     db_url = os.environ.get("SUPABASE_DB_URL")
     if not db_url:
         print("ERROR: SUPABASE_DB_URL is required to apply migrations.")
@@ -63,12 +75,10 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: psycopg is not installed. Run: pip install -r requirements.txt")
         return 2
 
-    migration_paths = sorted(MIGRATIONS_DIR.glob("*.sql"))
     if not migration_paths:
         print("ERROR: no migrations found.")
         return 2
 
-    selected = select_migrations(migration_paths, args.only)
     if selected is None:
         print("ERROR: --only named a migration that does not exist.")
         return 2

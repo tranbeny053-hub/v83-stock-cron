@@ -662,6 +662,9 @@ def test_the_contract_imports_only_the_standard_library_and_config_defaults() ->
 CONTRACT_IMPORTERS = (
     "scripts/resolve_outcomes.py",
     "src/crypto_probability_engine/api/analysis_service.py",
+    # NG4 (2026-11-05): the dormant lattice stamps and validates its TEST_ONLY rows as tc-v1;
+    # nothing imports it (tests/quant_ng/test_lattice.py guards that).
+    "src/crypto_probability_engine/quant_ng/lattice.py",
     "src/crypto_probability_engine/resolution/status_store.py",
 )
 
