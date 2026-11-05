@@ -193,8 +193,8 @@ class Rehearsal:
             "methodology_version": "reference-daytype-v1",
             "reference_prior_id": "rehearsal-prior",
             "normalized_symbol": "SOL/USDT",
-            "reference_venue": "BINANCE_SPOT",
-            "data_source": "BINANCE_SPOT",
+            "reference_venue": "BINANCE_PUBLIC",
+            "data_source": "BINANCE_PUBLIC",
             "provider": "binance",
             "timeframe": timeframe,
             "horizon_bars": 6,
@@ -215,7 +215,7 @@ class Rehearsal:
             "lattice_run_id": run_id,
             "timeframe": "4H",
             "normalized_symbol": "SOL/USDT",
-            "reference_venue": "BINANCE_SPOT",
+            "reference_venue": "BINANCE_PUBLIC",
             "lattice_instant_utc": (ANCHOR + timedelta(hours=12 * self.serial)).isoformat(),
             "reason": "STALE_SNAPSHOT",
             "protocol_version": "E3_LATTICE_V1",
@@ -644,7 +644,7 @@ class Rehearsal:
             "another target": self.row(target_version="v0"),
             "not live data": self.row(is_live_data=False),
             "a negative band": self.row(decision_band_frac=-0.001),
-            "two venues": self.row(data_source="OKX_SPOT"),
+            "two venues": self.row(data_source="OKX_PUBLIC"),
         }
         early = self.row()
         instant = datetime.fromisoformat(early["lattice_instant_utc"])
