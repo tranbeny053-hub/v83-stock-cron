@@ -2,6 +2,23 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-05 - NG3: the dormant wiring of the parallel pipeline (on main, not released)
+
+It records #323. Nothing in this entry is released.
+
+Added:
+- #323: the analysis service can route a recorded human analysis through NG1's parallel pipeline,
+  behind a switch that is OFF (`NG_PIPELINE_ENABLED = False`, a code constant; no setting or
+  request can turn it on). Built under the owner's R3a of 2026-11-04. With the switch OFF every
+  served byte, hash, gate, timestamp and stored row is unchanged, which 92 frozen cases check.
+  The response schema gains one optional, closed `ng_serving` property, which is only ever
+  present with the switch ON and then only holds hidden or unavailable states.
+
+Notes:
+- Publishing is not activation: turning the switch on needs a reviewed code change and its own
+  authorization.
+- Migration 0019 is not included; the owner deferred it to the lattice milestone.
+
 ## 2026-11-04 - NG1: the dormant registry and parallel pipeline (on main, not released)
 
 It records #320. Nothing in this entry is released.
