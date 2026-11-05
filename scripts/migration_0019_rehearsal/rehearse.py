@@ -702,6 +702,9 @@ class Rehearsal:
                     "SELECT ucpe_lattice.record_lattice_row(%s::jsonb)", (json.dumps(timed),)
                 ).fetchone()[0]
                 conn.execute("SELECT pg_sleep(1)")
+            # Wait again after the commit, so that a capture-time clock would be caught too.
+            self.su.execute("SELECT pg_sleep(1)")
+            before_capture = self.one(self.su, "SELECT clock_timestamp()")
             captured = self.capture()
             state, commit_ts, captured_at, inserted = self.receipt(timed["lattice_row_id"])
             states = sorted(
@@ -752,12 +755,14 @@ class Rehearsal:
                 and state == "COMMITTED"
                 and commit_ts - inserted >= timedelta(seconds=1)
                 and commit_ts - tx_start >= timedelta(seconds=1)
+                and before_capture - commit_ts >= timedelta(seconds=0.5)
                 and commit_ts <= captured_at
             )
             self.add(
-                "R-9 track_commit_timestamp on: the receipt holds the true commit time, at least"
+                "R-9 track_commit_timestamp on: the receipt holds the true commit time: at least"
                 " 1 s after both the insert clock and the transaction start (the transaction"
-                " slept 1 s after the insert) and not after the capture",
+                " slept 1 s after the insert) and at least 0.5 s before the capture began (it"
+                " waited 1 s after the commit)",
                 ok,
                 {
                     "state": state,
@@ -765,6 +770,9 @@ class Rehearsal:
                     if commit_ts
                     else None,
                     "commit_minus_tx_start_s": (commit_ts - tx_start).total_seconds()
+                    if commit_ts
+                    else None,
+                    "capture_start_minus_commit_s": (before_capture - commit_ts).total_seconds()
                     if commit_ts
                     else None,
                 },
