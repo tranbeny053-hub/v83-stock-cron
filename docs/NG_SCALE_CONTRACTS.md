@@ -46,7 +46,7 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 
 ## Deliberately absent
 
-The dormant NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is an isolated, default-OFF, REF-only TEST_ONLY pilot preparation. It has no startup hook, declared cell, prior value, or configured capacity; migration 0019 is authored but not applied. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors.
+The dormant NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is an isolated, default-OFF, REF-only TEST_ONLY pilot preparation. It has no startup hook, declared cell, prior value, or configured capacity; row and missed-entry payloads match the exact key contracts in authored migration 0019, which remains unapplied. The lattice uses tc-v1's round-trip cost as its decision band and refuses rows whose reference close is not the scheduled lattice instant. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors.
 
 The NG1 registry and `pipeline_ng` now exist as dormant modules encoding KEEP_HOLD and DEFER;
 they do not wire into a serving path. `quant_ng` already depends on `gates` transitively through

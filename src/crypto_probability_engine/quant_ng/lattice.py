@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,8 @@ from typing import Any
 
 from crypto_probability_engine.adapters.types import MarketSnapshot
 from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A
+from crypto_probability_engine.execution_realism.realism import compute_execution_realism
+from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
 from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.quant_ng import evidence, reference, reference_v1d, windows
 from crypto_probability_engine.targets.contract_v1 import VENUE_LABELS, stamp_v1, validate_v1
@@ -33,6 +36,48 @@ _MISSED = {
     "NOT_ISSUED",
     "CAPACITY_STOP",
 }
+STORE_ROW_KEYS = (
+    "lattice_row_id",
+    "lattice_run_id",
+    "lattice_instant_utc",
+    "reference_close_utc",
+    "horizon_end_utc",
+    "predicted_at_utc",
+    "core_computed_at_utc",
+    "issued_at_utc",
+    "protocol_version",
+    "evaluation_population",
+    "timing_class",
+    "evidence_use",
+    "arm",
+    "artifact_id",
+    "recipe_id",
+    "methodology_version",
+    "reference_prior_id",
+    "normalized_symbol",
+    "reference_venue",
+    "data_source",
+    "provider",
+    "timeframe",
+    "horizon_bars",
+    "target_version",
+    "is_live_data",
+    "reference_price",
+    "decision_band_frac",
+    "p_up_frac",
+    "p_down_frac",
+    "p_timeout_frac",
+)
+MISSED_ENTRY_KEYS = (
+    "lattice_run_id",
+    "timeframe",
+    "normalized_symbol",
+    "reference_venue",
+    "lattice_instant_utc",
+    "reason",
+    "protocol_version",
+    "evidence_use",
+)
 
 
 def _utc(value: datetime, name: str) -> datetime:
@@ -89,11 +134,52 @@ def validate_cell(cell: LatticeCell) -> None:
 @dataclass(frozen=True)
 class PilotConfig:
     cells: tuple[LatticeCell, ...]
-    priors: Mapping[str, reference.ReferencePriors | float | None]
+    priors: Mapping[LatticeCell, reference.ReferencePriors | float]
     reference_prior_id: str
     recipe_id: str
-    reference_spec: Any = None
-    reference_spec_v1d: Any = None
+    reference_spec: Any
+    reference_spec_v1d: Any
+
+    def __post_init__(self) -> None:
+        for cell in self.cells:
+            validate_cell(cell)
+
+
+class LatticeIssue(RuntimeError):
+    def __init__(self, reason: str) -> None:
+        if reason not in _MISSED:
+            raise ValueError("Unsupported lattice issue reason")
+        self.reason = reason
+        super().__init__(reason)
+
+
+def decision_band_frac(snapshot: MarketSnapshot) -> float:
+    value = compute_execution_realism(compute_liquidity_depth(snapshot.order_book))[
+        "round_trip_cost_frac"
+    ]
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise LatticeIssue("REFERENCE_UNAVAILABLE")
+    return float(value)
+
+
+def build_missed_entry(cell: LatticeCell, instant: datetime, reason: str) -> dict[str, Any]:
+    if reason not in _MISSED:
+        raise ValueError("Unsupported missed-instant reason")
+    return {
+        "lattice_run_id": lattice_row_id(cell, instant).split(":")[0],
+        "timeframe": cell.timeframe,
+        "normalized_symbol": normalize_symbol(cell.symbol).display,
+        "reference_venue": VENUE_LABELS[cell.venue],
+        "lattice_instant_utc": _utc(instant, "instant").isoformat(),
+        "reason": reason,
+        "protocol_version": PROTOCOL_VERSION,
+        "evidence_use": "TEST_ONLY",
+    }
 
 
 def reconstruct_gaps(
@@ -124,6 +210,14 @@ def build_lattice_row(
     validate_cell(cell)
     issued = _utc(issued_at, "issued_at")
     close = window.last_close_utc
+    if close != _utc(instant, "instant"):
+        raise LatticeIssue("WINDOW_UNAVAILABLE")
+    if (
+        snapshot.provider != cell.venue
+        or snapshot.normalized_symbol != normalize_symbol(cell.symbol).display
+    ):
+        raise LatticeIssue("REFERENCE_UNAVAILABLE")
+    band_frac = decision_band_frac(snapshot)
     seconds = _BAR_SECONDS[cell.timeframe]
     row = {
         "lattice_row_id": lattice_row_id(cell, instant),
@@ -142,16 +236,15 @@ def build_lattice_row(
         "reference_prior_id": config.reference_prior_id,
         "normalized_symbol": snapshot.normalized_symbol,
         "timeframe": cell.timeframe,
-        "data_source": snapshot.provider,
-        "provider_signature": snapshot.provider,
+        "data_source": VENUE_LABELS[snapshot.provider],
+        "provider": snapshot.provider,
         "reference_close_utc": close.isoformat(),
         "horizon_end_utc": (
             close + timedelta(seconds=seconds * DEFAULT_PHASE1A.h_primary_bars)
         ).isoformat(),
         "predicted_at_utc": snapshot.as_of_utc.isoformat(),
         "reference_price": window.candles[-1].close,
-        "band_frac": 0.0,
-        "decision_band_frac": 0.0,
+        "decision_band_frac": band_frac,
         "horizon_bars": DEFAULT_PHASE1A.h_primary_bars,
         "p_up_frac": triplet.p_up_frac,
         "p_down_frac": triplet.p_down_frac,
@@ -170,7 +263,7 @@ def build_lattice_row(
         or row.get("timing_class") != evidence.Timing.NOT_APPLICABLE.value
     ):
         raise AssertionError("lattice row failed tc-v1 or evidence contract")
-    return row
+    return {key: row[key] for key in STORE_ROW_KEYS}
 
 
 class LatticeDisabled(RuntimeError):
@@ -206,9 +299,7 @@ def lattice_step(
                 instant - timedelta(microseconds=1),
             )[:1000]
             for gap in skipped:
-                status = store.record_missed(
-                    {"cell": cell, "lattice_instant_utc": gap.isoformat(), "reason": "NOT_ISSUED"}
-                )
+                status = store.record_missed(build_missed_entry(cell, gap, "NOT_ISSUED"))
                 if status in {"CAPACITY_STOP", "CAPACITY_UNSET"}:
                     results.append({"instant": gap, "status": status, "reason": "NOT_ISSUED"})
                     stop = True
@@ -223,13 +314,22 @@ def lattice_step(
         if snapshot is not None and snapshot.as_of_utc < instant:
             reason = "STALE_SNAPSHOT"
         if snapshot is not None and reason is None:
+            if (
+                snapshot.provider != cell.venue
+                or snapshot.normalized_symbol != normalize_symbol(cell.symbol).display
+            ):
+                reason = "REFERENCE_UNAVAILABLE"
+        if snapshot is not None and reason is None:
             try:
                 window = fetch_window(cell, snapshot)
-            except Exception:
+            except windows.WindowUnavailable:
+                window, reason = None, "WINDOW_UNAVAILABLE"
+            if window is not None and window.last_close_utc != instant:
                 window, reason = None, "WINDOW_UNAVAILABLE"
             if window is not None and reason is None:
                 try:
-                    prior = config.priors.get(cell.timeframe)
+                    band_frac = decision_band_frac(snapshot)
+                    prior = config.priors.get(cell)
                     if cell.timeframe == "1D":
                         if prior is None:
                             raise reference.ReferenceNotFrozenError(
@@ -238,7 +338,7 @@ def lattice_step(
                         triplet = reference_v1d.compute_reference_v1d(
                             window.candles,
                             timeframe=cell.timeframe,
-                            band_frac=0.0,
+                            band_frac=band_frac,
                             spec=config.reference_spec_v1d,
                             prior=prior,
                         )
@@ -250,14 +350,14 @@ def lattice_step(
                         triplet = reference.compute_reference(
                             window.candles,
                             timeframe=cell.timeframe,
-                            band_frac=0.0,
+                            band_frac=band_frac,
                             spec=config.reference_spec,
                             priors=prior,
                         )
-                except reference.ReferenceNotFrozenError:
+                except (reference.ReferenceNotFrozenError, reference.ReferenceUnavailable):
                     triplet, reason = None, "REFERENCE_UNAVAILABLE"
-                except Exception:
-                    triplet, reason = None, "WINDOW_UNAVAILABLE"
+                except LatticeIssue as issue:
+                    triplet, reason = None, issue.reason
                 if triplet is not None:
                     row = build_lattice_row(
                         cell,
@@ -274,9 +374,7 @@ def lattice_step(
                     if status in {"CAPACITY_STOP", "CAPACITY_UNSET"}:
                         stop = True
         if reason:
-            status = store.record_missed(
-                {"cell": cell, "lattice_instant_utc": instant.isoformat(), "reason": reason}
-            )
+            status = store.record_missed(build_missed_entry(cell, instant, reason))
             results.append({"instant": instant, "status": status, "reason": reason})
             if status in {"CAPACITY_STOP", "CAPACITY_UNSET"} or reason == "CAPACITY_STOP":
                 stop = True
