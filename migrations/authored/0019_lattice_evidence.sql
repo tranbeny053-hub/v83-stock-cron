@@ -21,7 +21,8 @@
 --
 -- TRUSTED ADMINS. On PostgreSQL 16+ the CREATEROLE runner keeps the ADMIN OPTION it gets on each role it creates, and
 -- the owner can disable a trigger or a policy. Append-only therefore rests on who can reach ucpe_lattice_owner: the
--- runner and superusers, the same principals that own public.predictions and 0014's triggers today.
+-- runner, any role that can SET ROLE to the runner, and superusers, the same principals that own public.predictions
+-- and 0014's triggers today. The future T4 route lists them and runs this file's preconditions read-only first.
 --
 -- ROLLBACK. A separate T4, never automatic: DROP SCHEMA ucpe_lattice CASCADE; DROP ROLE ucpe_lattice_writer;
 -- DROP ROLE ucpe_lattice_owner.
@@ -308,6 +309,8 @@ $$;
 
 -- Runs in a fresh transaction only: a row this transaction wrote has no commit timestamp yet. It tests the setting
 -- before the call, which raises when track_commit_timestamp is off. A receipt is written once and never replaced.
+-- A time is accepted only if it is at or after the row's insert clock and not in the future, and only for a row
+-- younger than 7 days: a later capture could read a reused transaction id (wraparound), so it is COMMIT_UNKNOWN.
 CREATE FUNCTION ucpe_lattice.capture_commit_receipts(p_limit integer) RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -328,7 +331,7 @@ BEGIN
     END IF;
     PERFORM pg_catalog.pg_advisory_xact_lock(190019, 2);
     FOR v_row IN
-        SELECT r.lattice_row_id, r.xmin AS row_xmin
+        SELECT r.lattice_row_id, r.xmin AS row_xmin, r.db_insert_clock_utc AS inserted
           FROM ucpe_lattice.lattice_rows r
          WHERE NOT EXISTS (
                SELECT 1 FROM ucpe_lattice.lattice_commit_receipts c WHERE c.lattice_row_id = r.lattice_row_id)
@@ -339,8 +342,13 @@ BEGIN
         v_state := 'COMMIT_UNKNOWN';
         IF pg_catalog.current_setting('track_commit_timestamp') = 'on' THEN
             v_ts := pg_catalog.pg_xact_commit_timestamp(v_row.row_xmin);
-            IF v_ts IS NOT NULL THEN
+            IF v_ts IS NOT NULL
+               AND v_ts >= v_row.inserted
+               AND v_ts <= pg_catalog.clock_timestamp()
+               AND pg_catalog.clock_timestamp() - v_row.inserted <= interval '7 days' THEN
                 v_state := 'COMMITTED';
+            ELSE
+                v_ts := NULL;
             END IF;
         END IF;
         INSERT INTO ucpe_lattice.lattice_commit_receipts (lattice_row_id, commit_state, commit_ts_utc, commit_ts_source)
@@ -397,18 +405,23 @@ BEGIN
     IF EXISTS (
         SELECT 1
           FROM (
-                SELECT n.nspacl AS acl FROM pg_catalog.pg_namespace n WHERE n.nspname = 'ucpe_lattice'
+                -- A NULL ACL means the default (for functions, EXECUTE to PUBLIC), so it is expanded first.
+                SELECT coalesce(n.nspacl, pg_catalog.acldefault('n', n.nspowner)) AS acl
+                  FROM pg_catalog.pg_namespace n WHERE n.nspname = 'ucpe_lattice'
                 UNION ALL
-                SELECT c.relacl FROM pg_catalog.pg_class c
-                  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'ucpe_lattice'
+                SELECT coalesce(c.relacl, pg_catalog.acldefault(
+                           (CASE WHEN c.relkind = 'S' THEN 's' ELSE 'r' END)::"char", c.relowner))
+                  FROM pg_catalog.pg_class c
+                  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'ucpe_lattice' AND c.relkind IN ('r', 'S', 'v', 'm', 'p', 'f')
                 UNION ALL
-                SELECT p.proacl FROM pg_catalog.pg_proc p
+                SELECT coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))
+                  FROM pg_catalog.pg_proc p
                   JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'ucpe_lattice'
                ) o
           CROSS JOIN LATERAL pg_catalog.aclexplode(o.acl) a
           LEFT JOIN pg_catalog.pg_roles g ON g.oid = a.grantee
-         WHERE o.acl IS NOT NULL
-           AND (a.grantee = 0 OR (g.rolname NOT IN ('ucpe_lattice_owner', 'ucpe_lattice_writer') AND NOT g.rolsuper))
+         WHERE (a.grantee = 0 OR (g.rolname NOT IN ('ucpe_lattice_owner', 'ucpe_lattice_writer') AND NOT g.rolsuper))
     ) THEN
         RAISE EXCEPTION '0019 self-check: an unexpected privilege on ucpe_lattice' USING ERRCODE = 'UP019';
     END IF;

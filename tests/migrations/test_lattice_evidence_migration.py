@@ -146,18 +146,22 @@ def test_capture_records_only_postgresqls_commit_timestamp() -> None:
     assert body.index("current_setting('track_commit_timestamp') = 'on'") < body.index(
         "pg_xact_commit_timestamp(v_row.row_xmin)"
     )
-    for clock in (
-        "now()",
-        "transaction_timestamp",
-        "statement_timestamp",
-        "clock_timestamp",
-        "CURRENT_TIMESTAMP",
-    ):
+    # The commit time is only ever PostgreSQL's commit timestamp, or NULL; clocks only bound it.
+    assignments = re.findall(r"v_ts := ([^;]+);", body)
+    assert sorted(set(assignments)) == [
+        "NULL",
+        "pg_catalog.pg_xact_commit_timestamp(v_row.row_xmin)",
+    ]
+    for clock in ("now()", "transaction_timestamp", "statement_timestamp", "CURRENT_TIMESTAMP"):
         assert clock not in body
-    assert (
-        "ON CONFLICT (lattice_row_id) DO NOTHING" in body
-        and "pg_advisory_xact_lock(190019, 2)" in body
-    )
+    for bound in (
+        "v_ts >= v_row.inserted",
+        "v_ts <= pg_catalog.clock_timestamp()",
+        "pg_catalog.clock_timestamp() - v_row.inserted <= interval '7 days'",
+    ):
+        assert bound in body
+    assert "ON CONFLICT (lattice_row_id) DO NOTHING" in body
+    assert "pg_advisory_xact_lock(190019, 2)" in body
 
 
 def test_writes_take_exact_key_sets_capacity_and_never_overwrite() -> None:

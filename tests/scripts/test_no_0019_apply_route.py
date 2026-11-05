@@ -23,7 +23,7 @@ def test_the_file_sits_outside_every_migration_glob() -> None:
 
 def test_the_number_is_reserved_until_the_t4_move() -> None:
     numbers = [int(p.name[:4]) for p in (ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")]
-    assert max(numbers) < 19
+    assert 19 not in numbers  # a later root migration may exist; the T4 route orders 0019's move
 
 
 def test_no_apply_script_or_workflow_exists() -> None:

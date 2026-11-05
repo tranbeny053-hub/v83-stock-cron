@@ -415,6 +415,7 @@ class Rehearsal:
             {"seed_row": seed, "unexpected": live},
         )
 
+        seeded = self.count("lattice_rows")  # >= 1, so 0 rows below is RLS, never an empty table
         reader = {
             "select": self.as_role(
                 "probe_read_all", "SELECT count(*) FROM ucpe_lattice.lattice_rows"
@@ -434,8 +435,8 @@ class Rehearsal:
         self.add(
             "R-3 a non-bypass member of pg_read_all_data and pg_write_all_data sees no row and"
             " changes none (forced RLS, no policy)",
-            reader == expected and self.count("lattice_rows") == 1,
-            reader,
+            seeded == 1 and reader == expected and self.count("lattice_rows") == 1,
+            dict(reader, rows_present=seeded),
         )
 
         bypass = [
@@ -577,7 +578,8 @@ class Rehearsal:
         )
         self.facts["lattice_role_memberships"] = members
         ok = (
-            owner == {"update": 0, "delete": 0, "truncate": TRIGGER}
+            before >= 1
+            and owner == {"update": 0, "delete": 0, "truncate": TRIGGER}
             and all(v == TRIGGER for v in superuser.values())
             and self.count("lattice_rows") == before
             and can_disable is True
@@ -720,6 +722,7 @@ class Rehearsal:
             self.su.execute("VACUUM (FREEZE) ucpe_lattice.lattice_rows")
             self.capture()
             f_state, f_ts, f_captured, f_inserted = self.receipt(frozen["lattice_row_id"])
+            bounds = self.receipt_bounds()
             pair = [self.row(), self.row()]
             for item in pair:
                 self.write_row(item)
@@ -798,10 +801,45 @@ class Rehearsal:
             {"state": f_state},
         )
         self.add(
+            "R-9/R-10 a time is accepted only for a row younger than 7 days whose insert clock is"
+            " not after it: an 8-day-old row and a future insert clock are COMMIT_UNKNOWN",
+            bounds == {"old": "COMMIT_UNKNOWN", "future": "COMMIT_UNKNOWN"},
+            bounds,
+        )
+        self.add(
             "R-9/R-10 two concurrent captures write exactly one receipt per row",
             per_row == [1, 1] and len(results) == 2 and sum(results) == 2,
             {"captured_by_each": results, "receipts_per_row": per_row},
         )
+
+    def receipt_bounds(self) -> dict[str, str]:
+        """Scratch only: a superuser moves two rows' insert clocks (triggers disabled for it)."""
+
+        old, future = self.row(), self.row()
+        self.write_row(old)
+        self.write_row(future)
+        with self.su.transaction():
+            self.su.execute(
+                "ALTER TABLE ucpe_lattice.lattice_rows DISABLE TRIGGER lattice_rows_append_only"
+            )
+            self.su.execute(
+                "UPDATE ucpe_lattice.lattice_rows SET db_insert_clock_utc ="
+                " clock_timestamp() - interval '8 days' WHERE lattice_row_id = %s",
+                (old["lattice_row_id"],),
+            )
+            self.su.execute(
+                "UPDATE ucpe_lattice.lattice_rows SET db_insert_clock_utc ="
+                " clock_timestamp() + interval '1 hour' WHERE lattice_row_id = %s",
+                (future["lattice_row_id"],),
+            )
+            self.su.execute(
+                "ALTER TABLE ucpe_lattice.lattice_rows ENABLE TRIGGER lattice_rows_append_only"
+            )
+        self.capture()
+        return {
+            "old": self.receipt(old["lattice_row_id"])[0],
+            "future": self.receipt(future["lattice_row_id"])[0],
+        }
 
     def fresh_transaction_guard(self) -> None:
         guard = None
@@ -853,6 +891,7 @@ class Rehearsal:
     def append_only_elsewhere(self) -> None:
         mutations = {}
         for table in ("lattice_commit_receipts", "lattice_missed_instants", "lattice_capacity"):
+            present = self.count(table)  # >= 1, so 0 rows changed is RLS, never an empty table
             column = COLUMN[table]
             update = f"UPDATE ucpe_lattice.{table} SET {column} = {column}"
             delete = f"DELETE FROM ucpe_lattice.{table}"
@@ -862,6 +901,7 @@ class Rehearsal:
                 "owner_truncate": self.denied(OWNER, f"TRUNCATE ucpe_lattice.{table}"),
                 "super_update": self.sqlstate_of(lambda u=update: self.su.execute(u)),
                 "super_delete": self.sqlstate_of(lambda d=delete: self.su.execute(d)),
+                "rows_present": present >= 1,
             }
         expected = {
             "owner_update": 0,
@@ -869,6 +909,7 @@ class Rehearsal:
             "owner_truncate": TRIGGER,
             "super_update": TRIGGER,
             "super_delete": TRIGGER,
+            "rows_present": True,
         }
         self.add(
             "R-13 receipts, missed instants and capacity: the owner changes nothing and cannot"
