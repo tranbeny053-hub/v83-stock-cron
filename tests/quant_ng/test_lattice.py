@@ -347,6 +347,7 @@ def run_step(
     now=None,
     inputs=None,
     fresh_after=None,
+    pilot_window=None,
 ):
     cell, instant, snapshot, window = (inputs or real_inputs())[:4]
     monkeypatch.setattr(lattice, "LATTICE_ENABLED", True)
@@ -360,6 +361,7 @@ def run_step(
         app_clock=lambda: FIXED_CORE,
         state=state if state is not None else {},
         fresh_after=fresh_after,
+        pilot_window=pilot_window,
     )
     assert store.receipts == [1000]
     return cell, instant, store, result
@@ -495,3 +497,17 @@ def test_a_same_instant_recall_records_nothing_even_outside_pilot_mode(monkeypat
     assert len(store.rows) == 1
     _, _, store2, _ = run_step(monkeypatch, config=config, state=state)
     assert store2.rows == [] and store2.missed == []
+
+
+def test_the_pilot_window_clips_lattice_step_itself(monkeypatch):
+    # lattice_step's own contract (spec §2 A), independent of the runner's scheduling.
+    cell, instant, _, _, config, _ = real_inputs()
+    before = (instant + timedelta(seconds=1), instant + timedelta(days=1))  # instant < start
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=before)
+    assert store.rows == [] and store.missed == []
+    at_end = (instant - timedelta(days=1), instant)  # instant == end: outside [start, end)
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=at_end)
+    assert store.rows == [] and store.missed == []
+    inside = (instant - timedelta(days=1), instant + timedelta(seconds=1))
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=inside)
+    assert len(store.rows) == 1
