@@ -8,14 +8,23 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
 # catalog identity outside ucpe_lattice, every role refused but the owner and the writer, the writer's
 # execute-only access, owner and bypass paths, capacity, duplicates, CHECK refusals, commit receipts and missed
 # instants. It runs twice: with track_commit_timestamp off (every receipt COMMIT_UNKNOWN) and on (the true commit time).
-# It references no secret and touches no real database. Migration 0019 is AUTHORED, NOT APPLIED: no apply route or
-# workflow exists, and scripts/apply_migrations.py refuses it.
+# It references no secret and touches no real database. Migration 0019 is AUTHORED, NOT APPLIED: scripts/
+# apply_migrations.py refuses it, and its one-shot route (scripts/apply_migration_0019.py, the read-only
+# scripts/ng4_pilot_preflight.py and their workflows in ops/ng4_pilot/workflows/) is AUTHORED BUT DISABLED: GitHub
+# registers only files directly under .github/workflows. A third run (pilot, NG4-PILOT INPUTS 2026-11-06) rehearses
+# that route on the same kind of cluster: the preflight READY and read-only, the apply's refusals before any DDL, one
+# apply of 0019 plus the pilot capacity, a refused second run, and both W1 forms (R-16..R-19).
 
 "on":
   pull_request:
     paths:
       - migrations/**
       - scripts/migration_0019_rehearsal/**
+      - scripts/apply_migration_0019.py
+      - scripts/ng4_pilot_preflight.py
+      - scripts/migration_0019_capacity.sql
+      - ops/ng4_pilot/**
+      - src/crypto_probability_engine/persistence/reader_identity.py
       - scripts/migration_0013_rehearsal/**
       - scripts/migration_0015_rehearsal/**
       - scripts/migration_0016_rehearsal/**
@@ -57,10 +66,19 @@ jobs:
           bash scripts/migration_0019_rehearsal/run_scratch.sh /usr/lib/postgresql/16/bin \
             "$RUNNER_TEMP/r19-on" migration-0019-commit-ts-on.json on
 
+      - name: Rehearse the NG4 pilot's authored route (preflight, one-shot apply, W1 forms)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/migration_0019_rehearsal/run_scratch.sh /usr/lib/postgresql/16/bin \
+            "$RUNNER_TEMP/r19-pilot" migration-0019-pilot.json pilot
+
       - name: Upload the rehearsal reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: migration-0019-rehearsal-reports
-          path: migration-0019-commit-ts-*.json
+          path: |
+            migration-0019-commit-ts-*.json
+            migration-0019-pilot.json
           if-no-files-found: warn

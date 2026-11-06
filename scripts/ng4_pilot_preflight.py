@@ -116,7 +116,7 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
                 sql,
                 (list(SUPABASE_EVENT_TRIGGERS),)
                 if name == "event_triggers_ddl_not_allowlisted"
-                else (),
+                else None,  # no parameters: psycopg must not read the LIKE patterns' % as one
             )
             row = cur.fetchone()
             facts[name] = row[0] if row else 0

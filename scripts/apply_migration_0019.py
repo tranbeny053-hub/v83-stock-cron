@@ -98,7 +98,8 @@ SELECT jsonb_build_object(
       AND pg_get_userbyid(m.member) NOT IN ('ucpe_lattice_owner','ucpe_lattice_writer')) x),
  'grants',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x::text),'[]') FROM (
    SELECT n.nspname, c.relname, c.relkind, c.relacl::text AS acl FROM pg_class c
-     JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname<>'ucpe_lattice') x),
+     JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast','ucpe_lattice')) x),
  'schema_grants',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x::text),'[]') FROM (
    SELECT nspname, nspacl::text AS acl FROM pg_namespace WHERE nspname<>'ucpe_lattice') x),
  'policies',(SELECT coalesce(jsonb_agg(to_jsonb(x) ORDER BY x::text),'[]') FROM (
@@ -115,7 +116,7 @@ SELECT jsonb_build_object(
    SELECT pg_get_userbyid(defaclrole) AS role, defaclnamespace::regnamespace::text AS schema,
           defaclobjtype, defaclacl::text AS acl FROM pg_default_acl) x),
  'event_triggers',(SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY evtname),'[]')
-   FROM pg_event_trigger)
+   FROM pg_event_trigger e)
 )::text
 """
 
@@ -188,7 +189,11 @@ def apply_in_one_transaction(open_connection, migration: bytes, capacity: bytes,
         after = _checks(cur, records, "post")
         outside_after = _outside_fingerprint(cur)
         records["outside_after"] = outside_after
-        if before != after or outside_before != outside_after:
+        # The schema and the two roles now exist; every other pre-check must still hold.
+        if after["schema_absent"] is not False or after["roles_absent"] is not False:
+            raise Refused("post-check: the schema or the roles are missing")
+        unchanged = [k for k in CHECKS if k not in ("schema_absent", "roles_absent")]
+        if any(after[k] != before[k] for k in unchanged) or outside_before != outside_after:
             raise Refused("post-check catalog mismatch")
         # PostgreSQL 16 CREATEROLE auto-grant must be ADMIN-only for the applier.
         cur.execute("""SELECT m.admin_option AND NOT m.inherit_option AND NOT m.set_option

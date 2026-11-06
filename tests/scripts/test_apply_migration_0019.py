@@ -42,6 +42,7 @@ class FakeCursor:
     def __init__(self):
         self.statements = []
         self.row = (True,)
+        self.applied = False  # after the migration runs, the schema and the roles exist
 
     def __enter__(self):
         return self
@@ -51,7 +52,12 @@ class FakeCursor:
 
     def execute(self, sql, *args):
         self.statements.append(sql)
-        if "jsonb_build_object" in sql:
+        if "CREATE SCHEMA ucpe_lattice" in sql:
+            self.applied = True
+        if self.applied and ("nspname='ucpe_lattice'" in sql and "NOT EXISTS" in sql
+                             or "rolname IN ('ucpe_lattice_owner'" in sql and "NOT EXISTS" in sql):
+            self.row = (False,)
+        elif "jsonb_build_object" in sql:
             self.row = ("fingerprint",)
         elif "pg_advisory_xact_lock" in sql:
             self.row = (None,)

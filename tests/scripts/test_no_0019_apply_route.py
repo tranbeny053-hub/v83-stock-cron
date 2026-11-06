@@ -50,6 +50,10 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
     triggers = text.split('"on":', 1)[1].split("permissions:", 1)[0]
     assert re.findall(r"^  (\w+):", triggers, re.MULTILINE) == ["pull_request"]
     assert "permissions:\n  contents: read\n" in text
+    # The one path filter that names the authored, disabled route (NG4 pilot, 2026-11-06).
+    route_path = "      - scripts/apply_migration_0019.py\n"
+    assert text.count(route_path) == 1
+    text = text.replace(route_path, "")
     for forbidden in (
         "secrets.",
         "environment:",
@@ -60,7 +64,7 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
     ):
         assert forbidden not in text
     runs = re.findall(r"run_scratch\.sh /usr/lib/postgresql/16/bin", text)
-    assert len(runs) == 2
+    assert len(runs) == 3  # commit-ts off, on, and the NG4 pilot route
 
 
 def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:
