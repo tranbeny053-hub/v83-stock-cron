@@ -150,6 +150,29 @@ ALLOWED_NG_IMPORTS = {
         {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
     ),
 }
+PILOT_IMPORT_ALLOWANCE = (
+    "src/crypto_probability_engine/lattice_pilot.py",
+    "crypto_probability_engine.quant_ng",
+    frozenset({("lattice", None), ("reference", None), ("reference_v1d", None), ("windows", None)}),
+)
+
+
+def test_pilot_allowance_rejects_extra_name_alias_duplicate_and_other_file():
+    allowed = (
+        "from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows"
+    )
+    path = ROOT / PILOT_IMPORT_ALLOWANCE[0]
+    assert not _ng_import_violations(allowed, path, _module_path(path, ROOT / "src"))[0]
+    rejected = (
+        allowed + ", evidence",
+        ("from crypto_probability_engine.quant_ng import lattice as grid, reference, "
+         "reference_v1d, windows"),
+        allowed + "\n" + allowed,
+    )
+    for source in rejected:
+        assert _ng_import_violations(source, path, _module_path(path, ROOT / "src"))[0]
+    other = ROOT / "src/crypto_probability_engine/other_pilot.py"
+    assert _ng_import_violations(allowed, other, _module_path(other, ROOT / "src"))[0]
 
 
 def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[list[str], set[str]]:
@@ -180,8 +203,20 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
             and node.module not in used
             and frozenset((a.name, a.asname) for a in node.names) == ALLOWED_NG_IMPORTS[node.module]
         )
+        pilot_exempt = (
+            str(path.relative_to(ROOT)) == PILOT_IMPORT_ALLOWANCE[0]
+            and isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module == PILOT_IMPORT_ALLOWANCE[1]
+            and frozenset((a.name, a.asname) for a in node.names) == PILOT_IMPORT_ALLOWANCE[2]
+            and not any(
+                isinstance(k, tuple) and k[0] == PILOT_IMPORT_ALLOWANCE[0] for k in used
+            )
+        )
         if exempt:
             used.add(node.module)
+        elif pilot_exempt:
+            used.add((PILOT_IMPORT_ALLOWANCE[0], node.module))
         else:
             violations.extend(names)
     return violations, used

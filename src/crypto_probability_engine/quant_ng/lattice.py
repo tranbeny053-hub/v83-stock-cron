@@ -22,6 +22,24 @@ from crypto_probability_engine.targets.contract_v1 import VENUE_LABELS, stamp_v1
 # variable, setting, header or request reads or sets it.
 LATTICE_ENABLED = False
 DECLARED_CELLS: tuple = ()
+# NG4-PILOT INPUTS, owner 2026-11-06. These are arbitrary operational fixtures; not
+# scientific priors, not reference probabilities, never eligible for any statistical use.
+# The start is named by the owner in the switch-ON change (a T3).
+PILOT_SYMBOL = "SOL/USDT"
+PILOT_VENUE = "binance"
+PILOT_TIMEFRAMES = ("15m", "1H", "4H", "1D")
+PILOT_PRIOR_ID = "TEST_ONLY_PLACEHOLDER_PRIOR_V1"
+PILOT_PRIOR_PREFIX = "TEST_ONLY_PLACEHOLDER_PRIOR_"
+PILOT_PRIOR_INTRADAY = reference.ReferencePriors((0.5, 0.5, 0.5))
+PILOT_PRIOR_1D = 0.5
+PILOT_RECIPE_ID = "reference-daytype-v1"
+PILOT_RECIPE_ID_1D = "reference-daytype-v1d"
+PILOT_START_UTC: datetime | None = None
+PILOT_DURATION = timedelta(days=14)
+PILOT_CHECKPOINT = timedelta(days=7)
+PILOT_CAPACITY_MAX = 1200
+PILOT_CAPACITY_WARN = 600
+PILOT_BARS_REQUIRED = {"15m": 678, "1H": 678, "4H": 174, "1D": 371}
 PROTOCOL_VERSION = "E3_LATTICE_V1"
 LATTICE_ANCHOR_UTC = datetime(2026, 9, 21, tzinfo=UTC)
 TIMEFRAMES = ("15m", "1H", "4H", "1D")
@@ -117,6 +135,20 @@ class LatticeCell:
     timeframe: str
 
 
+PILOT_CELLS = tuple(LatticeCell(PILOT_SYMBOL, PILOT_VENUE, tf) for tf in PILOT_TIMEFRAMES)
+
+
+def pilot_end(start: datetime) -> datetime:
+    return _utc(start, "start") + PILOT_DURATION
+
+
+def planned_slots(start: datetime) -> dict[str, int]:
+    normalized = _utc(start, "start")
+    end = pilot_end(normalized)
+    return {tf: sum(i < end for i in lattice_instants(tf, normalized, end))
+            for tf in PILOT_TIMEFRAMES}
+
+
 def validate_cell(cell: LatticeCell) -> None:
     if not isinstance(cell, LatticeCell):
         raise ValueError("cell must be a LatticeCell")
@@ -139,10 +171,23 @@ class PilotConfig:
     recipe_id: str
     reference_spec: Any
     reference_spec_v1d: Any
+    recipe_id_1d: str | None = None
 
     def __post_init__(self) -> None:
         for cell in self.cells:
             validate_cell(cell)
+
+
+def pilot_config(reference_spec: Any, reference_spec_v1d: Any) -> PilotConfig:
+    # The pilot's only config: its prior id must say it is a placeholder (owner, 2026-11-06).
+    if not PILOT_PRIOR_ID.startswith(PILOT_PRIOR_PREFIX):
+        raise ValueError("Pilot reference prior id must use the TEST_ONLY placeholder prefix")
+    priors = {
+        cell: (PILOT_PRIOR_1D if cell.timeframe == "1D" else PILOT_PRIOR_INTRADAY)
+        for cell in PILOT_CELLS
+    }
+    return PilotConfig(PILOT_CELLS, priors, PILOT_PRIOR_ID, PILOT_RECIPE_ID,
+                       reference_spec, reference_spec_v1d, PILOT_RECIPE_ID_1D)
 
 
 class LatticeIssue(RuntimeError):
@@ -229,9 +274,9 @@ def build_lattice_row(
         "evidence_use": "TEST_ONLY",
         "arm": "REF",
         "artifact_id": None,
-        "recipe_id": config.recipe_id,
-        "methodology_version": "reference-daytype-v1d"
-        if cell.timeframe == "1D"
+        "recipe_id": (config.recipe_id_1d or config.recipe_id)
+        if cell.timeframe == "1D" else config.recipe_id,
+        "methodology_version": "reference-daytype-v1d" if cell.timeframe == "1D"
         else "reference-daytype-v1",
         "reference_prior_id": config.reference_prior_id,
         "normalized_symbol": snapshot.normalized_symbol,
@@ -279,6 +324,8 @@ def lattice_step(
     store: Any,
     app_clock: Any,
     state: dict[str, Any],
+    pilot_window: tuple[datetime, datetime] | None = None,
+    fresh_after: datetime | None = None,
 ) -> dict[str, Any]:
     if not LATTICE_ENABLED:
         raise LatticeDisabled("Lattice is disabled")
@@ -291,13 +338,24 @@ def lattice_step(
         instant = latest_due_instant(cell.timeframe, now_utc)
         if instant is None:
             continue
+        start, end = pilot_window if pilot_window is not None else (None, None)
+        if pilot_window is not None and not (start <= instant < end):
+            continue
         previous = state.get(cell)
+        if previous == instant:
+            continue
+        if (previous is None and fresh_after is not None
+                and instant <= _utc(fresh_after, "fresh_after")):
+            state[cell] = instant
+            continue
         if previous is not None:
             skipped = lattice_instants(
                 cell.timeframe,
                 previous + timedelta(microseconds=1),
                 instant - timedelta(microseconds=1),
             )[:1000]
+            if pilot_window is not None:
+                skipped = tuple(gap for gap in skipped if start <= gap < end)
             for gap in skipped:
                 status = store.record_missed(build_missed_entry(cell, gap, "NOT_ISSUED"))
                 if status in {"CAPACITY_STOP", "CAPACITY_UNSET"}:

@@ -173,7 +173,9 @@ def test_no_production_path_calls_the_history_capability() -> None:
     and nothing imports that path. The dormant quant_ng package (NGA) may also name the capability.
     Since NG3's dormant wiring (owner R3a, 2026-11-04) exactly one production module imports
     quant_ng, api/analysis_service.py, and only the registry and pipeline_ng: neither calls the
-    window loader that fetches history, and the importer never names it.
+    window loader that fetches history, and the importer never names it. Since the NG4 pilot build
+    (owner NG4-PILOT INPUTS, 2026-11-06) lattice_pilot.py is the second, dormant importer: it calls
+    the window loader only when LATTICE_ENABLED is True and the owner has named a start.
     """
 
     package = ROOT / "src" / "crypto_probability_engine"
@@ -185,6 +187,7 @@ def test_no_production_path_calls_the_history_capability() -> None:
     assert callers == [
         "adapters/candle_history.py",
         "adapters/public_market.py",
+        "lattice_pilot.py",
         "quant/distributional_v2_serving.py",
         "quant_ng/windows.py",
     ]
@@ -194,18 +197,26 @@ def test_no_production_path_calls_the_history_capability() -> None:
         if "distributional_v2_serving" in text and name != "quant/distributional_v2_serving.py"
     ]
     assert importers == []
-    quant_ng_importers = [
+    quant_ng_importers = sorted(
         name
         for name, text in sources.items()
         if not name.startswith("quant_ng/") and "quant_ng" in text
-    ]
-    assert quant_ng_importers == ["api/analysis_service.py"]
+    )
+    assert quant_ng_importers == ["api/analysis_service.py", "lattice_pilot.py"]
     service_ng_lines = [
         line for line in sources["api/analysis_service.py"].splitlines() if "quant_ng" in line
     ]
     assert service_ng_lines == [
         "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
         "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal",
+    ]
+    pilot_ng_lines = [
+        line for line in sources["lattice_pilot.py"].splitlines() if "quant_ng" in line
+    ]
+    assert pilot_ng_lines == [
+        "from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows",
+        '    v1 = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1.json").read_text())',
+        '    v1d = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1d.json").read_text())',
     ]
     for name in ("api/analysis_service.py", "quant_ng/registry.py", "quant_ng/pipeline_ng.py"):
         assert "acquire_window" not in sources[name], name

@@ -10,9 +10,12 @@ import pytest
 
 from crypto_probability_engine.execution_realism.realism import compute_execution_realism
 from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
-from crypto_probability_engine.quant_ng import lattice, reference, windows
+from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows
 from crypto_probability_engine.targets.contract_v1 import validate_v1
 from tests.fixtures.market_data import make_snapshot
+from tests.quant_ng.test_reference import SPEC
+from tests.quant_ng.test_reference import _candles as intraday_candles
+from tests.quant_ng.test_reference_v1d import _candles as daily_candles
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).parent / "fixtures" / "lattice_row_v1.json"
@@ -186,6 +189,48 @@ def test_frozen_fixture_matches_builder() -> None:
     assert json.loads(FIXTURE.read_text())["store_row"] == build_real_row()
 
 
+def test_pilot_bars_required_exact_boundary():
+    priors = reference.ReferencePriors((0.5, 0.5, 0.5))
+    for timeframe in ("15m", "1H", "4H"):
+        count = lattice.PILOT_BARS_REQUIRED[timeframe]
+        candles = intraday_candles(count, timeframe)
+        assert reference.compute_reference(candles, timeframe=timeframe, band_frac=0.05,
+                                           spec=SPEC, priors=priors)
+        with pytest.raises(reference.ReferenceUnavailable, match="full reference memory"):
+            reference.compute_reference(candles[:-1], timeframe=timeframe, band_frac=0.05,
+                                       spec=SPEC, priors=priors)
+    spec_path = ROOT / "ops/quant_ng/REFERENCE_SPEC_v1d.json"
+    spec_1d = reference_v1d.load_reference_spec_v1d(json.loads(spec_path.read_text()))
+    daily = daily_candles([100.0 + i for i in range(371)])
+    assert reference_v1d.compute_reference_v1d(daily, timeframe="1D", band_frac=0.05,
+                                               spec=spec_1d, prior=0.5)
+    with pytest.raises(reference.ReferenceUnavailable, match="full reference memory"):
+        reference_v1d.compute_reference_v1d(daily[:-1], timeframe="1D", band_frac=0.05,
+                                             spec=spec_1d, prior=0.5)
+
+
+def test_planned_slots_cover_every_15m_alignment_and_prior_prefix():
+    start = datetime(2026, 11, 9, tzinfo=UTC)
+    totals = set()
+    for offset in range(0, 3 * 24 * 60, 15):
+        counts = lattice.planned_slots(start + timedelta(minutes=offset))
+        assert counts["15m"] == 448
+        assert counts["1H"] == 112
+        assert counts["4H"] == 28
+        assert counts["1D"] in (4, 5)
+        total = sum(counts.values())
+        totals.add(total)
+        assert total < lattice.PILOT_CAPACITY_WARN < lattice.PILOT_CAPACITY_MAX
+    assert totals <= {592, 593}
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(lattice, "PILOT_PRIOR_ID", "bad-prior")
+        with pytest.raises(ValueError, match="placeholder prefix"):
+            lattice.pilot_config(None, None)
+    finally:
+        monkeypatch.undo()
+
+
 def test_store_contract_rejects_late_window_and_snapshot_mismatch() -> None:
     cell, instant, snapshot, window, config, triplet = real_inputs()
     late = replace(
@@ -229,6 +274,10 @@ def test_lattice_guards() -> None:
         for path in base.rglob("*.py"):
             if path.name == "lattice.py" and "quant_ng" in path.parts:
                 continue
+            # The NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06): its dormant runner is
+            # the one importer of the lattice and its store.
+            if path == module / "crypto_probability_engine/lattice_pilot.py":
+                continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):
@@ -243,7 +292,20 @@ def test_lattice_guards() -> None:
     texts = {path: path.read_text() for path in module.rglob("*.py")}
     hits = [str(path.relative_to(module)) for path, text in texts.items() if "ucpe_lattice" in text]
     assert hits == ["crypto_probability_engine/persistence/lattice_store.py"]
-    assert not any("ReferencePriors(" in text or "pi0=" in text for text in texts.values())
+    # The only prior values in src/ are the owner's TEST_ONLY placeholders (2026-11-06), in
+    # quant_ng/lattice.py.
+    prior_lines = [
+        (str(path.relative_to(module)), line)
+        for path, text in texts.items()
+        for line in text.splitlines()
+        if "ReferencePriors(" in line or "pi0=" in line
+    ]
+    assert [line for _path, line in prior_lines if "class ReferencePriors" not in line] == [
+        "PILOT_PRIOR_INTRADAY = reference.ReferencePriors((0.5, 0.5, 0.5))"
+    ]
+    assert {path for path, line in prior_lines if "class ReferencePriors" not in line} == {
+        "crypto_probability_engine/quant_ng/lattice.py"
+    }
     source = (module / "crypto_probability_engine/quant_ng/lattice.py").read_text()
     assert "LATTICE_ENABLED = False" in source
     assert "DECLARED_CELLS: tuple = ()" in source
@@ -284,6 +346,8 @@ def run_step(
     state=None,
     now=None,
     inputs=None,
+    fresh_after=None,
+    pilot_window=None,
 ):
     cell, instant, snapshot, window = (inputs or real_inputs())[:4]
     monkeypatch.setattr(lattice, "LATTICE_ENABLED", True)
@@ -296,6 +360,8 @@ def run_step(
         store=store,
         app_clock=lambda: FIXED_CORE,
         state=state if state is not None else {},
+        fresh_after=fresh_after,
+        pilot_window=pilot_window,
     )
     assert store.receipts == [1000]
     return cell, instant, store, result
@@ -384,3 +450,64 @@ def test_step_skipped_instants_are_bounded_and_row_id_ignores_prior(monkeypatch)
     assert result["stopped"] is True
     other = replace(config, priors={cell: reference.ReferencePriors((0.1, 0.2, 0.3))})
     assert lattice.lattice_row_id(cell, instant) == lattice.lattice_row_id(other.cells[0], instant)
+
+
+def test_pilot_recipe_and_methodology_identities():
+    assert lattice.PILOT_RECIPE_ID == "reference-daytype-v1"
+    assert lattice.PILOT_RECIPE_ID_1D == "reference-daytype-v1d"
+    cell = replace(real_inputs()[0], timeframe="1D")
+    config = replace(real_inputs()[4], cells=(cell,), recipe_id_1d="custom-v1d")
+    row = lattice.build_lattice_row(
+        cell, *real_inputs()[1:4], real_inputs()[5], config=config,
+        core_computed_at=FIXED_CORE, issued_at=FIXED_ISSUED,
+    )
+    assert row["recipe_id"] == "custom-v1d"
+    assert row["methodology_version"] == "reference-daytype-v1d"
+
+
+def test_planned_slot_counts():
+    start = datetime(2026, 11, 9, tzinfo=UTC)
+    slots = lattice.planned_slots(start)
+    assert slots == {"15m": 448, "1H": 112, "4H": 28, "1D": 4}
+    assert sum(slots.values()) == 592 < 600 < 1200
+
+
+def test_cold_start_fresh_after_boundary(monkeypatch):
+    cell, instant, _, _, config, _ = real_inputs()
+    # A process that began before this instant's wake (fresh_after < instant) issues it.
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state,
+                              now=instant + timedelta(seconds=25),
+                              fresh_after=instant - timedelta(seconds=1))
+    assert len(store.rows) == 1
+    # One that began after it (fresh_after >= instant) leaves it a gap and seeds the state.
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state,
+                              now=instant + timedelta(seconds=25), fresh_after=instant)
+    assert store.rows == [] and store.missed == []
+    assert state[cell] == instant
+
+
+def test_a_same_instant_recall_records_nothing_even_outside_pilot_mode(monkeypatch):
+    # Since the pilot build an already-processed instant is skipped in every mode (review R1-5):
+    # before it, a second call re-fetched and could add a missed entry beside the row.
+    cell, instant, _, _, config, _ = real_inputs()
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state)
+    assert len(store.rows) == 1
+    _, _, store2, _ = run_step(monkeypatch, config=config, state=state)
+    assert store2.rows == [] and store2.missed == []
+
+
+def test_the_pilot_window_clips_lattice_step_itself(monkeypatch):
+    # lattice_step's own contract (spec §2 A), independent of the runner's scheduling.
+    cell, instant, _, _, config, _ = real_inputs()
+    before = (instant + timedelta(seconds=1), instant + timedelta(days=1))  # instant < start
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=before)
+    assert store.rows == [] and store.missed == []
+    at_end = (instant - timedelta(days=1), instant)  # instant == end: outside [start, end)
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=at_end)
+    assert store.rows == [] and store.missed == []
+    inside = (instant - timedelta(days=1), instant + timedelta(seconds=1))
+    _, _, store, _ = run_step(monkeypatch, config=config, state={}, pilot_window=inside)
+    assert len(store.rows) == 1
