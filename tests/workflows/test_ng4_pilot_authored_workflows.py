@@ -39,7 +39,7 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
     assert "ucpe_lattice" in apply and "migration_0019_capacity.sql" in apply
     for header in (preflight, apply):
         assert "AUTHORED BUT DISABLED" in header
-        assert "pure rename" in header
+        assert "renames this file into .github/workflows unchanged" in header
         assert "production-db-owner" in header
         assert "section-5a-evaluation" in header
         assert "Only the" in header and "database secret" in header

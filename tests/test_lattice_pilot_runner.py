@@ -95,9 +95,11 @@ def test_a_restart_never_repeats_an_instant_a_previous_process_handled(monkeypat
 
 def test_a_capacity_stop_ends_the_loop(monkeypatch):
     store, clock = Store(missed_status="CAPACITY_STOP"), Clock(START - timedelta(seconds=5))
+    sink = TelemetrySink()
     _wire(monkeypatch, store, clock)
-    _run(clock, START + timedelta(days=1), TelemetrySink(), started_at=clock.now)
+    _run(clock, START + timedelta(days=1), sink, started_at=clock.now)
     assert len(store.entries) == 1  # the first entry answered CAPACITY_STOP; nothing after it
+    assert sink.events[-1] == {"event": "lattice_pilot_state", "state": "CAPACITY_STOP"}
 
 
 def test_a_failing_step_is_reported_by_class_only_and_the_loop_continues(monkeypatch):
@@ -311,3 +313,15 @@ def test_the_module_body_does_nothing_at_import():
             if isinstance(node.value, ast.Call):  # only timedelta(...) constants
                 assert ast.unparse(node.value.func) == "timedelta", ast.unparse(node)
     assert "lattice.pilot_config(" in source and "PilotConfig(" not in source
+
+
+def test_a_process_started_long_before_the_start_logs_nothing_before_it(monkeypatch):
+    # The switch-ON deployed ahead of the named start (review R2-1): START is not on the 1D lattice,
+    # whose last instant before it is 2026-11-08T00Z; without the window clip that instant would be
+    # logged missed at the first wake, outside [start, end).
+    store, clock = Store(), Clock(START - timedelta(hours=25))
+    _wire(monkeypatch, store, clock)
+    _run(clock, START + timedelta(hours=1), TelemetrySink(), started_at=clock.now)
+    assert store.entries
+    assert all(datetime.fromisoformat(i) >= START for _, i in store.entries)
+    assert ("1D", "2026-11-08T00:00:00+00:00") not in store.entries

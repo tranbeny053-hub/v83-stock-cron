@@ -312,9 +312,19 @@ def main(argv: list[str] | None = None) -> int:
                               text=True, timeout=10, check=True).stdout.strip()
     except Exception:
         head = "UNKNOWN"
+    try:  # a dirty tree (e.g. a mutation sweep mid-run) is not the commit it names (review R2-3)
+        dirty = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=no"],
+                               cwd=ROOT, capture_output=True, text=True, timeout=10,
+                               check=True).stdout.strip()
+        tree_clean = dirty == ""
+    except Exception:
+        tree_clean = False
+    if head != "UNKNOWN" and not tree_clean:
+        head += "+DIRTY"
     report = {
         "schema": "ucpe.ng4_pilot_rehearsal.v1",
         "source_head": head,
+        "tree_clean": tree_clean,
         "migration_sha256": hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),
         "capacity_sha256": hashlib.sha256(
             (ROOT / "scripts/migration_0019_capacity.sql").read_bytes()

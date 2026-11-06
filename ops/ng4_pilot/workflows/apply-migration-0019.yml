@@ -1,4 +1,4 @@
-# AUTHORED BUT DISABLED. Enabling is only a pure rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot authorization. The preflight is a production READ ONLY catalog query; this apply is T4 and must never be rerun.
+# AUTHORED BUT DISABLED. Enabling renames this file into .github/workflows unchanged (owner T3, git diff -M100%; its dormancy tests flip in the same change); dispatch is the owner's one-shot authorization. The preflight is a production READ ONLY catalog query; this apply is T4 and must never be rerun.
 name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
 
 # Dispatch-only. DELIBERATELY NO `schedule:`, `push:` OR `pull_request:` TRIGGER.
