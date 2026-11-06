@@ -14,6 +14,8 @@ class Untouchable:
 
 def test_constants_and_off_start_is_silent(monkeypatch):
     assert lattice_pilot.WRITER_DB_URL_ENV is None
+    assert lattice.PILOT_START_UTC is None  # named by the owner only in the switch-ON change
+    assert lattice.LATTICE_ENABLED is False
     assert lattice_pilot.GRACE_SECONDS == 20
     assert lattice_pilot.STEP_TIMEOUT_SECONDS == 120
     sink = TelemetrySink()

@@ -187,3 +187,34 @@ def test_attestation_admits_the_evaluator_pin_files_as_0018_does() -> None:
         source = (root / name).read_text(encoding="utf-8")
         assert "pinned=(*pinned_files(" in source, name
         assert "pinned=(SCRIPT,)" not in source, name
+
+
+def test_a_changed_capacity_byte_refuses_before_connecting(monkeypatch):
+    monkeypatch.setattr(apply, "CAPACITY_SHA256", "0" * 64)
+    try:
+        apply.pinned_bytes()
+    except apply.Refused as exc:
+        assert "capacity" in str(exc)
+    else:
+        raise AssertionError("a capacity digest mismatch was accepted")
+
+
+def test_a_change_outside_the_lattice_schema_refuses_and_never_commits():
+    conn = FakeConnection()
+    fingerprints = iter(("before", "after"))
+    original = conn.cur.execute
+
+    def execute(sql, *args):
+        original(sql, *args)
+        if "jsonb_build_object" in sql:
+            conn.cur.row = (next(fingerprints),)
+
+    conn.cur.execute = execute
+    migration, capacity = apply.pinned_bytes()
+    try:
+        apply.apply_in_one_transaction(lambda: conn, migration, capacity)
+    except apply.Refused as exc:
+        assert "catalog mismatch" in str(exc)
+    else:
+        raise AssertionError("a catalog change outside ucpe_lattice was accepted")
+    assert conn.committed is False
