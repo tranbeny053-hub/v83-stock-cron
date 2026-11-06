@@ -42,9 +42,9 @@ class PilotHandle:
 async def _run(settings: Any, start: datetime, end: datetime, config: Any,
                connect: Any, sink: Any, clock: Any, process_started_at: datetime) -> None:
     from crypto_probability_engine.adapters import http_client, public_market
+    from crypto_probability_engine.adapters.candle_history import BINANCE_KLINES_PATH
     from crypto_probability_engine.adapters.mappers import (
         BINANCE_BASE_URL,
-        BINANCE_KLINES_PATH,
         map_interval,
         parse_binance_candles,
         provider_symbol,
@@ -67,10 +67,16 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
             )
         client = adapter.http_client
         symbol = normalize_symbol(cell.symbol)
-        payload = client.get_json(base_url=BINANCE_BASE_URL, path=BINANCE_KLINES_PATH,
-            params={"symbol": provider_symbol(symbol, "binance"),
-                    "interval": map_interval("1D", "binance"), "limit": 376}, provider="binance")
-        candles = list(parse_binance_candles(payload, timeframe="1D"))[-371:]
+        try:  # a failed fetch or a payload that does not parse is a missed instant, never a crash
+            payload = client.get_json(base_url=BINANCE_BASE_URL, path=BINANCE_KLINES_PATH,
+                params={"symbol": provider_symbol(symbol, "binance"),
+                        "interval": map_interval("1D", "binance"), "limit": 376},
+                provider="binance")
+            candles = list(parse_binance_candles(payload, timeframe="1D"))[-371:]
+        except Exception as exc:
+            raise windows.WindowUnavailable(
+                windows.UnavailableReason.HISTORY_FAILED, type(exc).__name__
+            ) from None
         reference_v1d.require_well_formed_1d(candles)
         window = windows.Window(
             "binance", snapshot.normalized_symbol, "1D", tuple(candles),
@@ -78,12 +84,20 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
         )
         due = lattice.latest_due_instant("1D", step_now)
         if len(candles) != 371 or window.last_close_utc != due:
-            raise windows.WindowUnavailable("1D window does not close at due instant")
+            raise windows.WindowUnavailable(
+                windows.UnavailableReason.HISTORY_INVALID,
+                "the 1D window is not 371 candles closing at the instant",
+            )
         return window
     store = LatticeStore(connect)
     checkpoint = start + lattice.PILOT_CHECKPOINT
-    counts = {name: 0 for name in ("INSERTED", "INSERTED_WARN", "DUPLICATE", "LOGGED",
-                                   "CAPACITY_STOP", "CAPACITY_UNSET", "errors")}
+    checkpoint_sent = False
+    status_fields = {
+        "INSERTED": "inserted", "INSERTED_WARN": "inserted_warn",
+        "DUPLICATE": "duplicate", "LOGGED": "logged",
+        "CAPACITY_STOP": "capacity_stop", "CAPACITY_UNSET": "capacity_unset",
+    }
+    counts = {name: 0 for name in (*status_fields.values(), "errors")}
     while True:
         now = clock()
         if now >= end:
@@ -105,19 +119,22 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
                 result = await asyncio.wait_for(asyncio.shield(worker), STEP_TIMEOUT_SECONDS)
             except TimeoutError:
                 _event(sink, "lattice_pilot_error", exception_class="StepTimeout")
+                counts["errors"] += 1
                 result = await worker
         except Exception as exc:
             _event(sink, "lattice_pilot_error", exception_class=type(exc).__name__)
+            counts["errors"] += 1
             result = {}
         finally:
             http_client.PROVIDER_COALESCING.reset(token)
         for entry in result.get("results", []):
             status = entry.get("status")
-            if status in counts:
-                counts[status] += 1
-        if clock() >= checkpoint:
+            field = status_fields.get(status)
+            if field:
+                counts[field] += 1
+        if not checkpoint_sent and clock() >= checkpoint:
             _event(sink, "lattice_pilot_checkpoint", scope="since_process_start", **counts)
-            checkpoint = end + timedelta(seconds=1)
+            checkpoint_sent = True
         if result.get("stopped") or clock() >= end:
             return
 

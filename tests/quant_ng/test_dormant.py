@@ -157,6 +157,24 @@ PILOT_IMPORT_ALLOWANCE = (
 )
 
 
+def test_pilot_allowance_rejects_extra_name_alias_duplicate_and_other_file():
+    allowed = (
+        "from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows"
+    )
+    path = ROOT / PILOT_IMPORT_ALLOWANCE[0]
+    assert not _ng_import_violations(allowed, path, _module_path(path, ROOT / "src"))[0]
+    rejected = (
+        allowed + ", evidence",
+        ("from crypto_probability_engine.quant_ng import lattice as grid, reference, "
+         "reference_v1d, windows"),
+        allowed + "\n" + allowed,
+    )
+    for source in rejected:
+        assert _ng_import_violations(source, path, _module_path(path, ROOT / "src"))[0]
+    other = ROOT / "src/crypto_probability_engine/other_pilot.py"
+    assert _ng_import_violations(allowed, other, _module_path(other, ROOT / "src"))[0]
+
+
 def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[list[str], set[str]]:
     """Every quant_ng name a product file imports, and the allowed statements it used.
 
@@ -191,7 +209,9 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
             and node.level == 0
             and node.module == "crypto_probability_engine.quant_ng"
             and frozenset((a.name, a.asname) for a in node.names) == PILOT_IMPORT_ALLOWANCE[2]
-            and not any(k == PILOT_IMPORT_ALLOWANCE[0] for k in used)
+            and not any(
+                isinstance(k, tuple) and k[0] == PILOT_IMPORT_ALLOWANCE[0] for k in used
+            )
         )
         if exempt:
             used.add(node.module)

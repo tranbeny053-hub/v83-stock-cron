@@ -1,55 +1,26 @@
-# AUTHORED BUT DISABLED — enabling is a pure rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot authorization. The preflight is a production read; this apply is T4 and must never be rerun.
+# AUTHORED BUT DISABLED. Enabling is only a pure rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot authorization. The preflight is a production READ ONLY catalog query; this apply is T4 and must never be rerun.
 name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
 
 # Dispatch-only. DELIBERATELY NO `schedule:`, `push:` OR `pull_request:` TRIGGER.
-# - Merging this workflow is the owner's T3.
-# - Dispatching it is a T4: the owner authorizes ONE dispatch, one shot, and it is never rerun.
-# - It is dispatched only after the D6 production inventory is clean (owner ruling D6: timing B; run
-#   37149774863, expect=before, PASS) and migrations 0016 and 0017 are applied.
-# - The bulk scripts/apply_migrations.py is never used for 0019.
+# - It checks the 0019 preconditions, applies the pinned migration and capacity bytes in one transaction,
+#   then checks the catalog postconditions and outside-schema fingerprint. A second dispatch refuses.
+# - Its pre-checks are the lattice route's own (the preflight's 0019 facts, including an empty
+#   createrole_self_grant); nothing of migrations 0016-0018 is re-checked here.
 #
-# WHAT IT DOES. scripts/apply_migration_0019.py applies exactly migrations/0019 in ONE transaction:
-# - read-only pre-checks refuse unless all of these hold:
-#   - the server is PostgreSQL 16 or later, and PostgREST's authenticator exists;
-#   - migrations 0016 and 0017 are applied exactly: the four roles without powers, their grants,
-#     schema rights and 44 policies, authenticator's switch to the writer, and both bundle functions
-#     as SECURITY DEFINER of ucpe_bundle_owner with their reviewed bodies, executable by their
-#     owner, the writer and service_role;
-#   - the applying role holds ADMIN on ucpe_bundle_owner (or SUPERUSER) and owns every table;
-#   - service_role holds exactly its pre-D6 privileges on the six core evidence tables, and D6's
-#     core-write inventory finds every write surface inside the revoke set and none outside it;
-#   - if service_role already holds only SELECT and EXECUTE on neither function, a second dispatch
-#     changes nothing;
-# - then the migration, whose bytes must equal the digest pinned in the script;
-# - then read-only catalog post-checks:
-#   - service_role holds exactly SELECT on the six tables, and EXECUTE on neither bundle function;
-#   - D6's inventory finds no write surface at all;
-#   - both functions are otherwise unchanged, so their owner and the writer still execute them;
-#   - everything else is unchanged, the memberships, the four roles' grants and policies and the
-#     F1/UOR grants included.
-# Any refusal rolls everything back. No application row is read or written. The report names only
-# API, pg_* and ucpe_* roles (the repository is public); every other role name is withheld.
+# WHAT IT CHECKS. The route pins both migrations/authored/0019_lattice_evidence.sql and
+# scripts/migration_0019_capacity.sql by digest. In one transaction it checks server 16+, absent
+# ucpe_lattice schema and roles, the applier's CREATEROLE/non-superuser state, empty
+# createrole_self_grant, and the preflight's catalog safety facts; then runs the two exact byte sets.
+# Post-checks verify the lattice schema/roles, creator memberships, writer boundaries and that no
+# unrelated catalog state changed. No application rows are read. A refusal rolls the transaction back.
 #
-# BEFORE THE SECRET IS HANDED TO ANY STEP, the same apply is rehearsed on a scratch local PostgreSQL.
-# It is built from migrations 0001-0017 with Supabase-like roles, default privileges, PostgREST's
-# authenticator, and an owner holding CREATEROLE without SUPERUSER, which creates 0016's roles; then G1's
-# login for ucpe_resolver, as production holds it. The
-# apply runs once through the route, is refused a second time, and is then probed independently.
-# The result's behaviour through PostgREST is proven on every pull request by
-# .github/workflows/privilege-rehearsal.yml (P3-PRIV-R, D1-D4).
+# TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated
+# wheelhouse; `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha.
+# Inputs enter shell commands only through env and double quotes; every step uses bash. The protected
+# Environment is production-db-owner. Only the final database step receives the database secret.
 #
-# THE SAME TRUST BOUNDARY AS THE OTHER DATABASE ROUTES:
-# - exact CPython 3.13.14 and the pinned Actions;
-# - CPython's bundled pip, installing lock-authenticated wheels;
-# - `python -I -S -B`;
-# - a dispatch verified against THIS workflow, in the owner repository, on main, at exactly
-#   expected_sha.
-# Inputs reach the shell ONLY through `env:`, expanded in double quotes. Every step declares
-# `shell: bash`. Only the apply step receives the database secret, and only after the owner approves
-# the run in the protected Environment production-db-owner (C4).
-#
-# CONCURRENCY. It shares the section 5A group, so no two production-database dispatch workflows of
-# this repository can ever run at the same time.
+# CONCURRENCY. The section-5a-evaluation group serializes this route with the repository's protected
+# database dispatch workflows.
 
 "on":
   workflow_dispatch:

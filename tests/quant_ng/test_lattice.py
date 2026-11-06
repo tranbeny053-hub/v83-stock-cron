@@ -10,9 +10,12 @@ import pytest
 
 from crypto_probability_engine.execution_realism.realism import compute_execution_realism
 from crypto_probability_engine.features.liquidity_depth import compute_liquidity_depth
-from crypto_probability_engine.quant_ng import lattice, reference, windows
+from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows
 from crypto_probability_engine.targets.contract_v1 import validate_v1
 from tests.fixtures.market_data import make_snapshot
+from tests.quant_ng.test_reference import SPEC
+from tests.quant_ng.test_reference import _candles as intraday_candles
+from tests.quant_ng.test_reference_v1d import _candles as daily_candles
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = Path(__file__).parent / "fixtures" / "lattice_row_v1.json"
@@ -184,6 +187,48 @@ def test_builder_matches_store_contract_and_tc_v1() -> None:
 
 def test_frozen_fixture_matches_builder() -> None:
     assert json.loads(FIXTURE.read_text())["store_row"] == build_real_row()
+
+
+def test_pilot_bars_required_exact_boundary():
+    priors = reference.ReferencePriors((0.5, 0.5, 0.5))
+    for timeframe in ("15m", "1H", "4H"):
+        count = lattice.PILOT_BARS_REQUIRED[timeframe]
+        candles = intraday_candles(count, timeframe)
+        assert reference.compute_reference(candles, timeframe=timeframe, band_frac=0.05,
+                                           spec=SPEC, priors=priors)
+        with pytest.raises(reference.ReferenceUnavailable, match="full reference memory"):
+            reference.compute_reference(candles[:-1], timeframe=timeframe, band_frac=0.05,
+                                       spec=SPEC, priors=priors)
+    spec_path = ROOT / "ops/quant_ng/REFERENCE_SPEC_v1d.json"
+    spec_1d = reference_v1d.load_reference_spec_v1d(json.loads(spec_path.read_text()))
+    daily = daily_candles([100.0 + i for i in range(371)])
+    assert reference_v1d.compute_reference_v1d(daily, timeframe="1D", band_frac=0.05,
+                                               spec=spec_1d, prior=0.5)
+    with pytest.raises(reference.ReferenceUnavailable, match="full reference memory"):
+        reference_v1d.compute_reference_v1d(daily[:-1], timeframe="1D", band_frac=0.05,
+                                             spec=spec_1d, prior=0.5)
+
+
+def test_planned_slots_cover_every_15m_alignment_and_prior_prefix():
+    start = datetime(2026, 11, 9, tzinfo=UTC)
+    totals = set()
+    for offset in range(0, 3 * 24 * 60, 15):
+        counts = lattice.planned_slots(start + timedelta(minutes=offset))
+        assert counts["15m"] == 448
+        assert counts["1H"] == 112
+        assert counts["4H"] == 28
+        assert counts["1D"] in (4, 5)
+        total = sum(counts.values())
+        totals.add(total)
+        assert total < lattice.PILOT_CAPACITY_WARN < lattice.PILOT_CAPACITY_MAX
+    assert totals <= {592, 593}
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(lattice, "PILOT_PRIOR_ID", "bad-prior")
+        with pytest.raises(ValueError, match="placeholder prefix"):
+            lattice.pilot_config(None, None)
+    finally:
+        monkeypatch.undo()
 
 
 def test_store_contract_rejects_late_window_and_snapshot_mismatch() -> None:

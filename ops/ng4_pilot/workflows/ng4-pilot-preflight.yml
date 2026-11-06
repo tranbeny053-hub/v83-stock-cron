@@ -1,24 +1,23 @@
 # AUTHORED BUT DISABLED — enabling is a pure rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot authorization. The preflight is a production read.
 name: NG4 pilot preflight (AUTHORED BUT DISABLED, READ ONLY)
 
-# DELIBERATELY NO `schedule:` OR `push:` TRIGGER. Owner ruling 2026-09-16: read-only metadata only,
-# for the tables migrations 0001-0004 and 0007 shape: RLS, grants to PUBLIC/anon/authenticated/
-# service_role, policies, ownership and schema exposure. No application-row read, no mutation.
+# DELIBERATELY NO automatic trigger. This authored but disabled workflow is enabled only by a pure
+# rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot request.
+# This is a production READ ONLY catalog preflight for the ucpe_lattice 0019 route, not a table audit.
 #
-# WHAT IT DOES. scripts/ng4_pilot_preflight.py reads PostgreSQL catalogs only, in ONE transaction
-# made READ ONLY by its first statement, and rolls it back. No application table is ever named in a
-# query. Before any step holds the secret, the same audit is rehearsed against a scratch local
-# PostgreSQL built from the real migrations, connected as a role with NO privilege on any audited
-# table, which proves the audit reads catalogs only.
+# WHAT IT CHECKS. scripts/ng4_pilot_preflight.py starts with SET TRANSACTION READ ONLY, reads
+# PostgreSQL catalog facts for the 0019 preconditions (server version, track_commit_timestamp,
+# createrole_self_grant, role/membership safety, event triggers, parameter grants and ucpe_space_db),
+# then rolls back. It reads no application rows and reports booleans/counts. The scratch rehearsal
+# uses a local database and no production secret.
 #
-# THE SAME TRUST BOUNDARY AS THE OTHER DATABASE ROUTES: exact CPython 3.13.14, pinned Actions,
-# CPython's bundled pip installing lock-authenticated wheels, `python -I -S -B`, and a dispatch
-# verified against THIS workflow in the owner repository, on main, at exactly expected_sha. Inputs
-# reach the shell ONLY through `env:`, expanded in double quotes. Every step declares `shell: bash`.
-# Only the audit step receives the database secret.
+# TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated wheelhouse;
+# `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha. Inputs
+# enter shell commands only through env and double quotes; every step uses bash. The protected
+# Environment is production-db-owner. Only the production read step receives the database secret.
 #
-# CONCURRENCY. It shares the section 5A group, so no two production-database dispatch workflows of
-# this repository can ever run at the same time.
+# CONCURRENCY. The section-5a-evaluation group serializes this route with the repository's protected
+# database dispatch workflows.
 
 "on":
   workflow_dispatch:

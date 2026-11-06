@@ -8,6 +8,8 @@ import json
 import os
 import platform
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -19,6 +21,8 @@ SUPABASE_EVENT_TRIGGERS: tuple[
     str, ...
 ] = ()  # No fixed platform names are referenced in this repository.
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
+SOURCE = Path(__file__).resolve().parents[1] / "src"
+SCRIPT = "scripts/ng4_pilot_preflight.py"
 
 
 def refuse_url(url: str) -> str | None:
@@ -165,6 +169,50 @@ def verify_dispatch(env, expected_sha):
         raise ValueError("REFUSED")
 
 
+def enter_isolated_runtime(wheelhouse):
+    if not wheelhouse:
+        raise ValueError("REFUSED")
+    if str(SOURCE) not in sys.path:
+        sys.path.append(str(SOURCE))
+    from crypto_probability_engine import runtime_isolation
+    return runtime_isolation.enter(SOURCE.parent, wheelhouse=Path(wheelhouse))
+
+
+def attest_dispatch(env, expected_sha, isolation):
+    from crypto_probability_engine import runtime_isolation
+    root = SOURCE.parent
+    status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=no"],
+                            cwd=root, check=True, capture_output=True, text=True).stdout
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True,
+                          capture_output=True, text=True).stdout.strip()
+    python_runtime = (platform.python_implementation(), platform.python_version())
+    if (status or head != expected_sha or env.get("GITHUB_SHA") != expected_sha
+            or python_runtime != ("CPython", "3.13.14")
+            or runtime_isolation.interpreter_flags() != runtime_isolation.REQUIRED_FLAGS_TEXT):
+        raise ValueError("REFUSED")
+    verify_dispatch(env, expected_sha)
+    return {"workflow": WORKFLOW, "expected_sha": expected_sha, "git_head": head,
+            "installed_files_sha256": isolation.installed_files_sha256}
+
+
+def attest_loaded_modules(isolation):
+    from crypto_probability_engine import runtime_isolation
+
+    # As scripts/apply_migration_0018.py: the stdlib, the locked files, the evaluator pin's files
+    # (runtime_isolation itself is one) and this script.
+    from crypto_probability_engine.oos.evaluation.evaluator_pin import pinned_files
+
+    root = SOURCE.parent
+    return runtime_isolation.attest_loaded_modules(
+        isolation, pinned=(*pinned_files(root), SCRIPT), root=root
+    )
+
+
+def load_driver():
+    import psycopg
+    return psycopg
+
+
 def main(argv=None, *, environ=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("attest", "rehearse", "run"), required=True)
@@ -175,9 +223,15 @@ def main(argv=None, *, environ=None):
     env = os.environ if environ is None else environ
     report = {"schema": REPORT_SCHEMA, "verdict": "NOT_READY", "facts": {}, "failing": []}
     try:
+        if args.mode in ("attest", "run") and not args.wheelhouse:
+            raise ValueError("REFUSED")
         if args.mode == "attest":
-            verify_dispatch(env, args.expected_sha)
-            report["verdict"] = "READY"
+            isolation = enter_isolated_runtime(args.wheelhouse)
+            report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
+            attest_loaded_modules(isolation)
+            load_driver()
+            attest_loaded_modules(isolation)
+            report["verdict"] = "ATTESTED"
         else:
             url = (
                 env.get("NG4_PILOT_PREFLIGHT_REHEARSAL_URL", "")
@@ -187,13 +241,17 @@ def main(argv=None, *, environ=None):
             if args.mode == "rehearse" and env.get("SUPABASE_DB_URL"):
                 raise ValueError("REFUSED")
             if args.mode == "run":
-                verify_dispatch(env, args.expected_sha)
+                isolation = enter_isolated_runtime(args.wheelhouse)
+                report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
+                attest_loaded_modules(isolation)
             refusal = refuse_url(url) if args.mode == "rehearse" else None
             if refusal or not url:
                 raise ValueError("REFUSED")
-            import psycopg
+            driver = load_driver() if args.mode == "run" else __import__("psycopg")
+            if args.mode == "run":
+                attest_loaded_modules(isolation)
 
-            report = preflight(lambda: psycopg.connect(url, connect_timeout=8))
+            report = preflight(lambda: driver.connect(url, connect_timeout=8))
         code = 0
     except Exception as exc:
         code = 2 if type(exc).__name__ == "ValueError" else 1

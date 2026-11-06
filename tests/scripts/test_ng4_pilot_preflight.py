@@ -75,3 +75,30 @@ def test_rehearsal_url_rules():
     assert preflight.refuse_url("postgresql://localhost/x") is None
     assert preflight.refuse_url("postgresql://host.example/x")
     assert preflight.refuse_url("postgresql://x.supabase.co/db")
+
+
+def test_attest_requires_wheelhouse_and_reports_attested(monkeypatch, capsys):
+    class Isolation:
+        installed_files_sha256 = "b" * 64
+
+    monkeypatch.setattr(preflight, "enter_isolated_runtime", lambda wheelhouse: Isolation())
+    monkeypatch.setattr(preflight, "attest_dispatch", lambda *args: {"dispatch_verified": True})
+    monkeypatch.setattr(preflight, "attest_loaded_modules", lambda isolation: 1)
+    monkeypatch.setattr(preflight, "load_driver", lambda: object())
+    env = {"GITHUB_ACTIONS": "true"}
+    assert preflight.main(["--mode=attest", "--expected-sha=" + "a" * 40,
+                           "--wheelhouse=/tmp/wheels"], environ=env) == 0
+    assert '"verdict": "ATTESTED"' in capsys.readouterr().out
+    assert preflight.main(["--mode=attest", "--expected-sha=" + "a" * 40], environ=env) == 2
+    assert '"error": "REFUSED"' in capsys.readouterr().out
+
+
+def test_attest_refuses_invalid_dispatch(monkeypatch, capsys):
+    def refuse(*args):
+        raise ValueError("REFUSED")
+
+    monkeypatch.setattr(preflight, "enter_isolated_runtime", lambda wheelhouse: object())
+    monkeypatch.setattr(preflight, "attest_dispatch", refuse)
+    assert preflight.main(["--mode=attest", "--expected-sha=" + "a" * 40,
+                           "--wheelhouse=/tmp/wheels"], environ={}) == 2
+    assert '"error": "REFUSED"' in capsys.readouterr().out

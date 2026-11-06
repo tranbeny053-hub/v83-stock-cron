@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -23,6 +24,8 @@ CONFIRMATION = "APPLY-MIGRATION-0019-ONCE"
 REPORT_SCHEMA = "migration-0019-apply-report.v1"
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
 PINNED_PYTHON = ("CPython", "3.13.14")
+SOURCE = ROOT / "src"
+SCRIPT = "scripts/apply_migration_0019.py"
 
 
 class Refused(Exception):
@@ -168,6 +171,51 @@ def verify_dispatch(env, expected_sha):
         raise Refused("dispatch refused: " + ", ".join(failures))
 
 
+def enter_isolated_runtime(wheelhouse):
+    if not wheelhouse:
+        raise Refused("--wheelhouse is required")
+    if str(SOURCE) not in sys.path:
+        sys.path.append(str(SOURCE))
+    from crypto_probability_engine import runtime_isolation
+    return runtime_isolation.enter(ROOT, wheelhouse=Path(wheelhouse))
+
+
+def attest_dispatch(env, expected_sha, isolation):
+    from crypto_probability_engine import runtime_isolation
+    status = subprocess.run(["git", "status", "--porcelain=v1", "--untracked-files=no"],
+                            cwd=ROOT, check=True, capture_output=True, text=True).stdout
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+                          capture_output=True, text=True).stdout.strip()
+    if (env.get("GITHUB_ACTIONS") != "true" or env.get("GITHUB_REPOSITORY") != EXPECTED_REPOSITORY
+            or env.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+            or env.get("GITHUB_REF") != "refs/heads/main"
+            or env.get("GITHUB_WORKFLOW_REF") != f"{EXPECTED_REPOSITORY}/{WORKFLOW}@refs/heads/main"
+            or not re.fullmatch(r"[0-9a-f]{40}", expected_sha or "")
+            or env.get("GITHUB_SHA") != expected_sha or head != expected_sha or status
+            or (platform.python_implementation(), platform.python_version()) != PINNED_PYTHON
+            or runtime_isolation.interpreter_flags() != runtime_isolation.REQUIRED_FLAGS_TEXT):
+        raise Refused("dispatch or isolated runtime refused")
+    return {"workflow": WORKFLOW, "expected_sha": expected_sha, "git_head": head,
+            "installed_files_sha256": isolation.installed_files_sha256}
+
+
+def attest_loaded_modules(isolation):
+    from crypto_probability_engine import runtime_isolation
+
+    # As scripts/apply_migration_0018.py: the stdlib, the locked files, the evaluator pin's files
+    # (runtime_isolation itself is one) and this script.
+    from crypto_probability_engine.oos.evaluation.evaluator_pin import pinned_files
+
+    return runtime_isolation.attest_loaded_modules(
+        isolation, pinned=(*pinned_files(ROOT), SCRIPT), root=ROOT
+    )
+
+
+def load_driver():
+    import psycopg
+    return psycopg
+
+
 def apply_in_one_transaction(open_connection, migration: bytes, capacity: bytes, captured=None):
     records = {} if captured is None else captured
     with open_connection() as conn, conn.cursor() as cur:
@@ -246,14 +294,23 @@ def main(argv=None, *, environ=None):
     }
     try:
         migration, capacity = pinned_bytes()
+        if args.mode in ("attest", "apply") and not args.wheelhouse:
+            raise Refused("--wheelhouse is required")
         if args.mode == "attest":
-            verify_dispatch(env, args.expected_sha)
-            report["outcome"] = "APPLIED"
+            isolation = enter_isolated_runtime(args.wheelhouse)
+            report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
+            attest_loaded_modules(isolation)
+            load_driver()
+            attest_loaded_modules(isolation)
+            report["outcome"] = "ATTESTED"
         else:
             if args.mode == "apply" and args.confirm != CONFIRMATION:
                 raise Refused("confirmation mismatch")
+            isolation = None
             if args.mode == "apply":
-                verify_dispatch(env, args.expected_sha)
+                isolation = enter_isolated_runtime(args.wheelhouse)
+                report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
+                attest_loaded_modules(isolation)
             variable = (
                 "MIGRATION_0019_REHEARSAL_URL" if args.mode == "rehearse" else "SUPABASE_DB_URL"
             )
@@ -261,12 +318,14 @@ def main(argv=None, *, environ=None):
             reason = refuse_url(url) if args.mode == "rehearse" else None
             if reason or not url or (args.mode == "rehearse" and env.get("SUPABASE_DB_URL")):
                 raise Refused("database URL refused")
-            import psycopg
+            driver = load_driver() if isolation is not None else __import__("psycopg")
+            if isolation is not None:
+                attest_loaded_modules(isolation)
 
             checks = report["checks"]
 
             def opener():
-                return psycopg.connect(url, connect_timeout=8)
+                return driver.connect(url, connect_timeout=8)
 
             apply_in_one_transaction(opener, migration, capacity, checks)
             if args.mode == "rehearse":

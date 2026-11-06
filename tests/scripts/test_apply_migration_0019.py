@@ -150,3 +150,40 @@ def test_createrole_self_grant_refuses_before_migration():
     else:
         raise AssertionError("non-empty self-grant setting was accepted")
     assert migration.decode() not in conn.cur.statements
+
+
+def test_attest_requires_wheelhouse_and_reports_attested(monkeypatch, capsys):
+    class Isolation:
+        installed_files_sha256 = "a" * 64
+
+    monkeypatch.setattr(apply, "enter_isolated_runtime", lambda wheelhouse: Isolation())
+    monkeypatch.setattr(apply, "attest_dispatch", lambda *args: {"dispatch_verified": True})
+    monkeypatch.setattr(apply, "attest_loaded_modules", lambda isolation: 1)
+    monkeypatch.setattr(apply, "load_driver", lambda: object())
+    env = {"GITHUB_ACTIONS": "true"}
+    assert apply.main(["--mode=attest", "--expected-sha=" + "a" * 40,
+                       "--wheelhouse=/tmp/wheels"], environ=env) == 0
+    assert '"outcome": "ATTESTED"' in capsys.readouterr().out
+    assert apply.main(["--mode=attest", "--expected-sha=" + "a" * 40], environ=env) == 2
+    assert '"outcome": "REFUSED"' in capsys.readouterr().err
+
+
+def test_attest_refuses_invalid_dispatch(monkeypatch, capsys):
+    def refuse(*args):
+        raise apply.Refused("dispatch")
+
+    monkeypatch.setattr(apply, "enter_isolated_runtime", lambda wheelhouse: object())
+    monkeypatch.setattr(apply, "attest_dispatch", refuse)
+    assert apply.main(["--mode=attest", "--expected-sha=" + "a" * 40,
+                       "--wheelhouse=/tmp/wheels"], environ={}) == 2
+    assert '"outcome": "REFUSED"' in capsys.readouterr().err
+
+
+def test_attestation_admits_the_evaluator_pin_files_as_0018_does() -> None:
+    # The scripts import crypto_probability_engine.runtime_isolation, a pinned file: an attestation
+    # over this script alone would refuse every real dispatch before it reached the database.
+    root = Path(__file__).resolve().parents[2]
+    for name in ("scripts/apply_migration_0019.py", "scripts/ng4_pilot_preflight.py"):
+        source = (root / name).read_text(encoding="utf-8")
+        assert "pinned=(*pinned_files(" in source, name
+        assert "pinned=(SCRIPT,)" not in source, name
