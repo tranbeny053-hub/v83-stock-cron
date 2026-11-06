@@ -125,8 +125,6 @@ FIELDS = frozenset(
         "extra_privileges",
         "exception_class",
         "state",
-        "rows",
-        "missed",
         "scope",
         "inserted",
         "inserted_warn",

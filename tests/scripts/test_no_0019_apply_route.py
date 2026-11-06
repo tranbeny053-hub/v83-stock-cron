@@ -33,8 +33,13 @@ def test_no_enabled_apply_route_exists() -> None:
     scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
     assert scripts == ["apply_migration_0019.py"]
     source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
-    assert 'WORKFLOW = "ops/ng4_pilot/workflows/apply-migration-0019.yml"' in source
+    # The constant names the path GitHub reports after the enabling rename; dormancy is that no
+    # file exists there yet, while the authored file waits outside .github/workflows.
+    assert 'WORKFLOW = ".github/workflows/apply-migration-0019.yml"' in source
+    assert not (WORKFLOWS / "apply-migration-0019.yml").exists()
+    assert not (WORKFLOWS / "ng4-pilot-preflight.yml").exists()
     assert (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").is_file()
+    assert (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml").is_file()
     assert not list(WORKFLOWS.rglob("*0019*apply*")) and not list(WORKFLOWS.rglob("apply*0019*"))
     for path in WORKFLOWS.rglob("*.y*ml"):
         text = path.read_text(encoding="utf-8")

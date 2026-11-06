@@ -223,3 +223,91 @@ def test_the_day_7_checkpoint_is_emitted_once_with_sanitized_counts(monkeypatch)
     clean = checkpoints[0]  # the sink holds the sanitized event
     assert clean["scope"] == "since_process_start"
     assert clean["inserted"] > 0 and clean["errors"] == 0
+
+
+def test_a_cold_start_inside_an_instants_grace_window_still_issues_it(monkeypatch):
+    first = START
+    store = Store()
+    clock = Clock(first + timedelta(seconds=10))  # before first's wake at first + GRACE
+    _wire(monkeypatch, store, clock)
+    _run(clock, START + timedelta(hours=2), TelemetrySink(), started_at=clock.now)
+    assert store.entries.count(("15m", first.isoformat())) == 1
+
+
+def test_a_failed_last_wake_still_gives_every_slot_exactly_one_entry(monkeypatch):
+    end = START + timedelta(hours=6)
+    last_15m = max(i for i in lattice.lattice_instants("15m", START, end) if i < end)
+
+    class FailsAtTheLastWake(Store):
+        def record_missed(self, entry):
+            key = (entry["timeframe"], entry["lattice_instant_utc"])
+            if key == ("15m", last_15m.isoformat()) and not getattr(self, "failed", False):
+                self.failed = True
+                raise RuntimeError("synthetic database failure")
+            return super().record_missed(entry)
+
+    store, clock = FailsAtTheLastWake(), Clock(START - timedelta(seconds=5))
+    _wire(monkeypatch, store, clock)
+    _run(clock, end, TelemetrySink(), started_at=clock.now)
+    assert len(store.entries) == len(set(store.entries))
+    for timeframe in lattice.PILOT_TIMEFRAMES:
+        grid = lattice.lattice_instants(timeframe, START, end)
+        planned = [i.isoformat() for i in grid if i < end]
+        assert sorted(i for tf, i in store.entries if tf == timeframe) == sorted(planned)
+
+
+def test_no_checkpoint_from_a_process_that_starts_after_day_7(monkeypatch):
+    late = START + lattice.PILOT_CHECKPOINT + timedelta(hours=1)
+    clock, sink = Clock(late), TelemetrySink()
+    _wire(monkeypatch, Store(), clock)
+    _run(clock, late + timedelta(hours=1), sink, started_at=late)
+    assert not [e for e in sink.events if e["event"] == "lattice_pilot_checkpoint"]
+
+
+def test_the_end_is_reported(monkeypatch):
+    clock, sink = Clock(START - timedelta(seconds=5)), TelemetrySink()
+    _wire(monkeypatch, Store(), clock)
+    _run(clock, START + timedelta(hours=1), sink, started_at=clock.now)
+    assert sink.events[-1] == {"event": "lattice_pilot_state", "state": "ENDED"}
+
+
+def test_the_store_connection_is_bounded_inside_its_own_transaction(monkeypatch):
+    import sys
+
+    calls = []
+
+    class Conn:
+        def execute(self, sql):
+            calls.append(("execute", sql))
+
+        def close(self):
+            calls.append(("close",))
+
+    def connect(url, **kwargs):
+        calls.append(("connect", url, kwargs))
+        return Conn()
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(connect=connect))
+    lattice_pilot._connect("postgresql://synthetic")
+    assert calls[0] == ("connect", "postgresql://synthetic", {
+        "connect_timeout": 10, "tcp_user_timeout": 10000, "prepare_threshold": None,
+        "autocommit": False})
+    assert calls[1] == ("execute", "SET LOCAL statement_timeout = '5000'")
+    assert "options" not in calls[0][2]
+
+
+def test_the_module_body_does_nothing_at_import():
+    import ast
+    from pathlib import Path
+
+    source = Path(lattice_pilot.__file__).read_text(encoding="utf-8")
+    for node in ast.parse(source).body:
+        assert isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef, ast.Assign, ast.AnnAssign, ast.Expr)), type(node)
+        if isinstance(node, ast.Expr):
+            assert isinstance(node.value, ast.Constant)  # the docstring only
+        if isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+            assert isinstance(node.value, (ast.Constant, ast.Call)), ast.unparse(node)
+            if isinstance(node.value, ast.Call):  # only timedelta(...) constants
+                assert ast.unparse(node.value.func) == "timedelta", ast.unparse(node)
+    assert "lattice.pilot_config(" in source and "PilotConfig(" not in source

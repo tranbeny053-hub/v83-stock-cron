@@ -17,7 +17,7 @@ def test_off_lifespan_is_silent_and_closes_pool_once(monkeypatch):
     calls = []
     monkeypatch.setattr(app_module.reader_identity, "start_report", lambda *args: None)
     monkeypatch.setattr(app_module, "close_pool", lambda: calls.append("close"))
-    monkeypatch.setattr(lattice_pilot, "start", lambda settings: None)
+    # The real OFF path: LATTICE_ENABLED is False by default, so start() returns None itself.
     with TestClient(app_module.create_app(Settings(data_mode="fixture"))):
         pass
     assert calls == ["close"]

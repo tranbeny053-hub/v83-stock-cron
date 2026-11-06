@@ -17,7 +17,9 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = "migrations/authored/0019_lattice_evidence.sql"
 CAPACITY = "scripts/migration_0019_capacity.sql"
-WORKFLOW = "ops/ng4_pilot/workflows/apply-migration-0019.yml"
+# The path GitHub will report once the authored file is renamed into place (the enabling T3);
+# today no such file exists, so no dispatch can match it (review R1-1).
+WORKFLOW = ".github/workflows/apply-migration-0019.yml"
 MIGRATION_SHA256 = "8ae3c32968bb250f9700047309456606f8f75ac9b2580712f999b087355c9dc6"
 CAPACITY_SHA256 = "ef1fa7af0cf370604c2ad593f84833d23e5722083141b016ef7b3afff25f3b52"
 CONFIRMATION = "APPLY-MIGRATION-0019-ONCE"

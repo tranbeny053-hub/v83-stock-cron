@@ -484,3 +484,14 @@ def test_cold_start_fresh_after_boundary(monkeypatch):
                               now=instant + timedelta(seconds=25), fresh_after=instant)
     assert store.rows == [] and store.missed == []
     assert state[cell] == instant
+
+
+def test_a_same_instant_recall_records_nothing_even_outside_pilot_mode(monkeypatch):
+    # Since the pilot build an already-processed instant is skipped in every mode (review R1-5):
+    # before it, a second call re-fetched and could add a missed entry beside the row.
+    cell, instant, _, _, config, _ = real_inputs()
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state)
+    assert len(store.rows) == 1
+    _, _, store2, _ = run_step(monkeypatch, config=config, state=state)
+    assert store2.rows == [] and store2.missed == []

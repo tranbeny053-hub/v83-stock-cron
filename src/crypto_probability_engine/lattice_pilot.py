@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,25 @@ def _load_specs():
     v1 = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1.json").read_text())
     v1d = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1d.json").read_text())
     return reference.load_reference_spec(v1), reference_v1d.load_reference_spec_v1d(v1d)
+
+
+def _connect(url: str):
+    """One bounded connection for one store call; the URL is never logged.
+
+    As reader_identity: no server-side prepared statements and no startup options (both break
+    behind Supabase's transaction pooler); the bound is a SET LOCAL inside the very transaction the
+    store's one call then uses and its `with` block commits (review R1-2).
+    """
+    import psycopg
+
+    conn = psycopg.connect(url, connect_timeout=10, tcp_user_timeout=10000,
+                           prepare_threshold=None, autocommit=False)
+    try:
+        conn.execute("SET LOCAL statement_timeout = '5000'")
+    except BaseException:
+        conn.close()
+        raise
+    return conn
 
 
 class PilotHandle:
@@ -91,7 +111,8 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
         return window
     store = LatticeStore(connect)
     checkpoint = start + lattice.PILOT_CHECKPOINT
-    checkpoint_sent = False
+    # A process that starts after day 7 has no in-process day-7 counts to report (review R1-6).
+    checkpoint_sent = process_started_at >= checkpoint
     status_fields = {
         "INSERTED": "inserted", "INSERTED_WARN": "inserted_warn",
         "DUPLICATE": "duplicate", "LOGGED": "logged",
@@ -103,11 +124,16 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
         if now >= end:
             step_now = end - timedelta(microseconds=1)
         else:
+            # An instant whose wake (instant + GRACE) is still ahead is due; strict, so a clock that
+            # does not move during a step never wakes twice for one instant (review R1-3).
+            grace = timedelta(seconds=GRACE_SECONDS)
             due = [i for cell in lattice.PILOT_CELLS
-                   for i in lattice.lattice_instants(cell.timeframe, start, end) if i >= now]
-            target = min(due) + timedelta(seconds=GRACE_SECONDS) if due else end
+                   for i in lattice.lattice_instants(cell.timeframe, start, end) if i + grace > now]
+            target = min(due) + grace if due else end
             await asyncio.sleep(max(0, (target-now).total_seconds()))
-            step_now = clock()
+            # The last wake falls after the end: step just inside the window, so a lagging cell's
+            # in-window gaps are still logged (review R1-4).
+            step_now = min(clock(), end - timedelta(microseconds=1))
         token = http_client.PROVIDER_COALESCING.set(False)
         try:
             worker = asyncio.create_task(asyncio.to_thread(
@@ -136,6 +162,9 @@ async def _run(settings: Any, start: datetime, end: datetime, config: Any,
             _event(sink, "lattice_pilot_checkpoint", scope="since_process_start", **counts)
             checkpoint_sent = True
         if result.get("stopped") or clock() >= end:
+            # The end is visible in telemetry, not silent (review R1-7).
+            _event(sink, "lattice_pilot_state",
+                   state="CAPACITY_STOP" if result.get("stopped") else "ENDED")
             return
 
 
@@ -153,7 +182,7 @@ def start(settings: Any, *, clock=lambda: datetime.now(UTC), environ=None,
         if now >= end:
             _event(sink, "lattice_pilot_state", state="WINDOW_CLOSED")
             return None
-        values = __import__("os").environ if environ is None else environ
+        values = os.environ if environ is None else environ
         name = WRITER_DB_URL_ENV
         url = values.get(name) if name else None
         if not url:
@@ -162,9 +191,7 @@ def start(settings: Any, *, clock=lambda: datetime.now(UTC), environ=None,
         spec, spec_1d = _load_specs()
         config = lattice.pilot_config(spec, spec_1d)
         def connect():
-            import psycopg
-            return psycopg.connect(url, connect_timeout=10, tcp_user_timeout=10000,
-                prepare_threshold=None, options="-c statement_timeout=5000")
+            return _connect(url)
         process_started_at = now
         task = asyncio.get_running_loop().create_task(
             _run(settings, start_utc, end, config, connect, sink, clock, process_started_at)

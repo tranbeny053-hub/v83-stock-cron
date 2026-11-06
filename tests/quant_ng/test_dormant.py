@@ -152,7 +152,7 @@ ALLOWED_NG_IMPORTS = {
 }
 PILOT_IMPORT_ALLOWANCE = (
     "src/crypto_probability_engine/lattice_pilot.py",
-    "crypto_probability_engine.quant_ng.lattice",
+    "crypto_probability_engine.quant_ng",
     frozenset({("lattice", None), ("reference", None), ("reference_v1d", None), ("windows", None)}),
 )
 
@@ -207,7 +207,7 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
             str(path.relative_to(ROOT)) == PILOT_IMPORT_ALLOWANCE[0]
             and isinstance(node, ast.ImportFrom)
             and node.level == 0
-            and node.module == "crypto_probability_engine.quant_ng"
+            and node.module == PILOT_IMPORT_ALLOWANCE[1]
             and frozenset((a.name, a.asname) for a in node.names) == PILOT_IMPORT_ALLOWANCE[2]
             and not any(
                 isinstance(k, tuple) and k[0] == PILOT_IMPORT_ALLOWANCE[0] for k in used

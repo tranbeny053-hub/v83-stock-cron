@@ -218,3 +218,30 @@ def test_a_change_outside_the_lattice_schema_refuses_and_never_commits():
     else:
         raise AssertionError("a catalog change outside ucpe_lattice was accepted")
     assert conn.committed is False
+
+
+def _dispatch_env(workflow_path: str, sha: str = "a" * 40) -> dict[str, str]:
+    repo = "tranbeny053-hub/v83-stock-cron"
+    return {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REPOSITORY": repo,
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_REF": "refs/heads/main", "GITHUB_SHA": sha,
+        "GITHUB_WORKFLOW_REF": f"{repo}/{workflow_path}@refs/heads/main",
+    }
+
+
+def test_a_dispatch_of_the_renamed_workflow_passes_and_the_authored_path_refuses(monkeypatch):
+    # After the enabling rename GitHub reports .github/workflows/<file>; a dispatch check pinned to
+    # the authored ops/ path would refuse every dispatch and spend the one-shot (review R1-1).
+    monkeypatch.setattr(apply.platform, "python_implementation", lambda: "CPython")
+    monkeypatch.setattr(apply.platform, "python_version", lambda: "3.13.14")
+    apply.verify_dispatch(_dispatch_env(".github/workflows/apply-migration-0019.yml"), "a" * 40)
+    try:
+        apply.verify_dispatch(
+            _dispatch_env("ops/ng4_pilot/workflows/apply-migration-0019.yml"), "a" * 40
+        )
+    except apply.Refused:
+        pass
+    else:
+        raise AssertionError("a dispatch from the authored ops/ path was accepted")

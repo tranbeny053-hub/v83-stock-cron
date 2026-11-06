@@ -15,7 +15,9 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml"
+# The path GitHub will report once the authored file is renamed into place (the enabling T3);
+# today no such file exists, so no dispatch can match it (review R1-1).
+WORKFLOW = ".github/workflows/ng4-pilot-preflight.yml"
 REPORT_SCHEMA = "ng4-pilot-preflight-report.v1"
 SUPABASE_EVENT_TRIGGERS: tuple[
     str, ...

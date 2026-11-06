@@ -24,6 +24,7 @@ migrations, in this order:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -306,8 +307,18 @@ def main(argv: list[str] | None = None) -> int:
         pilot.runner.close()
         pilot.su.close()
     passed = bool(pilot.checks) and all(c["status"] == "PASS" for c in pilot.checks)
+    try:  # which source this rehearsal proved (review R1-11); UNKNOWN outside a git checkout
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                              text=True, timeout=10, check=True).stdout.strip()
+    except Exception:
+        head = "UNKNOWN"
     report = {
         "schema": "ucpe.ng4_pilot_rehearsal.v1",
+        "source_head": head,
+        "migration_sha256": hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),
+        "capacity_sha256": hashlib.sha256(
+            (ROOT / "scripts/migration_0019_capacity.sql").read_bytes()
+        ).hexdigest(),
         "facts": pilot.facts,
         "checks": pilot.checks,
         "result": "PASS" if passed else "FAIL",
