@@ -38,7 +38,8 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "src"))
 
-from rehearse import FINGERPRINT_SQL, refuse_url  # noqa: E402
+from rehearse import FINGERPRINT_SQL as _NG4_FINGERPRINT_SQL  # noqa: E402
+from rehearse import refuse_url  # noqa: E402
 
 from crypto_probability_engine.persistence import reader_identity  # noqa: E402
 
@@ -46,6 +47,13 @@ MIGRATION = ROOT / "migrations/authored/0019_lattice_evidence.sql"
 APPLY = ROOT / "scripts/apply_migration_0019.py"
 PREFLIGHT = ROOT / "scripts/ng4_pilot_preflight.py"
 OWNER = "ucpe_lattice_owner"
+SPACE_LOGIN = "ucpe_lattice_space"  # W2 (migration 0020)
+# The route's change includes 0020's role: outside it, the catalog must not change.
+FINGERPRINT_SQL = _NG4_FINGERPRINT_SQL.replace(
+    "('ucpe_lattice_owner', 'ucpe_lattice_writer')",
+    "('ucpe_lattice_owner', 'ucpe_lattice_writer', 'ucpe_lattice_space')",
+)
+assert FINGERPRINT_SQL != _NG4_FINGERPRINT_SQL
 WRITER = "ucpe_lattice_writer"
 SPACE = "ucpe_space_db"
 FUNCTIONS = (
@@ -192,7 +200,11 @@ class Pilot:
             and body.get("committed") is True
             and [list(r) for r in capacity] == [[1200, 600]]
             and members
-            == [[OWNER, "runner", True, False, False], [WRITER, "runner", True, False, False]]
+            == [
+                [OWNER, "runner", True, False, False],
+                [WRITER, "runner", True, False, False],
+                [WRITER, SPACE_LOGIN, False, True, False],
+            ]
             and before == after,
             {
                 "exit": code,
@@ -269,11 +281,145 @@ class Pilot:
             {"reader": direct, "self_check": state, "self_check_after_revoke": after},
         )
 
+    # ---- R-20..R-23: W2, the writer login (migration 0020) --------------------------------
+    def space_url(self) -> str:
+        return self.url.replace(f"user={self.runner_name}", f"user={SPACE_LOGIN}")
+
+    def r20(self) -> None:
+        role = self.su.execute(
+            "SELECT rolcanlogin, rolinherit, rolsuper, rolcreatedb, rolcreaterole, rolreplication,"
+            " rolbypassrls, rolconnlimit, coalesce(rolconfig, '{}')::text[] FROM pg_roles"
+            " WHERE rolname = %s",
+            (SPACE_LOGIN,),
+        ).fetchone()
+        member_of = self.su.execute(
+            "SELECT r.rolname, m.admin_option, m.inherit_option, m.set_option"
+            " FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid"
+            " JOIN pg_roles u ON u.oid = m.member WHERE u.rolname = %s",
+            (SPACE_LOGIN,),
+        ).fetchall()
+        members = self.su.execute(
+            "SELECT u.rolname, m.admin_option, m.inherit_option, m.set_option"
+            " FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid"
+            " JOIN pg_roles u ON u.oid = m.member WHERE r.rolname = %s",
+            (SPACE_LOGIN,),
+        ).fetchall()
+        settings = sorted(role[8]) if role else None
+        named = [["runner" if u == self.runner_name else u, a, i, x] for u, a, i, x in members]
+        self.add(
+            "R-20 W2's role: NOLOGIN, NOINHERIT, no power, CONNECTION LIMIT 3, three session"
+            " bounds; one membership (the writer: inherit, no SET, no ADMIN); no member but its"
+            " creator's ADMIN-only grant",
+            role is not None
+            and list(role[:8]) == [False, False, False, False, False, False, False, 3]
+            and settings
+            == [
+                "idle_in_transaction_session_timeout=30s",
+                "lock_timeout=2s",
+                "statement_timeout=5s",
+            ]
+            and [list(r) for r in member_of] == [[WRITER, False, True, False]]
+            and named == [["runner", True, False, False]],
+            {"role": role, "member_of": member_of, "members": named},
+        )
+
+    def r21(self) -> None:
+        self.su.execute(f"ALTER ROLE {SPACE_LOGIN} LOGIN")  # this scratch cluster only
+        denied: dict[str, str | None] = {}
+        try:
+            conn = self.psycopg.connect(self.space_url(), autocommit=True)
+            try:
+
+                def state_of(sql: str) -> str | None:
+                    try:
+                        conn.execute(sql)
+                    except self.psycopg.Error as exc:
+                        return exc.sqlstate
+                    return None
+
+                allowed = {
+                    "capture": state_of("SELECT ucpe_lattice.capture_commit_receipts(10)"),
+                    "timeout": conn.execute("SHOW statement_timeout").fetchone()[0],
+                }
+                for table, key in (
+                    ("lattice_rows", "lattice_row_id"),
+                    ("lattice_commit_receipts", "lattice_row_id"),
+                    ("lattice_missed_instants", "lattice_run_id"),
+                    ("lattice_capacity", "id"),
+                ):
+                    name = f"ucpe_lattice.{table}"
+                    for verb, sql in (
+                        ("select", f"SELECT 1 FROM {name} LIMIT 1"),
+                        ("insert", f"INSERT INTO {name} DEFAULT VALUES"),
+                        ("update", f"UPDATE {name} SET {key} = {key}"),
+                        ("delete", f"DELETE FROM {name}"),
+                        ("truncate", f"TRUNCATE {name}"),
+                    ):
+                        denied[f"{table}.{verb}"] = state_of(sql)
+                for name, sql in (
+                    ("capacity_status", "SELECT ucpe_lattice.capacity_status()"),
+                    ("set_role_writer", f"SET ROLE {WRITER}"),
+                    ("set_role_owner", f"SET ROLE {OWNER}"),
+                    ("create_public", "CREATE TABLE public.ng4_w2_probe (i int)"),
+                    ("create_lattice", "CREATE TABLE ucpe_lattice.ng4_w2_probe (i int)"),
+                    ("predictions", "SELECT 1 FROM public.predictions LIMIT 1"),
+                    ("prediction_outcomes", "SELECT 1 FROM public.prediction_outcomes LIMIT 1"),
+                    ("analysis_runs", "SELECT 1 FROM public.analysis_runs LIMIT 1"),
+                    ("automation_credential", "SELECT 1 FROM public.automation_credential LIMIT 1"),
+                    ("automation_ledger", "SELECT 1 FROM public.automation_radar_ledger LIMIT 1"),
+                ):
+                    denied[name] = state_of(sql)
+            finally:
+                conn.close()
+        finally:
+            self.su.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN")
+        not_refused = {k: v for k, v in denied.items() if v != "42501"}
+        self.add(
+            "R-21 W2 live: the login runs the writer's functions within its session bounds; every"
+            " lattice table verb, capacity_status, SET ROLE, CREATE and every core/F1 table read is"
+            " refused 42501",
+            allowed == {"capture": None, "timeout": "5s"} and not not_refused and len(denied) == 30,
+            {"allowed": allowed, "not_42501": not_refused, "checked": len(denied)},
+        )
+
+    def r22(self) -> None:
+        reader = self.reader()
+        self.add(
+            "R-22 the Space's evidence reader ucpe_space_db still reads DESIGNED after 0020",
+            reader == {"verdict": reader_identity.VERDICT_DESIGNED, "role_memberships": 0},
+            reader,
+        )
+
+    def r23(self) -> None:
+        before = self.fingerprint()
+        with self.runner.transaction():
+            self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN")
+            self.runner.execute(f"REVOKE {WRITER} FROM {SPACE_LOGIN}")
+            self.runner.execute(f"DROP ROLE {SPACE_LOGIN}")
+        left = self.su.execute(
+            "SELECT count(*) FROM pg_roles WHERE rolname = %s", (SPACE_LOGIN,)
+        ).fetchone()[0]
+        writer_members = self.su.execute(
+            "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid"
+            " WHERE r.rolname = %s AND m.member <> (SELECT oid FROM pg_roles WHERE rolname = %s)",
+            (WRITER, self.runner_name),
+        ).fetchone()[0]
+        self.add(
+            "R-23 W2's authored rollback, run as the runner, removes the role and its membership;"
+            " nothing else changes",
+            left == 0 and writer_members == 0 and self.fingerprint() == before,
+            {"role_left": left, "writer_members_left": writer_members},
+        )
+
     def run(self) -> None:
         self.r17()
         self.r18_refusals()
         self.r18_apply()
+        self.r20()
+        self.r21()
+        self.r22()
         self.r16()
+        self.r23()
 
 
 def main(argv: list[str] | None = None) -> int:
