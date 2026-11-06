@@ -6,12 +6,13 @@
 -- fires only above plan and the stop at about twice the plan. The capacity row stops collection; it never deletes.
 --
 -- 0019 revoked the applying role's hand-off on ucpe_lattice_owner, so writing the row takes the same temporary
--- hand-off again: SET on the owner, the row inserted by the owner itself (its INSERT policy), the hand-off revoked.
+-- hand-off again: SET on the owner (SET LOCAL ROLE, so it cannot outlive the transaction), the row inserted by the
+-- owner itself (its INSERT policy), the hand-off revoked.
 -- Then 0019's own self-check runs again unchanged (a test keeps the copy below byte-identical), and the row is read
 -- back. Any failure raises and rolls back the whole transaction, 0019 included.
 
 GRANT ucpe_lattice_owner TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
-SET ROLE ucpe_lattice_owner;
+SET LOCAL ROLE ucpe_lattice_owner;
 INSERT INTO ucpe_lattice.lattice_capacity (max_rows, warn_rows, note)
 VALUES (1200, 600, 'NG4 TEST_ONLY pilot, SOL/USDT Binance 15m/1H/4H/1D, 14 days; owner 2026-11-06');
 DO $$
