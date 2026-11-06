@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-05 - NG4: the dormant lattice and its separate store (on main, not released)
+
+It records #326. Nothing in this entry is released.
+
+Added:
+- #326: `quant_ng/lattice.py` and `persistence/lattice_store.py`, the TEST_ONLY operations lattice,
+  behind a switch that is OFF (`LATTICE_ENABLED = False`, a code constant), with no cell, no prior
+  and nothing importing it. Built under the owner's NG4-D1 (Route S), NG4-D2 and NG4-D3 of
+  2026-11-05.
+- Migration 0019 (`migrations/authored/0019_lattice_evidence.sql`), AUTHORED and NOT APPLIED: a
+  separate, append-only schema `ucpe_lattice` that no existing reader can see, written only
+  through three locked-down functions, with receipts that hold PostgreSQL's true commit time or
+  say COMMIT_UNKNOWN. It sits outside every migration glob, and `scripts/apply_migrations.py`
+  refuses it by name.
+- A pull-request-only workflow, `migration-0019-rehearsal.yml`, that rehearses 0019 on a scratch
+  PostgreSQL 16 cluster with commit-time tracking off and on.
+
+Notes:
+- Publishing is not activation: nothing is applied, no database is touched, and turning the
+  lattice on needs a reviewed code change and its own authorizations.
+
 ## 2026-11-05 - NG3: the dormant wiring of the parallel pipeline (on main, not released)
 
 It records #323. Nothing in this entry is released.
