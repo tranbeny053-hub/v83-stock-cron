@@ -149,8 +149,8 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `ops/section_5a_evaluator_pin.json` | ACTIVE_PIN | tests only; isolated route attestation | local | Read by tests/workflows/test_owner_url_environment.py. |
 | `ops/section_5a_evaluator_requirements.lock` | ACTIVE_PIN | core-write-inventory.yml; isolated route bootstrap | local | Read by .github/workflows/core-write-inventory.yml. |
 | `ops/ng4_pilot/README.md` | ACTIVE_OWNER_TOOL | documentation for the authored NG4 pilot routes | local | Documents the disabled preflight and one-shot apply boundary, route activation, digest pins, and local rehearsal interface. |
-| `ops/ng4_pilot/workflows/ng4-pilot-preflight.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED catalog-only pilot preflight; the owner enables it by a pure rename into .github/workflows. |
-| `ops/ng4_pilot/workflows/apply-migration-0019.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED, one-shot apply of 0019 plus capacity; the owner enables it by a pure rename into .github/workflows. |
+| `ops/ng4_pilot/workflows/ng4-pilot-preflight.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED catalog-only pilot preflight; the authored file waits outside .github/workflows, which GitHub never registers; its script names the .github path the rename creates; enabling renames the file unchanged and flips its dormancy tests (a T3). |
+| `ops/ng4_pilot/workflows/apply-migration-0019.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED, one-shot apply of 0019 plus capacity; the authored file waits outside .github/workflows, which GitHub never registers; its script names the .github path the rename creates; enabling renames the file unchanged and flips its dormancy tests (a T3). |
 | `ops/section_5a_red_tests_pin.json` | ACTIVE_PIN | tests only | local | Read by tests/oos/evaluation/test_red_tests_are_unedited.py. |
 
 ## Runbooks

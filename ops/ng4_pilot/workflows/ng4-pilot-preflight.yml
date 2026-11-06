@@ -1,8 +1,9 @@
 # AUTHORED BUT DISABLED — enabling renames this file into .github/workflows unchanged (owner T3, git diff -M100%; its dormancy tests flip in the same change); dispatch is the owner's one-shot authorization. The preflight is a production read.
 name: NG4 pilot preflight (AUTHORED BUT DISABLED, READ ONLY)
 
-# DELIBERATELY NO automatic trigger. This authored but disabled workflow is enabled only by a pure
-# rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot request.
+# DELIBERATELY NO automatic trigger. The authored file waits outside .github/workflows, which GitHub
+# never registers; its script names the .github path the rename creates. Enabling renames the file
+# unchanged and flips its dormancy tests (owner T3, git diff -M100%); dispatch is the owner's one-shot request.
 # This is a production READ ONLY catalog preflight for the ucpe_lattice 0019 route, not a table audit.
 #
 # WHAT IT CHECKS. scripts/ng4_pilot_preflight.py starts with SET TRANSACTION READ ONLY, reads

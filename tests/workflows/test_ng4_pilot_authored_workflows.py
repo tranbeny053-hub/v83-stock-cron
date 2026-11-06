@@ -38,6 +38,9 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
     assert "ucpe_lattice" in preflight and "READ ONLY" in preflight
     assert "ucpe_lattice" in apply and "migration_0019_capacity.sql" in apply
     for header in (preflight, apply):
+        # Join the comment lines so a phrase split across a line break is still caught (review R3).
+        joined = " ".join(line.lstrip("#").strip() for line in header.splitlines())
+        assert "pure rename" not in joined and "enabled only by" not in joined
         assert "AUTHORED BUT DISABLED" in header
         assert "renames this file into .github/workflows unchanged" in header
         assert "production-db-owner" in header
