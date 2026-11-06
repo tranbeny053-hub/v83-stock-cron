@@ -150,6 +150,11 @@ ALLOWED_NG_IMPORTS = {
         {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
     ),
 }
+PILOT_IMPORT_ALLOWANCE = (
+    "src/crypto_probability_engine/lattice_pilot.py",
+    "crypto_probability_engine.quant_ng.lattice",
+    frozenset({("lattice", None), ("reference", None), ("reference_v1d", None), ("windows", None)}),
+)
 
 
 def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[list[str], set[str]]:
@@ -180,8 +185,18 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
             and node.module not in used
             and frozenset((a.name, a.asname) for a in node.names) == ALLOWED_NG_IMPORTS[node.module]
         )
+        pilot_exempt = (
+            str(path.relative_to(ROOT)) == PILOT_IMPORT_ALLOWANCE[0]
+            and isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module == "crypto_probability_engine.quant_ng"
+            and frozenset((a.name, a.asname) for a in node.names) == PILOT_IMPORT_ALLOWANCE[2]
+            and not any(k == PILOT_IMPORT_ALLOWANCE[0] for k in used)
+        )
         if exempt:
             used.add(node.module)
+        elif pilot_exempt:
+            used.add((PILOT_IMPORT_ALLOWANCE[0], node.module))
         else:
             violations.extend(names)
     return violations, used

@@ -53,6 +53,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/migration_0016_rehearsal/` | REHEARSAL | migration-0016-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0016-rehearsal.yml. |
 | `scripts/migration_0017_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
 | `scripts/migration_0018_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
+| `scripts/migration_0019_capacity.sql` | ACTIVE_OWNER_TOOL | none (authored; run only inside the disabled one-shot scripts/apply_migration_0019.py route) | production DB | NG4 pilot capacity 1200/600 (owner 2026-11-06), the owner hand-off and 0019's self-check; never applied. |
 | `scripts/migration_0019_rehearsal/` | REHEARSAL | migration-0019-rehearsal.yml | scratch PG | Scratch cluster driver and probes invoked by .github/workflows/migration-0019-rehearsal.yml (NG4; migration 0019 authored, not applied). |
 | `scripts/news_live_smoke.py` | ACTIVE_OWNER_TOOL | owner-local | external read-only | scripts/news_live_smoke.py documents or exercises this opt-in owner CLI. |
 | `scripts/persistence_rehearsal/` | REHEARSAL | persistence-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/persistence-rehearsal.yml. |

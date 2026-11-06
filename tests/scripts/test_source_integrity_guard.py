@@ -27,10 +27,13 @@ DRIFT_SHA = "d" * 40
 # 2026-11-04: NG3's dormant wiring (owner R3a) adds analysis_service.py and response.schema.json: an
 # OFF switch and an optional, hidden ng_serving field. With the switch OFF every served byte is
 # unchanged (tests/api/test_ng_dormant_switch.py).
+# 2026-11-06: NG4's pilot hook (owner NG4-PILOT INPUTS) adds api/app.py: one dormant call; with
+# LATTICE_ENABLED False nothing is read, started, logged or served differently
 CURRENT_DELTA_PATHS: list[str] = [
     "frontend/app.js",
     "schemas/response.schema.json",
     "src/crypto_probability_engine/api/analysis_service.py",
+    "src/crypto_probability_engine/api/app.py",
 ]
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the

@@ -229,6 +229,10 @@ def test_lattice_guards() -> None:
         for path in base.rglob("*.py"):
             if path.name == "lattice.py" and "quant_ng" in path.parts:
                 continue
+            # The NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06): its dormant runner is
+            # the one importer of the lattice and its store.
+            if path == module / "crypto_probability_engine/lattice_pilot.py":
+                continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):
@@ -243,7 +247,20 @@ def test_lattice_guards() -> None:
     texts = {path: path.read_text() for path in module.rglob("*.py")}
     hits = [str(path.relative_to(module)) for path, text in texts.items() if "ucpe_lattice" in text]
     assert hits == ["crypto_probability_engine/persistence/lattice_store.py"]
-    assert not any("ReferencePriors(" in text or "pi0=" in text for text in texts.values())
+    # The only prior values in src/ are the owner's TEST_ONLY placeholders (2026-11-06), in
+    # quant_ng/lattice.py.
+    prior_lines = [
+        (str(path.relative_to(module)), line)
+        for path, text in texts.items()
+        for line in text.splitlines()
+        if "ReferencePriors(" in line or "pi0=" in line
+    ]
+    assert [line for _path, line in prior_lines if "class ReferencePriors" not in line] == [
+        "PILOT_PRIOR_INTRADAY = reference.ReferencePriors((0.5, 0.5, 0.5))"
+    ]
+    assert {path for path, line in prior_lines if "class ReferencePriors" not in line} == {
+        "crypto_probability_engine/quant_ng/lattice.py"
+    }
     source = (module / "crypto_probability_engine/quant_ng/lattice.py").read_text()
     assert "LATTICE_ENABLED = False" in source
     assert "DECLARED_CELLS: tuple = ()" in source
@@ -284,6 +301,7 @@ def run_step(
     state=None,
     now=None,
     inputs=None,
+    fresh_after=None,
 ):
     cell, instant, snapshot, window = (inputs or real_inputs())[:4]
     monkeypatch.setattr(lattice, "LATTICE_ENABLED", True)
@@ -296,6 +314,7 @@ def run_step(
         store=store,
         app_clock=lambda: FIXED_CORE,
         state=state if state is not None else {},
+        fresh_after=fresh_after,
     )
     assert store.receipts == [1000]
     return cell, instant, store, result
@@ -384,3 +403,39 @@ def test_step_skipped_instants_are_bounded_and_row_id_ignores_prior(monkeypatch)
     assert result["stopped"] is True
     other = replace(config, priors={cell: reference.ReferencePriors((0.1, 0.2, 0.3))})
     assert lattice.lattice_row_id(cell, instant) == lattice.lattice_row_id(other.cells[0], instant)
+
+
+def test_pilot_recipe_and_methodology_identities():
+    assert lattice.PILOT_RECIPE_ID == "reference-daytype-v1"
+    assert lattice.PILOT_RECIPE_ID_1D == "reference-daytype-v1d"
+    cell = replace(real_inputs()[0], timeframe="1D")
+    config = replace(real_inputs()[4], cells=(cell,), recipe_id_1d="custom-v1d")
+    row = lattice.build_lattice_row(
+        cell, *real_inputs()[1:4], real_inputs()[5], config=config,
+        core_computed_at=FIXED_CORE, issued_at=FIXED_ISSUED,
+    )
+    assert row["recipe_id"] == "custom-v1d"
+    assert row["methodology_version"] == "reference-daytype-v1d"
+
+
+def test_planned_slot_counts():
+    start = datetime(2026, 11, 9, tzinfo=UTC)
+    slots = lattice.planned_slots(start)
+    assert slots == {"15m": 448, "1H": 112, "4H": 28, "1D": 4}
+    assert sum(slots.values()) == 592 < 600 < 1200
+
+
+def test_cold_start_fresh_after_boundary(monkeypatch):
+    cell, instant, _, _, config, _ = real_inputs()
+    # A process that began before this instant's wake (fresh_after < instant) issues it.
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state,
+                              now=instant + timedelta(seconds=25),
+                              fresh_after=instant - timedelta(seconds=1))
+    assert len(store.rows) == 1
+    # One that began after it (fresh_after >= instant) leaves it a gap and seeds the state.
+    state = {}
+    _, _, store, _ = run_step(monkeypatch, config=config, state=state,
+                              now=instant + timedelta(seconds=25), fresh_after=instant)
+    assert store.rows == [] and store.missed == []
+    assert state[cell] == instant

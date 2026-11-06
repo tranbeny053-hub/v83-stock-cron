@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from crypto_probability_engine import lattice_pilot
 from crypto_probability_engine.adapters.http_client import close_pool
 from crypto_probability_engine.adapters.public_market import BinancePublicAdapter, OkxPublicAdapter
 from crypto_probability_engine.adapters.symbol_universe import resolve_symbol_availability
@@ -86,10 +87,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_app: FastAPI):
         # E2 (plan §8.3): one redacted, catalog-only report of the evidence reader's role per start.
         reader_identity.start_report(app_settings, reader_source)
+        pilot = lattice_pilot.start(app_settings)
         try:
             yield
         finally:
             try:
+                if pilot is not None:
+                    await pilot.stop()
                 repositories = (persistence_repository, skill_evidence_repository)
                 for repository in repositories:
                     close = getattr(repository, "close", None)

@@ -61,6 +61,9 @@ EVENTS = frozenset(
         "persistence_submit_failed",
         # E2 (plan §8.3): the evidence reader's role, redacted, once per process start
         "evidence_reader_identity",
+        "lattice_pilot_state",
+        "lattice_pilot_checkpoint",
+        "lattice_pilot_error",
     }
 )
 FIELDS = frozenset(
@@ -120,6 +123,17 @@ FIELDS = frozenset(
         "needed_privileges",
         "rls_allows_all",
         "extra_privileges",
+        "exception_class",
+        "rows",
+        "missed",
+        "scope",
+        "inserted",
+        "inserted_warn",
+        "duplicate",
+        "logged",
+        "capacity_stop",
+        "capacity_unset",
+        "errors",
     }
 )
 _CONTAINERS = (Mapping, list, tuple, set, frozenset, bytes, bytearray)

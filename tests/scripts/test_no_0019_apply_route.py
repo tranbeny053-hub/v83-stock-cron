@@ -56,7 +56,13 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
 
 
 def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:
-    allowed = {ROOT / "scripts/apply_migrations.py"}
+    # The NG4 pilot's authored, disabled apply route (owner NG4-PILOT INPUTS, 2026-11-06) names it
+    # by design.
+    allowed = {
+        ROOT / "scripts/apply_migrations.py",
+        ROOT / "scripts/apply_migration_0019.py",
+        ROOT / "scripts/migration_0019_capacity.sql",
+    }
     for path in (ROOT / "scripts").rglob("*"):
         if not path.is_file() or path.suffix not in {".py", ".sh", ".sql"}:
             continue
