@@ -54,6 +54,8 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/migration_0017_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
 | `scripts/migration_0018_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
 | `scripts/migration_0019_capacity.sql` | ACTIVE_OWNER_TOOL | none (authored; run only inside the disabled one-shot scripts/apply_migration_0019.py route) | production DB | NG4 pilot capacity 1200/600 (owner 2026-11-06), the owner hand-off and 0019's self-check; never applied. |
+| `scripts/ng4_pilot_preflight.py` | ACTIVE_OWNER_TOOL | ops/ng4_pilot/workflows/ng4-pilot-preflight.yml (authored, disabled) | production DB | Catalog-only, read-only first-apply preflight for the dormant NG4 pilot; rehearse mode accepts only local scratch PostgreSQL. |
+| `scripts/apply_migration_0019.py` | ACTIVE_OWNER_TOOL | ops/ng4_pilot/workflows/apply-migration-0019.yml (authored, disabled) | production DB | One-shot 0019 plus the pinned NG4 capacity SQL route; exact bytes, catalog checks, and transaction rollback on refusal. |
 | `scripts/migration_0019_rehearsal/` | REHEARSAL | migration-0019-rehearsal.yml | scratch PG | Scratch cluster driver and probes invoked by .github/workflows/migration-0019-rehearsal.yml (NG4; migration 0019 authored, not applied). |
 | `scripts/news_live_smoke.py` | ACTIVE_OWNER_TOOL | owner-local | external read-only | scripts/news_live_smoke.py documents or exercises this opt-in owner CLI. |
 | `scripts/persistence_rehearsal/` | REHEARSAL | persistence-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/persistence-rehearsal.yml. |
@@ -146,6 +148,9 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `ops/release/releases.json` | ACTIVE_RELEASE | owner-local (release.py) | local | Read by scripts/release.py for release and rollback checks. |
 | `ops/section_5a_evaluator_pin.json` | ACTIVE_PIN | tests only; isolated route attestation | local | Read by tests/workflows/test_owner_url_environment.py. |
 | `ops/section_5a_evaluator_requirements.lock` | ACTIVE_PIN | core-write-inventory.yml; isolated route bootstrap | local | Read by .github/workflows/core-write-inventory.yml. |
+| `ops/ng4_pilot/README.md` | ACTIVE_OWNER_TOOL | documentation for the authored NG4 pilot routes | local | Documents the disabled preflight and one-shot apply boundary, route activation, digest pins, and local rehearsal interface. |
+| `ops/ng4_pilot/workflows/ng4-pilot-preflight.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED catalog-only pilot preflight; the owner enables it by a pure rename into .github/workflows. |
+| `ops/ng4_pilot/workflows/apply-migration-0019.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED, one-shot apply of 0019 plus capacity; the owner enables it by a pure rename into .github/workflows. |
 | `ops/section_5a_red_tests_pin.json` | ACTIVE_PIN | tests only | local | Read by tests/oos/evaluation/test_red_tests_are_unedited.py. |
 
 ## Runbooks

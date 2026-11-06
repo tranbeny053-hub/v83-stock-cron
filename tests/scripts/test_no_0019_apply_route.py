@@ -26,9 +26,17 @@ def test_the_number_is_reserved_until_the_t4_move() -> None:
     assert 19 not in numbers  # a later root migration may exist; the T4 route orders 0019's move
 
 
-def test_no_apply_script_or_workflow_exists() -> None:
-    assert not list((ROOT / "scripts").glob("apply_migration_0019*"))
-    for path in WORKFLOWS.glob("*.y*ml"):
+def test_no_enabled_apply_route_exists() -> None:
+    # Since the NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06) the one-shot apply route is
+    # AUTHORED BUT DISABLED: its script names a workflow outside .github/workflows, which GitHub
+    # never registers. Enabling it is a pure rename (a T3); dispatching it is the T4.
+    scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
+    assert scripts == ["apply_migration_0019.py"]
+    source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
+    assert 'WORKFLOW = "ops/ng4_pilot/workflows/apply-migration-0019.yml"' in source
+    assert (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").is_file()
+    assert not list(WORKFLOWS.rglob("*0019*apply*")) and not list(WORKFLOWS.rglob("apply*0019*"))
+    for path in WORKFLOWS.rglob("*.y*ml"):
         text = path.read_text(encoding="utf-8")
         if path == REHEARSAL_WORKFLOW:
             continue

@@ -1,0 +1,108 @@
+# AUTHORED BUT DISABLED — enabling is a pure rename into .github/workflows (owner T3, git diff -M100%); dispatch is the owner's one-shot authorization. The preflight is a production read.
+name: NG4 pilot preflight (AUTHORED BUT DISABLED, READ ONLY)
+
+# DELIBERATELY NO `schedule:` OR `push:` TRIGGER. Owner ruling 2026-09-16: read-only metadata only,
+# for the tables migrations 0001-0004 and 0007 shape: RLS, grants to PUBLIC/anon/authenticated/
+# service_role, policies, ownership and schema exposure. No application-row read, no mutation.
+#
+# WHAT IT DOES. scripts/ng4_pilot_preflight.py reads PostgreSQL catalogs only, in ONE transaction
+# made READ ONLY by its first statement, and rolls it back. No application table is ever named in a
+# query. Before any step holds the secret, the same audit is rehearsed against a scratch local
+# PostgreSQL built from the real migrations, connected as a role with NO privilege on any audited
+# table, which proves the audit reads catalogs only.
+#
+# THE SAME TRUST BOUNDARY AS THE OTHER DATABASE ROUTES: exact CPython 3.13.14, pinned Actions,
+# CPython's bundled pip installing lock-authenticated wheels, `python -I -S -B`, and a dispatch
+# verified against THIS workflow in the owner repository, on main, at exactly expected_sha. Inputs
+# reach the shell ONLY through `env:`, expanded in double quotes. Every step declares `shell: bash`.
+# Only the audit step receives the database secret.
+#
+# CONCURRENCY. It shares the section 5A group, so no two production-database dispatch workflows of
+# this repository can ever run at the same time.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: REQUIRED. The full 40-character commit SHA on main that the owner reviewed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: section-5a-evaluation
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    environment: production-db-owner  # C4: the owner URL lives only in this protected Environment
+    timeout-minutes: 20
+    steps:
+      # Actions are pinned to full commit SHAs, never to movable tags.
+      - name: Check out the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install the exact pinned interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+
+      - name: Install the hash-locked set with CPython's bundled pip, from authenticated wheels
+        shell: bash
+        # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
+        run: |
+          python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer
+          bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"
+          python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: --dest "$RUNNER_TEMP/section-5a-wheels" \
+            -r ops/section_5a_evaluator_requirements.lock
+          python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check \
+            --no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile \
+            --require-hashes --no-deps --only-binary=:all: \
+            -r ops/section_5a_evaluator_requirements.lock
+
+      - name: Attest isolation, dispatch and runtime for this workflow (no database)
+        shell: bash
+        env:
+          NG4_PILOT_PREFLIGHT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: python -I -S -B scripts/ng4_pilot_preflight.py --mode=attest --expected-sha="$NG4_PILOT_PREFLIGHT_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels"
+
+      - name: Rehearse preflight on scratch PostgreSQL (no secret)
+        shell: bash
+        env:
+          NG4_PILOT_PREFLIGHT_REHEARSAL_URL: "postgresql:///ng4_pilot_preflight_rehearsal?host=/var/run/postgresql"
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres createdb ng4_pilot_preflight_rehearsal
+          python -I -S -B scripts/ng4_pilot_preflight.py --mode=rehearse --report=ng4-pilot-preflight-rehearsal-report.json
+
+      - name: Run preflight route tests (no secret)
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_ng4_pilot_preflight.py tests/workflows/test_ng4_pilot_authored_workflows.py
+
+      - name: Run the pilot preflight once, read only (the ONLY step that receives the database secret)
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NG4_PILOT_PREFLIGHT_EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: python -I -S -B scripts/ng4_pilot_preflight.py --mode=run --expected-sha="$NG4_PILOT_PREFLIGHT_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=ng4-pilot-preflight.json
+
+      # The raw catalog rows and the assessment, on success and on refusal. Never the database URL.
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: ng4-pilot-preflight
+          path: |
+            ng4-pilot-preflight.json
+            ng4-pilot-preflight-rehearsal-report.json
+          if-no-files-found: warn
