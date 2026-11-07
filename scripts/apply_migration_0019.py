@@ -469,6 +469,9 @@ def main(argv=None, *, environ=None):
             "UNKNOWN" if report.get("checks", {}).get("commit_attempted") else False
         )
         report["refusals"] = [type(exc).__name__]
+        # A database-side refusal's SQLSTATE (e.g. UP020, 0020's own self-check): a five-character
+        # code, never a message, so the report stays public-safe.
+        report["sqlstate"] = getattr(exc, "sqlstate", None)
         code = 1
     encoded = json.dumps(report, sort_keys=True)
     print(encoded, file=sys.stdout if code == 0 else sys.stderr)

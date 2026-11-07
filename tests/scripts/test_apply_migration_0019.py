@@ -349,3 +349,33 @@ def test_a_dispatch_of_the_renamed_workflow_passes_and_the_authored_path_refuses
         pass
     else:
         raise AssertionError("a dispatch from the authored ops/ path was accepted")
+
+
+def test_rehearse_with_a_wheelhouse_loads_the_driver_from_it(monkeypatch):
+    # The dispatch workflow rehearses under python -I -S -B: only the wheelhouse can provide the
+    # driver (W2 spec review R1-1; sweep survivor W13's sibling).
+    calls = []
+
+    class Isolation:
+        installed_files_sha256 = "a" * 64
+
+    class Stop(Exception):
+        pass
+
+    def driver():
+        calls.append("driver")
+        def connect(*_args, **_kwargs):
+            raise Stop()
+
+        return type("D", (), {"connect": staticmethod(connect)})
+
+    monkeypatch.setattr(
+        apply, "enter_isolated_runtime", lambda w: calls.append(("enter", w)) or Isolation()
+    )
+    monkeypatch.setattr(
+        apply, "attest_loaded_modules", lambda isolation: calls.append("attest") or 1
+    )
+    monkeypatch.setattr(apply, "load_driver", driver)
+    env = {"MIGRATION_0019_REHEARSAL_URL": "postgresql:///scratch?host=/tmp"}
+    apply.main(["--mode=rehearse", "--wheelhouse=/tmp/wheels"], environ=env)
+    assert calls[:3] == [("enter", "/tmp/wheels"), "driver", "attest"]

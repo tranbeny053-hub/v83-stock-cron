@@ -180,3 +180,31 @@ def test_a_dispatch_of_the_renamed_workflow_passes_and_the_authored_path_refuses
         pass
     else:
         raise AssertionError("a dispatch from the authored ops/ path was accepted")
+
+
+def test_rehearse_with_a_wheelhouse_loads_the_driver_from_it(monkeypatch):
+    calls = []
+
+    class Isolation:
+        installed_files_sha256 = "a" * 64
+
+    class Stop(Exception):
+        pass
+
+    def driver():
+        calls.append("driver")
+        def connect(*_args, **_kwargs):
+            raise Stop()
+
+        return type("D", (), {"connect": staticmethod(connect)})
+
+    monkeypatch.setattr(
+        preflight, "enter_isolated_runtime", lambda w: calls.append(("enter", w)) or Isolation()
+    )
+    monkeypatch.setattr(
+        preflight, "attest_loaded_modules", lambda isolation: calls.append("attest") or 1
+    )
+    monkeypatch.setattr(preflight, "load_driver", driver)
+    env = {"NG4_PILOT_PREFLIGHT_REHEARSAL_URL": "postgresql:///scratch?host=/tmp"}
+    preflight.main(["--mode=rehearse", "--wheelhouse=/tmp/wheels"], environ=env)
+    assert calls[:3] == [("enter", "/tmp/wheels"), "driver", "attest"]

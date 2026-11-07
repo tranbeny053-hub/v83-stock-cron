@@ -444,14 +444,17 @@ class Pilot:
                 "preflight_flags_it": fact in (body_p.get("failing") or []),
                 "route_exit": code_a,
                 "route_outcome": body_a.get("outcome"),
+                "route_sqlstate": body_a.get("sqlstate"),
                 "schema_created": applied,
                 "undone": self.fingerprint() == before,
             })
         self.add(
             "R-24 each planted PUBLIC privilege (a core-table SELECT, an executable SECURITY"
-            " DEFINER function, CREATE on public) makes the preflight NOT_READY and the route"
-            " refuse with nothing applied; each plant undone",
+            " DEFINER function, CREATE on public) makes the preflight NOT_READY and 0020's own"
+            " self-check refuse (UP020) with nothing applied; each plant undone",
+            # 0020's own self-check refuses (UP020), not only the route's duplicate post-check
             all(r["preflight"] == "NOT_READY" and r["preflight_flags_it"] and r["route_exit"] != 0
+                and r["route_sqlstate"] == "UP020"
                 and not r["schema_created"] and r["undone"] for r in results),
             results,
         )
