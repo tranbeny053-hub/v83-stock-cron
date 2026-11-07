@@ -26,6 +26,30 @@ def test_the_number_is_reserved_until_the_t4_move() -> None:
     assert 19 not in numbers  # a later root migration may exist; the T4 route orders 0019's move
 
 
+def test_0020_remains_authored_and_outside_root_migration_globs() -> None:
+    assert (ROOT / "migrations/authored/0020_lattice_space_login.sql").is_file()
+    assert not list((ROOT / "migrations").glob("0020*"))
+    numbers = [int(p.name[:4]) for p in (ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")]
+    assert 20 not in numbers
+
+
+def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> None:
+    allowed = {
+        ROOT / "scripts/apply_migration_0019.py",
+        ROOT / "scripts/apply_migrations.py",
+        ROOT / "scripts/migration_0019_rehearsal",
+    }
+    mentions = []
+    for path in (ROOT / "scripts").rglob("*"):
+        if not path.is_file() or path.suffix not in {".py", ".sh", ".sql"}:
+            continue
+        if "0020_lattice" in path.read_text(encoding="utf-8", errors="replace"):
+            mentions.append(path)
+    assert all(any(path == item or item in path.parents for item in allowed) for path in mentions)
+    general = (ROOT / "scripts/apply_migrations.py").read_text(encoding="utf-8")
+    assert '"0020_lattice_space_login.sql"' in general
+
+
 def test_no_enabled_apply_route_exists() -> None:
     # Since the NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06) the one-shot apply route is
     # AUTHORED BUT DISABLED: the authored file waits outside .github/workflows, which GitHub never

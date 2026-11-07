@@ -52,3 +52,12 @@ def test_0019_only_is_refused_before_environment_or_psycopg(monkeypatch, capsys)
         capsys.readouterr().out.strip()
         == "REFUSED: 0019_lattice_evidence.sql is authored but not authorized to apply"
     )
+
+
+def test_0020_only_is_refused_before_environment_or_psycopg(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    monkeypatch.setattr(apply_migrations, "MIGRATIONS_DIR", Path("/missing"))
+    assert apply_migrations.main(["--only", "0020_lattice_space_login.sql"]) == 2
+    assert capsys.readouterr().out.strip() == (
+        "REFUSED: 0020_lattice_space_login.sql is authored but not authorized to apply"
+    )

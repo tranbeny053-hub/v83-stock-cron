@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -12,11 +13,12 @@ SPEC.loader.exec_module(apply)
 
 
 def test_pinned_digests_match_bytes():
-    migration, capacity = apply.pinned_bytes()
+    migration, capacity, migration_0020 = apply.pinned_bytes()
     import hashlib
 
     assert hashlib.sha256(migration).hexdigest() == apply.MIGRATION_SHA256
     assert hashlib.sha256(capacity).hexdigest() == apply.CAPACITY_SHA256
+    assert hashlib.sha256(migration_0020).hexdigest() == apply.MIGRATION_0020_SHA256
 
 
 def test_digest_change_refuses_before_connecting(monkeypatch):
@@ -42,7 +44,8 @@ class FakeCursor:
     def __init__(self):
         self.statements = []
         self.row = (True,)
-        self.applied = False  # after the migration runs, the schema and the roles exist
+        self.stage = 0
+        self.bad_post = None
 
     def __enter__(self):
         return self
@@ -53,16 +56,50 @@ class FakeCursor:
     def execute(self, sql, *args):
         self.statements.append(sql)
         if "CREATE SCHEMA ucpe_lattice" in sql:
-            self.applied = True
-        if self.applied and ("nspname='ucpe_lattice'" in sql and "NOT EXISTS" in sql
-                             or "rolname IN ('ucpe_lattice_owner'" in sql and "NOT EXISTS" in sql):
-            self.row = (False,)
-        elif "jsonb_build_object" in sql:
+            self.stage = 1
+        elif "CREATE ROLE ucpe_lattice_space" in sql:
+            self.stage = 2
+        if "jsonb_build_object" in sql:
             self.row = ("fingerprint",)
         elif "pg_advisory_xact_lock" in sql:
             self.row = (None,)
-        elif "admin_option AND NOT" in sql:
-            self.rows = [(True,), (True,)]
+        elif sql == apply.POST_MEMBERSHIP_SQL:
+            self.rows = [("ucpe_lattice_writer", "ucpe_lattice_space", "applier",
+                          False, True, False)]
+            if self.bad_post == "membership":
+                self.rows = []
+        elif sql == apply.CURRENT_USER_SQL:
+            self.row = ("applier",)
+        elif sql == apply.POST_CREATOR_MEMBERSHIPS_SQL:
+            self.rows = [(name, "applier", True, False, False) for name in
+                         ("ucpe_lattice_owner", "ucpe_lattice_space", "ucpe_lattice_writer")]
+            if self.bad_post == "creator":
+                self.rows.pop()
+        elif sql == apply.POST_SPACE_ATTRIBUTES_SQL:
+            self.row = (
+                (False, False, False, False, False, False, False, 3, None)
+                if self.bad_post != "attributes"
+                else (True, False, False, False, False, False, False, 3, None)
+            )
+        elif sql == apply.POST_SPACE_SETTINGS_SQL:
+            self.rows = [(0, ["statement_timeout=5s", "lock_timeout=2s",
+                              "idle_in_transaction_session_timeout=30s"])]
+            if self.bad_post == "settings":
+                self.rows[0][1].pop()
+        elif sql == apply.POST_RELATION_PRIVILEGES_SQL:
+            self.row = (1 if self.bad_post == "relation" else 0,)
+        elif sql == apply.POST_DEFINER_PRIVILEGES_SQL:
+            self.row = (1 if self.bad_post == "definer" else 0,)
+        elif sql == apply.POST_CREATE_PRIVILEGES_SQL:
+            self.row = (self.bad_post == "create",)
+        elif sql == apply.POST_SHDEPEND_SQL:
+            self.row = (1 if self.bad_post == "shdepend" else 0,)
+        elif "nspname='ucpe_lattice'" in sql and "NOT EXISTS" in sql:
+            self.row = (self.stage == 0,)
+        elif "rolname IN ('ucpe_lattice_owner'" in sql and "NOT EXISTS" in sql:
+            self.row = (self.stage == 0,)
+        elif "ucpe_lattice_space" in sql and "NOT EXISTS" in sql and "pg_roles" in sql:
+            self.row = (self.stage < 2,)
         elif "count(*)" in sql:
             self.row = (0,)
         else:
@@ -95,13 +132,15 @@ class FakeConnection:
 
 def test_apply_runs_checks_then_exact_bytes_then_postchecks_then_commit():
     conn = FakeConnection()
-    migration, capacity = apply.pinned_bytes()
-    apply.apply_in_one_transaction(lambda: conn, migration, capacity)
+    migration, capacity, migration_0020 = apply.pinned_bytes()
+    apply.apply_in_one_transaction(lambda: conn, migration, capacity, migration_0020)
     sql = conn.cur.statements
     lock_index = sql.index("SELECT pg_advisory_xact_lock(5000019)")
     migration_index = sql.index(migration.decode())
     capacity_index = sql.index(capacity.decode())
+    migration_0020_index = sql.index(migration_0020.decode())
     assert lock_index < migration_index < capacity_index
+    assert capacity_index < migration_0020_index < sql.index(apply.POST_MEMBERSHIP_SQL)
     assert sql.index("SET LOCAL statement_timeout = '120s'") < lock_index
     assert (
         len(
@@ -122,9 +161,9 @@ def test_failed_precheck_never_sends_migration():
             conn.cur.row = (False,)
 
     conn.cur.execute = fail_schema
-    migration, capacity = apply.pinned_bytes()
+    migration, capacity, migration_0020 = apply.pinned_bytes()
     try:
-        apply.apply_in_one_transaction(lambda: conn, migration, capacity)
+        apply.apply_in_one_transaction(lambda: conn, migration, capacity, migration_0020)
     except apply.Refused:
         pass
     else:
@@ -142,9 +181,9 @@ def test_createrole_self_grant_refuses_before_migration():
             conn.cur.row = (False,)
 
     conn.cur.execute = nonempty_setting
-    migration, capacity = apply.pinned_bytes()
+    migration, capacity, migration_0020 = apply.pinned_bytes()
     try:
-        apply.apply_in_one_transaction(lambda: conn, migration, capacity)
+        apply.apply_in_one_transaction(lambda: conn, migration, capacity, migration_0020)
     except apply.Refused as exc:
         assert "createrole_self_grant_empty" in str(exc)
     else:
@@ -199,6 +238,70 @@ def test_a_changed_capacity_byte_refuses_before_connecting(monkeypatch):
         raise AssertionError("a capacity digest mismatch was accepted")
 
 
+def test_a_changed_0020_byte_refuses_before_connecting(monkeypatch):
+    monkeypatch.setattr(apply, "MIGRATION_0020_SHA256", "0" * 64)
+    called = False
+
+    def connect(*args, **kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setitem(__import__("sys").modules, "psycopg", SimpleNamespace(connect=connect))
+    assert apply.main(["--mode=rehearse"], environ={
+        "MIGRATION_0019_REHEARSAL_URL": "postgresql://localhost/test"
+    }) == 2
+    assert called is False
+
+
+def test_lattice_space_absence_is_a_required_precheck():
+    conn = FakeConnection()
+    original_execute = conn.cur.execute
+
+    def fail_space_absent(sql, *args):
+        original_execute(sql, *args)
+        if "rolname='ucpe_lattice_space'" in sql and "NOT EXISTS" in sql:
+            conn.cur.row = (False,)
+
+    conn.cur.execute = fail_space_absent
+    migration, capacity, migration_0020 = apply.pinned_bytes()
+    try:
+        apply.apply_in_one_transaction(lambda: conn, migration, capacity, migration_0020)
+    except apply.Refused as exc:
+        assert "lattice_space_absent" in str(exc)
+    else:
+        raise AssertionError("existing lattice space role passed the precheck")
+    assert migration.decode() not in conn.cur.statements
+    assert migration_0020.decode() not in conn.cur.statements
+
+
+def test_each_postcheck_group_refuses_and_never_commits():
+    for bad_post in (
+        "membership", "creator", "attributes", "settings", "relation", "definer",
+        "create", "shdepend",
+    ):
+        conn = FakeConnection()
+        conn.cur.bad_post = bad_post
+        migration, capacity, migration_0020 = apply.pinned_bytes()
+        try:
+            apply.apply_in_one_transaction(
+                lambda conn=conn: conn, migration, capacity, migration_0020
+            )
+        except apply.Refused:
+            pass
+        else:
+            raise AssertionError(f"bad post-check answer accepted: {bad_post}")
+        assert not conn.committed, bad_post
+
+
+def test_report_uses_v2_and_includes_0020_digest_without_connection(capsys):
+    assert apply.main(["--mode=rehearse"], environ={}) == 2
+    output = capsys.readouterr().err
+    assert '"schema": "migration-0019-apply-report.v2"' in output
+    assert f'"migration_0020_sha256": "{apply.MIGRATION_0020_SHA256}"' in output
+    assert "postgresql" not in output.lower()
+    assert "ucpe_lattice_space" not in output
+
+
 def test_a_change_outside_the_lattice_schema_refuses_and_never_commits():
     conn = FakeConnection()
     fingerprints = iter(("before", "after"))
@@ -210,9 +313,9 @@ def test_a_change_outside_the_lattice_schema_refuses_and_never_commits():
             conn.cur.row = (next(fingerprints),)
 
     conn.cur.execute = execute
-    migration, capacity = apply.pinned_bytes()
+    migration, capacity, migration_0020 = apply.pinned_bytes()
     try:
-        apply.apply_in_one_transaction(lambda: conn, migration, capacity)
+        apply.apply_in_one_transaction(lambda: conn, migration, capacity, migration_0020)
     except apply.Refused as exc:
         assert "catalog mismatch" in str(exc)
     else:

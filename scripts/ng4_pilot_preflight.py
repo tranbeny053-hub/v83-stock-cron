@@ -25,6 +25,11 @@ SUPABASE_EVENT_TRIGGERS: tuple[
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 SCRIPT = "scripts/ng4_pilot_preflight.py"
+PREREQUISITES = (
+    "server_16_plus", "schema_absent", "roles_absent", "lattice_space_absent",
+    "createrole", "not_superuser", "createrole_self_grant_empty",
+    "no_bypassrls_data_role_member", "no_all_tables_publication",
+)
 
 
 def refuse_url(url: str) -> str | None:
@@ -46,6 +51,8 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
     captured = {} if captured is None else captured
     with open_connection() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SET LOCAL statement_timeout = '5000'")
+        cur.execute("SET LOCAL lock_timeout = '2000'")
         queries = {
             "server_16_plus": "SELECT current_setting('server_version_num')::int >= 160000",
             "track_commit_timestamp_on": "SELECT current_setting('track_commit_timestamp') = 'on'",
@@ -56,8 +63,12 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
                 "SELECT NOT EXISTS (SELECT 1 FROM pg_roles "
                 "WHERE rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer'))"
             ),
+            "lattice_space_absent": (
+                "SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
+            ),
             "createrole": "SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user",
             "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
+            "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
             "createrole_self_grant_set": (
                 "SELECT current_setting('createrole_self_grant') LIKE '%set%'"
             ),
@@ -109,6 +120,27 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             "ucpe_lattice_space_exists": (
                 "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
             ),
+            "applier_signal_backend": (
+                "SELECT pg_has_role(current_user,'pg_signal_backend','USAGE')"
+            ),
+            "public_relation_privileges": """SELECT count(*) FROM pg_class c
+                JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+                AND c.relkind IN ('r','p','v','m','f','S')
+                AND (has_table_privilege('public',c.oid,
+                     'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                OR has_any_column_privilege('public',c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+                OR CASE WHEN c.relkind='S' THEN
+                    has_sequence_privilege('public',c.oid,'USAGE,SELECT,UPDATE')
+                ELSE false END)""",
+            "public_executable_definers": """SELECT count(*) FROM pg_proc p
+                JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prosecdef
+                AND has_schema_privilege('public',n.oid,'USAGE')
+                AND has_function_privilege('public',p.oid,'EXECUTE')""",
+            "public_schema_create": "SELECT has_schema_privilege('public','public','CREATE')",
+            "public_database_create": """SELECT has_database_privilege(
+                'public',current_database(),'CREATE')""",
+            "public_database_temporary": """SELECT has_database_privilege(
+                'public',current_database(),'TEMPORARY')""",
         }
         facts = {}
         for name, sql in queries.items():
@@ -128,18 +160,13 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             facts[name] = row[0] if row else 0
             captured[name] = facts[name]
         cur.execute("ROLLBACK")
-    prerequisites = (
-        "server_16_plus",
-        "schema_absent",
-        "roles_absent",
-        "createrole",
-        "not_superuser",
-        "no_bypassrls_data_role_member",
-        "no_all_tables_publication",
-    )
-    failing = [key for key in prerequisites if facts[key] is not True]
-    if facts["createrole_self_grant_set"] or facts["createrole_self_grant_inherit"]:
-        failing.append("createrole_self_grant_empty")
+    failing = [key for key in PREREQUISITES if facts[key] is not True]
+    for key in ("public_relation_privileges", "public_executable_definers"):
+        if facts[key] != 0:
+            failing.append(key)
+    for key in ("public_schema_create", "public_database_create"):
+        if facts[key] is True:
+            failing.append(key)
     return {
         "schema": REPORT_SCHEMA,
         "verdict": "READY" if not failing else "NOT_READY",
