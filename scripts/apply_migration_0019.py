@@ -142,8 +142,9 @@ POST_MEMBERSHIP_SQL = """SELECT pg_get_userbyid(r.oid), pg_get_userbyid(m.member
  WHERE r.rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer')
    AND m.member<>(SELECT oid FROM pg_roles WHERE rolname=current_user) ORDER BY 1"""
 CURRENT_USER_SQL = "SELECT current_user"
-# PostgreSQL 16 records the CREATEROLE auto-grant with the bootstrap superuser (oid 10) as its grantor, not the
-# creator (verified on scratch PostgreSQL 17.11); the explicit writer grant to ucpe_lattice_space names the applier.
+# PostgreSQL 16 records the CREATEROLE auto-grant with the bootstrap superuser (oid 10) as its
+# grantor, not the creator (verified on scratch PostgreSQL 17.11); the explicit writer grant to
+# ucpe_lattice_space names the applier.
 POST_CREATOR_MEMBERSHIPS_SQL = """SELECT pg_get_userbyid(r.oid), m.grantor = 10,
  m.admin_option, m.inherit_option, m.set_option
  FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid

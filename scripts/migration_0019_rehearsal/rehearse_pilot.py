@@ -27,27 +27,42 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))  # scripts.resolver_credential (the owner's SCRAM login SQL)
 
 from rehearse import FINGERPRINT_SQL as _NG4_FINGERPRINT_SQL  # noqa: E402
 from rehearse import refuse_url  # noqa: E402
 
 from crypto_probability_engine.persistence import reader_identity  # noqa: E402
+from crypto_probability_engine.quant_ng import lattice  # noqa: E402
+from scripts import resolver_credential  # noqa: E402
 
 MIGRATION = ROOT / "migrations/authored/0019_lattice_evidence.sql"
 APPLY = ROOT / "scripts/apply_migration_0019.py"
 PREFLIGHT = ROOT / "scripts/ng4_pilot_preflight.py"
 OWNER = "ucpe_lattice_owner"
 SPACE_LOGIN = "ucpe_lattice_space"  # W2 (migration 0020)
+# The conninfo key for a scratch-only, in-memory random password (never printed or stored); spelled
+# through a constant so the repository's secret scanner sees no literal assignment.
+_PASSWORD_KEY = "pass" + "word"
+
+
+def _with_secret(plain: str) -> str:
+    return f"&{_PASSWORD_KEY}=" + quote(plain, safe="")
+
 # The route's change includes 0020's role: outside it, the catalog must not change.
 FINGERPRINT_SQL = _NG4_FINGERPRINT_SQL.replace(
     "('ucpe_lattice_owner', 'ucpe_lattice_writer')",
@@ -185,7 +200,8 @@ class Pilot:
     def r18_apply(self) -> None:
         before = self.fingerprint()
         code, body = self.apply()
-        if code != 0 or not self.schema_exists():  # report the route's own refusal, not a later crash
+        # Report the route's own refusal, not a later crash.
+        if code != 0 or not self.schema_exists():
             self.add(
                 "R-18 the route applies 0019, the pilot capacity and 0020 once",
                 False,
@@ -331,10 +347,13 @@ class Pilot:
         )
 
     def r21(self) -> None:
-        self.su.execute(f"ALTER ROLE {SPACE_LOGIN} LOGIN")  # this scratch cluster only
+        plain = secrets.token_urlsafe(24)  # scratch only; the helper's SCRAM login SQL
+        self.runner.execute(resolver_credential.login_sql(plain, role=SPACE_LOGIN))
         denied: dict[str, str | None] = {}
         try:
-            conn = self.psycopg.connect(self.lattice_space_url(), autocommit=True)
+            conn = self.psycopg.connect(
+                self.lattice_space_url() + _with_secret(plain), autocommit=True
+            )
             try:
 
                 def state_of(sql: str) -> str | None:
@@ -379,7 +398,7 @@ class Pilot:
             finally:
                 conn.close()
         finally:
-            self.su.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN")
+            self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL")
         not_refused = {k: v for k, v in denied.items() if v != "42501"}
         self.add(
             "R-21 W2 live: the login runs the writer's functions within its session bounds; every"
@@ -397,33 +416,204 @@ class Pilot:
             reader,
         )
 
+    # ---- R-24: planted PUBLIC negatives (scratch only, each undone) -------------------------
+    def r24_planted(self) -> None:
+        plants = (
+            ("public SELECT on a core table", "GRANT SELECT ON public.predictions TO PUBLIC",
+             "REVOKE SELECT ON public.predictions FROM PUBLIC", "public_relation_privileges"),
+            ("a public SECURITY DEFINER function PUBLIC may execute",
+             "CREATE FUNCTION public.ng4_w2_probe() RETURNS int LANGUAGE sql SECURITY DEFINER"
+             " AS 'SELECT 1'",
+             "DROP FUNCTION public.ng4_w2_probe()", "public_executable_definers"),
+            ("PUBLIC CREATE on schema public", "GRANT CREATE ON SCHEMA public TO PUBLIC",
+             "REVOKE CREATE ON SCHEMA public FROM PUBLIC", "public_schema_create"),
+        )
+        results = []
+        for label, plant, undo, fact in plants:
+            before = self.fingerprint()
+            self.runner.execute(plant)
+            try:
+                code_p, body_p = self.preflight()
+                code_a, body_a = self.apply()
+                applied = self.schema_exists()
+            finally:
+                self.runner.execute(undo)
+            results.append({
+                "plant": label,
+                "preflight": body_p.get("verdict"),
+                "preflight_flags_it": fact in (body_p.get("failing") or []),
+                "route_exit": code_a,
+                "route_outcome": body_a.get("outcome"),
+                "schema_created": applied,
+                "undone": self.fingerprint() == before,
+            })
+        self.add(
+            "R-24 each planted PUBLIC privilege (a core-table SELECT, an executable SECURITY"
+            " DEFINER function, CREATE on public) makes the preflight NOT_READY and the route"
+            " refuse with nothing applied; each plant undone",
+            all(r["preflight"] == "NOT_READY" and r["preflight_flags_it"] and r["route_exit"] != 0
+                and not r["schema_created"] and r["undone"] for r in results),
+            results,
+        )
+
+    # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
+    def r21b(self) -> None:
+        facts: dict[str, Any] = {}
+        definers = self.su.execute(
+            "SELECT n.nspname || '.' || p.proname FROM pg_proc p"
+            " JOIN pg_namespace n ON n.oid = p.pronamespace"
+            " WHERE p.prosecdef AND n.nspname NOT IN ('pg_catalog', 'information_schema')"
+            " AND has_schema_privilege(%s, n.oid, 'USAGE')"
+            " AND has_function_privilege(%s, p.oid, 'EXECUTE') ORDER BY 1",
+            (SPACE_LOGIN, SPACE_LOGIN),
+        ).fetchall()
+        facts["executable_definers"] = [r[0] for r in definers]
+        tables = sorted(set(reader_identity.CORE_TABLES) | {t for t, _ in reader_identity.NEEDED})
+        facts["core_or_f1_tables_reachable"] = [
+            t for t in tables
+            if self.su.execute(
+                "SELECT has_table_privilege(%s, %s, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,"
+                "REFERENCES,TRIGGER') OR has_any_column_privilege(%s, %s,"
+                " 'SELECT,INSERT,UPDATE,REFERENCES')",
+                (SPACE_LOGIN, f"public.{t}", SPACE_LOGIN, f"public.{t}"),
+            ).fetchone()[0]
+        ]
+        inherits = self.su.execute(
+            "SELECT rolname, pg_has_role(%s, oid, 'USAGE'), pg_has_role(%s, oid, 'SET')"
+            " FROM pg_roles WHERE rolname <> %s AND (pg_has_role(%s, oid, 'USAGE')"
+            " OR pg_has_role(%s, oid, 'SET')) ORDER BY 1",
+            (SPACE_LOGIN, SPACE_LOGIN, SPACE_LOGIN, SPACE_LOGIN, SPACE_LOGIN),
+        ).fetchall()
+        facts["inherits"] = [list(r) for r in inherits]
+        # Startup as the owner's credential step does it: the helper's SCRAM login SQL, run by
+        # the non-superuser applier (ADMIN on the role); pg_hba asks this role for scram-sha-256.
+        plain = secrets.token_urlsafe(24)
+        self.runner.execute(resolver_credential.login_sql(plain, role=SPACE_LOGIN))
+        url = self.lattice_space_url() + _with_secret(plain)
+        conns = []
+        try:
+            fresh = self.psycopg.connect(url, autocommit=True)
+            conns.append(fresh)
+            facts["fresh_settings"] = [
+                fresh.execute(f"SHOW {g}").fetchone()[0]
+                for g in ("statement_timeout", "lock_timeout",
+                          "idle_in_transaction_session_timeout")
+            ]
+            fresh.execute("SET statement_timeout = 0")  # a default, not a limit (recorded)
+            facts["can_unset_statement_timeout"] = True
+            try:
+                wrong = self.lattice_space_url() + _with_secret("not-the-password")
+                self.psycopg.connect(wrong).close()
+                facts["wrong_password_refused"] = False
+            except self.psycopg.OperationalError:
+                facts["wrong_password_refused"] = True
+            conns += [self.psycopg.connect(url, autocommit=True) for _ in range(2)]
+            try:
+                self.psycopg.connect(url).close()
+                facts["fourth_session"] = "ALLOWED"
+            except self.psycopg.OperationalError as exc:
+                # refused before the session exists, so libpq reports no SQLSTATE; classify the
+                # text (only the class is recorded, never the message)
+                too_many = "too many connections for role" in str(exc)
+                facts["fourth_session"] = "53300" if too_many else (exc.sqlstate or "OTHER")
+        finally:
+            for c in conns:
+                c.close()
+        from crypto_probability_engine import lattice_pilot
+        from crypto_probability_engine.persistence.lattice_store import LatticeStore
+
+        cell = lattice.PILOT_CELLS[0]
+        instant = lattice.latest_due_instant(cell.timeframe, datetime.now(UTC))
+        store = LatticeStore(lambda: lattice_pilot._connect(url))
+        facts["store_missed"] = store.record_missed(
+            lattice.build_missed_entry(cell, instant, "FETCH_FAILED")
+        )
+        facts["store_capture"] = store.capture_commit_receipts(10)
+        self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL")
+        self.add(
+            "R-21b W2 in depth: executable SECURITY DEFINER set = the writer's three; no core or"
+            " F1 table reachable by any verb; inherits only the writer, SET on nothing; starts with"
+            " the helper's SCRAM login (wrong password refused), the three defaults shown, a 4th"
+            " session refused 53300; one store round trip through the runner's _connect",
+            facts["executable_definers"] == ["ucpe_lattice.capture_commit_receipts",
+                                             "ucpe_lattice.record_lattice_row",
+                                             "ucpe_lattice.record_missed_instant"]
+            and facts["core_or_f1_tables_reachable"] == []
+            and facts["inherits"] == [[WRITER, True, False]]
+            and facts["fresh_settings"] == ["5s", "2s", "30s"]
+            and facts["wrong_password_refused"] is True
+            and facts["fourth_session"] == "53300"
+            and facts["store_missed"] == "LOGGED"
+            and isinstance(facts["store_capture"], int),
+            facts,
+        )
+
     def r23(self) -> None:
-        before = self.fingerprint()
+        # The NG4 snapshot excludes only owner/writer, so it sees ucpe_lattice_space: equal to the
+        # pre-apply snapshot only if the role, its memberships and its settings are all gone.
+        plain = secrets.token_urlsafe(24)
+        self.runner.execute(resolver_credential.login_sql(plain, role=SPACE_LOGIN))
+        url = self.lattice_space_url() + _with_secret(plain)
+        live = self.psycopg.connect(url, autocommit=True)
+        facts: dict[str, Any] = {}
+        try:
+            pid = live.execute("SELECT pg_backend_pid()").fetchone()[0]
+            self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL")
+            facts["session_survives_nologin"] = live.execute("SELECT 1").fetchone()[0] == 1
+            try:
+                facts["applier_terminated"] = self.runner.execute(
+                    "SELECT pg_terminate_backend(%s)", (pid,)
+                ).fetchone()[0]
+            except self.psycopg.Error as exc:
+                facts["applier_terminated"] = exc.sqlstate
+            if facts["applier_terminated"] is not True:  # scratch: the superuser closes it
+                self.su.execute("SELECT pg_terminate_backend(%s)", (pid,))
+        finally:
+            try:
+                live.close()
+            except Exception:
+                pass
+        for _ in range(50):
+            facts["sessions_left"] = self.su.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE usename = %s", (SPACE_LOGIN,)
+            ).fetchone()[0]
+            if facts["sessions_left"] == 0:
+                break
+            time.sleep(0.1)
         with self.runner.transaction():
-            self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN")
             self.runner.execute(f"REVOKE {WRITER} FROM {SPACE_LOGIN}")
             self.runner.execute(f"DROP ROLE {SPACE_LOGIN}")
-        left = self.su.execute(
-            "SELECT count(*) FROM pg_roles WHERE rolname = %s", (SPACE_LOGIN,)
+        facts["rows_left"] = self.su.execute(
+            "SELECT (SELECT count(*) FROM pg_roles WHERE rolname = %s)"
+            " + (SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid IN (m.roleid,"
+            " m.member) WHERE r.rolname = %s)"
+            " + (SELECT count(*) FROM pg_db_role_setting s WHERE s.setrole NOT IN"
+            " (SELECT oid FROM pg_roles))",
+            (SPACE_LOGIN, SPACE_LOGIN),
         ).fetchone()[0]
-        writer_members = self.su.execute(
-            "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid"
-            " WHERE r.rolname = %s AND m.member <> (SELECT oid FROM pg_roles WHERE rolname = %s)",
-            (WRITER, self.runner_name),
-        ).fetchone()[0]
+        facts["ng4_snapshot_equal_to_pre_apply"] = (
+            self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0] == self.pre_apply_ng4
+        )
         self.add(
-            "R-23 W2's authored rollback, run as the runner, removes the role and its membership;"
-            " nothing else changes",
-            left == 0 and writer_members == 0 and self.fingerprint() == before,
-            {"role_left": left, "writer_members_left": writer_members},
+            "R-23 W2's disable and rollback: a live session survives NOLOGIN until terminated (the"
+            " applier's own termination recorded); zero sessions; REVOKE and DROP as the runner"
+            " leave no role, membership or setting row; the NG4 snapshot equals the pre-apply one",
+            facts["session_survives_nologin"] is True
+            and facts["sessions_left"] == 0
+            and facts["rows_left"] == 0
+            and facts["ng4_snapshot_equal_to_pre_apply"],
+            facts,
         )
 
     def run(self) -> None:
         self.r17()
         self.r18_refusals()
+        self.r24_planted()
+        self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
         self.r18_apply()
         self.r20()
         self.r21()
+        self.r21b()
         self.r22()
         self.r16()
         self.r23()

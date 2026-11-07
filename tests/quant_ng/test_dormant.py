@@ -129,6 +129,17 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
         for path in folder.rglob("*.py"):
             if NG_DIR == path or NG_DIR in path.parents:
                 continue
+            if path == REHEARSAL_DRIVER:
+                # W2's scratch-only rehearsal driver (owner 2026-11-07): exactly one quant_ng
+                # statement, pinned here; no production path imports it.
+                lines = [
+                    line for line in path.read_text(encoding="utf-8").splitlines()
+                    if "quant_ng" in line and line.lstrip().startswith(("import ", "from "))
+                ]
+                assert lines == [
+                    "from crypto_probability_engine.quant_ng import lattice  # noqa: E402"
+                ]
+                continue
             found, _used = _ng_import_violations(
                 path.read_text(encoding="utf-8"), path, _module_path(path, folder)
             )
@@ -143,6 +154,7 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
 
 
 SERVING_IMPORTER = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+REHEARSAL_DRIVER = ROOT / "scripts/migration_0019_rehearsal/rehearse_pilot.py"
 # NG3's dormant wiring (owner R3a, 2026-11-04): the only product statements that may name quant_ng.
 ALLOWED_NG_IMPORTS = {
     f"{NG_PREFIX}.pipeline_ng": frozenset({("run_pipeline_ng", None)}),
