@@ -71,7 +71,8 @@ class FakeCursor:
         elif sql == apply.CURRENT_USER_SQL:
             self.row = ("applier",)
         elif sql == apply.POST_CREATOR_MEMBERSHIPS_SQL:
-            self.rows = [(name, "applier", True, False, False) for name in
+            # grantor is the bootstrap superuser (oid 10) for PostgreSQL 16's CREATEROLE auto-grant
+            self.rows = [(name, True, True, False, False) for name in
                          ("ucpe_lattice_owner", "ucpe_lattice_space", "ucpe_lattice_writer")]
             if self.bad_post == "creator":
                 self.rows.pop()

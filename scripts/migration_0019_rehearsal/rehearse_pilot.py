@@ -185,6 +185,13 @@ class Pilot:
     def r18_apply(self) -> None:
         before = self.fingerprint()
         code, body = self.apply()
+        if code != 0 or not self.schema_exists():  # report the route's own refusal, not a later crash
+            self.add(
+                "R-18 the route applies 0019, the pilot capacity and 0020 once",
+                False,
+                {"exit": code, "outcome": body.get("outcome"), "refusals": body.get("refusals")},
+            )
+            raise RuntimeError("the route did not apply")
         with self.su.transaction():
             self.su.execute(f"SET LOCAL ROLE {OWNER}")
             capacity = self.su.execute(
@@ -282,7 +289,7 @@ class Pilot:
         )
 
     # ---- R-20..R-23: W2, the writer login (migration 0020) --------------------------------
-    def space_url(self) -> str:
+    def lattice_space_url(self) -> str:
         return self.url.replace(f"user={self.runner_name}", f"user={SPACE_LOGIN}")
 
     def r20(self) -> None:
@@ -327,7 +334,7 @@ class Pilot:
         self.su.execute(f"ALTER ROLE {SPACE_LOGIN} LOGIN")  # this scratch cluster only
         denied: dict[str, str | None] = {}
         try:
-            conn = self.psycopg.connect(self.space_url(), autocommit=True)
+            conn = self.psycopg.connect(self.lattice_space_url(), autocommit=True)
             try:
 
                 def state_of(sql: str) -> str | None:
