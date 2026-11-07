@@ -112,3 +112,16 @@ def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:
         if "migration_0019_rehearsal" in path.parts or path in allowed:
             continue
         assert "0019_lattice" not in path.read_text(encoding="utf-8", errors="replace")
+
+
+def test_both_create_checks_exclude_the_applying_sessions_temp_schema() -> None:
+    # Any TEMP holder "can CREATE" in the applying backend's own temp schema, which a pooled
+    # backend may keep (W2 review MINOR 2b; R-25 proves the behaviour on scratch). The route opens a
+    # fresh session, so the rehearsal cannot see a missing exclusion: pin it in both texts.
+    clause = "n.oid <> pg_catalog.pg_my_temp_schema()"
+    migration = (ROOT / "migrations/authored/0020_lattice_space_login.sql").read_text()
+    create_check = migration.split("has_schema_privilege('ucpe_lattice_space', n.oid, 'CREATE')", 1)
+    assert len(create_check) == 2 and clause in create_check[1].split("THEN", 1)[0]
+    route = (ROOT / "scripts/apply_migration_0019.py").read_text()
+    post = route.split("POST_CREATE_PRIVILEGES_SQL = ", 1)[1].split('"""', 2)[1]
+    assert clause in post
