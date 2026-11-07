@@ -45,6 +45,8 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
         # Join the comment lines so a phrase split across a line break is still caught (review R3).
         joined = " ".join(line.lstrip("#").strip() for line in header.splitlines())
         assert "pure rename" not in joined and "enabled only by" not in joined
+        # Location-neutral (review B1): true both before and after the enabling rename.
+        assert "waits outside" not in joined
         assert "Registered only when this file is directly under .github/workflows" in header
         assert "while it sits in ops/ng4_pilot/workflows/ GitHub never runs it" in header
         assert "production-db-owner" in header

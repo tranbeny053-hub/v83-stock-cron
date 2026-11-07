@@ -29,7 +29,8 @@ COMMIT;
 ```
 
 Fallback, if that is refused on the platform: stop the Space, keep the secret deleted, and wait (at most one hour)
-for the pooler to reap the idle server connections. Either way, verify zero sessions and re-read role configuration:
+for the pooler to reap the idle server connections. If sessions remain after that hour, stop and escalate to the
+owner: DROP ROLE does not itself need zero sessions — the zero check is this runbook's own gate, not PostgreSQL's. Either way, verify zero sessions and re-read role configuration:
 
 ```sql
 SELECT count(*) FROM pg_stat_activity WHERE usename = 'ucpe_lattice_space';

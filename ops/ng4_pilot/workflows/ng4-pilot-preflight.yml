@@ -1,9 +1,9 @@
 # Registered only when this file is directly under .github/workflows (an owner T3 renames it there unchanged); while it sits in ops/ng4_pilot/workflows/ GitHub never runs it.
 name: NG4 pilot preflight (READ ONLY)
 
-# DELIBERATELY NO automatic trigger. The authored file waits outside .github/workflows, which GitHub
-# never registers; its script names the .github path the rename creates. Enabling renames the file
-# unchanged and flips its dormancy tests (owner T3, git diff -M100%); dispatch is the owner's one-shot request.
+# DELIBERATELY NO automatic trigger: dispatch-only. GitHub registers this file only directly under
+# .github/workflows; its script names that path, so a dispatch of a copy anywhere else is refused. A dispatch
+# is the owner's request, approved in the production-db-owner Environment, and a one-shot production read.
 # This is a production READ ONLY catalog preflight for the ucpe_lattice 0019 route, not a table audit.
 #
 # WHAT IT CHECKS. scripts/ng4_pilot_preflight.py starts with SET TRANSACTION READ ONLY, reads
