@@ -26,6 +26,7 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
       - scripts/ng4_pilot_preflight.py
       - scripts/migration_0019_capacity.sql
       - ops/ng4_pilot/**
+      - .github/workflows/ng4-pilot-preflight.yml
       - src/crypto_probability_engine/persistence/reader_identity.py
       - src/crypto_probability_engine/persistence/lattice_store.py
       - src/crypto_probability_engine/lattice_pilot.py
@@ -56,7 +57,7 @@ jobs:
           check-latest: "false"
       - name: Run authored preflight scratch step
         shell: bash
-        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-preflight.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse preflight on scratch PostgreSQL (no secret)"
+        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py .github/workflows/ng4-pilot-preflight.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse preflight on scratch PostgreSQL (no secret)"
   authored-apply-rehearsal:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
