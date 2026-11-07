@@ -269,15 +269,20 @@ def main(argv=None, *, environ=None):
             )
             if args.mode == "rehearse" and env.get("SUPABASE_DB_URL"):
                 raise ValueError("REFUSED")
+            isolation = None
             if args.mode == "run":
                 isolation = enter_isolated_runtime(args.wheelhouse)
                 report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
                 attest_loaded_modules(isolation)
+            elif args.wheelhouse:
+                # As 0018: the dispatch workflow rehearses under `python -I -S -B`, where only the
+                # authenticated wheelhouse provides the driver (W2 spec review R1-1).
+                isolation = enter_isolated_runtime(args.wheelhouse)
             refusal = refuse_url(url) if args.mode == "rehearse" else None
             if refusal or not url:
                 raise ValueError("REFUSED")
-            driver = load_driver() if args.mode == "run" else __import__("psycopg")
-            if args.mode == "run":
+            driver = load_driver() if isolation is not None else __import__("psycopg")
+            if isolation is not None:
                 attest_loaded_modules(isolation)
 
             report = preflight(lambda: driver.connect(url, connect_timeout=8))

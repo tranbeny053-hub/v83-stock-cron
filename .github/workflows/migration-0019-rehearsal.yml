@@ -19,12 +19,16 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
   pull_request:
     paths:
       - migrations/**
+      - migrations/authored/0020_lattice_space_login.sql
       - scripts/migration_0019_rehearsal/**
       - scripts/apply_migration_0019.py
       - scripts/ng4_pilot_preflight.py
       - scripts/migration_0019_capacity.sql
       - ops/ng4_pilot/**
       - src/crypto_probability_engine/persistence/reader_identity.py
+      - src/crypto_probability_engine/persistence/lattice_store.py
+      - src/crypto_probability_engine/lattice_pilot.py
+      - scripts/lattice_space_credential.py
       - scripts/migration_0013_rehearsal/**
       - scripts/migration_0015_rehearsal/**
       - scripts/migration_0016_rehearsal/**
@@ -34,6 +38,42 @@ permissions:
   contents: read
 
 jobs:
+  authored-preflight-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+      - name: Install the authored workflow's exact interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+      - name: Run authored preflight scratch step
+        shell: bash
+        run: python scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-preflight.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse preflight on scratch PostgreSQL (no secret)"
+  authored-apply-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+      - name: Install the authored workflow's exact interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+      - name: Run authored apply scratch step
+        shell: bash
+        run: python scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/apply-migration-0019.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the apply on a scratch local PostgreSQL database (no secret)"
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

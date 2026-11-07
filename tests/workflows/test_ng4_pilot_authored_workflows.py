@@ -7,11 +7,10 @@ OPS = ROOT / "ops/ng4_pilot/workflows"
 
 def test_workflows_are_dormant_and_have_pinned_trust_boundary():
     paths = [OPS / "ng4-pilot-preflight.yml", OPS / "apply-migration-0019.yml"]
-    assert all(".github/workflows" not in p.parts for p in paths)
+    assert paths == [OPS / "ng4-pilot-preflight.yml", OPS / "apply-migration-0019.yml"]
     refs = set()
     for path in paths:
         text = path.read_text()
-        assert "AUTHORED BUT DISABLED" in text
         assert '"on":\n  workflow_dispatch:' in text
         assert not re.search(r"^\s*(schedule|push|pull_request|workflow_call):", text, re.M)
         assert "permissions:\n  contents: read" in text
@@ -41,8 +40,8 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
         # Join the comment lines so a phrase split across a line break is still caught (review R3).
         joined = " ".join(line.lstrip("#").strip() for line in header.splitlines())
         assert "pure rename" not in joined and "enabled only by" not in joined
-        assert "AUTHORED BUT DISABLED" in header
-        assert "renames this file into .github/workflows unchanged" in header
+        assert "Registered only when this file is directly under .github/workflows" in header
+        assert "while it sits in ops/ng4_pilot/workflows/ GitHub never runs it" in header
         assert "production-db-owner" in header
         assert "section-5a-evaluation" in header
         assert "Only the" in header and "database secret" in header

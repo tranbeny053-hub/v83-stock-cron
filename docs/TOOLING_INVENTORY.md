@@ -77,6 +77,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/resolve_outcomes.py` | ACTIVE_JOB | resolve-outcomes.yml | production DB | Invoked by .github/workflows/resolve-outcomes.yml. |
 | `scripts/resolver_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/RESOLVER_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/source_integrity_guard.py` | ACTIVE_JOB | source-integrity-guard.yml | HF Space | Invoked by .github/workflows/source-integrity-guard.yml. |
+| `scripts/lattice_space_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | Owner-only login helper for the NG4 pilot Space; docs/runbooks/NG4_PILOT_W2.md. |
 | `scripts/space_db_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/SPACE_DB_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/ux_comprehension/` | ACTIVE_OWNER_TOOL | owner-local | local | Generates docs/runbooks/UX_COMPREHENSION_CHECK.md from the real decision-view builder and frontend/app.js; tests/frontend/test_ux_comprehension_card.py keeps the card current. |
 | `scripts/validate_schemas.py` | ACTIVE_GATE | verify.sh | local | Invoked by verify.sh as an offline acceptance gate. |
@@ -114,6 +115,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `.github/workflows/migration-0016-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0016-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0017-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0017-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0018-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0018-rehearsal.yml runs its checks on pull_request. |
+| `docs/runbooks/NG4_PILOT_W2.md` | ACTIVE_OWNER_TOOL | owner procedure | production DB | W2 owner credential, disable and rollback steps for the pilot role. |
 | `.github/workflows/migration-0019-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0019-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/oos-pair-evidence.yml` | HISTORICAL_REFERENCE | workflow_dispatch | production DB | .github/workflows/oos-pair-evidence.yml says the holdout closed and re-enabling collection is an owner decision. |
 | `.github/workflows/persistence-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/persistence-rehearsal.yml runs its checks on pull_request. |

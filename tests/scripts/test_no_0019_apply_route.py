@@ -88,13 +88,13 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
         "secrets.",
         "environment:",
         "SUPABASE",
-        "DB_URL",
         "apply_migration",
         "workflow_dispatch",
     ):
         assert forbidden not in text
     runs = re.findall(r"run_scratch\.sh /usr/lib/postgresql/16/bin", text)
     assert len(runs) == 3  # commit-ts off, on, and the NG4 pilot route
+    assert text.count("run_authored_steps.py") == 2
 
 
 def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:

@@ -426,6 +426,10 @@ def main(argv=None, *, environ=None):
                 isolation = enter_isolated_runtime(args.wheelhouse)
                 report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
                 attest_loaded_modules(isolation)
+            elif args.wheelhouse:
+                # As 0018: the dispatch workflow rehearses under `python -I -S -B`, where only the
+                # authenticated wheelhouse provides the driver (W2 spec review R1-1).
+                isolation = enter_isolated_runtime(args.wheelhouse)
             variable = (
                 "MIGRATION_0019_REHEARSAL_URL" if args.mode == "rehearse" else "SUPABASE_DB_URL"
             )

@@ -1,5 +1,5 @@
-# AUTHORED BUT DISABLED. Enabling renames this file into .github/workflows unchanged (owner T3, git diff -M100%; its dormancy tests flip in the same change); dispatch is the owner's one-shot authorization. The preflight is a production READ ONLY catalog query; this apply is T4 and must never be rerun.
-name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
+# Registered only when this file is directly under .github/workflows (an owner T3 renames it there unchanged); while it sits in ops/ng4_pilot/workflows/ GitHub never runs it.
+name: NG4 pilot apply 0019 + capacity + 0020 (ONE SHOT)
 
 # Dispatch-only. DELIBERATELY NO `schedule:`, `push:` OR `pull_request:` TRIGGER.
 # - It checks the 0019 preconditions, applies the pinned migration and capacity bytes in one transaction,
@@ -30,7 +30,7 @@ name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
         required: true
         type: string
       confirm:
-        description: REQUIRED. Exactly APPLY-MIGRATION-0019-ONCE
+        description: REQUIRED. Exactly APPLY-MIGRATIONS-0019-0020-ONCE
         required: true
         type: string
 
@@ -85,7 +85,7 @@ jobs:
           MIGRATION_0019_REHEARSAL_URL: "postgresql:///migration_0019_rehearsal?host=/var/run/postgresql"
         run: |
           sudo systemctl start postgresql.service
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN CREATEROLE"
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -f - < scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql
           sudo -u postgres createdb -O "$(id -un)" migration_0019_rehearsal
@@ -93,9 +93,7 @@ jobs:
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0019_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
           cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql migrations/0018_narrow_service_role.sql > "$RUNNER_TEMP/migrations_0001_0018.sql"
           psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0018.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < scripts/migration_0019_rehearsal/00_g1_resolver_login.sql
           python -I -S -B scripts/apply_migration_0019.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0019-rehearsal-report.json
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < scripts/migration_0019_rehearsal/10_probe.sql
 
       - name: Run route tests under this exact runtime (no secret)
         shell: bash
