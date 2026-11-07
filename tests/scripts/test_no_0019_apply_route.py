@@ -88,6 +88,7 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
         "secrets.",
         "environment:",
         "SUPABASE",
+        "DB_URL",
         "apply_migration",
         "workflow_dispatch",
     ):

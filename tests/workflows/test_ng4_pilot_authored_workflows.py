@@ -7,7 +7,9 @@ OPS = ROOT / "ops/ng4_pilot/workflows"
 
 def test_workflows_are_dormant_and_have_pinned_trust_boundary():
     paths = [OPS / "ng4-pilot-preflight.yml", OPS / "apply-migration-0019.yml"]
-    assert paths == [OPS / "ng4-pilot-preflight.yml", OPS / "apply-migration-0019.yml"]
+    for path in paths:
+        assert path.is_file()
+        assert not (ROOT / ".github/workflows" / path.name).exists()
     refs = set()
     for path in paths:
         text = path.read_text()
@@ -36,6 +38,9 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
     assert not re.search(forbidden, apply, re.I)
     assert "ucpe_lattice" in preflight and "READ ONLY" in preflight
     assert "ucpe_lattice" in apply and "migration_0019_capacity.sql" in apply
+    assert "migrations/authored/0020_lattice_space_login.sql" in apply
+    assert "three exact byte sets" in apply
+    assert "two exact byte sets" not in apply
     for header in (preflight, apply):
         # Join the comment lines so a phrase split across a line break is still caught (review R3).
         joined = " ".join(line.lstrip("#").strip() for line in header.splitlines())

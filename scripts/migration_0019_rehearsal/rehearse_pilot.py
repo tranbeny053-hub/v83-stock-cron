@@ -1,24 +1,21 @@
-"""Rehearse the NG4 pilot's authored route on scratch local PostgreSQL only (R-16..R-19).
+"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-25).
 
-Run by run_scratch.sh in its pilot mode, locally or in CI:
-    rehearse_pilot.py --url <runner> --super-url <superuser> --space-url <ucpe_space_db>
-    --report <json>
-Every URL must be local (rehearse.refuse_url) and none is printed. On one fresh cluster with
-production's applied
-migrations, in this order:
-- R-17 the read-only preflight reports READY and changes nothing (catalog fingerprint equal);
-- R-18 the one-shot apply route refuses before any DDL when createrole_self_grant is 'set,
-  inherit' and when a FOR
-  ALL TABLES publication exists (nothing created either time); then applies 0019 plus the pilot
-  capacity once; the
-  capacity row is 1200/600; the runner keeps only PostgreSQL 16's ADMIN-only membership on the
-  two roles; nothing
-  outside ucpe_lattice changed; a second run refuses; the preflight now reports NOT_READY;
-- R-16 W1, both forms, each undone afterwards: GRANT ucpe_lattice_writer TO ucpe_space_db makes
-  reader_identity
-  count a membership and read NOT_DESIGNED; direct USAGE + EXECUTE to ucpe_space_db keeps that
-  count at 0 (the
-  reader scans schema public only) but 0019's own self-check raises UP019.
+Run by run_scratch.sh in its pilot mode, locally or in CI. Every URL must be local
+(rehearse.refuse_url) and none is
+printed. On one fresh cluster with production's applied migrations: R-17 the read-only preflight
+READY and
+read-only; R-18 the one-shot route's refusals before any DDL, then one apply of 0019 + the pilot
+capacity + 0020 (W2's
+login ucpe_lattice_space), a refused second run; R-19 the preflight NOT_READY after;
+R-20/R-21/R-21b W2's role, its
+live privileges, its SCRAM startup, its connection limit and a store round trip; R-22 the
+Space's reader still
+DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (UP020); R-25 the
+applier's own temp
+schema excluded from the CREATE check; R-16 both W1 forms; R-23 W2's disable (NOLOGIN, a live
+session ended by the
+non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
+memory only.
 """
 
 from __future__ import annotations
@@ -427,6 +424,9 @@ class Pilot:
              "DROP FUNCTION public.ng4_w2_probe()", "public_executable_definers"),
             ("PUBLIC CREATE on schema public", "GRANT CREATE ON SCHEMA public TO PUBLIC",
              "REVOKE CREATE ON SCHEMA public FROM PUBLIC", "public_schema_create"),
+            ("PUBLIC CREATE on another schema",
+             "CREATE SCHEMA ng4_w2_probe; GRANT CREATE ON SCHEMA ng4_w2_probe TO PUBLIC",
+             "DROP SCHEMA ng4_w2_probe", "public_any_schema_create"),
         )
         results = []
         for label, plant, undo, fact in plants:
@@ -450,8 +450,9 @@ class Pilot:
             })
         self.add(
             "R-24 each planted PUBLIC privilege (a core-table SELECT, an executable SECURITY"
-            " DEFINER function, CREATE on public) makes the preflight NOT_READY and 0020's own"
-            " self-check refuse (UP020) with nothing applied; each plant undone",
+            " DEFINER function, CREATE on public, CREATE on another schema) makes the preflight"
+            " NOT_READY and 0020's own self-check refuse (UP020) with nothing applied; each plant"
+            " undone",
             # 0020's own self-check refuses (UP020), not only the route's duplicate post-check
             all(r["preflight"] == "NOT_READY" and r["preflight_flags_it"] and r["route_exit"] != 0
                 and r["route_sqlstate"] == "UP020"
@@ -532,6 +533,17 @@ class Pilot:
             lattice.build_missed_entry(cell, instant, "FETCH_FAILED")
         )
         facts["store_capture"] = store.capture_commit_receipts(10)
+        try:  # the third writer function, called as the role: its own key-set refusal (22023)
+            row_conn = self.psycopg.connect(url, autocommit=True)
+            try:
+                row_conn.execute("SELECT ucpe_lattice.record_lattice_row('{}'::jsonb)")
+                facts["record_row_as_role"] = "ACCEPTED"
+            except self.psycopg.Error as exc:
+                facts["record_row_as_role"] = exc.sqlstate
+            finally:
+                row_conn.close()
+        except self.psycopg.OperationalError:
+            facts["record_row_as_role"] = "NO_SESSION"
         self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL")
         self.add(
             "R-21b W2 in depth: executable SECURITY DEFINER set = the writer's three; no core or"
@@ -547,6 +559,7 @@ class Pilot:
             and facts["wrong_password_refused"] is True
             and facts["fourth_session"] == "53300"
             and facts["store_missed"] == "LOGGED"
+            and facts["record_row_as_role"] == "22023"
             and isinstance(facts["store_capture"], int),
             facts,
         )
@@ -564,13 +577,21 @@ class Pilot:
             self.runner.execute(f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL")
             facts["session_survives_nologin"] = live.execute("SELECT 1").fetchone()[0] == 1
             try:
-                facts["applier_terminated"] = self.runner.execute(
+                facts["applier_terminated_plainly"] = self.runner.execute(
                     "SELECT pg_terminate_backend(%s)", (pid,)
                 ).fetchone()[0]
             except self.psycopg.Error as exc:
-                facts["applier_terminated"] = exc.sqlstate
-            if facts["applier_terminated"] is not True:  # scratch: the superuser closes it
-                self.su.execute("SELECT pg_terminate_backend(%s)", (pid,))
+                facts["applier_terminated_plainly"] = exc.sqlstate
+            # The runbook's primary path (review NOTE 2): the applier's ADMIN lets it grant the role
+            # to itself (INHERIT, no SET), end the session, and revoke the grant again.
+            with self.runner.transaction():
+                self.runner.execute(
+                    f"GRANT {SPACE_LOGIN} TO CURRENT_USER WITH INHERIT TRUE, SET FALSE"
+                )
+                facts["applier_terminated"] = self.runner.execute(
+                    "SELECT pg_terminate_backend(%s)", (pid,)
+                ).fetchone()[0]
+                self.runner.execute(f"REVOKE {SPACE_LOGIN} FROM CURRENT_USER")
         finally:
             try:
                 live.close()
@@ -598,14 +619,39 @@ class Pilot:
             self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0] == self.pre_apply_ng4
         )
         self.add(
-            "R-23 W2's disable and rollback: a live session survives NOLOGIN until terminated (the"
-            " applier's own termination recorded); zero sessions; REVOKE and DROP as the runner"
+            "R-23 W2's disable and rollback: a live session survives NOLOGIN; the non-superuser"
+            " applier cannot end it plainly (42501) but can through a temporary INHERIT self-grant,"
+            " revoked; zero sessions; REVOKE and DROP as the runner"
             " leave no role, membership or setting row; the NG4 snapshot equals the pre-apply one",
             facts["session_survives_nologin"] is True
+            and facts["applier_terminated_plainly"] == "42501"
+            and facts["applier_terminated"] is True
             and facts["sessions_left"] == 0
             and facts["rows_left"] == 0
             and facts["ng4_snapshot_equal_to_pre_apply"],
             facts,
+        )
+
+    def r25_temp_schema(self) -> None:
+        with self.runner.transaction():
+            self.runner.execute("CREATE TEMP TABLE ng4_w2_temp_probe (i int)")
+            raw = self.runner.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_namespace n"
+                " WHERE has_schema_privilege(%s, n.oid, 'CREATE'))", (WRITER,)
+            ).fetchone()[0]
+            excluded = self.runner.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_namespace n"
+                " WHERE has_schema_privilege(%s, n.oid, 'CREATE')"
+                " AND n.oid <> pg_catalog.pg_my_temp_schema())", (WRITER,)
+            ).fetchone()[0]
+            self.runner.execute("DROP TABLE ng4_w2_temp_probe")
+        self.add(
+            "R-25 with a temp schema in the applying session, any TEMP holder (here the writer;"
+            " W2's role is dropped by R-23) 'can CREATE' there; 0020's check excludes"
+            " pg_my_temp_schema(),"
+            " so it reads false",
+            raw is True and excluded is False,
+            {"without_exclusion": raw, "with_exclusion": excluded},
         )
 
     def run(self) -> None:
@@ -620,6 +666,8 @@ class Pilot:
         self.r22()
         self.r16()
         self.r23()
+        # last: a temp table leaves a pg_temp_N namespace row, which R-23's snapshot would see
+        self.r25_temp_schema()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -672,6 +720,9 @@ def main(argv: list[str] | None = None) -> int:
         "source_head": head,
         "tree_clean": tree_clean,
         "migration_sha256": hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),
+        "migration_0020_sha256": hashlib.sha256(
+            (ROOT / "migrations/authored/0020_lattice_space_login.sql").read_bytes()
+        ).hexdigest(),
         "capacity_sha256": hashlib.sha256(
             (ROOT / "scripts/migration_0019_capacity.sql").read_bytes()
         ).hexdigest(),

@@ -23,7 +23,7 @@ MIGRATION_0020 = "migrations/authored/0020_lattice_space_login.sql"
 WORKFLOW = ".github/workflows/apply-migration-0019.yml"
 MIGRATION_SHA256 = "8ae3c32968bb250f9700047309456606f8f75ac9b2580712f999b087355c9dc6"
 CAPACITY_SHA256 = "ef1fa7af0cf370604c2ad593f84833d23e5722083141b016ef7b3afff25f3b52"
-MIGRATION_0020_SHA256 = "b5d74139e3c16e5db9bf42b4fd7e201a6d626202c91cd2ad283dc17d3dda669d"
+MIGRATION_0020_SHA256 = "b4893eb5661176b71aaec248f939bbdbe0addba2485e81c86cea0a48726712af"
 CONFIRMATION = "APPLY-MIGRATIONS-0019-0020-ONCE"
 REPORT_SCHEMA = "migration-0019-apply-report.v2"
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
@@ -139,8 +139,12 @@ SELECT jsonb_build_object(
 POST_MEMBERSHIP_SQL = """SELECT pg_get_userbyid(r.oid), pg_get_userbyid(m.member),
  pg_get_userbyid(m.grantor), m.admin_option, m.inherit_option, m.set_option
  FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid
- WHERE r.rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer')
+ WHERE r.rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer','ucpe_lattice_space')
    AND m.member<>(SELECT oid FROM pg_roles WHERE rolname=current_user) ORDER BY 1"""
+POST_MEMBER_OF_SQL = """SELECT pg_get_userbyid(r.oid), pg_get_userbyid(m.member)
+ FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid
+ WHERE pg_get_userbyid(m.member) IN
+ ('ucpe_lattice_owner','ucpe_lattice_writer','ucpe_lattice_space') ORDER BY 1,2"""
 CURRENT_USER_SQL = "SELECT current_user"
 # PostgreSQL 16 records the CREATEROLE auto-grant with the bootstrap superuser (oid 10) as its
 # grantor, not the creator (verified on scratch PostgreSQL 17.11); the explicit writer grant to
@@ -175,7 +179,8 @@ SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
  ('ucpe_lattice','capture_commit_receipts','p_limit integer'))"""
 POST_CREATE_PRIVILEGES_SQL = """SELECT
  EXISTS (SELECT 1 FROM pg_namespace n
-         WHERE has_schema_privilege('ucpe_lattice_space',n.oid,'CREATE'))
+         WHERE has_schema_privilege('ucpe_lattice_space',n.oid,'CREATE')
+           AND n.oid <> pg_catalog.pg_my_temp_schema())
  OR has_database_privilege('ucpe_lattice_space',current_database(),'CREATE')"""
 POST_SHDEPEND_SQL = """
 SELECT count(*) FROM pg_shdepend d
@@ -345,6 +350,11 @@ def apply_in_one_transaction(
                 lattice_members[0][2] == applier
                 and lattice_members[0][3:] == (False, True, False)):
             raise Refused("post-check unexpected lattice member")
+        cur.execute(POST_MEMBER_OF_SQL)
+        member_of = cur.fetchall()
+        records["lattice_role_member_of"] = [list(row) for row in member_of]
+        if member_of != [("ucpe_lattice_writer", "ucpe_lattice_space")]:
+            raise Refused("post-check lattice role member-of")
         cur.execute(POST_CREATOR_MEMBERSHIPS_SQL)
         memberships = cur.fetchall()
         records["creator_memberships"] = len(memberships)

@@ -2,17 +2,19 @@
 name: NG4 pilot apply 0019 + capacity + 0020 (ONE SHOT)
 
 # Dispatch-only. DELIBERATELY NO `schedule:`, `push:` OR `pull_request:` TRIGGER.
-# - It checks the 0019 preconditions, applies the pinned migration and capacity bytes in one transaction,
+# - It checks the 0019 preconditions, applies all three pinned byte sets in one transaction,
 #   then checks the catalog postconditions and outside-schema fingerprint. A second dispatch refuses.
 # - Its pre-checks are the lattice route's own (the preflight's 0019 facts, including an empty
 #   createrole_self_grant); nothing of migrations 0016-0018 is re-checked here.
 #
-# WHAT IT CHECKS. The route pins both migrations/authored/0019_lattice_evidence.sql and
-# scripts/migration_0019_capacity.sql by digest. In one transaction it checks server 16+, absent
+# WHAT IT CHECKS. The route pins migrations/authored/0019_lattice_evidence.sql,
+# scripts/migration_0019_capacity.sql, and migrations/authored/0020_lattice_space_login.sql by digest.
+# In one transaction it checks server 16+, absent
 # ucpe_lattice schema and roles, the applier's CREATEROLE/non-superuser state, empty
-# createrole_self_grant, and the preflight's catalog safety facts; then runs the two exact byte sets.
-# Post-checks verify the lattice schema/roles, creator memberships, writer boundaries and that no
-# unrelated catalog state changed. No application rows are read. A refusal rolls the transaction back.
+# createrole_self_grant, and the preflight's catalog safety facts; then runs the three exact byte sets.
+# Post-checks verify the lattice schema/roles, the space role's attributes, settings, membership,
+# PUBLIC-inclusive least privilege, and that no unrelated catalog state changed. No application rows
+# are read. A refusal rolls the transaction back.
 #
 # TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated
 # wheelhouse; `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha.
@@ -102,7 +104,7 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_apply_migration_0019.py tests/workflows/test_ng4_pilot_authored_workflows.py
 
-      - name: Apply migration 0019 once (the ONLY step that receives the database secret)
+      - name: Apply 0019 + capacity + 0020 once (the ONLY step that receives the database secret)
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

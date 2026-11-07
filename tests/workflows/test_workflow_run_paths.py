@@ -12,8 +12,9 @@ WORKFLOW_FILES = sorted(
     [*ROOT.glob(".github/workflows/*.yml"), *ROOT.glob("ops/**/workflows/*.yml")]
 )
 PATH_RE = re.compile(
-    r"(?<![A-Za-z0-9_$/.-])((?:scripts|migrations|ops|tests|src)/[A-Za-z0-9_./+-]+)"
+    r"(?<![A-Za-z0-9_$/.-])((?:\./)?(?:scripts|migrations|ops|tests|src)/[A-Za-z0-9_./+-]+)"
 )
+MODULE_RE = re.compile(r"\bpython\s+-m\s+(scripts(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\b")
 USERLESS_URL = re.compile(r"postgresql:///[^\s\"']*")
 CREATE_RUNNER_ROLE = 'CREATE ROLE \\"$(id -un)\\"'
 
@@ -33,8 +34,13 @@ def test_every_named_repository_path_exists():
     for file in WORKFLOW_FILES:
         for named in PATH_RE.findall(_code_lines(file.read_text(encoding="utf-8"))):
             clean = named.rstrip(".,:)\"'")
+            clean = clean.removeprefix("./")
             if not (ROOT / clean).exists():
                 missing.append(f"{file.relative_to(ROOT)}: {clean}")
+        for module in MODULE_RE.findall(_code_lines(file.read_text(encoding="utf-8"))):
+            module_path = ROOT / (module.replace(".", "/") + ".py")
+            if not module_path.is_file():
+                missing.append(f"{file.relative_to(ROOT)}: {module}")
     assert missing == []
 
 
@@ -61,7 +67,9 @@ def test_a_userless_postgres_url_step_creates_the_runner_role_first():
                 env_text = " ".join(str(v) for v in (step.env or {}).values())
                 if CREATE_RUNNER_ROLE in (step.run or ""):
                     seen_role = True
-                urls = [u for u in USERLESS_URL.findall(env_text) if "user=" not in u]
+                run_text = step.run or ""
+                urls = [u for u in USERLESS_URL.findall(env_text + " " + run_text)
+                        if "user=" not in u]
                 if urls and not seen_role:
                     problems.append(f"{file.relative_to(ROOT)}: job {name}: {step.name}")
     assert problems == []

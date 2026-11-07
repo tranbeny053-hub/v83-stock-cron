@@ -68,6 +68,10 @@ class FakeCursor:
                           False, True, False)]
             if self.bad_post == "membership":
                 self.rows = []
+        elif sql == apply.POST_MEMBER_OF_SQL:
+            self.rows = [("ucpe_lattice_writer", "ucpe_lattice_space")]
+            if self.bad_post == "member_of":
+                self.rows.append(("ucpe_lattice_space", "ucpe_lattice_writer"))
         elif sql == apply.CURRENT_USER_SQL:
             self.row = ("applier",)
         elif sql == apply.POST_CREATOR_MEMBERSHIPS_SQL:
@@ -277,7 +281,7 @@ def test_lattice_space_absence_is_a_required_precheck():
 
 def test_each_postcheck_group_refuses_and_never_commits():
     for bad_post in (
-        "membership", "creator", "attributes", "settings", "relation", "definer",
+        "membership", "member_of", "creator", "attributes", "settings", "relation", "definer",
         "create", "shdepend",
     ):
         conn = FakeConnection()

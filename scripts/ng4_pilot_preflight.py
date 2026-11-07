@@ -30,6 +30,29 @@ PREREQUISITES = (
     "createrole", "not_superuser", "createrole_self_grant_empty",
     "no_bypassrls_data_role_member", "no_all_tables_publication",
 )
+PREREQUISITE_SQL = {
+    "server_16_plus": "SELECT current_setting('server_version_num')::int >= 160000",
+    "schema_absent": "SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='ucpe_lattice')",
+    "roles_absent": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles "
+        "WHERE rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer'))"
+    ),
+    "lattice_space_absent": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
+    ),
+    "createrole": "SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user",
+    "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
+    "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
+    "no_bypassrls_data_role_member": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
+        "JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
+        "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls AND NOT r.rolsuper "
+        "AND r.rolname<>current_user)"
+    ),
+    "no_all_tables_publication": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
+    ),
+}
 
 
 def refuse_url(url: str) -> str | None:
@@ -54,35 +77,13 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
         cur.execute("SET LOCAL statement_timeout = '5000'")
         cur.execute("SET LOCAL lock_timeout = '2000'")
         queries = {
-            "server_16_plus": "SELECT current_setting('server_version_num')::int >= 160000",
+            **PREREQUISITE_SQL,
             "track_commit_timestamp_on": "SELECT current_setting('track_commit_timestamp') = 'on'",
-            "schema_absent": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='ucpe_lattice')"
-            ),
-            "roles_absent": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_roles "
-                "WHERE rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer'))"
-            ),
-            "lattice_space_absent": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
-            ),
-            "createrole": "SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user",
-            "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
-            "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
             "createrole_self_grant_set": (
                 "SELECT current_setting('createrole_self_grant') LIKE '%set%'"
             ),
             "createrole_self_grant_inherit": (
                 "SELECT current_setting('createrole_self_grant') LIKE '%inherit%'"
-            ),
-            "no_bypassrls_data_role_member": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r "
-                "ON r.oid=m.member JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
-                "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls "
-                "AND NOT r.rolsuper AND r.rolname<>current_user)"
-            ),
-            "no_all_tables_publication": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
             ),
             "roles_that_can_set_role_to_me": (
                 "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
@@ -141,6 +142,11 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
                 'public',current_database(),'CREATE')""",
             "public_database_temporary": """SELECT has_database_privilege(
                 'public',current_database(),'TEMPORARY')""",
+            "public_any_schema_create": """SELECT EXISTS (SELECT 1 FROM pg_namespace n
+                WHERE has_schema_privilege('public',n.oid,'CREATE')
+                AND n.oid <> pg_catalog.pg_my_temp_schema())""",
+            "public_database_connect": """SELECT has_database_privilege(
+                'public',current_database(),'CONNECT')""",
         }
         facts = {}
         for name, sql in queries.items():
@@ -164,9 +170,11 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
     for key in ("public_relation_privileges", "public_executable_definers"):
         if facts[key] != 0:
             failing.append(key)
-    for key in ("public_schema_create", "public_database_create"):
+    for key in ("public_schema_create", "public_database_create", "public_any_schema_create"):
         if facts[key] is True:
             failing.append(key)
+    if facts["public_database_connect"] is not True:
+        failing.append("public_database_connect")
     return {
         "schema": REPORT_SCHEMA,
         "verdict": "READY" if not failing else "NOT_READY",

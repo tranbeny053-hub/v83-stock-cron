@@ -18,6 +18,8 @@ class Cursor:
         self.statements = []
         self.result = (True,)
         self.public_bad = False
+        self.public_any_schema_bad = False
+        self.public_connect_bad = False
 
     def __enter__(self):
         return self
@@ -30,6 +32,12 @@ class Cursor:
         if self.public_bad and ("has_table_privilege('public'" in sql or
                                 "has_function_privilege('public'" in sql):
             self.result = (1,)
+        elif self.public_any_schema_bad and "pg_my_temp_schema" in sql:
+            self.result = (True,)
+        elif self.public_connect_bad and "'CONNECT'" in sql:
+            self.result = (False,)
+        elif "'CONNECT'" in sql:
+            self.result = (True,)
         elif self.public_bad and ("has_schema_privilege('public'" in sql or
                                   "has_database_privilege('public'" in sql and "'CREATE'" in sql):
             self.result = (True,)
@@ -75,9 +83,10 @@ def test_first_statement_read_only_ends_rollback_and_has_no_mutation_keywords():
         "TRUNCATE",
         "COMMIT",
     )
+    stripped = [re.sub(r"'(?:[^']|'')*'", "''", statement) for statement in sql]
     assert not any(
-        re.match(rf"\s*{word}\b", statement, re.IGNORECASE)
-        for statement in sql
+        re.search(rf"\b{word}\b", statement, re.IGNORECASE)
+        for statement in stripped
         for word in forbidden
     )
     assert not any(re.search(r"\bSET\s+TRANSACTION\s+READ\s+WRITE\b", statement, re.I)
@@ -91,6 +100,8 @@ def test_preflight_prerequisites_match_route_refusing_prechecks():
     route = importlib.util.module_from_spec(route_spec)
     route_spec.loader.exec_module(route)
     assert set(preflight.PREREQUISITES) == set(route.CHECKS)
+    for key in preflight.PREREQUISITES:
+        assert preflight.PREREQUISITE_SQL[key] == route.CHECKS[key]
 
 
 def test_public_inclusive_facts_and_signal_backend_are_reported():
@@ -119,6 +130,20 @@ def test_public_least_privilege_failures_make_preflight_not_ready():
     assert report["verdict"] == "NOT_READY"
     assert {"public_relation_privileges", "public_executable_definers",
             "public_schema_create", "public_database_create"} <= set(report["failing"])
+
+
+def test_public_create_on_any_non_temp_schema_fails_preflight():
+    conn = Connection()
+    conn.cursor_obj.public_any_schema_bad = True
+    report = preflight.preflight(lambda: conn)
+    assert "public_any_schema_create" in report["failing"]
+
+
+def test_public_database_connect_is_required():
+    conn = Connection()
+    conn.cursor_obj.public_connect_bad = True
+    report = preflight.preflight(lambda: conn)
+    assert "public_database_connect" in report["failing"]
 
 
 def test_rehearsal_url_rules():

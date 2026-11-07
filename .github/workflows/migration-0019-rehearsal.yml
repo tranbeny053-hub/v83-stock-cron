@@ -21,6 +21,7 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
       - migrations/**
       - migrations/authored/0020_lattice_space_login.sql
       - scripts/migration_0019_rehearsal/**
+      - tests/workflows/_workflow_steps.py
       - scripts/apply_migration_0019.py
       - scripts/ng4_pilot_preflight.py
       - scripts/migration_0019_capacity.sql

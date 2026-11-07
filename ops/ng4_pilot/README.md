@@ -1,6 +1,6 @@
 # NG4 pilot database routes
 
-These workflows are registered only when directly under `.github/workflows` (an owner T3 renames them there unchanged); while they sit in `ops/ng4_pilot/workflows/` GitHub never runs them. Dispatch remains a separate owner authorization. The preflight is a production read. Applying 0019 is a one-shot T4 and must never be rerun.
+These workflows are registered only when directly under `.github/workflows` (an owner T3 renames them there unchanged); while they sit in `ops/ng4_pilot/workflows/` GitHub never runs them. Dispatch remains a separate owner authorization. The preflight is a production read. Applying 0019 + capacity + 0020 is a one-shot T4 and must never be rerun.
 
 `ng4-pilot-preflight.yml` runs `scripts/ng4_pilot_preflight.py`. Its first statement is `SET TRANSACTION READ ONLY`; it inspects catalogs and rolls back. READY means every first-apply condition currently checked is true. The event-trigger allowlist is empty: no Supabase platform event-trigger names are referenced by this repository, so every DDL event trigger is counted as not allowlisted.
 
