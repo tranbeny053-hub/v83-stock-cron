@@ -23,8 +23,10 @@
 -- TRUSTED ADMINS. On PostgreSQL 16+ the CREATEROLE applier keeps ADMIN on this role, so the applier, any role that can
 -- SET ROLE to it, and superusers can give it a login at any time — the same principals 0019's header names.
 --
--- ROLLBACK. A separate owner T4, never automatic: ALTER ROLE ucpe_lattice_space NOLOGIN; REVOKE ucpe_lattice_writer
--- FROM ucpe_lattice_space; DROP ROLE ucpe_lattice_space. Disabling it after the pilot's end is the first statement alone.
+-- DISABLE AND ROLLBACK (docs/runbooks/NG4_PILOT_W2.md; owner steps, never automatic). NOLOGIN stops only NEW logins:
+-- disabling after the pilot's end is ALTER ROLE ucpe_lattice_space NOLOGIN PASSWORD NULL, deleting the Space secret, and
+-- ending the role's live sessions. Rollback (a separate T4) then adds REVOKE ucpe_lattice_writer FROM
+-- ucpe_lattice_space; DROP ROLE ucpe_lattice_space.
 
 DO $$
 BEGIN
@@ -114,8 +116,11 @@ BEGIN
         RAISE EXCEPTION '0020 self-check: ucpe_lattice_space can execute a SECURITY DEFINER function beyond the three'
             USING ERRCODE = 'UP020';
     END IF;
+    -- The applying session's own temporary schema grants every right to any TEMP holder (PUBLIC's default):
+    -- it is excluded, since only that backend can use it and a pooled backend may keep one.
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n
-                WHERE pg_catalog.has_schema_privilege('ucpe_lattice_space', n.oid, 'CREATE'))
+                WHERE pg_catalog.has_schema_privilege('ucpe_lattice_space', n.oid, 'CREATE')
+                  AND n.oid <> pg_catalog.pg_my_temp_schema())
        OR pg_catalog.has_database_privilege('ucpe_lattice_space', pg_catalog.current_database(), 'CREATE') THEN
         RAISE EXCEPTION '0020 self-check: ucpe_lattice_space can CREATE in a schema or the database'
             USING ERRCODE = 'UP020';
