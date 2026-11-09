@@ -1,18 +1,20 @@
-# AUTHORED BUT DISABLED. Enabling renames this file into .github/workflows unchanged (owner T3, git diff -M100%; its dormancy tests flip in the same change); dispatch is the owner's one-shot authorization. The preflight is a production READ ONLY catalog query; this apply is T4 and must never be rerun.
-name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
+# Registered only when this file is directly under .github/workflows (an owner T3 renames it there unchanged); while it sits in ops/ng4_pilot/workflows/ GitHub never runs it.
+name: NG4 pilot apply 0019 + capacity + 0020 (ONE SHOT)
 
 # Dispatch-only. DELIBERATELY NO `schedule:`, `push:` OR `pull_request:` TRIGGER.
-# - It checks the 0019 preconditions, applies the pinned migration and capacity bytes in one transaction,
+# - It checks the 0019 preconditions, applies all three pinned byte sets in one transaction,
 #   then checks the catalog postconditions and outside-schema fingerprint. A second dispatch refuses.
 # - Its pre-checks are the lattice route's own (the preflight's 0019 facts, including an empty
 #   createrole_self_grant); nothing of migrations 0016-0018 is re-checked here.
 #
-# WHAT IT CHECKS. The route pins both migrations/authored/0019_lattice_evidence.sql and
-# scripts/migration_0019_capacity.sql by digest. In one transaction it checks server 16+, absent
+# WHAT IT CHECKS. The route pins migrations/authored/0019_lattice_evidence.sql,
+# scripts/migration_0019_capacity.sql, and migrations/authored/0020_lattice_space_login.sql by digest.
+# In one transaction it checks server 16+, absent
 # ucpe_lattice schema and roles, the applier's CREATEROLE/non-superuser state, empty
-# createrole_self_grant, and the preflight's catalog safety facts; then runs the two exact byte sets.
-# Post-checks verify the lattice schema/roles, creator memberships, writer boundaries and that no
-# unrelated catalog state changed. No application rows are read. A refusal rolls the transaction back.
+# createrole_self_grant, and the preflight's catalog safety facts; then runs the three exact byte sets.
+# Post-checks verify the lattice schema/roles, the space role's attributes, settings, membership,
+# PUBLIC-inclusive least privilege, and that no unrelated catalog state changed. No application rows
+# are read. A refusal rolls the transaction back.
 #
 # TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated
 # wheelhouse; `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha.
@@ -30,7 +32,7 @@ name: NG4 pilot apply 0019 (AUTHORED BUT DISABLED, ONE SHOT)
         required: true
         type: string
       confirm:
-        description: REQUIRED. Exactly APPLY-MIGRATION-0019-ONCE
+        description: REQUIRED. Exactly APPLY-MIGRATIONS-0019-0020-ONCE
         required: true
         type: string
 
@@ -85,7 +87,7 @@ jobs:
           MIGRATION_0019_REHEARSAL_URL: "postgresql:///migration_0019_rehearsal?host=/var/run/postgresql"
         run: |
           sudo systemctl start postgresql.service
-          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN"
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN CREATEROLE"
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -f - < scripts/migration_0013_rehearsal/00_supabase_like_roles.sql
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -f - < scripts/migration_0016_rehearsal/00_supabase_like_authenticator.sql
           sudo -u postgres createdb -O "$(id -un)" migration_0019_rehearsal
@@ -93,9 +95,7 @@ jobs:
           sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -v owner="$(id -un)" -d migration_0019_rehearsal -f - < scripts/migration_0015_rehearsal/00_supabase_like_function_grants.sql
           cat migrations/0001_init.sql migrations/0002_news.sql migrations/0003_prediction_ledger.sql migrations/0004_prediction_outcomes.sql migrations/0005_prediction_feature_snapshots.sql migrations/0006_prediction_derivatives_snapshots.sql migrations/0007_prediction_origin.sql migrations/0008_analysis_run_details.sql migrations/0009_section_5a_evaluation_seal.sql migrations/0010_legacy_table_security.sql migrations/0011_prediction_target_provenance.sql migrations/0012_prediction_resolution_status.sql migrations/0013_automation_radar_ledger.sql migrations/0014_core_evidence_invariants.sql migrations/0015_prediction_bundle_rpc.sql migrations/0016_least_privilege_roles.sql migrations/0017_forecast_bundle_rpc.sql migrations/0018_narrow_service_role.sql > "$RUNNER_TEMP/migrations_0001_0018.sql"
           psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < "$RUNNER_TEMP/migrations_0001_0018.sql"
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < scripts/migration_0019_rehearsal/00_g1_resolver_login.sql
           python -I -S -B scripts/apply_migration_0019.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=migration-0019-rehearsal-report.json
-          psql -X -q -v ON_ERROR_STOP=1 -d migration_0019_rehearsal -f - < scripts/migration_0019_rehearsal/10_probe.sql
 
       - name: Run route tests under this exact runtime (no secret)
         shell: bash
@@ -104,7 +104,7 @@ jobs:
           PYTHONNOUSERSITE: "1"
         run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_apply_migration_0019.py tests/workflows/test_ng4_pilot_authored_workflows.py
 
-      - name: Apply migration 0019 once (the ONLY step that receives the database secret)
+      - name: Apply 0019 + capacity + 0020 once (the ONLY step that receives the database secret)
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

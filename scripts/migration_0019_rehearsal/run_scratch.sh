@@ -51,6 +51,11 @@ for migration in "$ROOT"/migrations/[0-9][0-9][0-9][0-9]_*.sql; do
 done
 if [ "$MODE" = pilot ]; then
   as_super -d "$DB" -c "ALTER ROLE ucpe_space_db LOGIN"  # this scratch cluster only
+  # W2: the lattice login authenticates by scram-sha-256 here (first match wins), as a password login would in
+  # production; every other local connection stays trust. Scratch only.
+  { printf 'local all ucpe_lattice_space scram-sha-256\n'; cat "$WORK/data/pg_hba.conf"; } >"$WORK/pg_hba.new"
+  mv "$WORK/pg_hba.new" "$WORK/data/pg_hba.conf"
+  "$BIN/pg_ctl" -D "$WORK/data" reload >/dev/null
   "${PYTHON:-python}" "$ROOT/scripts/migration_0019_rehearsal/rehearse_pilot.py" \
     --url "postgresql:///$DB?host=$SOCKET&user=$OWNER" \
     --super-url "postgresql:///$DB?host=$SOCKET&user=postgres" \

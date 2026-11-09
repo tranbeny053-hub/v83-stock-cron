@@ -55,7 +55,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/migration_0018_rehearsal/` | REHEARSAL | migration-0018-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/migration-0018-rehearsal.yml. |
 | `scripts/migration_0019_capacity.sql` | ACTIVE_OWNER_TOOL | none (authored; run only inside the disabled one-shot scripts/apply_migration_0019.py route) | production DB | NG4 pilot capacity 1200/600 (owner 2026-11-06), the owner hand-off and 0019's self-check; never applied. |
 | `scripts/ng4_pilot_preflight.py` | ACTIVE_OWNER_TOOL | ops/ng4_pilot/workflows/ng4-pilot-preflight.yml (authored, disabled) | production DB | Catalog-only, read-only first-apply preflight for the dormant NG4 pilot; rehearse mode accepts only local scratch PostgreSQL. |
-| `scripts/apply_migration_0019.py` | ACTIVE_OWNER_TOOL | ops/ng4_pilot/workflows/apply-migration-0019.yml (authored, disabled) | production DB | One-shot 0019 plus the pinned NG4 capacity SQL route; exact bytes, catalog checks, and transaction rollback on refusal. |
+| `scripts/apply_migration_0019.py` | ACTIVE_OWNER_TOOL | ops/ng4_pilot/workflows/apply-migration-0019.yml (authored, disabled) | production DB | One-shot 0019 + capacity + 0020 route (three pinned byte sets); exact bytes, catalog checks, and transaction rollback on refusal. |
 | `scripts/migration_0019_rehearsal/` | REHEARSAL | migration-0019-rehearsal.yml | scratch PG | Scratch cluster driver and probes invoked by .github/workflows/migration-0019-rehearsal.yml (NG4; migration 0019 authored, not applied). |
 | `scripts/news_live_smoke.py` | ACTIVE_OWNER_TOOL | owner-local | external read-only | scripts/news_live_smoke.py documents or exercises this opt-in owner CLI. |
 | `scripts/persistence_rehearsal/` | REHEARSAL | persistence-rehearsal.yml | scratch PG | Scratch fixtures/probes invoked by .github/workflows/persistence-rehearsal.yml. |
@@ -77,6 +77,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `scripts/resolve_outcomes.py` | ACTIVE_JOB | resolve-outcomes.yml | production DB | Invoked by .github/workflows/resolve-outcomes.yml. |
 | `scripts/resolver_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/RESOLVER_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/source_integrity_guard.py` | ACTIVE_JOB | source-integrity-guard.yml | HF Space | Invoked by .github/workflows/source-integrity-guard.yml. |
+| `scripts/lattice_space_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | Owner-only login helper for the NG4 pilot Space; docs/runbooks/NG4_PILOT_W2.md. |
 | `scripts/space_db_credential.py` | ACTIVE_OWNER_TOOL | owner-local | local | docs/runbooks/SPACE_DB_CUTOVER.md documents or exercises this opt-in owner CLI. |
 | `scripts/ux_comprehension/` | ACTIVE_OWNER_TOOL | owner-local | local | Generates docs/runbooks/UX_COMPREHENSION_CHECK.md from the real decision-view builder and frontend/app.js; tests/frontend/test_ux_comprehension_card.py keeps the card current. |
 | `scripts/validate_schemas.py` | ACTIVE_GATE | verify.sh | local | Invoked by verify.sh as an offline acceptance gate. |
@@ -114,6 +115,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `.github/workflows/migration-0016-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0016-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0017-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0017-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/migration-0018-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0018-rehearsal.yml runs its checks on pull_request. |
+| `docs/runbooks/NG4_PILOT_W2.md` | ACTIVE_OWNER_TOOL | owner procedure | production DB | W2 owner credential, disable and rollback steps for the pilot role. |
 | `.github/workflows/migration-0019-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/migration-0019-rehearsal.yml runs its checks on pull_request. |
 | `.github/workflows/oos-pair-evidence.yml` | HISTORICAL_REFERENCE | workflow_dispatch | production DB | .github/workflows/oos-pair-evidence.yml says the holdout closed and re-enabling collection is an owner decision. |
 | `.github/workflows/persistence-rehearsal.yml` | ACTIVE_GATE | pull_request | scratch PG | .github/workflows/persistence-rehearsal.yml runs its checks on pull_request. |
@@ -150,7 +152,7 @@ tests/docs/test_tooling_inventory.py keeps the tables complete and checks classe
 | `ops/section_5a_evaluator_requirements.lock` | ACTIVE_PIN | core-write-inventory.yml; isolated route bootstrap | local | Read by .github/workflows/core-write-inventory.yml. |
 | `ops/ng4_pilot/README.md` | ACTIVE_OWNER_TOOL | documentation for the authored NG4 pilot routes | local | Documents the disabled preflight and one-shot apply boundary, route activation, digest pins, and local rehearsal interface. |
 | `ops/ng4_pilot/workflows/ng4-pilot-preflight.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED catalog-only pilot preflight; the authored file waits outside .github/workflows, which GitHub never registers; its script names the .github path the rename creates; enabling renames the file unchanged and flips its dormancy tests (a T3). |
-| `ops/ng4_pilot/workflows/apply-migration-0019.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED, one-shot apply of 0019 plus capacity; the authored file waits outside .github/workflows, which GitHub never registers; its script names the .github path the rename creates; enabling renames the file unchanged and flips its dormancy tests (a T3). |
+| `ops/ng4_pilot/workflows/apply-migration-0019.yml` | ACTIVE_OWNER_TOOL | authored workflow; not registered by GitHub | production DB | AUTHORED BUT DISABLED, one-shot apply of 0019 + capacity + 0020; the authored file waits outside .github/workflows, which GitHub never registers; its script names the .github path the rename creates; enabling renames the file unchanged and flips its dormancy tests (a T3). |
 | `ops/section_5a_red_tests_pin.json` | ACTIVE_PIN | tests only | local | Read by tests/oos/evaluation/test_red_tests_are_unedited.py. |
 
 ## Runbooks

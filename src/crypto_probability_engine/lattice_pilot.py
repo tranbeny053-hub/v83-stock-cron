@@ -11,7 +11,8 @@ from typing import Any
 from crypto_probability_engine.quant_ng import lattice, reference, reference_v1d, windows
 from crypto_probability_engine.telemetry.events import EVENTS_SINK
 
-WRITER_DB_URL_ENV: str | None = None  # W1 HELD, W2 not ruled
+WRITER_DB_URL_ENV: str | None = None  # W2 approved (owner 2026-11-07);
+# set to UCPE_LATTICE_DB_URL only in the switch-ON change
 GRACE_SECONDS = 20
 STEP_TIMEOUT_SECONDS = 120
 STOP_TIMEOUT_SECONDS = 10

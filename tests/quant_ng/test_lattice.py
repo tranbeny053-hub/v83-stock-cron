@@ -278,6 +278,10 @@ def test_lattice_guards() -> None:
             # the one importer of the lattice and its store.
             if path == module / "crypto_probability_engine/lattice_pilot.py":
                 continue
+            # W2's scratch rehearsal driver (owner 2026-11-07) round-trips the store as the
+            # lattice login on scratch PostgreSQL only; it is no production path.
+            if path == scripts / "migration_0019_rehearsal/rehearse_pilot.py":
+                continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom):
