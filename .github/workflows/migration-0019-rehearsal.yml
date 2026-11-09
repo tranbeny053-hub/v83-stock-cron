@@ -56,7 +56,7 @@ jobs:
           check-latest: "false"
       - name: Run authored preflight scratch step
         shell: bash
-        run: python scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-preflight.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse preflight on scratch PostgreSQL (no secret)"
+        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-preflight.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse preflight on scratch PostgreSQL (no secret)"
   authored-apply-rehearsal:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -74,7 +74,7 @@ jobs:
           check-latest: "false"
       - name: Run authored apply scratch step
         shell: bash
-        run: python scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/apply-migration-0019.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the apply on a scratch local PostgreSQL database (no secret)"
+        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/apply-migration-0019.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the apply on a scratch local PostgreSQL database (no secret)"
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

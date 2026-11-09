@@ -11,6 +11,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The selected steps run the authored scripts' checkout audit, which refuses any bytecode cache in
+# the checkout; this runner's own import of tests/ must not write one (PR #332's first CI run).
+sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:  # run as a script in CI: the repository root holds tests/
     sys.path.insert(0, str(ROOT))
