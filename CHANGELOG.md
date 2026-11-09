@@ -2,6 +2,25 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-06 - NG4: the TEST_ONLY pilot's dormant build (on main, not released)
+
+It records #329. Nothing in this entry is released.
+
+Added:
+- #329: the owner's pilot values (SOL/USDT on Binance, 15m/1H/4H/1D, 14 days with a day-7 checkpoint, capacity
+  1,200 with a warning at 600, and test-only placeholder priors of 0.5 that are never statistical evidence) in
+  `quant_ng/lattice.py`, with a pilot mode that gives each lattice slot exactly one entry; a dormant runner,
+  `lattice_pilot.py`, started from one call in the app's startup that does nothing while the lattice is OFF; and a
+  read-only production preflight and a one-shot apply route for migration 0019, both authored but disabled (their
+  workflows sit outside `.github/workflows`, so GitHub cannot run them).
+- The pull-request rehearsal of migration 0019 gains a third run that rehearses that route on scratch PostgreSQL 16.
+
+Notes:
+- Publishing is not activation: the lattice is OFF, no start is set, no writer is configured, no migration is applied
+  and no workflow is enabled.
+- Found after the merge: neither authored workflow's scratch step could run as published; the repair is in the next
+  change, before either is enabled.
+
 ## 2026-11-05 - NG4: the dormant lattice and its separate store (on main, not released)
 
 It records #326. Nothing in this entry is released.
