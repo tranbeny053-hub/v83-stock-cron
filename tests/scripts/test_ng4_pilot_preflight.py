@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 from pathlib import Path
 
@@ -16,6 +17,9 @@ class Cursor:
     def __init__(self):
         self.statements = []
         self.result = (True,)
+        self.public_bad = False
+        self.public_any_schema_bad = False
+        self.public_connect_bad = False
 
     def __enter__(self):
         return self
@@ -25,7 +29,22 @@ class Cursor:
 
     def execute(self, sql, params=()):
         self.statements.append((sql, params))
-        self.result = (0 if "count(*)" in sql.lower() else True,)
+        if self.public_bad and ("has_table_privilege('public'" in sql or
+                                "has_function_privilege('public'" in sql):
+            self.result = (1,)
+        elif self.public_any_schema_bad and "pg_my_temp_schema" in sql:
+            self.result = (True,)
+        elif self.public_connect_bad and "'CONNECT'" in sql:
+            self.result = (False,)
+        elif "'CONNECT'" in sql:
+            self.result = (True,)
+        elif self.public_bad and ("has_schema_privilege('public'" in sql or
+                                  "has_database_privilege('public'" in sql and "'CREATE'" in sql):
+            self.result = (True,)
+        elif "has_schema_privilege('public'" in sql or "has_database_privilege('public'" in sql:
+            self.result = (False,)
+        else:
+            self.result = (0 if "count(*)" in sql.lower() else True,)
 
     def fetchone(self):
         return self.result
@@ -50,6 +69,7 @@ def test_first_statement_read_only_ends_rollback_and_has_no_mutation_keywords():
     preflight.preflight(lambda: conn)
     sql = [q for q, _ in conn.cursor_obj.statements]
     assert sql[0] == "SET TRANSACTION READ ONLY"
+    assert sql[1:3] == ["SET LOCAL statement_timeout = '5000'", "SET LOCAL lock_timeout = '2000'"]
     assert sql[-1] == "ROLLBACK"
     forbidden = (
         "INSERT",
@@ -63,11 +83,67 @@ def test_first_statement_read_only_ends_rollback_and_has_no_mutation_keywords():
         "TRUNCATE",
         "COMMIT",
     )
+    stripped = [re.sub(r"'(?:[^']|'')*'", "''", statement) for statement in sql]
     assert not any(
         re.search(rf"\b{word}\b", statement, re.IGNORECASE)
-        for statement in sql
+        for statement in stripped
         for word in forbidden
     )
+    assert not any(re.search(r"\bSET\s+TRANSACTION\s+READ\s+WRITE\b", statement, re.I)
+                   for statement in sql)
+
+
+def test_preflight_prerequisites_match_route_refusing_prechecks():
+    route_spec = importlib.util.spec_from_file_location(
+        "apply_0019_for_parity", ROOT / "scripts/apply_migration_0019.py"
+    )
+    route = importlib.util.module_from_spec(route_spec)
+    route_spec.loader.exec_module(route)
+    assert set(preflight.PREREQUISITES) == set(route.CHECKS)
+    for key in preflight.PREREQUISITES:
+        assert preflight.PREREQUISITE_SQL[key] == route.CHECKS[key]
+
+
+def test_public_inclusive_facts_and_signal_backend_are_reported():
+    conn = Connection()
+    report = preflight.preflight(lambda: conn)
+    facts = report["facts"]
+    assert {"lattice_space_absent", "applier_signal_backend", "public_relation_privileges",
+            "public_executable_definers", "public_schema_create", "public_database_create",
+            "public_database_temporary"} <= facts.keys()
+    queries = "\n".join(sql for sql, _ in conn.cursor_obj.statements)
+    assert "has_table_privilege('public'" in queries
+    assert "has_any_column_privilege('public'" in queries
+    assert "has_sequence_privilege('public'" in queries
+    assert "has_function_privilege('public'" in queries
+    assert "has_schema_privilege('public'" in queries
+    assert "has_database_privilege(" in queries and "'public',current_database()" in queries
+    encoded = json.dumps(report)
+    assert "postgresql" not in encoded.lower()
+    assert "postgresql://" not in encoded.lower()
+
+
+def test_public_least_privilege_failures_make_preflight_not_ready():
+    conn = Connection()
+    conn.cursor_obj.public_bad = True
+    report = preflight.preflight(lambda: conn)
+    assert report["verdict"] == "NOT_READY"
+    assert {"public_relation_privileges", "public_executable_definers",
+            "public_schema_create", "public_database_create"} <= set(report["failing"])
+
+
+def test_public_create_on_any_non_temp_schema_fails_preflight():
+    conn = Connection()
+    conn.cursor_obj.public_any_schema_bad = True
+    report = preflight.preflight(lambda: conn)
+    assert "public_any_schema_create" in report["failing"]
+
+
+def test_public_database_connect_is_required():
+    conn = Connection()
+    conn.cursor_obj.public_connect_bad = True
+    report = preflight.preflight(lambda: conn)
+    assert "public_database_connect" in report["failing"]
 
 
 def test_rehearsal_url_rules():
@@ -129,3 +205,31 @@ def test_a_dispatch_of_the_renamed_workflow_passes_and_the_authored_path_refuses
         pass
     else:
         raise AssertionError("a dispatch from the authored ops/ path was accepted")
+
+
+def test_rehearse_with_a_wheelhouse_loads_the_driver_from_it(monkeypatch):
+    calls = []
+
+    class Isolation:
+        installed_files_sha256 = "a" * 64
+
+    class Stop(Exception):
+        pass
+
+    def driver():
+        calls.append("driver")
+        def connect(*_args, **_kwargs):
+            raise Stop()
+
+        return type("D", (), {"connect": staticmethod(connect)})
+
+    monkeypatch.setattr(
+        preflight, "enter_isolated_runtime", lambda w: calls.append(("enter", w)) or Isolation()
+    )
+    monkeypatch.setattr(
+        preflight, "attest_loaded_modules", lambda isolation: calls.append("attest") or 1
+    )
+    monkeypatch.setattr(preflight, "load_driver", driver)
+    env = {"NG4_PILOT_PREFLIGHT_REHEARSAL_URL": "postgresql:///scratch?host=/tmp"}
+    preflight.main(["--mode=rehearse", "--wheelhouse=/tmp/wheels"], environ=env)
+    assert calls[:3] == [("enter", "/tmp/wheels"), "driver", "attest"]

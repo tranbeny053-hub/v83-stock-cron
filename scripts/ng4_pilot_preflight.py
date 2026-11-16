@@ -25,6 +25,34 @@ SUPABASE_EVENT_TRIGGERS: tuple[
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 SCRIPT = "scripts/ng4_pilot_preflight.py"
+PREREQUISITES = (
+    "server_16_plus", "schema_absent", "roles_absent", "lattice_space_absent",
+    "createrole", "not_superuser", "createrole_self_grant_empty",
+    "no_bypassrls_data_role_member", "no_all_tables_publication",
+)
+PREREQUISITE_SQL = {
+    "server_16_plus": "SELECT current_setting('server_version_num')::int >= 160000",
+    "schema_absent": "SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='ucpe_lattice')",
+    "roles_absent": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles "
+        "WHERE rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer'))"
+    ),
+    "lattice_space_absent": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
+    ),
+    "createrole": "SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user",
+    "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
+    "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
+    "no_bypassrls_data_role_member": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
+        "JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
+        "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls AND NOT r.rolsuper "
+        "AND r.rolname<>current_user)"
+    ),
+    "no_all_tables_publication": (
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
+    ),
+}
 
 
 def refuse_url(url: str) -> str | None:
@@ -46,32 +74,16 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
     captured = {} if captured is None else captured
     with open_connection() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SET LOCAL statement_timeout = '5000'")
+        cur.execute("SET LOCAL lock_timeout = '2000'")
         queries = {
-            "server_16_plus": "SELECT current_setting('server_version_num')::int >= 160000",
+            **PREREQUISITE_SQL,
             "track_commit_timestamp_on": "SELECT current_setting('track_commit_timestamp') = 'on'",
-            "schema_absent": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='ucpe_lattice')"
-            ),
-            "roles_absent": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_roles "
-                "WHERE rolname IN ('ucpe_lattice_owner','ucpe_lattice_writer'))"
-            ),
-            "createrole": "SELECT rolcreaterole FROM pg_roles WHERE rolname=current_user",
-            "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
             "createrole_self_grant_set": (
                 "SELECT current_setting('createrole_self_grant') LIKE '%set%'"
             ),
             "createrole_self_grant_inherit": (
                 "SELECT current_setting('createrole_self_grant') LIKE '%inherit%'"
-            ),
-            "no_bypassrls_data_role_member": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r "
-                "ON r.oid=m.member JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
-                "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls "
-                "AND NOT r.rolsuper AND r.rolname<>current_user)"
-            ),
-            "no_all_tables_publication": (
-                "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
             ),
             "roles_that_can_set_role_to_me": (
                 "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
@@ -109,6 +121,32 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             "ucpe_lattice_space_exists": (
                 "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"
             ),
+            "applier_signal_backend": (
+                "SELECT pg_has_role(current_user,'pg_signal_backend','USAGE')"
+            ),
+            "public_relation_privileges": """SELECT count(*) FROM pg_class c
+                JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+                AND c.relkind IN ('r','p','v','m','f','S')
+                AND (has_table_privilege('public',c.oid,
+                     'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                OR has_any_column_privilege('public',c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+                OR CASE WHEN c.relkind='S' THEN
+                    has_sequence_privilege('public',c.oid,'USAGE,SELECT,UPDATE')
+                ELSE false END)""",
+            "public_executable_definers": """SELECT count(*) FROM pg_proc p
+                JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prosecdef
+                AND has_schema_privilege('public',n.oid,'USAGE')
+                AND has_function_privilege('public',p.oid,'EXECUTE')""",
+            "public_schema_create": "SELECT has_schema_privilege('public','public','CREATE')",
+            "public_database_create": """SELECT has_database_privilege(
+                'public',current_database(),'CREATE')""",
+            "public_database_temporary": """SELECT has_database_privilege(
+                'public',current_database(),'TEMPORARY')""",
+            "public_any_schema_create": """SELECT EXISTS (SELECT 1 FROM pg_namespace n
+                WHERE has_schema_privilege('public',n.oid,'CREATE')
+                AND n.oid <> pg_catalog.pg_my_temp_schema())""",
+            "public_database_connect": """SELECT has_database_privilege(
+                'public',current_database(),'CONNECT')""",
         }
         facts = {}
         for name, sql in queries.items():
@@ -128,18 +166,15 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             facts[name] = row[0] if row else 0
             captured[name] = facts[name]
         cur.execute("ROLLBACK")
-    prerequisites = (
-        "server_16_plus",
-        "schema_absent",
-        "roles_absent",
-        "createrole",
-        "not_superuser",
-        "no_bypassrls_data_role_member",
-        "no_all_tables_publication",
-    )
-    failing = [key for key in prerequisites if facts[key] is not True]
-    if facts["createrole_self_grant_set"] or facts["createrole_self_grant_inherit"]:
-        failing.append("createrole_self_grant_empty")
+    failing = [key for key in PREREQUISITES if facts[key] is not True]
+    for key in ("public_relation_privileges", "public_executable_definers"):
+        if facts[key] != 0:
+            failing.append(key)
+    for key in ("public_schema_create", "public_database_create", "public_any_schema_create"):
+        if facts[key] is True:
+            failing.append(key)
+    if facts["public_database_connect"] is not True:
+        failing.append("public_database_connect")
     return {
         "schema": REPORT_SCHEMA,
         "verdict": "READY" if not failing else "NOT_READY",
@@ -242,15 +277,20 @@ def main(argv=None, *, environ=None):
             )
             if args.mode == "rehearse" and env.get("SUPABASE_DB_URL"):
                 raise ValueError("REFUSED")
+            isolation = None
             if args.mode == "run":
                 isolation = enter_isolated_runtime(args.wheelhouse)
                 report["dispatch"] = attest_dispatch(env, args.expected_sha, isolation)
                 attest_loaded_modules(isolation)
+            elif args.wheelhouse:
+                # As 0018: the dispatch workflow rehearses under `python -I -S -B`, where only the
+                # authenticated wheelhouse provides the driver (W2 spec review R1-1).
+                isolation = enter_isolated_runtime(args.wheelhouse)
             refusal = refuse_url(url) if args.mode == "rehearse" else None
             if refusal or not url:
                 raise ValueError("REFUSED")
-            driver = load_driver() if args.mode == "run" else __import__("psycopg")
-            if args.mode == "run":
+            driver = load_driver() if isolation is not None else __import__("psycopg")
+            if isolation is not None:
                 attest_loaded_modules(isolation)
 
             report = preflight(lambda: driver.connect(url, connect_timeout=8))

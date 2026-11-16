@@ -148,7 +148,9 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # same pins.
     # 101 -> 104 (NG4's migration 0019, authored, not applied): its pull-request rehearsal adds the
     # same three, at the same pins.
-    assert len(refs) == 104
+    # 104 -> 108 (NG4 W2): the same rehearsal adds two jobs that run the authored workflows'
+    # scratch steps, each with checkout and setup-python at the same pins.
+    assert len(refs) == 108
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:

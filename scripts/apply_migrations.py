@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS_DIR = ROOT / "migrations"
-NOT_AUTHORIZED = frozenset({"0019_lattice_evidence.sql"})
+NOT_AUTHORIZED = frozenset({"0019_lattice_evidence.sql", "0020_lattice_space_login.sql"})
 
 
 def build_parser() -> argparse.ArgumentParser:

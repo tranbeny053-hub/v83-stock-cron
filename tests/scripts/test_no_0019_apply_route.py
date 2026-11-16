@@ -26,6 +26,30 @@ def test_the_number_is_reserved_until_the_t4_move() -> None:
     assert 19 not in numbers  # a later root migration may exist; the T4 route orders 0019's move
 
 
+def test_0020_remains_authored_and_outside_root_migration_globs() -> None:
+    assert (ROOT / "migrations/authored/0020_lattice_space_login.sql").is_file()
+    assert not list((ROOT / "migrations").glob("0020*"))
+    numbers = [int(p.name[:4]) for p in (ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")]
+    assert 20 not in numbers
+
+
+def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> None:
+    allowed = {
+        ROOT / "scripts/apply_migration_0019.py",
+        ROOT / "scripts/apply_migrations.py",
+        ROOT / "scripts/migration_0019_rehearsal",
+    }
+    mentions = []
+    for path in (ROOT / "scripts").rglob("*"):
+        if not path.is_file() or path.suffix not in {".py", ".sh", ".sql"}:
+            continue
+        if "0020_lattice" in path.read_text(encoding="utf-8", errors="replace"):
+            mentions.append(path)
+    assert all(any(path == item or item in path.parents for item in allowed) for path in mentions)
+    general = (ROOT / "scripts/apply_migrations.py").read_text(encoding="utf-8")
+    assert '"0020_lattice_space_login.sql"' in general
+
+
 def test_no_enabled_apply_route_exists() -> None:
     # Since the NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06) the one-shot apply route is
     # AUTHORED BUT DISABLED: the authored file waits outside .github/workflows, which GitHub never
@@ -71,6 +95,7 @@ def test_the_rehearsal_workflow_is_scratch_only() -> None:
         assert forbidden not in text
     runs = re.findall(r"run_scratch\.sh /usr/lib/postgresql/16/bin", text)
     assert len(runs) == 3  # commit-ts off, on, and the NG4 pilot route
+    assert text.count("run_authored_steps.py") == 2
 
 
 def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:
@@ -87,3 +112,16 @@ def test_no_script_outside_the_rehearsal_names_the_authored_file() -> None:
         if "migration_0019_rehearsal" in path.parts or path in allowed:
             continue
         assert "0019_lattice" not in path.read_text(encoding="utf-8", errors="replace")
+
+
+def test_both_create_checks_exclude_the_applying_sessions_temp_schema() -> None:
+    # Any TEMP holder "can CREATE" in the applying backend's own temp schema, which a pooled
+    # backend may keep (W2 review MINOR 2b; R-25 proves the behaviour on scratch). The route opens a
+    # fresh session, so the rehearsal cannot see a missing exclusion: pin it in both texts.
+    clause = "n.oid <> pg_catalog.pg_my_temp_schema()"
+    migration = (ROOT / "migrations/authored/0020_lattice_space_login.sql").read_text()
+    create_check = migration.split("has_schema_privilege('ucpe_lattice_space', n.oid, 'CREATE')", 1)
+    assert len(create_check) == 2 and clause in create_check[1].split("THEN", 1)[0]
+    route = (ROOT / "scripts/apply_migration_0019.py").read_text()
+    post = route.split("POST_CREATE_PRIVILEGES_SQL = ", 1)[1].split('"""', 2)[1]
+    assert clause in post

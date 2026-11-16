@@ -143,6 +143,11 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
 
 
 SERVING_IMPORTER = ROOT / "src/crypto_probability_engine/api/analysis_service.py"
+REHEARSAL_DRIVER = ROOT / "scripts/migration_0019_rehearsal/rehearse_pilot.py"
+REHEARSAL_QUANT_IMPORT = (
+    "crypto_probability_engine.quant_ng",
+    (("lattice", None),),
+)
 # NG3's dormant wiring (owner R3a, 2026-11-04): the only product statements that may name quant_ng.
 ALLOWED_NG_IMPORTS = {
     f"{NG_PREFIX}.pipeline_ng": frozenset({("run_pipeline_ng", None)}),
@@ -179,9 +184,8 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
     """Every quant_ng name a product file imports, and the allowed statements it used.
 
     Every import statement's names are resolved by the helper (absolute, relative and
-    parent-package forms alike). The only exemption is each ALLOWED_NG_IMPORTS statement, exactly
-    (level 0, exactly those names, no alias), at most once, in SERVING_IMPORTER. The real-file
-    guard and the negative tests below call this one function.
+    parent-package forms alike). Exemptions are exact import nodes and may occur at most once.
+    The real-file guard and the negative tests below call this one function.
     """
     violations: list[str] = []
     used: set[str] = set()
@@ -213,13 +217,33 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
                 isinstance(k, tuple) and k[0] == PILOT_IMPORT_ALLOWANCE[0] for k in used
             )
         )
+        rehearsal_exempt = (
+            path == REHEARSAL_DRIVER
+            and isinstance(node, ast.ImportFrom)
+            and node.level == 0
+            and node.module == REHEARSAL_QUANT_IMPORT[0]
+            and tuple((a.name, a.asname) for a in node.names) == REHEARSAL_QUANT_IMPORT[1]
+            and REHEARSAL_QUANT_IMPORT[0] not in used
+        )
         if exempt:
             used.add(node.module)
         elif pilot_exempt:
             used.add((PILOT_IMPORT_ALLOWANCE[0], node.module))
+        elif rehearsal_exempt:
+            used.add(REHEARSAL_QUANT_IMPORT[0])
         else:
             violations.extend(names)
     return violations, used
+
+
+def test_rehearsal_quant_import_allowance_is_one_exact_node():
+    allowed = "from crypto_probability_engine.quant_ng import lattice"
+    assert _ng_import_violations(allowed, REHEARSAL_DRIVER, "rehearse_pilot")[0] == []
+    assert _ng_import_violations(
+        allowed + "\nfrom crypto_probability_engine.quant_ng import evidence",
+        REHEARSAL_DRIVER,
+        "rehearse_pilot",
+    )[0]
 
 
 def test_quant_ng_avoids_forbidden_internal_dependencies() -> None:
