@@ -2,14 +2,15 @@
 
 Updated: 2026-11-16 (**W2 IS ON MAIN (#332 → M65 7466c77e): MIGRATION 0020 (THE NG4 PILOT'S SEPARATE LEAST-PRIVILEGE
 LOGIN ucpe_lattice_space) IS AUTHORED, NOT APPLIED; THE ONE-SHOT ROUTE WOULD APPLY 0019, THE PILOT CAPACITY AND 0020
-IN ONE TRANSACTION; NO ROLE EXISTS IN PRODUCTION, NO CREDENTIAL IS ISSUED, NOTHING IS GRANTED. THE READ-ONLY
-PREFLIGHT IS REGISTERED (#333 → M66 4b44efb2: .github/workflows/ng4-pilot-preflight.yml, DISPATCH-ONLY, BEHIND THE
-production-db-owner ENVIRONMENT) AND HAS NEVER BEEN DISPATCHED: NO PRODUCTION READ HAS HAPPENED. THE APPLY WORKFLOW
-STAYS AUTHORED BUT DISABLED (ops/ng4_pilot/workflows/). THE CHANGELOG RECORDS #329 (#331 → M64 2f525372).
-LATTICE_ENABLED = False, PILOT_START_UTC = None, WRITER_DB_URL_ENV = None. NO PRODUCTION DATABASE ACCESS (SCRATCH
-POSTGRESQL ONLY), NO NETWORK, NO PILOT. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN
-CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY
-CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+IN ONE TRANSACTION; NO LATTICE ROLE EXISTS IN PRODUCTION (0019 AND 0020 NEVER APPLIED), NO CREDENTIAL IS ISSUED,
+NOTHING IS GRANTED. THE READ-ONLY PREFLIGHT IS REGISTERED (#333 → M66 4b44efb2:
+.github/workflows/ng4-pilot-preflight.yml, DISPATCH-ONLY, BEHIND THE production-db-owner ENVIRONMENT) AND HAS NEVER
+BEEN DISPATCHED: NO PRODUCTION READ HAS HAPPENED. THE APPLY WORKFLOW STAYS AUTHORED BUT DISABLED
+(ops/ng4_pilot/workflows/). THE CHANGELOG RECORDS #329 (#331 → M64 2f525372). LATTICE_ENABLED = False,
+PILOT_START_UTC = None, WRITER_DB_URL_ENV = None. NO PRODUCTION DATABASE ACCESS (SCRATCH POSTGRESQL ONLY), NO
+NETWORK, NO PILOT. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST
+NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR
+DIRECTIONAL PERMISSION IS REACHABLE.**
 - The owner (verbatim below), 2026-11-10: the first T3 for this batch, GitHub-only, "CHANGELOG@abda2211, W2@88f5e238,
   ENABLE preflight@446439a8, STATE-last"; then 2026-11-16, the T3 for the repaired heads (v2: W2@b4a93895 as a
   fast-forward of #332, ENABLE preflight@5432619b, STATE-last); before enabling, verify the workflow's triggers,
@@ -18,25 +19,27 @@ CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
 - **The authorities for the build** (not reproduced here): the owner's W2 and PREFLIGHT clauses of 2026-11-07 (in the
   2026-11-07 block below): W2 approved as the design direction, LOCAL T0–T2 and scratch only; the preflight's
   enabling change prepared LOCAL, not enabled until a later explicit authorization — this T3.
-- **BEFORE ENABLING, VERIFIED** (read-only GitHub API reads; .work/ng4_w2_t3_20261110/PRE_ENABLE_BOUNDARY_VERIFY.md):
-  the preflight's only trigger is workflow_dispatch; all 17 workflows that read the production database secret are
+- **BEFORE ENABLING, VERIFIED** (read-only GitHub API reads; .work/ng4_w2_t3_20261110/PRE_ENABLE_BOUNDARY_VERIFY.md,
+  2026-11-09, on the first package's merged tree 471aaec2; the repair changed no trigger or secret reference): the
+  preflight's only trigger is workflow_dispatch; all 17 workflows that read the production database secret are
   dispatch-only and bind the production-db-owner Environment; that Environment requires the owner's approval, admins
   cannot bypass it, and it deploys from main only; the secret exists only in that Environment; the workflow token is
   read-only; the owner is the one collaborator; no workflow has a pull_request_target, workflow_run or workflow_call
   trigger. Registering it started no run.
 - **UOR HOLD #4** (the owner, 2026-11-12): the local main checkout stays frozen at
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0 until the UOR Entry-35 records commit's governed read-back or the owner's
-  release; this batch's merges are on origin only, and local main was not fast-forwarded
-  (.work/p7/redesign/handoff/owner_uor_hold_entry35_20261112.txt).
+  release; this batch's merges are on origin only, and local main was not fast-forwarded (the v2 T3's local
+  fast-forward waits for HOLD #4's release; .work/p7/redesign/handoff/owner_uor_hold_entry35_20261112.txt).
 - **PUBLISHED IN THIS BATCH**, each with the package's digests checked first (the first package's 21, SHA256SUMS
-  51e94c4c…; v2's 16, SHA256SUMS 56be0b4b…), the exact head pushed, a byte-identical diff (`PR_VERIFY=PASS`, again
-  just before the merge), every PR check green, a drift check, an independently computed merge tree, a merge with
-  `--match-head-commit`, `MERGE_VERIFY=PASS` and main's push runs green before the next merge. **One HOLD:** #332's
-  first CI run (head 88f5e238) failed both new authored-step jobs (IsolationRefused: the PR harness started its step
-  runner without -B, so a bytecode cache in the checkout made the authored scripts' checkout audit refuse; the
-  PostgreSQL 16 rehearsals — 0019 off 23/23, on 23/23, the pilot route + W2 15/15 — CI 8973 and build passed on that
-  run). The batch stopped there; one repair (b4a9389: no bytecode, -B, two tests; a narrow independent delta review,
-  PASS, one round), the enabling change restacked unchanged (5432619, R100), and the owner's v2 T3 for the new heads
+  51e94c4c…; v2's 16, SHA256SUMS 56be0b4b…), the exact head pushed, a byte-identical diff (`PR_VERIFY=PASS`), every
+  PR check green, a drift check (origin/main and the PR head re-read just before each merge; --match-head-commit
+  binds the head), an independently computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and
+  main's push runs green before the next merge. **One HOLD:** #332's first CI run (head 88f5e238) failed both new
+  authored-step jobs (IsolationRefused: the PR harness started its step runner without -B, so a bytecode cache in the
+  checkout made the authored scripts' checkout audit refuse; the PostgreSQL 16 rehearsals — 0019 off 23/23, on 23/23,
+  the pilot route + W2 15/15 — CI 8973 and build passed on that run). The batch stopped there; one repair (b4a9389:
+  no bytecode, -B, two tests; a narrow independent delta review, PASS, one round), the enabling change restacked
+  (5432619, R100; differing from 446439a8 only on the repaired -B line), and the owner's v2 T3 for the new heads
   (.work/ng4_w2_t3_20261110/FIRST_CAUSAL_FAILURE_PR332.md, T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_V2_20261110.md).
   - **#331 → M64 2f52537202f673bdada7b09b899942013c64d4b1** — the CHANGELOG entry for #329. Head abda2211 (on M63),
     tree baeb7b91, mergedAt 2026-11-09T17:24:59Z, 1 file, +19/−0. 4 of 4 checks: CI 42663084907, 8944 passed; build
@@ -57,8 +60,9 @@ CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
     path: READY and APPLIED; PostgreSQL 16 23/23, 23/23 and 15/15). M66's push runs: CI 43907365079, 8977 passed;
     build 43907365228. **Registered, never dispatched:** workflow 420343693 "NG4 pilot preflight (READ ONLY)",
     active, zero runs; no new production-db-owner deployment (the newest is 2026-10-04); the Environment re-read
-    before and after: the owner's approval required, no admin bypass, main only, the secret only there
-    (.work/ng4_w2_t3_20261110/boundary_recheck_pre_enable.txt).
+    before (boundary_recheck_20261116.txt, boundary_recheck_pre_enable.txt) and after the merge
+    (boundary_recheck_post_merge.txt): the owner's approval required, no admin bypass, main only, the secret only
+    there.
   Record: .work/ng4_w2_20261107/T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_20261107.md (SHA256SUMS_NG4_W2_BATCH.txt) and its
   v2, .work/ng4_w2_t3_20261110/T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_V2_20261110.md (SHA256SUMS_NG4_W2_BATCH_V2.txt,
   sha256 56be0b4b…), with the checks in .work/ng4_w2_t3_20261110/.
@@ -83,7 +87,8 @@ CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
   (.work/ng4_w2_20261107/MUTATION_SWEEP_W2.py: 15 of 16 at 2a472ef, W15 caught after its static pin). **One
   independent reviewer:** the W2 spec in TWO rounds (FINDINGS with 2 MAJOR; the draft-2 delta inside the code
   review), the W2 code in TWO rounds (PASS_WITH_AMENDMENTS with 6 MINOR; PASS on the fold) and the enabling change in
-  ONE (PASS_WITH_AMENDMENTS with 4 MINOR); the last folds closed by a deterministic exact-delta check
+  ONE (PASS_WITH_AMENDMENTS with 4 MINOR); the harness repair and the restack in ONE narrow delta round (PASS,
+  REVIEW_W2_FIX_DELTA_R1.md); the last folds closed by a deterministic exact-delta check
   (EXACT_DELTA_CHECK_W2_R2.md), not a review round.
 - **A correction to #330's record** (immutable): it says its STATE review had "one round on this filled record".
   Correct: ONE independent reviewer in TWO rounds — R1 PASS_WITH_AMENDMENTS on abe72e48 (2 MINOR, 7 NOTE); R2 a delta
@@ -97,8 +102,9 @@ CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
   .work/ng4_w2_t3_20261110/PREFLIGHT_DISPATCH_PACKET.md (prepared, not executed).
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort xhigh (read again with get_session before this review;
-  started from the master's session, read-only), reviewed this filled record in PENDING_REVIEW. The master ran Opus
-  5.5 at High, as the T3 named.
+  started from the master's session, read-only), reviewed this filled record in ONE round on this filled record
+  (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta check). The master ran Opus 5.5
+  at High, as the T3 named.
 - Process: Codex 1060–1063, none in the T3 (the harness repair is the master's); GPT sidecar consultations 0; paid
   API $0. The UOR relay is still NOT_DELIVERED (no verified permitted route).
 - Nothing else changed: no dispatch, no apply workflow enabled, no migration applied, no role created or granted, no
@@ -3510,36 +3516,37 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
     PASS_WITH_AMENDMENTS; PASS_WITH_AMENDMENTS), the wording-only last fold closed by an exact-delta check; W2 (#332)
     and the preflight's enabling (#333) had ONE independent reviewer: the W2 spec in TWO rounds (FINDINGS; the
     draft-2 delta), the W2 code in TWO rounds (PASS_WITH_AMENDMENTS; PASS) and the enabling change in ONE
-    (PASS_WITH_AMENDMENTS), the last folds closed by an exact-delta check; this record had ONE independent reviewer,
-    the same session, in PENDING_REVIEW; the NG4 pilot batch's record (#330) had ONE in TWO rounds
-    (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe whose verdict arrived after the
-    merge), although #330 itself says one round; NG4 (#326) had ONE independent reviewer: the spec in TWO rounds
-    (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's record
-    (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS: two MINOR and three NOTE folded, one NOTE withdrawn; then a
-    delta PASS); NG3 (#323) had ONE independent reviewer: the spec in THREE rounds (FINDINGS; PASS; PASS) and the
-    code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3 batch's record (#324) had ONE in TWO rounds
-    (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1 (#320) had ONE independent reviewer: the spec in
-    TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG1
-    batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next
-    batch's record (#318) had ONE in TWO rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer in
-    TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and the licensing evidence
-    had NO independent review (master audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE
-    round; the S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then PASS); the S1
-    recommended ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1
-    decision pack had NO independent review (master audit and quote checks only); the (b2) batch's record (#311) had
-    ONE in TWO rounds; the evaluation-row batch's record (#308) had ONE in TWO rounds; the evaluation-row producer
-    (#307) had ONE independent reviewer in TWO rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision
-    pack's revision 5 had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary
-    subagent, not independent; the last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE
-    round; C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice,
-    applied, then PASS), and its ruling sheet ONE in ONE round; the parse batch's record (#302) had ONE in TWO rounds
-    (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO rounds (static only; FINDINGS, then
-    PASS), after one read-only probe by an ordinary subagent (not independent); the F-CONFIRM batch's record (#299)
-    had ONE in THREE rounds; the decision pack had ONE independent reviewer in FOUR rounds, the last round's three
-    small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds;
-    the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed
-    independently twice") and a56f80c7's message ("a second review passed") overstate theirs and are immutable, so
-    this record documents them instead.
+    (PASS_WITH_AMENDMENTS), the repair and restack in ONE delta round (PASS), the last folds closed by an exact-delta
+    check; this record had ONE independent reviewer, the same session, in ONE round on this filled record
+    (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta check); the NG4 pilot batch's
+    record (#330) had ONE in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe
+    whose verdict arrived after the merge), although #330 itself says one round; NG4 (#326) had ONE independent
+    reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta
+    PASS); the NG4 batch's record (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS: two MINOR and three NOTE
+    folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had ONE independent reviewer: the spec in THREE rounds
+    (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3 batch's record
+    (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1 (#320) had ONE
+    independent reviewer: the spec in TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds (FINDINGS with
+    one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR
+    folded; then a delta PASS); the next batch's record (#318) had ONE in TWO rounds; the CLAUDE.md review routing
+    (#317) had ONE independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the
+    critical-path map and the licensing evidence had NO independent review (master audit, by the new policy); the
+    S1-engine batch's record (#314) had ONE in ONE round; the S1 engine (#313) had ONE independent reviewer in TWO
+    rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds (FINDINGS, then
+    PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO independent review (master audit and
+    quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row batch's record
+    (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in TWO rounds
+    (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS,
+    then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds not
+    re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer
+    in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE
+    round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer
+    (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary
+    subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had
+    ONE independent reviewer in FOUR rounds, the last round's three small items folded after its PASS and not
+    re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO
+    rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's
+    message ("a second review passed") overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -8276,13 +8283,13 @@ GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-16, after #331, #332, #333 and this record): the one-shot dispatch
-  of the read-only preflight (.work/ng4_w2_t3_20261110/PREFLIGHT_DISPATCH_PACKET.md: the exact authorization,
-  expected outputs, STOP conditions); then, depending on HOLD-1, the commit-time setting; then the apply workflow's
-  enabling (T3) and the 0019 + capacity + 0020 apply (T4); the credential step and the Space secret; the start
-  instant, the switch-ON change and the deploy. The CHANGELOG entries for #332 and #333 (a new T3). The release of
-  UOR HOLD #4 (local main frozen at 0118cfaa until Entry-35's governed read-back or the owner). Still open: the
-  licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b; NG6-D1…D3; the writer-token
-  renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
+  of the read-only preflight (.work/ng4_w2_t3_20261110/PREFLIGHT_DISPATCH_PACKET.md: the exact authorization, filled
+  with M67 after this record, expected outputs, STOP conditions); then, depending on HOLD-1, the commit-time setting;
+  then the apply workflow's enabling (T3) and the 0019 + capacity + 0020 apply (T4); the credential step and the
+  Space secret; the start instant, the switch-ON change and the deploy. The CHANGELOG entries for #332 and #333 (a
+  new T3). The release of UOR HOLD #4 (local main frozen at 0118cfaa until Entry-35's governed read-back or the
+  owner). Still open: the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b;
+  NG6-D1…D3; the writer-token renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
   Before it: THE OWNER'S NEXT DECISIONS (2026-11-07, after #328, #329 and this record): the next T3 package (W2:
   0020, the credential helper and their scratch tests; the preflight enabling change), once prepared and reviewed;
   then the preflight's one-shot production read; then the 0019 + 0020 apply (T4, as the W2 spec proposes), the
@@ -9747,11 +9754,12 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-16, after #331, #332, #333 an
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: wait for the owner's preflight dispatch decision; meanwhile only authorized T0–T2 preparation on
-  the pilot's critical path (LOCAL, unpublished; no new T3 without authorization). **The 1D evaluation and the S1
-  build are CONSUMED — never rebuild or rerun either, and verify them only as
-  .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no dispatch, production read, apply,
-  grant, credential, pilot, network, real data, T4 or deploy.
+NEXT_ACTION=Claude: after this record merges, verify M67's CI/build, keep local main at 0118cfaa (HOLD #4), fill
+  PREFLIGHT_DISPATCH_PACKET.md's final SHA, date and PR number; then wait for the owner's preflight dispatch
+  decision; meanwhile only authorized T0–T2 preparation on the pilot's critical path (LOCAL, unpublished; no new T3
+  without authorization). **The 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and
+  verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no dispatch,
+  production read, apply, grant, credential, pilot, network, real data, T4 or deploy.
   Before it: Claude: W2 and the preflight enabling change, LOCAL T0–T2 and scratch PostgreSQL only (owner,
   2026-11-07): 0020, the credential helper, R-20…R-23, the repair of both authored workflows' scratch steps (with a
   test that runs them on every PR), the enabling change's rename and flipped dormancy tests; independent review of
