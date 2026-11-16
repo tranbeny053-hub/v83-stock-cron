@@ -51,24 +51,26 @@ def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> No
 
 
 def test_no_enabled_apply_route_exists() -> None:
-    # Since the NG4 pilot build (owner NG4-PILOT INPUTS, 2026-11-06) the one-shot apply route is
-    # AUTHORED BUT DISABLED: the authored file waits outside .github/workflows, which GitHub never
-    # registers; its script names the .github path the rename creates. Enabling renames the file
-    # unchanged and flips its dormancy tests (a T3); dispatching it is the T4.
+    # The preflight is registered for owner-dispatched read-only audits; the one-shot apply remains
+    # authored outside .github/workflows and disabled until its separate T4.
     scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
     assert scripts == ["apply_migration_0019.py"]
     source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
-    # The constant names the path GitHub reports after the enabling rename; dormancy is that no
-    # file exists there yet, while the authored file waits outside .github/workflows.
+    # Apply remains dormant at the path GitHub would report if separately enabled.
     assert 'WORKFLOW = ".github/workflows/apply-migration-0019.yml"' in source
     assert not (WORKFLOWS / "apply-migration-0019.yml").exists()
-    assert not (WORKFLOWS / "ng4-pilot-preflight.yml").exists()
+    assert (WORKFLOWS / "ng4-pilot-preflight.yml").is_file()
     assert (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").is_file()
-    assert (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml").is_file()
+    assert not (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml").exists()
     assert not list(WORKFLOWS.rglob("*0019*apply*")) and not list(WORKFLOWS.rglob("apply*0019*"))
     for path in WORKFLOWS.rglob("*.y*ml"):
         text = path.read_text(encoding="utf-8")
         if path == REHEARSAL_WORKFLOW:
+            continue
+        if path == WORKFLOWS / "ng4-pilot-preflight.yml":
+            # The registered read-only preflight may name the schema and the route's number, but
+            # never the migration file, the apply script or an apply mode (review B4).
+            assert all(s not in text for s in ("0019_lattice", "apply_migration", "--mode=apply"))
             continue
         assert "0019" not in path.name and "0019_lattice" not in text and "ucpe_lattice" not in text
 
