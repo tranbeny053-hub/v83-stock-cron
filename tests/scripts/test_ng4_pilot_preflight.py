@@ -215,8 +215,16 @@ def test_ddl_event_trigger_reporting_and_sql_safety():
     report = preflight.preflight(lambda: conn)
     assert len(report["ddl_event_triggers"]) == 20
     assert report["ddl_event_triggers_truncated"] is True
+    for name in ("bad/name", "Upper_watch", "has space", "a@b", "postgresql://h", "9lead"):
+        conn.cursor_obj.ddl_triggers = json.dumps([[name, "ddl_command_end", "O"]])
+        assert preflight.preflight(lambda: conn)["ddl_event_triggers"][0]["name"] == (
+            "<non-identifier>"), name
     sql = preflight.DDL_EVENT_TRIGGERS_SQL
     assert "pg_catalog.pg_event_trigger" in sql
+    # The same planted-function class as the role checks: the aggregate and the array builder are
+    # schema-qualified (coalesce is a construct, not a function).
+    assert "pg_catalog.json_agg(pg_catalog.json_build_array(" in sql
+    assert not re.search(r"(?<!pg_catalog\.)\b(json_agg|json_build_array)\(", sql)
     assert not any(word in sql.lower() for word in
                    ("evtfoid", "evttags", "prosrc", "pg_proc", "pg_get_functiondef"))
 
