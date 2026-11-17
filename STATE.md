@@ -1,124 +1,100 @@
 # STATE
 
-Updated: 2026-11-16 (**W2 IS ON MAIN (#332 → M65 7466c77e): MIGRATION 0020 (THE NG4 PILOT'S SEPARATE LEAST-PRIVILEGE
-LOGIN ucpe_lattice_space) IS AUTHORED, NOT APPLIED; THE ONE-SHOT ROUTE WOULD APPLY 0019, THE PILOT CAPACITY AND 0020
-IN ONE TRANSACTION; NO LATTICE ROLE EXISTS IN PRODUCTION (0019 AND 0020 NEVER APPLIED), NO CREDENTIAL IS ISSUED,
-NOTHING IS GRANTED. THE READ-ONLY PREFLIGHT IS REGISTERED (#333 → M66 4b44efb2:
-.github/workflows/ng4-pilot-preflight.yml, DISPATCH-ONLY, BEHIND THE production-db-owner ENVIRONMENT) AND HAS NEVER
-BEEN DISPATCHED: NO PRODUCTION READ HAS HAPPENED. THE APPLY WORKFLOW STAYS AUTHORED BUT DISABLED
-(ops/ng4_pilot/workflows/). THE CHANGELOG RECORDS #329 (#331 → M64 2f525372). LATTICE_ENABLED = False,
-PILOT_START_UTC = None, WRITER_DB_URL_ENV = None. NO PRODUCTION DATABASE ACCESS (SCRATCH POSTGRESQL ONLY), NO
-NETWORK, NO PILOT. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST
-NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR
+Updated: 2026-11-17 (**THE FIRST ONE-SHOT PRODUCTION READ HAPPENED AND IS CONSUMED: THE READ-ONLY PREFLIGHT, RUN
+43916685548, DISPATCHED ONCE ON MAIN 84bd0339 AND APPROVED BY THE OWNER IN production-db-owner, RETURNED NOT_READY ON
+ONE CHECK, no_bypassrls_data_role_member: PRODUCTION HAS A NON-SUPERUSER BYPASSRLS MEMBER OF pg_read_all_data AND/OR
+pg_write_all_data, SO THE 0019 + 0020 APPLY WOULD BE REFUSED. HOLD-1: COMMIT TIMESTAMPS ARE OFF. NEVER RERUN THAT
+READ. THE PREFLIGHT NOW NAMES THE ROLES BEHIND THAT CHECK (#336 → M69 38b4cb53), NOT YET RUN. THE CHANGELOG RECORDS
+#332 AND #333 (#335 → M68 37c86fc9). LATTICE_ENABLED = False; 0019 AND 0020 NOT APPLIED; NO LATTICE ROLE, CREDENTIAL
+OR GRANT. NO PRODUCTION WRITE. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED
+AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR
 DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), 2026-11-10: the first T3 for this batch, GitHub-only, "CHANGELOG@abda2211, W2@88f5e238,
-  ENABLE preflight@446439a8, STATE-last"; then 2026-11-16, the T3 for the repaired heads (v2: W2@b4a93895 as a
-  fast-forward of #332, ENABLE preflight@5432619b, STATE-last); before enabling, verify the workflow's triggers,
-  every production-accessing job's Environment binding, the required reviewers, bypass settings, permissions and
-  secret scope; both new authored-step jobs and the PostgreSQL 16 W2 rehearsals must run and pass.
-- **The authorities for the build** (not reproduced here): the owner's W2 and PREFLIGHT clauses of 2026-11-07 (in the
-  2026-11-07 block below): W2 approved as the design direction, LOCAL T0–T2 and scratch only; the preflight's
-  enabling change prepared LOCAL, not enabled until a later explicit authorization — this T3.
-- **BEFORE ENABLING, VERIFIED** (read-only GitHub API reads; .work/ng4_w2_t3_20261110/PRE_ENABLE_BOUNDARY_VERIFY.md,
-  2026-11-09, on the first package's merged tree 471aaec2; the repair changed no trigger or secret reference): the
-  preflight's only trigger is workflow_dispatch; all 17 workflows that read the production database secret are
-  dispatch-only and bind the production-db-owner Environment; that Environment requires the owner's approval, admins
-  cannot bypass it, and it deploys from main only; the secret exists only in that Environment; the workflow token is
-  read-only; the owner is the one collaborator; no workflow has a pull_request_target, workflow_run or workflow_call
-  trigger. Registering it started no run.
-- **UOR HOLD #4** (the owner, 2026-11-12): the local main checkout stays frozen at
-  0118cfaace93d911bef88cf2bdf5a0fd31dc39e0 until the UOR Entry-35 records commit's governed read-back or the owner's
-  release; this batch's merges are on origin only, and local main was not fast-forwarded (the v2 T3's local
-  fast-forward waits for HOLD #4's release; .work/p7/redesign/handoff/owner_uor_hold_entry35_20261112.txt).
-- **PUBLISHED IN THIS BATCH**, each with the package's digests checked first (the first package's 21, SHA256SUMS
-  51e94c4c…; v2's 16, SHA256SUMS 56be0b4b…), the exact head pushed, a byte-identical diff (`PR_VERIFY=PASS`), every
-  PR check green, a drift check (origin/main and the PR head re-read just before each merge; --match-head-commit
-  binds the head), an independently computed merge tree, a merge with `--match-head-commit`, `MERGE_VERIFY=PASS` and
-  main's push runs green before the next merge. **One HOLD:** #332's first CI run (head 88f5e238) failed both new
-  authored-step jobs (IsolationRefused: the PR harness started its step runner without -B, so a bytecode cache in the
-  checkout made the authored scripts' checkout audit refuse; the PostgreSQL 16 rehearsals — 0019 off 23/23, on 23/23,
-  the pilot route + W2 15/15 — CI 8973 and build passed on that run). The batch stopped there; one repair (b4a9389:
-  no bytecode, -B, two tests; a narrow independent delta review, PASS, one round), the enabling change restacked
-  (5432619, R100; differing from 446439a8 only on the repaired -B line), and the owner's v2 T3 for the new heads
-  (.work/ng4_w2_t3_20261110/FIRST_CAUSAL_FAILURE_PR332.md, T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_V2_20261110.md).
-  - **#331 → M64 2f52537202f673bdada7b09b899942013c64d4b1** — the CHANGELOG entry for #329. Head abda2211 (on M63),
-    tree baeb7b91, mergedAt 2026-11-09T17:24:59Z, 1 file, +19/−0. 4 of 4 checks: CI 42663084907, 8944 passed; build
-    42663084890. M64's push runs: CI 42664396886, 8944 passed; build 42664396862.
-  - **#332 → M65 7466c77e6af9bacc998dc6232befb2f49ecc169a** — W2, the repair of #329's authored workflows and the
-    harness repair. Head b4a9389 (on ab0ff542, 13 commits), base the sequential M64, tree f9ac054f, mergedAt
-    2026-11-16T16:13:13Z, 29 files, +1615/−146. **20 of 20 checks**: the 4 standard ones (CI 43903632920, 8975
-    passed; build 43903632831), the privilege-rehearsal jobs, the other path-triggered rehearsals, the migration-0019
-    rehearsal (run 43903632755 on PostgreSQL 16: 0019 off 23/23, on 23/23, the pilot route + W2 15/15) and **the two
-    new authored-step jobs (the preflight's scratch step READY, the apply's scratch step APPLIED, no refusal)**,
-    which passed on the repaired head (run 43903632755, first attempt). M65's push runs: CI 43905059831, 8975 passed;
-    build 43905059852.
-  - **#333 → M66 4b44efb267067a6edc2c700a2701cc6f19341258** — the preflight's ENABLING: the authored file renamed
-    unchanged (R100) into .github/workflows/, and the location assertions. Head 5432619 (on b4a9389, 1 commit; the
-    reviewed 446439a8 restacked, differing only on the repaired -B line), base M65, tree d6ddd838 (equal to the
-    combined gate's tree), mergedAt 2026-11-16T16:25:38Z, 10 files, +33/−21. 7 of 7 checks: CI 43906200443, 8977
-    passed; build 43906200444; the 0019 rehearsal 43906200425 (both authored-step jobs, the preflight's from its new
-    path: READY and APPLIED; PostgreSQL 16 23/23, 23/23 and 15/15). M66's push runs: CI 43907365079, 8977 passed;
-    build 43907365228. **Registered, never dispatched:** workflow 420343693 "NG4 pilot preflight (READ ONLY)",
-    active, zero runs; no new production-db-owner deployment (the newest is 2026-10-04); the Environment re-read
-    before (boundary_recheck_20261116.txt, boundary_recheck_pre_enable.txt) and after the merge
-    (boundary_recheck_post_merge.txt): the owner's approval required, no admin bypass, main only, the secret only
-    there.
-  Record: .work/ng4_w2_20261107/T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_20261107.md (SHA256SUMS_NG4_W2_BATCH.txt) and its
-  v2, .work/ng4_w2_t3_20261110/T3_PACKAGE_NG4_W2_PREFLIGHT_BATCH_V2_20261110.md (SHA256SUMS_NG4_W2_BATCH_V2.txt,
-  sha256 56be0b4b…), with the checks in .work/ng4_w2_t3_20261110/.
-- **What W2 is:** migration 0020 creates ucpe_lattice_space NOLOGIN NOINHERIT, no power, CONNECTION LIMIT 3, one
-  membership (ucpe_lattice_writer, INHERIT TRUE, SET FALSE), role defaults statement_timeout 5s, lock_timeout 2s and
-  idle_in_transaction_session_timeout 30s; its guard refuses PostgreSQL < 16, a superuser or non-CREATEROLE applier,
-  a non-empty createrole_self_grant, a missing 0019 and an existing role; its self-check counts PUBLIC's grants
-  (relations, SECURITY DEFINER functions, schema and database CREATE) and refuses before commit.
-  scripts/apply_migration_0019.py applies 0019, the capacity and 0020 in one transaction (token
-  APPLY-MIGRATIONS-0019-0020-ONCE, report v2) with pre- and post-checks of the new role; the preflight checks the
-  same preconditions; scripts/lattice_space_credential.py (owner-only, prints no secret; the secret name
-  UCPE_LATTICE_DB_URL, also added to the secret scanner); docs/runbooks/NG4_PILOT_W2.md (the credential step, the
-  disable after the end, the rollback). The repair: the preflight's scratch step gains the runner-role line, the
-  apply's two missing files are gone, both rehearse under the wheelhouse, and every PR runs both authored workflows'
-  install and scratch steps verbatim (scripts/migration_0019_rehearsal/run_authored_steps.py), with
-  tests/workflows/test_workflow_run_paths.py scanning every workflow's named paths. No pinned or served file changed.
-- **How it was built and checked:** Codex 1060 (DONE), 1061, 1062 and 1063 (BLOCKED: lint, the sandbox's git index,
-  the scanner on local files; each repaired by the master; first causal failures in .work/ng4_w2_20261107/).
-  Exact-head gates 88f5e238 8973 and 446439a8 8975 (all three merged on M63 8975, tree 471aaec2); after the repair
-  b4a9389 8975 and 5432619 8977, merged on M64 8977 (tree d6ddd838). Scratch PostgreSQL 17.11: the pilot route and W2
-  15/15 (R-16…R-25) on a clean 88f5e238, 0019 23/23 and 23/23. Mutation sweep 16 of 16
-  (.work/ng4_w2_20261107/MUTATION_SWEEP_W2.py: 15 of 16 at 2a472ef, W15 caught after its static pin). **One
-  independent reviewer:** the W2 spec in TWO rounds (FINDINGS with 2 MAJOR; the draft-2 delta inside the code
-  review), the W2 code in TWO rounds (PASS_WITH_AMENDMENTS with 6 MINOR; PASS on the fold) and the enabling change in
-  ONE (PASS_WITH_AMENDMENTS with 4 MINOR); the harness repair and the restack in ONE narrow delta round (PASS,
-  REVIEW_W2_FIX_DELTA_R1.md); the last folds closed by a deterministic exact-delta check
-  (EXACT_DELTA_CHECK_W2_R2.md), not a review round.
-- **A correction to #330's record** (immutable): it says its STATE review had "one round on this filled record".
-  Correct: ONE independent reviewer in TWO rounds — R1 PASS_WITH_AMENDMENTS on abe72e48 (2 MINOR, 7 NOTE); R2 a delta
-  PASS_WITH_AMENDMENTS on the intermediate draft ec1847fe, whose verdict arrived after #330 merged (its items were
-  already folded in the merged 09d3d0de); the final bytes closed by an exact-delta check
-  (.work/ng4_pilot_t3_20261107/NEXT_RECORD_CORRECTIONS.md). Rule since: no STATE record merges while a review request
-  on an earlier draft is pending.
-- **Pilot readiness:** W1 HELD; W2 on main, not applied; the preflight registered, not dispatched; HOLD-1 (whether
-  production records commit times) unknown until the preflight runs; the start instant unset. The one-shot
-  preflight's authorization packet, its expected outputs and STOP conditions:
-  .work/ng4_w2_t3_20261110/PREFLIGHT_DISPATCH_PACKET.md (prepared, not executed).
+- The owner (verbatim below), 2026-11-17: the one-shot dispatch of the read-only preflight; then a LOCAL T1 for the
+  role naming; then the T3 for this batch, GitHub-only, "CHANGELOG@2f6f4897, NAMES@a0c53851, STATE-last", HOLD on
+  drift or any failed check including the PostgreSQL 16 rehearsal with R-26 and both authored-step jobs.
+- **THE ONE-SHOT PRODUCTION READ (CONSUMED).** Preconditions re-read just before (origin/main = 84bd0339, workflow
+  blob 45ab7cd0, no prior run, no other protected-database run queued or running, the Environment owner-only with no
+  admin bypass and main only, the secret only there). Run 43916685548, dispatched by Claude once at
+  2026-11-16T17:16:43Z, waited for review, approved by the owner, completed 2026-11-17T02:04:38Z, every step success
+  (the production step the only one with the secret). Raw capture before parsing: the artifact zip sha256 2bfb3ace…
+  (equal to GitHub's artifact digest), the run log 373cc332…. The report: exactly the 29 documented facts, booleans
+  and integers only; the public log holds no database URL, host or secret. **verdict NOT_READY, failing =
+  [no_bypassrls_data_role_member]**; every other prerequisite held (PostgreSQL 16+, no lattice schema or roles yet,
+  the applier CREATEROLE and not superuser, createrole_self_grant empty, no FOR ALL TABLES publication, PUBLIC least
+  privilege). Informational: track_commit_timestamp off (HOLD-1), 4 DDL event triggers (allowlist empty),
+  applier_signal_backend true, ucpe_space_db unchanged (W1 stays HELD). The apply route's own pre-check is the same
+  query, so an apply would be refused. Record: .work/ng4_preflight_run_20261117/PREFLIGHT_RESULT_20261117.md
+  (SHA256SUMS_PREFLIGHT_RUN.txt), decision note DECISION_NOTE_BYPASSRLS_20261117.md.
+- **PUBLISHED IN THIS BATCH**, each with the package's 19 digests checked first (SHA256SUMS f6e1cb18…), the exact
+  head pushed, a byte-identical diff (`PR_VERIFY=PASS`), every PR check green, a drift check (origin/main and the PR
+  head re-read just before each merge; --match-head-commit binds the head), an independently computed merge tree,
+  `MERGE_VERIFY=PASS` and main's push runs green before the next merge. No drift, no HOLD; every run passed on its
+  first attempt.
+  - **#335 → M68 37c86fc9330a4eb71af34a4ad4e4ee9f55a67e03** — the CHANGELOG entry for #332 and #333. Head 2f6f4897
+    (on M67), tree d3c54354, mergedAt 2026-11-17T02:52:16Z, 1 file, +20/−0. 4 of 4 checks: CI 44005316443, 8977
+    passed; build 44005316451. M68's push runs: CI 44006107167, 8977 passed; build 44006107156.
+  - **#336 → M69 38b4cb53b2790d1aa976a3435415a4309909c084** — the preflight names the roles behind
+    no_bypassrls_data_role_member. Head a0c5385 (on M67, 3 commits), base the sequential M68, tree 8e0a871a (equal to
+    the combined gate's tree), mergedAt 2026-11-17T03:05:00Z, 4 files, +204/−7. **7 of 7 checks**: CI 44006876380,
+    8984 passed; build 44006876630; the migration-0019 rehearsal (run 44006876569 on PostgreSQL 16: 0019 off 23/23,
+    on 23/23, the pilot route 16/16 incl. R-26), both authored-step jobs (the preflight's scratch step READY, the
+    apply's scratch step APPLIED). M69's push runs: CI 44007620896, 8984 passed; build 44007621003. The workflow
+    stays registered, dispatch-only, one prior run (the consumed one): workflow 420343693, 1 run (43916685548); the
+    newest production-db-owner deployment is that run's (2026-11-16T17:16:47Z, 84bd0339).
+  Record: .work/ng4_preflight_run_20261117/T3_PACKAGE_PREFLIGHT_NAMES_20261117.md (SHA256SUMS_PFNAMES_BATCH.txt),
+  with the checks beside it.
+- **What #336 is:** scripts/ng4_pilot_preflight.py runs one more catalog SELECT inside the same READ ONLY
+  transaction, before the rollback: a DISTINCT list over exactly the prerequisite's own FROM…WHERE text, reported as
+  bypassrls_data_role_members, {role, data_role}; names that are not plain lowercase identifiers or contain a run of
+  16+ hex characters are replaced by <non-identifier>, data roles only the two predefined names, at most 20 entries;
+  a malformed or inconsistent list ends the run as an error class (never REFUSED). The verdict and failing logic are
+  unchanged. Scratch rehearsal R-26 plants such a role: the preflight names exactly it and the route refuses on this
+  check. The workflow changes by one comment line (blob 45ab7cd0 → 5e9076bb). **Exposure:** the names become public
+  in the Actions log and artifact when the preflight next runs; the owner accepts that in the second dispatch
+  authorization; this record holds no role name.
+- **How it was built and checked:** Codex 1064 (DONE), then the master's folds. Exact-head gate a0c5385 8984; merged
+  with the CHANGELOG on M67 8984 (tree 8e0a871a). Scratch PostgreSQL 17: the pilot rehearsal 16/16 incl. R-26 on a
+  clean 8b211152 (a0c5385 changes only a test). Hand mutation probes: 10 of 10 on the final code
+  (.work/ng4_preflight_run_20261117/MUTATION_PROBES_PFNAMES.txt). **One independent reviewer:** ONE round
+  (PASS_WITH_AMENDMENTS: 4 MINOR, 5 NOTE; all folded) and ONE delta round (PASS); its test-only note closed by a
+  deterministic exact-delta check (EXACT_DELTA_CHECK_PFNAMES_R2.md), not a review round.
+- **UOR HOLD #4** (the owner, 2026-11-12) still stands: the local main checkout stays at
+  0118cfaace93d911bef88cf2bdf5a0fd31dc39e0; this batch's merges are on origin only.
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort xhigh (read again with get_session before this review;
-  started from the master's session, read-only), reviewed this filled record in ONE round on this filled record
-  (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta check). The master ran Opus 5.5
-  at High, as the T3 named.
-- Process: Codex 1060–1063, none in the T3 (the harness repair is the master's); GPT sidecar consultations 0; paid
-  API $0. The UOR relay is still NOT_DELIVERED (no verified permitted route).
-- Nothing else changed: no dispatch, no apply workflow enabled, no migration applied, no role created or granted, no
-  credential, no database read or write outside scratch PostgreSQL, no fetch, network, real data, fit or genuine
-  prior, no F3 or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: the preflight's one-shot read (the owner's dispatch and Environment approval); the
-  commit-time setting if HOLD-1 needs it; the apply workflow's enabling (T3) and the 0019 + capacity + 0020 apply
-  (T4); the owner's credential step and the Space secret; the start instant, the switch-ON change and the deploy; the
-  licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-1, OD-NG-3, OD-NG-4b; NG6-D1…D3
-  (.work/nga/master/B_NG6_CLAIM_AUTHORIZATION_CONTRACT_20261105.md); B-NG0's EXP-08 specification and packet note
-  (F3-adjacent, not started); the writer-token renewal by **2026-11-20** (expiry 2026-11-23); the runtime deltas
-  until a release; the CHANGELOG entry for #332 and #333 (a new T3); cleanup candidates.
-- This record is the batch's last publish. Before it: #333.)
+  started from the master's session, read-only), reviewed this filled record in PENDING_REVIEW. The master ran Opus
+  5.5 at High.
+- Process: Codex 1064, none in the T3; GPT sidecar consultations 0; paid API $0. The UOR relay is still
+  NOT_DELIVERED.
+- Nothing else changed: no production write, no second dispatch, no apply workflow enabled, no migration applied, no
+  role created or granted, no credential, no fetch, network, real data, fit or genuine prior, no F3 or §5A access, no
+  deploy, no rerun.
+- CARRIED OVER, still open: the second one-shot preflight read to name the role(s)
+  (.work/ng4_preflight_run_20261117/PREFLIGHT_DISPATCH_PACKET_2.md, filled with M70 after this record; the owner
+  accepts the names' public exposure in it); then the owner's ruling (a named read-only exception, a revoke (T4) or a
+  design ruling; a revoke may need a third read); HOLD-1 (accept COMMIT_UNKNOWN or turn commit timestamps on, T4);
+  the 4 DDL event triggers' assessment before any apply packet; then the apply workflow's enabling (T3) and the 0019
+  + capacity + 0020 apply (T4); the credential step; the start instant, the switch-ON change and the deploy; the
+  licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-1, OD-NG-3, OD-NG-4b; NG6-D1…D3; B-NG0's EXP-08; the
+  writer-token renewal by **2026-11-20** (expiry 2026-11-23); the runtime deltas until a release; the CHANGELOG entry
+  for #336 (a new T3); the release of UOR HOLD #4; cleanup candidates.
+- This record is the batch's last publish. Before it: #336.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-11-17), verbatim — the T3 for this batch**
+  (from .work/p7/redesign/handoff/owner_t3_pfnames_20261117.txt, sha256 8d0a1a04…):
+```text
+OWNER T3 GitHub-only AUTHORIZE exact .work/ng4_preflight_run_20261117/T3_PACKAGE_PREFLIGHT_NAMES_20261117.md (SHA256SUMS f6e1cb18…): CHANGELOG@2f6f4897, NAMES@a0c53851, STATE-last. HOLD on drift or any failed check, including the PostgreSQL 16 rehearsal with R-26 and both authored-step jobs. No dispatch, apply, grant, credential or deploy.
+```
+- **The owner (2026-11-17), verbatim — the LOCAL T1 for the role naming**
+  (from .work/p7/redesign/handoff/owner_t1_preflight_names_20261117.txt, sha256 0511c6f8…):
+```text
+OWNER: AUTHORIZE LOCAL T1 — preflight reports the role names (and which data role) for no_bypassrls_data_role_member only; narrow review; prepare a T3 package and a new one-shot dispatch packet. Do not publish or dispatch.
+```
+- **The owner (2026-11-17), verbatim — the one-shot dispatch of the read-only preflight (the production read, consumed)**
+  (from .work/p7/redesign/handoff/owner_preflight_dispatch_20261117.txt, sha256 f818edbb…):
+```text
+OWNER ONE-SHOT AUTHORIZE: dispatch .github/workflows/ng4-pilot-preflight.yml once on main with expected_sha=84bd03393b6daa24529608670d3d49e6a224951e, approve it myself in production-db-owner, then let Claude download its artifact ng4-pilot-preflight and the run log, capture them raw (sha256) before parsing, and report. Read only. No rerun on any failure or NOT_READY without my new authorization. No apply, role, grant, credential, enablement or deploy.
+```
 - **The owner (2026-11-16), verbatim — the T3 for this batch's repaired heads (v2)**
   (from .work/p7/redesign/handoff/owner_t3_w2_preflight_v2_20261116.txt, sha256 7f06c977…):
 ```text
@@ -3430,16 +3406,16 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not applied; no role, no credential, no
-  grant) AND THE READ-ONLY PREFLIGHT IS REGISTERED (#333 → M66 4b44efb2; dispatch-only, behind the
-  production-db-owner Environment; never dispatched); the apply workflow stays authored but disabled; the CHANGELOG
-  records #329 (#331 → M64 2f525372). LATTICE_ENABLED = False, PILOT_START_UTC = None, WRITER_DB_URL_ENV = None. Real
-  data stays refused at every entry point; no download. Main is M66 4b44efb2 before this record; production is
-  unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with four declared runtime deltas on
-  main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323; api/app.py, #329,
-  which also brings lattice_pilot.py and its quant_ng imports into the startup import set and three events into
-  telemetry/events.py) until a release. The next writer-token renewal is due by **2026-11-20** (expiry 2026-11-23);
-  the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=THE FIRST ONE-SHOT PREFLIGHT READ IS CONSUMED (run 43916685548: NOT_READY on
+  no_bypassrls_data_role_member; commit timestamps off; never rerun it); the preflight now names the roles behind
+  that check (#336 → M69 38b4cb53), not yet run; the CHANGELOG records #332 and #333 (#335 → M68 37c86fc9).
+  LATTICE_ENABLED = False; 0019 and 0020 not applied; no lattice role, credential or grant. Real data stays refused
+  at every entry point; no download. Main is M69 38b4cb53 before this record; local main is held at 0118cfaa (UOR
+  HOLD #4); production is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with four
+  declared runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py,
+  #323; api/app.py, #329, which also brings lattice_pilot.py and its quant_ng imports into the startup import set and
+  three events into telemetry/events.py) until a release. The next writer-token renewal is due by **2026-11-20**
+  (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
@@ -3491,12 +3467,13 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
     store, behind LATTICE_ENABLED = False, PILOT_START_UTC = None and WRITER_DB_URL_ENV = None (each set only by a
     reviewed switch-ON change, then T3/T4); its preflight is registered (.github/workflows/ng4-pilot-preflight.yml
     since #333: dispatch-only, behind the production-db-owner Environment; each dispatch is a one-shot production
-    read the owner authorizes) and its apply workflow stays in ops/ng4_pilot/workflows/ until an enabling T3; W2
-    (#332): migration 0020 (ucpe_lattice_space) is AUTHORED in migrations/authored/, applied only together with 0019
-    by the one-shot route (scripts/apply_migrations.py refuses both by name); W2's sweep:
-    .work/ng4_w2_20261107/MUTATION_SWEEP_W2.py (16 of 16); every PR runs both authored workflows' scratch steps
-    verbatim; its sweep: .work/ng4_pilot_20261106/MUTATION_SWEEP_PILOT.py (20 of 21, P05 equivalent); rehearse it
-    with run_scratch.sh pilot (a real PostgreSQL; the master runs it); their sweep:
+    read the owner authorizes; dispatched ONCE, run 43916685548, CONSUMED: NOT_READY on no_bypassrls_data_role_member
+    — never rerun it; since #336 it names the roles behind that check) and its apply workflow stays in
+    ops/ng4_pilot/workflows/ until an enabling T3; W2 (#332): migration 0020 (ucpe_lattice_space) is AUTHORED in
+    migrations/authored/, applied only together with 0019 by the one-shot route (scripts/apply_migrations.py refuses
+    both by name); W2's sweep: .work/ng4_w2_20261107/MUTATION_SWEEP_W2.py (16 of 16); every PR runs both authored
+    workflows' scratch steps verbatim; its sweep: .work/ng4_pilot_20261106/MUTATION_SWEEP_PILOT.py (20 of 21, P05
+    equivalent); rehearse it with run_scratch.sh pilot (a real PostgreSQL; the master runs it); their sweep:
     .work/ng1_registry_20261103/MUTATION_SWEEP_NG1.py (26 of 26); the legacy-parity fixture is regenerated only by
     its non-test function, and never by a skip (the repo forbids skips: tests/test_no_silent_skips.py). The S1 MOCK
     decision engine is on main as scripts/quant_ng_s1.py (#313): the listing route only, MOCK hosts, no network code;
@@ -3517,36 +3494,38 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
     and the preflight's enabling (#333) had ONE independent reviewer: the W2 spec in TWO rounds (FINDINGS; the
     draft-2 delta), the W2 code in TWO rounds (PASS_WITH_AMENDMENTS; PASS) and the enabling change in ONE
     (PASS_WITH_AMENDMENTS), the repair and restack in ONE delta round (PASS), the last folds closed by an exact-delta
-    check; this record had ONE independent reviewer, the same session, in ONE round on this filled record
-    (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta check); the NG4 pilot batch's
-    record (#330) had ONE in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe
-    whose verdict arrived after the merge), although #330 itself says one round; NG4 (#326) had ONE independent
-    reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta
-    PASS); the NG4 batch's record (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS: two MINOR and three NOTE
-    folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had ONE independent reviewer: the spec in THREE rounds
-    (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3 batch's record
-    (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1 (#320) had ONE
-    independent reviewer: the spec in TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds (FINDINGS with
-    one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR
-    folded; then a delta PASS); the next batch's record (#318) had ONE in TWO rounds; the CLAUDE.md review routing
-    (#317) had ONE independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the
-    critical-path map and the licensing evidence had NO independent review (master audit, by the new policy); the
-    S1-engine batch's record (#314) had ONE in ONE round; the S1 engine (#313) had ONE independent reviewer in TWO
-    rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds (FINDINGS, then
-    PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO independent review (master audit and
-    quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row batch's record
-    (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in TWO rounds
-    (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds (FINDINGS,
-    then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds not
-    re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent reviewer
-    in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE
-    round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer
-    (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary
-    subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had
-    ONE independent reviewer in FOUR rounds, the last round's three small items folded after its PASS and not
-    re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO
-    rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's
-    message ("a second review passed") overstate theirs and are immutable, so this record documents them instead.
+    check; the preflight's role naming (#336) had ONE independent reviewer: ONE round (PASS_WITH_AMENDMENTS) and ONE
+    delta round (PASS), its test-only note closed by an exact-delta check; this record had ONE independent reviewer,
+    the same session, in PENDING_REVIEW; the W2 batch's record (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS:
+    three MINOR and five NOTE folded, closed by an exact-delta check); the NG4 pilot batch's record (#330) had ONE in
+    TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe whose verdict arrived
+    after the merge), although #330 itself says one round; NG4 (#326) had ONE independent reviewer: the spec in TWO
+    rounds (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's
+    record (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS: two MINOR and three NOTE folded, one NOTE withdrawn;
+    then a delta PASS); NG3 (#323) had ONE independent reviewer: the spec in THREE rounds (FINDINGS; PASS; PASS) and
+    the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3 batch's record (#324) had ONE in TWO rounds
+    (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1 (#320) had ONE independent reviewer: the spec in
+    TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG1
+    batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next
+    batch's record (#318) had ONE in TWO rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer in
+    TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and the licensing evidence
+    had NO independent review (master audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE
+    round; the S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then PASS); the S1
+    recommended ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1
+    decision pack had NO independent review (master audit and quote checks only); the (b2) batch's record (#311) had
+    ONE in TWO rounds; the evaluation-row batch's record (#308) had ONE in TWO rounds; the evaluation-row producer
+    (#307) had ONE independent reviewer in TWO rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision
+    pack's revision 5 had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary
+    subagent, not independent; the last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE
+    round; C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice,
+    applied, then PASS), and its ruling sheet ONE in ONE round; the parse batch's record (#302) had ONE in TWO rounds
+    (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO rounds (static only; FINDINGS, then
+    PASS), after one read-only probe by an ordinary subagent (not independent); the F-CONFIRM batch's record (#299)
+    had ONE in THREE rounds; the decision pack had ONE independent reviewer in FOUR rounds, the last round's three
+    small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds;
+    the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed
+    independently twice") and a56f80c7's message ("a second review passed") overstate theirs and are immutable, so
+    this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3556,19 +3535,21 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
     app.js must cut what it calls (scripts/ux_comprehension/card.py keeps its own list); keep new regexes and
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
-  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/ng4_w2_t3_20261110/ (this batch's PR
-    and merge checks, the pre-enable boundary check and the preflight's dispatch packet), .work/ng4_w2_20261107/ (W2
-    and the preflight enabling change: spec, reviews, rehearsals, sweep, gates, package),
-    .work/ng4_pilot_t3_20261107/ (the previous batch's PR and merge checks), .work/ng4_pilot_20261106/ (the pilot's
-    spec, reviews, rehearsals, sweep, gates, build record, readiness and decisions, package), .work/ng4_t3_20261105/
-    (the previous batch's PR and merge checks), .work/ng4_20261105/ (NG4's spec, reviews, rehearsals, sweep, gates,
-    build record, package and NG4_PILOT_ROUTE_20261105.md), .work/nga/master/NG4_READINESS_ASSESSMENT_20261105.md,
-    NG5_NG6_PREP_ASSESSMENT_20261105.md and B_NG6_CLAIM_AUTHORIZATION_CONTRACT_20261105.md, .work/ng3_t3_20261105/
-    (the previous batch's PR and merge checks), .work/ng3_20261104/ (NG3's specs, reviews, sweep, gates, browser
-    check and package), .work/ng1_t3_20261104/ (the previous batch's PR and merge checks),
-    .work/ng1_registry_20261103/ (NG1's specs, reviews, sweep, gates and package),
-    .work/nga/master/OD_NG_2_4_SCOPING_RULING_20261103.md and NG3_DECISION_NOTE_20261103.md,
-    .work/next_batch_20261101/ (the previous batch's PR and merge checks),
+  - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then .work/ng4_preflight_run_20261117/ (the
+    first preflight's consumed run, raw capture and result, the decision note, the role-naming change's reviews,
+    probes, gates, package, this batch's PR and merge checks and the second dispatch packet),
+    .work/ng4_w2_t3_20261110/ (the previous batch's PR and merge checks, the pre-enable boundary check and the first
+    dispatch packet), .work/ng4_w2_20261107/ (W2 and the preflight enabling change: spec, reviews, rehearsals, sweep,
+    gates, package), .work/ng4_pilot_t3_20261107/ (the previous batch's PR and merge checks),
+    .work/ng4_pilot_20261106/ (the pilot's spec, reviews, rehearsals, sweep, gates, build record, readiness and
+    decisions, package), .work/ng4_t3_20261105/ (the previous batch's PR and merge checks), .work/ng4_20261105/
+    (NG4's spec, reviews, rehearsals, sweep, gates, build record, package and NG4_PILOT_ROUTE_20261105.md),
+    .work/nga/master/NG4_READINESS_ASSESSMENT_20261105.md, NG5_NG6_PREP_ASSESSMENT_20261105.md and
+    B_NG6_CLAIM_AUTHORIZATION_CONTRACT_20261105.md, .work/ng3_t3_20261105/ (the previous batch's PR and merge
+    checks), .work/ng3_20261104/ (NG3's specs, reviews, sweep, gates, browser check and package),
+    .work/ng1_t3_20261104/ (the previous batch's PR and merge checks), .work/ng1_registry_20261103/ (NG1's specs,
+    reviews, sweep, gates and package), .work/nga/master/OD_NG_2_4_SCOPING_RULING_20261103.md and
+    NG3_DECISION_NOTE_20261103.md, .work/next_batch_20261101/ (the previous batch's PR and merge checks),
     .work/nga/master/NGA_CRITICAL_PATH_MAP_20261101.md (the B-NG map and the decision pack),
     .work/nga/master/DATA_SOURCE_LICENSING_EVIDENCE_20261101.md, .work/s1_engine_20261031/ (the S1-engine batch and
     this batch's package: the engine's tasks, reviews, sweeps, gates, package and exec records, and the CI-flake root
@@ -3589,6 +3570,8 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: W2 REACHED MAIN (#332 → M65 7466c77e), THE READ-ONLY PREFLIGHT WAS REGISTERED (#333 → M66 4b44efb2), THE
+  CHANGELOG RECORDED #329 (#331 → M64), and that batch's record was published last (#334 → M67 84bd0339).
   Before it: THE NG4 PILOT'S DORMANT BUILD REACHED MAIN (#329 → M62 5dada1c1), THE CHANGELOG RECORDED #326 (#328 →
   M61), and that batch's record was published last (#330 → M63 0118cfaa).
   Before it: NG4'S DORMANT LATTICE REACHED MAIN (#326 → M59 5c5f6165), THE CHANGELOG RECORDED #323 (#325 → M58), and
@@ -6385,7 +6368,19 @@ LOOP_STATE=W2 IS ON MAIN (#332 → M65 7466c77e; migration 0020 authored, not ap
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING, NOW WITH W2 AND THE REGISTERED
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT'S FIRST PREFLIGHT
+  READ CONSUMED, NOT_READY (2026-11-17):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries four declared runtime
+    deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323;
+    api/app.py, #329, which also brings lattice_pilot.py and its quant_ng imports into the startup import set and
+    three events into telemetry/events.py) until a release.
+  - NGA: NG1, NG3, NG4, the NG4 pilot's build and W2 complete on main (dormant; every switch OFF; 0019 and 0020
+    authored, not applied); the preflight ran once (NOT_READY: a BYPASSRLS data-role member) and now names the roles
+    behind it; the pilot route stops until the owner rules; NG2's real corpus waits on the licence fit and the
+    survivorship path; NG5–NG7 wait on their rulings.
+  - The one 1D development evaluation, the one S1 build and preflight run 43916685548 are CONSUMED and must never be
+    rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING, NOW WITH W2 AND THE REGISTERED
   READ-ONLY PREFLIGHT (2026-11-16):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries four declared runtime
     deltas on main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323;
@@ -6852,7 +6847,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOO
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-w2-20261116 (this record, on main M66 4b44efb2). Merged on origin in this batch:
+CURRENT_BRANCH=chore/state-pfnames-20261117 (this record, on main M69 38b4cb53). Merged on origin in this batch:
+  docs/changelog-332-333 @ 2f6f4897 (#335) and feat/ng4-preflight-bypass-names @ a0c5385 (#336). Merged branches and
+  local worktrees are cleanup candidates; no cleanup was authorized.
+  Before it: chore/state-w2-20261116 (this record, on main M66 4b44efb2). Merged on origin in this batch:
   docs/changelog-329 @ abda2211 (#331), feat/ng4-w2-lattice-space @ b4a9389 (#332) and feat/ng4-preflight-enable-v5 @
   5432619 (#333). Merged branches and local worktrees (and the unpublished feat/ng4-preflight-enable, -v2, -v3 and
   -v4 leftovers) are cleanup candidates; no cleanup was authorized.
@@ -7229,7 +7227,14 @@ CURRENT_BRANCH=chore/state-w2-20261116 (this record, on main M66 4b44efb2). Merg
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=4b44efb2 (main M66, #333; the last merge before this record). Its 7 of 7 PR checks on 5432619 (CI
+LAST_GREEN_SHA=38b4cb53 (main M69, #336; the last merge before this record). Its 7 of 7 PR checks on a0c5385 (CI
+  44006876380, 8984 passed; build 44006876630) and main's push runs on M69 (CI 44007620896, 8984 passed; build
+  44007621003) are green.
+  Before it: 37c86fc9 (#335): PR CI 44005316443 (8977), build 44005316451; push CI 44006107167 (8977), build
+  44006107156.
+  Before it: 84bd0339 (main M67, #334: the W2 batch's STATE record): push CI 43914385007 (8977), build 43914384217,
+  green, first attempt.
+  Before it: 4b44efb2 (main M66, #333; the last merge before this record). Its 7 of 7 PR checks on 5432619 (CI
   43906200443, 8977 passed; build 43906200444) and main's push runs on M66 (CI 43907365079, 8977 passed; build
   43907365228) are green.
   Before it: 7466c77e (#332): 20 of 20 PR checks incl. run 43903632755 on PostgreSQL 16: 0019 off 23/23, on 23/23,
@@ -7659,7 +7664,10 @@ LAST_GREEN_SHA=4b44efb2 (main M66, #333; the last merge before this record). Its
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-16 (this batch), scanners 3/3 each: exact heads abda2211 8944, b4a9389 8975 and 5432619 8977
+LAST_VERIFY=PASS 2026-11-17 (this batch), scanners 3/3 each: exact heads 2f6f4897 8977 and a0c5385 8984; both merged
+  on M67 8984 (tree 8e0a871a); this record's own, 8984 at its exact head. CI: #335 8977, #336 8984; main's push runs
+  M68 8977, M69 8984 — each on its first attempt.
+  Before it: PASS 2026-11-16 (this batch), scanners 3/3 each: exact heads abda2211 8944, b4a9389 8975 and 5432619 8977
   (before the repair 88f5e238 8973, 446439a8 8975); #2 and #3 merged on M64 8977 (tree d6ddd838); this record's own,
   8977 at its exact head. CI: #331 8944, #332 8975, #333 8977; main's push runs M64 8944, M65 8975, M66 8977 — each
   on its first attempt; #332's first run at 88f5e238 failed its two authored-step jobs and that head was never
@@ -8058,7 +8066,9 @@ LAST_VERIFY=PASS 2026-11-16 (this batch), scanners 3/3 each: exact heads abda221
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. 1060 (DONE), 1061, 1062 and 1063 (BLOCKED, each repaired by the master; first causal failures in
+CODEX_PENDING=NONE. 1064 (the role naming) DONE, then the master's folds. No delegation in the T3. No API key, no
+  paid fallback, $0.
+  Before it: NONE. 1060 (DONE), 1061, 1062 and 1063 (BLOCKED, each repaired by the master; first causal failures in
   .work/ng4_w2_20261107/). No delegation in the T3; the harness repair is the master's. No API key, no paid fallback,
   $0.
   Before it: NONE. 1050–1053 (the pilot build) all ended BLOCKED and were repaired by the master (first causal
@@ -8282,7 +8292,14 @@ CODEX_PENDING=NONE. 1060 (DONE), 1061, 1062 and 1063 (BLOCKED, each repaired by 
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-16, after #331, #332, #333 and this record): the one-shot dispatch
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-17, after #335, #336 and this record): the second one-shot
+  preflight read, to name the role(s) (.work/ng4_preflight_run_20261117/PREFLIGHT_DISPATCH_PACKET_2.md, filled with
+  M70 after this record; it includes accepting that the names become public); then the ruling on those role(s) (a
+  named read-only exception, a revoke (T4) or a design ruling); HOLD-1 (COMMIT_UNKNOWN or commit timestamps on, T4);
+  then the apply chain. The CHANGELOG entry for #336 (a new T3). The release of UOR HOLD #4 (local main at 0118cfaa).
+  Still open: the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b; NG6-D1…D3; the
+  writer-token renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-16, after #331, #332, #333 and this record): the one-shot dispatch
   of the read-only preflight (.work/ng4_w2_t3_20261110/PREFLIGHT_DISPATCH_PACKET.md: the exact authorization, filled
   with M67 after this record, expected outputs, STOP conditions); then, depending on HOLD-1, the commit-time setting;
   then the apply workflow's enabling (T3) and the 0019 + capacity + 0020 apply (T4); the credential step and the
@@ -9754,7 +9771,12 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-16, after #331, #332, #333 an
   - T3: publish this STATE record.
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
-NEXT_ACTION=Claude: after this record merges, verify M67's CI/build, keep local main at 0118cfaa (HOLD #4), fill
+NEXT_ACTION=Claude: after this record merges, verify M70's CI/build, keep local main at 0118cfaa (HOLD #4), fill
+  PREFLIGHT_DISPATCH_PACKET_2.md's final SHA; then wait for the owner's second dispatch decision. **Never rerun
+  preflight run 43916685548. The 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and
+  verify them only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no dispatch,
+  production read, apply, grant, credential, pilot, network, real data, T4 or deploy without the owner.
+  Before it: Claude: after this record merges, verify M67's CI/build, keep local main at 0118cfaa (HOLD #4), fill
   PREFLIGHT_DISPATCH_PACKET.md's final SHA, date and PR number; then wait for the owner's preflight dispatch
   decision; meanwhile only authorized T0–T2 preparation on the pilot's critical path (LOCAL, unpublished; no new T3
   without authorization). **The 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and
