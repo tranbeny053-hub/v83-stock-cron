@@ -2,14 +2,14 @@
 
 Updated: 2026-11-17 (**THE NG4 PILOT'S SECOND ONE-SHOT PRODUCTION READ IS CONSUMED (RUN 44012717250, NOT_READY): IT
 NAMED THE TWO ROLES BEHIND no_bypassrls_data_role_member — supabase_etl_admin AND supabase_read_only_user, BOTH
-pg_read_all_data ONLY, NO WRITE MEMBER. THE OWNER RULED A: A NAMED READ-ONLY EXCEPTION FOR EXACTLY THOSE TWO (#339 →
-M72 23c50aed); ANY OTHER NAME, ANY INDIRECT MEMBER AND ANY pg_write_all_data MEMBER STAY A HARD REFUSAL; MIGRATION
-0019'S OWN GUARD CARRIES THE SAME EXCEPTION (RE-PINNED d12036a7, STILL NOT APPLIED). HOLD-1 IS RULED: COMMIT_UNKNOWN
-RECEIPTS ARE ACCEPTED. NEVER RERUN RUN 43916685548 OR RUN 44012717250. THE CHANGELOG RECORDS #336 (#338 → M71
-990cf797). LATTICE_ENABLED = False; 0019 AND 0020 NOT APPLIED; NO LATTICE ROLE, CREDENTIAL OR GRANT. NO PRODUCTION
-WRITE. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE
-RERUN. PRODUCTION IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL
-PERMISSION IS REACHABLE.**
+pg_read_all_data ONLY, NO DIRECT WRITE MEMBER (RUN 2 READ DIRECT MEMBERSHIP ONLY). THE OWNER RULED A: A NAMED
+READ-ONLY EXCEPTION FOR EXACTLY THOSE TWO (#339 → M72 23c50aed); ANY OTHER NAME (DIRECT OR INDIRECT MEMBER) AND ANY
+pg_write_all_data MEMBER ARE A HARD REFUSAL; INDIRECT MEMBERSHIP IS NEWLY CHECKED; MIGRATION 0019'S OWN GUARD CARRIES
+THE SAME EXCEPTION (RE-PINNED d12036a7, STILL NOT APPLIED). HOLD-1 IS RULED: COMMIT_UNKNOWN RECEIPTS ARE ACCEPTED.
+NEVER RERUN RUN 43916685548 OR RUN 44012717250. THE CHANGELOG RECORDS #336 (#338 → M71 990cf797). LATTICE_ENABLED =
+False; 0019 AND 0020 NOT APPLIED; NO LATTICE ROLE, CREDENTIAL OR GRANT. NO PRODUCTION WRITE. NGA IS STILL PROPOSED,
+NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND MUST NEVER BE RERUN. PRODUCTION IS UNCHANGED: D
+27edbcad / UCPE-PROD-P7P-20261017-A. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
 - The owner (verbatim below), 2026-11-17 (ICT): the second one-shot preflight dispatch (accepting that the role names
   become public); then ruling A and HOLD-1; then the T3 for this batch, GitHub-only, "CHANGELOG@78cadff4,
   RULING-A@893ee1a7, STATE-last", accepting the package's items 1–4.
@@ -19,20 +19,23 @@ PERMISSION IS REACHABLE.**
   2026-11-17T03:48:03Z (10:48 ICT) on main e958bb47, approved by the owner, completed 03:54:48Z, every step success.
   Raw capture before parsing: the artifact zip sha256 b1092d8e… (equal to GitHub's artifact digest), the run log
   4e29e3e3…. The report: the 29 facts unchanged from run 1, booleans and integers only; the one names list
-  well-formed, untruncated and consistent with `failing`; the public log holds no database URL, host or secret.
-  **verdict NOT_READY, failing = [no_bypassrls_data_role_member]; bypassrls_data_role_members = supabase_etl_admin
-  (pg_read_all_data) and supabase_read_only_user (pg_read_all_data)** — the owner accepted these names becoming
-  public. Record: .work/ng4_preflight_run2_20261117/PREFLIGHT2_RESULT_20261117.md (SHA256SUMS_PREFLIGHT_RUN2.txt),
-  decision note DECISION_NOTE_PREFLIGHT2_20261117.md. The repo's restore-proof runbook already records these two
-  memberships as owner-ruled managed-platform exceptions (2026-10-07).
+  well-formed, untruncated and consistent with `failing`; the public log holds no production database URL, host or
+  secret. **verdict NOT_READY, failing = [no_bypassrls_data_role_member]; bypassrls_data_role_members =
+  supabase_etl_admin (pg_read_all_data) and supabase_read_only_user (pg_read_all_data)** — the owner accepted these
+  names becoming public in the Actions log and artifact (dispatch 2) and authorized this record with them (T3 package
+  row 3); STATE and the restore-proof runbook already named both. Record:
+  .work/ng4_preflight_run2_20261117/PREFLIGHT2_RESULT_20261117.md (SHA256SUMS_PREFLIGHT_RUN2.txt), decision note
+  DECISION_NOTE_PREFLIGHT2_20261117.md. The repo's restore-proof runbook already records these two memberships as
+  owner-ruled managed-platform exceptions (2026-10-07).
 - **PUBLISHED IN THIS BATCH**, each with the package's 24 digests checked first (SHA256SUMS e6c43061…), the exact
   head pushed, a byte-identical diff (`PR_VERIFY=PASS`), every PR check green, each PR's checks re-read just before
   its merge (pr33x_checks.txt; --match-head-commit binds the head), an independently computed merge tree,
   `MERGE_VERIFY=PASS` and main's push runs green before the next merge. No drift, no HOLD; every run passed on its
   first attempt.
   - **#338 → M71 990cf7976ac4519ffba9f25562ebe267cf6e5b7c** — the CHANGELOG entry for #336. Head 78cadff4 (on M70),
-    tree cd5d1497, mergedAt 2026-11-17T05:44:44Z, 1 file, +16/−0. 4 of 4 checks: CI 44025655914, 8984 passed; build
-    44025655806. M71's push runs: CI 44026234720, 8984 passed; build 44026234645.
+    tree cd5d1497, mergedAt 2026-11-17T05:44:44Z, 1 file, +14/−0 (the PR body, pr338_verify.txt and the package's row
+    1 say +16; ERRATA_EVIDENCE_RULING_A.md). 4 of 4 checks: CI 44025655914, 8984 passed; build 44025655806. M71's
+    push runs: CI 44026234720, 8984 passed; build 44026234645.
   - **#339 → M72 23c50aed2e67c477c588ebd4c20ba597e765ccaa** — ruling A. Head 893ee1a7 (on M70, 4 commits), base the
     sequential M71, tree ef5ab72d (equal to the combined gate's tree), mergedAt 2026-11-17T05:55:13Z, 8 files,
     +283/−21. **20 of 20 checks**: CI 44026816547, 8988 passed; build 44026816419; the migration-0019 rehearsal (run
@@ -54,10 +57,11 @@ PERMISSION IS REACHABLE.**
   the real apply succeeds with both present.
 - **The owner's acceptances with this T3** (package items 1–4): the 0019 change and re-pin; the transitive check (a
   future read can surface new, public names); the two informational facts; the read exposure of the two named readers
-  plus any role that can SET ROLE to or holds ADMIN on either (superusers and the applier aside) — read only, never
-  write. The exception binds names, not OIDs, and is checked once, before the apply. Carried follow-ups: the
-  pre-existing unqualified-function class in other preflight facts and route post-checks (incl. json_build_array);
-  supabase_etl_admin's possible LOGIN REPLICATION (logical decoding; unverified).
+  plus any role that can SET ROLE to or holds ADMIN on either (superusers and the applier aside) — read only; none
+  can write at the check (a later write grant to a named role is not re-checked; the append-only triggers still
+  refuse UPDATE/DELETE/TRUNCATE). The exception binds names, not OIDs, and is checked once, before the apply. Carried
+  follow-ups: the pre-existing unqualified-function class in other preflight facts and route post-checks (incl.
+  json_build_array); supabase_etl_admin's possible LOGIN REPLICATION (logical decoding; unverified).
 - **HOLD-1 RULED** (owner, 2026-11-17): COMMIT_UNKNOWN receipts are accepted; no commit-time setting change.
 - **How it was built and checked:** Codex 1065 (BLOCKED on lint; first causal failure preserved), the master's
   repairs and folds. The first local pilot rehearsal failed R-27 on its own fingerprint timing (preserved; one
@@ -69,8 +73,9 @@ PERMISSION IS REACHABLE.**
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0; this batch's merges are on origin only.
 - **THE STATE REVIEW.** The same session. Session local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE
   F-CONFIRM STATE draft”, configured claude-opus-5-5 at effort xhigh (read again with get_session before this review;
-  started from the master's session, read-only), reviewed this filled record in PENDING_REVIEW. The master ran Opus
-  5.5 at High.
+  started from the master's session, read-only), reviewed this filled record in ONE round on this filled record
+  (PASS_WITH_AMENDMENTS: four MINOR and four NOTE folded, closed by an exact-delta check). The master ran Opus 5.5 at
+  High.
 - Process: Codex 1065 (before the T3), none in the T3; GPT sidecar consultations 0; paid API $0. The UOR relay is
   still NOT_DELIVERED.
 - Nothing else changed: no production write, no third dispatch, no apply workflow enabled, no migration applied, no
@@ -3522,38 +3527,38 @@ LOOP_STATE=BOTH PREFLIGHT READS ARE CONSUMED (runs 43916685548 and 44012717250: 
     delta round (PASS, 4 NOTE: one closed by an exact-delta check, two folded into the dispatch packet, one
     superseded); ruling A (#339) had ONE independent reviewer: ONE round (PASS_WITH_AMENDMENTS: 2 MINOR, 5 NOTE) and
     ONE delta round (PASS, 4 NOTE: three folded and closed by an exact-delta check, one carried); this record had ONE
-    independent reviewer, the same session, in PENDING_REVIEW; the role-naming batch's record (#337) had ONE in ONE
-    round (PASS_WITH_AMENDMENTS: one MINOR and seven NOTE folded, closed by an exact-delta check); the W2 batch's
-    record (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an
-    exact-delta check); the NG4 pilot batch's record (#330) had ONE in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48;
-    a delta PASS_WITH_AMENDMENTS on ec1847fe whose verdict arrived after the merge), although #330 itself says one
-    round; NG4 (#326) had ONE independent reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in
-    TWO rounds (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's record (#327) had ONE in TWO rounds
-    (PASS_WITH_AMENDMENTS: two MINOR and three NOTE folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had
-    ONE independent reviewer: the spec in THREE rounds (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS
-    with one MAJOR; delta PASS); the NG3 batch's record (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR
-    folded; then a delta PASS); NG1 (#320) had ONE independent reviewer: the spec in TWO rounds (FINDINGS; delta
-    FINDINGS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE
-    in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next batch's record (#318) had ONE
-    in TWO rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer in TWO rounds
-    (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and the licensing evidence had NO
-    independent review (master audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE round;
-    the S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then PASS); the S1 recommended
-    ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had
-    NO independent review (master audit and quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds;
-    the evaluation-row batch's record (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE
-    independent reviewer in TWO rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5
-    had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent;
-    the last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had
-    ONE independent reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its
-    ruling sheet ONE in ONE round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta
-    PASS); the (b1) parse layer (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only
-    probe by an ordinary subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the
-    decision pack had ONE independent reviewer in FOUR rounds, the last round's three small items folded after its
-    PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE
-    other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and
-    a56f80c7's message ("a second review passed") overstate theirs and are immutable, so this record documents them
-    instead.
+    independent reviewer, the same session, in ONE round on this filled record (PASS_WITH_AMENDMENTS: four MINOR and
+    four NOTE folded, closed by an exact-delta check); the role-naming batch's record (#337) had ONE in ONE round
+    (PASS_WITH_AMENDMENTS: one MINOR and seven NOTE folded, closed by an exact-delta check); the W2 batch's record
+    (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta
+    check); the NG4 pilot batch's record (#330) had ONE in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta
+    PASS_WITH_AMENDMENTS on ec1847fe whose verdict arrived after the merge), although #330 itself says one round; NG4
+    (#326) had ONE independent reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds
+    (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's record (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS:
+    two MINOR and three NOTE folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had ONE independent reviewer:
+    the spec in THREE rounds (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR; delta PASS);
+    the NG3 batch's record (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS);
+    NG1 (#320) had ONE independent reviewer: the spec in TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO
+    rounds (FINDINGS with one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE in TWO rounds
+    (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next batch's record (#318) had ONE in TWO
+    rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS,
+    folded; then a delta PASS); the critical-path map and the licensing evidence had NO independent review (master
+    audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE round; the S1 engine (#313) had ONE
+    independent reviewer in TWO rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds
+    (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO independent review
+    (master audit and quote checks only); the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row
+    batch's record (#308) had ONE in TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in
+    TWO rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds
+    (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the last two folds
+    not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1 (#304) had ONE independent
+    reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE
+    in ONE round; the parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse
+    layer (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary
+    subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision pack had
+    ONE independent reviewer in FOUR rounds, the last round's three small items folded after its PASS and not
+    re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the fit gate (#291) had ONE other in TWO
+    rounds; the builder had ONE in THREE rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's
+    message ("a second review passed") overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3600,9 +3605,10 @@ LOOP_STATE=BOTH PREFLIGHT READS ARE CONSUMED (runs 43916685548 and 44012717250: 
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
-  Before it: THE FIRST PREFLIGHT READ WAS CONSUMED (run 43916685548, NOT_READY), THE PREFLIGHT GAINED ROLE NAMING
-  (#336 → M69 38b4cb53), THE CHANGELOG RECORDED #332/#333 (#335 → M68), and that batch's record was published last
-  (#337 → M70 e958bb47).
+  Before it: THE FIRST PREFLIGHT READ WAS CONSUMED (run 43916685548, NOT_READY; raw zip 2bfb3ace…, log 373cc332…;
+  .work/ng4_preflight_run_20261117/PREFLIGHT_RESULT_20261117.md), THE PREFLIGHT GAINED ROLE NAMING (#336 → M69
+  38b4cb53), THE CHANGELOG RECORDED #332/#333 (#335 → M68), and that batch's record was published last (#337 → M70
+  e958bb47).
   Before it: W2 REACHED MAIN (#332 → M65 7466c77e), THE READ-ONLY PREFLIGHT WAS REGISTERED (#333 → M66 4b44efb2), THE
   CHANGELOG RECORDED #329 (#331 → M64), and that batch's record was published last (#334 → M67 84bd0339).
   Before it: THE NG4 PILOT'S DORMANT BUILD REACHED MAIN (#329 → M62 5dada1c1), THE CHANGELOG RECORDED #326 (#328 →
