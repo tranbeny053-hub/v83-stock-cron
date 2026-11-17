@@ -397,6 +397,11 @@ def test_role_checks_are_schema_qualified_and_the_set_role_paths_are_counted():
     report = preflight.preflight(lambda: conn)
     queries = "\n".join(sql for sql, _ in conn.cursor_obj.statements)
     assert "pg_catalog.pg_has_role(u.oid, n.oid, 'SET')" in queries
+    assert "pg_catalog.pg_has_role(u.oid, n.oid, 'MEMBER WITH ADMIN OPTION')" in queries
+    # A planted public.count(oid) would beat pg_catalog's count("any"): only count(*) may be bare.
+    bare_count = re.compile(r"(?<!pg_catalog\.)\bcount\((?!\*)")
+    for sql, _ in conn.cursor_obj.statements:
+        assert not bare_count.search(sql), sql
     for fact in ("bypassrls_allowlisted_readers", "named_reader_set_role_paths"):
         assert type(report["facts"][fact]) is int
         assert fact not in report["failing"]

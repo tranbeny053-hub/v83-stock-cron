@@ -148,15 +148,18 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
                 "AND pg_catalog.pg_has_role(r.oid, 'pg_read_all_data', 'MEMBER') "
                 "AND NOT pg_catalog.pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER')"
             ),
-            # Informational (review R1-2): SET ROLE carries BYPASSRLS, so every role that can
-            # SET ROLE to a named reader reads what the reader reads. Counted, never failing.
+            # Informational (review R1-2 and its delta notes): SET ROLE carries BYPASSRLS, so every
+            # role that can SET ROLE to a named reader, or holds ADMIN on one (and can grant itself
+            # SET), reads what the reader reads. The two named readers, superusers and the applier
+            # are not counted. Never failing.
             "named_reader_set_role_paths": (
-                "SELECT count(DISTINCT u.oid) FROM pg_catalog.pg_roles u "
+                "SELECT pg_catalog.count(DISTINCT u.oid) FROM pg_catalog.pg_roles u "
                 "CROSS JOIN pg_catalog.pg_roles n "
                 "WHERE n.rolname IN ('supabase_etl_admin','supabase_read_only_user') "
-                "AND u.oid<>n.oid "
+                "AND u.rolname NOT IN ('supabase_etl_admin','supabase_read_only_user') "
                 "AND NOT u.rolsuper AND u.rolname<>current_user "
-                "AND pg_catalog.pg_has_role(u.oid, n.oid, 'SET')"
+                "AND (pg_catalog.pg_has_role(u.oid, n.oid, 'SET') "
+                "OR pg_catalog.pg_has_role(u.oid, n.oid, 'MEMBER WITH ADMIN OPTION'))"
             ),
             "ucpe_lattice_space_exists": (
                 "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"

@@ -515,9 +515,18 @@ class Pilot:
             "GRANT supabase_read_only_user TO probe_setter WITH INHERIT FALSE, SET TRUE"
         )
         setter_p = self.preflight()[1]
+        # ADMIN without SET: the role can grant itself SET, so it is counted too.
+        self.su.execute("CREATE ROLE probe_admin NOLOGIN")
+        self.su.execute(
+            "GRANT supabase_etl_admin TO probe_admin WITH ADMIN TRUE, INHERIT FALSE, SET FALSE"
+        )
+        admin_p = self.preflight()[1]
+        self.su.execute("DROP ROLE probe_admin")
         self.su.execute("DROP ROLE probe_setter")
         setter_ok = (setter_p.get("facts", {}).get("named_reader_set_role_paths") == 1
-                     and "no_bypassrls_data_role_member" not in setter_p.get("failing", []))
+                     and admin_p.get("facts", {}).get("named_reader_set_role_paths") == 2
+                     and "no_bypassrls_data_role_member" not in setter_p.get("failing", [])
+                     and "no_bypassrls_data_role_member" not in admin_p.get("failing", []))
         self.su.execute("GRANT pg_write_all_data TO supabase_etl_admin")
         write_p = self.preflight()[1]
         write_a = self.apply()
