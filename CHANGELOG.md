@@ -2,6 +2,20 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-17 - NG4: the read-only preflight names the roles behind its BYPASSRLS check (on main, not released)
+
+It records #336. Nothing in this entry is released.
+
+Added:
+- #336: the preflight's report lists each role behind `no_bypassrls_data_role_member` and which data role it holds
+  (catalog identifiers only, at most 20, with names that are not plain identifiers or look like tokens replaced).
+  This is one extra catalog query inside the same read-only transaction, and the verdict logic is unchanged.
+
+Notes:
+- The pilot's first production read (run 43916685548, 2026-11-16) returned NOT_READY on that one check. A second read
+  (run 44012717250, 2026-11-17) named two provider roles holding read-only data access. Both reads are consumed.
+- Publishing is not activation: the lattice is OFF, and 0019 and 0020 are not applied.
+
 ## 2026-11-16 - NG4: the pilot's separate login (W2) and the registered read-only preflight (on main, not released)
 
 It records #332 and #333. Nothing in this entry is released.
