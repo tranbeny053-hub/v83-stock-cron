@@ -1,4 +1,4 @@
-"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-28).
+"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-29).
 
 Run by run_scratch.sh in its pilot mode, locally or in CI. Every URL must be local
 (rehearse.refuse_url) and none is
@@ -13,7 +13,8 @@ Space's reader still
 DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (UP020); R-25 the
 applier's own temp
 schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-27
-only the two named read-only BYPASSRLS readers accepted; R-28 their read-only exposure; R-16
+only the two named read-only BYPASSRLS readers accepted; R-28 their read-only exposure; R-29 a DDL
+watcher remains installed for R-18 apply and R-29b proves it fired; R-16
 both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
 non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
 memory only.
@@ -89,6 +90,9 @@ class Pilot:
         self.url, self.space_url = url, space_url
         self.runner = psycopg.connect(url, autocommit=True)
         self.su = psycopg.connect(super_url, autocommit=True)
+        self.super_url = super_url
+        self.ddl_listener = None
+        self.ddl_pre_apply: list[str] = []
         self.runner_name = self.runner.execute("SELECT current_user").fetchone()[0]
         self.checks: list[dict[str, Any]] = []
         self.facts: dict[str, Any] = {}
@@ -563,6 +567,57 @@ class Pilot:
              "fingerprints_unchanged": write_fp == baseline and indirect_fp == baseline},
         )
 
+    def r29_ddl_event_trigger(self) -> None:
+        baseline_code, baseline = self.preflight()
+        self.su.execute(
+            "CREATE FUNCTION public.ng4_probe_ddl_watch() RETURNS event_trigger "
+            "LANGUAGE plpgsql AS 'BEGIN PERFORM pg_notify(''pgrst'', ''reload schema''); END'"
+        )
+        self.su.execute(
+            "CREATE EVENT TRIGGER ng4_probe_ddl_watch ON ddl_command_end "
+            "EXECUTE FUNCTION public.ng4_probe_ddl_watch()"
+        )
+        code, body = self.preflight()
+        # A dedicated listener, so R-29b can prove the watcher FIRED during the real apply (R-18)
+        # (review R1-5); nothing else runs on this connection.
+        self.ddl_listener = self.psycopg.connect(self.super_url, autocommit=True)
+        self.ddl_listener.execute("LISTEN pgrst")
+        expected = [{"name": "ng4_probe_ddl_watch", "event": "ddl_command_end",
+                     "enabled": "origin"}]
+        unchanged = (body.get("verdict") == baseline.get("verdict")
+                     and body.get("failing") == baseline.get("failing"))
+        ok = (baseline_code == 0 and code == 0 and body.get("ddl_event_triggers") == expected
+              and body.get("facts", {}).get("event_triggers_ddl") == 1 and unchanged)
+        self.add(
+            "R-29 the preflight reports the named DDL watcher and its state; it leaves the verdict"
+            " unchanged and remains installed for R-18 apply",
+            ok,
+            {"triggers": body.get("ddl_event_triggers"),
+             "event_triggers_ddl": body.get("facts", {}).get("event_triggers_ddl"),
+             "verdict_unchanged": unchanged, "failing": body.get("failing")},
+        )
+
+    def r29_drain(self) -> None:
+        # Right before the route's apply: anything already queued is drained and recorded, so a
+        # notification R-29b sees can only come from the apply (delta review note 7).
+        self.ddl_pre_apply = []
+        if self.ddl_listener is not None:
+            for notify in self.ddl_listener.notifies(timeout=0.5):
+                self.ddl_pre_apply.append(notify.payload)
+
+    def r29b_ddl_watcher_fired(self) -> None:
+        payloads = []
+        if self.ddl_listener is not None:
+            for notify in self.ddl_listener.notifies(timeout=5, stop_after=1):
+                payloads.append(notify.payload)
+            self.ddl_listener.close()
+        self.add(
+            "R-29b the DDL watcher fired during the real apply (its NOTIFY arrived after the"
+            " route's commit)",
+            payloads == ["reload schema"] and self.ddl_pre_apply == [],
+            {"payloads": payloads, "drained_before_apply": self.ddl_pre_apply},
+        )
+
     # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
     def r21b(self) -> None:
         facts: dict[str, Any] = {}
@@ -816,8 +871,11 @@ class Pilot:
         self.r24_planted()
         self.r26_bypass_member()
         self.r27_named_readers()
+        self.r29_ddl_event_trigger()
         self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
+        self.r29_drain()
         self.r18_apply()
+        self.r29b_ddl_watcher_fired()
         self.r20()
         self.r21()
         self.r21b()

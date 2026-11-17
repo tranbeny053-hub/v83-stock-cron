@@ -3,7 +3,8 @@
 
 For the BYPASSRLS data-role check only, the report also names the roles and their data role
 (catalog identifiers only, never values). Two owner-approved read-only roles are allowlisted;
-their count is informational, while any write-role membership remains a hard failure.
+their count is informational, while any write-role membership remains a hard failure. The report
+also names DDL event triggers without exposing their definitions.
 """
 
 from __future__ import annotations
@@ -71,6 +72,13 @@ _BYPASSRLS_MEMBERS_FROM = (
 BYPASSRLS_MEMBERS_SQL = (
     "SELECT coalesce(json_agg(json_build_array(x.rn, x.dn) ORDER BY x.rn, x.dn), '[]'::json)::text "
     "FROM (SELECT DISTINCT r.rolname AS rn, g.rolname AS dn FROM " + _BYPASSRLS_MEMBERS_FROM + ") x"
+)
+DDL_EVENT_TRIGGERS_SQL = (
+    "SELECT coalesce(pg_catalog.json_agg(pg_catalog.json_build_array(e.evtname, e.evtevent, "
+    "e.evtenabled::text) "
+    "ORDER BY e.evtname, e.evtevent), '[]'::json)::text "
+    "FROM pg_catalog.pg_event_trigger e WHERE e.evtevent IN "
+    "('ddl_command_end','ddl_command_start')"
 )
 # A name that matches the identifier pattern can still look like a token (review R1-3): a run of 16+
 # hexadecimal characters is replaced too.
@@ -231,6 +239,29 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
         captured["bypassrls_data_role_members"] = members
         if len(raw_members) > 20:
             captured["bypassrls_data_role_members_truncated"] = True
+        cur.execute(DDL_EVENT_TRIGGERS_SQL)
+        raw_triggers = json.loads(cur.fetchone()[0])
+        if not isinstance(raw_triggers, list) or any(
+            not isinstance(trigger, list) or len(trigger) != 3 for trigger in raw_triggers
+        ):
+            raise RuntimeError("MALFORMED_TRIGGERS")
+        triggers = []
+        enabled_states = {"O": "origin", "D": "disabled", "R": "replica", "A": "always"}
+        for trigger in raw_triggers[:20]:
+            name, event, enabled = trigger
+            triggers.append({
+                "name": name if isinstance(name, str) and _ROLE_NAME.fullmatch(name)
+                and not _TOKEN_LIKE.search(name) else "<non-identifier>",
+                "event": event if event in ("ddl_command_start", "ddl_command_end")
+                else "<unexpected>",
+                "enabled": enabled_states.get(enabled, "<unexpected>"),
+            })
+        # Compared always (the SQL returns the full list; review R1-8).
+        if len(raw_triggers) != facts["event_triggers_ddl"]:
+            raise RuntimeError("INCONSISTENT_TRIGGERS")
+        captured["ddl_event_triggers"] = triggers
+        if len(raw_triggers) > 20:
+            captured["ddl_event_triggers_truncated"] = True
         cur.execute("ROLLBACK")
     failing = [key for key in PREREQUISITES if facts[key] is not True]
     for key in ("public_relation_privileges", "public_executable_definers"):
@@ -248,6 +279,8 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
         "failing": failing,
         "bypassrls_data_role_members": members,
         **({"bypassrls_data_role_members_truncated": True} if len(raw_members) > 20 else {}),
+        "ddl_event_triggers": triggers,
+        **({"ddl_event_triggers_truncated": True} if len(raw_triggers) > 20 else {}),
     }
 
 
