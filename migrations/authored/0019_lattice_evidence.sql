@@ -46,12 +46,15 @@ BEGIN
         RAISE EXCEPTION '0019: the applying role needs CREATEROLE' USING ERRCODE = 'UP019';
     END IF;
     -- Isolation preconditions: no role but superusers and the runner may bypass row-level security while holding
-    -- the predefined read-all or write-all data roles, and no publication may publish every table.
+    -- the predefined read-all or write-all data roles, and no publication may publish every table. The one
+    -- exception (owner ruling A, 2026-11-17): supabase_etl_admin and supabase_read_only_user may hold
+    -- pg_read_all_data with BYPASSRLS (read only); pg_write_all_data stays refused for every role.
     IF EXISTS (
         SELECT 1 FROM pg_catalog.pg_roles r
          WHERE r.rolbypassrls AND NOT r.rolsuper AND r.rolname <> current_user
-           AND (pg_catalog.pg_has_role(r.oid, 'pg_read_all_data', 'MEMBER')
-                OR pg_catalog.pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER'))
+           AND (pg_catalog.pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER')
+                OR (pg_catalog.pg_has_role(r.oid, 'pg_read_all_data', 'MEMBER')
+                    AND r.rolname NOT IN ('supabase_etl_admin', 'supabase_read_only_user')))
     ) THEN
         RAISE EXCEPTION '0019: a non-superuser role bypasses RLS and holds pg_read_all_data or pg_write_all_data'
             USING ERRCODE = 'UP019';

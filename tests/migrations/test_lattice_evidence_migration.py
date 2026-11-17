@@ -50,6 +50,14 @@ def test_first_apply_checks_refuse_with_up019() -> None:
     ):
         assert needle in checks
     assert checks.count("ERRCODE = 'UP019'") == 6
+    # The BYPASSRLS guard (comments are stripped from CODE): write membership refuses for every
+    # role; only the owner's two named readers are excepted, and only from pg_read_all_data.
+    guard = checks.split("r.rolbypassrls AND NOT r.rolsuper", 1)[1].split("END IF;", 1)[0]
+    flat = re.sub(r"\s+", " ", guard)
+    assert ("AND (pg_catalog.pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER') OR "
+            "(pg_catalog.pg_has_role(r.oid, 'pg_read_all_data', 'MEMBER') AND r.rolname NOT IN "
+            "('supabase_etl_admin', 'supabase_read_only_user')))") in flat
+    assert guard.count("supabase_etl_admin") == guard.count("supabase_read_only_user") == 1
 
 
 def test_roles_are_created_at_line_start_without_power() -> None:

@@ -311,6 +311,26 @@ class Rehearsal:
 
     def refusal_fixtures(self) -> None:
         sql = MIGRATION.read_text(encoding="utf-8")
+        self.su.execute("CREATE ROLE supabase_read_only_user NOLOGIN BYPASSRLS")
+        self.su.execute("CREATE ROLE supabase_etl_admin NOLOGIN BYPASSRLS")
+        self.su.execute("GRANT pg_read_all_data TO supabase_read_only_user, supabase_etl_admin")
+        self.runner.execute("BEGIN")
+        accepted = self.sqlstate_of(lambda: self.runner.execute(sql))
+        self.runner.execute("ROLLBACK")
+        no_schema = not self.one(self.su,
+            "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='ucpe_lattice')")
+        self.su.execute("GRANT pg_write_all_data TO supabase_etl_admin")
+        named_write = self.sqlstate_of(lambda: self._apply(sql))
+        self.su.execute("REVOKE pg_write_all_data FROM supabase_etl_admin")
+        self.su.execute("CREATE ROLE probe_group NOLOGIN")
+        self.su.execute("GRANT pg_read_all_data TO probe_group")
+        self.su.execute("CREATE ROLE probe_indirect NOLOGIN BYPASSRLS")
+        self.su.execute("GRANT probe_group TO probe_indirect")
+        indirect = self.sqlstate_of(lambda: self._apply(sql))
+        self.su.execute("DROP ROLE probe_indirect")
+        self.su.execute("DROP ROLE probe_group")
+        self.su.execute("DROP ROLE supabase_etl_admin")
+        self.su.execute("DROP ROLE supabase_read_only_user")
         self.su.execute("CREATE ROLE probe_bypass_reader NOLOGIN BYPASSRLS")
         self.su.execute("GRANT pg_read_all_data TO probe_bypass_reader")
         bypass = self.sqlstate_of(lambda: self._apply(sql))
@@ -319,10 +339,14 @@ class Rehearsal:
         alltables = self.sqlstate_of(lambda: self._apply(sql))
         self.su.execute("DROP PUBLICATION probe_all")
         self.add(
-            "R-0 the first-apply checks refuse a BYPASSRLS reader of pg_read_all_data"
-            " and a FOR ALL TABLES publication",
-            bypass == "UP019" and alltables == "UP019",
-            {"bypass_reader": bypass, "all_tables_publication": alltables},
+            "R-0 the first-apply checks accept only the owner's two named BYPASSRLS readers"
+            " (read only), refuse write and indirect membership, and refuse a BYPASSRLS reader"
+            " of pg_read_all_data and a FOR ALL TABLES publication",
+            accepted is None and no_schema and named_write == "UP019" and indirect == "UP019"
+            and bypass == "UP019" and alltables == "UP019",
+            {"named_readers_rollback": accepted, "rollback_left_no_schema": no_schema,
+             "named_writer": named_write, "indirect_reader": indirect,
+             "bypass_reader": bypass, "all_tables_publication": alltables},
         )
         # Hostile fixtures that stay: the runner's global default privileges grant everything to
         # the API roles (a platform default's worst case), a PUBLIC-only role, and a non-bypass

@@ -21,7 +21,7 @@ MIGRATION_0020 = "migrations/authored/0020_lattice_space_login.sql"
 # The path GitHub will report once the authored file is renamed into place (the enabling T3);
 # today no such file exists, so no dispatch can match it (review R1-1).
 WORKFLOW = ".github/workflows/apply-migration-0019.yml"
-MIGRATION_SHA256 = "8ae3c32968bb250f9700047309456606f8f75ac9b2580712f999b087355c9dc6"
+MIGRATION_SHA256 = "d12036a727da119e6986bbde52a488b5d794095c067734125ee6db59ad4c7809"
 CAPACITY_SHA256 = "ef1fa7af0cf370604c2ad593f84833d23e5722083141b016ef7b3afff25f3b52"
 MIGRATION_0020_SHA256 = "b4893eb5661176b71aaec248f939bbdbe0addba2485e81c86cea0a48726712af"
 CONFIRMATION = "APPLY-MIGRATIONS-0019-0020-ONCE"
@@ -77,10 +77,11 @@ CHECKS = {
     "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
     "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
     "no_bypassrls_data_role_member": (
-        "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
-        "JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
-        "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls AND NOT r.rolsuper "
-        "AND r.rolname<>current_user)"
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles r CROSS JOIN "
+        "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
+        "WHERE pg_has_role(r.oid, g.rolname, 'MEMBER') AND r.rolbypassrls AND NOT r.rolsuper "
+        "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' AND r.rolname IN "
+        "('supabase_etl_admin','supabase_read_only_user')))"
     ),
     "no_all_tables_publication": (
         "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"

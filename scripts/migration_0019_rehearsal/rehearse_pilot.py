@@ -1,4 +1,4 @@
-"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-26).
+"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-28).
 
 Run by run_scratch.sh in its pilot mode, locally or in CI. Every URL must be local
 (rehearse.refuse_url) and none is
@@ -13,6 +13,8 @@ Space's reader still
 DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (UP020); R-25 the
 applier's own temp
 schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-16
+R-27 accepts only the two named read-only BYPASSRLS readers and R-28 proves their read-only
+exposure;
 both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
 non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
 memory only.
@@ -498,6 +500,49 @@ class Pilot:
             },
         )
 
+    def r27_named_readers(self) -> None:
+        self.su.execute("CREATE ROLE supabase_read_only_user NOLOGIN BYPASSRLS")
+        self.su.execute("CREATE ROLE supabase_etl_admin NOLOGIN BYPASSRLS")
+        self.su.execute("GRANT pg_read_all_data TO supabase_read_only_user, supabase_etl_admin")
+        baseline = self.fingerprint()
+        code_p, body_p = self.preflight()
+        base_ok = (code_p == 0 and "no_bypassrls_data_role_member" not in body_p.get("failing", [])
+                   and body_p.get("bypassrls_data_role_members") == []
+                   and body_p.get("facts", {}).get("bypassrls_allowlisted_readers") == 2)
+        self.su.execute("GRANT pg_write_all_data TO supabase_etl_admin")
+        write_p = self.preflight()[1]
+        write_a = self.apply()
+        write_fp = self.fingerprint()
+        self.su.execute("REVOKE pg_write_all_data FROM supabase_etl_admin")
+        self.su.execute("CREATE ROLE probe_group NOLOGIN")
+        self.su.execute("GRANT pg_read_all_data TO probe_group")
+        self.su.execute("CREATE ROLE probe_indirect NOLOGIN BYPASSRLS")
+        self.su.execute("GRANT probe_group TO probe_indirect")
+        indirect_p = self.preflight()[1]
+        indirect_a = self.apply()
+        indirect_fp = self.fingerprint()
+        self.su.execute("DROP ROLE probe_indirect")
+        self.su.execute("DROP ROLE probe_group")
+        self.add(
+            "R-27 only the two named read-only BYPASSRLS readers pass; write and indirect"
+            " membership refuse",
+            base_ok
+            and write_p.get("bypassrls_data_role_members") == [
+                {"role": "supabase_etl_admin", "data_role": "pg_write_all_data"}]
+            and write_p.get("verdict") == "NOT_READY"
+            and write_a[0] != 0 and "no_bypassrls_data_role_member" in " ".join(
+                write_a[1].get("refusals") or [])
+            and indirect_p.get("bypassrls_data_role_members") == [
+                {"role": "probe_indirect", "data_role": "pg_read_all_data"}]
+            and indirect_a[0] != 0 and "no_bypassrls_data_role_member" in " ".join(
+                indirect_a[1].get("refusals") or [])
+            and write_fp == baseline and indirect_fp == baseline,
+            {"accepted": base_ok, "write_member": write_p.get("bypassrls_data_role_members"),
+             "write_route_exit": write_a[0], "indirect_member":
+             indirect_p.get("bypassrls_data_role_members"), "indirect_route_exit": indirect_a[0],
+             "fingerprints_unchanged": write_fp == baseline and indirect_fp == baseline},
+        )
+
     # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
     def r21b(self) -> None:
         facts: dict[str, Any] = {}
@@ -602,6 +647,50 @@ class Pilot:
             facts,
         )
 
+    def r28_named_readers_effect(self) -> None:
+        # The accepted exposure of owner ruling A, documented live: each named reader can read every
+        # lattice table and can change none, and may execute none of the writer's functions.
+        tables = [r[0] for r in self.su.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+            " WHERE n.nspname = 'ucpe_lattice' AND c.relkind IN ('r', 'p') ORDER BY 1"
+        ).fetchall()]
+        facts: dict[str, Any] = {"tables": tables}
+        for role in ("supabase_read_only_user", "supabase_etl_admin"):
+            reads, denied, other = 0, 0, []
+            with self.su.cursor() as cur:
+                cur.execute(f"SET ROLE {role}")
+                try:
+                    for table in tables:
+                        cur.execute(f"SELECT count(*) FROM ucpe_lattice.{table}")
+                        reads += 1
+                        for statement in (f"INSERT INTO ucpe_lattice.{table} DEFAULT VALUES",
+                                          f"DELETE FROM ucpe_lattice.{table}",
+                                          f"TRUNCATE ucpe_lattice.{table}"):
+                            try:
+                                cur.execute(statement)
+                                other.append(statement + ": SUCCEEDED")
+                            except Exception as exc:  # each refusal must be the privilege error
+                                state = getattr(exc, "sqlstate", None)
+                                if state == "42501":
+                                    denied += 1
+                                else:
+                                    other.append(f"{statement}: {state}")
+                finally:
+                    cur.execute("RESET ROLE")
+            executable = [f for f in FUNCTIONS if self.su.execute(
+                "SELECT has_function_privilege(%s, %s, 'EXECUTE')", (role, f)).fetchone()[0]]
+            facts[role] = {"reads": reads, "write_denials": denied, "other": other,
+                           "executable_writer_functions": executable}
+        self.add(
+            "R-28 the two named readers read every lattice table and can change none (INSERT,"
+            " DELETE, TRUNCATE refused 42501) and may execute none of the writer's functions",
+            len(tables) == 4
+            and all(facts[r]["reads"] == 4 and facts[r]["write_denials"] == 12
+                    and not facts[r]["other"] and not facts[r]["executable_writer_functions"]
+                    for r in ("supabase_read_only_user", "supabase_etl_admin")),
+            facts,
+        )
+
     def r23(self) -> None:
         # The NG4 snapshot excludes only owner/writer, so it sees ucpe_lattice_space: equal to the
         # pre-apply snapshot only if the role, its memberships and its settings are all gone.
@@ -697,11 +786,13 @@ class Pilot:
         self.r18_refusals()
         self.r24_planted()
         self.r26_bypass_member()
+        self.r27_named_readers()
         self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
         self.r18_apply()
         self.r20()
         self.r21()
         self.r21b()
+        self.r28_named_readers_effect()
         self.r22()
         self.r16()
         self.r23()
