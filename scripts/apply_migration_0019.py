@@ -77,9 +77,10 @@ CHECKS = {
     "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
     "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
     "no_bypassrls_data_role_member": (
-        "SELECT NOT EXISTS (SELECT 1 FROM pg_roles r CROSS JOIN "
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r CROSS JOIN "
         "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
-        "WHERE pg_has_role(r.oid, g.rolname, 'MEMBER') AND r.rolbypassrls AND NOT r.rolsuper "
+        "WHERE pg_catalog.pg_has_role(r.oid, g.rolname::name, 'MEMBER') AND r.rolbypassrls "
+        "AND NOT r.rolsuper "
         "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' AND r.rolname IN "
         "('supabase_etl_admin','supabase_read_only_user')))"
     ),

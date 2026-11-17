@@ -25,9 +25,10 @@ def test_route_predicate_and_guard_match_named_reader_exception():
     import hashlib
 
     sql = (ROOT / apply.MIGRATION).read_text()
-    predicate = ("SELECT NOT EXISTS (SELECT 1 FROM pg_roles r CROSS JOIN "
+    predicate = ("SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r CROSS JOIN "
                  "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
-                 "WHERE pg_has_role(r.oid, g.rolname, 'MEMBER') AND r.rolbypassrls "
+                 "WHERE pg_catalog.pg_has_role(r.oid, g.rolname::name, 'MEMBER') "
+                 "AND r.rolbypassrls "
                  "AND NOT r.rolsuper "
                  "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' "
                  "AND r.rolname IN "

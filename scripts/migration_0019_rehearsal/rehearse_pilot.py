@@ -12,9 +12,8 @@ live privileges, its SCRAM startup, its connection limit and a store round trip;
 Space's reader still
 DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (UP020); R-25 the
 applier's own temp
-schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-16
-R-27 accepts only the two named read-only BYPASSRLS readers and R-28 proves their read-only
-exposure;
+schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-27
+only the two named read-only BYPASSRLS readers accepted; R-28 their read-only exposure; R-16
 both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
 non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
 memory only.
@@ -508,7 +507,17 @@ class Pilot:
         code_p, body_p = self.preflight()
         base_ok = (code_p == 0 and "no_bypassrls_data_role_member" not in body_p.get("failing", [])
                    and body_p.get("bypassrls_data_role_members") == []
-                   and body_p.get("facts", {}).get("bypassrls_allowlisted_readers") == 2)
+                   and body_p.get("facts", {}).get("bypassrls_allowlisted_readers") == 2
+                   and body_p.get("facts", {}).get("named_reader_set_role_paths") == 0)
+        # A role that can SET ROLE to a named reader is counted, informational only (review R1-2).
+        self.su.execute("CREATE ROLE probe_setter NOLOGIN")
+        self.su.execute(
+            "GRANT supabase_read_only_user TO probe_setter WITH INHERIT FALSE, SET TRUE"
+        )
+        setter_p = self.preflight()[1]
+        self.su.execute("DROP ROLE probe_setter")
+        setter_ok = (setter_p.get("facts", {}).get("named_reader_set_role_paths") == 1
+                     and "no_bypassrls_data_role_member" not in setter_p.get("failing", []))
         self.su.execute("GRANT pg_write_all_data TO supabase_etl_admin")
         write_p = self.preflight()[1]
         write_a = self.apply()
@@ -527,6 +536,7 @@ class Pilot:
             "R-27 only the two named read-only BYPASSRLS readers pass; write and indirect"
             " membership refuse",
             base_ok
+            and setter_ok
             and write_p.get("bypassrls_data_role_members") == [
                 {"role": "supabase_etl_admin", "data_role": "pg_write_all_data"}]
             and write_p.get("verdict") == "NOT_READY"
@@ -537,7 +547,8 @@ class Pilot:
             and indirect_a[0] != 0 and "no_bypassrls_data_role_member" in " ".join(
                 indirect_a[1].get("refusals") or [])
             and write_fp == baseline and indirect_fp == baseline,
-            {"accepted": base_ok, "write_member": write_p.get("bypassrls_data_role_members"),
+            {"accepted": base_ok, "set_role_path_counted": setter_ok,
+             "write_member": write_p.get("bypassrls_data_role_members"),
              "write_route_exit": write_a[0], "indirect_member":
              indirect_p.get("bypassrls_data_role_members"), "indirect_route_exit": indirect_a[0],
              "fingerprints_unchanged": write_fp == baseline and indirect_fp == baseline},
@@ -663,7 +674,15 @@ class Pilot:
                     for table in tables:
                         cur.execute(f"SELECT count(*) FROM ucpe_lattice.{table}")
                         reads += 1
+                        column = self.su.execute(
+                            "SELECT a.attname FROM pg_attribute a JOIN pg_class c"
+                            " ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace"
+                            " WHERE n.nspname = 'ucpe_lattice' AND c.relname = %s"
+                            " AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum LIMIT 1",
+                            (table,),
+                        ).fetchone()[0]
                         for statement in (f"INSERT INTO ucpe_lattice.{table} DEFAULT VALUES",
+                                          f"UPDATE ucpe_lattice.{table} SET {column} = {column}",
                                           f"DELETE FROM ucpe_lattice.{table}",
                                           f"TRUNCATE ucpe_lattice.{table}"):
                             try:
@@ -683,9 +702,10 @@ class Pilot:
                            "executable_writer_functions": executable}
         self.add(
             "R-28 the two named readers read every lattice table and can change none (INSERT,"
-            " DELETE, TRUNCATE refused 42501) and may execute none of the writer's functions",
+            " UPDATE, DELETE, TRUNCATE refused 42501) and may execute none of the writer's"
+            " functions",
             len(tables) == 4
-            and all(facts[r]["reads"] == 4 and facts[r]["write_denials"] == 12
+            and all(facts[r]["reads"] == 4 and facts[r]["write_denials"] == 16
                     and not facts[r]["other"] and not facts[r]["executable_writer_functions"]
                     for r in ("supabase_read_only_user", "supabase_etl_admin")),
             facts,
