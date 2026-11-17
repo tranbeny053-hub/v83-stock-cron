@@ -2,6 +2,26 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-16 - NG4: the pilot's separate login (W2) and the registered read-only preflight (on main, not released)
+
+It records #332 and #333. Nothing in this entry is released.
+
+Added:
+- #332: migration 0020 (`migrations/authored/0020_lattice_space_login.sql`), AUTHORED and NOT APPLIED: the pilot's
+  own least-privilege login `ucpe_lattice_space`, which can only call the lattice writer's three functions and is
+  created with no password (NOLOGIN) until the owner's credential step. The one-shot route now applies 0019, the
+  pilot capacity and 0020 in one transaction; an owner-only credential helper and a runbook
+  (`docs/runbooks/NG4_PILOT_W2.md`) cover the credential, the disable after the pilot and the rollback.
+- #332 also repairs both authored workflows' scratch steps, and every pull request now runs those steps verbatim.
+- #333: the read-only preflight workflow is registered (`.github/workflows/ng4-pilot-preflight.yml`). It runs only
+  when the owner starts it, and only after the owner approves it in the protected `production-db-owner` environment.
+
+Notes:
+- #332's first CI run failed both new authored-step jobs: the step runner left a bytecode cache in the checkout,
+  which the scripts' safety audit refused. One repair, then all checks passed.
+- Publishing is not activation: the lattice is OFF, 0019 and 0020 are not applied, no role or credential exists, and
+  the apply workflow stays disabled.
+
 ## 2026-11-06 - NG4: the TEST_ONLY pilot's dormant build (on main, not released)
 
 It records #329. Nothing in this entry is released.
