@@ -7,7 +7,7 @@ PREFLIGHT = ROOT / ".github/workflows/ng4-pilot-preflight.yml"
 APPLY = ROOT / ".github/workflows/apply-migration-0019.yml"
 
 
-def test_workflows_are_dormant_and_have_pinned_trust_boundary():
+def test_workflows_are_dispatch_only_and_have_pinned_trust_boundary():
     paths = [PREFLIGHT, APPLY]
     assert PREFLIGHT.is_file() and not (OPS / "ng4-pilot-preflight.yml").exists()
     assert APPLY.is_file() and not (OPS / APPLY.name).exists()
