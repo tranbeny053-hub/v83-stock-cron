@@ -28,6 +28,8 @@ class Cursor:
         self.public_connect_bad = False
         self.bypass_members = "[]"
         self.bypass_fact = None
+        self.ddl_triggers = "[]"
+        self.ddl_fact = None
 
     def __enter__(self):
         return self
@@ -37,13 +39,19 @@ class Cursor:
 
     def execute(self, sql, params=()):
         self.statements.append((sql, params))
-        if "json_agg" in sql:
+        if sql == preflight.DDL_EVENT_TRIGGERS_SQL:
+            self.result = (self.ddl_triggers,)
+        elif "json_agg" in sql:
             self.result = (self.bypass_members,)
         elif sql == preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]:
             # the fact agrees with the members list unless told not to (delta review note 1)
             members = self.bypass_members
             consistent = members in ("[]", "") or not members.startswith("[")
             self.result = (consistent if self.bypass_fact is None else self.bypass_fact,)
+        elif "count(*) FROM pg_event_trigger" in sql:
+            parsed = json.loads(self.ddl_triggers)
+            count = len(parsed) if isinstance(parsed, list) else 0
+            self.result = (count if self.ddl_fact is None else self.ddl_fact,)
         elif self.public_bad and ("has_table_privilege('public'" in sql or
                                 "has_function_privilege('public'" in sql):
             self.result = (1,)
@@ -88,6 +96,8 @@ def test_first_statement_read_only_ends_rollback_and_has_no_mutation_keywords():
     assert sql[-1] == "ROLLBACK"
     assert sql.index(preflight.BYPASSRLS_MEMBERS_SQL) > 0
     assert sql.index(preflight.BYPASSRLS_MEMBERS_SQL) < sql.index("ROLLBACK")
+    assert sql.index(preflight.DDL_EVENT_TRIGGERS_SQL) > sql.index(preflight.BYPASSRLS_MEMBERS_SQL)
+    assert sql.index(preflight.DDL_EVENT_TRIGGERS_SQL) < sql.index("ROLLBACK")
     assert "SET TRANSACTION READ ONLY" in sql[:sql.index(preflight.BYPASSRLS_MEMBERS_SQL)]
     forbidden = (
         "INSERT",
@@ -174,6 +184,66 @@ def test_bypassrls_members_are_reported_safely_outside_facts():
     expected = [{"role": "x_reader", "data_role": "pg_read_all_data"}]
     assert report["bypassrls_data_role_members"] == expected
     assert captured["bypassrls_data_role_members"] == expected
+
+
+def test_ddl_event_trigger_reporting_and_sql_safety():
+    conn = Connection()
+    assert preflight.preflight(lambda: conn)["ddl_event_triggers"] == []
+    conn.cursor_obj.ddl_triggers = json.dumps([
+        ["pgrst_ddl_watch", "ddl_command_end", "O"],
+        ["another_watch", "ddl_command_start", "R"],
+    ])
+    assert preflight.preflight(lambda: conn)["ddl_event_triggers"] == [
+        {"name": "pgrst_ddl_watch", "event": "ddl_command_end", "enabled": "origin"},
+        {"name": "another_watch", "event": "ddl_command_start", "enabled": "replica"},
+    ]
+    for code, state in (("O", "origin"), ("D", "disabled"), ("R", "replica"),
+                        ("A", "always"), ("?", "<unexpected>")):
+        conn.cursor_obj.ddl_triggers = json.dumps([["pgrst_ddl_watch", "ddl_command_end", code]])
+        assert preflight.preflight(lambda: conn)["ddl_event_triggers"] == [{
+            "name": "pgrst_ddl_watch", "event": "ddl_command_end", "enabled": state
+        }]
+    conn.cursor_obj.ddl_triggers = json.dumps([
+        ["bad/name_0123456789abcdef", "unknown_event", "O"]
+    ])
+    assert preflight.preflight(lambda: conn)["ddl_event_triggers"] == [{
+        "name": "<non-identifier>", "event": "<unexpected>", "enabled": "origin"
+    }]
+    conn.cursor_obj.ddl_triggers = json.dumps([
+        [f"watch_{i}", "ddl_command_end", "O"] for i in range(21)
+    ])
+    report = preflight.preflight(lambda: conn)
+    assert len(report["ddl_event_triggers"]) == 20
+    assert report["ddl_event_triggers_truncated"] is True
+    sql = preflight.DDL_EVENT_TRIGGERS_SQL
+    assert "pg_catalog.pg_event_trigger" in sql
+    assert not any(word in sql.lower() for word in
+                   ("evtfoid", "evttags", "prosrc", "pg_proc", "pg_get_functiondef"))
+
+
+def test_ddl_event_trigger_bad_shapes_and_count_fail_closed_in_main(monkeypatch, capsys):
+    cases = (("null", 0, "MALFORMED_TRIGGERS"),
+             ('[["x","ddl_command_end"]]', 1, "MALFORMED_TRIGGERS"),
+             ('[["x","ddl_command_end","O","extra"]]', 1, "MALFORMED_TRIGGERS"),
+             ("[]", 1, "INCONSISTENT_TRIGGERS"))
+    for raw, fact, _error in cases:
+        conn = Connection()
+        conn.cursor_obj.ddl_triggers = raw
+        conn.cursor_obj.ddl_fact = fact
+        driver = type("Driver", (), {"connect": staticmethod(
+            lambda *a, conn=conn, **k: conn)})
+        monkeypatch.setattr(preflight, "enter_isolated_runtime", lambda _wheelhouse: object())
+        monkeypatch.setattr(preflight, "attest_dispatch", lambda *args: {})
+        monkeypatch.setattr(preflight, "attest_loaded_modules", lambda _isolation: None)
+        monkeypatch.setattr(preflight, "load_driver", lambda driver=driver: driver)
+        code = preflight.main(["--mode=run", "--wheelhouse=/tmp/wheels",
+                               "--expected-sha=" + "a" * 40], environ={
+            "SUPABASE_DB_URL": "postgresql://localhost/test"
+        })
+        captured = capsys.readouterr().out
+        output = json.loads(captured.splitlines()[-1])
+        assert code == 1 and output["error"] == "RuntimeError", output
+        assert "ddl_event_triggers" not in output
 
 
 def test_bypassrls_member_names_and_data_roles_are_sanitized():
