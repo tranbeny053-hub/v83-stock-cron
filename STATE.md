@@ -89,10 +89,11 @@ REACHABLE.**
   rehearsal: 0): the space role can reach 2 relations outside pg_catalog, information_schema, public
   and ucpe_lattice. The count does not require schema USAGE; the role's one membership
   (ucpe_lattice_writer, granted WITH INHERIT TRUE, which PostgreSQL 16+ counts despite the role's
-  NOINHERIT) is new and holds no grant outside the lattice (the outside fingerprint is unchanged),
-  so these are most likely PUBLIC grants, probably PostgreSQL's two pg_stat_statements views, which
-  that extension grants to PUBLIC (checked in the PostgreSQL 17 contrib scripts); NOT confirmed by
-  name, since the report gives only the count (the apply record's NOINHERIT premise is corrected in
+  NOINHERIT) is new and holds no grant outside the lattice (the outside fingerprint is unchanged,
+  and the pinned 0019/0020 grant the new writer nothing outside the lattice), so these are most
+  likely PUBLIC grants, probably PostgreSQL's two pg_stat_statements views, which that extension
+  grants to PUBLIC (checked in the PostgreSQL 17 contrib scripts); NOT confirmed by name, since the
+  report gives only the count (the apply record's NOINHERIT premise is corrected in
   ERRATA_20261118.md). To be assessed before the credential step gives the role a login.
   outside_definer_privileges 0, public_parameter_grants 0, temporary_privilege true (PUBLIC's
   default TEMP).
@@ -3621,9 +3622,9 @@ LOOP_STATE=THE ONE-SHOT PRODUCTION APPLY IS DONE AND CONSUMED (run 44133908695, 
     MAJOR, 4 MINOR, 4 NOTE, folded) and ONE delta round (R2, PASS; two wording NOTES and M1's
     residual citation applied, closed by an exact-delta check); this record's independent review
     (the same session) is ONE round (ST-A1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 3 MINOR, 5
-    NOTE; all eight folded) and a narrow delta check of the fold before the T3 (its verdict is in
-    the T3 package); the apply-prep batch's record (#343) had ONE in ONE round
-    (PASS_WITH_AMENDMENTS: two MINOR and three NOTE; four folded, the optional label note not
+    NOTE; all eight folded) and ONE delta round (R2, PASS; its one NOTE applied in the reviewer's
+    words, closed by an exact-delta check); the apply-prep batch's record (#343) had ONE in ONE
+    round (PASS_WITH_AMENDMENTS: two MINOR and three NOTE; four folded, the optional label note not
     changed; closed by an exact-delta check); the ruling-A batch's record (#340) had ONE in ONE
     round (PASS_WITH_AMENDMENTS: four MINOR and four NOTE folded, closed by an exact-delta check);
     the role-naming batch's record (#337) had ONE in ONE round (PASS_WITH_AMENDMENTS: one MINOR and
