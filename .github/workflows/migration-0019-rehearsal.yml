@@ -9,9 +9,9 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
 # execute-only access, owner and bypass paths, capacity, duplicates, CHECK refusals, commit receipts and missed
 # instants. It runs twice: with track_commit_timestamp off (every receipt COMMIT_UNKNOWN) and on (the true commit time).
 # It references no secret and touches no real database. Migration 0019 is AUTHORED, NOT APPLIED: scripts/
-# apply_migrations.py refuses it, and its one-shot route (scripts/apply_migration_0019.py, the read-only
-# scripts/ng4_pilot_preflight.py and their workflows in ops/ng4_pilot/workflows/) is AUTHORED BUT DISABLED: GitHub
-# registers only files directly under .github/workflows. A third run (pilot, NG4-PILOT INPUTS 2026-11-06) rehearses
+# apply_migrations.py refuses it, and its one-shot route (scripts/apply_migration_0019.py and the read-only
+# scripts/ng4_pilot_preflight.py) runs only from its owner-dispatched workflows in .github/workflows/, each behind the
+# production-db-owner Environment; dispatching the apply is the one-shot T4. A third run (pilot, NG4-PILOT INPUTS 2026-11-06) rehearses
 # that route on the same kind of cluster: the preflight READY and read-only, the apply's refusals before any DDL, one
 # apply of 0019 plus the pilot capacity, a refused second run, and both W1 forms (R-16..R-19).
 
@@ -26,6 +26,7 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
       - scripts/ng4_pilot_preflight.py
       - scripts/migration_0019_capacity.sql
       - ops/ng4_pilot/**
+      - .github/workflows/apply-migration-0019.yml
       - .github/workflows/ng4-pilot-preflight.yml
       - src/crypto_probability_engine/persistence/reader_identity.py
       - src/crypto_probability_engine/persistence/lattice_store.py
@@ -75,7 +76,7 @@ jobs:
           check-latest: "false"
       - name: Run authored apply scratch step
         shell: bash
-        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/apply-migration-0019.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the apply on a scratch local PostgreSQL database (no secret)"
+        run: python -B scripts/migration_0019_rehearsal/run_authored_steps.py .github/workflows/apply-migration-0019.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the apply on a scratch local PostgreSQL database (no secret)"
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

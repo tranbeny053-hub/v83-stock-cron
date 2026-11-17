@@ -4,14 +4,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "ops/ng4_pilot/workflows"
 PREFLIGHT = ROOT / ".github/workflows/ng4-pilot-preflight.yml"
+APPLY = ROOT / ".github/workflows/apply-migration-0019.yml"
 
 
-def test_workflows_are_dormant_and_have_pinned_trust_boundary():
-    paths = [PREFLIGHT, OPS / "apply-migration-0019.yml"]
-    # The enabling T3 registered the preflight; the apply stays authored outside .github/workflows.
+def test_workflows_are_dispatch_only_and_have_pinned_trust_boundary():
+    paths = [PREFLIGHT, APPLY]
     assert PREFLIGHT.is_file() and not (OPS / "ng4-pilot-preflight.yml").exists()
-    apply_path = OPS / "apply-migration-0019.yml"
-    assert apply_path.is_file() and not (ROOT / ".github/workflows" / apply_path.name).exists()
+    assert APPLY.is_file() and not (OPS / APPLY.name).exists()
     refs = set()
     for path in paths:
         text = path.read_text()
@@ -34,7 +33,7 @@ def test_workflows_are_dormant_and_have_pinned_trust_boundary():
 
 def test_route_headers_describe_ng4_checks_not_0018_checks():
     preflight = PREFLIGHT.read_text().split('"on":', 1)[0]
-    apply = (OPS / "apply-migration-0019.yml").read_text().split('"on":', 1)[0]
+    apply = APPLY.read_text().split('"on":', 1)[0]
     forbidden = r"\b(?:service_role|bundle|D6|0016 and 0017|0001-0004)\b"
     assert not re.search(forbidden, preflight, re.I)
     assert not re.search(forbidden, apply, re.I)

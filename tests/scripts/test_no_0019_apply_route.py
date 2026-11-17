@@ -50,22 +50,27 @@ def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> No
     assert '"0020_lattice_space_login.sql"' in general
 
 
-def test_no_enabled_apply_route_exists() -> None:
-    # The preflight is registered for owner-dispatched read-only audits; the one-shot apply remains
-    # authored outside .github/workflows and disabled until its separate T4.
+def test_registered_apply_route_is_the_one_shot_owner_dispatch() -> None:
+    # Both NG4 workflows are registered for owner dispatch; dispatching the apply is the one-shot
+    # T4.
     scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
     assert scripts == ["apply_migration_0019.py"]
     source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
-    # Apply remains dormant at the path GitHub would report if separately enabled.
     assert 'WORKFLOW = ".github/workflows/apply-migration-0019.yml"' in source
-    assert not (WORKFLOWS / "apply-migration-0019.yml").exists()
+    assert (WORKFLOWS / "apply-migration-0019.yml").is_file()
     assert (WORKFLOWS / "ng4-pilot-preflight.yml").is_file()
-    assert (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").is_file()
+    assert not (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").exists()
     assert not (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml").exists()
-    assert not list(WORKFLOWS.rglob("*0019*apply*")) and not list(WORKFLOWS.rglob("apply*0019*"))
+    # Exactly one registered workflow is an 0019 apply route: this one.
+    patterns = ("*0019*apply*", "apply*0019*")
+    applies = {p.name for pattern in patterns for p in WORKFLOWS.rglob(pattern)}
+    assert applies == {"apply-migration-0019.yml"}
     for path in WORKFLOWS.rglob("*.y*ml"):
         text = path.read_text(encoding="utf-8")
         if path == REHEARSAL_WORKFLOW:
+            continue
+        if path == WORKFLOWS / "apply-migration-0019.yml":
+            assert "0019" in path.name and "ucpe_lattice" in text and "--mode=apply" in text
             continue
         if path == WORKFLOWS / "ng4-pilot-preflight.yml":
             # The registered read-only preflight may name the schema and the route's number, but
