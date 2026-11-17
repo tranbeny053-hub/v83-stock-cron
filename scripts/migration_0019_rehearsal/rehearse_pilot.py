@@ -512,17 +512,17 @@ class Pilot:
         self.su.execute("GRANT pg_write_all_data TO supabase_etl_admin")
         write_p = self.preflight()[1]
         write_a = self.apply()
-        write_fp = self.fingerprint()
         self.su.execute("REVOKE pg_write_all_data FROM supabase_etl_admin")
+        write_fp = self.fingerprint()  # after the undo: the refused route changed nothing
         self.su.execute("CREATE ROLE probe_group NOLOGIN")
         self.su.execute("GRANT pg_read_all_data TO probe_group")
         self.su.execute("CREATE ROLE probe_indirect NOLOGIN BYPASSRLS")
         self.su.execute("GRANT probe_group TO probe_indirect")
         indirect_p = self.preflight()[1]
         indirect_a = self.apply()
-        indirect_fp = self.fingerprint()
         self.su.execute("DROP ROLE probe_indirect")
         self.su.execute("DROP ROLE probe_group")
+        indirect_fp = self.fingerprint()  # after the undo, as above
         self.add(
             "R-27 only the two named read-only BYPASSRLS readers pass; write and indirect"
             " membership refuse",
