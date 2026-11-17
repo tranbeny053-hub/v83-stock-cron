@@ -150,7 +150,7 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # same three, at the same pins.
     # 104 -> 108 (NG4 W2): the same rehearsal adds two jobs that run the authored workflows'
     # scratch steps, each with checkout and setup-python at the same pins.
-    assert len(refs) == 111  # +3: the NG4 pilot's read-only preflight
+    assert len(refs) == 114  # +3: the NG4 pilot's one-shot apply
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:

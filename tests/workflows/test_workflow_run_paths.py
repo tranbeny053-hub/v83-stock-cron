@@ -25,7 +25,7 @@ def _code_lines(text: str) -> str:
 
 def test_the_scan_covers_the_authored_workflows():
     names = {p.relative_to(ROOT).as_posix() for p in WORKFLOW_FILES}
-    assert "ops/ng4_pilot/workflows/apply-migration-0019.yml" in names
+    assert ".github/workflows/apply-migration-0019.yml" in names
     assert ".github/workflows/ng4-pilot-preflight.yml" in names
 
 
