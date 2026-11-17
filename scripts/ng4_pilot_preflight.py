@@ -57,13 +57,19 @@ PREREQUISITE_SQL = {
         "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
     ),
 }
-BYPASSRLS_MEMBERS_SQL = (
-    "SELECT coalesce(json_agg(json_build_array(r.rolname, g.rolname) ORDER BY "
-    "r.rolname, g.rolname), '[]'::json)::text FROM pg_auth_members m "
-    "JOIN pg_roles r ON r.oid=m.member JOIN pg_roles g ON g.oid=m.roleid "
-    "WHERE g.rolname IN ('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls "
-    "AND NOT r.rolsuper AND r.rolname<>current_user"
+# The prerequisite's own FROM ... WHERE text, so the names are exactly the members it counts;
+# DISTINCT because PostgreSQL 16 keeps one pg_auth_members row per grantor (review R1-1).
+_BYPASSRLS_MEMBERS_FROM = (
+    PREREQUISITE_SQL["no_bypassrls_data_role_member"].split(" FROM ", 1)[1][:-1]
 )
+BYPASSRLS_MEMBERS_SQL = (
+    "SELECT coalesce(json_agg(json_build_array(x.rn, x.dn) ORDER BY x.rn, x.dn), '[]'::json)::text "
+    "FROM (SELECT DISTINCT r.rolname AS rn, g.rolname AS dn FROM " + _BYPASSRLS_MEMBERS_FROM + ") x"
+)
+# A name that matches the identifier pattern can still look like a token (review R1-3): a run of 16+
+# hexadecimal characters is replaced too.
+_ROLE_NAME = re.compile(r"[a-z_][a-z0-9_$]{0,62}")
+_TOKEN_LIKE = re.compile(r"[0-9a-f]{16,}")
 
 
 def refuse_url(url: str) -> str | None:
@@ -178,17 +184,24 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             captured[name] = facts[name]
         cur.execute(BYPASSRLS_MEMBERS_SQL)
         raw_members = json.loads(cur.fetchone()[0])
+        if not isinstance(raw_members, list) or any(
+            not isinstance(pair, list) or len(pair) != 2 for pair in raw_members
+        ):
+            raise RuntimeError("MALFORMED_MEMBERS")  # an error class, never REFUSED (review R1-2)
         members = []
         for pair in raw_members[:20]:
             role, data_role = pair
             members.append({
-                "role": role if isinstance(role, str) and re.fullmatch(
-                    r"[a-z_][a-z0-9_$]{0,62}", role
-                ) else "<non-identifier>",
+                "role": role if isinstance(role, str) and _ROLE_NAME.fullmatch(role)
+                and not _TOKEN_LIKE.search(role) else "<non-identifier>",
                 "data_role": data_role if data_role in (
                     "pg_read_all_data", "pg_write_all_data"
                 ) else "<unexpected>",
             })
+        # The fact and this list come from two statements (two snapshots under READ COMMITTED): they
+        # must agree, or the run fails closed (review R1-6).
+        if (not raw_members) != (facts["no_bypassrls_data_role_member"] is True):
+            raise RuntimeError("INCONSISTENT_MEMBERS")
         captured["bypassrls_data_role_members"] = members
         if len(raw_members) > 20:
             captured["bypassrls_data_role_members_truncated"] = True

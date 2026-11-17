@@ -483,6 +483,8 @@ class Pilot:
                 {"role": "ng4_probe_bypass", "data_role": "pg_read_all_data"}
             ]
             and code_a != 0
+            # the route's own pre-check refuses on exactly this check (review R1-7)
+            and "no_bypassrls_data_role_member" in " ".join(body_a.get("refusals") or [])
             and not applied
             and self.fingerprint() == before,
             {
@@ -490,6 +492,7 @@ class Pilot:
                 "failing": body_p.get("failing"),
                 "members": body_p.get("bypassrls_data_role_members"),
                 "route_exit": code_a,
+                "route_refusals": body_a.get("refusals"),
                 "schema_created": applied,
                 "undone": self.fingerprint() == before,
             },
