@@ -9,8 +9,8 @@ name: NG4 pilot preflight (READ ONLY)
 # WHAT IT CHECKS. scripts/ng4_pilot_preflight.py starts with SET TRANSACTION READ ONLY, reads
 # PostgreSQL catalog facts for the 0019 preconditions (server version, track_commit_timestamp,
 # createrole_self_grant, role/membership safety, event triggers, parameter grants and ucpe_space_db),
-# then rolls back. It reads no application rows and reports booleans/counts. The scratch rehearsal
-# uses a local database and no production secret.
+# then rolls back. It reads no application rows and reports booleans/counts and, for the BYPASSRLS
+# data-role check only, the role names. The scratch rehearsal uses a local database and no secret.
 #
 # TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated wheelhouse;
 # `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha. Inputs
