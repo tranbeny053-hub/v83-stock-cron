@@ -256,7 +256,8 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
                 else "<unexpected>",
                 "enabled": enabled_states.get(enabled, "<unexpected>"),
             })
-        if len(raw_triggers) <= 20 and len(raw_triggers) != facts["event_triggers_ddl"]:
+        # Compared always (the SQL returns the full list; review R1-8).
+        if len(raw_triggers) != facts["event_triggers_ddl"]:
             raise RuntimeError("INCONSISTENT_TRIGGERS")
         captured["ddl_event_triggers"] = triggers
         if len(raw_triggers) > 20:

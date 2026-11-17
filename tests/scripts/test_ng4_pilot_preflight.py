@@ -226,7 +226,7 @@ def test_ddl_event_trigger_reporting_and_sql_safety():
     assert "pg_catalog.json_agg(pg_catalog.json_build_array(" in sql
     assert not re.search(r"(?<!pg_catalog\.)\b(json_agg|json_build_array)\(", sql)
     assert not any(word in sql.lower() for word in
-                   ("evtfoid", "evttags", "prosrc", "pg_proc", "pg_get_functiondef"))
+                   ("evtfoid", "evttags", "evtowner", "prosrc", "pg_proc", "pg_get_functiondef"))
 
 
 def test_ddl_event_trigger_bad_shapes_and_count_fail_closed_in_main(monkeypatch, capsys):

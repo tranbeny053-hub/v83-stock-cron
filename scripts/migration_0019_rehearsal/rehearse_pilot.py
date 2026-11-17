@@ -14,7 +14,7 @@ DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (
 applier's own temp
 schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-27
 only the two named read-only BYPASSRLS readers accepted; R-28 their read-only exposure; R-29 a DDL
-watcher remains installed for R-18 apply; R-16
+watcher remains installed for R-18 apply and R-29b proves it fired; R-16
 both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
 non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
 memory only.
@@ -90,6 +90,8 @@ class Pilot:
         self.url, self.space_url = url, space_url
         self.runner = psycopg.connect(url, autocommit=True)
         self.su = psycopg.connect(super_url, autocommit=True)
+        self.super_url = super_url
+        self.ddl_listener = None
         self.runner_name = self.runner.execute("SELECT current_user").fetchone()[0]
         self.checks: list[dict[str, Any]] = []
         self.facts: dict[str, Any] = {}
@@ -575,6 +577,10 @@ class Pilot:
             "EXECUTE FUNCTION public.ng4_probe_ddl_watch()"
         )
         code, body = self.preflight()
+        # A dedicated listener, so R-29b can prove the watcher FIRED during the real apply (R-18)
+        # (review R1-5); nothing else runs on this connection.
+        self.ddl_listener = self.psycopg.connect(self.super_url, autocommit=True)
+        self.ddl_listener.execute("LISTEN pgrst")
         expected = [{"name": "ng4_probe_ddl_watch", "event": "ddl_command_end",
                      "enabled": "origin"}]
         unchanged = (body.get("verdict") == baseline.get("verdict")
@@ -588,6 +594,19 @@ class Pilot:
             {"triggers": body.get("ddl_event_triggers"),
              "event_triggers_ddl": body.get("facts", {}).get("event_triggers_ddl"),
              "verdict_unchanged": unchanged, "failing": body.get("failing")},
+        )
+
+    def r29b_ddl_watcher_fired(self) -> None:
+        payloads = []
+        if self.ddl_listener is not None:
+            for notify in self.ddl_listener.notifies(timeout=5, stop_after=1):
+                payloads.append(notify.payload)
+            self.ddl_listener.close()
+        self.add(
+            "R-29b the DDL watcher fired during the real apply (its NOTIFY arrived after the"
+            " route's commit)",
+            payloads == ["reload schema"],
+            {"payloads": payloads},
         )
 
     # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
@@ -846,6 +865,7 @@ class Pilot:
         self.r29_ddl_event_trigger()
         self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
         self.r18_apply()
+        self.r29b_ddl_watcher_fired()
         self.r20()
         self.r21()
         self.r21b()
