@@ -38,66 +38,74 @@ REACHABLE.**
   SCHEMA (cron, once) or CREATE FUNCTION (graphql, 5 times); pgrst_ddl_watch fires on every DDL
   command and only queues one NOTIFY pgrst, 'reload schema' for the commit (ucpe_lattice is no
   exposed API schema); none is SECURITY DEFINER. Evidence on scratch PostgreSQL 17: the pilot
-  rehearsal 20/20 with each provider set installed and an unmodified control 20/20; a bound firing
-  probe (sets none, latest, legacy and mixed: exit 0, the outside fingerprint equal; calls latest
-  cron 0, graphql 0, net 0, pgrst 47; legacy and mixed 1, 5, 0, 47). ONE independent reviewer: ONE
-  round (ET-1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 4 MINOR, 4 NOTE, folded as rev 2) and ONE
-  delta round (R2, PASS; three wording NOTES applied as rev 3, closed by an exact-delta check).
-  **The owner ACCEPTED it (2026-11-17, ICT)**, including that the rollback backstop is partial (the
-  outside fingerprint does not see data rows, column ACLs, several other ACL kinds, role settings,
-  extensions, or new triggers or rules on existing tables) and that event_triggers_ddl ≠ 4 in the
-  apply report is a post-commit incident, not a stop; no pre-commit count check.
+  rehearsal 20/20 with the latest and the legacy set installed and an unmodified control 20/20; a
+  bound firing probe (sets none, latest, legacy and mixed: exit 0, the outside fingerprint equal;
+  calls latest cron 0, graphql 0, net 0, pgrst 47; legacy and mixed 1, 5, 0, 47). ONE independent
+  reviewer: ONE round (ET-1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 4 MINOR, 4 NOTE, folded as
+  rev 2) and ONE delta round (R2, PASS; two wording NOTES and M1's residual citation applied as rev
+  3, closed by an exact-delta check). **The owner ACCEPTED it (2026-11-17, ICT)**, including that
+  the rollback backstop is partial (the outside fingerprint does not see data rows, column ACLs,
+  several other ACL kinds, role settings, extensions, or new triggers or rules on existing tables)
+  and that event_triggers_ddl ≠ 4 in the apply report is a post-commit incident, not a stop; no
+  pre-commit count check.
 - **THE ONE-SHOT PRODUCTION APPLY (THE T4; CONSUMED).** The T4 packet
   .work/ng4_apply_prep_20261117/APPLY_0019_0020_T4_PACKET.md was filled from the reviewed draft
   (bbf12e80…) with M76 and the accepted assessment (sha256 11ffcd27…; the fill delta
   T4_PACKET_FILL.diff, deterministic, not model-reviewed; the operative authorization text
-  unchanged; SHA256SUMS_T4_APPLY_PACKET.txt, 59b681f2…, which the owner's T4 names). Preconditions
-  gated mechanically right before the dispatch (2026-11-17T17:09:36Z), 21 of 21 PASS: origin/main
-  57d0d907 = read 4's SHA; the workflow blob cfe42781; the route blob ab1ceed6; the three pins
-  d12036a7, ef1fa7af and b4893eb5 equal to the files on main; the apply workflow active with 0 runs;
-  4 preflight runs, the newest run 4, READY on 57d0d907; no non-completed run but the stale
-  Keepalive 37655506192 (its own concurrency group); the Environment owner-only, no admin bypass,
-  main only; the secret only there; 0 open PRs. A first gated attempt (17:08:47Z) stopped in the
-  check harness itself (`grep -c` exits 1 on zero matches) after 21/21 PASS and before any dispatch;
-  the apply's 0 runs were re-confirmed and its log kept. Run 44133908695, dispatched by Claude once
-  at 2026-11-17T17:09:50Z (2026-11-18 00:09 ICT) on main 57d0d907; the pending deployment named
-  production-db-owner with the owner as the only reviewer; approved by the owner (Claude did not
-  approve); the job ran 17:12:56Z–17:13:38Z, every step success (attest, the scratch rehearsal, the
-  route tests, the one production step, the upload). Raw capture before parsing: the zip sha256
-  85f61c7d… (equal to GitHub's artifact digest), the log c6e49c53…. **outcome APPLIED, committed
-  true, refusals []**, validated 107 of 107 against the packet's §4: the top-level keys exact; the
-  three digests as pinned; dispatch exact, git_head = expected_sha = 57d0d907; checks exactly the 41
-  documented keys; every pre-check true; outside_before = outside_after; one non-creator membership
-  (ucpe_lattice_writer granted to ucpe_lattice_space); three creator memberships; the space role's
-  attributes (NOLOGIN, NOINHERIT, no power, connection limit 3, no expiry) and its one settings row;
-  every post-privilege check false or 0; commit_attempted and committed true;
-  roles_that_can_set_role_to_me 0; track_commit_timestamp_on false; **event_triggers_ddl 4, as
-  accepted (no incident)**. The scratch rehearsal in the same run: APPLIED, and a second apply
-  refused. The public log shows the production database URL only as GitHub's mask, and the
-  production step printed exactly the report. Record:
+  unchanged; SHA256SUMS_T4_APPLY_PACKET.txt, 59b681f2…, which the owner's T4 names; its §0.2 and §5
+  date the acceptance 2026-11-18, an erratum: .work/ng4_apply_run_20261118/ERRATA_20261118.md).
+  Preconditions gated mechanically right before the dispatch (2026-11-17T17:09:36Z), 21 of 21 PASS:
+  origin/main 57d0d907 = read 4's SHA; the workflow blob cfe42781; the route blob ab1ceed6; the
+  three pins d12036a7, ef1fa7af and b4893eb5 equal to the files on main; the apply workflow active
+  with 0 runs; 4 preflight runs, the newest run 4, READY on 57d0d907; no non-completed run but the
+  stale Keepalive 37655506192 (its own concurrency group); the Environment owner-only, no admin
+  bypass, main only; the secret only there; 0 open PRs. A first gated attempt (17:08:47Z) stopped in
+  the check harness itself (`grep -c` exits 1 on zero matches) after 21/21 PASS and before any
+  dispatch; the apply's 0 runs were re-confirmed and its log kept. Run 44133908695, dispatched by
+  Claude once at 2026-11-17T17:09:50Z (2026-11-18 00:09 ICT) on main 57d0d907; the pending
+  deployment named production-db-owner with the owner as the only reviewer; approved by the owner
+  (Claude did not approve); the job ran 17:12:56Z–17:13:38Z, every step success (attest, the scratch
+  rehearsal, the route tests, the one production step, the upload). Raw capture before parsing: the
+  zip sha256 85f61c7d… (equal to GitHub's artifact digest), the log c6e49c53…. **outcome APPLIED,
+  committed true, refusals []**, validated 107 of 107 against the packet's §4: the top-level keys
+  exact; the three digests as pinned; dispatch exact, git_head = expected_sha = 57d0d907; checks
+  exactly the 41 documented keys; every pre-check true; outside_before = outside_after; one
+  non-creator membership (ucpe_lattice_writer granted to ucpe_lattice_space); three creator
+  memberships; the space role's attributes (NOLOGIN, NOINHERIT, no power, connection limit 3, no
+  expiry) and its one settings row; every post-privilege check false or 0; commit_attempted and
+  committed true; roles_that_can_set_role_to_me 0; track_commit_timestamp_on false;
+  **event_triggers_ddl 4, as accepted (no incident)**. The scratch rehearsal in the same run:
+  APPLIED, and a second apply refused. The public log shows the production database URL only as
+  GitHub's mask, and the production step printed exactly the report. Record:
   .work/ng4_apply_run_20261118/APPLY_RESULT_20261118.md (SHA256SUMS_APPLY_RUN.txt, c7417345…).
 - **What production holds now:** schema ucpe_lattice as 0019's pinned text defines it; the roles
   ucpe_lattice_owner, ucpe_lattice_writer and ucpe_lattice_space (NOLOGIN, NOINHERIT, no password,
   connection limit 3, three session bounds); the pilot capacity row from the pinned capacity SQL.
   The lattice is OFF (LATTICE_ENABLED = False, PILOT_START_UTC = None, WRITER_DB_URL_ENV = None):
   nothing can log in as the space role, and there is no credential, Space secret, switch-ON or
-  deploy. A second apply refuses. The disable and rollback texts stay as the T4 packet's §6 records
-  them, each its own T4.
+  deploy. A second apply would refuse (the route's pre-check; not exercised in production). The
+  disable and rollback texts stay as the T4 packet's §6 records them, each its own T4.
 - **Informational, an input to the credential step:** outside_relation_privileges 2 (the scratch
   rehearsal: 0): the space role can reach 2 relations outside pg_catalog, information_schema, public
-  and ucpe_lattice. The count does not require schema USAGE and the role is NOINHERIT, so these are
-  PUBLIC grants, most likely PostgreSQL's two pg_stat_statements views, which that extension grants
-  to PUBLIC (checked in the PostgreSQL 17 contrib scripts); NOT confirmed by name, since the report
-  gives only the count. To be assessed before the credential step gives the role a login.
+  and ucpe_lattice. The count does not require schema USAGE; the role's one membership
+  (ucpe_lattice_writer, granted WITH INHERIT TRUE, which PostgreSQL 16+ counts despite the role's
+  NOINHERIT) is new and holds no grant outside the lattice (the outside fingerprint is unchanged),
+  so these are most likely PUBLIC grants, probably PostgreSQL's two pg_stat_statements views, which
+  that extension grants to PUBLIC (checked in the PostgreSQL 17 contrib scripts); NOT confirmed by
+  name, since the report gives only the count (the apply record's NOINHERIT premise is corrected in
+  ERRATA_20261118.md). To be assessed before the credential step gives the role a login.
   outside_definer_privileges 0, public_parameter_grants 0, temporary_privilege true (PUBLIC's
   default TEMP).
 - **UOR HOLD #4** (the owner, 2026-11-12) still stands: the local main checkout stays at
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0.
 - **THE STATE REVIEW.** The independent reviewer is session
   local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE F-CONFIRM STATE draft”, configured
-  claude-opus-5-5 at effort xhigh (to be read again with get_session before it gets this record;
-  read-only); its review of this filled record is PENDING at this draft. The master ran Opus 5.5;
-  the owner was advised effort high for the fourth read and xhigh for the acceptance and the T4.
+  claude-opus-5-5 at effort xhigh (read-only; read again with get_session before each request and
+  after it); its round on this record: ST-A1 (.work/ng4_apply_run_20261118/REVIEW_STATE_APPLY_R1.md,
+  transcribed from its transcript). The master ran Opus 5.5; the owner was advised effort high for
+  the fourth read and xhigh for the acceptance and the T4 (from the session transcript: every SEND
+  THIS states its level at the owner's request,
+  .work/p7/redesign/handoff/owner_t3_apply_prep_20261117.txt).
 - Process: no Codex delegation in this batch; two fork subagents of the master's session drafted the
   trigger assessment (independently reviewed) and this record; GPT sidecar consultations 0; paid API
   $0. The UOR relay is still NOT_DELIVERED. Every SEND THIS stated its recommended effort level.
@@ -3493,11 +3501,13 @@ LOOP_STATE=THE ONE-SHOT PRODUCTION APPLY IS DONE AND CONSUMED (run 44133908695, 
   44039032076 and 44113873249 never to be rerun); the owner accepted the event-trigger assessment
   (all four HARMLESS; event_triggers_ddl ≠ 4 a post-commit incident; the apply recorded 4); the
   production database holds schema ucpe_lattice, the three lattice roles (the space role NOLOGIN, no
-  password) and the pilot capacity row; no credential, LOGIN, Space secret or grant beyond 0019's
-  and 0020's own; LATTICE_ENABLED = False. Real data stays refused at every entry point; no
-  download. Main is M76 57d0d907 before this record; local main is held at 0118cfaa (UOR HOLD #4);
-  the deployed app is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005,
-  with four declared runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and
+  password) and the pilot capacity row; owner ruling A on main (#339); HOLD-1 ruled (COMMIT_UNKNOWN
+  accepted; no commit-time setting change: track_commit_timestamp stays off, as read 4 and the apply
+  both recorded); no credential, LOGIN, Space secret or grant beyond 0019's and 0020's own;
+  LATTICE_ENABLED = False. Real data stays refused at every entry point; no download. Main is M76
+  57d0d907 before this record; local main is held at 0118cfaa (UOR HOLD #4); the deployed app is
+  unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with four declared
+  runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and
   api/analysis_service.py, #323; api/app.py, #329, which also brings lattice_pilot.py and its
   quant_ng imports into the startup import set and three events into telemetry/events.py) until a
   release. The next writer-token renewal is due by **2026-11-20** (expiry 2026-11-23); the
@@ -3570,10 +3580,10 @@ LOOP_STATE=THE ONE-SHOT PRODUCTION APPLY IS DONE AND CONSUMED (run 44133908695, 
     (.github/workflows/apply-migration-0019.yml since #342: dispatch-only, the confirmation token,
     the production-db-owner Environment), dispatched ONCE under the owner's T4: run 44133908695
     APPLIED and committed 0019 + capacity + 0020 (2026-11-17T17:13Z) — CONSUMED, never rerun; a
-    second dispatch refuses; W2 (#332): migration 0020 (ucpe_lattice_space) is AUTHORED in
-    migrations/authored/ and was applied together with 0019 by the one-shot route (run 44133908695;
-    the role stays NOLOGIN, no password, until the owner's credential step;
-    scripts/apply_migrations.py refuses both by name); W2's sweep:
+    second dispatch would refuse (the route's pre-check); W2 (#332): migration 0020
+    (ucpe_lattice_space) is AUTHORED in migrations/authored/ and was applied together with 0019 by
+    the one-shot route (run 44133908695; the role stays NOLOGIN, no password, until the owner's
+    credential step; scripts/apply_migrations.py refuses both by name); W2's sweep:
     .work/ng4_w2_20261107/MUTATION_SWEEP_W2.py (16 of 16); every PR runs both authored workflows'
     scratch steps verbatim; its sweep: .work/ng4_pilot_20261106/MUTATION_SWEEP_PILOT.py (20 of 21,
     P05 equivalent); rehearse it with run_scratch.sh pilot (a real PostgreSQL; the master runs it);
@@ -3608,49 +3618,50 @@ LOOP_STATE=THE ONE-SHOT PRODUCTION APPLY IS DONE AND CONSUMED (run 44133908695, 
     ONE round (PASS_WITH_AMENDMENTS: 0 MAJOR, 6 MINOR, 4 NOTE, incl. the T4 packet) and ONE delta
     round (PASS_WITH_AMENDMENTS: 3 MINOR, 4 NOTE), closed by an exact-delta check; the event-trigger
     assessment had ONE independent reviewer: ONE round (ET-1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0
-    MAJOR, 4 MINOR, 4 NOTE, folded) and ONE delta round (R2, PASS; three wording NOTES applied,
-    closed by an exact-delta check); this record's independent review (the same session) is PENDING
-    at this draft (no round has run; this text is regenerated with the actual rounds before the T3);
-    the apply-prep batch's record (#343) had ONE in ONE round (PASS_WITH_AMENDMENTS: two MINOR and
-    three NOTE; four folded, the optional label note not changed; closed by an exact-delta check);
-    the ruling-A batch's record (#340) had ONE in ONE round (PASS_WITH_AMENDMENTS: four MINOR and
-    four NOTE folded, closed by an exact-delta check); the role-naming batch's record (#337) had ONE
-    in ONE round (PASS_WITH_AMENDMENTS: one MINOR and seven NOTE folded, closed by an exact-delta
-    check); the W2 batch's record (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS: three MINOR and
-    five NOTE folded, closed by an exact-delta check); the NG4 pilot batch's record (#330) had ONE
-    in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe whose
-    verdict arrived after the merge), although #330 itself says one round; NG4 (#326) had ONE
-    independent reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds
-    (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's record (#327) had ONE in TWO rounds
-    (PASS_WITH_AMENDMENTS: two MINOR and three NOTE folded, one NOTE withdrawn; then a delta PASS);
-    NG3 (#323) had ONE independent reviewer: the spec in THREE rounds (FINDINGS; PASS; PASS) and the
-    code in TWO rounds (FINDINGS with one MAJOR; delta PASS); the NG3 batch's record (#324) had ONE
-    in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); NG1 (#320) had ONE
-    independent reviewer: the spec in TWO rounds (FINDINGS; delta FINDINGS) and the code in TWO
-    rounds (FINDINGS with one MAJOR; delta PASS); the NG1 batch's record (#321) had ONE in TWO
-    rounds (PASS_WITH_AMENDMENTS, one MINOR folded; then a delta PASS); the next batch's record
-    (#318) had ONE in TWO rounds; the CLAUDE.md review routing (#317) had ONE independent reviewer
-    in TWO rounds (PASS_WITH_AMENDMENTS, folded; then a delta PASS); the critical-path map and the
-    licensing evidence had NO independent review (master audit, by the new policy); the S1-engine
-    batch's record (#314) had ONE in ONE round; the S1 engine (#313) had ONE independent reviewer in
-    TWO rounds (static; FINDINGS, then PASS); the S1 recommended ruling had ONE in TWO rounds
-    (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the consolidated S1 decision pack had NO
-    independent review (master audit and quote checks only); the (b2) batch's record (#311) had ONE
-    in TWO rounds; the evaluation-row batch's record (#308) had ONE in TWO rounds; the
-    evaluation-row producer (#307) had ONE independent reviewer in TWO rounds (static only;
-    PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in TWO rounds
-    (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not independent; the
-    last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in ONE round; C10/G-1
-    (#304) had ONE independent reviewer in THREE rounds (static only; PASS_WITH_AMENDMENTS twice,
-    applied, then PASS), and its ruling sheet ONE in ONE round; the parse batch's record (#302) had
-    ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse layer (#301) had ONE in TWO
-    rounds (static only; FINDINGS, then PASS), after one read-only probe by an ordinary subagent
-    (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE rounds; the decision
-    pack had ONE independent reviewer in FOUR rounds, the last round's three small items folded
-    after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer in TWO rounds; the
-    fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE rounds. #286's PR body
-    ("Reviewed independently twice") and a56f80c7's message ("a second review passed") overstate
-    theirs and are immutable, so this record documents them instead.
+    MAJOR, 4 MINOR, 4 NOTE, folded) and ONE delta round (R2, PASS; two wording NOTES and M1's
+    residual citation applied, closed by an exact-delta check); this record's independent review
+    (the same session) is ONE round (ST-A1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 3 MINOR, 5
+    NOTE; all eight folded) and a narrow delta check of the fold before the T3 (its verdict is in
+    the T3 package); the apply-prep batch's record (#343) had ONE in ONE round
+    (PASS_WITH_AMENDMENTS: two MINOR and three NOTE; four folded, the optional label note not
+    changed; closed by an exact-delta check); the ruling-A batch's record (#340) had ONE in ONE
+    round (PASS_WITH_AMENDMENTS: four MINOR and four NOTE folded, closed by an exact-delta check);
+    the role-naming batch's record (#337) had ONE in ONE round (PASS_WITH_AMENDMENTS: one MINOR and
+    seven NOTE folded, closed by an exact-delta check); the W2 batch's record (#334) had ONE in ONE
+    round (PASS_WITH_AMENDMENTS: three MINOR and five NOTE folded, closed by an exact-delta check);
+    the NG4 pilot batch's record (#330) had ONE in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a
+    delta PASS_WITH_AMENDMENTS on ec1847fe whose verdict arrived after the merge), although #330
+    itself says one round; NG4 (#326) had ONE independent reviewer: the spec in TWO rounds
+    (FINDINGS; PASS) and the stable diff in TWO rounds (PASS_WITH_AMENDMENTS; delta PASS); the NG4
+    batch's record (#327) had ONE in TWO rounds (PASS_WITH_AMENDMENTS: two MINOR and three NOTE
+    folded, one NOTE withdrawn; then a delta PASS); NG3 (#323) had ONE independent reviewer: the
+    spec in THREE rounds (FINDINGS; PASS; PASS) and the code in TWO rounds (FINDINGS with one MAJOR;
+    delta PASS); the NG3 batch's record (#324) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one
+    MINOR folded; then a delta PASS); NG1 (#320) had ONE independent reviewer: the spec in TWO
+    rounds (FINDINGS; delta FINDINGS) and the code in TWO rounds (FINDINGS with one MAJOR; delta
+    PASS); the NG1 batch's record (#321) had ONE in TWO rounds (PASS_WITH_AMENDMENTS, one MINOR
+    folded; then a delta PASS); the next batch's record (#318) had ONE in TWO rounds; the CLAUDE.md
+    review routing (#317) had ONE independent reviewer in TWO rounds (PASS_WITH_AMENDMENTS, folded;
+    then a delta PASS); the critical-path map and the licensing evidence had NO independent review
+    (master audit, by the new policy); the S1-engine batch's record (#314) had ONE in ONE round; the
+    S1 engine (#313) had ONE independent reviewer in TWO rounds (static; FINDINGS, then PASS); the
+    S1 recommended ruling had ONE in TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS, folded); the
+    consolidated S1 decision pack had NO independent review (master audit and quote checks only);
+    the (b2) batch's record (#311) had ONE in TWO rounds; the evaluation-row batch's record (#308)
+    had ONE in TWO rounds; the evaluation-row producer (#307) had ONE independent reviewer in TWO
+    rounds (static only; PASS_WITH_AMENDMENTS, then PASS); the decision pack's revision 5 had ONE in
+    TWO rounds (FINDINGS, then PASS_WITH_AMENDMENTS; its writer was an ordinary subagent, not
+    independent; the last two folds not re-reviewed); the C10/G-1 batch's record (#305) had ONE in
+    ONE round; C10/G-1 (#304) had ONE independent reviewer in THREE rounds (static only;
+    PASS_WITH_AMENDMENTS twice, applied, then PASS), and its ruling sheet ONE in ONE round; the
+    parse batch's record (#302) had ONE in TWO rounds (FINDINGS, then a delta PASS); the (b1) parse
+    layer (#301) had ONE in TWO rounds (static only; FINDINGS, then PASS), after one read-only probe
+    by an ordinary subagent (not independent); the F-CONFIRM batch's record (#299) had ONE in THREE
+    rounds; the decision pack had ONE independent reviewer in FOUR rounds, the last round's three
+    small items folded after its PASS and not re-reviewed; (b1) (#294) had ONE independent reviewer
+    in TWO rounds; the fit gate (#291) had ONE other in TWO rounds; the builder had ONE in THREE
+    rounds. #286's PR body ("Reviewed independently twice") and a56f80c7's message ("a second review
+    passed") overstate theirs and are immutable, so this record documents them instead.
   - NEVER `shasum -c` the MANIFEST in s1_output or in eval/output: both list input files by absolute path, so the
     check re-reads the candle bytes. S1's outputs are verified by metadata only (`stat`, against
     eval/S1_OUTPUT_STAT_REFERENCE.txt); the evaluation's outputs alone, and never in s1_output, by
@@ -3711,10 +3722,10 @@ LOOP_STATE=THE ONE-SHOT PRODUCTION APPLY IS DONE AND CONSUMED (run 44133908695, 
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
-  Before it: THE THIRD PREFLIGHT READ WAS CONSUMED (run 44039032076, READY), THE PREFLIGHT NAMED THE
-  DDL EVENT TRIGGERS (#341 → M74 60a9c78e), THE ONE-SHOT APPLY WORKFLOW WAS REGISTERED, NEVER
-  DISPATCHED (#342 → M75 4da1b1ec), and that batch's record was published last (#343 → M76
-  57d0d907).
+  Before it: THE THIRD PREFLIGHT READ WAS CONSUMED (run 44039032076, READY; raw zip 24332834…, log
+  9192fff6…), THE PREFLIGHT NAMED THE DDL EVENT TRIGGERS (#341 → M74 60a9c78e), THE ONE-SHOT APPLY
+  WORKFLOW WAS REGISTERED, NEVER DISPATCHED (#342 → M75 4da1b1ec), and that batch's record was
+  published last (#343 → M76 57d0d907).
   Before it: THE SECOND PREFLIGHT READ WAS CONSUMED (run 44012717250, NOT_READY, the two provider readers named; raw
   zip b1092d8e…, log 4e29e3e3…), OWNER RULING A REACHED MAIN (#339 → M72 23c50aed), THE CHANGELOG RECORDED #336 (#338
   → M71), and that batch's record was published last (#340 → M73 ae632b6b).
@@ -8527,7 +8538,9 @@ GPT_REQUEST_STATE=NONE
 OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-18, after this record): the T3 that publishes
   this record; then the credential step (docs/runbooks/NG4_PILOT_W2.md: LOGIN and password through
   the owner-only helper, and the Space secret; never in chat or a file), preceded by an assessment
-  of outside_relation_privileges 2; then the start instant, switch-ON and deploy. The CHANGELOG
+  of outside_relation_privileges 2; then the start instant, switch-ON and deploy. The disable and
+  rollback texts for the applied database are the T4 packet's §6
+  (.work/ng4_apply_prep_20261117/APPLY_0019_0020_T4_PACKET.md), each its own T4. The CHANGELOG
   entries for #339, #341 and #342 (a new T3). The release of UOR HOLD #4 (local main at 0118cfaa).
   Still open: the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b;
   NG6-D1…D3; the writer-token renewal by **2026-11-20**; the UOR relay (NOT_DELIVERED).
