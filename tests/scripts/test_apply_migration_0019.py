@@ -21,6 +21,28 @@ def test_pinned_digests_match_bytes():
     assert hashlib.sha256(migration_0020).hexdigest() == apply.MIGRATION_0020_SHA256
 
 
+def test_route_predicate_and_guard_match_named_reader_exception():
+    import hashlib
+
+    sql = (ROOT / apply.MIGRATION).read_text()
+    predicate = ("SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r CROSS JOIN "
+                 "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
+                 "WHERE pg_catalog.pg_has_role(r.oid, g.rolname::name, 'MEMBER') "
+                 "AND r.rolbypassrls "
+                 "AND NOT r.rolsuper "
+                 "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' "
+                 "AND r.rolname IN "
+                 "('supabase_etl_admin','supabase_read_only_user')))")
+    assert apply.CHECKS["no_bypassrls_data_role_member"] == predicate
+    isolation = sql.split("-- Isolation preconditions:", 1)[1]
+    guard = isolation.split("IF EXISTS", 1)[1].split("END IF;", 1)[0]
+    flat = " ".join(guard.split())
+    assert "pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER') OR (pg_catalog.pg_has_role" in flat
+    assert guard.count("supabase_etl_admin") == guard.count("supabase_read_only_user") == 1
+    digest = hashlib.sha256((ROOT / apply.MIGRATION).read_bytes()).hexdigest()
+    assert apply.MIGRATION_SHA256 == digest
+
+
 def test_digest_change_refuses_before_connecting(monkeypatch):
     monkeypatch.setattr(apply, "MIGRATION_SHA256", "0" * 64)
     called = False

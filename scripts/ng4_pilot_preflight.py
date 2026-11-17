@@ -2,7 +2,8 @@
 """Read-only catalog preflight for the dormant NG4 pilot route.
 
 For the BYPASSRLS data-role check only, the report also names the roles and their data role
-(catalog identifiers only, never values).
+(catalog identifiers only, never values). Two owner-approved read-only roles are allowlisted;
+their count is informational, while any write-role membership remains a hard failure.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ SUPABASE_EVENT_TRIGGERS: tuple[
 EXPECTED_REPOSITORY = "tranbeny053-hub/v83-stock-cron"
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 SCRIPT = "scripts/ng4_pilot_preflight.py"
+ALLOWED_BYPASSRLS_READERS = ("supabase_etl_admin", "supabase_read_only_user")
 PREREQUISITES = (
     "server_16_plus", "schema_absent", "roles_absent", "lattice_space_absent",
     "createrole", "not_superuser", "createrole_self_grant_empty",
@@ -48,17 +50,21 @@ PREREQUISITE_SQL = {
     "not_superuser": "SELECT NOT rolsuper FROM pg_roles WHERE rolname=current_user",
     "createrole_self_grant_empty": "SELECT current_setting('createrole_self_grant') = ''",
     "no_bypassrls_data_role_member": (
-        "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.member "
-        "JOIN pg_roles g ON g.oid=m.roleid WHERE g.rolname IN "
-        "('pg_read_all_data','pg_write_all_data') AND r.rolbypassrls AND NOT r.rolsuper "
-        "AND r.rolname<>current_user)"
+        "SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r CROSS JOIN "
+        "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
+        "WHERE pg_catalog.pg_has_role(r.oid, g.rolname::name, 'MEMBER') AND r.rolbypassrls "
+        "AND NOT r.rolsuper "
+        "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' AND r.rolname IN "
+        "('supabase_etl_admin','supabase_read_only_user')))"
     ),
     "no_all_tables_publication": (
         "SELECT NOT EXISTS (SELECT 1 FROM pg_publication WHERE puballtables)"
     ),
 }
+assert all(name in PREREQUISITE_SQL["no_bypassrls_data_role_member"]
+           for name in ALLOWED_BYPASSRLS_READERS)
 # The prerequisite's own FROM ... WHERE text, so the names are exactly the members it counts;
-# DISTINCT because PostgreSQL 16 keeps one pg_auth_members row per grantor (review R1-1).
+# DISTINCT is redundant since the predicate reads pg_roles x two names (no pg_auth_members); kept.
 _BYPASSRLS_MEMBERS_FROM = (
     PREREQUISITE_SQL["no_bypassrls_data_role_member"].split(" FROM ", 1)[1][:-1]
 )
@@ -134,6 +140,26 @@ def preflight(open_connection, captured: dict[str, Any] | None = None) -> dict[s
             "ucpe_space_db_superuser_or_bypass": (
                 "SELECT COALESCE((SELECT rolsuper OR rolbypassrls FROM pg_roles "
                 "WHERE rolname='ucpe_space_db'), false)"
+            ),
+            "bypassrls_allowlisted_readers": (
+                "SELECT count(*) FROM pg_catalog.pg_roles r WHERE r.rolname IN "
+                "('supabase_etl_admin','supabase_read_only_user') AND r.rolbypassrls "
+                "AND NOT r.rolsuper "
+                "AND pg_catalog.pg_has_role(r.oid, 'pg_read_all_data', 'MEMBER') "
+                "AND NOT pg_catalog.pg_has_role(r.oid, 'pg_write_all_data', 'MEMBER')"
+            ),
+            # Informational (review R1-2 and its delta notes): SET ROLE carries BYPASSRLS, so every
+            # role that can SET ROLE to a named reader, or holds ADMIN on one (and can grant itself
+            # SET), reads what the reader reads. The two named readers, superusers and the applier
+            # are not counted. Never failing.
+            "named_reader_set_role_paths": (
+                "SELECT pg_catalog.count(DISTINCT u.oid) FROM pg_catalog.pg_roles u "
+                "CROSS JOIN pg_catalog.pg_roles n "
+                "WHERE n.rolname IN ('supabase_etl_admin','supabase_read_only_user') "
+                "AND u.rolname NOT IN ('supabase_etl_admin','supabase_read_only_user') "
+                "AND NOT u.rolsuper AND u.rolname<>current_user "
+                "AND (pg_catalog.pg_has_role(u.oid, n.oid, 'SET') "
+                "OR pg_catalog.pg_has_role(u.oid, n.oid, 'MEMBER WITH ADMIN OPTION'))"
             ),
             "ucpe_lattice_space_exists": (
                 "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='ucpe_lattice_space')"

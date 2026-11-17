@@ -6,6 +6,12 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+PREDICATE = ("SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r CROSS JOIN "
+             "(VALUES ('pg_read_all_data'),('pg_write_all_data')) g(rolname) "
+             "WHERE pg_catalog.pg_has_role(r.oid, g.rolname::name, 'MEMBER') AND r.rolbypassrls "
+             "AND NOT r.rolsuper "
+             "AND r.rolname<>current_user AND NOT (g.rolname='pg_read_all_data' AND r.rolname IN "
+             "('supabase_etl_admin','supabase_read_only_user')))")
 SPEC = importlib.util.spec_from_file_location(
     "ng4_preflight", ROOT / "scripts/ng4_pilot_preflight.py"
 )
@@ -53,7 +59,7 @@ class Cursor:
         elif "has_schema_privilege('public'" in sql or "has_database_privilege('public'" in sql:
             self.result = (False,)
         else:
-            self.result = (0 if "count(*)" in sql.lower() else True,)
+            self.result = (0 if "count(" in sql.lower() else True,)
 
     def fetchone(self):
         return self.result
@@ -114,6 +120,28 @@ def test_preflight_prerequisites_match_route_refusing_prechecks():
     assert set(preflight.PREREQUISITES) == set(route.CHECKS)
     for key in preflight.PREREQUISITES:
         assert preflight.PREREQUISITE_SQL[key] == route.CHECKS[key]
+
+
+def test_bypassrls_predicate_is_exact_and_write_membership_is_never_excepted():
+    sql = preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]
+    assert sql == PREDICATE
+    assert preflight.ALLOWED_BYPASSRLS_READERS == (
+        "supabase_etl_admin", "supabase_read_only_user"
+    )
+    assert "NOT (g.rolname='pg_read_all_data'" in sql
+    assert "pg_write_all_data' AND r.rolname IN" not in sql
+    assert preflight.BYPASSRLS_MEMBERS_SQL.startswith(
+        "SELECT coalesce(json_agg(json_build_array(x.rn, x.dn) ORDER BY x.rn, x.dn), "
+        "'[]'::json)::text "
+        "FROM (SELECT DISTINCT r.rolname AS rn, g.rolname AS dn "
+        "FROM pg_catalog.pg_roles r CROSS JOIN"
+    )
+
+
+def test_allowlisted_reader_fact_is_informational_int():
+    report = preflight.preflight(lambda: Connection())
+    assert "bypassrls_allowlisted_readers" not in report["failing"]
+    assert type(report["facts"]["bypassrls_allowlisted_readers"]) is int
 
 
 def test_public_inclusive_facts_and_signal_backend_are_reported():
@@ -349,3 +377,32 @@ def test_token_like_role_names_are_replaced():
         conn.cursor_obj.bypass_members = json.dumps([[name, "pg_read_all_data"]])
         report = preflight.preflight(lambda conn=conn: conn)
         assert report["bypassrls_data_role_members"][0]["role"] == "<non-identifier>", name
+
+
+def test_role_checks_are_schema_qualified_and_the_set_role_paths_are_counted():
+    # review R1-1: an unqualified pg_has_role(oid, text, text) could be shadowed by a planted
+    # public function of that exact signature (the CVE-2018-1058 class); review R1-2: SET ROLE
+    # carries BYPASSRLS, so the roles that can SET ROLE to a named reader are counted.
+    route_spec = importlib.util.spec_from_file_location(
+        "apply_0019_for_qualification", ROOT / "scripts/apply_migration_0019.py"
+    )
+    route = importlib.util.module_from_spec(route_spec)
+    route_spec.loader.exec_module(route)
+    unqualified = re.compile(r"(?<!pg_catalog\.)\b(pg_has_role|pg_roles)\b")
+    texts = [preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"],
+             route.CHECKS["no_bypassrls_data_role_member"], preflight.BYPASSRLS_MEMBERS_SQL]
+    for text in texts:
+        assert not unqualified.search(text), text
+    conn = Connection()
+    report = preflight.preflight(lambda: conn)
+    queries = "\n".join(sql for sql, _ in conn.cursor_obj.statements)
+    assert "pg_catalog.pg_has_role(u.oid, n.oid, 'SET')" in queries
+    assert "pg_catalog.pg_has_role(u.oid, n.oid, 'MEMBER WITH ADMIN OPTION')" in queries
+    # A planted public.count(oid) would beat pg_catalog's count("any"): only count(*) may be bare.
+    bare_count = re.compile(r"(?<!pg_catalog\.)\bcount\((?!\*)")
+    for sql, _ in conn.cursor_obj.statements:
+        assert not bare_count.search(sql), sql
+    for fact in ("bypassrls_allowlisted_readers", "named_reader_set_role_paths"):
+        assert type(report["facts"][fact]) is int
+        assert fact not in report["failing"]
+
