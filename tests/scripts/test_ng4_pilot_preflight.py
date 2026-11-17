@@ -20,6 +20,8 @@ class Cursor:
         self.public_bad = False
         self.public_any_schema_bad = False
         self.public_connect_bad = False
+        self.bypass_members = "[]"
+        self.bypass_fact = None
 
     def __enter__(self):
         return self
@@ -29,7 +31,14 @@ class Cursor:
 
     def execute(self, sql, params=()):
         self.statements.append((sql, params))
-        if self.public_bad and ("has_table_privilege('public'" in sql or
+        if "json_agg" in sql:
+            self.result = (self.bypass_members,)
+        elif sql == preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]:
+            # the fact agrees with the members list unless told not to (delta review note 1)
+            members = self.bypass_members
+            consistent = members in ("[]", "") or not members.startswith("[")
+            self.result = (consistent if self.bypass_fact is None else self.bypass_fact,)
+        elif self.public_bad and ("has_table_privilege('public'" in sql or
                                 "has_function_privilege('public'" in sql):
             self.result = (1,)
         elif self.public_any_schema_bad and "pg_my_temp_schema" in sql:
@@ -71,6 +80,9 @@ def test_first_statement_read_only_ends_rollback_and_has_no_mutation_keywords():
     assert sql[0] == "SET TRANSACTION READ ONLY"
     assert sql[1:3] == ["SET LOCAL statement_timeout = '5000'", "SET LOCAL lock_timeout = '2000'"]
     assert sql[-1] == "ROLLBACK"
+    assert sql.index(preflight.BYPASSRLS_MEMBERS_SQL) > 0
+    assert sql.index(preflight.BYPASSRLS_MEMBERS_SQL) < sql.index("ROLLBACK")
+    assert "SET TRANSACTION READ ONLY" in sql[:sql.index(preflight.BYPASSRLS_MEMBERS_SQL)]
     forbidden = (
         "INSERT",
         "UPDATE",
@@ -121,6 +133,64 @@ def test_public_inclusive_facts_and_signal_backend_are_reported():
     encoded = json.dumps(report)
     assert "postgresql" not in encoded.lower()
     assert "postgresql://" not in encoded.lower()
+
+
+def test_bypassrls_members_are_reported_safely_outside_facts():
+    conn = Connection()
+    report = preflight.preflight(lambda: conn)
+    assert report["bypassrls_data_role_members"] == []
+    assert all(type(value) in (bool, int) for value in report["facts"].values())
+    conn.cursor_obj.bypass_members = json.dumps([["x_reader", "pg_read_all_data"]])
+    captured = {}
+    report = preflight.preflight(lambda: conn, captured)
+    expected = [{"role": "x_reader", "data_role": "pg_read_all_data"}]
+    assert report["bypassrls_data_role_members"] == expected
+    assert captured["bypassrls_data_role_members"] == expected
+
+
+def test_bypassrls_member_names_and_data_roles_are_sanitized():
+    conn = Connection()
+    conn.cursor_obj.bypass_members = json.dumps([
+        ["bad/name", "pg_read_all_data"], ["x_reader", "unexpected"]
+    ])
+    report = preflight.preflight(lambda: conn)
+    assert report["bypassrls_data_role_members"] == [
+        {"role": "<non-identifier>", "data_role": "pg_read_all_data"},
+        {"role": "x_reader", "data_role": "<unexpected>"},
+    ]
+
+
+def test_every_non_identifier_role_name_is_replaced():
+    for name in ("a@b", "postgresql://h", "has space", "Upper", "", "9lead", "x" * 64):
+        conn = Connection()
+        conn.cursor_obj.bypass_members = json.dumps([[name, "pg_write_all_data"]])
+        report = preflight.preflight(lambda conn=conn: conn)
+        assert report["bypassrls_data_role_members"] == [
+            {"role": "<non-identifier>", "data_role": "pg_write_all_data"}
+        ], name
+        assert name not in json.dumps(report) or name == ""
+
+
+def test_bypassrls_member_list_is_capped_and_sql_matches_prerequisite_predicate():
+    conn = Connection()
+    pairs = [[f"reader_{i}", "pg_read_all_data"] for i in range(21)]
+    conn.cursor_obj.bypass_members = json.dumps(pairs)
+    report = preflight.preflight(lambda: conn)
+    assert len(report["bypassrls_data_role_members"]) == 20
+    assert report["bypassrls_data_role_members_truncated"] is True
+    sql = preflight.BYPASSRLS_MEMBERS_SQL
+    prerequisite = preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]
+    prerequisite_from = prerequisite.split(" FROM ", 1)[1]
+    assert prerequisite_from.endswith(")")
+    subquery = "FROM (SELECT DISTINCT r.rolname AS rn, g.rolname AS dn FROM "
+    assert subquery + prerequisite_from[:-1] + ") x" in sql
+    for condition in ("pg_read_all_data", "pg_write_all_data", "r.rolbypassrls",
+                      "NOT r.rolsuper", "r.rolname<>current_user"):
+        assert condition in sql
+    prerequisite = preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]
+    for condition in ("pg_read_all_data", "pg_write_all_data", "r.rolbypassrls",
+                      "NOT r.rolsuper", "r.rolname<>current_user"):
+        assert condition in prerequisite
 
 
 def test_public_least_privilege_failures_make_preflight_not_ready():
@@ -233,3 +303,49 @@ def test_rehearse_with_a_wheelhouse_loads_the_driver_from_it(monkeypatch):
     env = {"NG4_PILOT_PREFLIGHT_REHEARSAL_URL": "postgresql:///scratch?host=/tmp"}
     preflight.main(["--mode=rehearse", "--wheelhouse=/tmp/wheels"], environ=env)
     assert calls[:3] == [("enter", "/tmp/wheels"), "driver", "attest"]
+
+
+def _main_with_fake(monkeypatch, capsys, members, fact=None):
+    conn = Connection()
+    conn.cursor_obj.bypass_members = members
+    conn.cursor_obj.bypass_fact = fact
+    monkeypatch.setattr(preflight, "load_driver",
+                        lambda: type("D", (), {"connect": staticmethod(lambda *a, **k: conn)}))
+    monkeypatch.setattr(preflight, "enter_isolated_runtime", lambda w: object())
+    monkeypatch.setattr(preflight, "attest_loaded_modules", lambda isolation: 1)
+    env = {"NG4_PILOT_PREFLIGHT_REHEARSAL_URL": "postgresql:///scratch?host=/tmp"}
+    code = preflight.main(["--mode=rehearse", "--wheelhouse=/tmp/wheels"], environ=env)
+    return code, json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+
+def test_malformed_or_inconsistent_members_fail_closed_as_errors_not_refusals(monkeypatch, capsys):
+    # review R1-2/R1-6: an error class (exit 1), never REFUSED, and no names key in the output
+    for members, fact, error in (
+        ("not json", False, "JSONDecodeError"),
+        (json.dumps("x_reader"), False, "RuntimeError"),
+        (json.dumps([["x_reader"]]), False, "RuntimeError"),
+        (json.dumps([["x_reader", "pg_read_all_data", "extra"]]), False, "RuntimeError"),
+        (json.dumps([["x_reader", "pg_read_all_data"]]), True, "RuntimeError"),
+        ("[]", False, "RuntimeError"),
+    ):
+        code, report = _main_with_fake(monkeypatch, capsys, members, fact)
+        assert code == 1 and report["error"] == error, (members, fact, report)
+        assert "bypassrls_data_role_members" not in report
+        assert "x_reader" not in json.dumps(report)
+
+
+def test_a_consistent_member_list_passes_through_main(monkeypatch, capsys):
+    pair = [["x_reader", "pg_read_all_data"]]
+    code, report = _main_with_fake(monkeypatch, capsys, json.dumps(pair))
+    assert code == 0 and report["verdict"] == "NOT_READY"
+    assert "no_bypassrls_data_role_member" in report["failing"]
+    expected = [{"role": "x_reader", "data_role": "pg_read_all_data"}]
+    assert report["bypassrls_data_role_members"] == expected
+
+
+def test_token_like_role_names_are_replaced():
+    for name in ("a" * 16, "role_0123456789abcdef", "x_" + "deadbeef" * 5):
+        conn = Connection()
+        conn.cursor_obj.bypass_members = json.dumps([[name, "pg_read_all_data"]])
+        report = preflight.preflight(lambda conn=conn: conn)
+        assert report["bypassrls_data_role_members"][0]["role"] == "<non-identifier>", name

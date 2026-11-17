@@ -1,4 +1,4 @@
-"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-25).
+"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-26).
 
 Run by run_scratch.sh in its pilot mode, locally or in CI. Every URL must be local
 (rehearse.refuse_url) and none is
@@ -12,8 +12,8 @@ live privileges, its SCRAM startup, its connection limit and a store round trip;
 Space's reader still
 DESIGNED; R-24 planted PUBLIC privileges each refused by 0020's own self-check (UP020); R-25 the
 applier's own temp
-schema excluded from the CREATE check; R-16 both W1 forms; R-23 W2's disable (NOLOGIN, a live
-session ended by the
+schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-16
+both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
 non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
 memory only.
 """
@@ -152,6 +152,7 @@ class Pilot:
             "R-17 the preflight reports READY on a fresh cluster and changes nothing",
             code == 0
             and body.get("verdict") == "READY"
+            and body.get("bypassrls_data_role_members") == []
             and before == after
             and not self.schema_exists(),
             {
@@ -460,6 +461,43 @@ class Pilot:
             results,
         )
 
+    # ---- R-26: planted BYPASSRLS data-role member (scratch only) ----------------------------
+    def r26_bypass_member(self) -> None:
+        before = self.fingerprint()
+        self.su.execute("CREATE ROLE ng4_probe_bypass NOLOGIN BYPASSRLS")
+        try:
+            self.su.execute("GRANT pg_read_all_data TO ng4_probe_bypass")
+            code_p, body_p = self.preflight()
+            code_a, body_a = self.apply()
+            applied = self.schema_exists()
+        finally:
+            self.su.execute("REVOKE pg_read_all_data FROM ng4_probe_bypass")
+            self.su.execute("DROP ROLE ng4_probe_bypass")
+        self.add(
+            "R-26 a planted BYPASSRLS member of pg_read_all_data makes the preflight NOT_READY"
+            " and name exactly that role and data role; the route refuses; nothing applied; undone",
+            code_p == 0
+            and body_p.get("verdict") == "NOT_READY"
+            and "no_bypassrls_data_role_member" in (body_p.get("failing") or [])
+            and body_p.get("bypassrls_data_role_members") == [
+                {"role": "ng4_probe_bypass", "data_role": "pg_read_all_data"}
+            ]
+            and code_a != 0
+            # the route's own pre-check refuses on exactly this check (review R1-7)
+            and "no_bypassrls_data_role_member" in " ".join(body_a.get("refusals") or [])
+            and not applied
+            and self.fingerprint() == before,
+            {
+                "preflight": body_p.get("verdict"),
+                "failing": body_p.get("failing"),
+                "members": body_p.get("bypassrls_data_role_members"),
+                "route_exit": code_a,
+                "route_refusals": body_a.get("refusals"),
+                "schema_created": applied,
+                "undone": self.fingerprint() == before,
+            },
+        )
+
     # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
     def r21b(self) -> None:
         facts: dict[str, Any] = {}
@@ -658,6 +696,7 @@ class Pilot:
         self.r17()
         self.r18_refusals()
         self.r24_planted()
+        self.r26_bypass_member()
         self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
         self.r18_apply()
         self.r20()
