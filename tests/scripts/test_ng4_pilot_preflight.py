@@ -33,7 +33,8 @@ class Cursor:
         self.statements.append((sql, params))
         if "json_agg" in sql:
             self.result = (self.bypass_members,)
-        elif "rolbypassrls" in sql:  # the fact agrees with the members list unless told not to
+        elif sql == preflight.PREREQUISITE_SQL["no_bypassrls_data_role_member"]:
+            # the fact agrees with the members list unless told not to (delta review note 1)
             members = self.bypass_members
             consistent = members in ("[]", "") or not members.startswith("[")
             self.result = (consistent if self.bypass_fact is None else self.bypass_fact,)
