@@ -92,6 +92,7 @@ class Pilot:
         self.su = psycopg.connect(super_url, autocommit=True)
         self.super_url = super_url
         self.ddl_listener = None
+        self.ddl_pre_apply: list[str] = []
         self.runner_name = self.runner.execute("SELECT current_user").fetchone()[0]
         self.checks: list[dict[str, Any]] = []
         self.facts: dict[str, Any] = {}
@@ -596,6 +597,14 @@ class Pilot:
              "verdict_unchanged": unchanged, "failing": body.get("failing")},
         )
 
+    def r29_drain(self) -> None:
+        # Right before the route's apply: anything already queued is drained and recorded, so a
+        # notification R-29b sees can only come from the apply (delta review note 7).
+        self.ddl_pre_apply = []
+        if self.ddl_listener is not None:
+            for notify in self.ddl_listener.notifies(timeout=0.5):
+                self.ddl_pre_apply.append(notify.payload)
+
     def r29b_ddl_watcher_fired(self) -> None:
         payloads = []
         if self.ddl_listener is not None:
@@ -605,8 +614,8 @@ class Pilot:
         self.add(
             "R-29b the DDL watcher fired during the real apply (its NOTIFY arrived after the"
             " route's commit)",
-            payloads == ["reload schema"],
-            {"payloads": payloads},
+            payloads == ["reload schema"] and self.ddl_pre_apply == [],
+            {"payloads": payloads, "drained_before_apply": self.ddl_pre_apply},
         )
 
     # ---- R-21b: W2 in depth: the executable set, every verb, no inheritance, startup ----------
@@ -864,6 +873,7 @@ class Pilot:
         self.r27_named_readers()
         self.r29_ddl_event_trigger()
         self.pre_apply_ng4 = self.runner.execute(_NG4_FINGERPRINT_SQL).fetchone()[0]
+        self.r29_drain()
         self.r18_apply()
         self.r29b_ddl_watcher_fired()
         self.r20()
