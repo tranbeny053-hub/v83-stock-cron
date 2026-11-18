@@ -2,6 +2,41 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-17 - NG4: the DDL event triggers named; the one-shot apply workflow registered (on main, not released)
+
+It records #341 and #342. Nothing in this entry is released.
+
+Added:
+- #341: the read-only preflight's report also lists the database's DDL event triggers: name, event and enabled state,
+  never a definition, at most 20. Names are filtered like the role names, and only known event and state values are
+  printed. The script fails closed if the list disagrees with its own count.
+- #342: the one-shot apply workflow `.github/workflows/apply-migration-0019.yml` is registered, a 100% rename of the
+  reviewed authored file. It is dispatch-only, with two required inputs (the reviewed main SHA and a confirmation
+  token), and it runs only in the `production-db-owner` Environment, whose one approver is the owner.
+
+Notes:
+- Registering is not applying. Later, under the owner's separate one-shot authorizations: the fourth read (run
+  44113873249, READY) named the four provider triggers, the owner accepted their assessment, and the one apply (run
+  44133908695) applied 0019, the pilot capacity and 0020 once. Both runs are consumed and are never rerun.
+- The lattice stays OFF: no login, credential, Space secret, switch-on or deploy.
+
+## 2026-11-17 - NG4: owner ruling A, a named read-only exception to the BYPASSRLS check (on main, not released)
+
+It records #339. Nothing in this entry is released.
+
+Changed:
+- #339: the preflight, the apply route and 0019's own guard accept exactly two provider roles, `supabase_etl_admin`
+  and `supabase_read_only_user`, as BYPASSRLS members of `pg_read_all_data` (read only). Any other name, and any
+  member of `pg_write_all_data`, is still refused. The check now follows indirect memberships and is schema-qualified.
+  The preflight also reports two informational facts: how many of the two named readers hold that read-only
+  exception (`bypassrls_allowlisted_readers`), and how many other roles can SET ROLE to one of them or hold ADMIN on
+  one (`named_reader_set_role_paths`).
+  0019 was re-pinned, not applied.
+
+Notes:
+- The third read (run 44039032076) then returned READY. Commit timestamps stay off: HOLD-1 is ruled, and
+  COMMIT_UNKNOWN receipts are accepted.
+
 ## 2026-11-17 - NG4: the read-only preflight names the roles behind its BYPASSRLS check (on main, not released)
 
 It records #336. Nothing in this entry is released.
