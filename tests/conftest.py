@@ -6,6 +6,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def disable_real_lattice_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Keep tests from starting the real lattice runner.
+    monkeypatch.delenv("UCPE_LATTICE_DB_URL", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def block_real_network(monkeypatch: pytest.MonkeyPatch) -> None:
     def blocked_connect(*args, **kwargs):
         raise RuntimeError("Unit tests must not open real network sockets.")

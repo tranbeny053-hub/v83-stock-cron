@@ -1,3 +1,5 @@
+import importlib
+
 from fastapi.testclient import TestClient
 
 from crypto_probability_engine import lattice_pilot
@@ -6,7 +8,9 @@ from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.telemetry.events import EVENTS_SINK
 
 
-def test_pilot_module_import_is_dormant():
+def test_pilot_module_import_emits_no_event():
+    EVENTS_SINK.events.clear()
+    importlib.reload(lattice_pilot)
     assert lattice_pilot.WRITER_DB_URL_ENV == "UCPE_LATTICE_DB_URL"
     assert lattice_pilot.lattice.LATTICE_ENABLED is True
     assert not any(event["event"].startswith("lattice_pilot_") for event in EVENTS_SINK.events)
