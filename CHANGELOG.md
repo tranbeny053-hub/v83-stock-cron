@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-18 - NG4: the credential step's login SQL is guarded (owner ruling D; on main, not released)
+
+It records #345. Nothing in this entry is released.
+
+Changed:
+- #345: `scripts/lattice_space_credential.py` now writes one guarded block instead of a bare `ALTER ROLE … LOGIN`. It
+  refuses (codes UPL01–UPL08) before granting anything unless the pilot's login role is still in its applied state:
+  no login, no inheritance or powers, three connections, one membership (the writer), its three session limits, no
+  other member and nobody else able to switch into it, the apply's privilege checks, and at most read-only reach to
+  the two `extensions.pg_stat_statements` views outside its schema. The scratch rehearsal plants 15 violations and
+  proves each refusal.
+
+Notes:
+- Publishing is not activation. The owner then ran the credential step (2026-11-18, owner-attested): the login was
+  granted and the Space secret set. The lattice stays OFF until a reviewed switch-on and a deploy.
+
 ## 2026-11-17 - NG4: the DDL event triggers named; the one-shot apply workflow registered (on main, not released)
 
 It records #341 and #342. Nothing in this entry is released.
