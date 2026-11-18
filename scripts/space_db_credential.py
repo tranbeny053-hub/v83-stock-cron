@@ -8,9 +8,9 @@ NOLOGIN until the owner's credential step (docs/runbooks/SPACE_DB_CUTOVER.md). T
     .venv/bin/python -m scripts.space_db_credential copy-url
 
 They are G1's resolver helper (scripts/resolver_credential.py) for another role, unchanged in every
-rule: generate reads the dashboard's connection URI from the clipboard, its [YOUR-PASSWORD]
-placeholder still in it, makes a random password, and writes two owner-only files in ~/ucpe-keys,
-never inside this repository and never over an existing file:
+rule: generate reads the dashboard's connection URI from the clipboard, its [YOUR-PASSWORD] (or
+[YOUR-DATABASE-PASSWORD]) placeholder still in it, makes a random password, and writes two
+owner-only files in ~/ucpe-keys, never inside this repository and never over an existing file:
 - ucpe-space-db-login.sql: ALTER ROLE ucpe_space_db WITH LOGIN PASSWORD '<SCRAM-SHA-256 secret>',
   computed here, so the password itself never reaches the database;
 - ucpe-space-db-url.txt: the template with ucpe_space_db as its user ([ROLE].[PROJECT-REF] through

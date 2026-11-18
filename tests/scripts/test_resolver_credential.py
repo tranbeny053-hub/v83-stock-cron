@@ -67,6 +67,10 @@ def test_each_secret_has_postgresql_s_format_and_a_fresh_salt() -> None:
 
 
 @pytest.mark.parametrize(
+    "placeholder", ["[YOUR-PASSWORD]", "[YOUR-DATABASE-PASSWORD]"],
+    ids=["legacy-placeholder", "dashboard-placeholder"],
+)
+@pytest.mark.parametrize(
     ("template", "user", "mode"),
     [
         (SESSION, f"ucpe_resolver.{REF}", "shared pooler, session mode"),
@@ -81,11 +85,12 @@ def test_each_secret_has_postgresql_s_format_and_a_fresh_salt() -> None:
     ids=["session", "transaction", "direct", "dedicated", "options-and-whitespace"],
 )
 def test_the_role_replaces_postgres_and_the_rest_of_the_template_stays(
-    template: str, user: str, mode: str
+    template: str, user: str, mode: str, placeholder: str
 ) -> None:
+    template = template.replace("[YOUR-PASSWORD]", placeholder)
     url, found = credential.resolver_url(template, "Plain_token-123")
     assert found == mode
-    expected = template.strip().replace("[YOUR-PASSWORD]", "Plain_token-123")
+    expected = template.strip().replace(placeholder, "Plain_token-123")
     expected = re.sub(r"//postgres(\.[a-z0-9]{20})?:", f"//{user}:", expected)
     assert url == expected
 
@@ -94,6 +99,10 @@ def test_the_role_replaces_postgres_and_the_rest_of_the_template_stays(
     "template",
     [
         SESSION.replace("[YOUR-PASSWORD]", "an-actual-password"),
+        SESSION.replace("[YOUR-PASSWORD]", "[YOUR-PASSWORD-X]"),
+        SESSION.replace("[YOUR-PASSWORD]", "[YOUR-DATABASE-PASSWORD"),
+        SESSION.replace("[YOUR-PASSWORD]", "[]"),
+        SESSION.replace("[YOUR-PASSWORD]", ""),
         SESSION.replace("postgres.", "authenticator."),
         SESSION.replace(POOLER, "db.example.com"),
         SESSION.replace(f"postgres.{REF}", "postgres"),
@@ -102,8 +111,11 @@ def test_the_role_replaces_postgres_and_the_rest_of_the_template_stays(
         SESSION.replace("postgresql://", "https://"),
         "",
     ],
-    ids=["a-real-password", "another-user", "not-supabase", "pooler-without-ref",
-         "direct-with-ref", "port", "scheme", "empty"],
+    ids=[
+        "a-real-password", "extended-placeholder", "unclosed-placeholder", "empty-placeholder",
+        "empty-password", "another-user", "not-supabase", "pooler-without-ref", "direct-with-ref",
+        "port", "scheme", "empty",
+    ],
 )
 def test_anything_but_the_dashboard_s_template_is_refused_and_never_echoed(template: str) -> None:
     with pytest.raises(credential.CredentialError) as refused:

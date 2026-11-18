@@ -78,6 +78,14 @@ def test_generate_writes_guarded_login_sql_and_qualifies_catalog_access(tmp_path
         assert not re.search(rf"(?<!pg_catalog\.)\b{re.escape(name)}\b", sql)
 
 
+def test_generate_accepts_dashboard_password_placeholder_and_keeps_guarded_sql(tmp_path):
+    dashboard_template = SESSION.replace("[YOUR-PASSWORD]", "[YOUR-DATABASE-PASSWORD]")
+    assert credential.main(
+        ["generate", "--dir", str(tmp_path)], paste=lambda: dashboard_template
+    ) == 0
+    _assert_guarded_structure((tmp_path / credential.SQL_NAME).read_text())
+
+
 def test_resolver_generate_keeps_default_login_sql_shape(tmp_path):
     folder = tmp_path / "resolver-keys"
     resolver_credential.generate(folder, SESSION)

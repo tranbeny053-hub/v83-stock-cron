@@ -74,7 +74,7 @@ or the SQL into chat, a file in this repository, or a log.
    - In the Supabase dashboard, open the project and click **Connect** at the top.
    - In "Connect to your project", open **Connection String**.
    - Choose the type **URI** and the method **Session pooler**, then copy the string.
-   - It shows `[YOUR-PASSWORD]`: leave it as it is.
+   - It shows `[YOUR-PASSWORD]` (newer dashboards: `[YOUR-DATABASE-PASSWORD]`): leave it as it is.
 2. **Make the credential, on your Mac** (Terminal). The command reads the template from the
    clipboard:
    ```bash
