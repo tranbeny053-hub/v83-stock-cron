@@ -2,6 +2,34 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-18 - NG4: the pilot switched on and released as UCPE-PROD-NG4P-20261118-B
+
+It records #348, #349 and #351. Everything in this entry is released: production serves 49ab0855.
+
+Changed:
+- #348: `scripts/resolver_credential.py` accepts the dashboard's newer `[YOUR-DATABASE-PASSWORD]` placeholder as well as
+  `[YOUR-PASSWORD]`, so the credential step no longer refuses the session-pooler string the dashboard shows today. The
+  helper docstring, three runbooks and the tests follow. It also carries the CHANGELOG entry for #345.
+- #349: the NG4 pilot is switched on, per the owner's rulings of 2026-11-18. `LATTICE_ENABLED` is true and the window
+  is fixed: it starts 2026-11-23T00:00:00Z, has its day-7 checkpoint at 2026-11-30T00:00:00Z and ends
+  2026-12-07T00:00:00Z. The writer's connection comes only from the Space secret `UCPE_LATTICE_DB_URL`, never from
+  the code. The runner fails closed: without that secret it reports NOT_CONFIGURED, and after the end WINDOW_CLOSED.
+  A restart loses only in-process state; the instants it misses stay unlogged and are never backfilled.
+- #351: `index.html` gives `app.js` and `styles.css` one new cache token, `ng4p-20261118-b`, because `app.js` had
+  changed since the live build (#285). The release identity becomes UCPE-PROD-NG4P-20261118-B, since the release tool
+  refuses to reuse -A.
+
+Released:
+- UCPE-PROD-NG4P-20261118-B was deployed once on 2026-11-18 at 15:51 UTC, under the owner's one-shot authorization.
+  It fast-forwarded production from 27edbcad (UCPE-PROD-P7P-20261017-A) to 49ab0855. The preflight passed all nine
+  checks first, and the owner accepted the 21-file runtime delta by its digest. Afterwards production was RUNNING at
+  49ab0855 with health 200, and served this release's identity and the exact bytes of its frontend files.
+
+Notes:
+- The window opens at 2026-11-23T00:00:00Z. No change to the Space is allowed inside it. After the end, the owner's
+  planned disable step removes the login and deletes the Space secret.
+- The guard baseline still names the previous release until the re-pin merges.
+
 ## 2026-11-18 - NG4: the credential step's login SQL is guarded (owner ruling D; on main, not released)
 
 It records #345. Nothing in this entry is released.
