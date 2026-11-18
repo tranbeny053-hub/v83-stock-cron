@@ -13,9 +13,9 @@ class Untouchable:
 
 
 def test_constants_and_off_start_is_silent(monkeypatch):
-    assert lattice_pilot.WRITER_DB_URL_ENV is None
-    assert lattice.PILOT_START_UTC is None  # named by the owner only in the switch-ON change
-    assert lattice.LATTICE_ENABLED is False
+    assert lattice_pilot.WRITER_DB_URL_ENV == "UCPE_LATTICE_DB_URL"
+    assert lattice.PILOT_START_UTC == datetime(2026, 11, 23, tzinfo=UTC)
+    assert lattice.LATTICE_ENABLED is True
     assert lattice_pilot.GRACE_SECONDS == 20
     assert lattice_pilot.STEP_TIMEOUT_SECONDS == 120
     sink = TelemetrySink()
@@ -42,6 +42,14 @@ def test_window_clip_excludes_end_and_before_start():
     clipped = tuple(point for point in grid if start <= point < end)
     # The 15m lattice steps every 3 bars (45 minutes); 2026-11-09T00:00Z is on it.
     assert clipped == (start, start + timedelta(minutes=45))
+
+
+def test_pilot_owner_schedule():
+    start = lattice.PILOT_START_UTC
+    assert start is not None
+    assert lattice.pilot_end(start) == datetime(2026, 12, 7, tzinfo=UTC)
+    assert start + lattice.PILOT_CHECKPOINT == datetime(2026, 11, 30, tzinfo=UTC)
+    assert lattice.planned_slots(start) == {"15m": 448, "1H": 112, "4H": 28, "1D": 5}
 
 
 class FakeClock:

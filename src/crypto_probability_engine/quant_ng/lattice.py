@@ -18,13 +18,13 @@ from crypto_probability_engine.normalizers.symbols import normalize_symbol
 from crypto_probability_engine.quant_ng import evidence, reference, reference_v1d, windows
 from crypto_probability_engine.targets.contract_v1 import VENUE_LABELS, stamp_v1, validate_v1
 
-# OFF: turning this on is activation: a reviewed code change, then T3/T4; no environment
-# variable, setting, header or request reads or sets it.
-LATTICE_ENABLED = False
+# Switch-ON change per owner ruling 2026-11-18; activation is a reviewed code change, then T3/T4; no
+# environment variable, setting, header or request reads or sets it.
+LATTICE_ENABLED = True
 DECLARED_CELLS: tuple = ()
 # NG4-PILOT INPUTS, owner 2026-11-06. These are arbitrary operational fixtures; not
 # scientific priors, not reference probabilities, never eligible for any statistical use.
-# The start is named by the owner in the switch-ON change (a T3).
+# Owner ruling 2026-11-18 for the switch-ON change: pilot starts 2026-11-23T00:00:00Z.
 PILOT_SYMBOL = "SOL/USDT"
 PILOT_VENUE = "binance"
 PILOT_TIMEFRAMES = ("15m", "1H", "4H", "1D")
@@ -34,7 +34,7 @@ PILOT_PRIOR_INTRADAY = reference.ReferencePriors((0.5, 0.5, 0.5))
 PILOT_PRIOR_1D = 0.5
 PILOT_RECIPE_ID = "reference-daytype-v1"
 PILOT_RECIPE_ID_1D = "reference-daytype-v1d"
-PILOT_START_UTC: datetime | None = None
+PILOT_START_UTC: datetime | None = datetime(2026, 11, 23, tzinfo=UTC)
 PILOT_DURATION = timedelta(days=14)
 PILOT_CHECKPOINT = timedelta(days=7)
 PILOT_CAPACITY_MAX = 1200
