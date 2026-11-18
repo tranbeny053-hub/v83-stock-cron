@@ -1,76 +1,104 @@
 # STATE
 
-Updated: 2026-11-18 (**OWNER RULING D IS ON MAIN: THE CREDENTIAL STEP'S LOGIN SQL FOR
-ucpe_lattice_space IS GUARDED (#345 → M78 16ca6892). IT REFUSES LOGIN, BEFORE ANY ALTER, UNLESS THE
-ROLE'S APPLIED BOUNDARY STILL HOLDS AND ITS OUTSIDE REACH IS AT MOST extensions.pg_stat_statements
-AND extensions.pg_stat_statements_info, SELECT ONLY. THE CHANGELOG RECORDS #339, #341 AND #342 (#346
-→ M79 8aeb868b). THE CREDENTIAL STEP ITSELF HAS NOT RUN: NO CREDENTIAL, LOGIN OR SPACE SECRET; THE
-SPACE ROLE IS STILL NOLOGIN, NO PASSWORD. NEVER RERUN THE APPLY (44133908695) OR PREFLIGHT RUNS
-43916685548, 44012717250, 44039032076 OR 44113873249. LATTICE_ENABLED = False: NO SWITCH-ON OR
-DEPLOY. NGA IS STILL PROPOSED, NOT ADOPTED. THE 1D EVALUATION AND THE S1 BUILD REMAIN CONSUMED AND
-MUST NEVER BE RERUN. THE DEPLOYED APP IS UNCHANGED: D 27edbcad / UCPE-PROD-P7P-20261017-A. NO
-FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), 2026-11-18 (ICT): ruling D (the guarded login, a LOCAL T1, an
-  independent narrow review, one T3 package with the CHANGELOG, STATE last) and the T3 for this
-  batch.
-- **THE OUTSIDE-REACH ASSESSMENT (LOCAL).** .work/ng4_apply_run_20261118/OUTSIDE_REACH_ASSESSMENT.md
-  (sha256 59d7c3ae…): the apply's informational outside_relation_privileges 2 are PUBLIC grants (the
-  space role's one membership, the writer, holds nothing outside the lattice; post_shdepend 0), most
-  likely PostgreSQL's two pg_stat_statements views, which the extension grants to PUBLIC and the
-  provider installs in schema extensions; NOT confirmed by name. Options: A accept, B name them with
-  one more production read, C revoke PUBLIC's grant (a T4), D guard the login. **The owner chose
-  D.**
-- **THE GUARD (#345, M78 16ca6892).** scripts/lattice_space_credential.py now writes one DO block
-  instead of the bare ALTER ROLE. With search_path pinned to pg_catalog it RAISEs (UPL01–UPL08)
-  before any ALTER unless: both lattice roles exist; the space role is still NOLOGIN, NOINHERIT and
-  powerless, with connection limit 3 and no expiry; its one membership is the writer (INHERIT, no
-  SET, no ADMIN); its one settings row holds the three session bounds; no non-superuser can SET ROLE
-  to it; its only member row is its creator's ADMIN-only grant; its outside reach, in the route's
-  own scope, is at most the two accepted views with SELECT only; and the route's four gated
-  post-privilege checks still hold. The verifier, never the password, is in the SQL.
-  resolver_credential.generate gained a login= hook whose default leaves the resolver's and E2's SQL
-  unchanged. Evidence: rehearsal R-30 plants each violation on scratch PostgreSQL and proves its
-  refusal code with no password set, and the accepted set's LOGIN; R-21 logs in through the guard;
-  local PostgreSQL 17 PASS 21/21 at the clean head f8e0d10 (R-30: 16 plants: 15 refusals, each its
-  expected code with no password set, and the accepted set's LOGIN; the first run failed only R-30's
-  own harness, fixed by one consolidated repair); the PR's checks all green (9), including the
-  PostgreSQL 16 pilot rehearsal 21/21 with R-30, and M78's push CI 44264885845 (8996 passed) and
-  build 44264885766. Codex delegations: 4 (task-1068 built it, task-1069 repaired the harness,
-  task-1070 folded the review, task-1071 added the definer plant). ONE round (LG-1: the guard
-  PASS_WITH_AMENDMENTS, 4 MINOR and 3 NOTE; the CHANGELOG PASS, 1 NOTE; the credential-step packet
-  PASS_WITH_AMENDMENTS, 2 MINOR and 2 NOTE; all folded but NOTE 7, the SET grants on the applier,
-  outside ruling D, as the reviewer agreed) and TWO delta rounds (R2 PASS, its three NOTEs folded;
-  R3 PASS, its one NOTE, per-sub-check message assertions in R-30, not folded)
-- **THE CHANGELOG (#346, M79 8aeb868b):** the entries for #339 (owner ruling A) and for #341 and
-  #342 (the DDL event triggers named; the one-shot apply workflow registered). The guard's own entry
-  is owed.
-- **THE CREDENTIAL STEP IS PREPARED, NOT EXECUTED:**
-  .work/ng4_credential_step_20261118/CREDENTIAL_STEP_PACKET.md. The owner runs the helper from a
-  clean checkout at the final main, because UOR HOLD #4 keeps the local main checkout at 0118cfaa,
-  which predates the helper. Claude never runs the helper or sees the password, verifier, URL or
-  secret. A UPL refusal grants nothing and stops the step.
+Updated: 2026-11-18 (**THE NG4 PILOT IS SWITCHED ON ON MAIN (#349 → M82 31b938cb), NOT YET DEPLOYED:
+LATTICE_ENABLED = True, PILOT_START_UTC = 2026-11-23T00:00:00Z (END 2026-12-07T00:00:00Z, DAY-7
+CHECKPOINT 2026-11-30T00:00:00Z, 593 PLANNED SLOTS), WRITER_DB_URL_ENV = UCPE_LATTICE_DB_URL;
+RELEASE IDENTITY UCPE-PROD-NG4P-20261118-A. NOTHING RUNS UNTIL THE OWNER'S DEPLOY (T4). THE OWNER'S
+CREDENTIAL STEP IS EXECUTED (OWNER-ATTESTED, NOT INDEPENDENTLY VERIFIED): THE GUARDED LOGIN REPORTED
+EVERY CHECK PASSED AND THE SPACE SECRET UCPE_LATTICE_DB_URL IS SET; THE WRITER TOKEN IS RENEWED
+(EXPIRY 2026-12-18T09:27Z, OWNER-REPORTED). THE CREDENTIAL HELPERS ACCEPT THE DASHBOARD'S NEWER
+PLACEHOLDER (#348 → M81 34562b3c). NEVER RERUN THE APPLY (44133908695) OR PREFLIGHT RUNS
+43916685548, 44012717250, 44039032076 OR 44113873249. THE DEPLOYED APP IS UNCHANGED: D 27edbcad /
+UCPE-PROD-P7P-20261017-A. NGA IS STILL PROPOSED, NOT ADOPTED. NO FORECAST-QUALITY CLAIM OR
+DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below), 2026-11-18 (ICT): the credential step's authorization and its
+  completion report; the switch-ON rulings (start, deploy location, one T3); the writer-token
+  renewal; the T3 for this batch.
+- **THE CREDENTIAL STEP: EXECUTED, OWNER-ATTESTED.** The owner ran
+  scripts/lattice_space_credential.py from the clean checkout .work/wt-credential at M80 773db013
+  (helper blob e5b06939…, = the reviewed one), pasted the guarded login SQL as the applying role,
+  and reports "every check passed" and that the Space secret UCPE_LATTICE_DB_URL is set. NOT
+  independently verified (no production read was authorized). The two reported values (USAGE on
+  schema extensions; accepted relations reached) were not filled in: UNKNOWN; either value is
+  accepted under ruling D. The dashboard's session-pooler URI used [YOUR-DATABASE-PASSWORD], which
+  the helper refused before writing anything; the owner replaced only that placeholder (a template
+  edit, no secret). Claude never ran the helper or saw any of its outputs.
+- **THE SPACE AFTER BOTH SECRET CHANGES (read-only public metadata and /v1/build-info; no token, no
+  restart initiated by Claude; whether the secret changes restarted it is not observable):**
+  RUNNING, revision 27edbcad = the release baseline, replicas 1/1, release UCPE-PROD-P7P-20261017-A
+  (.work/ng4_switch_on_20261118/SPACE_RUNTIME_CHECK.txt). The writer token's validity is PENDING the
+  next natural SAVED receipt (read passively; no verification traffic). Its new expiry
+  (2026-12-18T09:27Z) falls after the pilot's end, so no renewal is needed inside the window.
+- **THE SWITCH-ON (#349, M82 31b938cb).** quant_ng/lattice.py: LATTICE_ENABLED = True,
+  PILOT_START_UTC = 2026-11-23T00:00:00Z; lattice_pilot.py: WRITER_DB_URL_ENV =
+  "UCPE_LATTICE_DB_URL"; the OFF-pinning tests pin the ON values (OFF paths kept by explicit
+  monkeypatching; app-lifespan tests on a fixed clock); release identity UCPE-PROD-NG4P-20261118-A
+  by scripts/release.py identity. start() is fail-closed: without the variable (which exists only in
+  the Space) it emits NOT_CONFIGURED and does no I/O, after the end WINDOW_CLOSED; no workflow or
+  GitHub secret holds the variable, so merging activates nothing. Contract:
+  .work/ng4_switch_on_20261118/SWITCH_ON_CONTRACT.md (§8: a Space restart inside the window loses
+  in-process state and leaves instants unlogged; the keepalive runs prevent the 48 h idle sleep; a
+  second RUNNING event inside the window is an incident). Evidence: the PR's 7 checks green, incl.
+  the migration-0019-rehearsal workflow's PostgreSQL 16 pilot rehearsal 21/21 (R-30 and R-21 PASS
+  with the switch ON); local PostgreSQL 17 pilot rehearsal 21/21 at the clean head 363197e. Codex:
+  task-1073 and task-1074 (the SO-1 fold). ONE round (SO-1: PASS_WITH_AMENDMENTS, 1 MINOR and 5
+  NOTE; the MINOR and NOTEs 2–3 folded by task-1074, NOTEs 4–5 carried into the T3 package and the
+  deploy card, NOTE 6 accepted as the release tool's own output) and ONE delta round (R2, PASS; its
+  one NOTE, the fixture's function scope, not folded: no module-scoped lifespan exists)
+- **THE PLACEHOLDER FIX (#348, M81 34562b3c):** scripts/resolver_credential.py's shared template
+  accepts exactly [YOUR-PASSWORD] or [YOUR-DATABASE-PASSWORD], nothing looser; tests for both forms
+  on every connection type; three runbooks and E2's docstring name both. The same PR carries the
+  CHANGELOG entry for #345. Codex: task-1072. It had ONE independent reviewer: ONE round (SW-1:
+  PASS, its two NOTEs folded) and a delta check (SO-1 item B: PASS).
 - **UOR HOLD #4** (the owner, 2026-11-12) still stands: the local main checkout stays at
-  0118cfaace93d911bef88cf2bdf5a0fd31dc39e0.
+  0118cfaace93d911bef88cf2bdf5a0fd31dc39e0. The owner ruled that the deploy runs from a clean,
+  verified checkout of the final main (docs/runbooks/RELEASE.md's card names the main checkout).
 - **THE STATE REVIEW.** The independent reviewer is session
   local_6aa4983c-16db-489b-a68f-bc93d69e1b80, “Review the UCPE F-CONFIRM STATE draft”, configured
   claude-opus-5-5 at effort xhigh (read-only; read again with get_session before each request and
-  after it). This record: ONE round (ST-G1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 2 MINOR, 3
-  NOTE; all folded) and ONE delta round (R2, PASS on one wording MINOR, applied in the reviewer's
-  words and closed by an exact-delta check; its NOTE on a surviving draft placeholder added as a
-  FINAL-mode assert).
-- Process: four Codex delegations (task-1068, task-1069, task-1070, task-1071); one fork subagent of
-  the master's session drafted the outside-reach assessment; GPT sidecar consultations 0; paid API
-  $0. The UOR relay is still NOT_DELIVERED. Every SEND THIS stated its recommended effort level.
-- Nothing else changed: no production read or write, no credential or LOGIN, no grant, no Space
-  secret, no dispatch, no product network or data fetch, no real data, fit or genuine prior, no F3
-  or §5A access, no deploy, no rerun.
-- CARRIED OVER, still open: the credential step (the owner, per the packet); the start instant, the
-  switch-ON change and the deploy; the CHANGELOG entry for #345 (a new T3); the licence fit and the
-  survivorship path; D2–D8; OD-NG-7; OD-NG-1, OD-NG-3, OD-NG-4b; NG6-D1…D3; B-NG0's EXP-08; the
-  writer-token renewal by **2026-11-20** (expiry 2026-11-23); the runtime deltas until a release;
-  the pre-existing unqualified-function follow-up; the release of UOR HOLD #4; cleanup candidates.
-- This record is the batch's last publish. Before it: #344.)
+  after it). This record: ONE round (ST-S1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 4 MINOR, 4
+  NOTE; all folded) and a delta check of the fold before the T3 (its verdict is in the T3 package).
+- Process: three Codex delegations (task-1072, task-1073, task-1074); one fork subagent drafted the
+  switch-on contract; GPT sidecar consultations 0; paid API $0. The UOR relay is still
+  NOT_DELIVERED. Every SEND THIS stated its recommended effort level.
+- Nothing else changed: no production read or write by Claude, no credential handling, no grant, no
+  dispatch, no product network or data fetch beyond the Space's public metadata and build-info, no
+  real data, no F3 or §5A access, no deploy, no rerun.
+- CARRIED OVER, still open: the deploy (the owner's T4 card, from a clean checkout; it releases
+  every runtime change since 27edbcad: 19 files, +2,860 lines, incl. the four declared guard
+  deltas); after it, the passive post-deploy checks; the disable after 2026-12-07T00:00Z (ALTER ROLE
+  ucpe_lattice_space NOLOGIN PASSWORD NULL, delete the Space secret, end live sessions; an owner
+  T4); the CHANGELOG entries for #348 and #349 (a new T3); the writer token's next renewal after
+  2026-12-07 and before 2026-12-18; the licence fit and the survivorship path; D2–D8; OD-NG-7;
+  OD-NG-1, OD-NG-3, OD-NG-4b; NG6-D1…D3; B-NG0's EXP-08; the pre-existing unqualified-function
+  follow-up; the release of UOR HOLD #4; cleanup candidates.
+- This record is the batch's last publish. Before it: #347.)
 **Production is D 27edbcad / UCPE-PROD-P7P-20261017-A (R 27682005). The rollback target is 1caa8b08 (E2).**
+- **The owner (2026-11-18, ICT), verbatim — the T3 for this batch**
+  (from .work/p7/redesign/handoff/owner_t3_switch_on_20261118.txt, sha256 95609854…):
+```text
+OWNER T3 GitHub-only AUTHORIZE exact .work/ng4_switch_on_20261118/T3_PACKAGE_SWITCH_ON_20261118.md (SHA256SUMS c1aa6c53…): FIX@8b83d97, SWITCH-ON@363197e, then STATE-last regenerated on the final main in FINAL mode with its exact-delta check; each merged with --merge --match-head-commit and merge-verified, with every CI check green including the PostgreSQL 16 rehearsal. HOLD on drift or any failed check. No deploy, dispatch, apply, grant, credential, Space change or switch-ON beyond these merges.
+```
+- **The owner (2026-11-18, ICT), verbatim — the writer token renewed**
+  (from .work/p7/redesign/handoff/owner_writer_token_renewed_20261118.txt, sha256 86401cec…):
+```text
+đã update write token, expiry day là 18 Dec 9:27 UTC
+```
+- **The owner (2026-11-18, ICT), verbatim — the switch-ON rulings**
+  (from .work/p7/redesign/handoff/owner_rulings_switch_on_20261118.txt, sha256 83baa8ac…):
+```text
+OWNER RULINGS: (1) pilot start = 2026-11-23T00:00:00Z (end 2026-12-07T00:00:00Z, day-7 checkpoint 2026-11-30T00:00:00Z); fallback 2026-11-26T00:00:00Z if the deploy cannot land by 2026-11-22. (2) The deploy runs from a clean, verified checkout of the final main; UOR HOLD #4 stays in force. (3) Authorize LOCAL T2: the switch-ON change per SWITCH_ON_CONTRACT.md (LATTICE_ENABLED, PILOT_START_UTC, WRITER_DB_URL_ENV, the release identity, the pinned tests), an independent narrow review, then ONE T3 package (the placeholder fix, the CHANGELOG for #345 · feat(ng4): owner ruling D — the…, the switch-ON change, STATE last recording the credential step as owner-attested). Do not publish or deploy.
+```
+- **The owner (2026-11-18, ICT), verbatim — the credential step: done (owner-attested)**
+  (from .work/p7/redesign/handoff/owner_credential_step_done_20261118.txt, sha256 e7770efe…):
+```text
+CREDENTIAL STEP DONE: the guarded login SQL reported that every check passed (USAGE on extensions: «true/false», accepted relations reached: «n»), and I set the Space secret UCPE_LATTICE_DB_URL. No other change.
+```
+- **The owner (2026-11-18, ICT), verbatim — the credential step: the authorization**
+  (from .work/p7/redesign/handoff/owner_credential_step_20261118.txt, sha256 c0139be3…):
+```text
+OWNER CREDENTIAL STEP (T4, owner-only): I will run scripts/lattice_space_credential.py from .work/wt-credential at 773db0131f5cb1b44efb06e7918de4c7553f2eb7 (generate, copy-sql, copy-url), paste the guarded login SQL into the SQL Editor as the applying role, and, only if it reports that every check passed, set the Space secret UCPE_LATTICE_DB_URL. I accept either USAGE value on schema extensions (the guard allows at most SELECT on the two pg_stat_statements views). Claude does not see or handle any secret. On any UPL refusal I stop and report the code. No switch-ON, no deploy.
+```
 - **The owner (2026-11-18, ICT), verbatim — the T3 for this batch**
   (from .work/p7/redesign/handoff/owner_t3_guard_20261118.txt, sha256 6eb7bb4f…):
 ```text
@@ -3455,24 +3483,26 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=OWNER RULING D IS ON MAIN (#345 → M78 16ca6892): the credential step's login SQL for
-  ucpe_lattice_space is guarded and refuses LOGIN, before any ALTER, unless the role's applied
-  boundary holds and its outside reach is at most the two pg_stat_statements views, SELECT only; the
-  CHANGELOG records #339, #341 and #342 (#346 → M79 8aeb868b); the credential step has NOT run (the
-  space role stays NOLOGIN, no password; no Space secret); the one-shot apply (run 44133908695) and
-  preflight runs 43916685548, 44012717250, 44039032076 and 44113873249 are CONSUMED, never to be
-  rerun; the production database holds schema ucpe_lattice, the three lattice roles and the pilot
-  capacity row; the 4 DDL event triggers were assessed HARMLESS for 0019 + capacity + 0020 and
-  accepted by the owner (any later DDL on production, e.g. the rollback, needs its own look); owner
-  ruling A on main (#339); HOLD-1 ruled (COMMIT_UNKNOWN accepted; no commit-time setting change:
-  track_commit_timestamp stays off); LATTICE_ENABLED = False. Real data stays refused at every entry
-  point; no download. Main is M79 8aeb868b before this record; local main is held at 0118cfaa (UOR
-  HOLD #4); the deployed app is unchanged: D 27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R
-  27682005, with four declared runtime deltas on main (frontend/app.js, #285;
-  schemas/response.schema.json and api/analysis_service.py, #323; api/app.py, #329, which also
-  brings lattice_pilot.py and its quant_ng imports into the startup import set and three events into
-  telemetry/events.py) until a release. The next writer-token renewal is due by **2026-11-20**
-  (expiry 2026-11-23); the 2026-10-24 renewal is still only owner-reported.
+LOOP_STATE=THE NG4 PILOT IS SWITCHED ON ON MAIN (#349 → M82 31b938cb), NOT DEPLOYED: start
+  2026-11-23T00:00:00Z, end 2026-12-07T00:00:00Z, day-7 checkpoint 2026-11-30T00:00:00Z, writer URL
+  from the Space secret UCPE_LATTICE_DB_URL; release identity UCPE-PROD-NG4P-20261118-A; nothing
+  runs until the owner's deploy (T4, from a clean checkout of the final main), which must land
+  before the start (fallback start 2026-11-26T00:00:00Z if it cannot land by 2026-11-22); no Space
+  change inside the window. The credential step is EXECUTED, owner-attested (not independently
+  verified; the two reported values UNKNOWN); the writer token is renewed (expiry 2026-12-18T09:27Z,
+  owner-reported; its validity pending the next natural SAVED receipt). The one-shot apply (run
+  44133908695) and preflight runs 43916685548, 44012717250, 44039032076 and 44113873249 are
+  CONSUMED, never to be rerun; the 4 DDL event triggers were assessed HARMLESS for 0019 + capacity +
+  0020 and accepted (any later DDL on production, e.g. the rollback, needs its own look); the
+  production database holds schema ucpe_lattice, the three lattice roles (the space role now has
+  LOGIN, owner-attested) and the pilot capacity row; owner ruling A on main (#339); HOLD-1 ruled
+  (COMMIT_UNKNOWN accepted; track_commit_timestamp stays off, so every lattice receipt reads
+  COMMIT_UNKNOWN). Real data stays refused at every entry point; no download. Main is M82 31b938cb
+  before this record; local main is held at 0118cfaa (UOR HOLD #4); the deployed app is unchanged: D
+  27edbcad / UCPE-PROD-P7P-20261017-A, re-pinned at R 27682005, with four declared runtime deltas on
+  main (frontend/app.js, #285; schemas/response.schema.json and api/analysis_service.py, #323;
+  api/app.py, #329, which also brings lattice_pilot.py and its quant_ng imports into the startup
+  import set and three events into telemetry/events.py) until a release.
   - DO NOT RERUN, EVER: the 1D evaluation (.work/v1d_1w_20261023/eval/output) and the one offline S1 build
     (.work/v1d_1w_20261023/s1_output). Both are consumed, both 0444. `.work/v1d_1w_20261023/CONSUMED_EVIDENCE.md`
     says how to verify either without reading the data.
@@ -3585,23 +3615,31 @@ LOOP_STATE=OWNER RULING D IS ON MAIN (#345 → M78 16ca6892): the credential ste
     4 MINOR and 3 NOTE; the CHANGELOG PASS, 1 NOTE; the credential-step packet PASS_WITH_AMENDMENTS,
     2 MINOR and 2 NOTE; all folded but NOTE 7, the SET grants on the applier, outside ruling D, as
     the reviewer agreed) and TWO delta rounds (R2 PASS, its three NOTEs folded; R3 PASS, its one
-    NOTE, per-sub-check message assertions in R-30, not folded); this record's independent review
-    (the same session) is ONE round (ST-G1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 2 MINOR, 3
-    NOTE; all folded) and ONE delta round (R2, PASS on one wording MINOR, applied in the reviewer's
-    words and closed by an exact-delta check; its NOTE on a surviving draft placeholder added as a
-    FINAL-mode assert); the apply batch's record (#344) had ONE in ONE round (ST-A1,
-    PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 3 MINOR, 5 NOTE; all eight folded) and ONE delta round
-    (R2, PASS; its one NOTE applied in the reviewer's words, closed by an exact-delta check); the
-    apply-prep batch's record (#343) had ONE in ONE round (PASS_WITH_AMENDMENTS: two MINOR and three
-    NOTE; four folded, the optional label note not changed; closed by an exact-delta check); the
-    ruling-A batch's record (#340) had ONE in ONE round (PASS_WITH_AMENDMENTS: four MINOR and four
-    NOTE folded, closed by an exact-delta check); the role-naming batch's record (#337) had ONE in
-    ONE round (PASS_WITH_AMENDMENTS: one MINOR and seven NOTE folded, closed by an exact-delta
-    check); the W2 batch's record (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS: three MINOR and
-    five NOTE folded, closed by an exact-delta check); the NG4 pilot batch's record (#330) had ONE
-    in TWO rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe whose
-    verdict arrived after the merge), although #330 itself says one round; NG4 (#326) had ONE
-    independent reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds
+    NOTE, per-sub-check message assertions in R-30, not folded); the switch-ON (#349) had ONE
+    independent reviewer: ONE round (SO-1: PASS_WITH_AMENDMENTS, 1 MINOR and 5 NOTE; the MINOR and
+    NOTEs 2–3 folded by task-1074, NOTEs 4–5 carried into the T3 package and the deploy card, NOTE 6
+    accepted as the release tool's own output) and ONE delta round (R2, PASS; its one NOTE, the
+    fixture's function scope, not folded: no module-scoped lifespan exists); the placeholder fix
+    (#348) had ONE independent reviewer: ONE round (SW-1: PASS, its two NOTEs folded) and a delta
+    check (SO-1 item B: PASS); this record's independent review (the same session) is ONE round
+    (ST-S1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 4 MINOR, 4 NOTE; all folded) and a delta check
+    of the fold before the T3 (its verdict is in the T3 package); the guard batch's record (#347)
+    had ONE in ONE round (ST-G1, PASS_WITH_AMENDMENTS: 0 BLOCKER, 0 MAJOR, 2 MINOR, 3 NOTE; all
+    folded) and ONE delta round (R2, PASS on one wording MINOR, applied in the reviewer's words and
+    closed by an exact-delta check; its NOTE on a surviving draft placeholder added as a FINAL-mode
+    assert); the apply batch's record (#344) had ONE in ONE round (ST-A1, PASS_WITH_AMENDMENTS: 0
+    BLOCKER, 0 MAJOR, 3 MINOR, 5 NOTE; all eight folded) and ONE delta round (R2, PASS; its one NOTE
+    applied in the reviewer's words, closed by an exact-delta check); the apply-prep batch's record
+    (#343) had ONE in ONE round (PASS_WITH_AMENDMENTS: two MINOR and three NOTE; four folded, the
+    optional label note not changed; closed by an exact-delta check); the ruling-A batch's record
+    (#340) had ONE in ONE round (PASS_WITH_AMENDMENTS: four MINOR and four NOTE folded, closed by an
+    exact-delta check); the role-naming batch's record (#337) had ONE in ONE round
+    (PASS_WITH_AMENDMENTS: one MINOR and seven NOTE folded, closed by an exact-delta check); the W2
+    batch's record (#334) had ONE in ONE round (PASS_WITH_AMENDMENTS: three MINOR and five NOTE
+    folded, closed by an exact-delta check); the NG4 pilot batch's record (#330) had ONE in TWO
+    rounds (PASS_WITH_AMENDMENTS on abe72e48; a delta PASS_WITH_AMENDMENTS on ec1847fe whose verdict
+    arrived after the merge), although #330 itself says one round; NG4 (#326) had ONE independent
+    reviewer: the spec in TWO rounds (FINDINGS; PASS) and the stable diff in TWO rounds
     (PASS_WITH_AMENDMENTS; delta PASS); the NG4 batch's record (#327) had ONE in TWO rounds
     (PASS_WITH_AMENDMENTS: two MINOR and three NOTE folded, one NOTE withdrawn; then a delta PASS);
     NG3 (#323) had ONE independent reviewer: the spec in THREE rounds (FINDINGS; PASS; PASS) and the
@@ -3642,6 +3680,8 @@ LOOP_STATE=OWNER RULING D IS ON MAIN (#345 → M78 16ca6892): the credential ste
     constants function-local; regenerate goldens and the UX card only with their own tools; declare a runtime delta
     only through scripts/release.py's set_guard_delta.
   - FOR A SUCCESSOR: .work/p7/LANE_RECORD.md (newest at the bottom), then
+    .work/ng4_switch_on_20261118/ (the switch-on contract, the Space runtime checks, the switch-ON
+    and placeholder-fix reviews, gates and rehearsals, this record's generator and T3 package),
     .work/ng4_credential_step_20261118/ (ruling D's guard: its rehearsal evidence, gates and review;
     the credential-step packet; this record's generator and T3 package),
     .work/ng4_apply_run_20261118/ (the one-shot apply's gated pre-check, dispatch, raw capture,
@@ -3694,6 +3734,10 @@ LOOP_STATE=OWNER RULING D IS ON MAIN (#345 → M78 16ca6892): the credential ste
   - STANDING GUARDS: exclude the protected fragments in EVERY path component, never by basename, and never NAME a new
     file with one; never grep or hash across .work; a folder-wide command takes an absolute cd in its own command;
     INCIDENT=A released the evaluation's HOLD only and is **not** a §5A acceptance.
+  Before it: OWNER RULING D WAS PUBLISHED (#345 → M78 16ca6892, the guarded login), the CHANGELOG
+  for #339/#341/#342 (#346 → M79 8aeb868b) and that batch's record (#347 → M80 773db013); push runs:
+  M78 CI 44264885845 (8996) and build 44264885766, M79 CI 44265840412 and build 44265840370, M80 CI
+  44268655512 and build 44268655537, all green on their first attempt.
   Before it: THE ONE-SHOT PRODUCTION APPLY WAS DONE AND CONSUMED (run 44133908695; raw zip
   85f61c7d…, log c6e49c53…), THE FOURTH PREFLIGHT READ NAMED THE 4 DDL EVENT TRIGGERS (run
   44113873249, READY; raw zip 69d12e94…, log 8e68e17f…), the owner accepted their assessment (rev 3,
@@ -6507,7 +6551,21 @@ LOOP_STATE=OWNER RULING D IS ON MAIN (#345 → M78 16ca6892): the credential ste
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4
+CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT
+  IS SWITCHED ON ON MAIN AND AWAITS THE OWNER'S DEPLOY; ITS WINDOW IS 2026-11-23T00:00Z –
+  2026-12-07T00:00Z (2026-11-18):
+  - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries four
+    declared runtime deltas on main (frontend/app.js, #285; schemas/response.schema.json and
+    api/analysis_service.py, #323; api/app.py, #329, which also brings lattice_pilot.py and its
+    quant_ng imports into the startup import set and three events into telemetry/events.py) until a
+    release, and the switch-ON with the next identity UCPE-PROD-NG4P-20261118-A.
+  - NGA: NG1, NG3, NG4, the pilot's build, W2 and the guarded login complete on main; the lattice
+    applied once (run 44133908695); the credential step EXECUTED (owner-attested); the switch-ON
+    merged (#349); next: the owner's deploy card, then passive post-deploy checks; NG2's real corpus
+    waits on the licence fit and the survivorship path; NG5–NG7 wait on their rulings.
+  - The one 1D development evaluation, the one S1 build, preflight runs 43916685548, 44012717250,
+    44039032076 and 44113873249 and the apply run 44133908695 are CONSUMED and must never be rerun.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4
   PILOT'S LATTICE IS APPLIED (ONE-SHOT, CONSUMED) AND ITS LOGIN IS GUARDED (RULING D); THE
   CREDENTIAL STEP AND THE SWITCH-ON ARE AHEAD (2026-11-18):
   - RELEASED and unchanged: UCPE-PROD-P7P-20261017-A, production D 27edbcad. Main carries four
@@ -7040,7 +7098,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOO
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-ng4-guard-20261118 (this record, on main M79 8aeb868b). This batch's
+CURRENT_BRANCH=chore/state-ng4-switch-on-20261118 (this record, on main M82 31b938cb). This batch's
+  other branches: fix/credential-placeholder (#348) and feat/ng4-switch-on (#349). Merged branches
+  and local worktrees are cleanup candidates; no cleanup was authorized.
+  Before it: chore/state-ng4-guard-20261118 (this record, on main M79 8aeb868b). This batch's
   other branches: feat/ng4-login-guard (#345) and docs/changelog-339-341-342 (#346). Merged branches
   and local worktrees are cleanup candidates; no cleanup was authorized.
   Before it: chore/state-ng4-apply-20261118 (this record, on main M76 57d0d907). No other branch
@@ -7432,7 +7493,10 @@ CURRENT_BRANCH=chore/state-ng4-guard-20261118 (this record, on main M79 8aeb868b
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=M79 8aeb868b (main, #346; the last merge before this record): main's push runs on
+LAST_GREEN_SHA=M82 31b938cb (main, #349; the last merge before this record): main's push runs on M81
+  (CI 44291147415, 9007 passed; build 44291147412) and on M82 (CI 44297966607, 9009 passed; build
+  44297966415), all green on their first attempt.
+  Before it: M79 8aeb868b (main, #346; the last merge before this record): main's push runs on
   M79: CI 44265840412 (8996 passed) and build 44265840370, both green on their first attempt.
   Before it: 57d0d907 (main M76, #343; the last merge before this record): main's push runs on M76
   (CI 44076735917, 8992 passed; build 44076735904) are green, each on its first attempt; the fourth
@@ -7888,7 +7952,9 @@ LAST_GREEN_SHA=M79 8aeb868b (main, #346; the last merge before this record): mai
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-18 (this record), scanners 3/3: 8996 at its exact head; the guard's head
+LAST_VERIFY=PASS 2026-11-18 (this record), scanners 3/3: 9009 at its exact head; the switch-ON head
+  8998 (363197e); the fix head 9007 (8b83d97).
+  Before it: PASS 2026-11-18 (this record), scanners 3/3: 8996 at its exact head; the guard's head
   8996 (f8e0d10); the CHANGELOG's head 8992 (5bf19c0).
   Before it: PASS 2026-11-18 (this record), scanners 3/3: 8992 at its exact head (this batch has no
   code change).
@@ -8300,7 +8366,10 @@ LAST_VERIFY=PASS 2026-11-18 (this record), scanners 3/3: 8996 at its exact head;
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. Four Codex delegations in this batch (task-1068 built the guard; task-1069
+CODEX_PENDING=NONE. Three Codex delegations in this batch (task-1072 the placeholder fix; task-1073
+  the switch-ON; task-1074 the SO-1 fold), all DONE and re-gated by the master. No API key, no paid
+  fallback, $0.
+  Before it: NONE. Four Codex delegations in this batch (task-1068 built the guard; task-1069
   repaired R-30's harness and hardened the guard; task-1070 folded review LG-1; task-1071 added
   R-30's definer plant): task-1068–1070 DONE; task-1071 BLOCKED on its sandbox's verify timeout, its
   one-file change kept and gated by the master (gate_guard_r3, 8996). No API key, no paid fallback,
@@ -8537,7 +8606,17 @@ CODEX_PENDING=NONE. Four Codex delegations in this batch (task-1068 built the gu
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-18, after this record): the credential step
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISION (2026-11-18, after this record): the deploy
+  (docs/runbooks/RELEASE.md's owner card, a T4) of the final main, run from a clean verified
+  checkout (UOR HOLD #4 stays), before 2026-11-23T00:00Z (else the fallback start 2026-11-26 needs a
+  new switch-ON value and T3). It releases every runtime change since 27edbcad (the owner accepts
+  that delta at the card). No Space change inside the window. After the end (2026-12-07T00:00Z): the
+  disable (NOLOGIN PASSWORD NULL, delete the Space secret, end live sessions;
+  docs/runbooks/NG4_PILOT_W2.md), an owner T4; the rollback texts: the T4 packet's §6, each its own
+  T4. The CHANGELOG entries for #348 and #349 (a new T3). The release of UOR HOLD #4. Still open:
+  the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-3; OD-NG-1; OD-NG-4b; NG6-D1…D3;
+  the UOR relay (NOT_DELIVERED).
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-18, after this record): the credential step
   (.work/ng4_credential_step_20261118/CREDENTIAL_STEP_PACKET.md: the helper from a clean checkout at
   the final main, the guarded login SQL in the SQL Editor, then the Space secret; never in chat or a
   file; a UPL refusal stops it with nothing granted); then the start instant, switch-ON and deploy.
@@ -10049,6 +10128,18 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-18, after this record): the c
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
+  (HOLD #4); prepare the deploy card's clean checkout at the final main and its preflight
+  (release.py, read-only), and give the owner the deploy authorization; after the deploy, read the
+  post-deploy state passively (public build-info, the Space's runtime, lattice_pilot_state events)
+  with no verification traffic, and read the keepalive run list through the window (a second RUNNING
+  event inside it is an incident: report, no backfill, the owner decides). **Never rerun the apply
+  (run 44133908695) or dispatch .github/workflows/apply-migration-0019.yml again; never rerun
+  preflight runs 43916685548, 44012717250, 44039032076 or 44113873249; never run the credential
+  helper or handle its outputs; no Space change inside the pilot window. The 1D evaluation and the
+  S1 build are CONSUMED — never rebuild or rerun either, and verify them only as
+  .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no dispatch, production
+  read or write, grant, credential, network, real data, T4 or deploy without the owner.
+  Before it: Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
   (HOLD #4); then fill the credential-step packet with the final main, prepare the clean checkout
   (.work/wt-credential) and verify its helper blob, and give the owner the packet's authorization.
   **Never rerun the apply (run 44133908695) or dispatch .github/workflows/apply-migration-0019.yml
