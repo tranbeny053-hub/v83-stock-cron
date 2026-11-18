@@ -9,10 +9,11 @@ It records #345. Nothing in this entry is released.
 Changed:
 - #345: `scripts/lattice_space_credential.py` now writes one guarded block instead of a bare `ALTER ROLE … LOGIN`. It
   refuses (codes UPL01–UPL08) before granting anything unless the pilot's login role is still in its applied state:
-  no login, no inheritance or powers, three connections, one membership (the writer), its three session limits, no
-  other member and nobody else able to switch into it, the apply's privilege checks, and at most read-only reach to
-  the two `extensions.pg_stat_statements` views outside its schema. The scratch rehearsal plants 15 violations and
-  proves each refusal.
+  no login, no inheritance or powers, a connection limit of 3 and no expiry, one membership (the writer), its three
+  session limits, no other member and nobody else able to switch into it, the apply's privilege checks, and at
+  most read-only reach to `extensions.pg_stat_statements` and `extensions.pg_stat_statements_info` outside
+  pg_catalog, information_schema, public and ucpe_lattice. The scratch rehearsal plants 15 violations and proves
+  each refusal.
 
 Notes:
 - Publishing is not activation. The owner then ran the credential step (2026-11-18, owner-attested): the login was
