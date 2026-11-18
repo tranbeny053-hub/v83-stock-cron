@@ -1,4 +1,4 @@
-"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-29).
+"""Rehearse the NG4 pilot's authored route and W2 on scratch local PostgreSQL only (R-16..R-30).
 
 Run by run_scratch.sh in its pilot mode, locally or in CI. Every URL must be local
 (rehearse.refuse_url) and none is
@@ -15,9 +15,9 @@ applier's own temp
 schema excluded from the CREATE check; R-26 planted BYPASSRLS member named and refused; R-27
 only the two named read-only BYPASSRLS readers accepted; R-28 their read-only exposure; R-29 a DDL
 watcher remains installed for R-18 apply and R-29b proves it fired; R-16
-both W1 forms; R-23 W2's disable (NOLOGIN, a live session ended by the
-non-superuser applier through a temporary self-grant) and rollback. A scratch password lives in
-memory only.
+both W1 forms; R-30 the guarded login refuses planted boundary violations; R-23 W2's disable
+(NOLOGIN, a live session ended by the non-superuser applier through a temporary self-grant) and
+rollback. A scratch password lives in memory only.
 """
 
 from __future__ import annotations
@@ -47,7 +47,10 @@ from rehearse import refuse_url  # noqa: E402
 
 from crypto_probability_engine.persistence import reader_identity  # noqa: E402
 from crypto_probability_engine.quant_ng import lattice  # noqa: E402
-from scripts import resolver_credential  # noqa: E402
+from scripts import (  # noqa: E402
+    lattice_space_credential,
+    resolver_credential,
+)
 
 MIGRATION = ROOT / "migrations/authored/0019_lattice_evidence.sql"
 APPLY = ROOT / "scripts/apply_migration_0019.py"
@@ -351,7 +354,7 @@ class Pilot:
 
     def r21(self) -> None:
         plain = secrets.token_urlsafe(24)  # scratch only; the helper's SCRAM login SQL
-        self.runner.execute(resolver_credential.login_sql(plain, role=SPACE_LOGIN))
+        self.runner.execute(lattice_space_credential.guarded_login_sql(plain, role=SPACE_LOGIN))
         denied: dict[str, str | None] = {}
         try:
             conn = self.psycopg.connect(
@@ -417,6 +420,87 @@ class Pilot:
             "R-22 the Space's evidence reader ucpe_space_db still reads DESIGNED after 0020",
             reader == {"verdict": reader_identity.VERDICT_DESIGNED, "role_memberships": 0},
             reader,
+        )
+
+    def r30_login_guard(self) -> None:
+        results = []
+
+        def attempt(
+            label: str,
+            expected: str | None,
+            plant: str | None,
+            undo: str | None = None,
+            *,
+            login_planted: bool = False,
+        ) -> None:
+            if plant:
+                self.su.execute(plant)
+            plain = secrets.token_urlsafe(24)
+            got = None
+            try:
+                self.runner.execute(
+                    lattice_space_credential.guarded_login_sql(plain, role=SPACE_LOGIN)
+                )
+            except self.psycopg.Error as exc:
+                got = exc.sqlstate
+            state = self.su.execute(
+                "SELECT r.rolcanlogin, a.rolpassword IS NULL FROM pg_catalog.pg_roles r"
+                " JOIN pg_catalog.pg_authid a ON a.oid = r.oid WHERE r.rolname = %s",
+                (SPACE_LOGIN,),
+            ).fetchone()
+            if undo:
+                self.su.execute(undo)
+            results.append({
+                "plant": label,
+                "expected": expected or "PASS",
+                "got": got or "PASS",
+                "login_planted": login_planted,
+                "login_after": state[0] if state else None,
+                "password_null_after": state[1] if state else None,
+            })
+
+        attempt("CONNECTION LIMIT 4", "UPL02",
+                f"ALTER ROLE {SPACE_LOGIN} CONNECTION LIMIT 4",
+                f"ALTER ROLE {SPACE_LOGIN} CONNECTION LIMIT 3")
+        attempt("already LOGIN", "UPL02", f"ALTER ROLE {SPACE_LOGIN} LOGIN",
+                f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL", login_planted=True)
+        attempt("extra membership", "UPL03",
+                "CREATE ROLE ng4_probe_extra NOLOGIN; GRANT ng4_probe_extra TO " + SPACE_LOGIN,
+                "DROP ROLE ng4_probe_extra")
+        attempt("extra role setting", "UPL04",
+                f"ALTER ROLE {SPACE_LOGIN} SET work_mem = '1MB'",
+                f"ALTER ROLE {SPACE_LOGIN} RESET work_mem")
+        attempt("another SET ROLE path", "UPL05",
+                "CREATE ROLE ng4_probe_setter NOLOGIN; GRANT " + SPACE_LOGIN +
+                " TO ng4_probe_setter WITH SET TRUE", "DROP ROLE ng4_probe_setter")
+        attempt("outside PUBLIC SELECT", "UPL06",
+                "CREATE SCHEMA ng4_probe_outside; CREATE TABLE ng4_probe_outside.t (i int);"
+                " GRANT SELECT ON ng4_probe_outside.t TO PUBLIC",
+                "DROP SCHEMA ng4_probe_outside CASCADE")
+        attempt("accepted extensions SELECT", None,
+                "CREATE SCHEMA extensions; CREATE VIEW extensions.pg_stat_statements AS"
+                " SELECT 1 AS x; CREATE VIEW extensions.pg_stat_statements_info AS"
+                " SELECT 1 AS x; GRANT SELECT ON extensions.pg_stat_statements,"
+                " extensions.pg_stat_statements_info TO PUBLIC",
+                f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL;"
+                " DROP SCHEMA extensions CASCADE")
+        attempt("accepted relation with INSERT", "UPL06",
+                "CREATE SCHEMA extensions; CREATE VIEW extensions.pg_stat_statements AS"
+                " SELECT 1 AS x; CREATE VIEW extensions.pg_stat_statements_info AS"
+                " SELECT 1 AS x; GRANT SELECT ON extensions.pg_stat_statements,"
+                " extensions.pg_stat_statements_info TO PUBLIC;"
+                " GRANT INSERT ON extensions.pg_stat_statements TO PUBLIC",
+                f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL;"
+                " DROP SCHEMA extensions CASCADE")
+        self.add(
+            "R-30 the guarded login refuses LOGIN on each planted violation and grants it "
+            "on the accepted set",
+            all(r["got"] == r["expected"] and
+                ((r["expected"] == "PASS" and r["login_after"] is True
+                  and r["password_null_after"] is False) or
+                 (r["expected"] != "PASS" and r["password_null_after"] is True
+                  and r["login_after"] is r["login_planted"])) for r in results),
+            results,
         )
 
     # ---- R-24: planted PUBLIC negatives (scratch only, each undone) -------------------------
@@ -877,6 +961,7 @@ class Pilot:
         self.r18_apply()
         self.r29b_ddl_watcher_fired()
         self.r20()
+        self.r30_login_guard()
         self.r21()
         self.r21b()
         self.r28_named_readers_effect()

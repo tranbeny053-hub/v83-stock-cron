@@ -137,6 +137,7 @@ def generate(
     role: str = ROLE,
     sql_name: str = SQL_NAME,
     url_name: str = URL_NAME,
+    login: Callable[[str, str], str] = login_sql,
 ) -> dict[str, str]:
     """One new password, written as the role's login SQL and URL (the resolver's by default).
     Never overwrites."""
@@ -152,7 +153,7 @@ def generate(
     folder.chmod(0o700)
     written: list[Path] = []
     try:
-        for path, data in ((sql_path, login_sql(plain, role)), (url_path, url + "\n")):
+        for path, data in ((sql_path, login(plain, role)), (url_path, url + "\n")):
             _write_owner_only(path, data)
             written.append(path)
     except BaseException:
