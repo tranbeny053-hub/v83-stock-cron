@@ -3,9 +3,16 @@
 After the single 0019 + capacity + 0020 apply T4 succeeds, the owner issues the login credential. This remains an owner action; authoring the helper issues nothing.
 
 1. On the owner's Mac, run `python -m scripts.lattice_space_credential generate`. The helper writes owner-only files under `~/ucpe-keys` and prints no secret.
-2. Run `python -m scripts.lattice_space_credential copy-sql`; paste the clipboard into the SQL Editor as the applying role. This enables `ucpe_lattice_space` login.
+2. Run `python -m scripts.lattice_space_credential copy-sql`; paste the clipboard into the SQL
+   Editor as the applying role. The login SQL is guarded per owner ruling D (2026-11-18): it
+   checks the role's attributes, membership, settings, who can SET ROLE to it, and its outside
+   reach (only `extensions.pg_stat_statements` / `extensions.pg_stat_statements_info`, SELECT
+   only), the space role's members, and the route's four gated privilege checks. It refuses with a
+   code UPL01…UPL08 before granting anything; on a refusal, stop: no
+   LOGIN was granted. Report the code; it holds no secret.
 3. Run `python -m scripts.lattice_space_credential copy-url`; paste into the Space secret `UCPE_LATTICE_DB_URL`.
-4. VALID UNTIL is an owner option at credential time; the start instant is unruled.
+4. If wanted, set VALID UNTIL in a separate statement after the guarded login; the guard refuses a
+   space role that already has an expiry. The start instant is unruled.
 5. Read the T4 post-checks, including the Space's next `evidence_reader_identity` event DESIGNED for `ucpe_space_db` and the preflight's `ucpe_lattice_space_exists`.
 
 ## Disable after the end
