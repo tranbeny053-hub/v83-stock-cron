@@ -20,12 +20,13 @@ DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# Now standing in it: app.js, response.schema.json, analysis_service.py, app.py, build_info.py,
-# merged but not yet
-# deployed. UCPE-PROD-NG4P-20261118-A names the next deploy; all of them clear
+# Now standing in it: app.js, index.html, response.schema.json, analysis_service.py, app.py,
+# build_info.py, merged but not yet
+# deployed. UCPE-PROD-NG4P-20261118-B names the next deploy; all of them clear
 # when it lands and the baseline is re-pinned.
 CURRENT_DELTA_PATHS: list[str] = [
     "frontend/app.js",
+    "frontend/index.html",
     "schemas/response.schema.json",
     "src/crypto_probability_engine/api/analysis_service.py",
     "src/crypto_probability_engine/api/app.py",
