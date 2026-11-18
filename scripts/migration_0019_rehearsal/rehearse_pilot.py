@@ -519,6 +519,10 @@ class Pilot:
                 "CREATE TABLE public.ng4_probe_pub (i int); GRANT SELECT ON"
                 " public.ng4_probe_pub TO PUBLIC",
                 "DROP TABLE public.ng4_probe_pub")
+        attempt("public SECURITY DEFINER function PUBLIC may execute", "UPL08",
+                "CREATE FUNCTION public.ng4_probe_guard_definer() RETURNS int"
+                " LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'",
+                "DROP FUNCTION public.ng4_probe_guard_definer()")
         attempt("schema ACL naming the space role", "UPL08",
                 "CREATE SCHEMA ng4_probe_acl; GRANT USAGE ON SCHEMA"
                 " ng4_probe_acl TO " + SPACE_LOGIN,
