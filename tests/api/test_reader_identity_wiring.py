@@ -84,15 +84,31 @@ def test_each_start_reports_once(monkeypatch, consumers):
 
 
 def test_a_start_without_a_database_reports_not_configured_and_connects_nowhere(monkeypatch):
+    from datetime import UTC, datetime
+
     import psycopg
+
+    from crypto_probability_engine import lattice_pilot
+
+    class FixedDateTime:
+        @staticmethod
+        def now(tz):
+            assert tz is UTC
+            return datetime(2026, 11, 23, tzinfo=UTC)
 
     def refuse(*_args, **_kwargs):
         raise AssertionError("connected at startup")
 
     monkeypatch.delenv("UCPE_SPACE_DB_URL", raising=False)
+    monkeypatch.delenv("UCPE_LATTICE_DB_URL", raising=False)
     monkeypatch.setattr(psycopg, "connect", refuse)
+    monkeypatch.setattr(lattice_pilot, "datetime", FixedDateTime)
+    EVENTS_SINK.events.clear()
     _start(Settings(data_mode="fixture"))
-    assert EVENTS_SINK.events[-1] == {
+    assert EVENTS_SINK.events[0] == {
         "event": "evidence_reader_identity", "db_role": "n/a", "verdict": "NOT_CONFIGURED",
         "db_url_source": "none", "release_id": reader_identity.RELEASE_ID,
+    }
+    assert EVENTS_SINK.events[1] == {
+        "event": "lattice_pilot_state", "state": "NOT_CONFIGURED",
     }

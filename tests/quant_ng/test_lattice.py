@@ -94,7 +94,8 @@ def generate_lattice_row_fixture():
 
 
 def test_default_dormancy_and_grid() -> None:
-    assert lattice.LATTICE_ENABLED is False
+    assert lattice.LATTICE_ENABLED is True
+    assert lattice.PILOT_START_UTC == datetime(2026, 11, 23, tzinfo=UTC)
     assert lattice.DECLARED_CELLS == ()
     anchor = lattice.LATTICE_ANCHOR_UTC
     assert lattice.lattice_instants("15m", anchor, anchor + timedelta(hours=2)) == tuple(
@@ -144,7 +145,8 @@ def test_id_and_gap_reconstruction() -> None:
     assert lattice.reconstruct_gaps(grid, (grid[0],), (grid[1],)) == (grid[2],)
 
 
-def test_step_disabled() -> None:
+def test_step_disabled(monkeypatch) -> None:
+    monkeypatch.setattr(lattice, "LATTICE_ENABLED", False)
     with pytest.raises(lattice.LatticeDisabled):
         lattice.lattice_step(
             datetime.now(UTC),
@@ -311,7 +313,8 @@ def test_lattice_guards() -> None:
         "crypto_probability_engine/quant_ng/lattice.py"
     }
     source = (module / "crypto_probability_engine/quant_ng/lattice.py").read_text()
-    assert "LATTICE_ENABLED = False" in source
+    assert "LATTICE_ENABLED = True" in source
+    assert "PILOT_START_UTC: datetime | None = datetime(2026, 11, 23, tzinfo=UTC)" in source
     assert "DECLARED_CELLS: tuple = ()" in source
 
 
