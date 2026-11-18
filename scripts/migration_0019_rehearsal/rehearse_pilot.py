@@ -473,6 +473,10 @@ class Pilot:
         attempt("another SET ROLE path", "UPL05",
                 "CREATE ROLE ng4_probe_setter NOLOGIN; GRANT " + SPACE_LOGIN +
                 " TO ng4_probe_setter WITH SET TRUE", "DROP ROLE ng4_probe_setter")
+        attempt("space role extra member (INHERIT only)", "UPL07",
+                "CREATE ROLE ng4_probe_member NOLOGIN; GRANT " + SPACE_LOGIN +
+                " TO ng4_probe_member WITH INHERIT TRUE, SET FALSE",
+                "DROP ROLE ng4_probe_member")
         attempt("outside PUBLIC SELECT", "UPL06",
                 "CREATE SCHEMA ng4_probe_outside; CREATE TABLE ng4_probe_outside.t (i int);"
                 " GRANT SELECT ON ng4_probe_outside.t TO PUBLIC",
@@ -492,8 +496,39 @@ class Pilot:
                 " GRANT INSERT ON extensions.pg_stat_statements TO PUBLIC",
                 f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL;"
                 " DROP SCHEMA extensions CASCADE")
+        attempt("accepted relation with a column UPDATE", "UPL06",
+                "CREATE SCHEMA extensions; CREATE VIEW extensions.pg_stat_statements AS"
+                " SELECT 1 AS x; CREATE VIEW extensions.pg_stat_statements_info AS"
+                " SELECT 1 AS x; GRANT SELECT ON extensions.pg_stat_statements,"
+                " extensions.pg_stat_statements_info TO PUBLIC;"
+                " GRANT UPDATE (x) ON extensions.pg_stat_statements TO PUBLIC",
+                f"ALTER ROLE {SPACE_LOGIN} NOLOGIN PASSWORD NULL;"
+                " DROP SCHEMA extensions CASCADE")
+        attempt("accepted names in another schema", "UPL06",
+                "CREATE SCHEMA ng4_probe_ext; CREATE VIEW"
+                " ng4_probe_ext.pg_stat_statements AS SELECT 1 AS x;"
+                " GRANT SELECT ON ng4_probe_ext.pg_stat_statements TO PUBLIC",
+                "DROP SCHEMA ng4_probe_ext CASCADE")
+        attempt("outside reach through the writer", "UPL06",
+                "CREATE SCHEMA ng4_probe_outside2; CREATE TABLE"
+                " ng4_probe_outside2.t (i int); GRANT USAGE ON SCHEMA"
+                " ng4_probe_outside2 TO ucpe_lattice_writer; GRANT SELECT ON"
+                " ng4_probe_outside2.t TO ucpe_lattice_writer",
+                "DROP SCHEMA ng4_probe_outside2 CASCADE")
+        attempt("public relation reach", "UPL08",
+                "CREATE TABLE public.ng4_probe_pub (i int); GRANT SELECT ON"
+                " public.ng4_probe_pub TO PUBLIC",
+                "DROP TABLE public.ng4_probe_pub")
+        attempt("schema ACL naming the space role", "UPL08",
+                "CREATE SCHEMA ng4_probe_acl; GRANT USAGE ON SCHEMA"
+                " ng4_probe_acl TO " + SPACE_LOGIN,
+                "DROP SCHEMA ng4_probe_acl CASCADE")
+        attempt("CREATE on schema public", "UPL08",
+                "GRANT CREATE ON SCHEMA public TO PUBLIC",
+                "REVOKE CREATE ON SCHEMA public FROM PUBLIC")
         self.add(
-            "R-30 the guarded login refuses LOGIN on each planted violation and grants it "
+            "R-30 UPL01…UPL08 guarded login refuses LOGIN on each planted violation "
+            "and grants it "
             "on the accepted set",
             all(r["got"] == r["expected"] and
                 ((r["expected"] == "PASS" and r["login_after"] is True

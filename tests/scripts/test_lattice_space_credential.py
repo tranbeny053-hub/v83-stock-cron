@@ -38,7 +38,7 @@ def _assert_guarded_structure(sql: str) -> None:
     assert sql.count("DO $ucpe_login$") == 1
     assert sql.count("$ucpe_login$;") == 1
     assert sql.count("ALTER ROLE") == 1
-    for code in (f"UPL{i:02}" for i in range(1, 7)):
+    for code in (f"UPL{i:02}" for i in range(1, 9)):
         refusal = sql.index(f"USING ERRCODE = '{code}'")
         assert refusal < alter
 
@@ -58,6 +58,8 @@ def test_generate_writes_guarded_login_sql_and_qualifies_catalog_access(tmp_path
     assert sql.count(set_config) == 1
     assert sql.index(set_config) < sql.index("USING ERRCODE = 'UPL01'")
     accepted_sets = re.findall(r"c\.relname IN \(([^)]*)\)", sql)
+    assert "c.relkind = 'v'" in sql
+    assert "c.relkind <> 'S'" not in sql
     assert accepted_sets and all(
         [name.strip().strip("'") for name in accepted.split(",")]
         == ["pg_stat_statements", "pg_stat_statements_info"]
@@ -68,7 +70,9 @@ def test_generate_writes_guarded_login_sql_and_qualifies_catalog_access(tmp_path
         "pg_roles", "pg_auth_members", "pg_db_role_setting", "pg_class", "pg_namespace",
         "pg_has_role", "has_table_privilege", "has_any_column_privilege",
         "has_sequence_privilege", "has_schema_privilege", "format", "string_agg",
-        "array_agg", "unnest", "quote_ident", "count",
+        "has_function_privilege", "has_database_privilege",
+        "pg_get_function_identity_arguments",
+        "pg_my_temp_schema", "current_database", "array_agg", "unnest", "quote_ident", "count",
     )
     for name in listed:
         assert not re.search(rf"(?<!pg_catalog\.)\b{re.escape(name)}\b", sql)
@@ -86,9 +90,9 @@ def test_resolver_generate_keeps_default_login_sql_shape(tmp_path):
 def test_guard_structure_rejects_each_missing_upl_check():
     sql = credential.guarded_login_sql("test-only-password")
     _assert_guarded_structure(sql)
-    for code in (f"UPL{i:02}" for i in range(1, 7)):
+    for code in (f"UPL{i:02}" for i in range(1, 9)):
         mutated = re.sub(
-            rf"^.*USING ERRCODE = '{code}'.*\n", "", sql, count=1, flags=re.MULTILINE
+            rf"^.*USING ERRCODE = '{code}'.*\n", "", sql, flags=re.MULTILINE
         )
         import pytest
 
