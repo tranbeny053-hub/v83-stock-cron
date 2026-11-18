@@ -1,26 +1,26 @@
 {
   "critical_source_digests": {
     "Dockerfile": "79343d238cf3a29c91bb1cef8cb70088a23c18e7cbc2f17f903c1133e85698cb",
-    "frontend/app.js": "f9576041010716edec04fc7e504008c079adee04c8c7b670072f75bada7a6271",
-    "frontend/index.html": "1c236cb9cdf4983efeb32b74a220806c9087600d929ab1fb7d90e281d83cafa8",
+    "frontend/app.js": "866011a5185b4a00de5fa57e56ccb5dfa86e6faf2b65189e440410a99c7b48b3",
+    "frontend/index.html": "bf4825dc566aeff66c903561c4cb544f1346b0ed5f6d92a6d055f7c44b0a16a8",
     "frontend/styles.css": "2648c02a2d6d4cd15d12cab7911daa97758fe27d9a23b0ba70bf4cd2748fc4a1",
     "schemas/build_info.schema.json": "70224ea192ffcc4d646d0cc3ee78c28a2c35faa6596fae13302f7db353864f81",
-    "schemas/response.schema.json": "6ad6b25c459cc951f960f4414dbaf4205adf24170a57c32eedf5d964e3a315a0",
-    "src/crypto_probability_engine/api/analysis_service.py": "d01095c5101136a7917fa001b6617ac90ca9e37c53bc66b4752f56943784f1fa",
-    "src/crypto_probability_engine/api/app.py": "c6a17c55393b042ed8ccd263d0beefa1ad5640318eac9768af2a8ebc13429986",
-    "src/crypto_probability_engine/config/build_info.py": "f8e45b2eabd7d1c1669a8ae0435b03d440665a2010409f829048262fd6b17936",
+    "schemas/response.schema.json": "e926824bf35878b131362506754673fe3b6e4f65e8910a9acaacc04d837e8caf",
+    "src/crypto_probability_engine/api/analysis_service.py": "4ab7564bc626c256811aa7b7e4f37e4f7aba132f5d91c1fbcd112dfbb929f005",
+    "src/crypto_probability_engine/api/app.py": "40808817bb41ff42faa77e64392e204d32cafd661b3d29ed29fd272c2372385d",
+    "src/crypto_probability_engine/config/build_info.py": "196d0f62fc46f2cc0b7fe6f6cc4c918b8471ab563c8aa89844422a88c8ebde94",
     "src/crypto_probability_engine/derivatives_intel/runtime.py": "dc4652995b52b0ac008bede51a73ab0f77f516147069f82908dd1dd20a0315c0",
     "src/crypto_probability_engine/quant_v2/contract.py": "db77b2f1472d07c0830fc442d780cad4df861c4868041a6a150eb2dfaf1d4973"
   },
   "environment": "HF_PRODUCTION",
-  "fingerprint": "UCPE LIVE BUILD · PROD-P7P-20261017-A",
+  "fingerprint": "UCPE LIVE BUILD · PROD-NG4P-20261118-B",
   "frontend_asset_tokens": {
-    "app_js": "p7p-20261012-a",
-    "styles_css": "p7p-20261012-a"
+    "app_js": "ng4p-20261118-b",
+    "styles_css": "ng4p-20261118-b"
   },
-  "hf_main_sha": "27edbcad7adadf85a7a747fb622d69e34a8446dd",
-  "release_id": "UCPE-PROD-P7P-20261017-A",
-  "release_label": "PROD-P7P release of main",
+  "hf_main_sha": "49ab085555e395529abb0543cdaf7393fc1feb50",
+  "release_id": "UCPE-PROD-NG4P-20261118-B",
+  "release_label": "PROD-NG4P release of main",
   "schema_version": "hf-runtime-baseline.v1",
-  "source_milestone": "prod-p7p"
+  "source_milestone": "prod-ng4p"
 }

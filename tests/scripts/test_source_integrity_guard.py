@@ -14,24 +14,16 @@ from jsonschema import Draft202012Validator
 from scripts import source_integrity_guard as guard
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN_SHA = "27edbcad7adadf85a7a747fb622d69e34a8446dd"
+PIN_SHA = "49ab085555e395529abb0543cdaf7393fc1feb50"
 SCHEDULER_SHA = "c" * 40
 DRIFT_SHA = "d" * 40
 # Guarded source files that currently differ between the deployed pin and this tree.
 # It goes non-empty whenever a guarded change is merged but not yet deployed, and empties
 # again once the deploy lands and ops/hf_runtime_baseline.json is re-pinned.
-# Now standing in it: app.js, index.html, response.schema.json, analysis_service.py, app.py,
-# build_info.py, merged but not yet
-# deployed. UCPE-PROD-NG4P-20261118-B names the next deploy; all of them clear
-# when it lands and the baseline is re-pinned.
-CURRENT_DELTA_PATHS: list[str] = [
-    "frontend/app.js",
-    "frontend/index.html",
-    "schemas/response.schema.json",
-    "src/crypto_probability_engine/api/analysis_service.py",
-    "src/crypto_probability_engine/api/app.py",
-    "src/crypto_probability_engine/config/build_info.py",
-]
+# UCPE-PROD-NG4P-20261118-B deployed main's own tree, so nothing stands in it:
+# app.js, index.html, response.schema.json, analysis_service.py, app.py, build_info.py cleared with
+# that release.
+CURRENT_DELTA_PATHS: list[str] = []
 
 # The deployed frontend comes from the pinned HF commit, not this working tree, so the
 # fake Space must not read frontend/ from the checkout.
@@ -269,14 +261,14 @@ def test_manifest_identity_is_loaded_without_checkout_runtime_source() -> None:
 
     assert intended.schema_version == guard.PIN_SCHEMA_VERSION
     assert intended.hf_main_sha == PIN_SHA
-    assert intended.release_id == "UCPE-PROD-P7P-20261017-A"
-    assert intended.release_label == "PROD-P7P release of main"
+    assert intended.release_id == "UCPE-PROD-NG4P-20261118-B"
+    assert intended.release_label == "PROD-NG4P release of main"
     assert intended.environment == "HF_PRODUCTION"
-    assert intended.source_milestone == "prod-p7p"
-    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-P7P-20261017-A"
+    assert intended.source_milestone == "prod-ng4p"
+    assert intended.fingerprint == "UCPE LIVE BUILD · PROD-NG4P-20261118-B"
     assert intended.asset_tokens == {
-        "app_js": "p7p-20261012-a",
-        "styles_css": "p7p-20261012-a",
+        "app_js": "ng4p-20261118-b",
+        "styles_css": "ng4p-20261118-b",
     }
     assert set(intended.critical_source_digests) == set(guard.CRITICAL_SOURCE_PATHS)
 
