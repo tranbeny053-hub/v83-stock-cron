@@ -8,9 +8,9 @@ NOLOGIN until the owner's credential step (docs/runbooks/RESOLVER_CUTOVER.md). T
     .venv/bin/python -m scripts.resolver_credential copy-url
 
 - generate reads a connection string TEMPLATE from the clipboard: the URI in the dashboard's
-  "Connect to your project" sheet, its [YOUR-PASSWORD] placeholder still in it. Any other password
-  is refused. It makes a random password and writes two owner-only files in ~/ucpe-keys, never
-  inside this repository, never over an existing file:
+  "Connect to your project" sheet, its [YOUR-PASSWORD] or [YOUR-DATABASE-PASSWORD] placeholder
+  still in it. Any other password is refused. It makes a random password and writes two owner-only
+  files in ~/ucpe-keys, never inside this repository, never over an existing file:
   - ucpe-resolver-login.sql: ALTER ROLE ucpe_resolver WITH LOGIN PASSWORD '<SCRAM-SHA-256 secret>'.
     The secret is computed here, in PostgreSQL's own format (RFC 5802 and RFC 7677), so the
     password itself never reaches the database, its logs or the SQL Editor's history;
@@ -49,7 +49,8 @@ SECRET_NAME = "UCPE_RESOLVER_DB_URL"
 ITERATIONS = 4096  # PostgreSQL's default scram_iterations.
 _TEMPLATE = re.compile(
     r"(?P<scheme>postgres(?:ql)?)://(?P<user>postgres(?:\.(?P<ref>[a-z0-9]{20}))?)"
-    r":\[YOUR-PASSWORD\]@(?P<host>[a-z0-9.-]+):(?P<port>5432|6543)/(?P<database>[A-Za-z0-9_]+)"
+    r":(?:\[YOUR-PASSWORD\]|\[YOUR-DATABASE-PASSWORD\])@(?P<host>[a-z0-9.-]+):"
+    r"(?P<port>5432|6543)/(?P<database>[A-Za-z0-9_]+)"
     r"(?P<options>\?[A-Za-z0-9_=&%.-]*)?"
 )
 _SHARED_POOLER = re.compile(r"aws-[0-9]+-[a-z0-9-]+\.pooler\.supabase\.com")
@@ -96,7 +97,8 @@ def resolver_url(template: str, plain: str, role: str = ROLE) -> tuple[str, str]
     match = _TEMPLATE.fullmatch(template.strip())
     if match is None:
         raise CredentialError(
-            "the clipboard is not the dashboard's connection URI with [YOUR-PASSWORD] still in it"
+            "the clipboard is not the dashboard's connection URI with [YOUR-PASSWORD] or "
+            "[YOUR-DATABASE-PASSWORD] still in it"
         )
     ref, host, port = match["ref"], match["host"], match["port"]
     if ref is not None and _SHARED_POOLER.fullmatch(host):

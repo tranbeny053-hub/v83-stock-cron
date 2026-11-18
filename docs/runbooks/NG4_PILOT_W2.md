@@ -2,7 +2,10 @@
 
 After the single 0019 + capacity + 0020 apply T4 succeeds, the owner issues the login credential. This remains an owner action; authoring the helper issues nothing.
 
-1. On the owner's Mac, run `python -m scripts.lattice_space_credential generate`. The helper writes owner-only files under `~/ucpe-keys` and prints no secret.
+1. Copy the dashboard's session-pooler URI template. It shows `[YOUR-PASSWORD]` (newer
+   dashboards: `[YOUR-DATABASE-PASSWORD]`): leave it as it is. On the owner's Mac, run
+   `python -m scripts.lattice_space_credential generate`. The helper writes owner-only files under
+   `~/ucpe-keys` and prints no secret.
 2. Run `python -m scripts.lattice_space_credential copy-sql`; paste the clipboard into the SQL
    Editor as the applying role. The login SQL is guarded per owner ruling D (2026-11-18): it
    checks the role's attributes, membership, settings, who can SET ROLE to it, and its outside

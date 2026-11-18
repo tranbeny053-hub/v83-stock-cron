@@ -43,6 +43,14 @@ def test_the_names_are_the_space_s_own() -> None:
     )
 
 
+def test_generate_accepts_dashboard_password_placeholder(tmp_path: Path) -> None:
+    dashboard_template = SESSION.replace("[YOUR-PASSWORD]", "[YOUR-DATABASE-PASSWORD]")
+    assert credential.main(
+        ["generate", "--dir", str(tmp_path)], paste=lambda: dashboard_template
+    ) == 0
+    assert (tmp_path / credential.URL_NAME).is_file()
+
+
 def test_generate_writes_the_space_role_s_login_and_url_that_belong_together(made) -> None:
     folder, _, _ = made
     sql = (folder / credential.SQL_NAME).read_text()
