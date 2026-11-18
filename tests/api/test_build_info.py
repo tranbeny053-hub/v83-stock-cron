@@ -44,8 +44,8 @@ def test_build_info_is_public_strict_and_no_store() -> None:
     assert response.headers["pragma"] == "no-cache"
     payload = response.json()
     assert set(payload) == EXPECTED_FIELDS
-    assert payload["release_id"] == "UCPE-PROD-NG4P-20261118-A"
-    assert payload["fingerprint"] == "UCPE LIVE BUILD · PROD-NG4P-20261118-A"
+    assert payload["release_id"] == "UCPE-PROD-NG4P-20261118-B"
+    assert payload["fingerprint"] == "UCPE LIVE BUILD · PROD-NG4P-20261118-B"
     assert payload["source_milestone"] == "prod-ng4p"
     assert payload == build_info_payload()
     BuildInfoResponse.model_validate(payload)

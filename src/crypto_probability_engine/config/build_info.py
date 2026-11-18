@@ -1,7 +1,7 @@
 """Source-controlled runtime build fingerprint."""
 
 SCHEMA_VERSION = "build-info.v1"
-RELEASE_ID = "UCPE-PROD-NG4P-20261118-A"
+RELEASE_ID = "UCPE-PROD-NG4P-20261118-B"
 RELEASE_LABEL = "PROD-NG4P release of main"
 ENVIRONMENT = "HF_PRODUCTION"
 SOURCE_MILESTONE = "prod-ng4p"

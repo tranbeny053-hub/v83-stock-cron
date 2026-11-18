@@ -54,21 +54,22 @@ def test_frontend_assets_are_versioned_for_deploy_cachebust() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
     # Keep both browser-facing asset tokens aligned for each frontend release.
-    assert 'href="/styles.css?v=p7p-20261012-a"' in html
-    assert 'src="/app.js?v=p7p-20261012-a"' in html
+    assert 'href="/styles.css?v=ng4p-20261118-b"' in html
+    assert 'src="/app.js?v=ng4p-20261118-b"' in html
     assert 'const UCPE_FRONTEND_BUILD = "ops-ka1-build-fingerprint";' in js
     # The token moves with the view's version (review finding 3). A browser that kept the script
     # served under the token before would draw a decision_view.v1 screen over a v2 payload: the
     # script that renders v2 is never served under that older token.
     assert 'view.schema_version === "decision_view.v2"' in js
+    # The token moved with the NG4P release (app.js changed since P7P: Vietnam-time display, #285).
     # It moved again with the release-prep lane: the stylesheet gained the Decision view's layout
     # and the alert styles, and the script picks the alert class. A browser that kept either
     # file under the token before would draw the new classes unstyled, or a red banner again.
-    for before in ("p7p-20261005-a", "p7p-20261011-a"):
+    for before in ("p7p-20261005-a", "p7p-20261011-a", "p7p-20261012-a"):
         assert before not in html
     assert "gate-alert-neutral" in js and ".gate-alert-neutral" in read_frontend("styles.css")
     tokens = set(re.findall(r"\?v=([\w.-]+)", html))
-    assert tokens == {"p7p-20261012-a"}, "one token, on the script and the stylesheet alike"
+    assert tokens == {"ng4p-20261118-b"}, "one token, on the script and the stylesheet alike"
 
 
 def test_recent_analysis_uses_operator_list_and_existing_detail_path() -> None:
