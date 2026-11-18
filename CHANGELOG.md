@@ -28,6 +28,9 @@ Changed:
 - #339: the preflight, the apply route and 0019's own guard accept exactly two provider roles, `supabase_etl_admin`
   and `supabase_read_only_user`, as BYPASSRLS members of `pg_read_all_data` (read only). Any other name, and any
   member of `pg_write_all_data`, is still refused. The check now follows indirect memberships and is schema-qualified.
+  The preflight also reports two informational facts: how many of the two named readers hold that read-only
+  exception (`bypassrls_allowlisted_readers`), and how many other roles can SET ROLE to one of them or hold ADMIN on
+  one (`named_reader_set_role_paths`).
   0019 was re-pinned, not applied.
 
 Notes:
