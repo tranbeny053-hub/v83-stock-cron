@@ -96,7 +96,7 @@ jobs:
       - name: Run authored EXP-09 scratch step
         shell: bash
         run: |
-          python -B -m scripts.migration_0019_rehearsal.run_authored_steps ops/ng4_pilot/workflows/ng4-pilot-exp09.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)"
+          python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-exp09.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)" "Run EXP-09 route tests (no secret)"
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -119,8 +119,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          postgres_bin=/usr/lib/postgresql/16/bin
-          bash scripts/migration_0019_rehearsal/run_scratch.sh "$postgres_bin" \
+          bash scripts/migration_0019_rehearsal/run_scratch.sh /usr/lib/postgresql/16/bin \
             "$RUNNER_TEMP/r19-off" migration-0019-commit-ts-off.json off
 
       - name: Rehearse migration 0019 with track_commit_timestamp on

@@ -32,6 +32,9 @@ PILOT_CAPACITY_MAX = 1200
 PILOT_CAPACITY_WARN = 600
 REPORT_SCHEMA = "ng4-pilot-exp09-report.v1"
 END_SETTLE = timedelta(minutes=10)
+# sha256 of ucpe_lattice.capacity_status()'s authored body (the text PostgreSQL stores in prosrc).
+# The test file recomputes it from the migration; this script never names or reads that file.
+CAPACITY_BODY_SHA256 = "5f5bac33746dabf502936ce80a3c22287f2668408e14e2c62e8696a90e6f4561"
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src"
 WORKFLOW = ".github/workflows/ng4-pilot-exp09.yml"
@@ -277,15 +280,6 @@ def dumps(report: dict[str, object]) -> str:
     return json.dumps(report, indent=2, sort_keys=False, ensure_ascii=True) + "\n"
 
 
-def authored_capacity_body(root: Path) -> str:
-    filename = "0019" + "_" + "lattice_evidence.sql"
-    migration = (root / "migrations/authored" / filename).read_text(encoding="utf-8")
-    marker = "CREATE FUNCTION ucpe_lattice.capacity_status()"
-    start = migration.index("AS $$", migration.index(marker)) + len("AS $$")
-    end = migration.index("$$;", start)
-    return migration[start:end]
-
-
 def _percentile(values: list[float], fraction: float) -> float | None:
     if not values:
         return None
@@ -313,7 +307,7 @@ def _time(value: datetime) -> datetime:
 
 
 def measure(open_connection, as_of: datetime, dispatched_sha: str,
-            authored_capacity_body: str) -> dict[str, object]:
+            capacity_body_sha256: str) -> dict[str, object]:
     access: tuple[bool, ...] = ()
     read_at: datetime | None = None
     rows: list[tuple] = []
@@ -344,11 +338,11 @@ def measure(open_connection, as_of: datetime, dispatched_sha: str,
             cur.execute(SQL["missed"])
             missed = list(cur.fetchall())
             cur.execute(SQL["sizes"])
-            sizes = {
-                str(name): {"total_bytes": int(total), "table_bytes": int(table),
-                            "index_bytes": int(index)}
+            sizes = dict(sorted(
+                (str(name), {"total_bytes": int(total), "table_bytes": int(table),
+                             "index_bytes": int(index)})
                 for name, total, table, index in cur.fetchall()
-            }
+            ))
             cur.execute(SQL["capacity_body"])
             body_row = cur.fetchone()
             capacity_body = body_row[0] if body_row else ""
@@ -383,6 +377,7 @@ def measure(open_connection, as_of: datetime, dispatched_sha: str,
     missed_report: dict[str, object] = {}
     completeness: dict[str, object] = {}
     timing: dict[str, object] = {}
+    late_rows = late_missed = 0
     for timeframe in PILOT_TIMEFRAMES:
         pilot_rows = by_tf_rows[timeframe]
         pilot_missed = by_tf_missed[timeframe]
@@ -405,11 +400,16 @@ def measure(open_connection, as_of: datetime, dispatched_sha: str,
             "non_test_only": non_test, "receipts": receipt_counts,
         }
         in_missed = [row for row in pilot_missed if start <= _time(row[0]) < as_of]
-        reason_counts: dict[str, int] = {}
+        counted: dict[str, int] = {}
         for _, reason, _ in in_missed:
             key = reason if reason in MISSED_REASONS else "<unexpected>"
-            reason_counts[key] = reason_counts.get(key, 0) + 1
-        missed_report[timeframe] = reason_counts
+            counted[key] = counted.get(key, 0) + 1
+        # A fixed order (review EX-C1 A7): MISSED_REASONS, then <unexpected> last.
+        missed_report[timeframe] = {
+            key: counted[key] for key in (*MISSED_REASONS, "<unexpected>") if key in counted
+        }
+        late_rows += sum(1 for row in in_rows if _time(row[2]) >= as_of)
+        late_missed += sum(1 for row in in_missed if _time(row[2]) >= as_of)
         completeness[timeframe] = measure_cell(
             timeframe, as_of,
             [row[0] for row in in_rows], [row[0] for row in in_missed],
@@ -438,9 +438,10 @@ def measure(open_connection, as_of: datetime, dispatched_sha: str,
         if unexpected_missed else {},
         "completeness": completeness,
         "timing": timing,
-        "late_writes": {
-            "rows": sum(1 for row in rows if _time(row[5]) >= as_of),
-            "missed": sum(1 for row in missed if _time(row[5]) >= as_of),
+        # In-window pilot-cell records written at or after as_of (review EX-C1 A6).
+        "written_at_or_after_as_of": {
+            "rows": late_rows,
+            "missed": late_missed,
         },
         "occupancy": {
             "tables": sizes, "all_time_rows": all_rows,
@@ -455,7 +456,7 @@ def measure(open_connection, as_of: datetime, dispatched_sha: str,
             == (PILOT_CAPACITY_MAX, PILOT_CAPACITY_WARN),
             "capacity_function_body_matches_authored": hashlib.sha256(
                 capacity_body.encode()
-            ).digest() == hashlib.sha256(authored_capacity_body.encode()).digest(),
+            ).hexdigest() == capacity_body_sha256,
         },
         "read_at_db_utc": _iso_z(read_at),
     }
@@ -580,7 +581,8 @@ def main(argv=None, *, environ=None):
             if rehearsal_clock is not None:
                 raise Refused("REHEARSAL_NOW_REFUSED")
             now = datetime.now(UTC)
-        as_of_text = args.as_of or env.get("NG4_PILOT_EXP09_AS_OF")
+        # A blank optional input (the dispatch form's default) means the pilot end (EX-C1 A1).
+        as_of_text = args.as_of or env.get("NG4_PILOT_EXP09_AS_OF") or None
         as_of = parse_as_of(as_of_text, now)
         report = _empty_report(as_of, args.expected_sha)
         if args.mode in ("attest", "run") and not args.wheelhouse:
@@ -594,15 +596,17 @@ def main(argv=None, *, environ=None):
                 load_driver()
                 attest_loaded_modules(isolation)
                 report["dispatch"] = dispatch
-                report["outcome"] = "READ_OK"
+                report["outcome"] = "ATTESTED"
                 code = 0
             else:
                 url = env.get("SUPABASE_DB_URL", "")
+                if not url:
+                    raise Refused("URL_MISSING")
                 driver = load_driver()
                 attest_loaded_modules(isolation)
                 measured = measure(
                     lambda: driver.connect(url, connect_timeout=8), as_of,
-                    args.expected_sha, authored_capacity_body(ROOT),
+                    args.expected_sha, CAPACITY_BODY_SHA256,
                 )
                 report = measured
                 report["dispatch"] = dispatch
@@ -622,7 +626,7 @@ def main(argv=None, *, environ=None):
                 driver = load_driver()
             report = measure(
                 lambda: driver.connect(url, connect_timeout=8), as_of,
-                args.expected_sha or "", authored_capacity_body(ROOT),
+                args.expected_sha or "", CAPACITY_BODY_SHA256,
             )
             report["outcome"] = "READ_OK"
             code = 0

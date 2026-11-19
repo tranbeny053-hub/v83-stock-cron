@@ -187,6 +187,7 @@ class Rehearsal:
                         "SELECT ucpe_lattice.record_lattice_row(%s::jsonb)", (json.dumps(values),)
                     )
                     cur.execute("RESET ROLE")
+                    self.capacity_after_write()
                 for n, instant in enumerate(missed):
                     reason = REASONS[n]
                     identity = row_id(tf, instant)
@@ -205,11 +206,26 @@ class Rehearsal:
                         "SELECT ucpe_lattice.record_missed_instant(%s::jsonb)", (json.dumps(entry),)
                     )
                     cur.execute("RESET ROLE")
+                    self.capacity_after_write()
         writer.close()
         with self.psycopg.connect(self.super_url, autocommit=True) as conn:
             conn.execute("SET ROLE ucpe_lattice_writer")
             conn.execute("SELECT ucpe_lattice.capture_commit_receipts(1000)")
         return {"rows": instants, "counts": counts}
+
+    def capacity_after_write(self) -> None:
+        """A9: the route's reproduction equals capacity_status() after every synthetic write."""
+        if not hasattr(self, "_route"):
+            spec = importlib.util.spec_from_file_location("exp09_route_cap", EXP09)
+            self._route = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(self._route)
+            self.capacity_mismatches = 0
+            self.capacity_compared = 0
+        rows, _, missed, _ = self.fingerprint()
+        expected = self.su.execute("SELECT ucpe_lattice.capacity_status()").fetchone()[0]
+        got = self._route.capacity_state(PILOT_CAPACITY, PILOT_WARN, rows, missed)
+        self.capacity_compared += 1
+        self.capacity_mismatches += expected != got
 
     def rls_backstop(self, url: str) -> str | None:
         """Behind the access check: the route's own statements, read by a role that row security
@@ -267,7 +283,7 @@ class Rehearsal:
                 return Cursor(self.inner.cursor())
 
         as_of = datetime(2026, 11, 30, tzinfo=UTC)
-        report = route.measure(Connection, as_of, "0" * 40, route.authored_capacity_body(ROOT))
+        report = route.measure(Connection, as_of, "0" * 40, route.CAPACITY_BODY_SHA256)
         occupancy, capacity = report["occupancy"], report["capacity"]
         in_window = sum(item["in_window"] for item in report["rows"].values())
         on_grid = sum(item["issued_on_grid"] for item in report["completeness"].values())
@@ -289,10 +305,8 @@ class Rehearsal:
         for role, extra in (("exp09_no_rls", ""), ("exp09_reader", "BYPASSRLS")):
             self.su.execute(f"CREATE ROLE {role} LOGIN {extra}")
             self.su.execute(f"GRANT pg_read_all_data TO {role}")
-        self.su.execute("GRANT USAGE ON SCHEMA ucpe_lattice TO exp09_no_rls, exp09_reader")
-        self.su.execute(
-            "GRANT SELECT ON ALL TABLES IN SCHEMA ucpe_lattice TO exp09_no_rls, exp09_reader"
-        )
+        # No explicit grant (review EX-C1 A9): production's only possible path is the implicit
+        # pg_read_all_data plus BYPASSRLS, so the readers get exactly that.
         pattern = self.seed()
         before = self.fingerprint()
         catalog_before = self.catalog_fingerprint()
@@ -350,6 +364,12 @@ class Rehearsal:
             c.get("capacity", {}).get("state")
             == self.su.execute("SELECT ucpe_lattice.capacity_status()").fetchone()[0],
             c.get("capacity"),
+        )
+        self.check(
+            "capacity_reproduction_equals_function_after_every_write",
+            getattr(self, "capacity_compared", 0) > 0 and self.capacity_mismatches == 0,
+            {"compared": getattr(self, "capacity_compared", 0),
+             "mismatches": getattr(self, "capacity_mismatches", None)},
         )
         self.check(
             "capacity_body_matches",

@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import importlib.util
 import re
 from datetime import UTC, datetime, timedelta
@@ -6,8 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-from crypto_probability_engine.quant_ng import lattice
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -17,64 +16,11 @@ exp09 = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(exp09)
 
 
+AUTHORED_SHA = hashlib.sha256(b"authored body").hexdigest()
+
+
 def instant(day: int, hour: int = 0) -> datetime:
     return datetime(2026, 11, day, hour, tzinfo=UTC)
-
-
-def test_restated_constants_match_lattice():
-    assert set(exp09.MISSED_REASONS) == lattice._MISSED
-    assert exp09.PILOT_START_UTC == lattice.PILOT_START_UTC
-    assert exp09.PILOT_DURATION == lattice.PILOT_DURATION
-    assert exp09.PILOT_END_UTC == lattice.pilot_end(lattice.PILOT_START_UTC)
-    assert exp09.LATTICE_ANCHOR_UTC == lattice.LATTICE_ANCHOR_UTC
-    assert exp09.PILOT_TIMEFRAMES == lattice.PILOT_TIMEFRAMES
-    assert exp09.STEP_SECONDS == {
-        tf: lattice._BAR_SECONDS[tf] * lattice.CADENCE_BARS for tf in lattice.PILOT_TIMEFRAMES
-    }
-    assert exp09.PILOT_CAPACITY_MAX == lattice.PILOT_CAPACITY_MAX
-    assert exp09.PILOT_CAPACITY_WARN == lattice.PILOT_CAPACITY_WARN
-    assert (
-        exp09.PILOT_NORMALIZED_SYMBOL
-        == lattice.build_missed_entry(lattice.PILOT_CELLS[0], exp09.PILOT_START_UTC, "NOT_ISSUED")[
-            "normalized_symbol"
-        ]
-    )
-    assert (
-        exp09.PILOT_REFERENCE_VENUE
-        == lattice.build_missed_entry(lattice.PILOT_CELLS[0], exp09.PILOT_START_UTC, "NOT_ISSUED")[
-            "reference_venue"
-        ]
-    )
-
-
-def test_lattice_grid_matches_for_full_window_and_day_seven():
-    day_seven = datetime(2026, 11, 30, tzinfo=UTC)
-    full_counts, day_counts = [], []
-    for timeframe in exp09.PILOT_TIMEFRAMES:
-        full = exp09.lattice_instants(timeframe, exp09.PILOT_START_UTC, exp09.PILOT_END_UTC)
-        day = exp09.lattice_instants(timeframe, exp09.PILOT_START_UTC, day_seven)
-        assert full == lattice.lattice_instants(
-            timeframe, exp09.PILOT_START_UTC, exp09.PILOT_END_UTC
-        )
-        assert day == lattice.lattice_instants(timeframe, exp09.PILOT_START_UTC, day_seven)
-        full_counts.append(len([value for value in full if value < exp09.PILOT_END_UTC]))
-        day_counts.append(len([value for value in day if value < day_seven]))
-    assert full_counts == [448, 112, 28, 5]
-    assert sum(full_counts) == 593
-    assert sum(full_counts) == sum(lattice.planned_slots(exp09.PILOT_START_UTC).values())
-    assert day_counts == [224, 56, 14, 3]
-    assert sum(day_counts) == 297
-    assert sum(len(exp09.grid(tf, exp09.PILOT_END_UTC)) for tf in exp09.PILOT_TIMEFRAMES) == 593
-    assert sum(len(exp09.grid(tf, day_seven)) for tf in exp09.PILOT_TIMEFRAMES) == 297
-
-
-def test_reconstruct_gaps_matches_lattice():
-    grid = [instant(23), instant(23, 1), instant(23, 2), instant(23, 3)]
-    rows = [grid[0], grid[3]]
-    missed = [grid[1]]
-    assert exp09.reconstruct_gaps(grid, rows, missed) == lattice.reconstruct_gaps(
-        grid, rows, missed
-    )
 
 
 @pytest.mark.parametrize(
@@ -246,7 +192,7 @@ def basic_responses(access=(True, False, True, True, True, True, True)):
 
 def test_measure_statement_order_and_rollback_on_success():
     conn = FakeConnection(basic_responses())
-    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "authored body")
+    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, AUTHORED_SHA)
     assert conn.cur.executed == [exp09.SQL[key] for key in (
         "begin", "timeout", "lock_timeout", "row_security", "timezone", "access",
         "read_at", "capacity", "rows", "missed", "sizes", "capacity_body", "rollback",
@@ -324,10 +270,104 @@ def test_sql_ast_and_identifier_allowlist():
         assert query.count("*") == query.upper().count("COUNT(*)")
 
 
-def test_authored_body_is_exact_capacity_function_body():
-    body = exp09.authored_capacity_body(ROOT)
-    assert "v_used >= v_max" in body
-    assert body.startswith("\nDECLARE")
+TABLES = ("lattice_rows", "lattice_commit_receipts", "lattice_missed_instants", "lattice_capacity",
+          "pg_class", "pg_namespace", "pg_roles", "pg_proc")
+COLUMNS = set("""oid relname relnamespace rolname rolsuper rolbypassrls proname pronamespace prosrc
+    nspname id lattice_instant_utc issued_at_utc db_insert_clock_utc timeframe normalized_symbol
+    reference_venue evidence_use evaluation_population lattice_row_id commit_state reason
+    logged_at_db_clock max_rows warn_rows""".split())
+
+
+def test_a_table_name_is_never_a_whole_row_value_and_never_aliased():
+    # Review EX-C1 A8: a bare table name in a select list is the whole row as one composite value.
+    for query in exp09.SQL.values():
+        text = re.sub(r"'(?:''|[^'])*'", " ", query)
+        for table in TABLES:
+            for found in re.finditer(rf"\b{table}\b", text):
+                before = text[:found.start()]
+                after = text[found.end():]
+                qualified = before.endswith(("ucpe_lattice.", "pg_catalog."))
+                column = re.match(r"\.([A-Za-z_][A-Za-z_0-9]*)", after)
+                assert qualified or (column and column.group(1) in COLUMNS), (table, query)
+        assert not re.search(
+            r"\b(?:FROM|JOIN)\s+(?:ucpe_lattice\.|pg_catalog\.)?[a-z_][a-z0-9_]*\s+"
+            r"(?!WHERE\b|JOIN\b|ON\b|LEFT\b|AND\b)[a-z_][a-z0-9_]*\b",
+            text, re.IGNORECASE,
+        ), query
+
+
+def test_the_script_calls_only_cursor_execute_and_fetch_on_the_database():
+    tree = ast.parse((ROOT / "scripts/ng4_pilot_exp09.py").read_text(encoding="utf-8"))
+    forbidden = {"executemany", "copy", "stream", "fetchmany", "scroll", "copy_expert",
+                 "copy_from", "copy_to", "callproc", "pipeline", "commit"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            assert node.func.attr not in forbidden, node.func.attr
+            if node.func.attr == "execute":
+                assert len(node.args) == 1 and not node.keywords
+
+
+def test_capacity_body_digest_equals_the_authored_function_body():
+    # The script pins the digest only; this test derives it from the authored migration.
+    migration = (ROOT / "migrations/authored/0019_lattice_evidence.sql").read_text(encoding="utf-8")
+    marker = "CREATE FUNCTION ucpe_lattice.capacity_status()"
+    start = migration.index("AS $$", migration.index(marker)) + len("AS $$")
+    body = migration[start:migration.index("$$;", start)]
+    assert "v_used >= v_max" in body and body.startswith("\nDECLARE")
+    assert hashlib.sha256(body.encode()).hexdigest() == exp09.CAPACITY_BODY_SHA256
+
+
+def test_a_blank_as_of_input_means_the_settled_pilot_end(capsys):
+    # The dispatch form's optional as_of_utc arrives as "" when left blank (review EX-C1 A1).
+    seen = []
+
+    def fake_parse(text, now):
+        seen.append(text)
+        raise exp09.Refused("STOP_HERE")
+
+    with patch.object(exp09, "parse_as_of", side_effect=fake_parse):
+        exp09.main(["--mode", "rehearse"], environ={"NG4_PILOT_EXP09_AS_OF": ""})
+    assert seen == [None]
+    settled = exp09.PILOT_END_UTC + timedelta(minutes=11)
+    assert exp09.parse_as_of(None, settled) == exp09.PILOT_END_UTC
+
+
+def test_run_mode_refuses_an_empty_database_url(capsys):
+    with patch.object(exp09, "parse_as_of", return_value=datetime(2026, 11, 24, tzinfo=UTC)), \
+            patch.object(exp09, "enter_isolated_runtime", return_value=object()), \
+            patch.object(exp09, "attest_dispatch", return_value={}), \
+            patch.object(exp09, "attest_loaded_modules", return_value=None), \
+            patch.object(exp09, "measure") as measured:
+        code = exp09.main(["--mode", "run", "--wheelhouse", "w"], environ={"SUPABASE_DB_URL": ""})
+    assert code == 2 and not measured.called
+    assert '"refusal": "URL_MISSING"' in capsys.readouterr().out
+
+
+def test_attest_never_claims_a_read(capsys):
+    with patch.object(exp09, "parse_as_of", return_value=datetime(2026, 11, 24, tzinfo=UTC)), \
+            patch.object(exp09, "enter_isolated_runtime", return_value=object()), \
+            patch.object(exp09, "attest_dispatch", return_value={}), \
+            patch.object(exp09, "attest_loaded_modules", return_value=None), \
+            patch.object(exp09, "load_driver", return_value=None):
+        code = exp09.main(["--mode", "attest", "--wheelhouse", "w"], environ={})
+    output = capsys.readouterr().out
+    assert code == 0 and '"outcome": "ATTESTED"' in output and "READ_OK" not in output
+
+
+def test_sizes_and_reasons_have_a_fixed_order():
+    base = basic_responses()
+    start = exp09.PILOT_START_UTC
+    base["sizes"] = [("lattice_rows", 3, 2, 1), ("lattice_capacity", 3, 2, 1),
+                     ("lattice_missed_instants", 3, 2, 1)]
+    base["missed"] = [
+        ("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+         start + timedelta(minutes=m), reason, start)
+        for m, reason in ((0, "ODD"), (45, "WINDOW_UNAVAILABLE"), (90, "NOT_ISSUED"))
+    ]
+    report = exp09.measure(lambda: FakeConnection(base), start + timedelta(hours=3), "a" * 40,
+                           AUTHORED_SHA)
+    assert list(report["occupancy"]["tables"]) == sorted(report["occupancy"]["tables"])
+    assert list(report["missed"]["15m"]) == ["NOT_ISSUED", "WINDOW_UNAVAILABLE", "<unexpected>"]
 
 
 def test_measure_sections_counts_timing_capacity_and_foreign_rows():
@@ -368,7 +408,9 @@ def test_measure_sections_counts_timing_capacity_and_foreign_rows():
         ("lattice_capacity", 20, 16, 4),
     ]
     conn = FakeConnection(base)
-    report = exp09.measure(lambda: conn, as_of, "a" * 40, "different body")
+    report = exp09.measure(
+        lambda: conn, as_of, "a" * 40, hashlib.sha256(b"different body").hexdigest()
+    )
     assert report["rows"]["15m"] == {
         "in_window": 3, "after_as_of": 1, "outside_pilot_window": 0,
         "first": "2026-11-23T00:00:00Z", "last": "2026-11-23T02:15:00Z",
@@ -388,14 +430,22 @@ def test_measure_sections_counts_timing_capacity_and_foreign_rows():
     assert report["completeness"]["15m"]["planned"] == 4
     assert report["completeness"]["15m"]["issued_on_grid"] == 3
     assert report["completeness"]["15m"]["missed_on_grid"] == 1
-    assert report["late_writes"]["rows"] == 1
+    # Only in-window pilot records count: the row at minute 195 lies after as_of (review EX-C1 A6).
+    assert report["written_at_or_after_as_of"] == {"rows": 0, "missed": 0}
     assert report["occupancy"]["all_time_rows"] == 6
     assert report["occupancy"]["all_time_receipts"] == 2
     assert report["occupancy"]["bytes_per_row_estimate"] == 70
     assert report["capacity"]["capacity_function_body_matches_authored"] is False
     conn = FakeConnection({**base, "capacity_body": [("authored body",)]})
-    report = exp09.measure(lambda: conn, as_of, "a" * 40, "authored body")
+    report = exp09.measure(lambda: conn, as_of, "a" * 40, AUTHORED_SHA)
     assert report["capacity"]["capacity_function_body_matches_authored"] is True
+    late = dict(base)
+    late["rows"] = [row("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+                        135, 20, 3600, "COMMITTED")]
+    late["missed"] = [("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+                       start + timedelta(minutes=90), "NOT_ISSUED", as_of)]
+    report = exp09.measure(lambda: FakeConnection(late), as_of, "a" * 40, AUTHORED_SHA)
+    assert report["written_at_or_after_as_of"] == {"rows": 1, "missed": 1}
 
 
 def test_rehearse_url_refusals_and_dispatch_workflow_constant(capsys):
@@ -489,7 +539,7 @@ def test_each_missing_privilege_refuses_even_for_a_superuser(missing):
 ])
 def test_superuser_or_bypassrls_with_every_privilege_reads(access):
     conn = FakeConnection(basic_responses(access))
-    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "authored body")
+    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, AUTHORED_SHA)
     assert exp09.SQL["rows"] in conn.cur.executed
 
 
@@ -505,3 +555,18 @@ def test_a_malformed_sqlstate_is_never_printed(capsys, sqlstate):
     output = capsys.readouterr().out
     assert code == 1
     assert '"sqlstate"' not in output and "boom" not in output
+
+
+def test_the_dispatch_test_step_imports_no_engine_module():
+    # Review EX-C1 A2: that step runs under the evaluator lock only (no httpx or pydantic).
+    workflow = (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-exp09.yml").read_text(encoding="utf-8")
+    line = next(item for item in workflow.splitlines() if "-m pytest" in item)
+    named = [token for token in line.split() if token.endswith(".py")]
+    assert named and "tests/scripts/test_ng4_pilot_exp09_lattice_parity.py" not in named
+    for name in named:
+        tree = ast.parse((ROOT / name).read_text(encoding="utf-8"))
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                assert not (node.module or "").startswith("crypto_probability_engine"), name
+            if isinstance(node, ast.Import):
+                assert all(not a.name.startswith("crypto_probability_engine") for a in node.names)
