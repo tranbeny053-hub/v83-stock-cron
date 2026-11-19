@@ -962,7 +962,11 @@ def _migration_label(migration: dict[str, Any]) -> str:
 def rollback_findings(
     env: Env, target: str, current: str, registry: dict[str, Any]
 ) -> list[tuple[bool, str]]:
-    """Compare registered migrations with top-level and authored files at the target."""
+    """Compare registered migrations with top-level and authored files at the target.
+
+    Counting migrations/authored/ as present is safe only because check 5c refuses a release while
+    any registered migration, authored ones included, is unapplied; relax neither alone.
+    """
     entry = next((item for item in registry["releases"] if item["commit"] == target), None)
     target_migrations: set[str] = set()
     for directory in ("migrations/", "migrations/authored/"):
