@@ -1,6 +1,9 @@
+import ast
 import importlib.util
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +22,7 @@ def instant(day: int, hour: int = 0) -> datetime:
 
 
 def test_restated_constants_match_lattice():
+    assert set(exp09.MISSED_REASONS) == lattice._MISSED
     assert exp09.PILOT_START_UTC == lattice.PILOT_START_UTC
     assert exp09.PILOT_DURATION == lattice.PILOT_DURATION
     assert exp09.PILOT_END_UTC == lattice.pilot_end(lattice.PILOT_START_UTC)
@@ -158,7 +162,6 @@ def test_report_is_deterministic_and_has_fixed_order_and_values():
         "evidence_use",
         "population",
         "claim",
-        "look_spent",
         "verdict",
         "thresholds",
         "http_counts",
@@ -172,7 +175,6 @@ def test_report_is_deterministic_and_has_fixed_order_and_values():
     assert first["evidence_use"] == "TEST_ONLY"
     assert first["population"] == "E1_OPERATIONAL"
     assert first["claim"] == "NONE"
-    assert first["look_spent"] == "NONE (counts, statuses and timestamps only)"
     assert first["verdict"] == "NOT_JUDGED_THRESHOLD_UNRULED"
     assert first["thresholds"] == "OD-NG-7 unruled; none applied or stored"
     assert first["http_counts"] == "NOT_IN_DATABASE"
@@ -181,3 +183,230 @@ def test_report_is_deterministic_and_has_fixed_order_and_values():
     assert first["dispatched_sha"] == args[1]
     assert set(first) & {"threshold", "threshold_value", "completeness_threshold"} == set()
     assert "0.90" not in exp09.dumps(first)
+
+
+class FakeCursor:
+    def __init__(self, responses, fail_on=None):
+        self.responses = responses
+        self.fail_on = fail_on
+        self.executed = []
+        self.current = None
+
+    def execute(self, query):
+        self.executed.append(query)
+        self.current = next(key for key, value in exp09.SQL.items() if value == query)
+        if self.current == self.fail_on:
+            raise FakeOperationalError("db.example.supabase.co " + "a" * 40, "XX001")
+
+    def fetchone(self):
+        value = self.responses.get(self.current, [])
+        if isinstance(value, list) and value and isinstance(value[0], tuple):
+            return value[0]
+        return value
+
+    def fetchall(self):
+        value = self.responses.get(self.current, [])
+        return value
+
+
+class FakeOperationalError(Exception):
+    def __init__(self, message, sqlstate):
+        self.sqlstate = sqlstate
+        super().__init__(message)
+
+
+class FakeConnection:
+    def __init__(self, responses, fail_on=None):
+        self.cur = FakeCursor(responses, fail_on)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def cursor(self):
+        return self.cur
+
+
+def basic_responses(access=(True, False, True, True, True, True, True)):
+    return {
+        "access": [access],
+        "read_at": [(datetime(2026, 11, 24, tzinfo=UTC),)],
+        "capacity": [(1200, 600)],
+        "rows": [],
+        "missed": [],
+        "sizes": [],
+        "capacity_body": [("authored body",)],
+    }
+
+
+def test_measure_statement_order_and_rollback_on_success():
+    conn = FakeConnection(basic_responses())
+    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "authored body")
+    assert conn.cur.executed == [exp09.SQL[key] for key in (
+        "begin", "timeout", "lock_timeout", "row_security", "timezone", "access",
+        "read_at", "capacity", "rows", "missed", "sizes", "capacity_body", "rollback",
+    )]
+    assert all(not re.search(r"\bCOMMIT\b", sql, re.IGNORECASE)
+               for sql in exp09.SQL.values())
+
+
+@pytest.mark.parametrize("false_index", range(7))
+def test_no_read_path_rolls_back_and_carries_only_access_booleans(false_index):
+    access = [False, False, True, True, True, True, True]
+    access[false_index] = False
+    conn = FakeConnection(basic_responses(tuple(access)))
+    with pytest.raises(exp09.Refused) as caught:
+        exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "")
+    assert caught.value.code == "NO_READ_PATH"
+    assert caught.value.access == tuple(access)
+    assert conn.cur.executed[-1] == exp09.SQL["rollback"]
+    assert exp09.SQL["read_at"] not in conn.cur.executed
+
+
+def test_mid_read_exception_rolls_back_and_cli_sanitizes_error(capsys):
+    conn = FakeConnection(basic_responses(), fail_on="rows")
+    with pytest.raises(FakeOperationalError):
+        exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "")
+    assert conn.cur.executed[-1] == exp09.SQL["rollback"]
+    failure = FakeOperationalError("db.example.supabase.co " + "b" * 40, "XX001")
+    with patch.object(exp09, "parse_as_of", return_value=datetime(2026, 11, 24, tzinfo=UTC)), \
+            patch.object(exp09, "measure", side_effect=failure):
+        code = exp09.main(
+            ["--mode", "rehearse", "--as-of", "2026-11-24T00:00:00Z"],
+            environ={"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://localhost/test"},
+        )
+    output = capsys.readouterr().out
+    assert code == 1
+    assert "db.example.supabase.co" not in output and "b" * 40 not in output
+    assert '"sqlstate": "XX001"' in output
+
+
+def test_sql_ast_and_identifier_allowlist():
+    tree = ast.parse((ROOT / "scripts/ng4_pilot_exp09.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                and node.func.attr == "execute":
+            arg = node.args[0]
+            assert isinstance(arg, ast.Subscript)
+            assert isinstance(arg.value, ast.Name) and arg.value.id == "SQL"
+            assert isinstance(arg.slice, ast.Constant) and isinstance(arg.slice.value, str)
+    allowed = set("""SELECT SET TRANSACTION ISOLATION LEVEL REPEATABLE READ ONLY LOCAL
+        statement_timeout lock_timeout row_security off TimeZone UTC coalesce current_user
+            FROM WHERE JOIN LEFT ON AND IN AS false true ROLLBACK ucpe_lattice pg_catalog
+            pg_class pg_namespace pg_roles
+        pg_proc oid relname relnamespace rolname rolsuper rolbypassrls proname pronamespace
+        prosrc nspname id has_schema_privilege has_table_privilege statement_timestamp
+        lattice_rows lattice_commit_receipts lattice_missed_instants lattice_capacity
+        lattice_instant_utc issued_at_utc db_insert_clock_utc timeframe normalized_symbol
+        reference_venue evidence_use evaluation_population lattice_row_id commit_state reason
+        logged_at_db_clock max_rows warn_rows pg_total_relation_size pg_relation_size
+        pg_indexes_size""".split())
+    for query in exp09.SQL.values():
+        no_literals = re.sub(r"'(?:''|[^'])*'", " ", query)
+        identifiers = re.findall(r"[A-Za-z_][A-Za-z_0-9]*", no_literals)
+        assert set(identifiers) <= allowed
+        assert not re.search(
+            r"\b(pg_stats|pg_statistic|pg_stats_ext|pg_statistic_ext_data|pg_stat_activity|"
+            r"pg_stat_statements|get_raw_page|pgstattuple|pg_read_file|pg_read_binary_file|"
+            r"lo_|dblink|COPY|TABLE|pg_column_size|octet_length|to_json|json_agg|jsonb_agg|"
+            r"hstore|ROW\()\b", query, re.IGNORECASE,
+        )
+        assert not re.search(
+            r"\b(?:FROM|JOIN)\s+(?:ucpe_lattice\.)?[a-z_][a-z0-9_]*\s+"
+            r"(?!WHERE\b|JOIN\b|ON\b|LEFT\b|AND\b)[a-z_][a-z0-9_]*\b",
+            query, re.IGNORECASE,
+        )
+        assert query.count("*") == query.upper().count("COUNT(*)")
+
+
+def test_authored_body_is_exact_capacity_function_body():
+    body = exp09.authored_capacity_body(ROOT)
+    assert "v_used >= v_max" in body
+    assert body.startswith("\nDECLARE")
+
+
+def test_measure_sections_counts_timing_capacity_and_foreign_rows():
+    base = basic_responses()
+    start = exp09.PILOT_START_UTC
+    as_of = start + timedelta(hours=3)
+    def row(tf, symbol, venue, minute, issued_seconds, store_seconds, state):
+        instant_value = start + timedelta(minutes=minute)
+        issued = instant_value + timedelta(seconds=issued_seconds)
+        inserted = issued + timedelta(seconds=store_seconds)
+        return (tf, symbol, venue, instant_value, issued, inserted,
+                "TEST_ONLY", "E1_OPERATIONAL", state)
+    base["rows"] = [
+        row("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+            0, 0, 1, "COMMITTED"),
+        row("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+            45, 10, 2, "COMMIT_UNKNOWN"),
+        row("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+            135, 20, 3, None),
+        row("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+            195, 4, 1, None),
+        row("15m", "ETH/USDT", exp09.PILOT_REFERENCE_VENUE, 0, 1, 1, None),
+        row("2H", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+            0, 1, 1, None),
+    ]
+    base["missed"] = [
+        ("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+         start + timedelta(minutes=90), "NOT_ISSUED", start + timedelta(minutes=91)),
+        ("15m", exp09.PILOT_NORMALIZED_SYMBOL, exp09.PILOT_REFERENCE_VENUE,
+         start + timedelta(minutes=120), "NEW_REASON", start + timedelta(minutes=121)),
+        ("15m", "ETH/USDT", exp09.PILOT_REFERENCE_VENUE,
+         start, "NOT_ISSUED", start),
+    ]
+    base["sizes"] = [
+        ("lattice_rows", 300, 200, 100),
+        ("lattice_commit_receipts", 120, 80, 40),
+        ("lattice_missed_instants", 50, 40, 10),
+        ("lattice_capacity", 20, 16, 4),
+    ]
+    conn = FakeConnection(base)
+    report = exp09.measure(lambda: conn, as_of, "a" * 40, "different body")
+    assert report["rows"]["15m"] == {
+        "in_window": 3, "after_as_of": 1, "outside_pilot_window": 0,
+        "first": "2026-11-23T00:00:00Z", "last": "2026-11-23T02:15:00Z",
+        "non_test_only": 0,
+        "receipts": {"COMMITTED": 1, "COMMIT_UNKNOWN": 1, "NONE": 1},
+    }
+    assert report["foreign_cell_rows"] == 1
+    assert report["unexpected_timeframe_rows"] == {"<unexpected>": 1}
+    assert report["missed"]["15m"] == {"NOT_ISSUED": 1, "<unexpected>": 1}
+    assert report["foreign_cell_missed"] == 1
+    assert report["timing"]["15m"]["issued_after_lattice_seconds"] == {
+        "n": 3, "min": 0, "p50": 10.0, "p95": 19.0, "max": 20,
+    }
+    assert report["timing"]["15m"]["store_latency_plus_clock_offset_seconds"] == {
+        "n": 3, "min": 1, "p50": 2.0, "p95": 2.9, "max": 3,
+    }
+    assert report["completeness"]["15m"]["planned"] == 4
+    assert report["completeness"]["15m"]["issued_on_grid"] == 3
+    assert report["completeness"]["15m"]["missed_on_grid"] == 1
+    assert report["late_writes"]["rows"] == 1
+    assert report["occupancy"]["all_time_rows"] == 6
+    assert report["occupancy"]["all_time_receipts"] == 2
+    assert report["occupancy"]["bytes_per_row_estimate"] == 70
+    assert report["capacity"]["capacity_function_body_matches_authored"] is False
+    conn = FakeConnection({**base, "capacity_body": [("authored body",)]})
+    report = exp09.measure(lambda: conn, as_of, "a" * 40, "authored body")
+    assert report["capacity"]["capacity_function_body_matches_authored"] is True
+
+
+def test_rehearse_url_refusals_and_dispatch_workflow_constant(capsys):
+    assert exp09.WORKFLOW == ".github/workflows/ng4-pilot-exp09.yml"
+    with patch.object(exp09, "parse_as_of", return_value=datetime(2026, 11, 24, tzinfo=UTC)):
+        assert exp09.main(
+            ["--mode", "rehearse", "--as-of", "2026-11-24T00:00:00Z"],
+            environ={"SUPABASE_DB_URL": "set", "NG4_PILOT_EXP09_REHEARSAL_URL":
+                     "postgresql://localhost/test"},
+        ) == 2
+        assert exp09.main(
+            ["--mode", "rehearse", "--as-of", "2026-11-24T00:00:00Z"],
+            environ={"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://db.example/test"},
+        ) == 2
+    report = capsys.readouterr().out
+    assert "URL_REFUSED" in report
+    assert exp09.main(["--mode", "run", "--expected-sha", "a" * 40], environ={}) == 2
