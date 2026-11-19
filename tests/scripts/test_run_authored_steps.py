@@ -28,10 +28,12 @@ def test_real_authored_scratch_blocks_are_extracted_byte_exactly():
             "apply-migration-0019.yml",
             "Rehearse the apply on a scratch local PostgreSQL database (no secret)",
         ),
+        (
+            "ng4-pilot-exp09.yml",
+            "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)",
+        ),
     ):
         base = ROOT / ".github/workflows"
-        if wf not in {"ng4-pilot-preflight.yml", "apply-migration-0019.yml"}:
-            base = ROOT / "ops/ng4_pilot/workflows"
         run, env = extract(base / wf, name)
         assert run.startswith("sudo systemctl start postgresql.service")
         assert "postgresql:///" in next(iter(env.values()))

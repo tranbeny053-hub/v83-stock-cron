@@ -559,7 +559,7 @@ def test_a_malformed_sqlstate_is_never_printed(capsys, sqlstate):
 
 def test_the_dispatch_test_step_imports_no_engine_module():
     # Review EX-C1 A2: that step runs under the evaluator lock only (no httpx or pydantic).
-    workflow = (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-exp09.yml").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ng4-pilot-exp09.yml").read_text(encoding="utf-8")
     line = next(item for item in workflow.splitlines() if "-m pytest" in item)
     named = [token for token in line.split() if token.endswith(".py")]
     assert named and "tests/scripts/test_ng4_pilot_exp09_lattice_parity.py" not in named

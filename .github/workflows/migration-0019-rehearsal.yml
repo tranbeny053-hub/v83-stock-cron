@@ -29,6 +29,7 @@ name: Migration 0019 rehearsal (scratch PostgreSQL, no secrets)
       - ops/ng4_pilot/**
       - .github/workflows/apply-migration-0019.yml
       - .github/workflows/ng4-pilot-preflight.yml
+      - .github/workflows/ng4-pilot-exp09.yml
       - src/crypto_probability_engine/persistence/reader_identity.py
       - src/crypto_probability_engine/persistence/lattice_store.py
       - src/crypto_probability_engine/lattice_pilot.py
@@ -96,7 +97,11 @@ jobs:
       - name: Run authored EXP-09 scratch step
         shell: bash
         run: |
-          python -B scripts/migration_0019_rehearsal/run_authored_steps.py ops/ng4_pilot/workflows/ng4-pilot-exp09.yml "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)" "Run EXP-09 route tests (no secret)"
+          python -B scripts/migration_0019_rehearsal/run_authored_steps.py \
+            .github/workflows/ng4-pilot-exp09.yml \
+            "Install the hash-locked set with CPython's bundled pip, from authenticated wheels" \
+            "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)" \
+            "Run EXP-09 route tests (no secret)"
   test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

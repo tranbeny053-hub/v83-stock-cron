@@ -150,10 +150,10 @@ def test_every_workflow_parses_at_least_the_expected_number_of_refs() -> None:
     # same three, at the same pins.
     # 104 -> 108 (NG4 W2): the same rehearsal adds two jobs that run the authored workflows'
     # scratch steps, each with checkout and setup-python at the same pins.
-    # Then +3: the NG4 pilot's one-shot apply. 114 -> 116 (NG4 EXP-09): the same rehearsal adds a
-    # job that runs the authored EXP-09 route's scratch step, with checkout and setup-python at the
-    # same pins.
-    assert len(refs) == 116
+    # Then +3: the NG4 pilot's one-shot apply. 114 -> 116 (NG4 EXP-09 rehearsal): the same
+    # rehearsal adds a job for the EXP-09 scratch step. 116 -> 119: registering EXP-09 adds its
+    # checkout and setup-python references plus its own pinned action.
+    assert len(refs) == 119
 
 
 def test_every_action_ref_is_a_reviewed_node24_pin() -> None:
