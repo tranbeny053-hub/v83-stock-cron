@@ -101,6 +101,18 @@
       "id": "0018",
       "note": "D6: service_role loses INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER (and MAINTAIN) on the six core evidence tables and EXECUTE on both bundle functions, and keeps SELECT; not additive: a code rollback stays safe only to a release from a2de125f (WA) on, which writes through the least-privilege pair (P3-PRIV-R D1-D4)",
       "rollback_safe_from": "a2de125ffa449cd6f5ec452e4a7a3335286eb413"
+    },
+    {
+      "additive": true,
+      "applied_run": 44133908695,
+      "id": "0019",
+      "note": "Creates ucpe_lattice with four tables and five functions plus NOLOGIN owner and writer roles; nothing outside the new schema and roles changes, older code never calls it; applied in run 44133908695 together with the capacity SQL (scripts/migration_0019_capacity.sql: the 1200/600 row) and 0020"
+    },
+    {
+      "additive": true,
+      "applied_run": 44133908695,
+      "id": "0020",
+      "note": "Creates NOLOGIN ucpe_lattice_space inheriting only the writer's three function grants; the LOGIN and Space secret are the owner's later credential step, and a code rollback leaves both in place (docs/runbooks/NG4_PILOT_W2.md disables them); applied in run 44133908695 together with the capacity SQL and 0019"
     }
   ],
   "releases": [
