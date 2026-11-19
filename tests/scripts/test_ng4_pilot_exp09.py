@@ -459,3 +459,49 @@ def test_rehearse_cli_fake_driver_deterministic_except_read_timestamp(capsys):
     left.pop("read_at_db_utc")
     right.pop("read_at_db_utc")
     assert __import__("json").dumps(left) == __import__("json").dumps(right)
+
+
+def test_session_statements_are_exact():
+    # The review's A1/A3: one REPEATABLE READ, READ ONLY snapshot whose row-security setting makes a
+    # filtered read raise instead of returning zero rows.
+    assert exp09.SQL["begin"] == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+    assert exp09.SQL["timeout"] == "SET LOCAL statement_timeout = '15000'"
+    assert exp09.SQL["lock_timeout"] == "SET LOCAL lock_timeout = '2000'"
+    assert exp09.SQL["row_security"] == "SET LOCAL row_security = off"
+    assert exp09.SQL["timezone"] == "SET LOCAL TimeZone = 'UTC'"
+    assert exp09.SQL["rollback"] == "ROLLBACK"
+
+
+@pytest.mark.parametrize("missing", range(2, 7))
+def test_each_missing_privilege_refuses_even_for_a_superuser(missing):
+    access = [True, True, True, True, True, True, True]
+    access[missing] = False
+    conn = FakeConnection(basic_responses(tuple(access)))
+    with pytest.raises(exp09.Refused) as caught:
+        exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "")
+    assert caught.value.code == "NO_READ_PATH"
+    assert exp09.SQL["rows"] not in conn.cur.executed
+
+
+@pytest.mark.parametrize("access", [
+    (True, False, True, True, True, True, True),
+    (False, True, True, True, True, True, True),
+])
+def test_superuser_or_bypassrls_with_every_privilege_reads(access):
+    conn = FakeConnection(basic_responses(access))
+    exp09.measure(lambda: conn, datetime(2026, 11, 24, tzinfo=UTC), "a" * 40, "authored body")
+    assert exp09.SQL["rows"] in conn.cur.executed
+
+
+@pytest.mark.parametrize("sqlstate", ["xx001", "XX0011", "db.ex", "42 01", None, 42501])
+def test_a_malformed_sqlstate_is_never_printed(capsys, sqlstate):
+    failure = FakeOperationalError("boom", sqlstate)
+    with patch.object(exp09, "parse_as_of", return_value=datetime(2026, 11, 24, tzinfo=UTC)), \
+            patch.object(exp09, "measure", side_effect=failure):
+        code = exp09.main(
+            ["--mode", "rehearse", "--as-of", "2026-11-24T00:00:00Z"],
+            environ={"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://localhost/test"},
+        )
+    output = capsys.readouterr().out
+    assert code == 1
+    assert '"sqlstate"' not in output and "boom" not in output
