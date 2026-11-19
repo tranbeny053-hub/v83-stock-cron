@@ -1,6 +1,8 @@
 # NG4 pilot database routes
 
-Both workflows are registered for owner dispatch. Dispatching the apply is the one-shot T4. The preflight is a production read. Applying 0019 + capacity + 0020 must never be rerun.
+The preflight, the one-shot apply and the EXP-09 routes are registered for owner dispatch; each
+dispatch is a separate owner authorization. Dispatching the apply is the one-shot T4 (consumed by
+run 44133908695; never rerun). The preflight is a production read.
 
 `ng4-pilot-preflight.yml` runs `scripts/ng4_pilot_preflight.py`. Its first statement is `SET TRANSACTION READ ONLY`; it inspects catalogs and rolls back. READY means every first-apply condition currently checked is true. The event-trigger allowlist is empty: the route allowlists no provider event-trigger name, so every DDL event trigger is counted as not allowlisted; the preflight reports each one's name, event and enabled state (never its definition) for the owner's assessment before the apply.
 
@@ -8,7 +10,12 @@ Both workflows are registered for owner dispatch. Dispatching the apply is the o
 
 The rehearse interface is local-only and accepts socket or localhost URLs without passwords or a Supabase host. It is intended for scratch PostgreSQL; it is not a production route. `MIGRATION_0019_REHEARSAL_URL` and `NG4_PILOT_PREFLIGHT_REHEARSAL_URL` are the respective rehearsal variables.
 
-The EXP-09 route is authored and disabled in `ops/ng4_pilot/workflows/ng4-pilot-exp09.yml`; it reads counts, statuses, timestamps and whole-table sizes only. It fails closed with `NO_READ_PATH` unless the owner's role is superuser or has `BYPASSRLS` together with `USAGE` and `SELECT` on all four lattice tables; no record currently shows that path, so `NO_READ_PATH` needs a new, reviewed read path. Enabling is a later T3 rename, and the read is a later owner one-shot.
+The EXP-09 route is registered at `.github/workflows/ng4-pilot-exp09.yml`; it reads counts,
+statuses, timestamps and whole-table sizes only. It fails closed with `NO_READ_PATH` unless the
+owner's role is superuser or has `BYPASSRLS` together with `USAGE` and `SELECT` on all four lattice
+tables; no UCPE record verifies that path, so `NO_READ_PATH` needs a new, reviewed read path. The
+read is a one-shot owner action and must not start before `2026-12-07T00:10Z` for the end-of-window
+read, else `END_NOT_SETTLED`.
 
 The apply's outside-schema post-check compares, before and after, everything outside schema `ucpe_lattice`: roles and their attributes, memberships, relation and schema ACLs, policies, functions, publications, default ACLs and event triggers. It excludes `ucpe_lattice_space` and its memberships because 0020 creates them, then checks that role positively, including PUBLIC-inclusive relation and SECURITY DEFINER access in `public` and `ucpe_lattice`, schema/database CREATE, settings, and shared dependencies. Access in other non-system schemas, database TEMPORARY, and PUBLIC parameter grants are recorded. The preflight reports the corresponding PUBLIC privileges in `public`, and READY also requires `ucpe_lattice_space` to be absent.
 

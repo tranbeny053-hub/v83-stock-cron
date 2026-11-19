@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "ops/ng4_pilot/workflows"
 PREFLIGHT = ROOT / ".github/workflows/ng4-pilot-preflight.yml"
 APPLY = ROOT / ".github/workflows/apply-migration-0019.yml"
-EXP09 = OPS / "ng4-pilot-exp09.yml"
+EXP09 = ROOT / ".github/workflows/ng4-pilot-exp09.yml"
 
 
 def test_workflows_are_dispatch_only_and_have_pinned_trust_boundary():
@@ -56,8 +56,8 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
         assert "Only the" in header and "database secret" in header
 
 
-def test_exp09_authored_workflow_is_dispatch_only_and_secret_is_read_step_only():
-    assert EXP09.is_file() and not (ROOT / ".github/workflows/ng4-pilot-exp09.yml").exists()
+def test_exp09_registered_workflow_is_dispatch_only_and_secret_is_read_step_only():
+    assert EXP09.is_file() and not (OPS / "ng4-pilot-exp09.yml").exists()
     text = EXP09.read_text()
     assert '"on":\n  workflow_dispatch:' in text
     assert not re.search(r"^\s*(schedule|push|pull_request|workflow_call):", text, re.M)

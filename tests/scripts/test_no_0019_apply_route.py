@@ -51,16 +51,18 @@ def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> No
 
 
 def test_registered_apply_route_is_the_one_shot_owner_dispatch() -> None:
-    # Both NG4 workflows are registered for owner dispatch; dispatching the apply is the one-shot
-    # T4.
+    # The preflight, the apply and EXP-09 are registered for owner dispatch; dispatching the apply
+    # is the one-shot T4.
     scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
     assert scripts == ["apply_migration_0019.py"]
     source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
     assert 'WORKFLOW = ".github/workflows/apply-migration-0019.yml"' in source
     assert (WORKFLOWS / "apply-migration-0019.yml").is_file()
     assert (WORKFLOWS / "ng4-pilot-preflight.yml").is_file()
+    assert (WORKFLOWS / "ng4-pilot-exp09.yml").is_file()
     assert not (ROOT / "ops/ng4_pilot/workflows/apply-migration-0019.yml").exists()
     assert not (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-preflight.yml").exists()
+    assert not (ROOT / "ops/ng4_pilot/workflows/ng4-pilot-exp09.yml").exists()
     # Exactly one registered workflow is an 0019 apply route: this one.
     patterns = ("*0019*apply*", "apply*0019*")
     applies = {p.name for pattern in patterns for p in WORKFLOWS.rglob(pattern)}
@@ -76,6 +78,11 @@ def test_registered_apply_route_is_the_one_shot_owner_dispatch() -> None:
             # The registered read-only preflight may name the schema and the route's number, but
             # never the migration file, the apply script or an apply mode (review B4).
             assert all(s not in text for s in ("0019_lattice", "apply_migration", "--mode=apply"))
+            continue
+        if path == WORKFLOWS / "ng4-pilot-exp09.yml":
+            # As the preflight's: never the migration file, the apply script or an apply mode.
+            assert all(s not in text for s in ("0019_lattice", "ucpe_lattice", "apply_migration",
+                                               "--mode=apply"))
             continue
         assert "0019" not in path.name and "0019_lattice" not in text and "ucpe_lattice" not in text
 
