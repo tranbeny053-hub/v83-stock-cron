@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OPS = ROOT / "ops/ng4_pilot/workflows"
 PREFLIGHT = ROOT / ".github/workflows/ng4-pilot-preflight.yml"
 APPLY = ROOT / ".github/workflows/apply-migration-0019.yml"
+EXP09 = OPS / "ng4-pilot-exp09.yml"
 
 
 def test_workflows_are_dispatch_only_and_have_pinned_trust_boundary():
@@ -53,3 +54,29 @@ def test_route_headers_describe_ng4_checks_not_0018_checks():
         assert "production-db-owner" in header
         assert "section-5a-evaluation" in header
         assert "Only the" in header and "database secret" in header
+
+
+def test_exp09_authored_workflow_is_dispatch_only_and_secret_is_read_step_only():
+    assert EXP09.is_file() and not (ROOT / ".github/workflows/ng4-pilot-exp09.yml").exists()
+    text = EXP09.read_text()
+    assert '"on":\n  workflow_dispatch:' in text
+    assert not re.search(r"^\s*(schedule|push|pull_request|workflow_call):", text, re.M)
+    assert "permissions:\n  contents: read" in text
+    assert "group: section-5a-evaluation" in text
+    assert "environment: production-db-owner" in text
+    assert "expected_sha:" in text and "as_of_utc:" in text
+    assert text.count("${{ secrets.SUPABASE_DB_URL }}") == 1
+    read_step = text.split("- name: Read EXP-09 once", 1)[1]
+    assert "${{ secrets.SUPABASE_DB_URL }}" in read_step
+    assert text.count("${{ inputs.as_of_utc }}") == 2
+    assert text.count("NG4_PILOT_EXP09_AS_OF: ${{ inputs.as_of_utc }}") == 2
+    production_step = text.split("- name: Read EXP-09 once", 1)[1]
+    assert "--as-of" not in production_step
+    assert 'python-version: "3.13.14"' in text
+    assert "Rehearse the EXP-09 route on scratch PostgreSQL (no secret)" in text
+    assert "NO_READ_PATH" in text
+    refs = re.findall(r"uses:\s*([^\s]+)", text)
+    assert len(refs) == 3 and all(re.fullmatch(r"[^@]+@[0-9a-f]{40}", ref) for ref in refs)
+    header = text.split('"on":', 1)[0]
+    assert "Registered only when this file is directly under .github/workflows" in header
+    assert "while it sits in ops/ng4_pilot/workflows/ GitHub never runs it" in header
