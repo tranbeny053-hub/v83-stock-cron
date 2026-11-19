@@ -183,9 +183,12 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
     assert releases[0]["h2_hold"] is False, "the pre-hold release is never safe"
     ids = [migration["id"] for migration in registry["migrations_applied"]]
     assert ids == sorted(ids) and len(ids) == len(set(ids))
-    on_main = sorted(
-        path.name[:4] for path in (ROOT / "migrations").glob("[0-9][0-9][0-9][0-9]_*.sql")
-    )
+    on_main = sorted({
+        path.name[:4]
+        for pattern in ("[0-9][0-9][0-9][0-9]_*.sql",
+                        "authored/[0-9][0-9][0-9][0-9]_*.sql")
+        for path in (ROOT / "migrations").glob(pattern)
+    })
     assert ids == on_main, (
         "every migration on main is registered; the rollback check conservatively treats each as "
         "applied, so a new migration must say whether it is additive"
@@ -193,8 +196,8 @@ def test_the_committed_registry_is_consistent_and_ends_at_the_pin() -> None:
     # An explicit "applied_run": null marks a migration authored on main but not yet applied
     # (0001-0007 predate apply tracking and carry no applied_run key at all). 0015 was applied by
     # run 37033014490, 0016 by run 37110330500, 0017 by run 37110375659 and 0018 (D6) by run
-    # 37172530166, after the refused, unapplied attempt 37170407623. No release ships while one is
-    # still unapplied (check 5c).
+    # 37172530166, after the refused, unapplied attempt 37170407623; 0019 and 0020 were applied
+    # together in run 44133908695. No release ships while one is still unapplied (check 5c).
     unapplied = [m for m in registry["migrations_applied"]
                  if "applied_run" in m and m["applied_run"] is None]
     assert [m["id"] for m in unapplied] == []
@@ -657,6 +660,23 @@ def test_rollback_check_refuses_unsafe_targets(world: World, tmp_path: Path) -> 
     # The target must be older than production.
     results = rel.rollback_findings(env, world.c0, world.c0, registry)
     assert results[3][0] is False
+
+
+def test_authored_migration_is_counted_in_target_tree(world: World) -> None:
+    registry = json.loads((world.work / rel.REGISTRY_PATH).read_text())
+    registry["migrations_applied"].append({"id": "0019", "additive": True})
+    env = world.env()
+
+    without_migration = rel.rollback_findings(env, world.c0, world.c0, registry)
+    assert without_migration[4][1].endswith(": 0011, 0019")
+
+    _write(world.work, "migrations/authored/0019_x.sql", "-- authored fixture\n")
+    _git(world.work, "add", "migrations/authored/0019_x.sql")
+    _git(world.work, "commit", "-qm", "add authored migration")
+    target_with_migration = _git(world.work, "rev-parse", "HEAD")
+    with_migration = rel.rollback_findings(env, target_with_migration, target_with_migration,
+                                          registry)
+    assert with_migration[4][1].endswith(": 0011")
 
 
 def test_a_non_additive_migration_is_rollback_safe_only_from_its_named_release(

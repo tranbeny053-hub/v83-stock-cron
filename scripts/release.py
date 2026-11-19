@@ -962,12 +962,15 @@ def _migration_label(migration: dict[str, Any]) -> str:
 def rollback_findings(
     env: Env, target: str, current: str, registry: dict[str, Any]
 ) -> list[tuple[bool, str]]:
+    """Compare registered migrations with top-level and authored files at the target."""
     entry = next((item for item in registry["releases"] if item["commit"] == target), None)
-    target_migrations = {
-        Path(name).name[:4]
-        for name in git_text(env, "ls-tree", "--name-only", target, "migrations/").splitlines()
-        if re.fullmatch(r"\d{4}_.*\.sql", Path(name).name)
-    }
+    target_migrations: set[str] = set()
+    for directory in ("migrations/", "migrations/authored/"):
+        target_migrations.update(
+            Path(name).name[:4]
+            for name in git_text(env, "ls-tree", "--name-only", target, directory).splitlines()
+            if re.fullmatch(r"\d{4}_.*\.sql", Path(name).name)
+        )
     newer = [m for m in registry["migrations_applied"] if m["id"] not in target_migrations]
     return [
         (entry is not None, f"{target[:12]} is a registered release"),
