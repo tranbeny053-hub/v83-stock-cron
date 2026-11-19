@@ -2,6 +2,19 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-18 - the source-integrity guard re-pinned to UCPE-PROD-NG4P-20261118-B (on main; no runtime change)
+
+It records #353. Production's bytes did not change: the guard and the release registry now name what production
+already serves.
+
+Changed:
+- #353: `scripts/release.py repin` produced its deterministic three-file commit from production's bytes. The runtime
+  baseline (`ops/hf_runtime_baseline.json`), the release registry's new entry and the guard test now name
+  UCPE-PROD-NG4P-20261118-B at 49ab0855, and the guard's expected runtime delta is empty. The guard run dispatched on
+  main right after the merge (44354977319) read HEALTHY three times, with the pin, the live Space and the intended
+  release all agreeing. No guard run ran between the deploy and the re-pin (none between dispatch 44323378283 on D
+  and dispatch 44354977319 on R), so none reported the expected drift.
+
 ## 2026-11-18 - NG4: the pilot switched on and released as UCPE-PROD-NG4P-20261118-B
 
 It records #348, #349 and #351, and it carries every entry below back to the P7P release (2026-10-17), each headed
