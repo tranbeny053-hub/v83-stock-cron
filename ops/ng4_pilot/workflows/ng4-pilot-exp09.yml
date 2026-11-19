@@ -1,0 +1,113 @@
+# Registered only when this file is directly under .github/workflows (an owner T3 renames it unchanged); while it sits in ops/ng4_pilot/workflows/ GitHub never runs it.
+name: NG4 pilot EXP-09 (READ ONLY)
+
+# DELIBERATELY NO automatic trigger: dispatch-only. GitHub registers this file only directly under
+# .github/workflows; its script names that path, so a dispatch of a copy anywhere else is refused.
+# A dispatch is the owner's request, approved in the production-db-owner Environment, and a one-shot
+# production read. EXP-09 reports counts, statuses, timestamps and whole-table sizes only.
+#
+# TRUST BOUNDARY. Exact CPython 3.13.14, pinned Actions, bundled pip and lock-authenticated wheelhouse;
+# `python -I -S -B`; dispatch bound to this workflow, owner repository, main and expected_sha. Inputs
+# enter shell commands only through env and double quotes; every step uses bash. The protected
+# Environment is production-db-owner. Only the production read step receives the database secret.
+#
+# CONCURRENCY. The section-5a-evaluation group serializes this route with the repository's protected
+# database dispatch workflows.
+
+"on":
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: REQUIRED. The full 40-character commit SHA on main that the owner reviewed
+        required: true
+        type: string
+      as_of_utc:
+        description: Optional whole-minute UTC Z instant within the pilot window
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: section-5a-evaluation
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    environment: production-db-owner
+    timeout-minutes: 20
+    steps:
+      - name: Check out the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: "false"
+
+      - name: Install the exact pinned interpreter
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7
+        with:
+          python-version: "3.13.14"
+          check-latest: "false"
+
+      - name: Install the hash-locked set with CPython's bundled pip, from authenticated wheels
+        shell: bash
+        # A literal block: `:all: ` in a plain YAML scalar would make the whole file invalid.
+        run: |
+          python -I -S -B scripts/evaluate_section_5a.py --remove-floating-installer
+          bundled_pip="$(python -I -S -B scripts/evaluate_section_5a.py --bundled-pip)"
+          python -I -S -B "$bundled_pip/pip" download --no-cache-dir --disable-pip-version-check \
+            --require-hashes --no-deps --only-binary=:all: --dest "$RUNNER_TEMP/section-5a-wheels" \
+            -r ops/section_5a_evaluator_requirements.lock
+          python -I -S -B "$bundled_pip/pip" install --no-cache-dir --disable-pip-version-check \
+            --no-index --find-links "$RUNNER_TEMP/section-5a-wheels" --no-compile \
+            --require-hashes --no-deps --only-binary=:all: \
+            -r ops/section_5a_evaluator_requirements.lock
+
+      - name: Attest isolation, dispatch and runtime for this workflow (no database)
+        shell: bash
+        env:
+          NG4_PILOT_EXP09_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          NG4_PILOT_EXP09_AS_OF: ${{ inputs.as_of_utc }}
+        run: python -I -S -B scripts/ng4_pilot_exp09.py --mode=attest --expected-sha="$NG4_PILOT_EXP09_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels"
+
+      - name: Rehearse the EXP-09 route on scratch PostgreSQL (no secret)
+        shell: bash
+        env:
+          NG4_PILOT_EXP09_REHEARSAL_URL: "postgresql:///ng4_pilot_exp09_rehearsal?host=/var/run/postgresql"
+          NG4_PILOT_EXP09_REHEARSAL_NOW: "2026-12-07T00:30:00Z"
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -X -q -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$(id -un)\" LOGIN CREATEROLE"
+          sudo -u postgres createdb -O "$(id -un)" ng4_pilot_exp09_rehearsal
+          set +e
+          output="$(python -I -S -B scripts/ng4_pilot_exp09.py --mode=rehearse --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --as-of=2026-11-30T00:00:00Z --report=ng4-pilot-exp09-scratch.json)"
+          code=$?
+          set -e
+          test "$code" -eq 2
+          printf '%s\n' "$output" | python -c 'import json,sys; assert json.load(sys.stdin)["refusal"] == "NO_READ_PATH"'
+
+      - name: Run EXP-09 route tests (no secret)
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONNOUSERSITE: "1"
+        run: python -s -B -m pytest -q -p no:cacheprovider tests/scripts/test_ng4_pilot_exp09.py tests/workflows/test_ng4_pilot_authored_workflows.py
+
+      - name: Read EXP-09 once, read only (the ONLY step that receives the database secret)
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          NG4_PILOT_EXP09_EXPECTED_SHA: ${{ inputs.expected_sha }}
+          NG4_PILOT_EXP09_AS_OF: ${{ inputs.as_of_utc }}
+        run: python -I -S -B scripts/ng4_pilot_exp09.py --mode=run --expected-sha="$NG4_PILOT_EXP09_EXPECTED_SHA" --wheelhouse="$RUNNER_TEMP/section-5a-wheels" --report=ng4-pilot-exp09.json
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        with:
+          name: ng4-pilot-exp09
+          path: |
+            ng4-pilot-exp09.json
+            ng4-pilot-exp09-scratch.json
+          if-no-files-found: warn

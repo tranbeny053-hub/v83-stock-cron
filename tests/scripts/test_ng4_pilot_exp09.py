@@ -162,6 +162,7 @@ def test_report_is_deterministic_and_has_fixed_order_and_values():
         "evidence_use",
         "population",
         "claim",
+        "look_spent",
         "verdict",
         "thresholds",
         "http_counts",
@@ -175,12 +176,14 @@ def test_report_is_deterministic_and_has_fixed_order_and_values():
     assert first["evidence_use"] == "TEST_ONLY"
     assert first["population"] == "E1_OPERATIONAL"
     assert first["claim"] == "NONE"
+    assert first["look_spent"] == "NONE (counts, statuses and timestamps only)"
     assert first["verdict"] == "NOT_JUDGED_THRESHOLD_UNRULED"
     assert first["thresholds"] == "OD-NG-7 unruled; none applied or stored"
     assert first["http_counts"] == "NOT_IN_DATABASE"
     assert first["as_of_utc"] == "2026-11-30T00:00:00Z"
     assert first["provisional"] is True
     assert first["dispatched_sha"] == args[1]
+    assert exp09.assemble_report(args[0], "not-a-sha")["dispatched_sha"] is None
     assert set(first) & {"threshold", "threshold_value", "completeness_threshold"} == set()
     assert "0.90" not in exp09.dumps(first)
 
@@ -410,3 +413,49 @@ def test_rehearse_url_refusals_and_dispatch_workflow_constant(capsys):
     report = capsys.readouterr().out
     assert "URL_REFUSED" in report
     assert exp09.main(["--mode", "run", "--expected-sha", "a" * 40], environ={}) == 2
+
+
+def test_rehearsal_clock_is_rehearse_only_and_validated(capsys):
+    clock = "2026-12-07T00:30:00Z"
+    with patch.object(exp09, "parse_as_of", wraps=exp09.parse_as_of) as parse:
+        assert exp09.main(
+            ["--mode", "rehearse", "--as-of", "2026-11-30T00:00:00Z"],
+            environ={"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://localhost/test",
+                     "NG4_PILOT_EXP09_REHEARSAL_NOW": clock},
+        ) == 1
+        assert parse.call_args.args[1] == datetime(2026, 12, 7, 0, 30, tzinfo=UTC)
+    for mode in ("attest", "run"):
+        assert exp09.main(["--mode", mode], environ={
+            "NG4_PILOT_EXP09_REHEARSAL_NOW": clock,
+        }) == 2
+    assert exp09.main(
+        ["--mode", "rehearse", "--as-of", "2026-11-30T00:00:00Z"],
+        environ={"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://localhost/test",
+                 "NG4_PILOT_EXP09_REHEARSAL_NOW": "2026-12-07T00:30:01Z"},
+    ) == 2
+    assert "REHEARSAL_NOW_REFUSED" in capsys.readouterr().out
+
+
+def test_rehearse_cli_fake_driver_deterministic_except_read_timestamp(capsys):
+    class Driver:
+        calls = 0
+
+        @classmethod
+        def connect(cls, *_args, **_kwargs):
+            cls.calls += 1
+            responses = basic_responses()
+            responses["read_at"] = [(datetime(2026, 11, 30, 0, cls.calls, tzinfo=UTC),)]
+            return FakeConnection(responses)
+
+    env = {"NG4_PILOT_EXP09_REHEARSAL_URL": "postgresql://localhost/test",
+           "NG4_PILOT_EXP09_REHEARSAL_NOW": "2026-12-07T00:30:00Z"}
+    with patch.object(exp09, "load_driver", return_value=Driver):
+        outputs = []
+        for _ in range(2):
+            assert exp09.main(["--mode", "rehearse", "--as-of", "2026-11-30T00:00:00Z"],
+                              environ=env) == 0
+            outputs.append(capsys.readouterr().out)
+    left, right = [__import__("json").loads(value) for value in outputs]
+    left.pop("read_at_db_utc")
+    right.pop("read_at_db_utc")
+    assert __import__("json").dumps(left) == __import__("json").dumps(right)

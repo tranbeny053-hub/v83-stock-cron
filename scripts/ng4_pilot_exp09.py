@@ -255,6 +255,7 @@ def assemble_report(
         "evidence_use": "TEST_ONLY",
         "population": "E1_OPERATIONAL",
         "claim": "NONE",
+        "look_spent": "NONE (counts, statuses and timestamps only)",
         "verdict": "NOT_JUDGED_THRESHOLD_UNRULED",
         "thresholds": "OD-NG-7 unruled; none applied or stored",
         "http_counts": "NOT_IN_DATABASE",
@@ -264,7 +265,8 @@ def assemble_report(
         "window": {"start": _iso_z(start), "end": _iso_z(end)},
         "as_of_utc": _iso_z(as_of),
         "provisional": as_of < PILOT_END_UTC,
-        "dispatched_sha": dispatched_sha,
+        "dispatched_sha": dispatched_sha if isinstance(dispatched_sha, str)
+        and re.fullmatch(r"[0-9a-f]{40}", dispatched_sha) else None,
     }
     if sections:
         report.update(sections)
@@ -536,13 +538,16 @@ def load_driver():
 def _empty_report(as_of, dispatched_sha):
     return assemble_report(as_of, dispatched_sha) if as_of else {
         "schema": REPORT_SCHEMA, "evidence_use": "TEST_ONLY", "population": "E1_OPERATIONAL",
-        "claim": "NONE", "verdict": "NOT_JUDGED_THRESHOLD_UNRULED",
+        "claim": "NONE", "look_spent": "NONE (counts, statuses and timestamps only)",
+        "verdict": "NOT_JUDGED_THRESHOLD_UNRULED",
         "thresholds": "OD-NG-7 unruled; none applied or stored", "http_counts": "NOT_IN_DATABASE",
         "http_counts_note": (
             "Provider exchanges appear only in the Space's own logs (owner-visible)."
         ),
         "window": {"start": _iso_z(PILOT_START_UTC), "end": _iso_z(PILOT_END_UTC)},
-        "as_of_utc": None, "provisional": True, "dispatched_sha": dispatched_sha,
+        "as_of_utc": None, "provisional": True,
+        "dispatched_sha": dispatched_sha if isinstance(dispatched_sha, str)
+        and re.fullmatch(r"[0-9a-f]{40}", dispatched_sha) else None,
     }
 
 
@@ -558,8 +563,25 @@ def main(argv=None, *, environ=None):
     report = _empty_report(None, args.expected_sha)
     code = 1
     try:
+        rehearsal_clock = env.get("NG4_PILOT_EXP09_REHEARSAL_NOW")
+        if args.mode == "rehearse":
+            if rehearsal_clock is None:
+                now = datetime.now(UTC)
+            else:
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00Z", rehearsal_clock):
+                    raise Refused("REHEARSAL_NOW_FORMAT")
+                try:
+                    now = datetime.strptime(
+                        rehearsal_clock, "%Y-%m-%dT%H:%M:%SZ"
+                    ).replace(tzinfo=UTC)
+                except ValueError:
+                    raise Refused("REHEARSAL_NOW_FORMAT") from None
+        else:
+            if rehearsal_clock is not None:
+                raise Refused("REHEARSAL_NOW_REFUSED")
+            now = datetime.now(UTC)
         as_of_text = args.as_of or env.get("NG4_PILOT_EXP09_AS_OF")
-        as_of = parse_as_of(as_of_text, datetime.now(UTC))
+        as_of = parse_as_of(as_of_text, now)
         report = _empty_report(as_of, args.expected_sha)
         if args.mode in ("attest", "run") and not args.wheelhouse:
             raise Refused("RUNTIME")
@@ -583,6 +605,7 @@ def main(argv=None, *, environ=None):
                     args.expected_sha, authored_capacity_body(ROOT),
                 )
                 report = measured
+                report["dispatch"] = dispatch
                 report["outcome"] = "READ_OK"
                 code = 0
         else:
@@ -596,7 +619,7 @@ def main(argv=None, *, environ=None):
                 driver = load_driver()
                 attest_loaded_modules(isolation)
             else:
-                driver = __import__("psycopg")
+                driver = load_driver()
             report = measure(
                 lambda: driver.connect(url, connect_timeout=8), as_of,
                 args.expected_sha or "", authored_capacity_body(ROOT),
@@ -618,6 +641,10 @@ def main(argv=None, *, environ=None):
                 report["sqlstate"] = sqlstate
             code = 1
     encoded = dumps(report)
+    dispatched = report.get("dispatched_sha")
+    if not isinstance(dispatched, str) or not re.fullmatch(r"[0-9a-f]{40}", dispatched):
+        report["dispatched_sha"] = None
+        encoded = dumps(report)
     print(encoded, end="")
     if args.report:
         Path(args.report).write_text(encoded, encoding="utf-8")

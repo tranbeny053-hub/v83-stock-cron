@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One scratch PostgreSQL cluster for the migration 0019 rehearsal (NG4, Route S). A local run and the CI workflow
 # run this same script:
-#   run_scratch.sh <postgres bin dir> <fresh work dir> <report path> <on|off|pilot>
+#   run_scratch.sh <postgres bin dir> <fresh work dir> <report path> <on|off|pilot|exp09>
 # It starts a private server listening on a socket only (no TCP) with track_commit_timestamp set as asked, applies
 # the Supabase-like role fixtures and every root migration (production's applied state) as a CREATEROLE
 # non-superuser owner, runs rehearse.py, which applies migrations/authored/0019_lattice_evidence.sql and probes it,
@@ -13,9 +13,9 @@ BIN="$1"
 WORK="$2"
 REPORT="$3"
 COMMIT_TS="$4"
-case "$COMMIT_TS" in on|off|pilot) ;; *) echo "REFUSED: the fourth argument must be on, off or pilot" >&2; exit 2 ;; esac
+case "$COMMIT_TS" in on|off|pilot|exp09) ;; *) echo "REFUSED: the fourth argument must be on, off, pilot or exp09" >&2; exit 2 ;; esac
 MODE="$COMMIT_TS"
-[ "$MODE" = pilot ] && COMMIT_TS=on
+[ "$MODE" = pilot ] || [ "$MODE" = exp09 ] && COMMIT_TS=on
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OWNER="$(id -un)"
 DB=migration_0019_rehearsal
@@ -60,6 +60,12 @@ if [ "$MODE" = pilot ]; then
     --url "postgresql:///$DB?host=$SOCKET&user=$OWNER" \
     --super-url "postgresql:///$DB?host=$SOCKET&user=postgres" \
     --space-url "postgresql:///$DB?host=$SOCKET&user=ucpe_space_db" --report "$REPORT"
+  exit $?
+fi
+if [ "$MODE" = exp09 ]; then
+  "${PYTHON:-python}" "$ROOT/scripts/migration_0019_rehearsal/rehearse_exp09.py" \
+    --url "postgresql:///$DB?host=$SOCKET&user=$OWNER" \
+    --super-url "postgresql:///$DB?host=$SOCKET&user=postgres" --report "$REPORT"
   exit $?
 fi
 "${PYTHON:-python}" "$ROOT/scripts/migration_0019_rehearsal/rehearse.py" \
