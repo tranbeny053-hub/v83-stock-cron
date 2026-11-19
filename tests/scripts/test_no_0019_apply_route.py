@@ -51,8 +51,8 @@ def test_0020_apply_route_is_explicitly_narrow_and_general_route_refuses() -> No
 
 
 def test_registered_apply_route_is_the_one_shot_owner_dispatch() -> None:
-    # The preflight and EXP-09 are registered for owner dispatch; dispatching the apply is the
-    # one-shot T4.
+    # The preflight, the apply and EXP-09 are registered for owner dispatch; dispatching the apply
+    # is the one-shot T4.
     scripts = sorted(p.name for p in (ROOT / "scripts").glob("apply_migration_0019*"))
     assert scripts == ["apply_migration_0019.py"]
     source = (ROOT / "scripts/apply_migration_0019.py").read_text(encoding="utf-8")
@@ -80,7 +80,9 @@ def test_registered_apply_route_is_the_one_shot_owner_dispatch() -> None:
             assert all(s not in text for s in ("0019_lattice", "apply_migration", "--mode=apply"))
             continue
         if path == WORKFLOWS / "ng4-pilot-exp09.yml":
-            assert "0019_lattice" not in text and "ucpe_lattice" not in text
+            # As the preflight's: never the migration file, the apply script or an apply mode.
+            assert all(s not in text for s in ("0019_lattice", "ucpe_lattice", "apply_migration",
+                                               "--mode=apply"))
             continue
         assert "0019" not in path.name and "0019_lattice" not in text and "ucpe_lattice" not in text
 

@@ -1,8 +1,8 @@
 # NG4 pilot database routes
 
-The preflight and EXP-09 routes are registered for owner dispatch; dispatch remains a separate
-owner authorization. Dispatching the apply is the one-shot T4. The preflight is a production read.
-Applying 0019 + capacity + 0020 must never be rerun.
+The preflight, the one-shot apply and the EXP-09 routes are registered for owner dispatch; each
+dispatch is a separate owner authorization. Dispatching the apply is the one-shot T4 (consumed by
+run 44133908695; never rerun). The preflight is a production read.
 
 `ng4-pilot-preflight.yml` runs `scripts/ng4_pilot_preflight.py`. Its first statement is `SET TRANSACTION READ ONLY`; it inspects catalogs and rolls back. READY means every first-apply condition currently checked is true. The event-trigger allowlist is empty: the route allowlists no provider event-trigger name, so every DDL event trigger is counted as not allowlisted; the preflight reports each one's name, event and enabled state (never its definition) for the owner's assessment before the apply.
 
