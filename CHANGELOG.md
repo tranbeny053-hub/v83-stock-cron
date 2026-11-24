@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-24 - NGA: the dormant registry v2 (on main, not released)
+
+It records #361. Nothing in this entry is released: production still serves 49ab0855. The served path does not
+change: the analysis service still builds the empty v1 registry, and the NG pipeline stays switched off.
+
+Added:
+- #361: `quant_ng/registry.py` gains the dormant `quant-ng-registry.v2` with NGA v2's vocabulary (owner ruling
+  NG6-D1 = A): six research statuses, five claim statuses, F.3's six serving states plus the provisional
+  HOLD_HIDDEN_REFERENCE, and five independent permission flags. `validate_registry_v2` first checks the entry,
+  claim-record and authorization-reference shapes approved under NG6-D2, then refuses everything beyond the
+  initial state: any authorization, any look-bearing claim, any true permission flag, any serving state other than
+  HOLD_HIDDEN_REFERENCE, any research status other than NONE or SHADOW, and any claim status other than NOT_RUN. E1
+  (TEST_ONLY) and E4 evidence are refused by name as claim evidence. It reads each input mapping once and returns
+  read-only snapshots.
+
+Changed:
+- #361: `serving_state` validates a v2 registry with `validate_registry_v2` and every other schema exactly as
+  before (`validate_registry`, which refuses v2 as unsupported); for the same entry its result is field-identical.
+  `ServingState` now refuses a status other than NONE or SHADOW, and a slot policy other than KEEP_HOLD's.
+  `docs/NG_SCALE_CONTRACTS.md` gains a "Registry v2 (dormant)" section that names the open items NG6-R1 to NG6-R5.
+
 ## 2026-11-19 - NG4: the EXP-09 route, and migrations 0019/0020 registered (on main, not released)
 
 It records #356, #357 and #358. Nothing in this entry is released: production still serves 49ab0855, and none of
