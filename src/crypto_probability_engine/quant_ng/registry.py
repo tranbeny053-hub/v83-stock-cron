@@ -332,7 +332,7 @@ def validate_registry_v2(registry: object) -> tuple[_MappingProxyType, ...]:
             missing_flag = sorted(PERMISSION_FLAGS - set(permissions))[0]
             raise Refusal(f"missing permission flag: {missing_flag}")
         checked_permissions = {}
-        for flag in PERMISSION_FLAGS:
+        for flag in sorted(PERMISSION_FLAGS):  # a fixed order: the same input, the same message
             value = permissions[flag]
             if type(value) is not bool:
                 raise Refusal(f"permission flag must be a bool: {flag}")
@@ -466,7 +466,7 @@ class ServingState:
             raise Refusal("tier must be HEURISTIC under KEEP_HOLD")
         if self.reference != "HIDDEN":
             raise Refusal("reference must be HIDDEN under KEEP_HOLD")
-        if self.status not in {"NONE", "SHADOW"}:
+        if not isinstance(self.status, str) or self.status not in ("NONE", "SHADOW"):
             raise Refusal("status not admitted under KEEP_HOLD")
         if self.slot_policy != SLOT_POLICY:
             raise Refusal("slot policy not admitted under KEEP_HOLD")
@@ -474,19 +474,11 @@ class ServingState:
 
 def serving_state(registry: object, cell: object, now: datetime) -> ServingState:
     """Return the heuristic authority state; the reference remains hidden."""
-    if isinstance(registry, Mapping) and "schema" in registry:
-        schema = registry["schema"]
-        if schema == SCHEMA_ID_V2:
-            entries = validate_registry_v2(registry)
-            is_v2 = True
-        elif schema == SCHEMA_ID:
-            entries = validate_registry(registry)
-            is_v2 = False
-        else:
-            raise Refusal("registry schema is unsupported")
+    # Only a v2 registry leaves today's path; every other input meets v1's checks and messages.
+    if isinstance(registry, Mapping) and registry.get("schema") == SCHEMA_ID_V2:
+        entries, is_v2 = validate_registry_v2(registry), True
     else:
-        entries = validate_registry(registry)
-        is_v2 = False
+        entries, is_v2 = validate_registry(registry), False
     query_cell = _validate_cell(cell)
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise Refusal("now must be a tz-aware UTC datetime")

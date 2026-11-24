@@ -44,16 +44,44 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 - `candidate` delegates C1's triplet to `candidate_r4_c1` behind an ELIGIBLE manifest, the σ guard,
   and the central range; no model constants exist in the repository.
 
+## Registry v2 (dormant)
+
+`quant-ng-registry.v2` (owner rulings NG6-D1 = A, NG6-D2, NG6-D3, 2026-11-24) carries NGA v2's vocabulary:
+research status (NONE, SHADOW, TRANSFER, HISTORICALLY_CONFIRMED, BASE_RATE_EQUIVALENT, REJECTED), claim status
+(NOT_RUN, SUPPORTED_FOR_NAMED_SCOPE, NOT_SUPPORTED, INCONCLUSIVE, UNINFORMATIVE), serving state, five permission
+flags, and the claim-record and authorization-reference shapes. It is validated strictly, and everything beyond
+NONE/SHADOW research, NOT_RUN claims, the HOLD_HIDDEN_REFERENCE serving state and five false flags is refused: no
+claim, authorization or permission is reachable, and a record's presence never counts. v1 is unchanged and stays
+the served schema. Open for the owner: NG6-R1 how grants map to flags and serving states; NG6-R2 how a cell's claim
+status derives from its records; NG6-R3 the per-cell serving-state vocabulary beyond the provisional hold value;
+NG6-R4 NONE and an absent cell both serve NONE; NG6-R5 whether C-hier (EXP-05) becomes a registry claim type.
+
 ## Deliberately absent
 
-### Registry v2 (dormant)
+The dormant NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is an isolated, default-OFF, REF-only TEST_ONLY pilot preparation. It has no startup hook, declared cell, prior value, or configured capacity; row and missed-entry payloads match the exact key contracts in authored migration 0019, which remains unapplied. The lattice uses tc-v1's round-trip cost as its decision band and refuses rows whose reference close is not the scheduled lattice instant. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors. The NG4 pilot runner and startup hook remain dormant while `LATTICE_ENABLED` is false, with no environment or database access. Pilot fixtures are operational placeholders and are excluded from statistical use.
 
-`quant-ng-registry.v2` (owner rulings NG6-D1 = A, NG6-D2, NG6-D3, 2026-11-24) carries NGA v2's vocabulary: research
-status (NONE, SHADOW, TRANSFER, HISTORICALLY_CONFIRMED, BASE_RATE_EQUIVALENT, REJECTED), claim status (NOT_RUN,
-SUPPORTED_FOR_NAMED_SCOPE, NOT_SUPPORTED, INCONCLUSIVE, UNINFORMATIVE), serving state, five permission flags, and
-the claim-record and authorization-reference shapes. It is validated strictly, and everything beyond NONE/SHADOW
-research, NOT_RUN claims, the HOLD_HIDDEN_REFERENCE serving state and five false flags is refused: no claim,
-authorization or permission is reachable, and a record's presence never counts. v1 is unchanged and stays the
-served schema. Open for the owner: NG6-R1 how grants map to flags and serving states; NG6-R2 how a cell's claim
-status derives from its records; NG6-R3 the serving-state transitions after OD-NG-4; NG6-R5 whether C-hier (EXP-05)
-becomes a registry claim type.
+When enabled by a reviewed change, the runner processes only its named half-open window and records per-process checkpoint counts. Its worker steps are serialized, use public Binance data directly, and preserve the default-off coalescing policy outside each step.
+
+The NG1 registry and `pipeline_ng` now exist as dormant modules encoding KEEP_HOLD and DEFER;
+they do not wire into a serving path. `quant_ng` already depends on `gates` transitively through
+`quant.pipeline.stable_hash`; `pipeline_ng.py` has the one direct allowance for
+`gates.composite.apply_composite_gates`. There is still no wiring, lattice, model constant, prior
+value, decision tolerance, F3 or look. The reference tier's priors and the candidate's constants
+are always the caller's; none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
+implemented, and 1W under the owner's 2026-10-23 ruling (DEV-only, no F3 access). EXP-01 and
+EXP-02 ran once each under the owner's 2026-10-22 rulings (recorded in STATE); the parity
+tests here are synthetic. S-R2 revision evidence and
+S-R4 retention (including never deleting claim evidence and capacity stop rules) are process
+rules with no code here. S-E3 freeze content and S-C1's maximum commit delay are protocol and
+owner matters; this code sets neither. These safeguards are executable proposals only; they do
+not select or serve a model.
+
+NG3 imports `pipeline_ng` in `analysis_service.py` behind the owner-approved, default-OFF constant;
+only the recorded human path can reach it, and OFF preserves the existing response and persistence
+bytes. ON adds one optional `ng_serving` object with HIDDEN/NONE/UNAVAILABLE states; the heuristic
+remains authoritative, and no candidate becomes authoritative. There is no lattice or
+`quant_ng/lattice.py`, no frontend display (OD5 shadow data remains out of the normal UI), no
+migration 0019 or writes to the new population/timing columns, and no fit, refit, activation, or
+serving rule from §H.3. The §H.5 fields are nested in `ng_serving`; `not_a_forecast` is omitted to
+preserve `probability_state`, and `candidate_shadow` is absent because KEEP_HOLD creates no
+candidate. `h_extended_context` is explicitly UNAVAILABLE/NOT_MODELED.

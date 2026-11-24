@@ -339,12 +339,9 @@ def test_changing_mapping_status_is_snapshotted_once():
     entry = _ChangingEntry(_v2_entry())
     registry = _v2_registry()
     registry["cells"] = [entry]
-    try:
-        state = serving_state(registry, CELL, NOW)
-        assert state.status == "SHADOW"
-    except Refusal:
-        pass
-    assert entry.status_reads <= 1
+    state = serving_state(registry, CELL, NOW)  # v2 serves from its snapshot (review NG6-C1 4)
+    assert state.status == "SHADOW"
+    assert entry.status_reads == 1
 
 
 def test_decision_view_acceptance_guard_remains_closed():
@@ -552,3 +549,47 @@ def test_e1_and_e4_populations_are_refused_by_name(population):
 def test_each_known_non_hold_serving_state_alone_is_refused(state):
     with pytest.raises(Refusal, match="^not ruled: OD-NG-4 KEEP_HOLD$"):
         validate_registry_v2(_v2_registry(_v2_entry(serving_state=state)))
+
+
+# Review NG6-C1 2: the same input gives the same message, whatever the hash seed.
+def test_flag_order_is_fixed():
+    every_true = {flag: True for flag in PERMISSION_FLAGS}
+    with pytest.raises(Refusal, match="^permission not ruled in this build: directional$"):
+        validate_registry_v2(_v2_registry(_v2_entry(permissions=every_true)))
+    every_one = {flag: 1 for flag in PERMISSION_FLAGS}
+    with pytest.raises(Refusal, match="^permission flag must be a bool: directional$"):
+        validate_registry_v2(_v2_registry(_v2_entry(permissions=every_one)))
+    snapshot = validate_registry_v2(_v2_registry(_v2_entry()))
+    assert list(snapshot[0]["permissions"]) == sorted(PERMISSION_FLAGS)
+
+
+# Review NG6-C1 3: a non-v2 input takes today's path, so its first message is unchanged.
+def test_serving_state_keeps_the_v1_message_precedence():
+    future = {"schema": "future", "slot_policy": SLOT_POLICY, "cells": [], "extra": 1}
+    with pytest.raises(Refusal, match="^unknown registry key: extra$"):
+        serving_state(future, CELL, NOW)
+    with pytest.raises(Refusal, match="^registry schema is unsupported$"):
+        serving_state({"schema": "future", "slot_policy": SLOT_POLICY, "cells": []}, CELL, NOW)
+
+
+# Review NG6-C1 4: on the v1 path the ServingState guard is the sink that refuses a status flip.
+def test_v1_status_flip_is_refused_at_the_sink():
+    class FlippingV1(Mapping):
+        def __init__(self, data):
+            self.data, self.reads = dict(data), 0
+
+        def __getitem__(self, key):
+            if key == "status":
+                self.reads += 1
+                return "SHADOW" if self.reads == 1 else "TRIPLET_ACCEPTED"
+            return self.data[key]
+
+        def __iter__(self):
+            return iter(self.data)
+
+        def __len__(self):
+            return len(self.data)
+
+    registry = _v1_registry(FlippingV1(_v1_entry()))
+    with pytest.raises(Refusal, match="^status not admitted under KEEP_HOLD$"):
+        serving_state(registry, CELL, NOW)
