@@ -2,6 +2,31 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-19 - NG4: the EXP-09 route, and migrations 0019/0020 registered (on main, not released)
+
+It records #356, #357 and #358. Nothing in this entry is released: production still serves 49ab0855, and none of
+these files is in its runtime.
+
+Added:
+- #357: `scripts/ng4_pilot_exp09.py`, the read-only EXP-09 measurement of the NG4 pilot. It reads in one REPEATABLE
+  READ, READ ONLY transaction that always ends in ROLLBACK, and reads only counts, statuses, timestamps and
+  whole-table sizes of `ucpe_lattice`, through an identifier allowlist. It never reads a probability, price or band
+  value, nothing from the statistics catalogs, and no whole row. It refuses NO_READ_PATH, measuring nothing, unless
+  the reading role is a superuser or has BYPASSRLS with USAGE and SELECT, and it sets `row_security` off so a
+  filtered read fails instead of returning zeros. It applies no threshold: it reports issued and accounted
+  fractions, unlogged runs, timing, receipts, occupancy and capacity. Its scratch rehearsal (`run_scratch.sh ...
+  exp09`) runs on every pull request that touches the route.
+
+Changed:
+- #356: migrations 0019 and 0020 are in the release registry as additive (applied together by run 44133908695), so
+  `scripts/release.py rollback-check` now assesses them; a rollback to P7P lists both and keeps working. The check
+  also counts `migrations/authored/` files at the target as present. **Rule:** an authored migration must now be
+  registered like a top-level one, with `"applied_run": null` until it is applied; until then check 5c blocks every
+  release, and the registry test's `unapplied == []` assertion must be edited to name it.
+- #358: the EXP-09 route is registered at `.github/workflows/ng4-pilot-exp09.yml` (dispatch-only; it has never
+  run). Each read is a separate owner one-shot; the end-of-window read must not start before 2026-12-07T00:10Z,
+  or it is refused with END_NOT_SETTLED.
+
 ## 2026-11-18 - the source-integrity guard re-pinned to UCPE-PROD-NG4P-20261118-B (on main; no runtime change)
 
 It records #353. Production's bytes did not change: the guard and the release registry now name what production
