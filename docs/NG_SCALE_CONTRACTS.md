@@ -44,6 +44,18 @@ sections: §5.1, §5.3, §7.1, §12.2, §12.3, and §21 OD-FINAL-6.
 - `candidate` delegates C1's triplet to `candidate_r4_c1` behind an ELIGIBLE manifest, the σ guard,
   and the central range; no model constants exist in the repository.
 
+## Registry v2 (dormant)
+
+`quant-ng-registry.v2` (owner rulings NG6-D1 = A, NG6-D2, NG6-D3, 2026-11-24) carries NGA v2's vocabulary:
+research status (NONE, SHADOW, TRANSFER, HISTORICALLY_CONFIRMED, BASE_RATE_EQUIVALENT, REJECTED), claim status
+(NOT_RUN, SUPPORTED_FOR_NAMED_SCOPE, NOT_SUPPORTED, INCONCLUSIVE, UNINFORMATIVE), serving state, five permission
+flags, and the claim-record and authorization-reference shapes. It is validated strictly, and everything beyond
+NONE/SHADOW research, NOT_RUN claims, the HOLD_HIDDEN_REFERENCE serving state and five false flags is refused: no
+claim, authorization or permission is reachable, and a record's presence never counts. v1 is unchanged and stays
+the served schema. Open for the owner: NG6-R1 how grants map to flags and serving states; NG6-R2 how a cell's claim
+status derives from its records; NG6-R3 the per-cell serving-state vocabulary beyond the provisional hold value;
+NG6-R4 NONE and an absent cell both serve NONE; NG6-R5 whether C-hier (EXP-05) becomes a registry claim type.
+
 ## Deliberately absent
 
 The dormant NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is an isolated, default-OFF, REF-only TEST_ONLY pilot preparation. It has no startup hook, declared cell, prior value, or configured capacity; row and missed-entry payloads match the exact key contracts in authored migration 0019, which remains unapplied. The lattice uses tc-v1's round-trip cost as its decision band and refuses rows whose reference close is not the scheduled lattice instant. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors. The NG4 pilot runner and startup hook remain dormant while `LATTICE_ENABLED` is false, with no environment or database access. Pilot fixtures are operational placeholders and are excluded from statistical use.
