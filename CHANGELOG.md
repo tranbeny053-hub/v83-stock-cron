@@ -11,11 +11,11 @@ Added:
 - #361: `quant_ng/registry.py` gains the dormant `quant-ng-registry.v2` with NGA v2's vocabulary (owner ruling
   NG6-D1 = A): six research statuses, five claim statuses, F.3's six serving states plus the provisional
   HOLD_HIDDEN_REFERENCE, and five independent permission flags. `validate_registry_v2` first checks the entry,
-  claim-record and authorization-reference shapes approved under NG6-D2, then refuses everything beyond the
-  initial state: any authorization, any look-bearing claim, any true permission flag, any serving state other than
-  HOLD_HIDDEN_REFERENCE, any research status other than NONE or SHADOW, and any claim status other than NOT_RUN. E1
-  (TEST_ONLY) and E4 evidence are refused by name as claim evidence. It reads each input mapping once and returns
-  read-only snapshots.
+  claim-record and authorization-reference shapes approved under NG6-D2, then refuses everything beyond the initial
+  state: any authorization, any claim, any true permission flag, any serving state other than HOLD_HIDDEN_REFERENCE,
+  any research status other than NONE or SHADOW, and any claim status other than NOT_RUN. The populations
+  `E1_OPERATIONAL` (the TEST_ONLY pilot's) and `E4_USER_REQUESTED` are refused by name as claim evidence. It reads
+  each input mapping once and returns read-only snapshots.
 
 Changed:
 - #361: `serving_state` validates a v2 registry with `validate_registry_v2` and every other schema exactly as
