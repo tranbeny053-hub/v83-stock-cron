@@ -163,7 +163,8 @@ def test_dormant_refusal_order_is_after_valid_claim_and_authorization_structure(
         authorization_refs=[reference],
         permissions={**PERMISSIONS, "directional": True},
     )
-    with pytest.raises(Refusal, match="^no look exists in this build"):
+    # The authorization is refused first (it needs claims); a well-formed record never counts.
+    with pytest.raises(Refusal, match="^no authorization exists in this build$"):
         validate_registry_v2(_v2_registry(entry))
 
 
@@ -245,7 +246,7 @@ def test_valid_claim_record_is_checked_before_the_dormant_refusal():
 
 def test_authorization_reference_structure_and_cross_checks():
     good_entry = _v2_entry(claims=[_claim()], authorization_refs=[_authorization()])
-    with pytest.raises(Refusal, match="^no look exists in this build"):
+    with pytest.raises(Refusal, match="^no authorization exists in this build$"):
         validate_registry_v2(_v2_registry(good_entry))
     bad_refs = [
         ({"t3_pr": True}, "t3_pr must be an int"),
@@ -522,3 +523,32 @@ def test_a_cell_mapping_is_read_once_and_the_snapshot_holds_the_checked_value():
     snapshot = validate_registry_v2(_v2_registry(entry))
     assert snapshot[0]["cell"]["symbol"] == "BTC/USDT"
     assert entry["cell"].reads == 1
+
+
+# Each dormant refusal alone (probes P02, P04, P05, P09); every other field is the admitted state.
+@pytest.mark.parametrize("flag", sorted(PERMISSION_FLAGS))
+def test_one_true_flag_alone_is_refused_by_name(flag):
+    permissions = {**PERMISSIONS, flag: True}
+    with pytest.raises(Refusal, match=f"^permission not ruled in this build: {flag}$"):
+        validate_registry_v2(_v2_registry(_v2_entry(permissions=permissions)))
+
+
+def test_a_matching_authorization_is_refused_before_its_claims():
+    entry = _v2_entry(claims=[_claim()], authorization_refs=[_authorization()])
+    with pytest.raises(Refusal, match="^no authorization exists in this build$"):
+        validate_registry_v2(_v2_registry(entry))
+    with pytest.raises(Refusal, match="^no look exists in this build"):
+        validate_registry_v2(_v2_registry(_v2_entry(claims=[_claim()])))
+
+
+@pytest.mark.parametrize("population", ["E1_OPERATIONAL", "E4_USER_REQUESTED"])
+def test_e1_and_e4_populations_are_refused_by_name(population):
+    entry = _v2_entry(claims=[_claim(population=population)])
+    with pytest.raises(Refusal, match=f"^population is refused by name: {population}$"):
+        validate_registry_v2(_v2_registry(entry))
+
+
+@pytest.mark.parametrize("state", sorted(SERVING_STATES - {"HOLD_HIDDEN_REFERENCE"}))
+def test_each_known_non_hold_serving_state_alone_is_refused(state):
+    with pytest.raises(Refusal, match="^not ruled: OD-NG-4 KEEP_HOLD$"):
+        validate_registry_v2(_v2_registry(_v2_entry(serving_state=state)))

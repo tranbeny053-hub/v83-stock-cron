@@ -385,12 +385,13 @@ def validate_registry_v2(registry: object) -> tuple[_MappingProxyType, ...]:
 
     # Dormant refusals intentionally follow all structural and cross-record checks.
     for entry in checked_entries:
+        # An authorization needs claims, so it is refused first: each refusal stays reachable.
+        if entry["authorization_refs"]:
+            raise Refusal("no authorization exists in this build")
         if entry["claims"]:
             raise Refusal(
                 "no look exists in this build (the look ledger and claim outcomes are unruled)"
             )
-        if entry["authorization_refs"]:
-            raise Refusal("no authorization exists in this build")
         for flag, enabled in entry["permissions"].items():
             if enabled:
                 raise Refusal(f"permission not ruled in this build: {flag}")
