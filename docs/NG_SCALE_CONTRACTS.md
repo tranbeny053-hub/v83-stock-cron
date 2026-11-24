@@ -58,16 +58,16 @@ NG6-R4 NONE and an absent cell both serve NONE; NG6-R5 whether C-hier (EXP-05) b
 
 ## What exists, and what is deliberately absent
 
-The NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is a REF-only TEST_ONLY pilot. A reviewed change (#349) set `LATTICE_ENABLED = True` for one 14-day window from 2026-11-23T00:00Z on SOL/USDT (15m, 1H, 4H, 1D); the app's lifespan starts the runner in `lattice_pilot.py`, which writes only through the writer named by `UCPE_LATTICE_DB_URL`. It has no declared cell. Its pilot priors are operational placeholders, excluded from statistical use. Row and missed-entry payloads match the exact key contracts of migration 0019, applied once by run 44133908695 (2026-11-18). The lattice uses tc-v1's round-trip cost as its decision band and refuses rows whose reference close is not the scheduled lattice instant. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors. A process that starts after the window ends records WINDOW_CLOSED and starts no runner.
+The NG4 lattice in `quant_ng/lattice.py` and `persistence/lattice_store.py` is a REF-only TEST_ONLY pilot. A reviewed change (#349) set `LATTICE_ENABLED = True` for one 14-day window from 2026-11-23T00:00Z on SOL/USDT (15m, 1H, 4H, 1D); the app's lifespan starts the runner in `lattice_pilot.py`, which writes only through the writer named by `UCPE_LATTICE_DB_URL` (without it, the runner records NOT_CONFIGURED and does not start). It has no declared cell. Its pilot priors are operational placeholders, excluded from statistical use. Row and missed-entry payloads match the exact key contracts of migration 0019, applied once by run 44133908695 (2026-11-17T17:13Z). The lattice uses tc-v1's round-trip cost as its decision band and refuses rows whose reference close is not the scheduled lattice instant. HOLD-1 remains open for faithful DB commit timestamps, and HOLD-2 remains open for owner-approved frozen reference priors. A process that starts after the window ends records WINDOW_CLOSED and starts no runner.
 
 When enabled by a reviewed change, the runner processes only its named half-open window and records per-process checkpoint counts. Its worker steps are serialized, use public Binance data directly, and preserve the default-off coalescing policy outside each step.
 
 The NG1 registry and `pipeline_ng` now exist as dormant modules encoding KEEP_HOLD and DEFER;
 they do not wire into a serving path. `quant_ng` already depends on `gates` transitively through
 `quant.pipeline.stable_hash`; `pipeline_ng.py` has the one direct allowance for
-`gates.composite.apply_composite_gates`. There is still no wiring, model constant, prior value,
-decision tolerance, F3 or look (the NG4 lattice above is a TEST_ONLY pilot, not a serving
-path). The reference tier's priors and the candidate's constants are always the caller's; none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
+`gates.composite.apply_composite_gates`. Outside the NG4 TEST_ONLY pilot above, there is still no
+wiring, model constant, prior value, decision tolerance, F3 or look. The reference tier's priors and
+the candidate's constants are always the caller's; none exists here. OD-NG-6 (2026-10-22): spec v1d approved for development only; 1D is
 implemented, and 1W under the owner's 2026-10-23 ruling (DEV-only, no F3 access). EXP-01 and
 EXP-02 ran once each under the owner's 2026-10-22 rulings (recorded in STATE); the parity
 tests here are synthetic. S-R2 revision evidence and
