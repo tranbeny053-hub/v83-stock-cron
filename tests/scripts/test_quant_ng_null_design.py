@@ -932,14 +932,23 @@ def test_kat_v6_dev_selection_and_added_power_refusal():
     with pytest.raises(q.Refusal):
         q.build_dev_decisions(
             [run],
-            [{"scenario_id": "P-CORE/d=0.15/rho=0.60/n=010/L=026/delta=0.20", "reason": "probe"}],
+            {
+                "grid_additions": [
+                    {
+                        "scenario_id": "P-CORE/d=0.15/rho=0.60/n=010/L=026/delta=0.20",
+                        "reason": "probe",
+                    }
+                ]
+            },
         )
     size_addition = {
-        "scenario_id": "N-CORE/d=0.15/rho=0.60/n=010/L=026",
-        "reason": "frozen size sensitivity probe",
+        "scenario_id": "N-CORE/d=0.15/rho=0.60/n=015/L=026",
+        "reason": "a size scenario outside the frozen grid",
     }
-    decision = q.build_dev_decisions([run], [size_addition])
-    assert decision["selections"] == decision["dev_runs"][0]["selections"]
+    decision = q.build_dev_decisions([run], {"grid_additions": [size_addition]})
+    assert decision["selections"] == [
+        {k: s[k] for k in q._SELECTION_KEYS} for s in decision["dev_runs"][0]["selections"]
+    ]
     assert decision["selection_source"] == "r" and decision["grid_additions"] == [size_addition]
 
     designs = q.candidates("A050")
@@ -1009,5 +1018,400 @@ def test_kat_v6_dev_selection_and_added_power_refusal():
     earlier = {**run, "started_utc": "2025-01-01T00:00:00Z", "cells": []}
     later = {**run, "started_utc": "2025-02-01T00:00:00Z", "cells": data}
     decisions = q.build_dev_decisions([later, earlier])
-    assert decisions["selections"] == q.select_designs("DEV", data)
+    assert decisions["selections"] == [
+        {k: s[k] for k in q._SELECTION_KEYS} for s in q.select_designs("DEV", data)
+    ]
     assert [x["dev_report_sha256"] for x in decisions["dev_runs"]] == ["r", "r"]
+
+
+# ---- Master's consolidated repair R-D3: classification and decisions on the run's own path ----
+
+
+def _size_row(sid, verdicts_by_design, rates=None, confirmed=()):
+    s = q.parse_scenario_id(sid)
+    cells = []
+    for design, verdict in verdicts_by_design.items():
+        if verdict == "NOT_ESTIMABLE":
+            cells.append({"design_id": design, "variant_id": "V_CORE", "status": "NOT_ESTIMABLE"})
+            continue
+        cells.append(
+            {
+                "design_id": design,
+                "variant_id": "V_CORE",
+                "status": "ESTIMATED",
+                "rate": (rates or {}).get(design, 0.02),
+                "cp95": [0.01, 0.03],
+                "size_verdicts": {b: verdict for b in q.BOUNDS},
+                "confirmed_invalid": {b: design in confirmed for b in q.BOUNDS},
+            }
+        )
+    return {
+        "scenario_id": sid,
+        "kind": "SIZE",
+        "params": dict(s.__dict__),
+        "family_class": q.family_class(s),
+        "d_envelope": q.d_envelope(s),
+        "cells": cells,
+    }
+
+
+def _power_row(sid, verdicts_by_cell):
+    s = q.parse_scenario_id(sid)
+    return {
+        "scenario_id": sid,
+        "kind": "POWER",
+        "params": dict(s.__dict__),
+        "cells": [
+            {"design_id": d, "variant_id": v, "status": "ESTIMATED", "power_verdicts": pv}
+            for (d, v), pv in verdicts_by_cell.items()
+        ],
+    }
+
+
+def test_kat_v1_verdict_boundaries_are_inclusive(monkeypatch):
+    # VALID iff hi <= B; INVALID iff lo > B (spec §11):
+    # equality on either side is not INVALID (M15).
+    limit = 1.2 * q.LEVELS["A025"]
+    monkeypatch.setattr(q, "clopper_pearson", lambda x, n: (0.01, limit))
+    assert q.classify_size(10, 1000, q.LEVELS["A025"], "TOL20", 1)["verdict"] == "VALID"
+    monkeypatch.setattr(q, "clopper_pearson", lambda x, n: (limit, 0.9))
+    assert q.classify_size(10, 1000, q.LEVELS["A025"], "TOL20", 1)["verdict"] == "INCONCLUSIVE"
+
+
+@pytest.mark.parametrize(
+    "second,expected",
+    [
+        ("VALID", "VALID"),
+        ("INCONCLUSIVE", "UNRESOLVED"),
+        ("NOT_ESTIMABLE", "UNRESOLVED"),
+        ("INVALID", "INVALID"),
+    ],
+    ids=["valid", "inconclusive", "not-estimable", "invalid"],
+)
+def test_kat_v5_size_rollup_status(second, expected):
+    rows = [
+        _size_row("N-CORE/d=0.00/rho=0.30/n=010/L=026", {"T/A025": "VALID"}),
+        _size_row("N-CORE/d=0.00/rho=0.60/n=010/L=026", {"T/A025": second}),
+    ]
+    roll = q.size_rollups(rows, bounds=("TOL20",), envelopes=("E65",), class_sets=("PLAN_NAMED",))
+    by_l = {r["L"]: r["status"] for r in roll}
+    assert by_l == {"026": expected, "ALL": expected}
+
+
+def test_kat_v5_size_rollup_refuses_a_cell_without_verdict():
+    row = _size_row("N-CORE/d=0.00/rho=0.30/n=010/L=026", {"T/A025": "VALID"})
+    del row["cells"][0]["size_verdicts"]
+    with pytest.raises(ValueError):
+        q.size_rollups([row])
+
+
+def _p_core(d, rho, delta, verdict, L=26, n=10, design="T/A025"):
+    sid = f"P-CORE/d={d:.2f}/rho={rho:.2f}/n={n:03d}/L={L:03d}/delta={delta:.2f}"
+    pv = {"P50": verdict, "P80": verdict, "P90": verdict}
+    return _power_row(sid, {(design, "V_J0"): pv, (design, "V_CORE"): pv})
+
+
+def test_kat_v5_power_rollup_statuses_and_omission():
+    # Pair (0.40, 0.20): both required cells present for each (d, rho) -> an entry.
+    rows = [_p_core(d, 0.6, delta, "VALID") for d in (0.0, 0.15) for delta in (0.4, 0.2)]
+    got = {
+        (r["variant_id"], tuple(r["effect_pair"]), r["dependence"]): r["status"]
+        for r in q.power_rollups(rows)
+    }
+    assert got[("V_J0", (0.4, 0.2), "WORST_E65")] == "MET"
+    assert got[("V_J0", (0.4, 0.2), "CENTRAL")] == "MET"
+    # (0.20, 0.10) has no delta = 0.10 cell: omitted, not computed from half its cells (spec §11).
+    assert ("V_J0", (0.2, 0.1), "WORST_E65") not in got
+    for verdict, status in (
+        ("INSUFFICIENT_POWER", "INSUFFICIENT"),
+        ("INCONCLUSIVE", "INCONCLUSIVE"),
+        ("INVALID", "NOT_CREDITED"),
+        ("NOT_ESTIMABLE", "NOT_CREDITED"),
+    ):
+        mixed = rows[:-1] + [_p_core(0.15, 0.6, 0.2, verdict)]
+        roll = {
+            (r["variant_id"], tuple(r["effect_pair"]), r["dependence"]): r["status"]
+            for r in q.power_rollups(mixed)
+        }
+        assert roll[("V_J0", (0.4, 0.2), "WORST_E65")] == status, verdict
+        assert roll[("V_J0", (0.4, 0.2), "CENTRAL")] == status, verdict
+
+
+def test_kat_v5_minimum_detectable_effect():
+    rows = [
+        _p_core(0.15, 0.6, delta, "VALID" if delta >= 0.4 else "INSUFFICIENT_POWER")
+        for delta in (0.2, 0.4, 0.8)
+    ]
+    mde = {
+        (r["variant_id"], r["dependence"]): (r["mde_p80"], r["mde_p50"])
+        for r in q.minimum_detectable_effects(rows)
+    }
+    assert mde[("V_J0", "CENTRAL")] == (0.4, 0.4)
+    # WORST_E65 needs every (d, rho) VALID at a delta:
+    # d = 0 is INSUFFICIENT at 0.4, so its MDE is 0.8.
+    mixed = [
+        _p_core(0.15, 0.6, 0.4, "VALID"),
+        _p_core(0.0, 0.6, 0.4, "INSUFFICIENT_POWER"),
+        _p_core(0.15, 0.6, 0.8, "VALID"),
+        _p_core(0.0, 0.6, 0.8, "VALID"),
+    ]
+    by_dep = {
+        (r["variant_id"], r["dependence"]): r["mde_p80"]
+        for r in q.minimum_detectable_effects(mixed)
+    }
+    assert by_dep[("V_J0", "WORST_E65")] == 0.8 and by_dep[("V_J0", "CENTRAL")] == 0.4
+    none = q.minimum_detectable_effects([_p_core(0.15, 0.6, 0.4, "INCONCLUSIVE")])
+    assert all(r["mde_p80"] is None and r["mde_p50"] is None for r in none)
+
+
+def _sc_rows(sym_verdicts, t_verdict="VALID", thmc_verdict="VALID"):
+    rows = []
+    for rho, verdict in sym_verdicts.items():
+        rows.append(
+            _size_row(
+                f"N-CORE/d=0.00/rho={rho:.2f}/n=010/L=026",
+                {"T/A025": t_verdict, "SYM_REPL/A025": verdict},
+            )
+        )
+    rows.append(_size_row("N-CORE/d=0.15/rho=0.60/n=010/L=026", {"TH_MC/A025/H065": thmc_verdict}))
+    return rows
+
+
+def _checks(rows):
+    return {
+        c["id"]: c["status"]
+        for c in q.self_checks(
+            rows,
+            expected_scenarios=len(rows),
+            expected_cells=sum(len(r["cells"]) for r in rows),
+        )
+    }
+
+
+def test_kat_v5_self_checks_follow_the_prereg():
+    # PREREG §5.3: SC-2 is INVALID at rho >= 0.6 and not INVALID at rho = 0;
+    # rho = 0.3 is not part of it.
+    ok = _sc_rows({0.0: "INCONCLUSIVE", 0.3: "INVALID", 0.6: "INVALID", 0.9: "INVALID"})
+    assert _checks(ok) == {"SC-1": "PASS", "SC-2": "PASS", "SC-3": "PASS", "SC-4": "PASS"}
+    assert _checks(_sc_rows({0.0: "INVALID", 0.6: "INVALID"}))["SC-2"] == "FAIL"
+    assert _checks(_sc_rows({0.0: "VALID", 0.6: "VALID"}))["SC-2"] == "FAIL"
+    assert _checks(_sc_rows({0.0: "VALID"}, t_verdict="INCONCLUSIVE"))["SC-1"] == "FAIL"
+    assert _checks(_sc_rows({0.0: "VALID"}, thmc_verdict="INVALID"))["SC-3"] == "FAIL"
+    rows = _sc_rows({0.0: "VALID"})
+    sc4 = {
+        c["id"]: c["status"]
+        for c in q.self_checks(rows, expected_scenarios=len(rows) + 1, expected_cells=3)
+    }
+    assert sc4["SC-4"] == "FAIL"
+
+
+def _selections(primary_by_level, fallback=None):
+    return [
+        {
+            "level": lvl,
+            "envelope": env,
+            "primary": primary_by_level(lvl),
+            "fallback": fallback,
+            "dev_no_candidate": False,
+        }
+        for lvl, env in q.READINGS
+    ]
+
+
+def _envelope_split_rows():
+    # T/A025 is VALID at d = 0.15 and INVALID (confirmed) at d = 0.35; P-CORE power MET at E65.
+    rows = [
+        _size_row("N-CORE/d=0.15/rho=0.60/n=010/L=026", {"T/A025": "VALID"}),
+        _size_row(
+            "N-CORE/d=0.35/rho=0.60/n=010/L=026", {"T/A025": "INVALID"}, confirmed=("T/A025",)
+        ),
+        _size_row("N-AR/d=0.15/rho=0.60/n=010/L=026/phi=0.30", {"T/A025": "INVALID"}),
+    ]
+    rows += [_p_core(d, 0.6, delta, "VALID") for d in (0.0, 0.15) for delta in (0.4, 0.2)]
+    return rows
+
+
+def test_kat_v5_envelope_split_and_sensitivity_attachment():
+    rows = _envelope_split_rows()
+    size = q.size_rollups(rows)
+    power = q.power_rollups(rows)
+    checks = [{"id": c, "status": "PASS"} for c in q.SELF_CHECK_IDS]
+    got = {
+        (o["level"], o["envelope"]): o
+        for o in q.outcomes(_selections(lambda lvl: f"T/{lvl}"), size, power, rows, checks)
+    }
+    e65, e85 = got[("A025", "E65")], got[("A025", "E85")]
+    assert e65["result"] == "STAGE1_PASS_CONDITIONAL" and e65["valid_L"] == ["026"]
+    assert e85["result"] == "STOP_SIZE_UNCONTROLLED" and e85["design_used"] is None
+    # PREREG §5.4 step 5: the SENSITIVITY roll-up of the design in use,
+    # and its INVALID scenarios by name.
+    assert e65["sensitivity_status"] == "INVALID"
+    assert e65["sensitivity_invalid_cells"] == ["N-AR/d=0.15/rho=0.60/n=010/L=026/phi=0.30"]
+    assert got[("A050", "E65")]["result"] == "STOP_INCONCLUSIVE"
+
+
+def test_kat_v5_null_fallback_and_met_core_in_inconclusive():
+    size = [
+        {
+            "design_id": "T/A025",
+            "bound": "TOL20",
+            "envelope": env,
+            "class_set": "PLAN_NAMED",
+            "L": "026",
+            "status": "VALID",
+            "confirmed_invalid": False,
+        }
+        for env in ("E65", "E85")
+    ]
+    power = [
+        {
+            "design_id": "T/A025",
+            "variant_id": "V_J0",
+            "effect_pair": [0.4, 0.2],
+            "L": "026",
+            "n": 10,
+            "dependence": "WORST_E65",
+            "status": "INCONCLUSIVE",
+        },
+        {
+            "design_id": "T/A025",
+            "variant_id": "V_J0",
+            "effect_pair": [0.8, 0.4],
+            "L": "026",
+            "n": 10,
+            "dependence": "WORST_E65",
+            "status": "INSUFFICIENT",
+        },
+        {
+            "design_id": "T/A025",
+            "variant_id": "V_CORE",
+            "effect_pair": [0.8, 0.4],
+            "L": "026",
+            "n": 10,
+            "dependence": "WORST_E65",
+            "status": "MET",
+        },
+    ]
+    checks = [{"id": c, "status": "PASS"} for c in q.SELF_CHECK_IDS]
+    got = {
+        (o["level"], o["envelope"]): o
+        for o in q.outcomes(_selections(lambda lvl: f"T/{lvl}"), size, power, [], checks)
+    }
+    a = got[("A025", "E65")]
+    assert a["result"] == "STOP_INCONCLUSIVE"
+    assert a["met_core"] == [{"L": "026", "n": 10, "effect_pair": [0.8, 0.4]}]
+    stopped = got[("A050", "E65")]
+    assert stopped["consulted"] == ["T/A050"] and stopped["design_used"] is None
+    assert stopped["result"] == "STOP_INCONCLUSIVE"
+
+
+def _dev_data(scores):
+    """A DEV cell table: every candidate passes the screen at L = 26; V_J0 rates from `scores`."""
+    designs = q.candidates("A050")
+    rows = [
+        {
+            "scenario_id": "N-CORE/d=0.15/rho=0.60/n=010/L=026",
+            "kind": "SIZE",
+            "params": dict(q.parse_scenario_id("N-CORE/d=0.15/rho=0.60/n=010/L=026").__dict__),
+            "family_class": "PLAN_NAMED",
+            "d_envelope": "E65",
+            "cells": [{"design_id": d, "status": "ESTIMATED", "rate": 0.05} for d in designs],
+        }
+    ]
+    sid = "P-CORE/d=0.15/rho=0.60/n=010/L=026/delta=0.40"
+    rows.append(
+        {
+            "scenario_id": sid,
+            "kind": "POWER",
+            "params": dict(q.parse_scenario_id(sid).__dict__),
+            "cells": [
+                c
+                for d in designs
+                for c in (
+                    {"design_id": d, "variant_id": "V_J0", "rate": scores.get(d, 0.0)},
+                    {"design_id": d, "variant_id": "V_CORE", "rate": scores.get(d, 0.0)},
+                )
+            ],
+        }
+    )
+    return rows
+
+
+def test_kat_v6_tie_order_and_null_fallback():
+    tie = _dev_data(
+        {"TH_MC/A050/H060": 0.5, "RA_WM/A050/A050/W208/UB95": 0.5, "RA_WM/A050/A050/W104/NONE": 0.5}
+    )
+    first = q.select_designs("DEV", tie)[0]
+    assert first["primary"] == "RA_WM/A050/A050/W104/NONE"  # core order, then design id
+    assert first["fallback"] == "TH_MC/A050/H060"
+    single_type = _dev_data({"RA_WM/A050/A050/W104/NONE": 0.5, "RA_WM/A050/A050/W208/NONE": 0.4})
+    only = q.select_designs("DEV", single_type)[0]
+    assert only["primary"] == "RA_WM/A050/A050/W104/NONE" and only["fallback"] is None
+    assert not only["dev_no_candidate"]
+
+
+@pytest.mark.parametrize(
+    "additions,reason",
+    [
+        (
+            {
+                "grid_additions": [
+                    {"scenario_id": "P-CORE/d=0.15/rho=0.60/n=010/L=026/delta=0.20", "reason": "x"}
+                ]
+            },
+            "only size scenarios may be added",
+        ),
+        (
+            {
+                "grid_additions": [
+                    {"scenario_id": "N-CORE/d=0.15/rho=0.60/n=010/L=026", "reason": "x"}
+                ]
+            },
+            "duplicate scenario",
+        ),
+        (
+            {
+                "grid_additions": [
+                    {"scenario_id": "N-CORE/d=0.15/rho=0.60/n=015/L=026", "reason": "x"},
+                    {"scenario_id": "N-CORE/d=0.15/rho=0.60/n=015/L=026", "reason": "y"},
+                ]
+            },
+            "duplicate scenario",
+        ),
+        (
+            {"grid_additions": [{"scenario_id": "N-CORE/garbage", "reason": "x"}]},
+            "invalid scenario id",
+        ),
+        (
+            {"grid_additions": [{"scenario_id": "N-CORE/d=0.15/rho=0.60/n=015/L=026"}]},
+            "unknown field",
+        ),
+        ({"selections": []}, "unknown field"),
+        ({"replications": {"n_null": 50_000}}, "validation grid is incomplete"),
+        ({"replications": {"n_other": 1}}, "unknown field"),
+    ],
+    ids=["power", "in-grid", "repeat", "bad-id", "no-reason", "extra-key", "small-n", "unknown-n"],
+)
+def test_kat_v6_additions_refusals_are_exact(additions, reason):
+    run = {
+        "dev_manifest_sha256": "m",
+        "dev_report_sha256": "r",
+        "code_sha256": "c",
+        "started_utc": "2026-01-01T00:00:00Z",
+        "stage": "DEV",
+        "cells": [],
+    }
+    with pytest.raises(q.Refusal, match=f"^{reason}$"):
+        q.build_dev_decisions([run], additions)
+
+
+def test_kat_v6_not_a_development_report():
+    for call in (
+        lambda: q.select_designs("VAL", []),
+        lambda: q.build_dev_decisions([]),
+        lambda: q.build_dev_decisions([{"stage": "VAL", "started_utc": "x"}]),
+    ):
+        with pytest.raises(q.Refusal, match="^not a development report$"):
+            call()
+    with pytest.raises(q.Refusal, match="^selection is incomplete$"):
+        q.outcomes([], [], [], [], [])

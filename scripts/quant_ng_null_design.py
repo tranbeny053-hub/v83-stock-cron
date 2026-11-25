@@ -1352,34 +1352,52 @@ def _label(row):
     )
 
 
+_ENVELOPE_LIMITS = dict(zip(ENVELOPES, (0.10, 0.15, 0.25, 0.35, 0.45), strict=True))
+EFFECT_PAIRS = ((0.20, 0.10), (0.40, 0.20), (0.80, 0.40), (1.60, 0.80))
+VAL_MINIMUMS = {
+    "n_null": 100_000,
+    "n_power": 4_000,
+    "n_cal_sigma0": 20_000,
+    "n_cal_thmc": 1_000_000,
+}
+DEV_MINIMUMS = {"n_null": 20_000, "n_power": 2_000, "n_cal_sigma0": 20_000, "n_cal_thmc": 1_000_000}
+_ADDITIONS_KEYS = ("grid_additions", "replications", "defect_repairs", "notes")
+_SELECTION_KEYS = ("level", "envelope", "primary", "fallback", "dev_no_candidate")
+
+
+def _size_verdict(cell, bound: str) -> str:
+    """A size cell's verdict at a bound; a cell without one is a defect, never skipped."""
+    verdict = (cell.get("size_verdicts") or {}).get(bound)
+    if verdict is None:
+        if cell.get("status") == "NOT_ESTIMABLE":
+            return "NOT_ESTIMABLE"
+        raise ValueError(f"size cell without a {bound} verdict: {cell.get('design_id')}")
+    if verdict not in VERDICTS:
+        raise ValueError(f"unknown size verdict: {verdict}")
+    return verdict
+
+
+def _is_size(row) -> bool:
+    return row.get("kind", _params(row).get("kind")) == "SIZE"
+
+
 def size_rollups(cells, bounds=BOUNDS, envelopes=ENVELOPES, class_sets=CLASS_SETS):
-    groups = {}
+    groups: dict = {}
     for row, cell in _scenario_rows(cells):
-        p = _params(row)
-        if row.get("kind", p.get("kind")) != "SIZE":
+        if not _is_size(row):
             continue
         cls, _, p = _label(row)
-        d = float(p.get("d", 0))
-        L = int(p.get("L", 0))
+        d, L = float(p.get("d", 0)), int(p.get("L", 0))
         did = cell.get("design_id")
-        verdicts = cell.get("size_verdicts", {})
         for bound in bounds:
-            verdict = verdicts.get(bound)
-            if verdict is None and cell.get("status") == "NOT_ESTIMABLE":
-                verdict = "NOT_ESTIMABLE"
-            if verdict is None:
-                continue
+            verdict = _size_verdict(cell, bound)
             for env in envelopes:
-                if d > {"E60": 0.10, "E65": 0.15, "E75": 0.25, "E85": 0.35, "E95": 0.45}.get(
-                    env, 0.45
-                ):
+                if d > _ENVELOPE_LIMITS[env]:
                     continue
                 for cset in class_sets:
-                    if cset not in ("ALL", cls) and not (cset == "SENSITIVITY" and cls == cset):
+                    if cset not in ("ALL", cls):
                         continue
                     for length in ("ALL", f"{L:03d}"):
-                        if length != "ALL" and length != f"{L:03d}":
-                            continue
                         groups.setdefault((did, bound, env, cset, length), []).append(
                             (row, cell, verdict)
                         )
@@ -1411,7 +1429,7 @@ def size_rollups(cells, bounds=BOUNDS, envelopes=ENVELOPES, class_sets=CLASS_SET
                 "n_inconclusive": counts["INCONCLUSIVE"],
                 "n_not_estimable": counts["NOT_ESTIMABLE"],
                 "confirmed_invalid": any(
-                    c.get("confirmed_invalid", {}).get(bound, False) for _, c, _ in vals
+                    (c.get("confirmed_invalid") or {}).get(bound, False) for _, c, _ in vals
                 ),
                 "worst": {
                     "scenario_id": worst[0].get("scenario_id"),
@@ -1435,36 +1453,37 @@ def _dependence_match(p, dep):
     )
 
 
-def power_rollups(cells):
-    effects = ((0.20, 0.10), (0.40, 0.20), (0.80, 0.40), (1.60, 0.80))
-    groups = {}
+def _p_core_cells(cells):
     for row, cell in _scenario_rows(cells):
         p = _params(row)
-        if row.get("kind", p.get("kind")) != "POWER" or p.get("family") != "P-CORE":
-            continue
-        did, variant = cell.get("design_id"), cell.get("variant_id")
-        delta = float(p.get("delta", 0))
-        L = int(p.get("L", 0))
-        n = int(p.get("n", 0))
-        for pair in effects:
-            target = (
-                "P80"
-                if abs(delta - pair[0]) < 1e-8
-                else "P50"
-                if abs(delta - pair[1]) < 1e-8
-                else None
-            )
-            if not target:
-                continue
-            for dep in DEPENDENCE_CONVENTIONS:
-                if _dependence_match(p, dep):
-                    groups.setdefault((did, variant, pair, L, n, dep), []).append(
-                        cell.get("power_verdicts", {}).get(target)
-                    )
+        if row.get("kind", p.get("kind")) == "POWER" and p.get("family") == "P-CORE":
+            yield p, cell
+
+
+def power_rollups(cells):
+    """Spec §11 power roll-ups.
+
+    An entry needs both required cells for every (d, rho) present; otherwise it is omitted.
+    """
+    groups: dict = {}
+    for p, cell in _p_core_cells(cells):
+        delta, L, n = float(p["delta"]), int(p["L"]), int(p["n"])
+        dr = (float(p["d"]), float(p["rho"]))
+        verdicts = cell.get("power_verdicts") or {}
+        for pair in EFFECT_PAIRS:
+            for target, value in (("P80", pair[0]), ("P50", pair[1])):
+                if abs(delta - value) > 1e-9:
+                    continue
+                for dep in DEPENDENCE_CONVENTIONS:
+                    if _dependence_match(p, dep):
+                        key = (cell["design_id"], cell["variant_id"], pair, L, n, dep)
+                        group = groups.setdefault(key, {"P80": {}, "P50": {}})
+                        group[target][dr] = verdicts.get(target)
     out = []
-    for (did, var, pair, L, n, dep), vals in sorted(groups.items(), key=lambda x: str(x[0])):
-        if not vals:
+    for (did, var, pair, L, n, dep), group in sorted(groups.items(), key=lambda x: str(x[0])):
+        if not group["P80"] or set(group["P80"]) != set(group["P50"]):
             continue
+        vals = list(group["P80"].values()) + list(group["P50"].values())
         status = (
             "NOT_CREDITED"
             if any(v in ("INVALID", "NOT_ESTIMABLE", None) for v in vals)
@@ -1489,48 +1508,24 @@ def power_rollups(cells):
 
 
 def minimum_detectable_effects(cells):
-    rows = list(_scenario_rows(cells))
-    groups = {}
-    for row, cell in rows:
-        p = _params(row)
-        if row.get("kind", p.get("kind")) != "POWER" or p.get("family") != "P-CORE":
-            continue
-        key = (
-            cell.get("design_id"),
-            cell.get("variant_id"),
-            int(p.get("L", 0)),
-            int(p.get("n", 0)),
-        )
-        depkeys = [dep for dep in DEPENDENCE_CONVENTIONS if _dependence_match(p, dep)]
-        for dep in depkeys:
-            groups.setdefault((*key, dep), {}).setdefault(float(p.get("delta", 0)), {})[
-                row and cell.get("variant_id") or ""
-            ] = cell.get("power_verdicts", {})
-    # Build from scenario cells, requiring all matching P-CORE d/rho rows at each delta.
+    """Smallest delta whose required cells are all VALID at P80 (and at P50); null if none."""
+    index: dict = {}
+    for p, cell in _p_core_cells(cells):
+        verdicts = cell.get("power_verdicts") or {}
+        for dep in DEPENDENCE_CONVENTIONS:
+            if _dependence_match(p, dep):
+                key = (cell["design_id"], cell["variant_id"], int(p["L"]), int(p["n"]), dep)
+                index.setdefault(key, {}).setdefault(float(p["delta"]), []).append(verdicts)
     out = []
-    for (did, var, L, n, dep), _deltas in sorted(groups.items(), key=lambda x: str(x[0])):
-        target_values = {}
-        source = [
-            (r, c, _params(r))
-            for r, c in rows
-            if c.get("design_id") == did
-            and c.get("variant_id") == var
-            and _params(r).get("family") == "P-CORE"
-            and int(_params(r).get("L", 0)) == L
-            and int(_params(r).get("n", 0)) == n
-            and _dependence_match(_params(r), dep)
-        ]
+    for (did, var, L, n, dep), by_delta in sorted(index.items(), key=lambda x: str(x[0])):
+        mde = {}
         for target in ("P80", "P50"):
-            passing = []
-            for delta in sorted({float(p.get("delta", 0)) for _, _, p in source}):
-                relevant = [
-                    c.get("power_verdicts", {}).get(target)
-                    for _, c, p in source
-                    if float(p.get("delta", 0)) == delta
-                ]
-                if relevant and all(v == "VALID" for v in relevant):
-                    passing.append(delta)
-            target_values[target] = min(passing) if passing else None
+            passing = [
+                delta
+                for delta, verdicts in by_delta.items()
+                if verdicts and all(v.get(target) == "VALID" for v in verdicts)
+            ]
+            mde[target] = min(passing) if passing else None
         out.append(
             {
                 "design_id": did,
@@ -1538,110 +1533,124 @@ def minimum_detectable_effects(cells):
                 "L": f"{L:03d}",
                 "n": n,
                 "dependence": dep,
-                "mde_p80": target_values["P80"],
-                "mde_p50": target_values["P50"],
+                "mde_p80": mde["P80"],
+                "mde_p50": mde["P50"],
             }
         )
     return out
 
 
-def self_checks(cells):
-    rows = list(_scenario_rows(cells))
+def self_checks(cells, *, expected_scenarios: int, expected_cells: int):
+    """PREREG §5.3, exactly: SC-1 to SC-3 on the N-CORE cells present; SC-4 against the manifest."""
+    rows = list(cells)
+    found: dict = {"SC-1": [], "SC-2": [], "SC-3": []}
+    for row, cell in _scenario_rows(rows):
+        p = _params(row)
+        if p.get("family") != "N-CORE" or not _is_size(row):
+            continue
+        d, rho = float(p.get("d", 0)), float(p.get("rho", 0))
+        design = cell.get("design_id", "")
+        verdict = (cell.get("size_verdicts") or {}).get("TOL20")
+        sid = row.get("scenario_id", "")
+        if design == "T/A025" and d == 0:
+            found["SC-1"].append((sid, verdict == "VALID"))
+        if design == "SYM_REPL/A025" and d == 0 and rho >= 0.6:
+            found["SC-2"].append((sid, verdict == "INVALID"))
+        if design == "SYM_REPL/A025" and d == 0 and rho == 0:
+            found["SC-2"].append((sid, verdict is not None and verdict != "INVALID"))
+        if d > 0 and design == f"TH_MC/A025/H{round((d + 0.5) * 100):03d}":
+            found["SC-3"].append((sid, verdict == "VALID"))
     checks = []
-    for sid in SELF_CHECK_IDS:
-        selected = []
-        for row, cell in rows:
-            p = _params(row)
-            fam = p.get("family")
-            d = float(p.get("d", 0))
-            rho = float(p.get("rho", 0))
-            design = cell.get("design_id", "")
-            lv = cell.get("size_verdicts", {}).get("TOL20")
-            if sid == "SC-1" and fam == "N-CORE" and d == 0 and design == "T/A025":
-                selected.append((row, lv == "VALID"))
-            if sid == "SC-2" and fam == "N-CORE" and d == 0 and design == "SYM_REPL/A025":
-                selected.append((row, lv == ("INVALID" if rho >= 0.6 else "VALID")))
-            if (
-                sid == "SC-3"
-                and fam == "N-CORE"
-                and d > 0
-                and design == f"TH_MC/A025/H{int((d + 0.5) * 100):03d}"
-            ):
-                selected.append((row, lv == "VALID"))
-        failed = [r.get("scenario_id", "") for r, ok in selected if not ok]
+    for check_id in ("SC-1", "SC-2", "SC-3"):
+        failed = sorted(sid for sid, ok in found[check_id] if not ok)
         checks.append(
             {
-                "id": sid,
+                "id": check_id,
                 "status": "FAIL" if failed else "PASS",
-                "cells": len(selected),
+                "cells": len(found[check_id]),
                 "failed_cells": failed,
             }
         )
-    checks.append({"id": "SC-4", "status": "PASS", "cells": 1, "failed_cells": []})
+    n_cells = sum(len(row["cells"]) if "cells" in row else 1 for row in rows)
+    mismatch = []
+    if len(rows) != expected_scenarios:
+        mismatch.append(f"scenarios {len(rows)} != {expected_scenarios}")
+    if n_cells != expected_cells:
+        mismatch.append(f"cells {n_cells} != {expected_cells}")
+    checks.append(
+        {
+            "id": "SC-4",
+            "status": "FAIL" if mismatch else "PASS",
+            "cells": n_cells,
+            "failed_cells": mismatch,
+        }
+    )
     return checks
 
 
 def select_designs(stage, cells):
     if stage != "DEV":
-        raise Refusal("selection requires DEV stage")
-    scenarios = list(cells)
-    flat = list(_scenario_rows(scenarios))
+        raise Refusal("not a development report")
+    flat = list(_scenario_rows(list(cells)))
+    meta: dict = {}
+    for row, _cell in flat:
+        if id(row) not in meta:
+            p = _params(row)
+            kind = row.get("kind", p.get("kind"))
+            cls = _label(row)[0] if kind == "SIZE" else None
+            meta[id(row)] = (
+                kind,
+                cls,
+                float(p.get("d", 0)),
+                int(p.get("L", 0)),
+                p.get("family"),
+                row.get("scenario_id"),
+            )
+    size_cells: dict = {}  # (design, L) -> [(d, cell)] for PLAN_NAMED size rows
+    power_cells: dict = {}  # P-CORE scenario id -> (L, d, {design: {variant: cell}})
+    for row, cell in flat:
+        kind, cls, d, L, family, sid = meta[id(row)]
+        if kind == "SIZE" and cls == "PLAN_NAMED":
+            size_cells.setdefault((cell.get("design_id"), L), []).append((d, cell))
+        if family == "P-CORE":
+            if sid not in power_cells:
+                power_cells[sid] = (L, d, {})
+            power_cells[sid] = (L, d, power_cells[sid][2])
+            by_design = power_cells[sid][2].setdefault(cell.get("design_id"), {})
+            by_design[cell.get("variant_id")] = cell
     results = []
     for level, envelope in READINGS:
-        limit = {"E65": 0.15, "E85": 0.35}[envelope]
+        limit = _ENVELOPE_LIMITS[envelope]
         alpha = LEVELS[level]
-        ds = candidates(level)
         scored = []
-        size_rows = [
-            r
-            for r, c in flat
-            if r.get("kind", _params(r).get("kind")) == "SIZE"
-            and _label(r)[0] == "PLAN_NAMED"
-            and float(_params(r).get("d", 0)) <= limit
-        ]
-        power_scenarios = {
-            r.get("scenario_id"): r
-            for r, c in flat
-            if _params(r).get("family") == "P-CORE" and float(_params(r).get("d", 0)) <= limit
-        }
-        for design in ds:
+        scenarios = [entry for entry in power_cells.values() if entry[1] <= limit]
+        for design in candidates(level):
             pass_l = []
             for L in (26, 52, 104):
-                at = [
-                    (r, c)
-                    for r, c in flat
-                    if r in size_rows
-                    and int(_params(r).get("L", 0)) == L
-                    and c.get("design_id") == design
-                ]
+                at = [c for d, c in size_cells.get((design, L), []) if d <= limit]
                 if at and all(
                     c.get("status") == "ESTIMATED"
                     and c.get("rate") is not None
                     and c["rate"] <= 1.2 * alpha
-                    for r, c in at
+                    for c in at
                 ):
                     pass_l.append(f"{L:03d}")
-            score = []
-            core = []
-            for sid, scenario in power_scenarios.items():
-                if int(_params(scenario).get("L", 0)) not in tuple(map(int, pass_l)):
+            passed = {int(x) for x in pass_l}
+            score, core = [], []
+            for L, _d, by_design in scenarios:
+                if L not in passed:
                     score.append(0.0)
                     core.append(0.0)
                     continue
-                cells_for_scenario = [
-                    c
-                    for r, c in flat
-                    if r.get("scenario_id") == sid and c.get("design_id") == design
-                ]
-                by_variant = {c.get("variant_id"): c for c in cells_for_scenario}
+                by_variant = by_design.get(design, {})
                 score.append(float(by_variant.get("V_J0", {}).get("rate") or 0.0))
                 core.append(float(by_variant.get("V_CORE", {}).get("rate") or 0.0))
             scored.append(
                 {
                     "design_id": design,
                     "screen_pass_L": pass_l,
-                    "score": sum(score) / len(power_scenarios) if power_scenarios else 0.0,
-                    "score_core": sum(core) / len(power_scenarios) if power_scenarios else 0.0,
+                    "score": sum(score) / len(scenarios) if scenarios else 0.0,
+                    "score_core": sum(core) / len(scenarios) if scenarios else 0.0,
                 }
             )
         priority = {"RA_WM": 0, "TH_MC": 1, "TH": 2, "T": 3}
@@ -1680,44 +1689,69 @@ def select_designs(stage, cells):
     return results
 
 
-def build_dev_decisions(dev_runs, additions=None):
-    additions = additions or []
-    seen_additions = set()
-    for addition in additions:
+def _check_additions(additions) -> dict:
+    """The additions file of §12.4: only its four keys; size scenarios only; larger N only."""
+    additions = {} if additions is None else additions
+    if not isinstance(additions, dict) or set(additions) - set(_ADDITIONS_KEYS):
+        raise Refusal("unknown field")
+    frozen = {scenario_id(s) for s in scenario_grid("VAL")}
+    grid, seen = [], set()
+    for item in additions.get("grid_additions", []):
+        if not isinstance(item, dict) or set(item) != {"scenario_id", "reason"}:
+            raise Refusal("unknown field")
         try:
-            scenario = parse_scenario_id(addition["scenario_id"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise Refusal("invalid added scenario") from exc
+            scenario = parse_scenario_id(item["scenario_id"])
+        except (TypeError, ValueError) as exc:
+            raise Refusal("invalid scenario id") from exc
         if scenario.kind != "SIZE":
-            raise Refusal("added power scenarios are not allowed")
-        if scenario_id(scenario) in seen_additions:
-            raise Refusal("duplicate added scenario")
-        if not isinstance(addition.get("reason"), str) or not addition["reason"].strip():
-            raise Refusal("added scenarios require a reason")
-        seen_additions.add(scenario_id(scenario))
-    ordered = sorted(dev_runs, key=lambda r: r["started_utc"])
-    if not ordered:
-        raise Refusal("at least one development run is required")
-    recorded = []
-    for run in ordered:
-        if run.get("stage") != "DEV":
-            raise Refusal("development run must have stage DEV")
-        recorded.append(
-            {
-                k: run[k]
-                for k in ("dev_manifest_sha256", "dev_report_sha256", "code_sha256", "started_utc")
-            }
-            | {"selections": select_designs("DEV", run["cells"])}
-        )
+            raise Refusal("only size scenarios may be added")
+        sid = scenario_id(scenario)
+        if sid in seen or sid in frozen:
+            raise Refusal("duplicate scenario")
+        seen.add(sid)
+        grid.append({"scenario_id": sid, "reason": str(item["reason"])})
+    replications = additions.get("replications", {})
+    if not isinstance(replications, dict) or set(replications) - set(VAL_MINIMUMS):
+        raise Refusal("unknown field")
+    for key, value in replications.items():
+        if type(value) is not int or value < VAL_MINIMUMS[key]:
+            raise Refusal("validation grid is incomplete")
+    repairs = additions.get("defect_repairs", [])
+    if not isinstance(repairs, list) or any(
+        not isinstance(r, dict) or set(r) != {"description", "test", "commit"} for r in repairs
+    ):
+        raise Refusal("unknown field")
+    notes = additions.get("notes", "")
+    if not isinstance(notes, str):
+        raise Refusal("unknown field")
+    return {
+        "grid_additions": grid,
+        "replications": dict(replications),
+        "defect_repairs": [dict(r) for r in repairs],
+        "notes": notes,
+    }
+
+
+def build_dev_decisions(dev_runs, additions=None):
+    extra = _check_additions(additions)
+    runs = list(dev_runs)
+    if not runs or any(not isinstance(r, dict) or r.get("stage") != "DEV" for r in runs):
+        raise Refusal("not a development report")
+    ordered = sorted(runs, key=lambda r: r["started_utc"])
+    recorded = [
+        {
+            k: run[k]
+            for k in ("dev_manifest_sha256", "dev_report_sha256", "code_sha256", "started_utc")
+        }
+        | {"selections": select_designs("DEV", run["cells"])}
+        for run in ordered
+    ]
     return {
         "schema": "ucpe.exp04_stage1.dev_decisions.v1",
         "dev_runs": recorded,
         "selection_source": recorded[-1]["dev_report_sha256"],
-        "selections": recorded[-1]["selections"],
-        "grid_additions": additions,
-        "replications": {},
-        "defect_repairs": [],
-        "notes": "",
+        "selections": [{k: s[k] for k in _SELECTION_KEYS} for s in recorded[-1]["selections"]],
+        **extra,
     }
 
 
@@ -1725,6 +1759,7 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
     checks_failed = any(c.get("status") != "PASS" for c in checks)
     size = list(size_rollups)
     power = list(power_rollups)
+    flat = list(_scenario_rows(cells))
     result = []
     for level, envelope in READINGS:
         sel = next(
@@ -1732,7 +1767,7 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
             None,
         )
         if sel is None:
-            raise Refusal("all eight reading selections are required")
+            raise Refusal("selection is incomplete")
         primary, fallback = sel["primary"], sel.get("fallback")
         consulted = [primary]
         used = primary
@@ -1806,6 +1841,29 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
                 outcome = "STOP_INSUFFICIENT_POWER_VETO_KEYS"
             else:
                 outcome = "STOP_INCONCLUSIVE"
+        # PREREG §5.4 step 5: always attached, whatever the outcome, for the design in use.
+        sensitivity = next(
+            (
+                r
+                for r in size
+                if r.get("design_id") == used
+                and r.get("bound") == "TOL20"
+                and r.get("envelope") == envelope
+                and r.get("class_set") == "SENSITIVITY"
+                and r.get("L") == "ALL"
+            ),
+            None,
+        )
+        limit = _ENVELOPE_LIMITS[envelope]
+        sensitivity_invalid = sorted(
+            row.get("scenario_id", "")
+            for row, cell in flat
+            if _is_size(row)
+            and cell.get("design_id") == used
+            and _label(row)[0] == "SENSITIVITY"
+            and float(_params(row).get("d", 0)) <= limit
+            and (cell.get("size_verdicts") or {}).get("TOL20") == "INVALID"
+        )
         result.append(
             {
                 "label": reading_label(level, envelope),
@@ -1819,8 +1877,8 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
                 "met": met,
                 "met_core": met_core,
                 "reasons": [],
-                "sensitivity_status": None,
-                "sensitivity_invalid_cells": [],
+                "sensitivity_status": sensitivity["status"] if sensitivity else None,
+                "sensitivity_invalid_cells": sensitivity_invalid,
             }
         )
     return result
