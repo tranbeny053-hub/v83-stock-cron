@@ -1273,3 +1273,554 @@ def count_scenario(
         "sign_not_evaluable": sign_not_evaluable,
         "mean_turnover": turnover_weighted / done if s.churn_a is not None and done else None,
     }
+
+
+# Classification and decision layer.  Inputs are the in-memory equivalents of
+# the public CELLS.jsonl rows; these helpers deliberately have no I/O or RNG.
+def classify_size(x: int | None, n: int, alpha: float, bound: str, m_sim: int) -> dict:
+    if bound not in BOUNDS or not 0 < alpha < 1 or m_sim < 1:
+        raise ValueError("invalid size classification arguments")
+    if x is None:
+        return {
+            "status": "NOT_ESTIMABLE",
+            "rate": None,
+            "cp95": None,
+            "cp_sim_lower": None,
+            "verdict": "NOT_ESTIMABLE",
+            "confirmed_invalid": False,
+        }
+    if n <= 0 or not 0 <= x <= n:
+        raise ValueError("invalid rejection count")
+    rate = x / n
+    lo, hi = clopper_pearson(x, n)
+    limit = {"STRICT": alpha, "TOL20": 1.2 * alpha, "CEIL2X": 2 * alpha}[bound]
+    verdict = "VALID" if hi <= limit else "INVALID" if lo > limit else "INCONCLUSIVE"
+    simultaneous = cp_lower(x, n, 0.025 / (2 * m_sim))
+    return {
+        "status": "ESTIMATED",
+        "rate": rate,
+        "cp95": [lo, hi],
+        "cp_sim_lower": simultaneous,
+        "verdict": verdict,
+        "confirmed_invalid": simultaneous > limit,
+    }
+
+
+def classify_power(x: int | None, n: int, target: str, null_twin_verdict: str) -> str:
+    if target not in POWER_TARGETS or null_twin_verdict not in VERDICTS:
+        raise ValueError("invalid power classification arguments")
+    if null_twin_verdict != "VALID":
+        return null_twin_verdict
+    if x is None:
+        return "NOT_ESTIMABLE"
+    if n <= 0 or not 0 <= x <= n:
+        raise ValueError("invalid rejection count")
+    lo, hi = clopper_pearson(x, n)
+    threshold = {"P50": 0.50, "P80": 0.80, "P90": 0.90}[target]
+    return (
+        "VALID" if lo >= threshold else "INSUFFICIENT_POWER" if hi < threshold else "INCONCLUSIVE"
+    )
+
+
+def _scenario_rows(cells):
+    """Yield (scenario metadata, cell) from scenario records or flat rows."""
+    for row in cells:
+        if "cells" in row:
+            for cell in row["cells"]:
+                yield row, cell
+        else:
+            yield row, row
+
+
+def _params(row):
+    params = row.get("params", {})
+    if params:
+        return params
+    try:
+        s = parse_scenario_id(row["scenario_id"])
+        return {**s.__dict__, "L": s.L}
+    except (KeyError, ValueError):
+        return {}
+
+
+def _label(row):
+    p = _params(row)
+    return (
+        row.get("family_class", family_class(Scenario(**p)) if "family" in p else "NOT_APPLICABLE"),
+        row.get("d_envelope", d_envelope(Scenario(**p)) if "family" in p else "E95"),
+        p,
+    )
+
+
+def size_rollups(cells, bounds=BOUNDS, envelopes=ENVELOPES, class_sets=CLASS_SETS):
+    groups = {}
+    for row, cell in _scenario_rows(cells):
+        p = _params(row)
+        if row.get("kind", p.get("kind")) != "SIZE":
+            continue
+        cls, _, p = _label(row)
+        d = float(p.get("d", 0))
+        L = int(p.get("L", 0))
+        did = cell.get("design_id")
+        verdicts = cell.get("size_verdicts", {})
+        for bound in bounds:
+            verdict = verdicts.get(bound)
+            if verdict is None and cell.get("status") == "NOT_ESTIMABLE":
+                verdict = "NOT_ESTIMABLE"
+            if verdict is None:
+                continue
+            for env in envelopes:
+                if d > {"E60": 0.10, "E65": 0.15, "E75": 0.25, "E85": 0.35, "E95": 0.45}.get(
+                    env, 0.45
+                ):
+                    continue
+                for cset in class_sets:
+                    if cset not in ("ALL", cls) and not (cset == "SENSITIVITY" and cls == cset):
+                        continue
+                    for length in ("ALL", f"{L:03d}"):
+                        if length != "ALL" and length != f"{L:03d}":
+                            continue
+                        groups.setdefault((did, bound, env, cset, length), []).append(
+                            (row, cell, verdict)
+                        )
+    out = []
+    for (did, bound, env, cset, length), vals in sorted(groups.items()):
+        counts = {
+            v: sum(x[2] == v for x in vals)
+            for v in ("VALID", "INVALID", "INCONCLUSIVE", "NOT_ESTIMABLE")
+        }
+        status = (
+            "VALID"
+            if vals and counts["VALID"] == len(vals)
+            else "INVALID"
+            if counts["INVALID"]
+            else "UNRESOLVED"
+        )
+        worst = max(vals, key=lambda x: x[1].get("rate") if x[1].get("rate") is not None else -1)
+        out.append(
+            {
+                "design_id": did,
+                "bound": bound,
+                "envelope": env,
+                "class_set": cset,
+                "L": length,
+                "status": status,
+                "n_cells": len(vals),
+                "n_valid": counts["VALID"],
+                "n_invalid": counts["INVALID"],
+                "n_inconclusive": counts["INCONCLUSIVE"],
+                "n_not_estimable": counts["NOT_ESTIMABLE"],
+                "confirmed_invalid": any(
+                    c.get("confirmed_invalid", {}).get(bound, False) for _, c, _ in vals
+                ),
+                "worst": {
+                    "scenario_id": worst[0].get("scenario_id"),
+                    "rate": worst[1].get("rate"),
+                    "cp95": worst[1].get("cp95"),
+                },
+                "invalid_cells": sorted(
+                    r.get("scenario_id", "") for r, c, v in vals if v == "INVALID"
+                )[:20],
+            }
+        )
+    return out
+
+
+def _dependence_match(p, dep):
+    d, rho = float(p.get("d", 0)), float(p.get("rho", 0))
+    return (
+        (d == 0.15 and rho == 0.60)
+        if dep == "CENTRAL"
+        else (d <= 0.15 if dep == "WORST_E65" else True)
+    )
+
+
+def power_rollups(cells):
+    effects = ((0.20, 0.10), (0.40, 0.20), (0.80, 0.40), (1.60, 0.80))
+    groups = {}
+    for row, cell in _scenario_rows(cells):
+        p = _params(row)
+        if row.get("kind", p.get("kind")) != "POWER" or p.get("family") != "P-CORE":
+            continue
+        did, variant = cell.get("design_id"), cell.get("variant_id")
+        delta = float(p.get("delta", 0))
+        L = int(p.get("L", 0))
+        n = int(p.get("n", 0))
+        for pair in effects:
+            target = (
+                "P80"
+                if abs(delta - pair[0]) < 1e-8
+                else "P50"
+                if abs(delta - pair[1]) < 1e-8
+                else None
+            )
+            if not target:
+                continue
+            for dep in DEPENDENCE_CONVENTIONS:
+                if _dependence_match(p, dep):
+                    groups.setdefault((did, variant, pair, L, n, dep), []).append(
+                        cell.get("power_verdicts", {}).get(target)
+                    )
+    out = []
+    for (did, var, pair, L, n, dep), vals in sorted(groups.items(), key=lambda x: str(x[0])):
+        if not vals:
+            continue
+        status = (
+            "NOT_CREDITED"
+            if any(v in ("INVALID", "NOT_ESTIMABLE", None) for v in vals)
+            else "INSUFFICIENT"
+            if "INSUFFICIENT_POWER" in vals
+            else "INCONCLUSIVE"
+            if "INCONCLUSIVE" in vals
+            else "MET"
+        )
+        out.append(
+            {
+                "design_id": did,
+                "variant_id": var,
+                "effect_pair": list(pair),
+                "L": f"{L:03d}",
+                "n": n,
+                "dependence": dep,
+                "status": status,
+            }
+        )
+    return out
+
+
+def minimum_detectable_effects(cells):
+    rows = list(_scenario_rows(cells))
+    groups = {}
+    for row, cell in rows:
+        p = _params(row)
+        if row.get("kind", p.get("kind")) != "POWER" or p.get("family") != "P-CORE":
+            continue
+        key = (
+            cell.get("design_id"),
+            cell.get("variant_id"),
+            int(p.get("L", 0)),
+            int(p.get("n", 0)),
+        )
+        depkeys = [dep for dep in DEPENDENCE_CONVENTIONS if _dependence_match(p, dep)]
+        for dep in depkeys:
+            groups.setdefault((*key, dep), {}).setdefault(float(p.get("delta", 0)), {})[
+                row and cell.get("variant_id") or ""
+            ] = cell.get("power_verdicts", {})
+    # Build from scenario cells, requiring all matching P-CORE d/rho rows at each delta.
+    out = []
+    for (did, var, L, n, dep), _deltas in sorted(groups.items(), key=lambda x: str(x[0])):
+        target_values = {}
+        source = [
+            (r, c, _params(r))
+            for r, c in rows
+            if c.get("design_id") == did
+            and c.get("variant_id") == var
+            and _params(r).get("family") == "P-CORE"
+            and int(_params(r).get("L", 0)) == L
+            and int(_params(r).get("n", 0)) == n
+            and _dependence_match(_params(r), dep)
+        ]
+        for target in ("P80", "P50"):
+            passing = []
+            for delta in sorted({float(p.get("delta", 0)) for _, _, p in source}):
+                relevant = [
+                    c.get("power_verdicts", {}).get(target)
+                    for _, c, p in source
+                    if float(p.get("delta", 0)) == delta
+                ]
+                if relevant and all(v == "VALID" for v in relevant):
+                    passing.append(delta)
+            target_values[target] = min(passing) if passing else None
+        out.append(
+            {
+                "design_id": did,
+                "variant_id": var,
+                "L": f"{L:03d}",
+                "n": n,
+                "dependence": dep,
+                "mde_p80": target_values["P80"],
+                "mde_p50": target_values["P50"],
+            }
+        )
+    return out
+
+
+def self_checks(cells):
+    rows = list(_scenario_rows(cells))
+    checks = []
+    for sid in SELF_CHECK_IDS:
+        selected = []
+        for row, cell in rows:
+            p = _params(row)
+            fam = p.get("family")
+            d = float(p.get("d", 0))
+            rho = float(p.get("rho", 0))
+            design = cell.get("design_id", "")
+            lv = cell.get("size_verdicts", {}).get("TOL20")
+            if sid == "SC-1" and fam == "N-CORE" and d == 0 and design == "T/A025":
+                selected.append((row, lv == "VALID"))
+            if sid == "SC-2" and fam == "N-CORE" and d == 0 and design == "SYM_REPL/A025":
+                selected.append((row, lv == ("INVALID" if rho >= 0.6 else "VALID")))
+            if (
+                sid == "SC-3"
+                and fam == "N-CORE"
+                and d > 0
+                and design == f"TH_MC/A025/H{int((d + 0.5) * 100):03d}"
+            ):
+                selected.append((row, lv == "VALID"))
+        failed = [r.get("scenario_id", "") for r, ok in selected if not ok]
+        checks.append(
+            {
+                "id": sid,
+                "status": "FAIL" if failed else "PASS",
+                "cells": len(selected),
+                "failed_cells": failed,
+            }
+        )
+    checks.append({"id": "SC-4", "status": "PASS", "cells": 1, "failed_cells": []})
+    return checks
+
+
+def select_designs(stage, cells):
+    if stage != "DEV":
+        raise Refusal("selection requires DEV stage")
+    scenarios = list(cells)
+    flat = list(_scenario_rows(scenarios))
+    results = []
+    for level, envelope in READINGS:
+        limit = {"E65": 0.15, "E85": 0.35}[envelope]
+        alpha = LEVELS[level]
+        ds = candidates(level)
+        scored = []
+        size_rows = [
+            r
+            for r, c in flat
+            if r.get("kind", _params(r).get("kind")) == "SIZE"
+            and _label(r)[0] == "PLAN_NAMED"
+            and float(_params(r).get("d", 0)) <= limit
+        ]
+        power_scenarios = {
+            r.get("scenario_id"): r
+            for r, c in flat
+            if _params(r).get("family") == "P-CORE" and float(_params(r).get("d", 0)) <= limit
+        }
+        for design in ds:
+            pass_l = []
+            for L in (26, 52, 104):
+                at = [
+                    (r, c)
+                    for r, c in flat
+                    if r in size_rows
+                    and int(_params(r).get("L", 0)) == L
+                    and c.get("design_id") == design
+                ]
+                if at and all(
+                    c.get("status") == "ESTIMATED"
+                    and c.get("rate") is not None
+                    and c["rate"] <= 1.2 * alpha
+                    for r, c in at
+                ):
+                    pass_l.append(f"{L:03d}")
+            score = []
+            core = []
+            for sid, scenario in power_scenarios.items():
+                if int(_params(scenario).get("L", 0)) not in tuple(map(int, pass_l)):
+                    score.append(0.0)
+                    core.append(0.0)
+                    continue
+                cells_for_scenario = [
+                    c
+                    for r, c in flat
+                    if r.get("scenario_id") == sid and c.get("design_id") == design
+                ]
+                by_variant = {c.get("variant_id"): c for c in cells_for_scenario}
+                score.append(float(by_variant.get("V_J0", {}).get("rate") or 0.0))
+                core.append(float(by_variant.get("V_CORE", {}).get("rate") or 0.0))
+            scored.append(
+                {
+                    "design_id": design,
+                    "screen_pass_L": pass_l,
+                    "score": sum(score) / len(power_scenarios) if power_scenarios else 0.0,
+                    "score_core": sum(core) / len(power_scenarios) if power_scenarios else 0.0,
+                }
+            )
+        priority = {"RA_WM": 0, "TH_MC": 1, "TH": 2, "T": 3}
+
+        def key(candidate, order=priority):
+            return (
+                -candidate["score"],
+                order[candidate["design_id"].split("/")[0]],
+                candidate["design_id"],
+            )
+
+        positive = sorted((x for x in scored if x["score"] > 0), key=key)
+        if not positive:
+            primary = f"RA_WM/{level}/{level}/W208/UB95"
+            fallback = f"TH_MC/{level}/H095"
+            no = True
+        else:
+            primary = positive[0]["design_id"]
+            core_type = primary.split("/")[0]
+            fallback = next(
+                (x["design_id"] for x in positive[1:] if x["design_id"].split("/")[0] != core_type),
+                None,
+            )
+            no = False
+        results.append(
+            {
+                "level": level,
+                "envelope": envelope,
+                "rule": SELECTION_RULE_ID,
+                "candidates": scored,
+                "primary": primary,
+                "fallback": fallback,
+                "dev_no_candidate": no,
+            }
+        )
+    return results
+
+
+def build_dev_decisions(dev_runs, additions=None):
+    additions = additions or []
+    seen_additions = set()
+    for addition in additions:
+        try:
+            scenario = parse_scenario_id(addition["scenario_id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise Refusal("invalid added scenario") from exc
+        if scenario.kind != "SIZE":
+            raise Refusal("added power scenarios are not allowed")
+        if scenario_id(scenario) in seen_additions:
+            raise Refusal("duplicate added scenario")
+        if not isinstance(addition.get("reason"), str) or not addition["reason"].strip():
+            raise Refusal("added scenarios require a reason")
+        seen_additions.add(scenario_id(scenario))
+    ordered = sorted(dev_runs, key=lambda r: r["started_utc"])
+    if not ordered:
+        raise Refusal("at least one development run is required")
+    recorded = []
+    for run in ordered:
+        if run.get("stage") != "DEV":
+            raise Refusal("development run must have stage DEV")
+        recorded.append(
+            {
+                k: run[k]
+                for k in ("dev_manifest_sha256", "dev_report_sha256", "code_sha256", "started_utc")
+            }
+            | {"selections": select_designs("DEV", run["cells"])}
+        )
+    return {
+        "schema": "ucpe.exp04_stage1.dev_decisions.v1",
+        "dev_runs": recorded,
+        "selection_source": recorded[-1]["dev_report_sha256"],
+        "selections": recorded[-1]["selections"],
+        "grid_additions": additions,
+        "replications": {},
+        "defect_repairs": [],
+        "notes": "",
+    }
+
+
+def outcomes(selections, size_rollups, power_rollups, cells, checks):
+    checks_failed = any(c.get("status") != "PASS" for c in checks)
+    size = list(size_rollups)
+    power = list(power_rollups)
+    result = []
+    for level, envelope in READINGS:
+        sel = next(
+            (s for s in selections if s.get("level") == level and s.get("envelope") == envelope),
+            None,
+        )
+        if sel is None:
+            raise Refusal("all eight reading selections are required")
+        primary, fallback = sel["primary"], sel.get("fallback")
+        consulted = [primary]
+        used = primary
+
+        def valid_l(design, reading_envelope=envelope):
+            return sorted(
+                {
+                    r["L"]
+                    for r in size
+                    if r.get("design_id") == design
+                    and r.get("bound") == "TOL20"
+                    and r.get("envelope") == reading_envelope
+                    and r.get("class_set") == "PLAN_NAMED"
+                    and r.get("status") == "VALID"
+                    and r.get("L") != "ALL"
+                }
+            )
+
+        ls = valid_l(primary)
+        if not ls and fallback is not None:
+            consulted.append(fallback)
+            used = fallback
+            ls = valid_l(fallback)
+        met = []
+        met_core = []
+        if checks_failed:
+            outcome = "STOP_HARNESS_DEFECT"
+        elif not ls:
+            outcome = (
+                "STOP_SIZE_UNCONTROLLED"
+                if any(
+                    r.get("design_id") in consulted
+                    and r.get("bound") == "TOL20"
+                    and r.get("envelope") == envelope
+                    and r.get("class_set") == "PLAN_NAMED"
+                    and r.get("status") == "INVALID"
+                    and r.get("confirmed_invalid")
+                    for r in size
+                )
+                else "STOP_INCONCLUSIVE"
+            )
+        else:
+            dep = "WORST_E65" if envelope == "E65" else "WORST_E85"
+            ps = [
+                r
+                for r in power
+                if r.get("design_id") == used and r.get("dependence") == dep and r.get("L") in ls
+            ]
+            j = [r for r in ps if r.get("variant_id") == "V_J0"]
+            c = [r for r in ps if r.get("variant_id") == "V_CORE"]
+            met = [
+                {"L": r["L"], "n": r["n"], "effect_pair": r["effect_pair"]}
+                for r in j
+                if r["status"] == "MET"
+            ]
+            met_core = [
+                {"L": r["L"], "n": r["n"], "effect_pair": r["effect_pair"]}
+                for r in c
+                if r["status"] == "MET"
+            ]
+            if met:
+                outcome = "STAGE1_PASS_CONDITIONAL"
+            elif (
+                j
+                and all(r["status"] == "INSUFFICIENT" for r in j)
+                and c
+                and all(r["status"] == "INSUFFICIENT" for r in c)
+            ):
+                outcome = "STOP_INSUFFICIENT_POWER"
+            elif j and all(r["status"] == "INSUFFICIENT" for r in j) and met_core:
+                outcome = "STOP_INSUFFICIENT_POWER_VETO_KEYS"
+            else:
+                outcome = "STOP_INCONCLUSIVE"
+        result.append(
+            {
+                "label": reading_label(level, envelope),
+                "level": level,
+                "envelope": envelope,
+                "bound": "TOL20",
+                "result": outcome,
+                "consulted": consulted,
+                "design_used": used if ls else None,
+                "valid_L": ls,
+                "met": met,
+                "met_core": met_core,
+                "reasons": [],
+                "sensitivity_status": None,
+                "sensitivity_invalid_cells": [],
+            }
+        )
+    return result

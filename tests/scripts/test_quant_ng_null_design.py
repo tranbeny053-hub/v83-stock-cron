@@ -693,3 +693,321 @@ def test_kat_s4_sign_key_cache_keys_on_q_and_m_min():
     assert np.array_equal(
         ev.sign("4/5", 1)[0], q.sign_key({"S": x}, member, L=L, q="4/5", m_min=1)[0]
     )
+
+
+@pytest.mark.parametrize(
+    "x,expected",
+    [(500, "VALID"), (600, "INCONCLUSIVE"), (700, "INVALID")],
+    ids=["below", "overlap", "above"],
+)
+def test_kat_v1_size_verdict_boundaries(x, expected):
+    assert q.classify_size(x, 20_000, q.LEVELS["A025"], "TOL20", 588)["verdict"] == expected
+
+
+@pytest.mark.parametrize(
+    "bound,x_valid,x_invalid",
+    [
+        ("TOL20", 5852, 6149),
+        ("TOL20", 2894, 3107),
+        ("TOL20", 1424, 1577),
+        ("TOL20", 938, 1063),
+        ("STRICT", 2403, 2598),
+        ("CEIL2X", 4864, 5137),
+    ],
+    ids=["tol-a050", "tol-a025", "tol-a0125", "tol-a0083", "strict-a025", "ceil-a025"],
+)
+def test_kat_v2_size_boundary_thresholds(bound, x_valid, x_invalid):
+    level = (
+        "A050"
+        if x_valid == 5852
+        else "A0083"
+        if x_valid == 938
+        else "A025"
+        if bound != "TOL20" or x_valid == 2894
+        else "A0125"
+    )
+    assert q.classify_size(x_valid, 100_000, q.LEVELS[level], bound, 588)["verdict"] == "VALID"
+    assert q.classify_size(x_invalid, 100_000, q.LEVELS[level], bound, 588)["verdict"] == "INVALID"
+
+
+def test_kat_v3_simultaneous_confirmed_limit():
+    a = q.classify_size(3107, 100_000, 0.025, "TOL20", 588)
+    b = q.classify_size(3300, 100_000, 0.025, "TOL20", 588)
+    assert a["verdict"] == "INVALID" and not a["confirmed_invalid"]
+    assert a["cp_sim_lower"] == pytest.approx(0.028873, abs=1e-6)
+    assert b["confirmed_invalid"] and b["cp_sim_lower"] == pytest.approx(0.030736, abs=1e-6)
+    assert q.classify_size(3224, 100_000, 0.025, "TOL20", 588)["confirmed_invalid"]
+    assert not q.classify_size(3223, 100_000, 0.025, "TOL20", 588)["confirmed_invalid"]
+
+
+@pytest.mark.parametrize(
+    "target,valid_x,insufficient_x",
+    [("P80", 3250, 3149), ("P50", 2063, 1937), ("P90", 3638, 3561)],
+    ids=["p80", "p50", "p90"],
+)
+def test_kat_v4_power_targets_and_null_veto(target, valid_x, insufficient_x):
+    assert q.classify_power(valid_x, 4000, target, "VALID") == "VALID"
+    assert q.classify_power(insufficient_x, 4000, target, "VALID") == "INSUFFICIENT_POWER"
+    assert q.classify_power(valid_x, 4000, target, "INVALID") == "INVALID"
+
+
+def _v5_cells():
+    rows = []
+    for level, _envelope in q.READINGS:
+        sid = "N-CORE/d=0.00/rho=0.60/n=010/L=026"
+        scenario = {
+            "scenario_id": sid,
+            "kind": "SIZE",
+            "params": {"family": "N-CORE", "kind": "SIZE", "d": 0.0, "rho": 0.6, "n": 10, "L": 26},
+            "family_class": "PLAN_NAMED",
+            "d_envelope": "E60",
+            "n_reps": 100,
+        }
+        # Size-cell table is used by roll-up tests as well as outcomes.
+        scenario["cells"] = [
+            {
+                "design_id": f"T/{level}",
+                "variant_id": "V_CORE",
+                "status": "ESTIMATED",
+                "rate": 0.02,
+                "cp95": [0.01, 0.03],
+                "size_verdicts": {"TOL20": "VALID"},
+                "confirmed_invalid": {"TOL20": False},
+            }
+        ]
+        rows.append(scenario)
+    return rows
+
+
+def test_kat_v5_rollups_and_all_eight_reading_outcomes():
+    cells = _v5_cells()
+    roll = q.size_rollups(cells, bounds=("TOL20",), envelopes=("E65",), class_sets=("PLAN_NAMED",))
+    assert roll and all(x["status"] == "VALID" for x in roll)
+    checks = [{"id": x, "status": "PASS", "cells": 1, "failed_cells": []} for x in q.SELF_CHECK_IDS]
+    selections = []
+    sizes = []
+    powers = []
+    outcomes_by_reading = (
+        "STAGE1_PASS_CONDITIONAL",
+        "STOP_INCONCLUSIVE",
+        "STOP_INSUFFICIENT_POWER",
+        "STOP_INSUFFICIENT_POWER_VETO_KEYS",
+        "STOP_INCONCLUSIVE",
+        "STOP_SIZE_UNCONTROLLED",
+        "STOP_INCONCLUSIVE",
+        "STOP_INCONCLUSIVE",
+    )
+    for i, (level, envelope) in enumerate(q.READINGS):
+        pri = f"T/{level}"
+        fb = f"TH/{level}/H095"
+        selections.append(
+            {
+                "level": level,
+                "envelope": envelope,
+                "primary": pri,
+                "fallback": None if i in (4, 5) else fb,
+            }
+        )
+        sizes.append(
+            {
+                "design_id": pri,
+                "bound": "TOL20",
+                "envelope": envelope,
+                "class_set": "PLAN_NAMED",
+                "L": "026",
+                "status": "VALID" if i in (0, 2, 3, 6, 7) else "INVALID",
+                "confirmed_invalid": i == 5,
+            }
+        )
+        if i == 1:
+            sizes.append(
+                {
+                    "design_id": fb,
+                    "bound": "TOL20",
+                    "envelope": envelope,
+                    "class_set": "PLAN_NAMED",
+                    "L": "026",
+                    "status": "VALID",
+                    "confirmed_invalid": False,
+                }
+            )
+        if i == 5:
+            sizes.append(
+                {
+                    "design_id": pri,
+                    "bound": "TOL20",
+                    "envelope": envelope,
+                    "class_set": "PLAN_NAMED",
+                    "L": "ALL",
+                    "status": "INVALID",
+                    "confirmed_invalid": True,
+                }
+            )
+        if i == 2:
+            powers.extend(
+                [
+                    {
+                        "design_id": pri,
+                        "variant_id": "V_J0",
+                        "effect_pair": [0.2, 0.1],
+                        "L": "026",
+                        "n": 10,
+                        "dependence": "WORST_E65" if envelope == "E65" else "WORST_E85",
+                        "status": "INSUFFICIENT",
+                    },
+                    {
+                        "design_id": pri,
+                        "variant_id": "V_CORE",
+                        "effect_pair": [0.2, 0.1],
+                        "L": "026",
+                        "n": 10,
+                        "dependence": "WORST_E65" if envelope == "E65" else "WORST_E85",
+                        "status": "INSUFFICIENT",
+                    },
+                ]
+            )
+        if i == 3:
+            powers.extend(
+                [
+                    {
+                        "design_id": pri,
+                        "variant_id": "V_J0",
+                        "effect_pair": [0.2, 0.1],
+                        "L": "026",
+                        "n": 10,
+                        "dependence": "WORST_E65" if envelope == "E65" else "WORST_E85",
+                        "status": "INSUFFICIENT",
+                    },
+                    {
+                        "design_id": pri,
+                        "variant_id": "V_CORE",
+                        "effect_pair": [0.2, 0.1],
+                        "L": "026",
+                        "n": 10,
+                        "dependence": "WORST_E65" if envelope == "E65" else "WORST_E85",
+                        "status": "MET",
+                    },
+                ]
+            )
+        if i == 0:
+            powers.extend(
+                [
+                    {
+                        "design_id": pri,
+                        "variant_id": "V_J0",
+                        "effect_pair": [0.2, 0.1],
+                        "L": "026",
+                        "n": 10,
+                        "dependence": "WORST_E65",
+                        "status": "MET",
+                    }
+                ]
+            )
+    got = q.outcomes(selections, sizes, powers, cells, checks)
+    assert len(got) == 8 and [x["label"] for x in got] == list(q.READING_LABELS)
+    assert [x["result"] for x in got] == list(outcomes_by_reading)
+    assert got[0]["met"] and got[3]["met_core"]
+    assert got[1]["consulted"] == ["T/A050", "TH/A050/H095"]
+    assert got[2]["result"] == "STOP_INSUFFICIENT_POWER"
+    defect = q.outcomes(selections, sizes, powers, cells, [{"id": "SC-1", "status": "FAIL"}])
+    assert len(defect) == 8 and all(x["result"] == "STOP_HARNESS_DEFECT" for x in defect)
+
+
+def test_kat_v6_dev_selection_and_added_power_refusal():
+    assert len(q.candidates("A025")) == 17 and len(q.candidates("A050")) == 23
+    empty = q.select_designs("DEV", [])
+    assert [(x["level"], x["envelope"]) for x in empty] == list(q.READINGS)
+    assert empty[0]["primary"] == "RA_WM/A050/A050/W208/UB95"
+    assert empty[0]["fallback"] == "TH_MC/A050/H095" and empty[0]["dev_no_candidate"]
+    with pytest.raises(q.Refusal):
+        q.select_designs("VAL", [])
+    run = {
+        "dev_manifest_sha256": "m",
+        "dev_report_sha256": "r",
+        "code_sha256": "c",
+        "started_utc": "2026-01-01T00:00:00Z",
+        "stage": "DEV",
+        "cells": [],
+    }
+    with pytest.raises(q.Refusal):
+        q.build_dev_decisions(
+            [run],
+            [{"scenario_id": "P-CORE/d=0.15/rho=0.60/n=010/L=026/delta=0.20", "reason": "probe"}],
+        )
+    size_addition = {
+        "scenario_id": "N-CORE/d=0.15/rho=0.60/n=010/L=026",
+        "reason": "frozen size sensitivity probe",
+    }
+    decision = q.build_dev_decisions([run], [size_addition])
+    assert decision["selections"] == decision["dev_runs"][0]["selections"]
+    assert decision["selection_source"] == "r" and decision["grid_additions"] == [size_addition]
+
+    designs = q.candidates("A050")
+    data = []
+    for d in (0.15, 0.35):
+        row = {
+            "scenario_id": f"N-CORE/d={d:.2f}/rho=0.60/n=010/L=026",
+            "kind": "SIZE",
+            "params": {"family": "N-CORE", "kind": "SIZE", "d": d, "rho": 0.6, "n": 10, "L": 26},
+            "family_class": "PLAN_NAMED",
+            "d_envelope": "E85",
+            "cells": [],
+        }
+        row["cells"] = [
+            {"design_id": design, "status": "ESTIMATED", "rate": (0.05 if d == 0.15 else 0.99)}
+            for design in designs
+        ]
+        data.append(row)
+    for d in (0.15, 0.35):
+        row = {
+            "scenario_id": f"P-CORE/d={d:.2f}/rho=0.60/n=010/L=026/delta=0.20",
+            "kind": "POWER",
+            "params": {
+                "family": "P-CORE",
+                "kind": "POWER",
+                "d": d,
+                "rho": 0.6,
+                "n": 10,
+                "L": 26,
+                "delta": 0.2,
+            },
+            "cells": [],
+        }
+        row["cells"] = []
+        for design in designs:
+            score = (
+                0.8
+                if design == "RA_WM/A050/A050/W104/NONE"
+                else 0.5
+                if design == "TH_MC/A050/H060"
+                else 0.1
+            )
+            if d == 0.35:
+                score = 1.0
+            row["cells"].extend(
+                [
+                    {"design_id": design, "variant_id": "V_J0", "rate": score},
+                    {
+                        "design_id": design,
+                        "variant_id": "V_CORE",
+                        "rate": 0.99 if design == "T/A050" else 0.2,
+                    },
+                ]
+            )
+        data.append(row)
+    selected = q.select_designs("DEV", data)
+    e65 = selected[0]
+    assert e65["primary"] == "RA_WM/A050/A050/W104/NONE"
+    assert e65["fallback"] == "TH_MC/A050/H060"
+    best = next(x for x in e65["candidates"] if x["design_id"] == e65["primary"])
+    assert best["screen_pass_L"] == ["026"] and best["score"] == pytest.approx(0.8)
+    assert best["score_core"] == pytest.approx(0.2)
+    assert next(x for x in e65["candidates"] if x["design_id"] == "T/A050")[
+        "score_core"
+    ] == pytest.approx(0.99)
+    # Reordering runs cannot change which run is selected: start time controls it.
+    earlier = {**run, "started_utc": "2025-01-01T00:00:00Z", "cells": []}
+    later = {**run, "started_utc": "2025-02-01T00:00:00Z", "cells": data}
+    decisions = q.build_dev_decisions([later, earlier])
+    assert decisions["selections"] == q.select_designs("DEV", data)
+    assert [x["dev_report_sha256"] for x in decisions["dev_runs"]] == ["r", "r"]
