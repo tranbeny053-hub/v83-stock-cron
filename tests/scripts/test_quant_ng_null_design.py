@@ -2351,6 +2351,9 @@ def test_kat_i2_cli_run_refusals_exit_2_and_plan_is_guarded():
         junk = root / "junk.json"
         junk.write_bytes(b"not json")
         val = root / "val.json"
+        # Deliberately WRONG code_sha256: a second barrier, so that this VAL child, which the
+        # in-process fixture does not reach, refuses at load_manifest and run_stage before any
+        # draw (EXP04-C2 NOTE 2). Do not "fix" it.
         val.write_bytes(q.canonical_bytes(dict(_val_manifest(), code_sha256="0" * 64)))
         for manifest, digest, out, reason in (
             (junk, "0" * 64, lane / "a", "manifest digest mismatch"),
@@ -2436,3 +2439,17 @@ def test_kat_v5_reasons_are_the_fixed_step_texts_and_step5_is_attached():
     defect = q.outcomes(selections, sizes, powers + central, cells, [{"status": "FAIL"}], mde)
     assert all(x["reasons"] == [r["S1_SELF_CHECK_FAILED"]] for x in defect)
     assert [x["central_power_rollups"] for x in defect] == [x["central_power_rollups"] for x in got]
+
+
+def test_kat_i2_plan_and_benchmark_install_the_guard_with_no_write_allowance(monkeypatch):
+    # EXP04-C2 NOTE 1: both commands are guarded with allowed=None. The stub keeps the real hook
+    # out of this process; project_runtime is stubbed so benchmark draws nothing.
+    installed = []
+    monkeypatch.setattr(q, "install_guard", lambda holder: installed.append(dict(holder)))
+    monkeypatch.setattr(q, "project_runtime", lambda manifest: 1.0)
+    for key in _orchestration_env():
+        monkeypatch.setenv(key, "1")
+    for command in ("plan", "benchmark"):
+        installed.clear()
+        assert q.main([command, "--stage", "DEV"]) == 0
+        assert installed == [{"allowed": None, "extra_files": ()}], command
