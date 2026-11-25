@@ -1587,6 +1587,7 @@ def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path):
     lane.mkdir(parents=True, exist_ok=True)
     out = lane / "out"
     out.mkdir()
+    val["focus_designs"] = list(q.expected_focus("VAL", val["selections"]))
     marker = lane / f"VALIDATION_CONSUMED_{val['prereg_sha256'][:16]}.json"
     marker.write_bytes(
         q.canonical_bytes(
@@ -1632,6 +1633,7 @@ def test_kat_r1_rejects_missing_manifest_scenario_and_completed_validation(tmp_p
         }
         for level, envelope in q.READINGS
     ]
+    val["focus_designs"] = list(q.expected_focus("VAL", val["selections"]))
     marker = lane / f"VALIDATION_CONSUMED_{val['prereg_sha256'][:16]}.json"
     marker.write_bytes(
         q.canonical_bytes(
@@ -1698,3 +1700,264 @@ def test_kat_i2_environment_platform_and_child_manifest_guard():
         assert proc.returncode == 0, proc.stderr
         manifest = json.loads((out / "MANIFEST.json").read_bytes())
         assert manifest["environment"] == q.environment_record(env)
+
+
+# ---- Master's consolidated repair R-D4: orchestration on the run's own path ----
+
+
+def _readings(primary=lambda level: q.candidates(level)[0]):
+    return [
+        {
+            "level": lvl,
+            "envelope": env,
+            "primary": primary(lvl),
+            "fallback": None,
+            "dev_no_candidate": False,
+        }
+        for lvl, env in q.READINGS
+    ]
+
+
+def _val_manifest(**kw):
+    return q.build_manifest(
+        "VAL",
+        "1" * 64,
+        "2" * 64,
+        environ=_orchestration_env(),
+        selections=kw.pop("selections", _readings()),
+        **kw,
+    )
+
+
+def _fast_val(monkeypatch, projected=0.0):
+    monkeypatch.setattr(q, "project_runtime", lambda manifest: projected)
+    monkeypatch.setattr(q, "thmc_table", lambda L, h, **kw: dict.fromkeys(q.READING_LEVELS, -2.0))
+    monkeypatch.setattr(q, "sigma0_for", lambda s, **kw: 0.2)
+
+
+def test_kat_g1_val_focus_adds_selected_designs():
+    # Spec §9 [S1:MAJOR-B]: VAL focus = the fixed 34 plus every selected design; DEV = the 34.
+    m = _val_manifest(selections=_readings(lambda lvl: f"RA_WM/{lvl}/{lvl}/W208/UB95"))
+    extra = {f"RA_WM/{lvl}/{lvl}/W208/UB95" for lvl in q.READING_LEVELS} - set(q.focus_designs())
+    assert len(extra) == 3 and set(m["focus_designs"]) == set(q.focus_designs()) | extra
+    f = len(m["focus_designs"])
+    assert 387 * (12 * f + 2 * (103 - f)) == 211302 + 3 * 3870
+    dev = q.build_manifest("DEV", "1" * 64, "2" * 64, environ=_orchestration_env())
+    assert dev["focus_designs"] == list(q.focus_designs())
+    with pytest.raises(q.Refusal, match="^development grid is incomplete$"):
+        q._validate_grid(
+            "DEV",
+            dev["scenarios"],
+            dev["designs"],
+            dev["replications"],
+            dev["chunking"],
+            None,
+            ["T/A025"],
+        )
+
+
+def test_kat_r1_output_folder_refusals(tmp_path):
+    repo = tmp_path
+    lane = repo / ".work" / "exp04_stage1_test"
+    (lane / "real").mkdir(parents=True)
+    (lane / "link").symlink_to(lane / "real", target_is_directory=True)
+    cases = (
+        (lane / "holdout_x", "protected path component"),
+        (lane / "link" / "out", "output folder is a symlink"),
+        (lane, r"output folder outside \.work/exp04_stage1_\*"),
+        (repo / ".work" / "other" / "x", r"output folder outside \.work/exp04_stage1_\*"),
+    )
+    for path, reason in cases:
+        with pytest.raises(q.Refusal, match=f"^{reason}$"):
+            q.check_out_dir(path, repo)
+    full = lane / "full"
+    full.mkdir()
+    (full / "x").write_text("x")
+    with pytest.raises(q.Refusal, match="^output folder is not empty$"):
+        q.run_stage(_tiny_manifest(), full, repo_root=repo, environ=_orchestration_env())
+
+
+def test_kat_r1_manifest_and_grid_refusals(tmp_path):
+    good = q.canonical_bytes(_tiny_manifest())
+    path = tmp_path / "m.json"
+    for change, reason in (
+        (lambda m: m["environment"].update(python="other"), "environment mismatch"),
+        (lambda m: m.update(extra=1), "unknown field"),
+    ):
+        m = json.loads(good)
+        change(m)
+        path.write_bytes(q.canonical_bytes(m))
+        with pytest.raises(q.Refusal, match=f"^{reason}$"):
+            q.load_manifest(path, hashlib.sha256(path.read_bytes()).hexdigest())
+    val_ids = [q.scenario_id(s) for s in q.scenario_grid("VAL")]
+    twin = "N-CORE/d=0.15/rho=0.60/n=015/L=026"
+    added_power = "P-CORE/d=0.15/rho=0.60/n=015/L=026/delta=0.40"
+    for kwargs, reason in (
+        ({"selections": None}, "selection is incomplete"),
+        (
+            {"selections": _readings(lambda lvl: f"SYM_REPL/{lvl}")},
+            "selected design is not a candidate",
+        ),
+        ({"scenarios": val_ids[1:]}, "validation grid is incomplete"),
+        ({"scenarios": val_ids + [twin, added_power]}, "only size scenarios may be added"),
+        ({"scenarios": val_ids + ["garbage"]}, "invalid scenario id"),
+        ({"scenarios": val_ids + val_ids[:1]}, "duplicate scenario"),
+        ({"replications": dict(q.VAL_MINIMUMS, n_null=99_000)}, "validation grid is incomplete"),
+    ):
+        with pytest.raises(q.Refusal, match=f"^{reason}$"):
+            _val_manifest(**kwargs)
+    with pytest.raises(q.Refusal, match="^null twin missing$"):
+        q.build_manifest(
+            "KAT",
+            "1" * 64,
+            "2" * 64,
+            environ=_orchestration_env(),
+            replications=dict(q.DEV_MINIMUMS),
+            scenarios=[added_power],
+        )
+    with pytest.raises(q.Refusal, match="^development grid is incomplete$"):
+        q.build_manifest(
+            "DEV",
+            "1" * 64,
+            "2" * 64,
+            environ=_orchestration_env(),
+            replications=dict(q.DEV_MINIMUMS, n_power=1_000),
+        )
+
+
+def test_kat_r1_projection_refusal_writes_no_marker(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    _fast_val(monkeypatch, projected=1e9)
+    with pytest.raises(q.Refusal, match="^projected runtime exceeds the cap$"):
+        q.run_stage(_val_manifest(), lane / "val", repo_root=tmp_path, environ=_orchestration_env())
+    assert not list(lane.glob("VALIDATION_CONSUMED_*")) and not (lane / "val").exists()
+
+
+def test_kat_r1_interrupted_validation_leaves_no_cells_and_needs_resume(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    _fast_val(monkeypatch)
+    manifest = _val_manifest()
+
+    def interrupted(*args, **kwargs):
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(q, "count_scenario", interrupted)
+    env = _orchestration_env()
+    with pytest.raises(RuntimeError):
+        q.run_stage(manifest, lane / "val", repo_root=tmp_path, environ=env)
+    assert not (lane / "val" / "REPORT.json").exists()
+    assert not (lane / "val" / "CELLS.jsonl").exists()
+    marker = lane / f"VALIDATION_CONSUMED_{'1' * 16}.json"
+    assert json.loads(marker.read_bytes())["status"] == "STARTED"
+    with pytest.raises(q.Refusal, match="^validation interrupted: resume flag required$"):
+        q.run_stage(manifest, lane / "val2", repo_root=tmp_path, environ=env)
+    other = dict(manifest, amendments=["a different manifest"])
+    for status in ("STARTED", "COMPLETE"):
+        marker.write_bytes(q.canonical_bytes(json.loads(marker.read_bytes()) | {"status": status}))
+        with pytest.raises(
+            q.Refusal, match="^validation already consumed under this preregistration$"
+        ):
+            q.run_stage(other, lane / "val3", repo_root=tmp_path, environ=env)
+
+
+def test_kat_d1_power_cells_follow_the_null_twin(tmp_path):
+    twin = q.Scenario("N-CORE", "SIZE", 0.0, 0.6, 5, 104)
+    power = q._scenario("P-CORE", d=0.0, rho=0.6, n=5, L=104, delta=0.8)
+    m = _tiny_manifest()
+    m["scenarios"] = sorted([q.scenario_id(twin), q.scenario_id(power)])
+    m["designs"] = ["RA_WM/A050/A050/W104/NONE", "SYM_REPL/A050", "T/A050"]
+    m["focus_designs"] = ["T/A050"]
+    m["replications"] = {"n_null": 40, "n_power": 20, "n_cal_sigma0": 20, "n_cal_thmc": 20}
+    m["chunking"] = {"chunk_null": 20, "chunk_power": 10, "chunk_thmc": 10}
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    report = q.run_stage(m, lane / "out", repo_root=tmp_path, environ=_orchestration_env())
+    rows = [json.loads(x) for x in (lane / "out" / "CELLS.jsonl").read_text().splitlines()]
+    size = {c["design_id"]: c for c in next(r for r in rows if r["kind"] == "SIZE")["cells"]}
+    prow = next(r for r in rows if r["kind"] == "POWER")
+    assert prow["null_twin_id"] == q.scenario_id(twin) and len(prow["cells"]) == 12 + 2 * 2
+    # At L = 104 the W104 allowance has one window: NOT_ESTIMABLE on both sides.
+    assert size["RA_WM/A050/A050/W104/NONE"]["status"] == "NOT_ESTIMABLE"
+    for cell in prow["cells"]:
+        nv = size[cell["design_id"]]["size_verdicts"]["TOL20"]
+        assert cell["null_twin_verdict"] == nv
+        if cell["design_id"].startswith("RA_WM/"):
+            assert cell["status"] == "NOT_ESTIMABLE" and cell["rejections"] is None
+        else:
+            assert cell["power_verdicts"] == {
+                p: q.classify_power(cell["rejections"], 20, p, nv) for p in q.POWER_TARGETS
+            }
+    sc4 = next(c for c in report["self_checks"] if c["id"] == "SC-4")
+    assert sc4["status"] == "PASS" and sc4["cells"] == 3 + 16
+    assert report["outcome_status"] == "KAT_ONLY_NOT_AN_OUTCOME" and report["outcomes"] == []
+
+
+def test_kat_r1_val_manifest_inputs_match_select():
+    run = {
+        "dev_manifest_sha256": "a" * 64,
+        "dev_report_sha256": "b" * 64,
+        "code_sha256": "c" * 64,
+        "started_utc": "2026-01-01T00:00:00Z",
+        "stage": "DEV",
+        "cells": _dev_data({"TH_MC/A050/H060": 0.5}),
+    }
+    additions = {
+        "grid_additions": [
+            {"scenario_id": "N-CORE/d=0.15/rho=0.60/n=015/L=026", "reason": "a size addition"}
+        ],
+        "replications": {"n_null": 200_000},
+    }
+    decisions = q.build_dev_decisions([run], additions)
+    good = q.canonical_bytes(decisions)
+    extra = q.val_manifest_inputs([run], additions, good)
+    assert extra["selections"] == decisions["selections"]
+    assert extra["scenarios"][-1] == "N-CORE/d=0.15/rho=0.60/n=015/L=026"
+    assert extra["replications"]["n_null"] == 200_000
+    assert extra["decisions_sha256"] == hashlib.sha256(good).hexdigest()
+    tampered = json.loads(good)
+    tampered["selections"][0]["primary"] = "T/A050"
+    with pytest.raises(q.Refusal, match="^selection does not match the development report$"):
+        q.val_manifest_inputs([run], additions, q.canonical_bytes(tampered))
+    with pytest.raises(q.Refusal, match="^not a development report$"):
+        q.val_manifest_inputs([dict(run, stage="VAL")], additions, good)
+    with pytest.raises(q.Refusal, match="^unknown field$"):
+        q.val_manifest_inputs([run], additions, b"not json")
+
+
+def test_kat_i2_benchmark_runs_without_an_output_folder():
+    env = os.environ.copy() | _orchestration_env()
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            str(Path(q.__file__).resolve()),
+            "benchmark",
+            "--stage",
+            "DEV",
+        ],
+        cwd=tempfile.gettempdir(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert float(proc.stdout.strip().split("=", 1)[1]) > 0
+
+
+def test_kat_r1_run_stage_checks_harness_and_existing_report(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    env = _orchestration_env()
+    stale = dict(_tiny_manifest(), code_sha256="0" * 64)
+    with pytest.raises(q.Refusal, match="^harness digest mismatch$"):
+        q.run_stage(stale, lane / "kat", repo_root=tmp_path, environ=env)
+    _fast_val(monkeypatch)
+    done = lane / "val"
+    done.mkdir()
+    (done / "REPORT.json").write_text("{}")
+    with pytest.raises(q.Refusal, match="^validation already consumed$"):
+        q.run_stage(_val_manifest(), done, resume=True, repo_root=tmp_path, environ=env)

@@ -490,7 +490,9 @@ def _check_hash(value):
     )
 
 
-def _validate_grid(stage, scenario_ids, designs, replications, chunking, selections=None):
+def _validate_grid(
+    stage, scenario_ids, designs, replications, chunking, selections=None, focus=None
+):
     """Apply the immutable stage grid and minimum rules to a manifest or run."""
     minimums = VAL_MINIMUMS if stage == "VAL" else DEV_MINIMUMS
     refusal = (
@@ -519,9 +521,9 @@ def _validate_grid(stage, scenario_ids, designs, replications, chunking, selecti
         raise Refusal("null twin missing")
     if stage in ("DEV", "VAL"):
         frozen = {scenario_id(s) for s in scenario_grid(stage)}
-        if not frozen.issubset(ids) or any(
-            s.kind != "SIZE" for s in scenarios if scenario_id(s) not in frozen
-        ):
+        if any(s.kind != "SIZE" for s in scenarios if scenario_id(s) not in frozen):
+            raise Refusal("only size scenarios may be added")
+        if not frozen.issubset(ids) or set(designs) != set(design_grid()):
             raise Refusal(refusal)
     if stage == "VAL":
         if not isinstance(selections, list) or len(selections) != len(READINGS):
@@ -541,7 +543,21 @@ def _validate_grid(stage, scenario_ids, designs, replications, chunking, selecti
                 and selection.get("fallback") not in candidates(level)
             ):
                 raise Refusal("selected design is not a candidate")
+    if stage in ("DEV", "VAL") and focus is not None:
+        if sorted(set(focus)) != sorted(focus) or set(focus) != set(
+            expected_focus(stage, selections)
+        ):
+            raise Refusal(refusal)
     return scenarios
+
+
+def expected_focus(stage, selections=None):
+    """Spec §9: the fixed 34 and, for VAL, every design selected in any reading [S1:MAJOR-B]."""
+    focus = set(focus_designs())
+    if stage == "VAL":
+        for selection in selections or []:
+            focus |= {selection.get(k) for k in ("primary", "fallback") if selection.get(k)}
+    return tuple(sorted(focus))
 
 
 def build_manifest(
@@ -588,19 +604,9 @@ def build_manifest(
         raise Refusal("duplicate scenario")
     if any(s.kind != "SIZE" and null_twin_id(s) not in set(ids) for s in grid):
         raise Refusal("null twin missing")
-    if stage in ("DEV", "VAL"):
-        frozen = {scenario_id(s) for s in scenario_grid(stage)}
-        if not frozen.issubset(set(ids)) or any(
-            s.kind != "SIZE" for s in grid if scenario_id(s) not in frozen
-        ):
-            raise Refusal(
-                "validation grid is incomplete"
-                if stage == "VAL"
-                else "development grid is incomplete"
-            )
     des = list(design_grid())
-    focus = list(focus_designs())
-    _validate_grid(stage, ids, des, reps, chunks, selections)
+    focus = list(expected_focus(stage, selections if isinstance(selections, list) else None))
+    _validate_grid(stage, ids, des, reps, chunks, selections, focus)
     keys = all_seed_keys(
         stage,
         ids,
@@ -665,46 +671,91 @@ def load_manifest(path, expect_sha256):
         obj.get("replications", {}),
         obj.get("chunking", {}),
         obj.get("selections"),
+        obj.get("focus_designs"),
     )
     return obj
 
 
-def _runtime_shape(s, designs, focus, reps=2, chunk=2):
-    th = {
-        L: {h: {level: 0.0 for level in READING_LEVELS} for h in (0.60, 0.65, 0.75, 0.85, 0.95)}
-        for L in (s.L,)
-    }
-    sig = {scenario_id(s): 1.0}
+REFERENCE_SHAPES = (
+    "N-CORE/d=0.15/rho=0.60/n=005/L=026",
+    "N-CORE/d=0.15/rho=0.60/n=060/L=104",
+    "P-CORE/d=0.15/rho=0.60/n=030/L=104/delta=0.40",
+)
+RUNTIME_OVERHEAD = 1.15  # statistics, intervals and writing (PREREG §3.6: estimated, not measured)
+POWER_FLOOR = 0.35  # a power scenario never projects below this share of the power shape's time
+
+
+def _work_units(s):
+    """Generator work per replication: fields x (1 + n_sup) x W^2 (the Cholesky products)."""
+    n_sup = 2 * s.n if s.churn_a is not None else s.n
+    width = W_HIST_MAX + s.L
+    return (1 if s.kind == "SIZE" else 4) * (1 + n_sup) * width * width
+
+
+def _seconds_per_replication(s, manifest, reps):
+    sigma = {scenario_id(s): 1.0}
     if null_twin_id(s) is not None:
-        sig[null_twin_id(s)] = 1.0
+        sigma[null_twin_id(s)] = 1.0
+    thmc = {s.L: {h: dict.fromkeys(READING_LEVELS, -1.0) for h in (0.60, 0.65, 0.75, 0.85, 0.95)}}
     start = time.perf_counter()
     count_scenario(
         s,
         stage="BENCH",
         n_reps=reps,
-        chunk=chunk,
-        designs=designs,
-        focus=focus,
-        sigma0=sig,
-        thmc=th,
+        chunk=reps,
+        designs=manifest["designs"],
+        focus=manifest["focus_designs"],
+        sigma0=sigma,
+        thmc=thmc,
     )
-    return time.perf_counter() - start
+    return (time.perf_counter() - start) / reps
 
 
 def project_runtime(manifest):
-    """Measure count_scenario on three reference shapes and project the manifest workload."""
-    shapes = (
-        scenario_grid("DEV")[0],
-        scenario_grid("DEV")[1],
-        next(s for s in scenario_grid("DEV") if s.kind == "POWER"),
+    """Projected seconds for a manifest, from three measured reference shapes (§10 step 2).
+
+    Each shape runs one full chunk of the manifest's chunk size. A size replication costs
+    a + b * units, fitted on the two size shapes; a power replication scales the power
+    shape's time by its units (never below POWER_FLOOR of it). The sigma0 calibration is
+    bounded by the size cost, the TH_MC tables by the L = 104 table's measured time, and
+    statistics and writing add RUNTIME_OVERHEAD.
+    """
+    small, large, power = (parse_scenario_id(x) for x in REFERENCE_SHAPES)
+    chunking, reps = manifest["chunking"], manifest["replications"]
+    t_small = _seconds_per_replication(small, manifest, chunking["chunk_null"])
+    t_large = _seconds_per_replication(large, manifest, chunking["chunk_null"])
+    t_power = _seconds_per_replication(power, manifest, chunking["chunk_power"])
+    u_small, u_large, u_power = (_work_units(s) for s in (small, large, power))
+    slope = max((t_large - t_small) / (u_large - u_small), 0.0)
+    intercept = max(t_small - slope * u_small, 0.0)
+    total = 0.0
+    lengths = set()
+    for sid in manifest["scenarios"]:
+        s = parse_scenario_id(sid)
+        lengths.add(s.L)
+        if s.kind == "SIZE":
+            per = intercept + slope * _work_units(s)
+            total += per * (reps["n_null"] + reps["n_cal_sigma0"])
+        else:
+            total += t_power * max(_work_units(s) / u_power, POWER_FLOOR) * reps["n_power"]
+    start = time.perf_counter()
+    thmc_table(
+        104, 0.85, stage="BENCH", n_series=chunking["chunk_thmc"], chunk=chunking["chunk_thmc"]
     )
-    measured = [_runtime_shape(s, manifest["designs"], manifest["focus_designs"]) for s in shapes]
-    scenarios = [parse_scenario_id(x) for x in manifest["scenarios"]]
-    reps = manifest["replications"]
-    eval_seconds = sum(measured[0] * reps["n_null"] / 2 for s in scenarios if s.kind == "SIZE")
-    eval_seconds += sum(measured[2] * reps["n_power"] / 2 for s in scenarios if s.kind == "POWER")
-    calib = sum(reps["n_cal_sigma0"] for s in scenarios if s.kind == "SIZE") * measured[1] / 2
-    return float(eval_seconds + calib)
+    per_series = (time.perf_counter() - start) / chunking["chunk_thmc"]
+    total += per_series * reps["n_cal_thmc"] * 5 * len(lengths)
+    return float(total * RUNTIME_OVERHEAD)
+
+
+def benchmark_manifest(stage):
+    """The workload `benchmark` projects: the stage's frozen grid at its minimum N."""
+    return {
+        "scenarios": [scenario_id(s) for s in scenario_grid(stage)],
+        "designs": list(design_grid()),
+        "focus_designs": list(focus_designs()),
+        "replications": dict(VAL_MINIMUMS if stage == "VAL" else DEV_MINIMUMS),
+        "chunking": {"chunk_null": 1000, "chunk_power": 500, "chunk_thmc": 10000},
+    }
 
 
 def guard_reason(event, args, allowed, extra_files=()):
@@ -870,16 +921,15 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
         manifest.get("replications", {}),
         manifest.get("chunking", {}),
         manifest.get("selections"),
+        manifest.get("focus_designs"),
     )
     if manifest.get("stage") == "VAL" and (out / "REPORT.json").exists():
         raise Refusal("validation already consumed")
     if out.exists() and any(out.iterdir()) and not resume:
         raise Refusal("output folder is not empty")
-    out.mkdir(parents=True, exist_ok=True)
-    started = time.perf_counter()
-    start_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     stage = manifest["stage"]
     marker = None
+    restarts = 0
     if stage == "VAL":
         lane = out.relative_to(pathlib.Path(repo_root).resolve() / ".work").parts[0]
         marker = (
@@ -897,8 +947,12 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
             if not resume:
                 raise Refusal("validation interrupted: resume flag required")
             restarts = old.get("restarts", 0) + 1
-        else:
-            restarts = 0
+    if stage in ("DEV", "VAL") and project_runtime(manifest) > manifest["runtime_cap_seconds"]:
+        raise Refusal("projected runtime exceeds the cap")
+    out.mkdir(parents=True, exist_ok=True)
+    started = time.perf_counter()
+    start_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if marker is not None:
         marker_obj = {
             "schema": "ucpe.exp04_stage1.consumed.v1",
             "prereg_sha256": manifest["prereg_sha256"],
@@ -907,10 +961,6 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
             "restarts": restarts,
         }
         marker.write_bytes(canonical_bytes(marker_obj))
-    else:
-        restarts = 0
-    if stage in ("DEV", "VAL") and project_runtime(manifest) > manifest["runtime_cap_seconds"]:
-        raise Refusal("projected runtime exceeds the cap")
     scenarios = [parse_scenario_id(x) for x in manifest["scenarios"]]
     size_scenarios = [s for s in scenarios if s.kind == "SIZE"]
     expected_cells = sum(len(manifest["designs"]) for s in size_scenarios) + sum(
@@ -1085,6 +1135,30 @@ def _load_dev_report(folder):
     }
 
 
+def val_manifest_inputs(runs, additions, decision_bytes):
+    """`manifest --stage VAL`: the decisions file must be exactly what `select` computes."""
+    expected = build_dev_decisions(runs, additions)
+    try:
+        decisions = json.loads(decision_bytes)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise Refusal("unknown field") from exc
+    if decisions != expected:
+        raise Refusal("selection does not match the development report")
+    final_run = sorted(runs, key=lambda run: run["started_utc"])[-1]
+    scenario_ids = [scenario_id(s) for s in scenario_grid("VAL")]
+    scenario_ids.extend(x["scenario_id"] for x in expected["grid_additions"])
+    replications = dict(VAL_MINIMUMS) | expected["replications"]
+    return {
+        "scenarios": scenario_ids,
+        "selections": expected["selections"],
+        "dev_report_sha256": final_run["dev_report_sha256"],
+        "dev_manifest_sha256": final_run["dev_manifest_sha256"],
+        "decisions_sha256": _sha(decision_bytes),
+        "replications": replications,
+        "amendments": [expected["notes"]] if expected["notes"] else [],
+    }
+
+
 def main(argv=None):
     """CLI entry point. Its audit hook is intentionally process-global."""
     parser = argparse.ArgumentParser()
@@ -1132,6 +1206,12 @@ def main(argv=None):
                 f"power_cells={power_cells} scenario_ids_sha256={ids_digest}"
             )
             return 0
+        if args.command == "benchmark":
+            if not thread_settings_ok(os.environ):
+                raise Refusal("thread settings must be 1")
+            projected = project_runtime(benchmark_manifest(args.stage))
+            print(f"projected_runtime_seconds={projected:.6f}")
+            return 0
         holder = {"allowed": pathlib.Path(args.out).resolve(), "extra_files": ()}
         if args.command in ("run", "manifest", "select"):
             # Guard allows only output writes; consumed marker is the sole exact extra path.
@@ -1149,12 +1229,6 @@ def main(argv=None):
                         / f"VALIDATION_CONSUMED_{manifest_obj['prereg_sha256'][:16]}.json",
                     )
             install_guard(holder)
-        if args.command == "benchmark":
-            if not thread_settings_ok(os.environ):
-                raise Refusal("thread settings must be 1")
-            m = build_manifest(args.stage, "0" * 64, "0" * 64, environ=os.environ)
-            print(f"projected_runtime_seconds={project_runtime(m):.6f}")
-            return 0
         if args.command == "manifest":
             out = check_out_dir(args.out, repo_root)
             if out.exists() and any(out.iterdir()):
@@ -1169,28 +1243,9 @@ def main(argv=None):
                     if args.additions
                     else None
                 )
-                expected_decisions = build_dev_decisions(runs, additions)
-                decision_bytes = pathlib.Path(args.decisions).read_bytes()
-                decisions = json.loads(decision_bytes)
-                if decisions != expected_decisions:
-                    raise Refusal("selection does not match the development report")
-                ordered_runs = sorted(runs, key=lambda run: run["started_utc"])
-                final_run = ordered_runs[-1]
-                scenario_ids = [scenario_id(s) for s in scenario_grid("VAL")]
-                scenario_ids.extend(x["scenario_id"] for x in expected_decisions["grid_additions"])
-                replications = dict(VAL_MINIMUMS)
-                replications.update(expected_decisions["replications"])
-                extra = {
-                    "scenarios": scenario_ids,
-                    "selections": expected_decisions["selections"],
-                    "dev_report_sha256": final_run["dev_report_sha256"],
-                    "dev_manifest_sha256": final_run["dev_manifest_sha256"],
-                    "decisions_sha256": _sha(decision_bytes),
-                    "replications": replications,
-                    "amendments": [expected_decisions["notes"]]
-                    if expected_decisions["notes"]
-                    else [],
-                }
+                extra = val_manifest_inputs(
+                    runs, additions, pathlib.Path(args.decisions).read_bytes()
+                )
             m = build_manifest(
                 args.stage, args.prereg_sha256, args.spec_sha256, environ=os.environ, **extra
             )
