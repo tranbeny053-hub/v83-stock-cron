@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import math
+import os
+import pathlib
+import platform
 import re
 import statistics
+import sys
+import time
 from dataclasses import dataclass
 from fractions import Fraction
 from functools import cache, lru_cache
@@ -354,6 +360,871 @@ def cholesky_factor(d: float, n: int, ar_phi: float = 0.0) -> np.ndarray:
     result = np.linalg.cholesky(matrix)
     result.setflags(write=False)
     return result
+
+
+# Orchestration and file boundary.  Kept here so the numerical layer remains usable
+# directly by tests without installing a process-global audit hook.
+_THREAD_KEYS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "MKL_NUM_THREADS",
+)
+_MANIFEST_KEYS = {
+    "schema",
+    "stage",
+    "namespace",
+    "prereg_sha256",
+    "spec_sha256",
+    "code_sha256",
+    "environment",
+    "replications",
+    "chunking",
+    "runtime_cap_seconds",
+    "scenarios",
+    "designs",
+    "variants",
+    "focus_designs",
+    "levels",
+    "seed_keys_sha256",
+    "seed_key_count",
+    "selections",
+    "dev_report_sha256",
+    "dev_manifest_sha256",
+    "decisions_sha256",
+    "amendments",
+}
+_REPORT_DISCLAIMERS = [
+    "Synthetic data only. No real market data was read.",
+    "No look was taken and no claim is made or supported.",
+    "Synthetic validity does not remove real-data survivorship bias.",
+    "Every constant is PROPOSED and none is adopted by this report.",
+    "Stage 2 needs the owner, real data and the licence; none is authorized.",
+]
+
+
+def environment_record(environ):
+    """Return the closed §12.1 runtime record using only approved platform calls."""
+    return {
+        "python": sys.version,
+        "numpy": np.__version__,
+        "system": platform.system(),
+        "release": platform.release(),
+        "machine": platform.machine(),
+        "threads": {key: environ.get(key) for key in _THREAD_KEYS},
+    }
+
+
+def thread_settings_ok(environ):
+    return all(environ.get(key) == "1" for key in _THREAD_KEYS)
+
+
+def _protected_path(value):
+    text = os.fspath(value).lower()
+    return any(
+        token in part
+        for part in pathlib.PurePath(text).parts
+        for token in ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
+    )
+
+
+def check_out_dir(path, repo_root):
+    raw = pathlib.Path(path)
+    if _protected_path(raw):
+        raise Refusal("protected path component")
+    root = pathlib.Path(repo_root).resolve()
+    work = root / ".work"
+    candidate = raw if raw.is_absolute() else pathlib.Path.cwd() / raw
+    candidate = pathlib.Path(os.path.abspath(candidate))
+    # Locate the repo root through the supplied spelling (macOS may spell the same
+    # temp directory as /var or /private/var), then inspect each output component.
+    prefix = pathlib.Path(candidate.anchor)
+    suffix = None
+    for index, part in enumerate(candidate.parts[1:], start=1):
+        prefix = prefix / part
+        if prefix.resolve(strict=False) == root:
+            suffix = candidate.parts[index + 1 :]
+            break
+    if suffix is None:
+        raise Refusal("output folder outside .work/exp04_stage1_*")
+    current = root
+    for part in suffix:
+        current = current / part
+        if current.is_symlink():
+            raise Refusal("output folder is a symlink")
+    candidate = current.resolve(strict=False)
+    # Ancestors of repo_root may be platform aliases (for example /private); the
+    # output path itself must contain no symlink from .work down.
+    out = candidate
+    try:
+        rel = out.relative_to(work)
+    except ValueError as exc:
+        raise Refusal("output folder outside .work/exp04_stage1_*") from exc
+    if (
+        len(rel.parts) < 2
+        or not rel.parts[0].startswith("exp04_stage1_")
+        or out == (work / rel.parts[0]).resolve()
+    ):
+        raise Refusal("output folder outside .work/exp04_stage1_*")
+    return out
+
+
+def _write_bytes(path, data):
+    path = pathlib.Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
+
+
+def _sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def _code_sha256():
+    return _sha(pathlib.Path(__file__).read_bytes())
+
+
+def _check_hash(value):
+    return (
+        isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+    )
+
+
+def _validate_grid(stage, scenario_ids, designs, replications, chunking, selections=None):
+    """Apply the immutable stage grid and minimum rules to a manifest or run."""
+    minimums = VAL_MINIMUMS if stage == "VAL" else DEV_MINIMUMS
+    refusal = (
+        "validation grid is incomplete" if stage == "VAL" else "development grid is incomplete"
+    )
+    if stage in ("DEV", "VAL"):
+        if any(replications.get(k, 0) < v for k, v in minimums.items()):
+            raise Refusal(refusal)
+        for key, nkey in (
+            ("chunk_null", "n_null"),
+            ("chunk_power", "n_power"),
+            ("chunk_thmc", "n_cal_thmc"),
+        ):
+            if chunking.get(key, 0) < 1 or replications[nkey] % chunking[key]:
+                raise Refusal(refusal)
+    if stage in ("DEV", "VAL") and not set(design_grid()).issubset(designs):
+        raise Refusal(refusal)
+    try:
+        scenarios = [parse_scenario_id(item) for item in scenario_ids]
+    except (TypeError, ValueError) as exc:
+        raise Refusal("invalid scenario id") from exc
+    if len(scenario_ids) != len(set(scenario_ids)):
+        raise Refusal("duplicate scenario")
+    ids = set(scenario_ids)
+    if any(s.kind == "POWER" and null_twin_id(s) not in ids for s in scenarios):
+        raise Refusal("null twin missing")
+    if stage in ("DEV", "VAL"):
+        frozen = {scenario_id(s) for s in scenario_grid(stage)}
+        if not frozen.issubset(ids) or any(
+            s.kind != "SIZE" for s in scenarios if scenario_id(s) not in frozen
+        ):
+            raise Refusal(refusal)
+    if stage == "VAL":
+        if not isinstance(selections, list) or len(selections) != len(READINGS):
+            raise Refusal("selection is incomplete")
+        for selection, (level, envelope) in zip(selections, READINGS, strict=True):
+            if not isinstance(selection, dict):
+                raise Refusal("selection is incomplete")
+            required = {"level", "envelope", "primary", "fallback", "dev_no_candidate"}
+            if set(selection) - required:
+                raise Refusal("unknown field")
+            if set(selection) != required:
+                raise Refusal("selection is incomplete")
+            if selection.get("level") != level or selection.get("envelope") != envelope:
+                raise Refusal("selection is incomplete")
+            if selection.get("primary") not in candidates(level) or (
+                selection.get("fallback") is not None
+                and selection.get("fallback") not in candidates(level)
+            ):
+                raise Refusal("selected design is not a candidate")
+    return scenarios
+
+
+def build_manifest(
+    stage,
+    prereg_sha256,
+    spec_sha256,
+    *,
+    environ=None,
+    replications=None,
+    chunking=None,
+    scenarios=None,
+    selections=None,
+    dev_report_sha256=None,
+    dev_manifest_sha256=None,
+    decisions_sha256=None,
+    amendments=None,
+):
+    """Build and validate the closed manifest record for a DEV, VAL, or KAT stage."""
+    env = os.environ if environ is None else environ
+    if stage not in ("DEV", "VAL", "KAT"):
+        raise Refusal("unknown field")
+    if not _check_hash(prereg_sha256) or not _check_hash(spec_sha256):
+        raise Refusal("unknown field")
+    mins = VAL_MINIMUMS if stage == "VAL" else DEV_MINIMUMS
+    reps = dict(mins if replications is None else replications)
+    if set(reps) != set(mins) or any(type(reps[k]) is not int or reps[k] < mins[k] for k in mins):
+        raise Refusal(
+            "validation grid is incomplete" if stage == "VAL" else "development grid is incomplete"
+        )
+    chunks = {"chunk_null": 1000, "chunk_power": 500, "chunk_thmc": 10000} | (chunking or {})
+    if set(chunks) != {"chunk_null", "chunk_power", "chunk_thmc"} or any(
+        type(v) is not int or v < 1 for v in chunks.values()
+    ):
+        raise Refusal("unknown field")
+    if scenarios is None:
+        grid = scenario_grid(stage)
+    else:
+        try:
+            grid = tuple(sorted((parse_scenario_id(x) for x in scenarios), key=scenario_id))
+        except (TypeError, ValueError) as exc:
+            raise Refusal("invalid scenario id") from exc
+    ids = [scenario_id(s) for s in grid]
+    if len(ids) != len(set(ids)):
+        raise Refusal("duplicate scenario")
+    if any(s.kind != "SIZE" and null_twin_id(s) not in set(ids) for s in grid):
+        raise Refusal("null twin missing")
+    if stage in ("DEV", "VAL"):
+        frozen = {scenario_id(s) for s in scenario_grid(stage)}
+        if not frozen.issubset(set(ids)) or any(
+            s.kind != "SIZE" for s in grid if scenario_id(s) not in frozen
+        ):
+            raise Refusal(
+                "validation grid is incomplete"
+                if stage == "VAL"
+                else "development grid is incomplete"
+            )
+    des = list(design_grid())
+    focus = list(focus_designs())
+    _validate_grid(stage, ids, des, reps, chunks, selections)
+    keys = all_seed_keys(
+        stage,
+        ids,
+        [
+            f"THMC/L={L:03d}/H={h:.2f}"
+            for L in sorted({s.L for s in grid})
+            for h in (0.60, 0.65, 0.75, 0.85, 0.95)
+        ],
+        reps,
+        chunks,
+    )
+    if len(keys) != len(set(keys)) or len({_sha(key.encode("ascii")) for key in keys}) != len(keys):
+        raise Refusal("seed streams are not disjoint")
+    return {
+        "schema": "ucpe.exp04_stage1.manifest.v1",
+        "stage": stage,
+        "namespace": "UCPE-EXP04-STAGE1-v1",
+        "prereg_sha256": prereg_sha256,
+        "spec_sha256": spec_sha256,
+        "code_sha256": _code_sha256(),
+        "environment": environment_record(env),
+        "replications": reps,
+        "chunking": chunks,
+        "runtime_cap_seconds": 21600 if stage == "VAL" else 3600,
+        "scenarios": ids,
+        "designs": des,
+        "variants": list(VARIANTS),
+        "focus_designs": focus,
+        "levels": dict(LEVELS),
+        "seed_keys_sha256": _sha("\n".join(sorted(keys)).encode("ascii")),
+        "seed_key_count": len(keys),
+        "selections": selections,
+        "dev_report_sha256": dev_report_sha256,
+        "dev_manifest_sha256": dev_manifest_sha256,
+        "decisions_sha256": decisions_sha256,
+        "amendments": list(amendments or []),
+    }
+
+
+def load_manifest(path, expect_sha256):
+    """Load only a canonical manifest, verify its byte digest, closed keys and code digest."""
+    path = pathlib.Path(path)
+    if _protected_path(path):
+        raise Refusal("protected path component")
+    raw = path.read_bytes()
+    if _sha(raw) != expect_sha256:
+        raise Refusal("manifest digest mismatch")
+    try:
+        obj = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise Refusal("unknown field") from exc
+    if not isinstance(obj, dict) or set(obj) != _MANIFEST_KEYS:
+        raise Refusal("unknown field")
+    if obj.get("code_sha256") != _code_sha256():
+        raise Refusal("harness digest mismatch")
+    if obj.get("environment") != environment_record(os.environ):
+        raise Refusal("environment mismatch")
+    _validate_grid(
+        obj.get("stage"),
+        obj.get("scenarios", []),
+        obj.get("designs", []),
+        obj.get("replications", {}),
+        obj.get("chunking", {}),
+        obj.get("selections"),
+    )
+    return obj
+
+
+def _runtime_shape(s, designs, focus, reps=2, chunk=2):
+    th = {
+        L: {h: {level: 0.0 for level in READING_LEVELS} for h in (0.60, 0.65, 0.75, 0.85, 0.95)}
+        for L in (s.L,)
+    }
+    sig = {scenario_id(s): 1.0}
+    if null_twin_id(s) is not None:
+        sig[null_twin_id(s)] = 1.0
+    start = time.perf_counter()
+    count_scenario(
+        s,
+        stage="BENCH",
+        n_reps=reps,
+        chunk=chunk,
+        designs=designs,
+        focus=focus,
+        sigma0=sig,
+        thmc=th,
+    )
+    return time.perf_counter() - start
+
+
+def project_runtime(manifest):
+    """Measure count_scenario on three reference shapes and project the manifest workload."""
+    shapes = (
+        scenario_grid("DEV")[0],
+        scenario_grid("DEV")[1],
+        next(s for s in scenario_grid("DEV") if s.kind == "POWER"),
+    )
+    measured = [_runtime_shape(s, manifest["designs"], manifest["focus_designs"]) for s in shapes]
+    scenarios = [parse_scenario_id(x) for x in manifest["scenarios"]]
+    reps = manifest["replications"]
+    eval_seconds = sum(measured[0] * reps["n_null"] / 2 for s in scenarios if s.kind == "SIZE")
+    eval_seconds += sum(measured[2] * reps["n_power"] / 2 for s in scenarios if s.kind == "POWER")
+    calib = sum(reps["n_cal_sigma0"] for s in scenarios if s.kind == "SIZE") * measured[1] / 2
+    return float(eval_seconds + calib)
+
+
+def guard_reason(event, args, allowed, extra_files=()):
+    """Return an audit refusal reason, or None when an event is permitted."""
+    if event.startswith("socket.") or event in {
+        "subprocess.Popen",
+        "os.system",
+        "os.posix_spawn",
+        "os.fork",
+        "os.exec",
+    }:
+        return "network or process creation refused"
+    if (
+        event in {"open", "os.open", "os.rename", "os.remove", "os.mkdir", "os.rmdir", "os.chmod"}
+        and args
+    ):
+        writing = event != "open"
+        if event == "open":
+            mode = args[1] if len(args) > 1 else "r"
+            flags = args[2] if len(args) > 2 and isinstance(args[2], int) else 0
+            writing = any(flag in str(mode) for flag in ("w", "a", "x", "+")) or bool(
+                flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)
+            )
+        if not writing:
+            return None
+        targets = args[:2] if event in {"os.rename", "os.replace"} else args[:1]
+        roots = [pathlib.Path(allowed).resolve()]
+        extras = {pathlib.Path(x).resolve() for x in extra_files}
+        for target in targets:
+            if not isinstance(target, (str, bytes, os.PathLike)):
+                continue
+            p = pathlib.Path(os.fsdecode(target)).resolve()
+            if p in extras:
+                continue
+            if not any(p == root or root in p.parents for root in roots):
+                return "write outside output folder refused"
+    return None
+
+
+def install_guard(holder):
+    """Install the process audit hook; holder has allowed and extra_files entries."""
+
+    def hook(event, args):
+        reason = guard_reason(event, args, holder["allowed"], holder.get("extra_files", ()))
+        if reason:
+            raise Refusal(reason)
+
+    sys.addaudithook(hook)
+
+
+def _cell_for(s, stats, manifest, sigma, thmc, null_cells, m_sim):
+    designs = manifest["designs"]
+    entries = []
+    counts = stats["counts"]
+    bad = set(stats["not_estimable"])
+    for design in designs:
+        variants = (
+            ("V_CORE",)
+            if s.kind == "SIZE"
+            else (VARIANTS if design in manifest["focus_designs"] else ("V_CORE", "V_J0"))
+        )
+        for variant in variants:
+            key = f"{design}|{variant}"
+            base = {
+                "design_id": design,
+                "variant_id": variant,
+                "status": "NOT_ESTIMABLE" if key in bad else "ESTIMATED",
+            }
+            if key in bad:
+                base.update({"rejections": None, "rate": None, "cp95": None})
+            else:
+                x = counts.get(f"{key}|rejections", 0)
+                n = stats["n_reps"]
+                ci = clopper_pearson(x, n)
+                base.update({"rejections": x, "rate": x / n, "cp95": list(ci)})
+            if s.kind == "SIZE":
+                if key in bad:
+                    base.update(
+                        {
+                            "cp_sim_lower": None,
+                            "size_verdicts": {b: "NOT_ESTIMABLE" for b in BOUNDS},
+                            "confirmed_invalid": {b: False for b in BOUNDS},
+                            "rejections_core_and_sign": None,
+                        }
+                    )
+                else:
+                    x, n = base["rejections"], stats["n_reps"]
+                    alpha = LEVELS[declared_level(design)]
+                    cl = {b: classify_size(x, n, alpha, b, m_sim) for b in BOUNDS}
+                    base.update(
+                        {
+                            "cp_sim_lower": cp_lower(x, n, 0.025 / (2 * m_sim)),
+                            "size_verdicts": {b: cl[b]["verdict"] for b in BOUNDS},
+                            "confirmed_invalid": {b: cl[b]["confirmed_invalid"] for b in BOUNDS},
+                            "rejections_core_and_sign": counts.get(f"{design}|core_and_sign", 0),
+                        }
+                    )
+            else:
+                null = (
+                    null_cells.get((design, "V_CORE"), {})
+                    .get("size_verdicts", {})
+                    .get("TOL20", "NOT_ESTIMABLE")
+                )
+                if key in bad:
+                    base.update(
+                        {
+                            "null_twin_verdict": null,
+                            "power_verdicts": {p: "NOT_ESTIMABLE" for p in POWER_TARGETS},
+                            "core_rejections": None,
+                            "sign_vetoes": None,
+                            "control_vetoes": None,
+                        }
+                    )
+                else:
+                    x, n = base["rejections"], stats["n_reps"]
+                    base.update(
+                        {
+                            "null_twin_verdict": null,
+                            "power_verdicts": {
+                                p: classify_power(x, n, p, null) for p in POWER_TARGETS
+                            },
+                            "core_rejections": counts.get(f"{key}|core_rejections", 0),
+                            "sign_vetoes": counts.get(f"{key}|sign_vetoes", 0),
+                            "control_vetoes": counts.get(f"{key}|control_vetoes", 0),
+                        }
+                    )
+            entries.append(base)
+    params = {k: getattr(s, k) for k in Scenario.__dataclass_fields__}
+    return {
+        "schema": "ucpe.exp04_stage1.cells.v1",
+        "scenario_id": scenario_id(s),
+        "kind": s.kind,
+        "params": params,
+        "family_class": family_class(s),
+        "d_envelope": d_envelope(s),
+        "null_twin_id": null_twin_id(s),
+        "n_reps": stats["n_reps"],
+        "diagnostics": {
+            "mean_turnover": stats["mean_turnover"],
+            "sign_not_evaluable": stats["sign_not_evaluable"],
+        },
+        "cells": entries,
+    }
+
+
+def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
+    """Run one complete synthetic stage and write its canonical output bundle."""
+    out = check_out_dir(out_dir, repo_root)
+    if not thread_settings_ok(environ):
+        raise Refusal("thread settings must be 1")
+    if manifest.get("code_sha256") != _code_sha256():
+        raise Refusal("harness digest mismatch")
+    if manifest.get("environment") != environment_record(environ):
+        raise Refusal("environment mismatch")
+    if manifest.get("schema") != "ucpe.exp04_stage1.manifest.v1" or set(manifest) != _MANIFEST_KEYS:
+        raise Refusal("unknown field")
+    if manifest.get("stage") not in ("DEV", "VAL", "KAT"):
+        raise Refusal("unknown field")
+    _validate_grid(
+        manifest["stage"],
+        manifest.get("scenarios", []),
+        manifest.get("designs", []),
+        manifest.get("replications", {}),
+        manifest.get("chunking", {}),
+        manifest.get("selections"),
+    )
+    if manifest.get("stage") == "VAL" and (out / "REPORT.json").exists():
+        raise Refusal("validation already consumed")
+    if out.exists() and any(out.iterdir()) and not resume:
+        raise Refusal("output folder is not empty")
+    out.mkdir(parents=True, exist_ok=True)
+    started = time.perf_counter()
+    start_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    stage = manifest["stage"]
+    marker = None
+    if stage == "VAL":
+        lane = out.relative_to(pathlib.Path(repo_root).resolve() / ".work").parts[0]
+        marker = (
+            pathlib.Path(repo_root)
+            / ".work"
+            / lane
+            / f"VALIDATION_CONSUMED_{manifest['prereg_sha256'][:16]}.json"
+        )
+        if marker.exists():
+            old = json.loads(marker.read_bytes())
+            if old.get("manifest_sha256") != _sha(canonical_bytes(manifest)):
+                raise Refusal("validation already consumed under this preregistration")
+            if old.get("status") == "COMPLETE":
+                raise Refusal("validation already consumed")
+            if not resume:
+                raise Refusal("validation interrupted: resume flag required")
+            restarts = old.get("restarts", 0) + 1
+        else:
+            restarts = 0
+        marker_obj = {
+            "schema": "ucpe.exp04_stage1.consumed.v1",
+            "prereg_sha256": manifest["prereg_sha256"],
+            "manifest_sha256": _sha(canonical_bytes(manifest)),
+            "status": "STARTED",
+            "restarts": restarts,
+        }
+        marker.write_bytes(canonical_bytes(marker_obj))
+    else:
+        restarts = 0
+    if stage in ("DEV", "VAL") and project_runtime(manifest) > manifest["runtime_cap_seconds"]:
+        raise Refusal("projected runtime exceeds the cap")
+    scenarios = [parse_scenario_id(x) for x in manifest["scenarios"]]
+    size_scenarios = [s for s in scenarios if s.kind == "SIZE"]
+    expected_cells = sum(len(manifest["designs"]) for s in size_scenarios) + sum(
+        12 * len(manifest["focus_designs"])
+        + 2 * (len(manifest["designs"]) - len(manifest["focus_designs"]))
+        for s in scenarios
+        if s.kind == "POWER"
+    )
+    thmc = {
+        L: {
+            h: thmc_table(
+                L,
+                h,
+                stage=stage,
+                n_series=manifest["replications"]["n_cal_thmc"],
+                chunk=manifest["chunking"]["chunk_thmc"],
+            )
+            for h in (0.60, 0.65, 0.75, 0.85, 0.95)
+        }
+        for L in sorted({s.L for s in scenarios})
+    }
+    sigma = {
+        scenario_id(s): sigma0_for(
+            s,
+            stage=stage,
+            n_reps=manifest["replications"]["n_cal_sigma0"],
+            chunk=manifest["chunking"]["chunk_null"],
+        )
+        for s in size_scenarios
+    }
+    rows, size_by_scenario = [], {}
+    for s in scenarios:
+        n = manifest["replications"]["n_null" if s.kind == "SIZE" else "n_power"]
+        chunk = manifest["chunking"]["chunk_null" if s.kind == "SIZE" else "chunk_power"]
+        twin_sigmas = {sid: val for sid, val in sigma.items()}
+        stats = count_scenario(
+            s,
+            stage=stage,
+            n_reps=n,
+            chunk=chunk,
+            designs=manifest["designs"],
+            focus=manifest["focus_designs"],
+            sigma0=twin_sigmas,
+            thmc=thmc,
+        )
+        cellsrow = _cell_for(s, stats, manifest, sigma, thmc, {}, len(size_scenarios))
+        if s.kind == "SIZE":
+            size_by_scenario[scenario_id(s)] = {c["design_id"]: c for c in cellsrow["cells"]}
+        rows.append(cellsrow)
+    for row in rows:
+        if row["kind"] == "POWER":
+            twin = size_by_scenario.get(row["null_twin_id"], {})
+            for c in row["cells"]:
+                c["null_twin_verdict"] = (
+                    twin.get(c["design_id"], {})
+                    .get("size_verdicts", {})
+                    .get("TOL20", "NOT_ESTIMABLE")
+                )
+                if c["status"] == "ESTIMATED":
+                    c["power_verdicts"] = {
+                        p: classify_power(c["rejections"], row["n_reps"], p, c["null_twin_verdict"])
+                        for p in POWER_TARGETS
+                    }
+    cells_bytes = b"".join(canonical_bytes(row) for row in rows)
+    checks = self_checks(rows, expected_scenarios=len(scenarios), expected_cells=expected_cells)
+    size_roll = size_rollups(rows)
+    power_roll = power_rollups(rows)
+    mde = minimum_detectable_effects(rows)
+    if stage == "DEV":
+        sels = select_designs("DEV", rows)
+        outcome_status, outcome_rows = "DEV_ONLY_NOT_AN_OUTCOME", []
+    elif stage == "VAL":
+        sels = [
+            {
+                "level": x["level"],
+                "envelope": x["envelope"],
+                "rule": SELECTION_RULE_ID,
+                "candidates": [],
+                "primary": x["primary"],
+                "fallback": x["fallback"],
+                "dev_no_candidate": x["dev_no_candidate"],
+            }
+            for x in manifest["selections"]
+        ]
+        outcome_rows = outcomes(manifest["selections"], size_roll, power_roll, rows, checks)
+        outcome_status = (
+            "STOP_HARNESS_DEFECT" if any(x["status"] != "PASS" for x in checks) else "COMPUTED"
+        )
+    else:
+        sels, outcome_rows, outcome_status = [], [], "KAT_ONLY_NOT_AN_OUTCOME"
+    cells_path = out / "CELLS.jsonl"
+    _write_bytes(cells_path, cells_bytes)
+    cell_digest = _sha(cells_bytes)
+    size_count = sum(s.kind == "SIZE" for s in scenarios)
+    power_count = len(scenarios) - size_count
+    report = {
+        "schema": "ucpe.exp04_stage1.report.v1",
+        "stage": stage,
+        "synthetic_only": True,
+        "manifest_sha256": _sha(canonical_bytes(manifest)),
+        "prereg_sha256": manifest["prereg_sha256"],
+        "spec_sha256": manifest["spec_sha256"],
+        "code_sha256": manifest["code_sha256"],
+        "environment": manifest["environment"],
+        "replications": manifest["replications"],
+        "counts": {
+            "scenarios_expected": len(scenarios),
+            "scenarios_reported": len(rows),
+            "size_scenarios": size_count,
+            "power_scenarios": power_count,
+            "designs": len(manifest["designs"]),
+            "focus_designs": len(manifest["focus_designs"]),
+            "size_cells": sum(len(r["cells"]) for r in rows if r["kind"] == "SIZE"),
+            "power_cells": sum(len(r["cells"]) for r in rows if r["kind"] == "POWER"),
+        },
+        "cells_file": {"name": "CELLS.jsonl", "sha256": cell_digest, "lines": len(rows)},
+        "calibration": {
+            "thmc": [
+                {"L": L, "h_c": h, "level": level, "critical_value": v}
+                for L, hs in thmc.items()
+                for h, levels in hs.items()
+                for level, v in levels.items()
+            ],
+            "sigma0": [{"scenario_id": k, "sigma0": v} for k, v in sigma.items()],
+        },
+        "self_checks": checks,
+        "size_rollups": size_roll,
+        "power_rollups": power_roll,
+        "minimum_detectable_effect": mde,
+        "selections": sels,
+        "outcome_status": outcome_status,
+        "outcomes": outcome_rows,
+        "omissions": [],
+        "disclaimers": _REPORT_DISCLAIMERS,
+    }
+    _write_bytes(out / "REPORT.json", canonical_bytes(report))
+    finished_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    _write_bytes(
+        out / "TIMING.json",
+        canonical_bytes(
+            {
+                "schema": "ucpe.exp04_stage1.timing.v1",
+                "started_utc": start_utc,
+                "finished_utc": finished_utc,
+                "seconds": time.perf_counter() - started,
+                "restarts": restarts,
+            }
+        ),
+    )
+    if marker:
+        marker_obj["status"] = "COMPLETE"
+        marker.write_bytes(canonical_bytes(marker_obj))
+    return report
+
+
+def _load_dev_report(folder):
+    folder = pathlib.Path(folder)
+    report_raw = (folder / "REPORT.json").read_bytes()
+    timing = json.loads((folder / "TIMING.json").read_bytes())
+    with (folder / "CELLS.jsonl").open() as f:
+        cells = [json.loads(line) for line in f]
+    report = json.loads(report_raw)
+    if report.get("stage") != "DEV":
+        raise Refusal("not a development report")
+    return {
+        "dev_manifest_sha256": report["manifest_sha256"],
+        "dev_report_sha256": _sha(report_raw),
+        "code_sha256": report["code_sha256"],
+        "started_utc": timing["started_utc"],
+        "stage": "DEV",
+        "cells": cells,
+    }
+
+
+def main(argv=None):
+    """CLI entry point. Its audit hook is intentionally process-global."""
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("plan", "benchmark"):
+        p = sub.add_parser(name)
+        p.add_argument("--stage", choices=("DEV", "VAL"), required=True)
+    p = sub.add_parser("manifest")
+    p.add_argument("--stage", choices=("DEV", "VAL"), required=True)
+    p.add_argument("--prereg-sha256", required=True)
+    p.add_argument("--spec-sha256", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--dev-report", action="append")
+    p.add_argument("--decisions")
+    p.add_argument("--additions")
+    p = sub.add_parser("run")
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--expect-sha256", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--resume-interrupted", action="store_true")
+    p = sub.add_parser("select")
+    p.add_argument("--dev-report", action="append", required=True)
+    p.add_argument("--additions")
+    p.add_argument("--out", required=True)
+    args = parser.parse_args(argv)
+    repo_root = pathlib.Path.cwd()
+    try:
+        path_args = [
+            getattr(args, key, None) for key in ("manifest", "out", "additions", "decisions")
+        ]
+        path_args.extend(getattr(args, "dev_report", None) or [])
+        if any(value is not None and _protected_path(value) for value in path_args):
+            raise Refusal("protected path component")
+        if args.command == "plan":
+            scenarios = scenario_grid(args.stage)
+            sizes = sum(s.kind == "SIZE" for s in scenarios)
+            powers = len(scenarios) - sizes
+            des, foc = len(design_grid()), len(focus_designs())
+            size_cells = sizes * des
+            power_cells = powers * (12 * foc + 2 * (des - foc))
+            ids_digest = _sha("\n".join(sorted(scenario_id(s) for s in scenarios)).encode("ascii"))
+            print(
+                f"stage={args.stage} scenarios={len(scenarios)} size={sizes} "
+                f"power={powers} designs={des} size_cells={size_cells} "
+                f"power_cells={power_cells} scenario_ids_sha256={ids_digest}"
+            )
+            return 0
+        holder = {"allowed": pathlib.Path(args.out).resolve(), "extra_files": ()}
+        if args.command in ("run", "manifest", "select"):
+            # Guard allows only output writes; consumed marker is the sole exact extra path.
+            if args.command == "run":
+                raw = pathlib.Path(args.manifest).read_bytes()
+                manifest_obj = json.loads(raw)
+                if manifest_obj.get("stage") == "VAL":
+                    lane = (
+                        pathlib.Path(args.out).resolve().relative_to(repo_root / ".work").parts[0]
+                    )
+                    holder["extra_files"] = (
+                        repo_root
+                        / ".work"
+                        / lane
+                        / f"VALIDATION_CONSUMED_{manifest_obj['prereg_sha256'][:16]}.json",
+                    )
+            install_guard(holder)
+        if args.command == "benchmark":
+            if not thread_settings_ok(os.environ):
+                raise Refusal("thread settings must be 1")
+            m = build_manifest(args.stage, "0" * 64, "0" * 64, environ=os.environ)
+            print(f"projected_runtime_seconds={project_runtime(m):.6f}")
+            return 0
+        if args.command == "manifest":
+            out = check_out_dir(args.out, repo_root)
+            if out.exists() and any(out.iterdir()):
+                raise Refusal("output folder is not empty")
+            extra = {}
+            if args.stage == "VAL":
+                if not args.dev_report or not args.decisions:
+                    raise Refusal("selection is incomplete")
+                runs = [_load_dev_report(folder) for folder in args.dev_report]
+                additions = (
+                    json.loads(pathlib.Path(args.additions).read_bytes())
+                    if args.additions
+                    else None
+                )
+                expected_decisions = build_dev_decisions(runs, additions)
+                decision_bytes = pathlib.Path(args.decisions).read_bytes()
+                decisions = json.loads(decision_bytes)
+                if decisions != expected_decisions:
+                    raise Refusal("selection does not match the development report")
+                ordered_runs = sorted(runs, key=lambda run: run["started_utc"])
+                final_run = ordered_runs[-1]
+                scenario_ids = [scenario_id(s) for s in scenario_grid("VAL")]
+                scenario_ids.extend(x["scenario_id"] for x in expected_decisions["grid_additions"])
+                replications = dict(VAL_MINIMUMS)
+                replications.update(expected_decisions["replications"])
+                extra = {
+                    "scenarios": scenario_ids,
+                    "selections": expected_decisions["selections"],
+                    "dev_report_sha256": final_run["dev_report_sha256"],
+                    "dev_manifest_sha256": final_run["dev_manifest_sha256"],
+                    "decisions_sha256": _sha(decision_bytes),
+                    "replications": replications,
+                    "amendments": [expected_decisions["notes"]]
+                    if expected_decisions["notes"]
+                    else [],
+                }
+            m = build_manifest(
+                args.stage, args.prereg_sha256, args.spec_sha256, environ=os.environ, **extra
+            )
+            out.mkdir(parents=True, exist_ok=True)
+            _write_bytes(out / "MANIFEST.json", canonical_bytes(m))
+            print(_sha(canonical_bytes(m)))
+            return 0
+        if args.command == "run":
+            m = load_manifest(args.manifest, args.expect_sha256)
+            report = run_stage(
+                m, args.out, resume=args.resume_interrupted, repo_root=repo_root, environ=os.environ
+            )
+            print(report["outcome_status"])
+            return 0
+        if args.command == "select":
+            out = check_out_dir(args.out, repo_root)
+            if out.exists() and any(out.iterdir()):
+                raise Refusal("output folder is not empty")
+            additions = (
+                json.loads(pathlib.Path(args.additions).read_bytes()) if args.additions else None
+            )
+            decisions = build_dev_decisions(
+                [_load_dev_report(folder) for folder in args.dev_report], additions
+            )
+            out.mkdir(parents=True, exist_ok=True)
+            _write_bytes(out / "DEV_DECISIONS.json", canonical_bytes(decisions))
+            return 0
+    except Refusal as exc:
+        print(f"REFUSAL: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"run failed: {type(exc).__name__}", file=sys.stderr)
+        return 1
+    return 1
 
 
 @dataclass(frozen=True)
@@ -1882,3 +2753,7 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
             }
         )
     return result
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

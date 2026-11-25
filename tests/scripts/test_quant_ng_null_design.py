@@ -1,7 +1,13 @@
 """Known-answer tests for EXP-04 stage-1 identity and numeric primitives."""
 
 import ast
+import hashlib
+import json
 import math
+import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -1415,3 +1421,280 @@ def test_kat_v6_not_a_development_report():
             call()
     with pytest.raises(q.Refusal, match="^selection is incomplete$"):
         q.outcomes([], [], [], [], [])
+
+
+# Delegation 4: orchestration and isolation known answers.
+
+
+def _orchestration_env():
+    return {
+        key: "1"
+        for key in (
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "MKL_NUM_THREADS",
+        )
+    }
+
+
+def _tiny_manifest(stage="KAT"):
+    s = q.Scenario("N-CORE", "SIZE", 0.0, 0.0, 5, 26)
+    return {
+        "schema": "ucpe.exp04_stage1.manifest.v1",
+        "stage": stage,
+        "namespace": "UCPE-EXP04-STAGE1-v1",
+        "prereg_sha256": "1" * 64,
+        "spec_sha256": "2" * 64,
+        "code_sha256": q._code_sha256(),
+        "environment": q.environment_record(_orchestration_env()),
+        "replications": {"n_null": 2, "n_power": 2, "n_cal_sigma0": 2, "n_cal_thmc": 2},
+        "chunking": {"chunk_null": 2, "chunk_power": 2, "chunk_thmc": 2},
+        "runtime_cap_seconds": 3600,
+        "scenarios": [q.scenario_id(s)],
+        "designs": ["T/A050"],
+        "variants": list(q.VARIANTS),
+        "focus_designs": [],
+        "levels": dict(q.LEVELS),
+        "seed_keys_sha256": "3" * 64,
+        "seed_key_count": 1,
+        "selections": None,
+        "dev_report_sha256": None,
+        "dev_manifest_sha256": None,
+        "decisions_sha256": None,
+        "amendments": [],
+    }
+
+
+def _run_tiny_twice(tmp_path):
+    repo = tmp_path
+    lane = repo / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    manifest = _tiny_manifest()
+    reports = []
+    for name in ("first", "second"):
+        reports.append(
+            q.run_stage(manifest, lane / name, repo_root=repo, environ=_orchestration_env())
+        )
+    return lane, reports
+
+
+def test_kat_d1_same_manifest_run_is_byte_deterministic(tmp_path):
+    lane, _ = _run_tiny_twice(tmp_path)
+    assert (lane / "first" / "REPORT.json").read_bytes() == (
+        lane / "second" / "REPORT.json"
+    ).read_bytes()
+    assert (lane / "first" / "CELLS.jsonl").read_bytes() == (
+        lane / "second" / "CELLS.jsonl"
+    ).read_bytes()
+
+
+def test_kat_d2_order_reverse_chunks_matches_forward_counts():
+    s = q.Scenario("N-CORE", "SIZE", 0.0, 0.0, 5, 26)
+    common = {
+        "stage": "KAT",
+        "n_reps": 4,
+        "chunk": 2,
+        "designs": ["T/A050"],
+        "focus": [],
+        "sigma0": {q.scenario_id(s): 1.0},
+        "thmc": {
+            26: {
+                h: {level: 0.0 for level in q.READING_LEVELS}
+                for h in (0.60, 0.65, 0.75, 0.85, 0.95)
+            }
+        },
+    }
+    forward = q.count_scenario(s, **common, chunk_indices=[0, 1])
+    reverse = q.count_scenario(s, **common, chunk_indices=[1, 0])
+    assert forward == reverse
+    dev = q.all_seed_keys(
+        "DEV",
+        [q.scenario_id(s)],
+        [],
+        {"n_null": 4, "n_power": 2, "n_cal_sigma0": 2, "n_cal_thmc": 2},
+        {"chunk_null": 2, "chunk_power": 2, "chunk_thmc": 2},
+    )
+    val = q.all_seed_keys(
+        "VAL",
+        [q.scenario_id(s)],
+        [],
+        {"n_null": 4, "n_power": 2, "n_cal_sigma0": 2, "n_cal_thmc": 2},
+        {"chunk_null": 2, "chunk_power": 2, "chunk_thmc": 2},
+    )
+    assert len(dev) == len(set(dev)) and set(dev).isdisjoint(val)
+    all_keys = dev + val
+    assert len(all_keys) == len(set(all_keys))
+    digests = [hashlib.sha256(k.encode("ascii")).digest() for k in all_keys]
+    assert len(digests) == len(set(digests))
+    streams = {
+        stream: {key for key in dev if f"|{stream}|" in key}
+        for stream in ("EVAL", "CAL_SIGMA0", "CAL_THMC")
+    }
+    assert streams["EVAL"].isdisjoint(streams["CAL_SIGMA0"])
+    assert streams["EVAL"].isdisjoint(streams["CAL_THMC"])
+    assert streams["CAL_SIGMA0"].isdisjoint(streams["CAL_THMC"])
+
+
+def test_kat_d3_report_and_cells_omit_clock_host_and_absolute_path(tmp_path):
+    lane, _ = _run_tiny_twice(tmp_path)
+    payload = (lane / "first" / "REPORT.json").read_text() + (
+        lane / "first" / "CELLS.jsonl"
+    ).read_text()
+    assert str(tmp_path) not in payload
+    assert os.uname().nodename not in payload
+    assert "started_utc" not in payload and "finished_utc" not in payload
+
+
+def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path):
+    repo = tmp_path
+    with pytest.raises(q.Refusal, match=r"^output folder outside \.work/exp04_stage1_\*$"):
+        q.check_out_dir(repo / "outside", repo)
+    with pytest.raises(q.Refusal, match="^thread settings must be 1$"):
+        q.run_stage(
+            _tiny_manifest(),
+            repo / ".work" / "exp04_stage1_test" / "out",
+            repo_root=repo,
+            environ={},
+        )
+    raw = q.canonical_bytes(_tiny_manifest())
+    path = repo / "manifest.json"
+    path.write_bytes(raw)
+    with pytest.raises(q.Refusal, match="^manifest digest mismatch$"):
+        q.load_manifest(path, "0" * 64)
+    wrong = _tiny_manifest()
+    wrong["code_sha256"] = "0" * 64
+    path.write_bytes(q.canonical_bytes(wrong))
+    with pytest.raises(q.Refusal, match="^harness digest mismatch$"):
+        q.load_manifest(path, hashlib.sha256(path.read_bytes()).hexdigest())
+    val = _tiny_manifest("VAL")
+    val["scenarios"] = [q.scenario_id(s) for s in q.scenario_grid("VAL")]
+    val["designs"] = list(q.design_grid())
+    val["focus_designs"] = list(q.focus_designs())
+    val["replications"] = dict(q.VAL_MINIMUMS)
+    val["chunking"] = {"chunk_null": 1000, "chunk_power": 500, "chunk_thmc": 10000}
+    val["selections"] = [
+        {
+            "level": level,
+            "envelope": envelope,
+            "primary": q.candidates(level)[0],
+            "fallback": None,
+            "dev_no_candidate": False,
+        }
+        for level, envelope in q.READINGS
+    ]
+    lane = repo / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True, exist_ok=True)
+    out = lane / "out"
+    out.mkdir()
+    marker = lane / f"VALIDATION_CONSUMED_{val['prereg_sha256'][:16]}.json"
+    marker.write_bytes(
+        q.canonical_bytes(
+            {
+                "schema": "ucpe.exp04_stage1.consumed.v1",
+                "prereg_sha256": val["prereg_sha256"],
+                "manifest_sha256": hashlib.sha256(b"another manifest").hexdigest(),
+                "status": "STARTED",
+                "restarts": 0,
+            }
+        )
+    )
+    with pytest.raises(q.Refusal, match="^validation already consumed under this preregistration$"):
+        q.run_stage(val, out, repo_root=repo, environ=_orchestration_env())
+
+
+def test_kat_r1_rejects_missing_manifest_scenario_and_completed_validation(tmp_path):
+    repo = tmp_path
+    lane = repo / ".work" / "exp04_stage1_test"
+    out = lane / "out"
+    lane.mkdir(parents=True)
+    out.mkdir()
+    incomplete = _tiny_manifest("DEV")
+    incomplete["designs"] = list(q.design_grid())
+    incomplete["replications"] = dict(q.DEV_MINIMUMS)
+    incomplete["chunking"] = {"chunk_null": 1000, "chunk_power": 500, "chunk_thmc": 10000}
+    with pytest.raises(q.Refusal, match="^development grid is incomplete$"):
+        q.run_stage(incomplete, out, repo_root=repo, environ=_orchestration_env())
+
+    val = _tiny_manifest("VAL")
+    val["scenarios"] = [q.scenario_id(s) for s in q.scenario_grid("VAL")]
+    val["designs"] = list(q.design_grid())
+    val["focus_designs"] = list(q.focus_designs())
+    val["replications"] = dict(q.VAL_MINIMUMS)
+    val["chunking"] = {"chunk_null": 1000, "chunk_power": 500, "chunk_thmc": 10000}
+    val["selections"] = [
+        {
+            "level": level,
+            "envelope": envelope,
+            "primary": q.candidates(level)[0],
+            "fallback": None,
+            "dev_no_candidate": False,
+        }
+        for level, envelope in q.READINGS
+    ]
+    marker = lane / f"VALIDATION_CONSUMED_{val['prereg_sha256'][:16]}.json"
+    marker.write_bytes(
+        q.canonical_bytes(
+            {
+                "schema": "ucpe.exp04_stage1.consumed.v1",
+                "prereg_sha256": val["prereg_sha256"],
+                "manifest_sha256": hashlib.sha256(q.canonical_bytes(val)).hexdigest(),
+                "status": "COMPLETE",
+                "restarts": 0,
+            }
+        )
+    )
+    with pytest.raises(q.Refusal, match="^validation already consumed$"):
+        q.run_stage(val, out, repo_root=repo, environ=_orchestration_env())
+
+
+def test_kat_i1_hook_refuses_network_process_and_outside_write(tmp_path):
+    allowed = tmp_path / "out"
+    extra = tmp_path / "marker.json"
+    assert q.guard_reason("socket.connect", (), allowed) == "network or process creation refused"
+    assert q.guard_reason("subprocess.Popen", (), allowed) == "network or process creation refused"
+    assert (
+        q.guard_reason("open", (str(tmp_path / "other"), "w", 0), allowed)
+        == "write outside output folder refused"
+    )
+    assert q.guard_reason("open", (str(extra), "w", 0), allowed, (extra,)) is None
+    assert q.guard_reason("open", (str(allowed / "ok"), "w", 0), allowed) is None
+
+
+def test_kat_i2_environment_platform_and_child_manifest_guard():
+    tree = ast.parse(Path(q.__file__).read_text())
+    platform_attrs = {
+        n.attr
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Attribute)
+        and isinstance(n.value, ast.Name)
+        and n.value.id == "platform"
+    }
+    assert platform_attrs == {"system", "release", "machine"}
+    record = q.environment_record(_orchestration_env())
+    assert set(record) == {"python", "numpy", "system", "release", "machine", "threads"}
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        lane = root / ".work" / "exp04_stage1_test"
+        lane.mkdir(parents=True)
+        out = lane / "manifest"
+        env = os.environ.copy() | _orchestration_env()
+        cmd = [
+            sys.executable,
+            "-I",
+            "-B",
+            str(Path(q.__file__).resolve()),
+            "manifest",
+            "--stage",
+            "DEV",
+            "--prereg-sha256",
+            "1" * 64,
+            "--spec-sha256",
+            "2" * 64,
+            "--out",
+            str(out),
+        ]
+        proc = subprocess.run(cmd, cwd=root, env=env, capture_output=True, text=True, timeout=15)
+        assert proc.returncode == 0, proc.stderr
+        manifest = json.loads((out / "MANIFEST.json").read_bytes())
+        assert manifest["environment"] == q.environment_record(env)
