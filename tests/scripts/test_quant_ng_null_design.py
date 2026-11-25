@@ -488,20 +488,17 @@ def test_kat_m6_allowance_key2_gaussian_rate():
 
 
 def test_kat_m7_regime_stationarity_and_variance():
-    p_hh, p_ll, pi, vlo, vhi = q._regime_params("FAST", 3.0)
-    uniforms = q.rng_for(q.seed_key("KAT", "EVAL", "M7", "REGIME", 0)).random((20_000, 234))
-    state = np.empty_like(uniforms, dtype=bool)
-    state[:, 0] = uniforms[:, 0] < pi
-    for b in range(1, state.shape[1]):
-        state[:, b] = np.where(state[:, b - 1], uniforms[:, b] < p_hh, uniforms[:, b] >= p_ll)
-    assert abs(state.mean() - 0.2) <= 0.01
-    multipliers = np.where(state, vhi, vlo)
-    gaussian = q.rng_for(q.seed_key("KAT", "EVAL", "M7", "NOISE_G1", 0)).standard_normal(
-        state.shape
-    )
-    assert np.var(multipliers * gaussian, ddof=1) == pytest.approx(1.0, rel=0.03)
-    means = np.where(state, -0.8 * 0.5, 0.2 * 0.5)
-    assert abs(means.mean()) <= 0.01
+    # Spec §14 KAT-M7, through simulate_chunk (the path a run uses): 20,000 x 234 weeks.
+    vol = q._scenario("N-VOL", d=0.0, L=26)
+    states, values = [], []
+    for panel in _kat_chunks(vol, 20_000):
+        states.append(panel.state)
+        values.append(panel.x[("CAND", "S")])
+    assert abs(np.concatenate(states).mean() - 0.2) <= 0.01
+    assert np.var(np.concatenate(values), ddof=1) == pytest.approx(1.0, rel=0.03)
+    shifted = q._scenario("N-REGMEAN", d=0.0, L=26, regime_mean_g=0.5, regime_speed="FAST")
+    means = [panel.x[("CAND", "S")].mean() for panel in _kat_chunks(shifted, 20_000)]
+    assert abs(float(np.mean(means))) <= 0.01
 
 
 def test_kat_m8_churn_is_asof_and_has_exact_panel_size():
@@ -518,3 +515,181 @@ def test_kat_m8_churn_is_asof_and_has_exact_panel_size():
     changed[:] = -scores
     psi_zero_changed, _ = q._select_membership(changed, eta, 0.5, 0.0, n, W)
     assert np.array_equal(psi_zero, psi_zero_changed)
+    many = 64
+    eta = q.rng_for("membership-test-asof").standard_normal((many, 2 * n, Q))
+    scores = q.rng_for("values-test-asof").standard_normal((many, 2 * n, W))
+    base, _ = q._select_membership(scores, eta, 0.5, 0.5, n, W)
+    for quarter in range(1, Q):
+        for shift in (1000.0, -1000.0):
+            changed = scores.copy()
+            changed[:, 0, 13 * quarter :] += shift
+            after, _ = q._select_membership(changed, eta, 0.5, 0.5, n, W)
+            weeks = slice(13 * quarter, 13 * (quarter + 1))
+            assert np.array_equal(base[:, :, weeks], after[:, :, weeks]), (quarter, shift)
+
+
+def _look_panel(look, history=None, L=4):
+    full = np.zeros((1, 208 + L))
+    if history is not None:
+        full[:, 208 - len(history) : 208] = history
+    full[:, 208:] = look
+    return full
+
+
+def test_kat_s1_boundary_is_inclusive(monkeypatch):
+    # Spec §9: reject when t <= the critical value, so equality rejects (M4).
+    full = _look_panel([-0.3, -0.1, -0.2, -0.4])
+    t_exact = float(q.block_t(full[:, 208:])[0])
+    monkeypatch.setattr(q, "student_t_quantile", lambda p, df: t_exact)
+    assert q.core_rejects("T/A025", {"S": full}, L=4, floor=0, sigma0=1, thmc={})[0]
+    monkeypatch.undo()
+    table = {4: {0.75: {"A025": t_exact}}}
+    assert q.core_rejects("TH_MC/A025/H075", {"S": full}, L=4, floor=0, sigma0=1, thmc=table)[0]
+
+
+def test_kat_s3_core_reads_history_weeks_only():
+    # KAT-S3's history in weeks 200-207 and a strongly negative look: windows 0.05 and -0.05,
+    # s_K = 0.0707107, so K2 at A050 rejects. Windows that reached into the look weeks would
+    # give s_K = 0.7071068 and no rejection (M8).
+    hist = [0.1, -0.1, 0.2, 0.0, -0.2, 0.0, 0.1, -0.1]
+    full = _look_panel([-1.0, -1.2, -0.9, -1.1], hist)
+    assert q.core_rejects(
+        "RA_WM/A050/A050/W008/NONE", {"S": full}, L=4, floor=0, sigma0=1, thmc={}
+    )[0]
+
+
+def test_kat_s8_floor_invariance_across_cores():
+    # Spec §14 KAT-S8 for every core type: decisions on (y - phi, floor = phi) equal (y, floor = 0).
+    rng = q.rng_for("kat-s8-dyadic")
+    y = rng.integers(-64, 64, size=(64, 208 + 4)) / 64.0
+    phi = 0.125
+    table = {4: {0.75: {"A025": -2.5}}}
+    for design in (
+        "T/A025",
+        "TH/A025/H075",
+        "TH_MC/A025/H075",
+        "RA_EXT/A025/A050/K100",
+        "RA_WM/A025/A050/W008/UB80",
+        "RA_WM/A025/A025/W208/NONE",
+    ):
+        shifted = q.core_rejects(design, {"S": y - phi}, L=4, floor=phi, sigma0=0.25, thmc=table)
+        plain = q.core_rejects(design, {"S": y}, L=4, floor=0.0, sigma0=0.25, thmc=table)
+        assert np.array_equal(shifted, plain), design
+
+
+def _floor_panel():
+    # Five symbols over the look: means -1, -1, -1, -0.1, +0.5 plus a common weekly wiggle.
+    L, W = 4, 208 + 4
+    base = np.array([-1.0, -1.0, -1.0, -0.1, 0.5])
+    wiggle = np.array([0.05, -0.05, 0.03, -0.03])
+    cand_x = np.zeros((1, 5, W))
+    cand_x[0, :, 208:] = base[:, None] + wiggle[None, :]
+    ctrl_x = np.zeros_like(cand_x)
+    y = {("CAND", "S"): cand_x.mean(axis=1), ("CTRL", "S"): ctrl_x.mean(axis=1)}
+    return q.Panel({("CAND", "S"): cand_x, ("CTRL", "S"): ctrl_x}, None, y, None), L
+
+
+def test_kat_s8_floor_never_reaches_sign_key():
+    # Four events of five pass q = 4/5. A floor of 0.20 added to the sign key's input would
+    # turn the -0.1 symbol into a non-event and veto (M25); the floor belongs to the core only.
+    panel, L = _floor_panel()
+    assert q.joint_rejects("T/A050", "V_J0", panel, L=L, sigma0=1, thmc={})[0]
+    assert q.joint_rejects("T/A050", "V_FLOOR_020", panel, L=L, sigma0=1, thmc={})[0]
+
+
+def test_kat_s9_count_scenario_matches_joint_rejects():
+    # count_scenario must count exactly the joint rule of joint_rejects (spec §9) on every cell,
+    # with the null twin's sigma0, and list the cells that are not estimable.
+    s = q._scenario("P-CHURN", d=0.15, L=26, delta=0.4, churn_a=0.5)
+    designs, focus = q.design_grid(), set(q.focus_designs())
+    thmc = {
+        26: {
+            h: q.thmc_table(26, h, stage="KAT", n_series=2000, chunk=1000)
+            for h in (0.60, 0.65, 0.75, 0.85, 0.95)
+        }
+    }
+    sigma0 = {q.null_twin_id(s): 0.3}
+    out = q.count_scenario(
+        s,
+        stage="KAT",
+        n_reps=200,
+        chunk=100,
+        designs=designs,
+        focus=focus,
+        sigma0=sigma0,
+        thmc=thmc,
+    )
+    expected, not_estimable = {}, set()
+    for idx in range(2):
+        panel = q.simulate_chunk(s, stage="KAT", stream="EVAL", chunk=idx, reps=100)
+        for design in designs:
+            for variant in q.VARIANTS if design in focus else ("V_CORE", "V_J0"):
+                r = q.joint_rejects(design, variant, panel, L=26, sigma0=0.3, thmc=thmc)
+                if r is None:
+                    not_estimable.add(f"{design}|{variant}")
+                    continue
+                key = f"{design}|{variant}|rejections"
+                expected[key] = expected.get(key, 0) + int(r.sum())
+        # An independent reference from the primitives for three V_J0 cells.
+        cand_y = {k[1]: v for k, v in panel.y.items() if k[0] == "CAND"}
+        ctrl_y = {k[1]: v for k, v in panel.y.items() if k[0] == "CTRL"}
+        cand_x = {k[1]: v for k, v in panel.x.items() if k[0] == "CAND"}
+        sign, _ = q.sign_key(cand_x, panel.member, L=26, q="4/5", m_min=7)
+        for design in ("T/A025", "RA_EXT/A025/A050/K100", "RA_WM/A025/A050/W208/UB95"):
+            core = q.core_rejects(design, cand_y, L=26, floor=0.0, sigma0=0.3, thmc=thmc)
+            ctrl = q.core_rejects(design, ctrl_y, L=26, floor=0.0, sigma0=0.3, thmc=thmc)
+            direct = core & sign & ~ctrl
+            joint = q.joint_rejects(design, "V_J0", panel, L=26, sigma0=0.3, thmc=thmc)
+            assert np.array_equal(direct, joint), design
+    assert {k: v for k, v in out["counts"].items() if k.endswith("|rejections")} == expected
+    assert out["not_estimable"] == sorted(not_estimable)
+    assert out["n_reps"] == 200
+    with pytest.raises(q.Refusal):
+        q.count_scenario(
+            s,
+            stage="KAT",
+            n_reps=100,
+            chunk=100,
+            designs=designs,
+            focus=focus,
+            sigma0={},
+            thmc=thmc,
+        )
+
+
+def test_kat_s9_not_estimable_cells_are_listed():
+    # At L = 104 the W104 allowance has K = 1 window: those 15 cells are NOT_ESTIMABLE (spec §9).
+    s = q._scenario("N-CORE", d=0.15, L=104)
+    out = q.count_scenario(
+        s,
+        stage="KAT",
+        n_reps=20,
+        chunk=20,
+        designs=q.design_grid(),
+        focus=set(q.focus_designs()),
+        sigma0=0.3,
+        thmc={104: {h: {lvl: -3.0 for lvl in q.LEVELS} for h in (0.60, 0.65, 0.75, 0.85, 0.95)}},
+    )
+    expected = sorted(
+        f"{d}|V_CORE" for d in q.design_grid() if d.startswith("RA_WM/") and "/W104/" in d
+    )
+    assert out["not_estimable"] == expected and len(expected) == 15
+    assert not any(
+        k.startswith(tuple(e.split("|")[0] + "|" for e in expected)) for k in out["counts"]
+    )
+
+
+def test_kat_s4_sign_key_cache_keys_on_q_and_m_min():
+    # Symbol 0 is a member in one look week only: eligible at m_min = 1, not at m_min = 2.
+    L, W = 8, 208 + 8
+    x = np.zeros((1, 5, W))
+    x[0, :, 208:] = np.array([-0.2, -0.2, -0.2, -0.2, 0.3])[:, None]
+    member = np.ones((1, 5, W), dtype=bool)
+    member[0, 0, 209:] = False
+    panel = q.Panel({("CAND", "S"): x}, member, {("CAND", "S"): x.mean(axis=1)}, None)
+    ev = q._ChunkEval(panel, L=L, sigma0=1.0, thmc={})
+    assert not ev.sign("4/5", 2)[0][0]
+    assert ev.sign("4/5", 1)[0][0]
+    assert np.array_equal(
+        ev.sign("4/5", 1)[0], q.sign_key({"S": x}, member, L=L, q="4/5", m_min=1)[0]
+    )

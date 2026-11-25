@@ -8,6 +8,7 @@ import math
 import re
 import statistics
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import cache, lru_cache
 
 import numpy as np
@@ -1010,8 +1011,6 @@ def sign_key(
         )
         events &= means < 0
     n_events = (events & eligible).sum(axis=1)
-    from fractions import Fraction
-
     frac = Fraction(q)
     evaluable = n_eligible > 0
     return (evaluable & (n_events * frac.denominator >= frac.numerator * n_eligible), evaluable)
@@ -1066,51 +1065,98 @@ def sym_repl_rejects(
     return all_reject
 
 
+def _arm(part: dict[tuple[str, str], np.ndarray], arm: str) -> dict[str, np.ndarray]:
+    return {score: values for (name, score), values in part.items() if name == arm}
+
+
+def _sigma_for(s: Scenario, sigma0) -> float:
+    """The sigma0 an RA_EXT allowance uses: the null twin's, or a size scenario's own.
+
+    Never a default: a missing value is refused.
+    """
+    if isinstance(sigma0, dict):
+        key = null_twin_id(s) or scenario_id(s)
+        if key not in sigma0:
+            raise Refusal(f"sigma0 missing for {key}")
+        return float(sigma0[key])
+    if sigma0 is None:
+        raise Refusal(f"sigma0 missing for {scenario_id(s)}")
+    return float(sigma0)
+
+
+class _ChunkEval:
+    """Every decision on one chunk, each computed once.
+
+    joint_rejects and count_scenario both use it, so the joint rule exists once.
+    """
+
+    def __init__(self, panel: Panel, *, L: int, sigma0, thmc) -> None:
+        self.panel, self.L, self.sigma0, self.thmc = panel, L, sigma0, thmc
+        self.x = {arm: _arm(panel.x, arm) for arm in ARMS}
+        self.y = {arm: _arm(panel.y, arm) for arm in ARMS}
+        self._sign: dict = {}
+        self._decisions: dict = {}
+
+    def sign(self, q: str, m_min: int) -> tuple[np.ndarray, np.ndarray]:
+        key = (q, m_min)
+        if key not in self._sign:
+            self._sign[key] = sign_key(
+                self.x["CAND"], self.panel.member, L=self.L, q=q, m_min=m_min
+            )
+        return self._sign[key]
+
+    def decision(self, design_id: str, arm: str, floor: float) -> np.ndarray | None:
+        """A core's decision on one arm.
+
+        SYM_REPL takes no floor; the control arm is always evaluated with floor 0.
+        """
+        sym = design_id.split("/")[0] == "SYM_REPL"
+        key = (design_id, arm, 0.0 if sym else float(floor))
+        if key not in self._decisions:
+            if sym:
+                level = design_id.split("/")[1]
+                value = sym_repl_rejects(self.x[arm], self.panel.member, L=self.L, level=level)
+            else:
+                value = core_rejects(
+                    design_id,
+                    self.y[arm],
+                    L=self.L,
+                    floor=key[2],
+                    sigma0=self.sigma0,
+                    thmc=self.thmc,
+                )
+            self._decisions[key] = value
+        return self._decisions[key]
+
+    def parts(self, design_id: str, variant_id: str):
+        """(core, sign_fail, control_fail) for one cell, or None when the cell is NOT_ESTIMABLE."""
+        if variant_id not in VARIANT_TABLE:
+            raise ValueError("unknown variant")
+        spec = VARIANT_TABLE[variant_id]
+        core = self.decision(design_id, "CAND", spec["floor"])
+        if core is None:
+            return None
+        sign_fail = np.zeros_like(core)
+        if spec["q"] is not None:
+            m_min = math.ceil(self.L / 4) if spec["m_min"] == "ceil(L/4)" else spec["m_min"]
+            sign_fail = ~self.sign(spec["q"], m_min)[0]
+        control_fail = np.zeros_like(core)
+        if spec["control"]:
+            control = self.decision(design_id, "CTRL", 0.0)
+            if control is None:
+                return None
+            control_fail = control
+        return core, sign_fail, control_fail
+
+
 def joint_rejects(
     design_id: str, variant_id: str, panel: Panel, *, L: int, sigma0, thmc
 ) -> np.ndarray | None:
-    if variant_id not in VARIANT_TABLE:
-        raise ValueError("unknown variant")
-    spec = VARIANT_TABLE[variant_id]
-    cand = {score: values for (arm, score), values in panel.y.items() if arm == "CAND"}
-    core = design_id.split("/")[0]
-    if core == "SYM_REPL":
-        base = sym_repl_rejects(
-            {score: values for (arm, score), values in panel.x.items() if arm == "CAND"},
-            panel.member,
-            L=L,
-            level=design_id.split("/")[1],
-        )
-    else:
-        base = core_rejects(design_id, cand, L=L, floor=spec["floor"], sigma0=sigma0, thmc=thmc)
-    if base is None or variant_id == "V_CORE":
-        return base
-    result = base.copy()
-    if spec["q"] is not None:
-        m_min = math.ceil(L / 4) if spec["m_min"] == "ceil(L/4)" else spec["m_min"]
-        passes, _ = sign_key(
-            {score: values for (arm, score), values in panel.x.items() if arm == "CAND"},
-            panel.member,
-            L=L,
-            q=spec["q"],
-            m_min=m_min,
-        )
-        result &= passes
-    if spec["control"]:
-        ctrl = {score: values for (arm, score), values in panel.y.items() if arm == "CTRL"}
-        if core == "SYM_REPL":
-            ctrl_reject = sym_repl_rejects(
-                {score: values for (arm, score), values in panel.x.items() if arm == "CTRL"},
-                panel.member,
-                L=L,
-                level=design_id.split("/")[1],
-            )
-        else:
-            ctrl_reject = core_rejects(design_id, ctrl, L=L, floor=0.0, sigma0=sigma0, thmc=thmc)
-        if ctrl_reject is None:
-            return None
-        result &= ~ctrl_reject
-    return result
+    parts = _ChunkEval(panel, L=L, sigma0=sigma0, thmc=thmc).parts(design_id, variant_id)
+    if parts is None:
+        return None
+    core, sign_fail, control_fail = parts
+    return core & ~sign_fail & ~control_fail
 
 
 def thmc_table(L: int, h_c: float, *, stage: str, n_series: int, chunk: int) -> dict[str, float]:
@@ -1160,115 +1206,70 @@ def count_scenario(
     thmc,
     chunk_indices=None,
 ) -> dict:
+    """Integer counts for one scenario over its chunks (spec §10 step 5).
+
+    Returns `scenario_id`, `n_reps` (replications counted), `counts` keyed
+    `<design>|<variant>|<suffix>` with the suffixes `rejections`, `core_rejections`,
+    `sign_vetoes` and `control_vetoes` (plus `<design>|core_and_sign` for a size
+    scenario), `not_estimable` (sorted `<design>|<variant>`), `sign_not_evaluable` and
+    `mean_turnover`. A missing sigma0 is refused, never defaulted.
+    """
+    if n_reps < 1 or chunk < 1:
+        raise ValueError("n_reps and chunk must be positive")
     indices = (
         list(chunk_indices)
         if chunk_indices is not None
         else list(range((n_reps + chunk - 1) // chunk))
     )
     sid = scenario_id(s)
-    out = {
-        "scenario_id": sid,
-        "n_reps": 0,
-        "counts": {},
-        "turnover_weighted": 0.0,
-        "sign_not_evaluable": 0,
-    }
+    sigma = _sigma_for(s, sigma0)
+    m_min_default = math.ceil(s.L / 4)
+    counts: dict[str, int] = {}
+    not_estimable: set[str] = set()
+    done, turnover_weighted, sign_not_evaluable = 0, 0.0, 0
     for idx in indices:
         panel = simulate_chunk(
             s, stage=stage, stream="EVAL", chunk=idx, reps=min(chunk, n_reps - idx * chunk)
         )
         reps_in_chunk = next(iter(panel.y.values())).shape[0]
-        out["n_reps"] += reps_in_chunk
+        done += reps_in_chunk
         if panel.mean_turnover is not None:
-            out["turnover_weighted"] += panel.mean_turnover * reps_in_chunk
-        diagnostic_x = {score: value for (arm, score), value in panel.x.items() if arm == "CAND"}
-        _, evaluable = sign_key(
-            diagnostic_x, panel.member, L=s.L, q="4/5", m_min=math.ceil(s.L / 4)
-        )
-        out["sign_not_evaluable"] += int((~evaluable).sum())
+            turnover_weighted += panel.mean_turnover * reps_in_chunk
+        ev = _ChunkEval(panel, L=s.L, sigma0=sigma, thmc=thmc)
+        sign_default, evaluable = ev.sign("4/5", m_min_default)
+        sign_not_evaluable += int((~evaluable).sum())
         for design in designs:
             variants = (
                 ("V_CORE",)
                 if s.kind == "SIZE"
                 else (VARIANTS if design in focus else ("V_CORE", "V_J0"))
             )
-            core = design.split("/")[0]
             for variant in variants:
-                spec = VARIANT_TABLE[variant]
-                sigmas = sigma0 if isinstance(sigma0, dict) else {sid: sigma0}
-                sigma = sigmas.get(null_twin_id(s) or sid, sigmas.get(sid, 1.0))
-                cand_y = {score: value for (arm, score), value in panel.y.items() if arm == "CAND"}
-                cand_x = {score: value for (arm, score), value in panel.x.items() if arm == "CAND"}
-                if core == "SYM_REPL":
-                    core_result = sym_repl_rejects(
-                        cand_x, panel.member, L=s.L, level=design.split("/")[1]
-                    )
-                else:
-                    core_result = core_rejects(
-                        design, cand_y, L=s.L, floor=spec["floor"], sigma0=sigma, thmc=thmc
-                    )
-                if core_result is None:
-                    continue
-                sign_result = np.ones(reps_in_chunk, dtype=bool)
-                sign_fail = np.zeros(reps_in_chunk, dtype=bool)
-                if spec["q"] is not None:
-                    m_min = math.ceil(s.L / 4) if spec["m_min"] == "ceil(L/4)" else spec["m_min"]
-                    sign_result, _evaluable = sign_key(
-                        cand_x, panel.member, L=s.L, q=spec["q"], m_min=m_min
-                    )
-                    sign_fail = ~sign_result
-                control_fail = np.zeros(reps_in_chunk, dtype=bool)
-                if spec["control"]:
-                    if core == "SYM_REPL":
-                        control_fail = sym_repl_rejects(
-                            {
-                                score: value
-                                for (arm, score), value in panel.x.items()
-                                if arm == "CTRL"
-                            },
-                            panel.member,
-                            L=s.L,
-                            level=design.split("/")[1],
-                        )
-                    else:
-                        control_result = core_rejects(
-                            design,
-                            {
-                                score: value
-                                for (arm, score), value in panel.y.items()
-                                if arm == "CTRL"
-                            },
-                            L=s.L,
-                            floor=0.0,
-                            sigma0=sigma,
-                            thmc=thmc,
-                        )
-                        if control_result is None:
-                            continue
-                        control_fail = control_result
-                pre_control = core_result & sign_result
-                joint = pre_control & ~control_fail
                 prefix = f"{design}|{variant}"
+                parts = ev.parts(design, variant)
+                if parts is None:
+                    not_estimable.add(prefix)
+                    continue
+                core, sign_fail, control_fail = parts
+                pre_control = core & ~sign_fail
                 for suffix, values in (
-                    ("rejections", joint),
-                    ("core_rejections", core_result),
-                    ("sign_vetoes", core_result & sign_fail),
+                    ("rejections", pre_control & ~control_fail),
+                    ("core_rejections", core),
+                    ("sign_vetoes", core & sign_fail),
                     ("control_vetoes", pre_control & control_fail),
                 ):
                     key = f"{prefix}|{suffix}"
-                    out["counts"][key] = out["counts"].get(key, 0) + int(values.sum())
-                if s.kind == "SIZE":
-                    size_sign, _evaluable = sign_key(
-                        cand_x, panel.member, L=s.L, q="4/5", m_min=math.ceil(s.L / 4)
-                    )
+                    counts[key] = counts.get(key, 0) + int(values.sum())
+            if s.kind == "SIZE":
+                core = ev.decision(design, "CAND", 0.0)
+                if core is not None:
                     key = f"{design}|core_and_sign"
-                    out["counts"][key] = out["counts"].get(key, 0) + int(
-                        (core_result & size_sign).sum()
-                    )
-    out["mean_turnover"] = (
-        out["turnover_weighted"] / out["n_reps"]
-        if s.churn_a is not None and out["n_reps"]
-        else None
-    )
-    del out["turnover_weighted"]
-    return out
+                    counts[key] = counts.get(key, 0) + int((core & sign_default).sum())
+    return {
+        "scenario_id": sid,
+        "n_reps": done,
+        "counts": counts,
+        "not_estimable": sorted(not_estimable),
+        "sign_not_evaluable": sign_not_evaluable,
+        "mean_turnover": turnover_weighted / done if s.churn_a is not None and done else None,
+    }
