@@ -8,12 +8,41 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 from scripts import quant_ng_null_design as q
+
+
+class _ProtectedDraw(BaseException):
+    """Raised for a DEV or VAL draw inside the test session (prereg d3 §4.7; spec d3 §14)."""
+
+
+_PROTECTED_DRAWS = []
+
+
+@pytest.fixture(autouse=True)
+def _no_dev_or_val_draws(monkeypatch):
+    """No test, mutated or not, may draw a development or validation number (incident M1).
+
+    A BaseException, so that no `except Exception` and no `pytest.raises(Refusal)` can
+    absorb it; every attempt is also recorded and fails the test at teardown.
+    """
+    real = q.rng_for
+
+    def guarded(key):
+        if {"DEV", "VAL"} & set(str(key).split("|")):
+            _PROTECTED_DRAWS.append(key)
+            raise _ProtectedDraw(key)
+        return real(key)
+
+    monkeypatch.setattr(q, "rng_for", guarded)
+    _PROTECTED_DRAWS.clear()
+    yield
+    assert _PROTECTED_DRAWS == [], "a test reached a DEV or VAL draw"
 
 
 @pytest.mark.parametrize(
@@ -785,24 +814,13 @@ def _v5_cells():
     return rows
 
 
-def test_kat_v5_rollups_and_all_eight_reading_outcomes():
+def _v5_inputs():
+    """The hand-made inputs of KAT-V5: one case per outcome result, per reading."""
     cells = _v5_cells()
-    roll = q.size_rollups(cells, bounds=("TOL20",), envelopes=("E65",), class_sets=("PLAN_NAMED",))
-    assert roll and all(x["status"] == "VALID" for x in roll)
     checks = [{"id": x, "status": "PASS", "cells": 1, "failed_cells": []} for x in q.SELF_CHECK_IDS]
     selections = []
     sizes = []
     powers = []
-    outcomes_by_reading = (
-        "STAGE1_PASS_CONDITIONAL",
-        "STOP_INCONCLUSIVE",
-        "STOP_INSUFFICIENT_POWER",
-        "STOP_INSUFFICIENT_POWER_VETO_KEYS",
-        "STOP_INCONCLUSIVE",
-        "STOP_SIZE_UNCONTROLLED",
-        "STOP_INCONCLUSIVE",
-        "STOP_INCONCLUSIVE",
-    )
     for i, (level, envelope) in enumerate(q.READINGS):
         pri = f"T/{level}"
         fb = f"TH/{level}/H095"
@@ -909,6 +927,24 @@ def test_kat_v5_rollups_and_all_eight_reading_outcomes():
                     }
                 ]
             )
+    return selections, sizes, powers, cells, checks
+
+
+def test_kat_v5_rollups_and_all_eight_reading_outcomes():
+    cells = _v5_cells()
+    roll = q.size_rollups(cells, bounds=("TOL20",), envelopes=("E65",), class_sets=("PLAN_NAMED",))
+    assert roll and all(x["status"] == "VALID" for x in roll)
+    selections, sizes, powers, cells, checks = _v5_inputs()
+    outcomes_by_reading = (
+        "STAGE1_PASS_CONDITIONAL",
+        "STOP_INCONCLUSIVE",
+        "STOP_INSUFFICIENT_POWER",
+        "STOP_INSUFFICIENT_POWER_VETO_KEYS",
+        "STOP_INCONCLUSIVE",
+        "STOP_SIZE_UNCONTROLLED",
+        "STOP_INCONCLUSIVE",
+        "STOP_INCONCLUSIVE",
+    )
     got = q.outcomes(selections, sizes, powers, cells, checks)
     assert len(got) == 8 and [x["label"] for x in got] == list(q.READING_LABELS)
     assert [x["result"] for x in got] == list(outcomes_by_reading)
@@ -1443,7 +1479,7 @@ def _tiny_manifest(stage="KAT"):
     return {
         "schema": "ucpe.exp04_stage1.manifest.v1",
         "stage": stage,
-        "namespace": "UCPE-EXP04-STAGE1-v1",
+        "namespace": q.SEED_NAMESPACE,
         "prereg_sha256": "1" * 64,
         "spec_sha256": "2" * 64,
         "code_sha256": q._code_sha256(),
@@ -1546,7 +1582,8 @@ def test_kat_d3_report_and_cells_omit_clock_host_and_absolute_path(tmp_path):
     assert "started_utc" not in payload and "finished_utc" not in payload
 
 
-def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path):
+def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path, monkeypatch):
+    _fast_val(monkeypatch)
     repo = tmp_path
     with pytest.raises(q.Refusal, match=r"^output folder outside \.work/exp04_stage1_\*$"):
         q.check_out_dir(repo / "outside", repo)
@@ -1583,6 +1620,7 @@ def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path):
         }
         for level, envelope in q.READINGS
     ]
+    val.update(_PROVENANCE)
     lane = repo / ".work" / "exp04_stage1_test"
     lane.mkdir(parents=True, exist_ok=True)
     out = lane / "out"
@@ -1604,7 +1642,8 @@ def test_kat_r1_refusals_are_exact_and_consumption_is_single_use(tmp_path):
         q.run_stage(val, out, repo_root=repo, environ=_orchestration_env())
 
 
-def test_kat_r1_rejects_missing_manifest_scenario_and_completed_validation(tmp_path):
+def test_kat_r1_rejects_missing_manifest_scenario_and_completed_validation(tmp_path, monkeypatch):
+    _fast_val(monkeypatch)
     repo = tmp_path
     lane = repo / ".work" / "exp04_stage1_test"
     out = lane / "out"
@@ -1633,6 +1672,7 @@ def test_kat_r1_rejects_missing_manifest_scenario_and_completed_validation(tmp_p
         }
         for level, envelope in q.READINGS
     ]
+    val.update(_PROVENANCE)
     val["focus_designs"] = list(q.expected_focus("VAL", val["selections"]))
     marker = lane / f"VALIDATION_CONSUMED_{val['prereg_sha256'][:16]}.json"
     marker.write_bytes(
@@ -1718,6 +1758,13 @@ def _readings(primary=lambda level: q.candidates(level)[0]):
     ]
 
 
+_PROVENANCE = {
+    "dev_report_sha256": "a" * 64,
+    "dev_manifest_sha256": "b" * 64,
+    "decisions_sha256": "c" * 64,
+}
+
+
 def _val_manifest(**kw):
     return q.build_manifest(
         "VAL",
@@ -1725,14 +1772,23 @@ def _val_manifest(**kw):
         "2" * 64,
         environ=_orchestration_env(),
         selections=kw.pop("selections", _readings()),
-        **kw,
+        **(_PROVENANCE | kw),
     )
+
+
+class _EvaluationReached(BaseException):
+    """A test reached `count_scenario` where it must stop at a refusal (incident M1)."""
 
 
 def _fast_val(monkeypatch, projected=0.0):
     monkeypatch.setattr(q, "project_runtime", lambda manifest: projected)
     monkeypatch.setattr(q, "thmc_table", lambda L, h, **kw: dict.fromkeys(q.READING_LEVELS, -2.0))
     monkeypatch.setattr(q, "sigma0_for", lambda s, **kw: 0.2)
+
+    def unreachable(*args, **kwargs):
+        raise _EvaluationReached("evaluation reached in a refusal test")
+
+    monkeypatch.setattr(q, "count_scenario", unreachable)
 
 
 def test_kat_g1_val_focus_adds_selected_designs():
@@ -1961,3 +2017,422 @@ def test_kat_r1_run_stage_checks_harness_and_existing_report(tmp_path, monkeypat
     (done / "REPORT.json").write_text("{}")
     with pytest.raises(q.Refusal, match="^validation already consumed$"):
         q.run_stage(_val_manifest(), done, resume=True, repo_root=tmp_path, environ=env)
+
+
+# ---- Master's consolidated repair R-C1 (EXP04-C1; prereg d3, spec d3) ----
+
+_DISCLAIMERS_VERBATIM = [
+    "Synthetic data only. No real market data was read.",
+    "No look was taken and no claim is made or supported.",
+    "Synthetic validity does not remove real-data survivorship bias.",
+    "Every constant is PROPOSED and none is adopted by this report.",
+    "Stage 2 needs the owner, real data and the licence; none is authorized.",
+]
+_REASONS_VERBATIM = {
+    "S1_SELF_CHECK_FAILED": "step 1: a self-check failed; results are kept and not interpreted",
+    "S2_PRIMARY_VALID": "step 2: the primary has a VALID look length",
+    "S2_FALLBACK_CONSULTED": (
+        "step 2: the primary has no VALID look length; the fallback is consulted"
+    ),
+    "S2_FALLBACK_VALID": "step 2: the fallback has a VALID look length",
+    "S2_FALLBACK_NULL": "step 2: the primary has no VALID look length and the fallback is null",
+    "S3_NO_VALID": "step 3: no consulted design has a VALID look length",
+    "S3_CONFIRMED_INVALID": (
+        "step 3: an admissible cell is INVALID and confirmed by the simultaneous limit"
+    ),
+    "S3_NOT_CONFIRMED": "step 3: no INVALID cell is confirmed by the simultaneous limit",
+    "S4_J_MET": "step 4: at least one V_J0 entry is MET",
+    "S4_ALL_INSUFFICIENT": "step 4: every V_J0 entry and every V_CORE entry is INSUFFICIENT",
+    "S4_VETO_KEYS": "step 4: every V_J0 entry is INSUFFICIENT and at least one V_CORE entry is MET",
+    "S4_OTHERWISE": "step 4: no earlier rule of step 4 applies",
+}
+_OUTCOME_KEYS = {
+    "label",
+    "level",
+    "envelope",
+    "bound",
+    "result",
+    "consulted",
+    "design_used",
+    "valid_L",
+    "met",
+    "met_core",
+    "reasons",
+    "sensitivity_status",
+    "sensitivity_invalid_cells",
+    "attached_design_id",
+    "central_power_rollups",
+    "minimum_detectable_effects",
+}
+
+
+def test_kat_t1_the_test_session_refuses_dev_and_val_draws(monkeypatch):
+    sid = "N-CORE/d=0.00/rho=0.60/n=010/L=026"
+    for stage in ("DEV", "VAL"):
+        for stream in q.STREAMS:
+            with pytest.raises(_ProtectedDraw):
+                q.rng_for(q.seed_key(stage, stream, sid, "NOISE_G1", 0))
+    assert len(_PROTECTED_DRAWS) == 6
+    _PROTECTED_DRAWS.clear()  # the six attempts above are this test's own
+    assert q.rng_for(q.seed_key("KAT", "EVAL", sid, "NOISE_G1", 0)).standard_normal() != 0.0
+    assert q.SEED_NAMESPACE == "UCPE-EXP04-STAGE1-v2"
+    assert q.seed_key("KAT", "EVAL", sid, "NOISE_G1", 7).startswith("UCPE-EXP04-STAGE1-v2|KAT|")
+    # A test that must stop at a refusal cannot evaluate: `_fast_val` makes evaluation raise.
+    _fast_val(monkeypatch)
+    with pytest.raises(_EvaluationReached):
+        q.count_scenario(
+            q.parse_scenario_id(sid),
+            stage="KAT",
+            n_reps=1,
+            chunk=1,
+            designs=["T/A050"],
+            focus=[],
+            sigma0={sid: 1.0},
+            thmc={},
+        )
+
+
+def _synthetic_counts(sym_rejects=True):
+    """A stand-in for `count_scenario`: every size cell 0, every power cell n, and SYM_REPL
+    rejecting everything at rho >= 0.6 (so SC-2 passes) unless `sym_rejects` is False."""
+
+    def fake(s, *, stage, n_reps, chunk, designs, focus, sigma0, thmc, chunk_indices=None):
+        counts = {}
+        for design in designs:
+            variants = (
+                ("V_CORE",)
+                if s.kind == "SIZE"
+                else (q.VARIANTS if design in focus else ("V_CORE", "V_J0"))
+            )
+            for variant in variants:
+                x = n_reps if s.kind == "POWER" else 0
+                if sym_rejects and s.kind == "SIZE" and design.startswith("SYM_REPL/"):
+                    x = n_reps if s.rho >= 0.6 else 0
+                counts[f"{design}|{variant}|rejections"] = x
+        return {
+            "scenario_id": q.scenario_id(s),
+            "n_reps": n_reps,
+            "counts": counts,
+            "not_estimable": [],
+            "sign_not_evaluable": 0,
+            "mean_turnover": None,
+        }
+
+    return fake
+
+
+def _complete_run(monkeypatch, repo, manifest, out, *, sym_rejects=True, resume=False):
+    _fast_val(monkeypatch)
+    monkeypatch.setattr(q, "count_scenario", _synthetic_counts(sym_rejects))
+    return q.run_stage(manifest, out, resume=resume, repo_root=repo, environ=_orchestration_env())
+
+
+def test_kat_r2_dev_run_completes_on_its_own_path(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    manifest = q.build_manifest("DEV", "1" * 64, "2" * 64, environ=_orchestration_env())
+    report = _complete_run(monkeypatch, tmp_path, manifest, lane / "dev")
+    assert report["schema"] == "ucpe.exp04_stage1.report.v2" and report["stage"] == "DEV"
+    assert report["outcome_status"] == "DEV_ONLY_NOT_AN_OUTCOME" and report["outcomes"] == []
+    assert report["disclaimers"] == _DISCLAIMERS_VERBATIM and report["omissions"] == []
+    assert [c["status"] for c in report["self_checks"]] == ["PASS"] * 4
+    assert [(x["level"], x["envelope"]) for x in report["selections"]] == list(q.READINGS)
+    assert all(x["candidates"] for x in report["selections"])
+    assert (lane / "dev" / "REPORT.json").read_bytes() == q.canonical_bytes(report)
+    assert len((lane / "dev" / "CELLS.jsonl").read_bytes().splitlines()) == 101
+    assert report["counts"]["size_cells"] == 7931 and report["counts"]["power_cells"] == 13104
+    assert not list(lane.glob("VALIDATION_CONSUMED_*"))
+    run = q._load_dev_report(lane / "dev")
+    decisions = q.build_dev_decisions([run])
+    assert decisions["selection_source"] == run["dev_report_sha256"]
+    cells = lane / "dev" / "CELLS.jsonl"
+    cells.write_bytes(cells.read_bytes() + b"\n")
+    with pytest.raises(q.Refusal, match="^development cells do not match the report$"):
+        q._load_dev_report(lane / "dev")
+
+
+def test_kat_r2_val_run_completes_marks_complete_and_is_single_use(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    manifest = _val_manifest()
+    report = _complete_run(monkeypatch, tmp_path, manifest, lane / "val")
+    assert report["schema"] == "ucpe.exp04_stage1.report.v2" and report["stage"] == "VAL"
+    assert report["outcome_status"] == "COMPUTED"
+    assert report["disclaimers"] == _DISCLAIMERS_VERBATIM and report["omissions"] == []
+    assert [x["label"] for x in report["outcomes"]] == list(q.READING_LABELS)
+    reasons = [_REASONS_VERBATIM["S2_PRIMARY_VALID"], _REASONS_VERBATIM["S4_J_MET"]]
+    for o, sel in zip(report["outcomes"], manifest["selections"], strict=True):
+        assert set(o) == _OUTCOME_KEYS
+        assert o["result"] == "STAGE1_PASS_CONDITIONAL" and o["reasons"] == reasons
+        assert o["attached_design_id"] == sel["primary"] == o["design_used"]
+        central = [
+            r
+            for r in report["power_rollups"]
+            if r["design_id"] == sel["primary"] and r["dependence"] == "CENTRAL"
+        ]
+        assert central and o["central_power_rollups"] == central
+        mde = [r for r in report["minimum_detectable_effect"] if r["design_id"] == sel["primary"]]
+        assert mde and o["minimum_detectable_effects"] == mde
+    marker = lane / f"VALIDATION_CONSUMED_{'1' * 16}.json"
+    assert json.loads(marker.read_bytes()) == {
+        "schema": "ucpe.exp04_stage1.consumed.v1",
+        "prereg_sha256": "1" * 64,
+        "manifest_sha256": hashlib.sha256(q.canonical_bytes(manifest)).hexdigest(),
+        "status": "COMPLETE",
+        "restarts": 0,
+    }
+    for name, resume in (("again", True), ("again2", False)):
+        with pytest.raises(q.Refusal, match="^validation already consumed$"):
+            _complete_run(monkeypatch, tmp_path, manifest, lane / name, resume=resume)
+        assert not (lane / name).exists()
+
+
+def test_kat_r2_val_self_check_failure_stops_every_reading(tmp_path, monkeypatch):
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    report = _complete_run(monkeypatch, tmp_path, _val_manifest(), lane / "val", sym_rejects=False)
+    assert next(c for c in report["self_checks"] if c["id"] == "SC-2")["status"] == "FAIL"
+    assert report["outcome_status"] == "STOP_HARNESS_DEFECT"
+    assert [o["result"] for o in report["outcomes"]] == ["STOP_HARNESS_DEFECT"] * 8
+    assert all(
+        o["reasons"] == [_REASONS_VERBATIM["S1_SELF_CHECK_FAILED"]] for o in report["outcomes"]
+    )
+    assert report["disclaimers"] == _DISCLAIMERS_VERBATIM and report["omissions"] == []
+
+
+_SPY_SCENARIOS = (
+    "N-CHURN/d=0.00/rho=0.60/n=010/L=026/a=0.50",
+    "N-VOL/d=0.00/rho=0.60/n=010/L=026",
+    "P-CHURN/d=0.00/rho=0.60/n=010/L=026/delta=0.40/a=0.50",
+)
+
+
+def _spy_run(tmp_path):
+    m = _tiny_manifest()
+    m["scenarios"] = sorted(_SPY_SCENARIOS)
+    m["designs"] = ["SYM_REPL/A050", "T/A050"]
+    m["focus_designs"] = ["T/A050"]
+    m["replications"] = {"n_null": 40, "n_power": 20, "n_cal_sigma0": 20, "n_cal_thmc": 20}
+    m["chunking"] = {"chunk_null": 20, "chunk_power": 10, "chunk_thmc": 10}
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    q.run_stage(m, lane / "out", repo_root=tmp_path, environ=_orchestration_env())
+    rows = [json.loads(x) for x in (lane / "out" / "CELLS.jsonl").read_bytes().splitlines()]
+    return m, rows
+
+
+def test_kat_d4_seed_record_is_exactly_the_drawn_set(tmp_path, monkeypatch):
+    drawn = []
+    inner = q.rng_for
+
+    def spy(key):
+        drawn.append(key)
+        return inner(key)
+
+    monkeypatch.setattr(q, "rng_for", spy)
+    m, _ = _spy_run(tmp_path)
+    tables = [f"THMC/L=026/H={h:.2f}" for h in (0.60, 0.65, 0.75, 0.85, 0.95)]
+    listed = q.all_seed_keys("KAT", m["scenarios"], tables, m["replications"], m["chunking"])
+    # Each listed key is drawn exactly once, and nothing unlisted is drawn.
+    assert Counter(drawn) == Counter(listed)
+    sigma = sorted(k for k in listed if "|CAL_SIGMA0|" in k)
+    assert {k.split("|")[4] for k in sigma} == {"NOISE_G1", "REGIME", "MEMBERSHIP"}
+    assert not any(k.endswith("|SERIES|000000") and "|CAL_SIGMA0|" in k for k in listed)
+
+
+def test_kat_v7_simultaneous_limit_counts_size_scenarios_on_the_run_path(tmp_path):
+    _, rows = _spy_run(tmp_path)
+    size_rows = [r for r in rows if r["kind"] == "SIZE"]
+    assert len(rows) == 3 and len(size_rows) == 2
+    positive = 0
+    for row in size_rows:
+        for c in row["cells"]:
+            assert c["status"] == "ESTIMATED"
+            assert c["cp_sim_lower"] == q.cp_lower(c["rejections"], row["n_reps"], 0.025 / 4)
+            positive += c["rejections"] > 0
+    assert positive
+
+
+def test_kat_n10_thmc_critical_value_is_the_kth_smallest(monkeypatch):
+    L, n, chunk = 4, 400, 100
+    order = np.random.default_rng(0).permutation(n)
+    rows = (order - 200.0)[:, None] + np.array([-1.0, 1.0, 0.0, 0.0])
+
+    class _Rows:
+        def __init__(self, block):
+            self.block = block
+
+        def standard_normal(self, shape):
+            assert shape == self.block.shape
+            return self.block.copy()
+
+    def fake(key):
+        idx = int(key.rsplit("|", 1)[1])
+        return _Rows(rows[idx * chunk : (idx + 1) * chunk])
+
+    monkeypatch.setattr(q, "rng_for", fake)
+    got = q.thmc_table(L, 0.5, stage="KAT", n_series=n, chunk=chunk)
+    scale = 2.0 / math.sqrt(2.0 / 3.0)  # t = mean / (s / sqrt(4)), s = sqrt(2/3) for every row
+    # Spec §10 step 3: the k-th smallest t, k = floor(level * n), counting from 1.
+    for level, k in (("A050", 20), ("A025", 10), ("A0125", 5), ("A0083", 3)):
+        assert got[level] == pytest.approx((k - 1 - 200.0) * scale, abs=1e-9)
+
+
+def test_kat_i3_guard_covers_every_event_family(tmp_path):
+    allowed = tmp_path / "out"
+    inside, outside = str(allowed / "f"), str(tmp_path / "STATE.md")
+    proc, write = "network or process creation refused", "write outside output folder refused"
+    for event in (
+        "os.spawn",
+        "os.forkpty",
+        "os.posix_spawn",
+        "os.exec",
+        "os.system",
+        "subprocess.Popen",
+        "socket.getaddrinfo",
+    ):
+        assert q.guard_reason(event, (), allowed) == proc
+    for event, args in (
+        ("os.truncate", (outside, 0)),
+        ("os.link", (inside, outside, None, None, True)),
+        ("os.symlink", (inside, outside, None)),
+        ("os.utime", (outside, None, None, None)),
+        ("os.chown", (outside, 0, 0, None)),
+        ("os.chmod", (outside, 420, None)),
+        ("os.mkdir", (outside, 511, None)),
+        ("os.remove", (outside, None)),
+        ("os.rmdir", (outside, None)),
+        ("os.rename", (inside, outside, None, None)),
+        ("shutil.copyfile", (inside, outside)),
+        ("shutil.rmtree", (outside, None)),
+    ):
+        assert q.guard_reason(event, args, allowed) == write, event
+        inner = tuple(inside if a == outside else a for a in args)
+        assert q.guard_reason(event, inner, allowed) is None, event
+        assert q.guard_reason(event, inner, None) == write, event
+    assert q.guard_reason("os.truncate", (3, 0), allowed) is None  # a descriptor, not a path
+    assert q.guard_reason("open", (outside, "r", 0), None) is None
+    assert q.guard_reason("open", (inside, "w", 0), None) == write
+    assert q.guard_reason("open", (outside, None, os.O_WRONLY | os.O_CREAT), allowed) == write
+
+
+def test_kat_r1_namespace_and_validation_provenance_refusals(tmp_path, monkeypatch):
+    _fast_val(monkeypatch)
+    lane = tmp_path / ".work" / "exp04_stage1_test"
+    lane.mkdir(parents=True)
+    env = _orchestration_env()
+    path = tmp_path / "m.json"
+    old = dict(_tiny_manifest(), namespace="UCPE-EXP04-STAGE1-v1")
+    with pytest.raises(q.Refusal, match="^seed namespace mismatch$"):
+        q.run_stage(old, lane / "kat", repo_root=tmp_path, environ=env)
+    path.write_bytes(q.canonical_bytes(old))
+    with pytest.raises(q.Refusal, match="^seed namespace mismatch$"):
+        q.load_manifest(path, hashlib.sha256(path.read_bytes()).hexdigest())
+    reason = "^validation manifest lacks development provenance$"
+    for key in _PROVENANCE:
+        with pytest.raises(q.Refusal, match=reason):
+            _val_manifest(**{key: None})
+        bare = dict(_val_manifest(), **{key: None})
+        with pytest.raises(q.Refusal, match=reason):
+            q.run_stage(bare, lane / "val", repo_root=tmp_path, environ=env)
+        path.write_bytes(q.canonical_bytes(bare))
+        with pytest.raises(q.Refusal, match=reason):
+            q.load_manifest(path, hashlib.sha256(path.read_bytes()).hexdigest())
+    assert not list(lane.glob("VALIDATION_CONSUMED_*")) and not (lane / "val").exists()
+
+
+def test_kat_i2_cli_run_refusals_exit_2_and_plan_is_guarded():
+    script = str(Path(q.__file__).resolve())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        lane = root / ".work" / "exp04_stage1_test"
+        lane.mkdir(parents=True)
+        env = os.environ.copy() | _orchestration_env()
+        junk = root / "junk.json"
+        junk.write_bytes(b"not json")
+        val = root / "val.json"
+        val.write_bytes(q.canonical_bytes(dict(_val_manifest(), code_sha256="0" * 64)))
+        for manifest, digest, out, reason in (
+            (junk, "0" * 64, lane / "a", "manifest digest mismatch"),
+            (junk, hashlib.sha256(b"not json").hexdigest(), lane / "b", "unknown field"),
+            (
+                val,
+                hashlib.sha256(val.read_bytes()).hexdigest(),
+                root / "outside",
+                "output folder outside .work/exp04_stage1_*",
+            ),
+        ):
+            cmd = [sys.executable, "-I", "-B", script, "run", "--manifest", str(manifest)]
+            cmd += ["--expect-sha256", digest, "--out", str(out)]
+            proc = subprocess.run(
+                cmd, cwd=root, env=env, capture_output=True, text=True, timeout=15
+            )
+            assert (proc.returncode, proc.stderr.strip()) == (2, f"REFUSAL: {reason}")
+        assert not (root / "outside").exists() and list(lane.iterdir()) == []
+        code = (
+            "import importlib.util, sys\n"
+            f"spec = importlib.util.spec_from_file_location('h', {script!r})\n"
+            "h = importlib.util.module_from_spec(spec)\n"
+            "sys.modules['h'] = h\n"
+            "spec.loader.exec_module(h)\n"
+            "assert h.main(['plan', '--stage', 'DEV']) == 0\n"
+            "try:\n"
+            "    open('after_plan.txt', 'w')\n"
+            "except h.Refusal as exc:\n"
+            "    print('GUARDED', exc)\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-I", "-B", "-c", code],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert proc.stdout.splitlines()[-1] == "GUARDED write outside output folder refused"
+        assert not (root / "after_plan.txt").exists()
+
+
+def test_kat_v5_reasons_are_the_fixed_step_texts_and_step5_is_attached():
+    assert q.REASON_TEXTS == _REASONS_VERBATIM
+    r = _REASONS_VERBATIM
+    selections, sizes, powers, cells, checks = _v5_inputs()
+    central, mde = [], []
+    for level in q.READING_LEVELS:
+        for design in (f"T/{level}", f"TH/{level}/H095", f"TH_MC/{level}/H095"):
+            common = {"design_id": design, "variant_id": "V_J0", "L": "026", "n": 10}
+            central.append(
+                common | {"effect_pair": [0.4, 0.2], "dependence": "CENTRAL", "status": "MET"}
+            )
+            mde.append(common | {"dependence": "WORST_E85", "mde_p80": None, "mde_p50": 0.8})
+    got = q.outcomes(selections, sizes, powers + central, cells, checks, mde)
+    assert [x["reasons"] for x in got] == [
+        [r["S2_PRIMARY_VALID"], r["S4_J_MET"]],
+        [r["S2_FALLBACK_CONSULTED"], r["S2_FALLBACK_VALID"], r["S4_OTHERWISE"]],
+        [r["S2_PRIMARY_VALID"], r["S4_ALL_INSUFFICIENT"]],
+        [r["S2_PRIMARY_VALID"], r["S4_VETO_KEYS"]],
+        [r["S2_FALLBACK_NULL"], r["S3_NO_VALID"], r["S3_NOT_CONFIRMED"]],
+        [r["S2_FALLBACK_NULL"], r["S3_NO_VALID"], r["S3_CONFIRMED_INVALID"]],
+        [r["S2_PRIMARY_VALID"], r["S4_OTHERWISE"]],
+        [r["S2_PRIMARY_VALID"], r["S4_OTHERWISE"]],
+    ]
+    # CENTRAL entries never change a result (step 4 reads the worst case only).
+    assert [x["result"] for x in got] == [x["result"] for x in q.outcomes(*_v5_inputs())]
+    for x in got:
+        used = x["consulted"][-1]
+        assert set(x) == _OUTCOME_KEYS and x["attached_design_id"] == used
+        assert x["central_power_rollups"] == [p for p in central if p["design_id"] == used]
+        assert x["minimum_detectable_effects"] == [m for m in mde if m["design_id"] == used]
+    assert got[1]["attached_design_id"] == "TH/A050/H095"
+    no_fallback = [s for s in sizes if s["design_id"] != "TH/A050/H095"]
+    second = q.outcomes(selections, no_fallback, powers, cells, checks, [])[1]
+    assert second["result"] == "STOP_INCONCLUSIVE"
+    assert second["reasons"] == [
+        r["S2_FALLBACK_CONSULTED"],
+        r["S3_NO_VALID"],
+        r["S3_NOT_CONFIRMED"],
+    ]
+    defect = q.outcomes(selections, sizes, powers + central, cells, [{"status": "FAIL"}], mde)
+    assert all(x["reasons"] == [r["S1_SELF_CHECK_FAILED"]] for x in defect)
+    assert [x["central_power_rollups"] for x in defect] == [x["central_power_rollups"] for x in got]

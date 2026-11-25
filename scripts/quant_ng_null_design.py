@@ -118,17 +118,38 @@ OUTCOME_RESULTS = (
     "STOP_INCONCLUSIVE",
     "STOP_HARNESS_DEFECT",
 )
+# Spec d3 §11: each outcome's `reasons` is the path it took through PR §5.4, as these
+# fixed texts in step order (owner ruling OD-EXP04-2, 2026-11-25).
+REASON_TEXTS = {
+    "S1_SELF_CHECK_FAILED": "step 1: a self-check failed; results are kept and not interpreted",
+    "S2_PRIMARY_VALID": "step 2: the primary has a VALID look length",
+    "S2_FALLBACK_CONSULTED": (
+        "step 2: the primary has no VALID look length; the fallback is consulted"
+    ),
+    "S2_FALLBACK_VALID": "step 2: the fallback has a VALID look length",
+    "S2_FALLBACK_NULL": "step 2: the primary has no VALID look length and the fallback is null",
+    "S3_NO_VALID": "step 3: no consulted design has a VALID look length",
+    "S3_CONFIRMED_INVALID": (
+        "step 3: an admissible cell is INVALID and confirmed by the simultaneous limit"
+    ),
+    "S3_NOT_CONFIRMED": "step 3: no INVALID cell is confirmed by the simultaneous limit",
+    "S4_J_MET": "step 4: at least one V_J0 entry is MET",
+    "S4_ALL_INSUFFICIENT": "step 4: every V_J0 entry and every V_CORE entry is INSUFFICIENT",
+    "S4_VETO_KEYS": "step 4: every V_J0 entry is INSUFFICIENT and at least one V_CORE entry is MET",
+    "S4_OTHERWISE": "step 4: no earlier rule of step 4 applies",
+}
 SELECTION_RULE_ID = "PREREG_4_4"
 CONSUMED_MARKER_STATUSES = ("STARTED", "COMPLETE")
 SCHEMA_IDS = (
     "ucpe.exp04_stage1.manifest.v1",
-    "ucpe.exp04_stage1.report.v1",
+    "ucpe.exp04_stage1.report.v2",
     "ucpe.exp04_stage1.cells.v1",
     "ucpe.exp04_stage1.dev_decisions.v1",
     "ucpe.exp04_stage1.consumed.v1",
     "ucpe.exp04_stage1.timing.v1",
 )
-SEED_NAMESPACE = "UCPE-EXP04-STAGE1-v1"
+# Prereg d3 §3.5: v1 is retired (incident M1: its VAL draws were evaluated once in a probe).
+SEED_NAMESPACE = "UCPE-EXP04-STAGE1-v2"
 DISCLAIMERS = (
     "Synthetic data only. No real market data was read.",
     "No look was taken and no claim is made or supported.",
@@ -490,6 +511,17 @@ def _check_hash(value):
     )
 
 
+def _check_identity(manifest):
+    """Spec d3 §3: the namespace is this version's, and VAL carries its DEV provenance."""
+    if manifest.get("namespace") != SEED_NAMESPACE:
+        raise Refusal("seed namespace mismatch")
+    if manifest.get("stage") == "VAL" and not all(
+        _check_hash(manifest.get(key))
+        for key in ("dev_report_sha256", "dev_manifest_sha256", "decisions_sha256")
+    ):
+        raise Refusal("validation manifest lacks development provenance")
+
+
 def _validate_grid(
     stage, scenario_ids, designs, replications, chunking, selections=None, focus=None
 ):
@@ -620,10 +652,19 @@ def build_manifest(
     )
     if len(keys) != len(set(keys)) or len({_sha(key.encode("ascii")) for key in keys}) != len(keys):
         raise Refusal("seed streams are not disjoint")
+    _check_identity(
+        {
+            "namespace": SEED_NAMESPACE,
+            "stage": stage,
+            "dev_report_sha256": dev_report_sha256,
+            "dev_manifest_sha256": dev_manifest_sha256,
+            "decisions_sha256": decisions_sha256,
+        }
+    )
     return {
         "schema": "ucpe.exp04_stage1.manifest.v1",
         "stage": stage,
-        "namespace": "UCPE-EXP04-STAGE1-v1",
+        "namespace": SEED_NAMESPACE,
         "prereg_sha256": prereg_sha256,
         "spec_sha256": spec_sha256,
         "code_sha256": _code_sha256(),
@@ -660,6 +701,7 @@ def load_manifest(path, expect_sha256):
         raise Refusal("unknown field") from exc
     if not isinstance(obj, dict) or set(obj) != _MANIFEST_KEYS:
         raise Refusal("unknown field")
+    _check_identity(obj)
     if obj.get("code_sha256") != _code_sha256():
         raise Refusal("harness digest mismatch")
     if obj.get("environment") != environment_record(os.environ):
@@ -758,40 +800,55 @@ def benchmark_manifest(stage):
     }
 
 
+_PROCESS_EVENTS = ("subprocess.", "os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.fork")
+_FS_EVENTS = {
+    "os.mkdir",
+    "os.rename",
+    "os.remove",
+    "os.rmdir",
+    "os.chmod",
+    "os.chown",
+    "os.truncate",
+    "os.link",
+    "os.symlink",
+    "os.utime",
+}
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+
+
 def guard_reason(event, args, allowed, extra_files=()):
-    """Return an audit refusal reason, or None when an event is permitted."""
-    if event.startswith("socket.") or event in {
-        "subprocess.Popen",
-        "os.system",
-        "os.posix_spawn",
-        "os.fork",
-        "os.exec",
-    }:
+    """Return an audit refusal reason, or None when an event is permitted.
+
+    Spec d3 §1, the behaviour of `scripts/quant_ng_fit.py:198-250`: network and process
+    events by prefix; every path argument of a filesystem change (and of `shutil.*`), and
+    the target of a writing `open`, must lie inside `allowed` or be one of `extra_files`.
+    `allowed=None` (`plan`, `benchmark`) permits no write at all.
+    """
+    if event.startswith("socket.") or event.startswith(_PROCESS_EVENTS):
         return "network or process creation refused"
-    if (
-        event in {"open", "os.open", "os.rename", "os.remove", "os.mkdir", "os.rmdir", "os.chmod"}
-        and args
-    ):
-        writing = event != "open"
-        if event == "open":
-            mode = args[1] if len(args) > 1 else "r"
-            flags = args[2] if len(args) > 2 and isinstance(args[2], int) else 0
-            writing = any(flag in str(mode) for flag in ("w", "a", "x", "+")) or bool(
-                flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)
-            )
+    if event.startswith("shutil.") or event in _FS_EVENTS:
+        targets = args
+    elif event == "open" and args:
+        mode = args[1] if len(args) > 1 else "r"
+        flags = args[2] if len(args) > 2 and isinstance(args[2], int) else 0
+        writing = any(flag in str(mode) for flag in ("w", "a", "x", "+")) or bool(
+            flags & _WRITE_FLAGS
+        )
         if not writing:
             return None
-        targets = args[:2] if event in {"os.rename", "os.replace"} else args[:1]
-        roots = [pathlib.Path(allowed).resolve()]
-        extras = {pathlib.Path(x).resolve() for x in extra_files}
-        for target in targets:
-            if not isinstance(target, (str, bytes, os.PathLike)):
-                continue
-            p = pathlib.Path(os.fsdecode(target)).resolve()
-            if p in extras:
-                continue
-            if not any(p == root or root in p.parents for root in roots):
-                return "write outside output folder refused"
+        targets = args[:1]
+    else:
+        return None
+    root = None if allowed is None else pathlib.Path(allowed).resolve()
+    extras = {pathlib.Path(x).resolve() for x in extra_files}
+    for target in targets:
+        if not isinstance(target, (str, bytes, os.PathLike)):
+            continue
+        p = pathlib.Path(os.fsdecode(target)).resolve()
+        if p in extras:
+            continue
+        if root is None or not (p == root or root in p.parents):
+            return "write outside output folder refused"
     return None
 
 
@@ -914,6 +971,7 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
         raise Refusal("unknown field")
     if manifest.get("stage") not in ("DEV", "VAL", "KAT"):
         raise Refusal("unknown field")
+    _check_identity(manifest)
     _validate_grid(
         manifest["stage"],
         manifest.get("scenarios", []),
@@ -1045,7 +1103,7 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
             }
             for x in manifest["selections"]
         ]
-        outcome_rows = outcomes(manifest["selections"], size_roll, power_roll, rows, checks)
+        outcome_rows = outcomes(manifest["selections"], size_roll, power_roll, rows, checks, mde)
         outcome_status = (
             "STOP_HARNESS_DEFECT" if any(x["status"] != "PASS" for x in checks) else "COMPUTED"
         )
@@ -1057,7 +1115,7 @@ def run_stage(manifest, out_dir, *, resume=False, repo_root, environ):
     size_count = sum(s.kind == "SIZE" for s in scenarios)
     power_count = len(scenarios) - size_count
     report = {
-        "schema": "ucpe.exp04_stage1.report.v1",
+        "schema": "ucpe.exp04_stage1.report.v2",
         "stage": stage,
         "synthetic_only": True,
         "manifest_sha256": _sha(canonical_bytes(manifest)),
@@ -1120,11 +1178,13 @@ def _load_dev_report(folder):
     folder = pathlib.Path(folder)
     report_raw = (folder / "REPORT.json").read_bytes()
     timing = json.loads((folder / "TIMING.json").read_bytes())
-    with (folder / "CELLS.jsonl").open() as f:
-        cells = [json.loads(line) for line in f]
+    cells_raw = (folder / "CELLS.jsonl").read_bytes()
     report = json.loads(report_raw)
     if report.get("stage") != "DEV":
         raise Refusal("not a development report")
+    if _sha(cells_raw) != (report.get("cells_file") or {}).get("sha256"):
+        raise Refusal("development cells do not match the report")
+    cells = [json.loads(line) for line in cells_raw.splitlines()]
     return {
         "dev_manifest_sha256": report["manifest_sha256"],
         "dev_report_sha256": _sha(report_raw),
@@ -1192,6 +1252,9 @@ def main(argv=None):
         path_args.extend(getattr(args, "dev_report", None) or [])
         if any(value is not None and _protected_path(value) for value in path_args):
             raise Refusal("protected path component")
+        if args.command in ("plan", "benchmark"):
+            # Spec d3 §1: the guard is installed for every command; these two may write nothing.
+            install_guard({"allowed": None, "extra_files": ()})
         if args.command == "plan":
             scenarios = scenario_grid(args.stage)
             sizes = sum(s.kind == "SIZE" for s in scenarios)
@@ -1216,17 +1279,25 @@ def main(argv=None):
         if args.command in ("run", "manifest", "select"):
             # Guard allows only output writes; consumed marker is the sole exact extra path.
             if args.command == "run":
+                # Spec d3 §2: the digest is checked before the bytes are parsed, and a VAL
+                # output folder is checked before the marker path is derived from it.
                 raw = pathlib.Path(args.manifest).read_bytes()
-                manifest_obj = json.loads(raw)
+                if _sha(raw) != args.expect_sha256:
+                    raise Refusal("manifest digest mismatch")
+                try:
+                    manifest_obj = json.loads(raw)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise Refusal("unknown field") from exc
+                if not isinstance(manifest_obj, dict):
+                    raise Refusal("unknown field")
                 if manifest_obj.get("stage") == "VAL":
-                    lane = (
-                        pathlib.Path(args.out).resolve().relative_to(repo_root / ".work").parts[0]
-                    )
+                    checked = check_out_dir(args.out, repo_root)
+                    lane = checked.relative_to(repo_root.resolve() / ".work").parts[0]
                     holder["extra_files"] = (
                         repo_root
                         / ".work"
                         / lane
-                        / f"VALIDATION_CONSUMED_{manifest_obj['prereg_sha256'][:16]}.json",
+                        / f"VALIDATION_CONSUMED_{str(manifest_obj.get('prereg_sha256'))[:16]}.json",
                     )
             install_guard(holder)
         if args.command == "manifest":
@@ -1682,8 +1753,10 @@ def all_seed_keys(stage: str, scenario_ids, table_ids, replications, chunking) -
         for comp in components:
             keys.extend(seed_key(stage, "EVAL", sid, comp, c) for c in chunks)
         if s.kind == "SIZE":
+            # sigma0_for draws a size scenario's own generator (§8) under CAL_SIGMA0.
             keys.extend(
-                seed_key(stage, "CAL_SIGMA0", sid, "SERIES", c)
+                seed_key(stage, "CAL_SIGMA0", sid, comp, c)
+                for comp in components
                 for c in range((n_sigma + c_null - 1) // c_null)
             )
     for table in table_ids:
@@ -2681,11 +2754,13 @@ def build_dev_decisions(dev_runs, additions=None):
     }
 
 
-def outcomes(selections, size_rollups, power_rollups, cells, checks):
+def outcomes(selections, size_rollups, power_rollups, cells, checks, mde=None):
     checks_failed = any(c.get("status") != "PASS" for c in checks)
     size = list(size_rollups)
     power = list(power_rollups)
     flat = list(_scenario_rows(cells))
+    mde = list(minimum_detectable_effects(cells) if mde is None else mde)
+    text = REASON_TEXTS
     result = []
     for level, envelope in READINGS:
         sel = next(
@@ -2713,14 +2788,20 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
             )
 
         ls = valid_l(primary)
-        if not ls and fallback is not None:
+        if ls:
+            reasons = [text["S2_PRIMARY_VALID"]]
+        elif fallback is None:
+            reasons = [text["S2_FALLBACK_NULL"]]
+        else:
             consulted.append(fallback)
             used = fallback
             ls = valid_l(fallback)
+            reasons = [text["S2_FALLBACK_CONSULTED"]] + ([text["S2_FALLBACK_VALID"]] if ls else [])
         met = []
         met_core = []
         if checks_failed:
             outcome = "STOP_HARNESS_DEFECT"
+            reasons = [text["S1_SELF_CHECK_FAILED"]]
         elif not ls:
             outcome = (
                 "STOP_SIZE_UNCONTROLLED"
@@ -2735,6 +2816,14 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
                 )
                 else "STOP_INCONCLUSIVE"
             )
+            reasons += [
+                text["S3_NO_VALID"],
+                text[
+                    "S3_CONFIRMED_INVALID"
+                    if outcome == "STOP_SIZE_UNCONTROLLED"
+                    else "S3_NOT_CONFIRMED"
+                ],
+            ]
         else:
             dep = "WORST_E65" if envelope == "E65" else "WORST_E85"
             ps = [
@@ -2755,18 +2844,19 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
                 if r["status"] == "MET"
             ]
             if met:
-                outcome = "STAGE1_PASS_CONDITIONAL"
+                outcome, step4 = "STAGE1_PASS_CONDITIONAL", "S4_J_MET"
             elif (
                 j
                 and all(r["status"] == "INSUFFICIENT" for r in j)
                 and c
                 and all(r["status"] == "INSUFFICIENT" for r in c)
             ):
-                outcome = "STOP_INSUFFICIENT_POWER"
+                outcome, step4 = "STOP_INSUFFICIENT_POWER", "S4_ALL_INSUFFICIENT"
             elif j and all(r["status"] == "INSUFFICIENT" for r in j) and met_core:
-                outcome = "STOP_INSUFFICIENT_POWER_VETO_KEYS"
+                outcome, step4 = "STOP_INSUFFICIENT_POWER_VETO_KEYS", "S4_VETO_KEYS"
             else:
-                outcome = "STOP_INCONCLUSIVE"
+                outcome, step4 = "STOP_INCONCLUSIVE", "S4_OTHERWISE"
+            reasons.append(text[step4])
         # PREREG §5.4 step 5: always attached, whatever the outcome, for the design in use.
         sensitivity = next(
             (
@@ -2802,9 +2892,17 @@ def outcomes(selections, size_rollups, power_rollups, cells, checks):
                 "valid_L": ls,
                 "met": met,
                 "met_core": met_core,
-                "reasons": [],
+                "reasons": reasons,
                 "sensitivity_status": sensitivity["status"] if sensitivity else None,
                 "sensitivity_invalid_cells": sensitivity_invalid,
+                # PREREG §5.4 step 5, attached per reading (prereg d3; owner ruling OD-EXP04-2).
+                "attached_design_id": used,
+                "central_power_rollups": [
+                    r
+                    for r in power
+                    if r.get("design_id") == used and r.get("dependence") == "CENTRAL"
+                ],
+                "minimum_detectable_effects": [r for r in mde if r.get("design_id") == used],
             }
         )
     return result
