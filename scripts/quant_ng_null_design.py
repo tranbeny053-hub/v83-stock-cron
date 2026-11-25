@@ -533,8 +533,8 @@ def scenario_grid(stage: str) -> tuple[Scenario, ...]:
     out: list[Scenario] = []
     anchors = _anchors()
     if stage == "VAL":
-        for d in (0.0, 0.05, 0.10, 0.15, 0.25, 0.35):
-            for rho in (0.3, 0.6, 0.9, 0.95, 0.99):
+        for d in (0.0, 0.10, 0.15, 0.25, 0.35, 0.45):
+            for rho in (0.0, 0.3, 0.6, 0.9, 0.99):
                 for n in (5, 10, 20, 30, 60):
                     for L in (26, 52, 104):
                         out.append(_scenario("N-CORE", d=d, rho=rho, n=n, L=L))
@@ -774,3 +774,501 @@ def canonical_bytes(obj) -> bytes:
         json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
         + "\n"
     ).encode("ascii")
+
+
+@dataclass
+class Panel:
+    x: dict[tuple[str, str], np.ndarray]
+    member: np.ndarray | None
+    y: dict[tuple[str, str], np.ndarray]
+    state: np.ndarray | None
+    mean_turnover: float | None = None
+
+
+def _regime_params(speed: str, vol_ratio: float) -> tuple[float, float, float, float, float]:
+    """Return high/low persistence, stationary turbulent share, and variance-scaled vols."""
+    if speed == "FAST":
+        d_hi, d_lo = 8, 32
+    elif speed == "SLOW":
+        d_hi, d_lo = 26, 104
+    else:
+        raise ValueError("regime speed must be FAST or SLOW")
+    p_hh, p_ll = 1 - 1 / d_hi, 1 - 1 / d_lo
+    pi = (1 - p_ll) / ((1 - p_ll) + (1 - p_hh))
+    v_lo = 1 / math.sqrt(1 - pi + pi * vol_ratio**2)
+    return p_hh, p_ll, pi, v_lo, vol_ratio * v_lo
+
+
+def pooled_block_means(x: np.ndarray, member: np.ndarray | None) -> np.ndarray:
+    if member is None:
+        return x.mean(axis=1)
+    counts = member.sum(axis=1)
+    if np.any(counts == 0):
+        raise ValueError("every week must have at least one member")
+    return np.where(member, x, 0.0).sum(axis=1) / counts
+
+
+def _select_membership(
+    scores: np.ndarray, eta: np.ndarray, a: float, psi: float, n: int, W: int
+) -> tuple[np.ndarray, float | None]:
+    reps, n_sup, Q = eta.shape
+    latent = np.empty_like(eta)
+    latent[..., 0] = eta[..., 0]
+    for qtr in range(1, Q):
+        latent[..., qtr] = a * latent[..., qtr - 1] + math.sqrt(1 - a**2) * eta[..., qtr]
+    z = np.zeros((reps, n_sup, Q), dtype=np.float64)
+    for qtr in range(1, Q):
+        z[..., qtr] = math.sqrt(QUARTER) * scores[..., QUARTER * (qtr - 1) : QUARTER * qtr].mean(
+            axis=2
+        )
+    u = math.sqrt(psi) * -z + math.sqrt(1 - psi) * latent
+    selected = np.zeros((reps, n_sup, Q), dtype=bool)
+    order = np.argsort(-u, axis=1, kind="stable")
+    selected[np.arange(reps)[:, None, None], order[:, :n, :], np.arange(Q)[None, None, :]] = True
+    member = np.repeat(selected, QUARTER, axis=2)[:, :, :W]
+    turnover = None
+    if Q > 1:
+        turnover = float((1 - (selected[:, :, 1:] & selected[:, :, :-1]).sum(axis=1) / n).mean())
+    return member, turnover
+
+
+def simulate_chunk(s: Scenario, *, stage: str, stream: str, chunk: int, reps: int) -> Panel:
+    if reps < 1:
+        raise ValueError("reps must be positive")
+    W = W_HIST_MAX + s.L
+    n_sup = 2 * s.n if s.churn_a is not None else s.n
+    state = None
+    v = np.ones((reps, W), dtype=np.float64)
+    m = np.zeros((reps, W), dtype=np.float64)
+    if s.regime_speed != "NONE":
+        p_hh, p_ll, pi, v_lo, v_hi = _regime_params(s.regime_speed, s.vol_ratio)
+        u = rng_for(seed_key(stage, stream, scenario_id(s), "REGIME", chunk)).random((reps, W))
+        state = np.empty((reps, W), dtype=bool)
+        state[:, 0] = u[:, 0] < pi
+        for b in range(1, W):
+            prev = state[:, b - 1]
+            state[:, b] = np.where(prev, u[:, b] < p_hh, u[:, b] >= p_ll)
+        if s.vol_ratio != 1.0:
+            v = np.where(state, v_hi, v_lo)
+        if s.regime_mean_g != 0:
+            m = np.where(state, -(1 - pi) * s.regime_mean_g, pi * s.regime_mean_g)
+
+    dc, di = (s.d, s.d)
+    if s.mem == "COMMON_ONLY":
+        di = 0.0
+    elif s.mem == "IDIO_ONLY":
+        dc = 0.0
+    Cc, Ci = cholesky_factor(dc, W, s.ar_phi), cholesky_factor(di, W, s.ar_phi)
+    fields: dict[int, np.ndarray] = {}
+    n_fields = 1 if s.kind == "SIZE" else 4
+    for k in range(1, n_fields + 1):
+        rg = rng_for(seed_key(stage, stream, scenario_id(s), f"NOISE_G{k}", chunk))
+        shape = (reps, 1 + n_sup, W)
+        if s.tail_nu is None:
+            e = rg.standard_normal(shape)
+        else:
+            e = rg.standard_t(s.tail_nu, size=shape) / math.sqrt(s.tail_nu / (s.tail_nu - 2))
+        common = e[:, 0, :] @ Cc.T
+        idio = e[:, 1:, :] @ Ci.T
+        if s.twin_fraction and s.twin_rho is not None:
+            pairs = math.floor(s.twin_fraction * s.n / 2)
+            if pairs:
+                original = idio[:, : 2 * pairs : 2, :].copy()
+                partner = idio[:, 1 : 2 * pairs : 2, :]
+                idio[:, 1 : 2 * pairs : 2, :] = (
+                    s.twin_rho * original + math.sqrt(1 - s.twin_rho**2) * partner
+                )
+        fields[k] = math.sqrt(s.rho) * common[:, None, :] + math.sqrt(1 - s.rho) * idio
+
+    if s.kind == "SIZE":
+        values = {("CAND", "S"): v[:, None, :] * fields[1] + m[:, None, :]}
+    else:
+        rs, omega = s.score_rho, s.ctrl_omega
+        cand_ll = fields[1]
+        cand_br = rs * fields[1] + math.sqrt(1 - rs**2) * fields[2]
+        ctrl_ll = math.sqrt(omega) * fields[1] + math.sqrt(1 - omega) * fields[3]
+        ctrl_br = math.sqrt(omega) * cand_br + math.sqrt(1 - omega) * (
+            rs * fields[3] + math.sqrt(1 - rs**2) * fields[4]
+        )
+        effect = np.zeros((reps, n_sup, W), dtype=np.float64)
+        if s.effect == "HOMOG":
+            effect[:] = -s.delta
+        elif s.effect == "HALF":
+            effect[:, : n_sup // 2, :] = -2 * s.delta
+        elif s.effect == "OPPOSED":
+            effect[:, : int(0.8 * n_sup), :] = -1.5 * s.delta
+            effect[:, int(0.8 * n_sup) :, :] = s.delta
+        elif s.effect == "REGIME_ONLY":
+            _, _, pi, _, _ = _regime_params(s.regime_speed, s.vol_ratio)
+            effect = np.where(state[:, None, :], -s.delta / pi, 0.0)
+        cand_br_effect = effect * s.brier_ratio
+        values = {
+            ("CAND", "LL"): effect + m[:, None, :] + v[:, None, :] * cand_ll,
+            ("CAND", "BR"): cand_br_effect + m[:, None, :] + v[:, None, :] * cand_br,
+            ("CTRL", "LL"): m[:, None, :] + v[:, None, :] * ctrl_ll,
+            ("CTRL", "BR"): m[:, None, :] + v[:, None, :] * ctrl_br,
+        }
+
+    member = None
+    turnover = None
+    if s.churn_a is not None:
+        Q = W // QUARTER
+        rg = rng_for(seed_key(stage, stream, scenario_id(s), "MEMBERSHIP", chunk))
+        eta = rg.standard_normal((reps, n_sup, Q))
+        score = values[("CAND", "LL" if s.kind == "POWER" else "S")]
+        member, turnover = _select_membership(score, eta, s.churn_a, s.sel_psi, s.n, W)
+
+    y = {key: pooled_block_means(value, member) for key, value in values.items()}
+    return Panel(values, member, y, state, turnover)
+
+
+def block_t(y_look: np.ndarray, floor: float = 0.0) -> np.ndarray:
+    means = y_look.mean(axis=1)
+    sd = y_look.std(axis=1, ddof=1)
+    return np.divide(
+        (means + floor) * np.sqrt(y_look.shape[1]),
+        sd,
+        out=np.full_like(means, np.inf),
+        where=sd > 0,
+    )
+
+
+def allowance_window_means(y_hist: np.ndarray, L: int, w_hist: int, ub: str) -> np.ndarray | None:
+    K = w_hist // L
+    if K < 2:
+        return None
+    recent = y_hist[:, -w_hist:]
+    means = np.stack(
+        [recent[:, w_hist - j * L : w_hist - (j - 1) * L].mean(axis=1) for j in range(1, K + 1)],
+        axis=1,
+    )
+    return means.std(axis=1, ddof=1) * ub_factor(K, ub)
+
+
+def core_rejects(
+    design_id: str, y_by_score: dict[str, np.ndarray], *, L: int, floor: float, sigma0, thmc
+) -> np.ndarray | None:
+    parts = design_id.split("/")
+    core = parts[0]
+    if core == "SYM_REPL":
+        return None
+    if core in ("RA_WM", "RA_EXT"):
+        level_k1, level_ra = parts[1], parts[2]
+    else:
+        level_k1 = parts[1]
+        level_ra = None
+    reject = None
+    for _name, series in y_by_score.items():
+        look = series[:, W_HIST_MAX : W_HIST_MAX + L]
+        t = block_t(look, floor)
+        if core in ("T", "RA_EXT", "RA_WM"):
+            this = t <= student_t_quantile(LEVELS[level_k1], L - 1)
+        elif core == "TH":
+            h_c = int(parts[2][1:]) / 100
+            this = (look.mean(axis=1) + floor) / (
+                look.std(axis=1, ddof=1) * L ** (h_c - 1)
+            ) <= student_t_quantile(LEVELS[level_k1], L - 1)
+        elif core == "TH_MC":
+            h_c = int(parts[2][1:]) / 100
+            this = t <= thmc[L][h_c][level_k1]
+        else:
+            raise ValueError("unknown core")
+        if core == "RA_EXT":
+            kappa = int(parts[3][1:]) / 100
+            this &= _allowance_rejects(look.mean(axis=1) + floor, level_ra, kappa * sigma0)
+        elif core == "RA_WM":
+            wh = int(parts[3][1:])
+            ub = parts[4]
+            allowance = allowance_window_means(series[:, :W_HIST_MAX], L, wh, ub)
+            if allowance is None:
+                return None
+            this &= _allowance_rejects(look.mean(axis=1) + floor, level_ra, allowance)
+        reject = this if reject is None else reject & this
+    return reject
+
+
+def _allowance_rejects(adjusted_mean: np.ndarray, level: str, allowance) -> np.ndarray:
+    return adjusted_mean <= -normal_quantile(1 - LEVELS[level]) * allowance
+
+
+def sign_key(
+    x_cand_by_score: dict[str, np.ndarray], member: np.ndarray | None, *, L: int, q, m_min: int
+):
+    first = next(iter(x_cand_by_score.values()))
+    if member is None:
+        member = np.ones(first.shape, dtype=bool)
+    look_member = member[:, :, W_HIST_MAX : W_HIST_MAX + L]
+    eligible = look_member.sum(axis=2) >= m_min
+    n_eligible = eligible.sum(axis=1)
+    events = np.ones(first.shape[:2], dtype=bool)
+    for values in x_cand_by_score.values():
+        means = np.divide(
+            (values[:, :, W_HIST_MAX : W_HIST_MAX + L] * look_member).sum(axis=2),
+            look_member.sum(axis=2),
+            out=np.zeros(first.shape[:2]),
+            where=look_member.sum(axis=2) > 0,
+        )
+        events &= means < 0
+    n_events = (events & eligible).sum(axis=1)
+    from fractions import Fraction
+
+    frac = Fraction(q)
+    evaluable = n_eligible > 0
+    return (evaluable & (n_events * frac.denominator >= frac.numerator * n_eligible), evaluable)
+
+
+def sym_repl_rejects(
+    x_cand_by_score: dict[str, np.ndarray], member: np.ndarray | None, *, L: int, level: str
+) -> np.ndarray:
+    first = next(iter(x_cand_by_score.values()))
+    if member is None:
+        member = np.ones(first.shape, dtype=bool)
+    look_member = member[:, :, W_HIST_MAX : W_HIST_MAX + L]
+    eligible = look_member.sum(axis=2) > 0
+    all_reject = None
+    for values in x_cand_by_score.values():
+        look = values[:, :, W_HIST_MAX : W_HIST_MAX + L]
+        symbol_mean = np.divide(
+            (look * look_member).sum(axis=2),
+            look_member.sum(axis=2),
+            out=np.zeros(first.shape[:2]),
+            where=eligible,
+        )
+        count = eligible.sum(axis=1)
+        mean = np.divide(
+            (symbol_mean * eligible).sum(axis=1),
+            count,
+            out=np.zeros(first.shape[0]),
+            where=count > 0,
+        )
+        sd = np.sqrt(
+            np.divide(
+                ((symbol_mean - mean[:, None]) ** 2 * eligible).sum(axis=1),
+                count - 1,
+                out=np.zeros(first.shape[0]),
+                where=count > 1,
+            )
+        )
+        stat = np.divide(
+            mean * np.sqrt(count),
+            sd,
+            out=np.full(first.shape[0], np.inf),
+            where=(count >= 2) & (sd > 0),
+        )
+        this = (count >= 2) & (
+            stat <= student_t_quantile(LEVELS[level], max(first.shape[1] - 1, 1))
+        )
+        # The degrees of freedom are replication symbols, hence vary by replication.
+        for n_e in np.unique(count[count >= 2]):
+            mask = count == n_e
+            this[mask] = stat[mask] <= student_t_quantile(LEVELS[level], int(n_e) - 1)
+        all_reject = this if all_reject is None else all_reject & this
+    return all_reject
+
+
+def joint_rejects(
+    design_id: str, variant_id: str, panel: Panel, *, L: int, sigma0, thmc
+) -> np.ndarray | None:
+    if variant_id not in VARIANT_TABLE:
+        raise ValueError("unknown variant")
+    spec = VARIANT_TABLE[variant_id]
+    cand = {score: values for (arm, score), values in panel.y.items() if arm == "CAND"}
+    core = design_id.split("/")[0]
+    if core == "SYM_REPL":
+        base = sym_repl_rejects(
+            {score: values for (arm, score), values in panel.x.items() if arm == "CAND"},
+            panel.member,
+            L=L,
+            level=design_id.split("/")[1],
+        )
+    else:
+        base = core_rejects(design_id, cand, L=L, floor=spec["floor"], sigma0=sigma0, thmc=thmc)
+    if base is None or variant_id == "V_CORE":
+        return base
+    result = base.copy()
+    if spec["q"] is not None:
+        m_min = math.ceil(L / 4) if spec["m_min"] == "ceil(L/4)" else spec["m_min"]
+        passes, _ = sign_key(
+            {score: values for (arm, score), values in panel.x.items() if arm == "CAND"},
+            panel.member,
+            L=L,
+            q=spec["q"],
+            m_min=m_min,
+        )
+        result &= passes
+    if spec["control"]:
+        ctrl = {score: values for (arm, score), values in panel.y.items() if arm == "CTRL"}
+        if core == "SYM_REPL":
+            ctrl_reject = sym_repl_rejects(
+                {score: values for (arm, score), values in panel.x.items() if arm == "CTRL"},
+                panel.member,
+                L=L,
+                level=design_id.split("/")[1],
+            )
+        else:
+            ctrl_reject = core_rejects(design_id, ctrl, L=L, floor=0.0, sigma0=sigma0, thmc=thmc)
+        if ctrl_reject is None:
+            return None
+        result &= ~ctrl_reject
+    return result
+
+
+def thmc_table(L: int, h_c: float, *, stage: str, n_series: int, chunk: int) -> dict[str, float]:
+    if n_series < 1 or chunk < 1:
+        raise ValueError("series and chunk must be positive")
+    C = cholesky_factor(h_c - 0.5, L)
+    stats = []
+    for idx, start in enumerate(range(0, n_series, chunk)):
+        size = min(chunk, n_series - start)
+        z = (
+            rng_for(
+                seed_key(stage, "CAL_THMC", f"THMC/L={L:03d}/H={h_c:.2f}", "SERIES", idx)
+            ).standard_normal((size, L))
+            @ C.T
+        )
+        sd = z.std(axis=1, ddof=1)
+        stats.extend(
+            np.divide(z.mean(axis=1), sd / math.sqrt(L), out=np.full(size, np.inf), where=sd > 0)
+        )
+    vals = np.asarray(stats)
+    result = {}
+    for level in READING_LEVELS:
+        k = max(1, math.floor(LEVELS[level] * n_series)) - 1
+        result[level] = float(np.partition(vals, k)[k])
+    return result
+
+
+def sigma0_for(s: Scenario, *, stage: str, n_reps: int, chunk: int) -> float:
+    means = []
+    for idx, start in enumerate(range(0, n_reps, chunk)):
+        panel = simulate_chunk(
+            s, stage=stage, stream="CAL_SIGMA0", chunk=idx, reps=min(chunk, n_reps - start)
+        )
+        means.extend(panel.y[("CAND", "S")][:, W_HIST_MAX : W_HIST_MAX + s.L].mean(axis=1))
+    return float(np.std(means, ddof=1))
+
+
+def count_scenario(
+    s: Scenario,
+    *,
+    stage: str,
+    n_reps: int,
+    chunk: int,
+    designs,
+    focus,
+    sigma0,
+    thmc,
+    chunk_indices=None,
+) -> dict:
+    indices = (
+        list(chunk_indices)
+        if chunk_indices is not None
+        else list(range((n_reps + chunk - 1) // chunk))
+    )
+    sid = scenario_id(s)
+    out = {
+        "scenario_id": sid,
+        "n_reps": 0,
+        "counts": {},
+        "turnover_weighted": 0.0,
+        "sign_not_evaluable": 0,
+    }
+    for idx in indices:
+        panel = simulate_chunk(
+            s, stage=stage, stream="EVAL", chunk=idx, reps=min(chunk, n_reps - idx * chunk)
+        )
+        reps_in_chunk = next(iter(panel.y.values())).shape[0]
+        out["n_reps"] += reps_in_chunk
+        if panel.mean_turnover is not None:
+            out["turnover_weighted"] += panel.mean_turnover * reps_in_chunk
+        diagnostic_x = {score: value for (arm, score), value in panel.x.items() if arm == "CAND"}
+        _, evaluable = sign_key(
+            diagnostic_x, panel.member, L=s.L, q="4/5", m_min=math.ceil(s.L / 4)
+        )
+        out["sign_not_evaluable"] += int((~evaluable).sum())
+        for design in designs:
+            variants = (
+                ("V_CORE",)
+                if s.kind == "SIZE"
+                else (VARIANTS if design in focus else ("V_CORE", "V_J0"))
+            )
+            core = design.split("/")[0]
+            for variant in variants:
+                spec = VARIANT_TABLE[variant]
+                sigmas = sigma0 if isinstance(sigma0, dict) else {sid: sigma0}
+                sigma = sigmas.get(null_twin_id(s) or sid, sigmas.get(sid, 1.0))
+                cand_y = {score: value for (arm, score), value in panel.y.items() if arm == "CAND"}
+                cand_x = {score: value for (arm, score), value in panel.x.items() if arm == "CAND"}
+                if core == "SYM_REPL":
+                    core_result = sym_repl_rejects(
+                        cand_x, panel.member, L=s.L, level=design.split("/")[1]
+                    )
+                else:
+                    core_result = core_rejects(
+                        design, cand_y, L=s.L, floor=spec["floor"], sigma0=sigma, thmc=thmc
+                    )
+                if core_result is None:
+                    continue
+                sign_result = np.ones(reps_in_chunk, dtype=bool)
+                sign_fail = np.zeros(reps_in_chunk, dtype=bool)
+                if spec["q"] is not None:
+                    m_min = math.ceil(s.L / 4) if spec["m_min"] == "ceil(L/4)" else spec["m_min"]
+                    sign_result, _evaluable = sign_key(
+                        cand_x, panel.member, L=s.L, q=spec["q"], m_min=m_min
+                    )
+                    sign_fail = ~sign_result
+                control_fail = np.zeros(reps_in_chunk, dtype=bool)
+                if spec["control"]:
+                    if core == "SYM_REPL":
+                        control_fail = sym_repl_rejects(
+                            {
+                                score: value
+                                for (arm, score), value in panel.x.items()
+                                if arm == "CTRL"
+                            },
+                            panel.member,
+                            L=s.L,
+                            level=design.split("/")[1],
+                        )
+                    else:
+                        control_result = core_rejects(
+                            design,
+                            {
+                                score: value
+                                for (arm, score), value in panel.y.items()
+                                if arm == "CTRL"
+                            },
+                            L=s.L,
+                            floor=0.0,
+                            sigma0=sigma,
+                            thmc=thmc,
+                        )
+                        if control_result is None:
+                            continue
+                        control_fail = control_result
+                pre_control = core_result & sign_result
+                joint = pre_control & ~control_fail
+                prefix = f"{design}|{variant}"
+                for suffix, values in (
+                    ("rejections", joint),
+                    ("core_rejections", core_result),
+                    ("sign_vetoes", core_result & sign_fail),
+                    ("control_vetoes", pre_control & control_fail),
+                ):
+                    key = f"{prefix}|{suffix}"
+                    out["counts"][key] = out["counts"].get(key, 0) + int(values.sum())
+                if s.kind == "SIZE":
+                    size_sign, _evaluable = sign_key(
+                        cand_x, panel.member, L=s.L, q="4/5", m_min=math.ceil(s.L / 4)
+                    )
+                    key = f"{design}|core_and_sign"
+                    out["counts"][key] = out["counts"].get(key, 0) + int(
+                        (core_result & size_sign).sum()
+                    )
+    out["mean_turnover"] = (
+        out["turnover_weighted"] / out["n_reps"]
+        if s.churn_a is not None and out["n_reps"]
+        else None
+    )
+    del out["turnover_weighted"]
+    return out
