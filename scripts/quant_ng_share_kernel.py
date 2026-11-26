@@ -849,71 +849,105 @@ def _number(value):
     return {"exact": _fraction_text(value), "decimal": decimal}
 
 
-def _grid_matrices(manifest, point):
+# ---- The master's consolidated repair R-K2 of delegation 2 (EXP-05 stage 0) ----
+# The map evaluates the class-collapsed matrix path below. SC-2 checks it against the closed forms
+# computed independently (isotropic_moments), and SC-4 checks it against the per-symbol functions
+# (target_risk, cross_covariance) on the declared subset. Nothing here takes or returns a
+# coefficient (prereg d2 §2.5).
+
+_CACHE = {}
+
+
+def _design(manifest, point, cache):
+    """One point's design, from prereg d2 §6's fixed part (any p); pure values, cached by key."""
     p = manifest["fixed"]["p"]
-    sigma2, t = (
-        _parse_fraction(manifest["fixed"]["sigma2"]),
-        _parse_fraction(manifest["fixed"]["t"]),
-    )
-    rx, a = _parse_fraction(point["r_x"]), _parse_fraction(point["a"])
-    sigma = [
-        [_Fraction(int(i == j)) if i == 0 else _Fraction(0) for j in range(p)] for i in range(p)
-    ]
-    sigma[0][0] = 1
-    for i in range(1, p):
-        for j in range(1, p):
-            sigma[i][j] = 1 if i == j else rx
-    inv = _inverse(sigma)
+    sigma2 = _parse_fraction(manifest["fixed"]["sigma2"])
+    t = _parse_fraction(manifest["fixed"]["t"])
+    rx = _parse_fraction(point["r_x"])
+    key = ("sigma", p, rx)
+    if key not in cache:
+        sigma = [[_Fraction(0) for _ in range(p)] for _ in range(p)]
+        sigma[0][0] = _Fraction(1)
+        for i in range(1, p):
+            for j in range(1, p):
+                sigma[i][j] = _Fraction(1) if i == j else rx
+        cache[key] = (sigma, _inverse(sigma))
+    sigma, inverse = cache[key]
+    shape_key = ("omega", p, rx, point["omega"])
+    if shape_key not in cache:
+        omega = [[_Fraction(0) for _ in range(p)] for _ in range(p)]
+        for i in range(1, p):
+            for j in range(1, p):
+                omega[i][j] = sigma[i][j] if point["omega"] == "GRAM" else _Fraction(int(i == j))
+        cache[shape_key] = omega
+    a, c = _parse_fraction(point["a"]), _parse_fraction(point["c"])
+    m, k = point["m"], point["k"]
     v = sigma2 / t
     S = _scale(t, sigma)
-    V = _scale(v, inv)
-    Gamma = _scale(a * v, inv)
-    omega = [[_Fraction(0) for _ in range(p)] for _ in range(p)]
-    for i in range(1, p):
-        for j in range(1, p):
-            omega[i][j] = sigma[i][j] if point["omega"] == "GRAM" else _Fraction(int(i == j))
-    m, k, c = point["m"], point["k"], _parse_fraction(point["c"])
-    donor_ids = set(range(m + 2))
-    donors = tuple(range(1, m + 1))
-    W = _scale(k, S)
-    cov = {}
-    for i in donor_ids:
-        for j in donor_ids:
-            factor = (
-                v
-                if i == j and i in (0, m + 1)
-                else v / k
-                if i == j
-                else c * v / _root(k)
-                if (i in (0, m + 1)) != (j in (0, m + 1))
-                else c * v / k
-                if i != j
-                else 0
-            )
-            cov[(i, j)] = _scale(factor, inv)
-    Q = sigma
-    return S, {j: W for j in donors}, omega, V, Gamma, cov, Q, donors, donor_ids, sigma, v
+    V = _scale(v, inverse)
+    return {
+        "p": p,
+        "t": t,
+        "v": v,
+        "a": a,
+        "m": m,
+        "k": k,
+        "c": c,
+        "rx": rx,
+        "shape": point["omega"],
+        "sigma": sigma,
+        "S": S,
+        "V": V,
+        "Q": sigma,
+        "Gamma": _scale(a * v, inverse),
+        "omega": cache[shape_key],
+        "W": _scale(k, S),
+        "V_d": _scale(_Fraction(1, k), V),
+        "C_dd": _scale(c / k, V),
+        "C_td": _scale(c / _root(k), V),
+        "C_tt": _scale(c, V),
+        "cache": cache,
+    }
 
 
-def _collapsed_target_risk(manifest, point, strength, matrices):
-    S, weights, omega, V, Gamma, _, Q, _, _, sigma, v = matrices
-    m, k = point["m"], point["k"]
-    c = _parse_fraction(point["c"])
-    gamma = _parse_fraction(point["a"]) * v
-    donor_v = v / k
-    z = (donor_v * (1 + (m - 1) * c) + gamma) / m + gamma
-    cross = c * v / _root(k)
-    inverse_sigma = _inverse(sigma)
-    Z = _scale(z, inverse_sigma)
-    K = _scale(cross, inverse_sigma)
-    S, omega, strength = _validate_design(S, omega, strength)
-    if strength == "INFINITE":
-        B = pooling_projector(S, omega)
-        H = _sub(_identity(len(S)), B)
-    else:
-        A = _inverse(_add(S, _scale(strength, omega)))
-        B = _product(A, S)
-        H = _scale(strength, _product(A, omega))
+def _shrinkage(design, strength):
+    """B and H (or Π and I − Π) for one (p, r_x, Ω, t, strength), computed once."""
+    cache = design["cache"]
+    key = ("BH", design["p"], design["rx"], design["shape"], design["t"], strength)
+    if key not in cache:
+        S, omega, value = _validate_design(design["S"], design["omega"], strength)
+        if value == "INFINITE":
+            B = pooling_projector(S, omega)
+            H = _sub(_identity(len(S)), B)
+        else:
+            A = _inverse(_add(S, _scale(value, omega)))
+            B = _product(A, S)
+            H = _scale(value, _product(A, omega))
+        cache[key] = (B, H)
+    return cache[key]
+
+
+def _collapsed_moments(design):
+    """Z and K by the class-collapsed sums over m identical donors (task-1090; §4)."""
+    m, W = design["m"], design["W"]
+    WT = _transpose(W)
+    P = _inverse(_scale(m, W))
+    total = _add(
+        _add(
+            _scale(m, _product(_product(W, design["V_d"]), WT)),
+            _scale(m * (m - 1), _product(_product(W, design["C_dd"]), WT)),
+        ),
+        _scale(m, _product(_product(W, design["Gamma"]), WT)),
+    )
+    Z = _add(_product(_product(P, total), _transpose(P)), design["Gamma"])
+    K = _scale(m, _product(_product(design["C_td"], WT), _transpose(P)))
+    return Z, K
+
+
+def _collapsed_target_risk(manifest, point, strength, design):
+    """The target's MSE and risks on the collapsed path; design carries Z and K."""
+    B, H = _shrinkage(design, strength)
+    V, Z, K, Q = design["V"], design["Z"], design["K"], design["Q"]
     mse = _add(
         _add(_product(_product(B, V), _transpose(B)), _product(_product(H, Z), _transpose(H))),
         _add(
@@ -936,53 +970,49 @@ def _collapsed_target_risk(manifest, point, strength, matrices):
     }
 
 
+def _collapsed_cross(design, risk):
+    """Cov(eS_i, eS_k) for two identical targets outside the common donor set (task-1090)."""
+    B, H, K, Z = risk["B"], risk["H"], risk["K"], risk["Z"]
+    C_tt, Q = design["C_tt"], design["Q"]
+    cov = _add(
+        _add(
+            _product(_product(B, C_tt), _transpose(B)),
+            _product(_product(B, K), _transpose(H)),
+        ),
+        _add(
+            _product(_product(H, _transpose(K)), _transpose(B)),
+            _product(_product(H, _sub(Z, design["Gamma"])), _transpose(H)),
+        ),
+    )
+    r_s = _trace(_product(Q, cov)) / _root(risk["R_S"] * risk["R_S"])
+    r_u = _trace(_product(Q, C_tt)) / _root(risk["R_U"] * risk["R_U"])
+    return {"Cov_eS": cov, "rS": r_s, "rU": r_u}
+
+
+def _prepared(manifest, point):
+    design = _design(manifest, point, _CACHE)
+    design["Z"], design["K"] = _collapsed_moments(design)
+    return design
+
+
+def _strength_value(strength_text):
+    return "INFINITE" if strength_text == "INFINITE" else _parse_fraction(strength_text)
+
+
 def _eval_point(manifest, point):
-    matrices = _grid_matrices(manifest, point)
-    S, weights, omega, V, Gamma, cov, Q, donors, donor_ids, sigma, v = matrices
-    m, c = point["m"], _parse_fraction(point["c"])
+    design = _prepared(manifest, point)
+    v, t, p = design["v"], design["t"], design["p"]
+    a, c = design["a"], design["c"]
+    # The closed-form side is computed independently of the matrix path (SC-2).
+    moments = isotropic_moments(v, design["k"], design["m"], c, a * v)
     per_strength = []
     checks = {key: True for key in _SELF_CHECKS}
     for strength_text in manifest["strengths"]:
-        strength = "INFINITE" if strength_text == "INFINITE" else _parse_fraction(strength_text)
-        risk = _collapsed_target_risk(manifest, point, strength, matrices)
-        other = _collapsed_target_risk(manifest, point, strength, matrices)
-        cross = cross_covariance(
-            S,
-            omega,
-            strength,
-            S,
-            omega,
-            strength,
-            cov[(0, m + 1)],
-            {j: cov[(0, j)] for j in donors},
-            {j: cov[(j, m + 1)] for j in donors},
-            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
-            Gamma,
-            Q,
-            donors,
-            donors,
-            weights,
-            0,
-            m + 1,
-            donor_ids,
-            risk,
-            other,
-        )
-        inverse_sigma = _inverse(sigma)
-        direction_scale = inverse_sigma[1][1]
-        z = risk["Z"][1][1] / direction_scale
-        cross_v = risk["K"][1][1] / direction_scale
+        strength = _strength_value(strength_text)
+        risk = _collapsed_target_risk(manifest, point, strength, design)
+        cross = _collapsed_cross(design, risk)
         form = directional_totals(
-            v,
-            z,
-            cross_v,
-            _parse_fraction(point["a"]) * v,
-            c,
-            _parse_fraction(manifest["fixed"]["t"]),
-            manifest["fixed"]["p"],
-            point["omega"],
-            strength,
-            rx=_parse_fraction(point["r_x"]),
+            v, moments["Z"], moments["K"], a * v, c, t, p, point["omega"], strength, rx=design["rx"]
         )
         checks["SC-1"] &= strength != 0 or (
             risk["R_S"] == risk["R_U"] and cross["rS"] == cross["rU"]
@@ -1006,40 +1036,66 @@ def _eval_point(manifest, point):
                 "rU": cross["rU"],
             }
         )
-    # The manifest strengths alone define the reported minimum; stable order favors weaker ties.
+    # The manifest's strengths alone define the reported minimum; a tie goes to the weaker one.
     best = min(enumerate(per_strength), key=lambda pair: (pair[1]["R_S"], pair[0]))[1]["strength"]
     result = {
         "parameters": point,
-        "R_U": risk["R_U"],
+        "R_U": _trace(_product(design["Q"], design["V"])),
         "strengths": per_strength,
         "best_strength": best,
         "status": "COMPUTED",
     }
     if point["omega"] == "GRAM":
-        inverse_sigma = _inverse(sigma)
-        direction_scale = inverse_sigma[1][1]
-        z = risk["Z"][1][1] / direction_scale
-        cross_v = risk["K"][1][1] / direction_scale
-        form = closed_forms(v, z, cross_v, _parse_fraction(manifest["fixed"]["t"]))
+        form = closed_forms(v, moments["Z"], moments["K"], t)
+        # Per-direction closed form; the reported best risk is the TOTAL, comparable with R_S
+        # (the intercept is unshrunk and adds v; the p − 1 shrunk directions share one weight).
+        r_best_total = v + (p - 1) * form["R_best"]
         result["closed_form"] = {
-            key: form[key]
-            for key in ("w_star", "flag", "w_best", "best_strength", "R_best", "w_be")
+            "w_star": form["w_star"],
+            "flag": form["flag"],
+            "w_best": form["w_best"],
+            "best_strength": form["best_strength"],
+            "R_best": r_best_total,
+            "w_be": form["w_be"],
         }
         for item in per_strength:
-            checks["SC-7"] &= form["R_best"] <= item["R_S"]
+            checks["SC-7"] &= r_best_total <= item["R_S"]
         if form["flag"] == "OUT_OF_RANGE":
-            endpoint = next(
-                item["R_S"] for item in per_strength if item["strength"] == form["best_strength"]
-            )
-            checks["SC-7"] &= form["R_best"] == endpoint
-    projector = pooling_projector(S, omega)
-    complement = _sub(_identity(len(S)), projector)
+            endpoint = [
+                item["R_S"]
+                for item in per_strength
+                if _strength_value(item["strength"]) == form["best_strength"]
+            ]
+            checks["SC-7"] &= len(endpoint) == 1 and r_best_total == endpoint[0]
+    projector = pooling_projector(design["S"], design["omega"])
+    complement = _sub(_identity(p), projector)
+    size = p
     checks["SC-8"] = (
         _product(projector, projector) == projector
-        and _product(omega, projector) == _zero(len(S), len(S))
-        and _product(_product(_transpose(projector), S), complement) == _zero(len(S), len(S))
+        and _product(design["omega"], projector) == _zero(size, size)
+        and _product(_product(_transpose(projector), design["S"]), complement) == _zero(size, size)
     )
     return result, checks
+
+
+def _full_symbols(design):
+    """Per-symbol inputs for SC-4: ids 0 and m + 1 are the two targets, 1..m the donors."""
+    m = design["m"]
+    targets = (0, m + 1)
+    ids = set(range(m + 2))
+    cov = {}
+    for i in ids:
+        for j in ids:
+            if i == j:
+                cov[(i, j)] = design["V"] if i in targets else design["V_d"]
+            elif i in targets and j in targets:
+                cov[(i, j)] = design["C_tt"]
+            elif i in targets or j in targets:
+                cov[(i, j)] = design["C_td"]
+            else:
+                cov[(i, j)] = design["C_dd"]
+    donors = tuple(range(1, m + 1))
+    return cov, donors, ids, {j: design["W"] for j in donors}
 
 
 def _sc6_check(manifest):
@@ -1048,40 +1104,20 @@ def _sc6_check(manifest):
     )
     for a_value, m, k, c_value in combinations_to_check:
         common = {"a": a_value, "m": m, "k": k, "c": c_value, "r_x": "0"}
-        gram = _grid_matrices(manifest, {**common, "omega": "GRAM"})
-        identity = _grid_matrices(manifest, {**common, "omega": "IDENTITY"})
+        gram_point, identity_point = {**common, "omega": "GRAM"}, {**common, "omega": "IDENTITY"}
+        gram, identity = _prepared(manifest, gram_point), _prepared(manifest, identity_point)
         for strength_text in manifest["strengths"]:
-            strength = "INFINITE" if strength_text == "INFINITE" else _parse_fraction(strength_text)
-            gram_risk = target_risk(
-                gram[0],
-                gram[1],
-                gram[2],
-                strength,
-                gram[3],
-                gram[4],
-                gram[5],
-                gram[6],
-                gram[7],
-                0,
-                gram[8],
-            )
-            identity_risk = target_risk(
-                identity[0],
-                identity[1],
-                identity[2],
-                strength,
-                identity[3],
-                identity[4],
-                identity[5],
-                identity[6],
-                identity[7],
-                0,
-                identity[8],
-            )
+            strength = _strength_value(strength_text)
+            gram_risk = _collapsed_target_risk(manifest, gram_point, strength, gram)
+            identity_risk = _collapsed_target_risk(manifest, identity_point, strength, identity)
             if any(
                 gram_risk[key] != identity_risk[key]
                 for key in ("Z", "K", "MSE_S", "R_U", "R_S", "gain", "relative_gain")
             ):
+                return False
+            gram_cross = _collapsed_cross(gram, gram_risk)
+            identity_cross = _collapsed_cross(identity, identity_risk)
+            if any(gram_cross[key] != identity_cross[key] for key in ("Cov_eS", "rS", "rU")):
                 return False
     return True
 
@@ -1102,107 +1138,61 @@ def _sc4_check(manifest):
                         "r_x": rx,
                         "omega": shape,
                     }
-                    matrices = _grid_matrices(manifest, point)
-                    S, weights, omega, V, Gamma, cov, Q, donors, ids, sigma, v = matrices
+                    design = _prepared(manifest, point)
+                    cov, donors, ids, weights = _full_symbols(design)
                     m = point["m"]
-                    c = _parse_fraction(c_value)
-                    gamma_scalar = _parse_fraction(a_value) * v
-                    donor_v = v / k_value
-                    z_scalar = (donor_v * (1 + (m - 1) * c) + gamma_scalar) / m + gamma_scalar
-                    k_scalar = c * v / _root(k_value)
                     for strength_text in manifest["strengths"]:
-                        strength = (
-                            "INFINITE"
-                            if strength_text == "INFINITE"
-                            else _parse_fraction(strength_text)
-                        )
-                        risk = _collapsed_target_risk(manifest, point, strength, matrices)
-                        symbolic_risk = target_risk(
-                            S, weights, omega, strength, V, Gamma, cov, Q, donors, 0, ids
+                        strength = _strength_value(strength_text)
+                        risk = _collapsed_target_risk(manifest, point, strength, design)
+                        symbolic = target_risk(
+                            design["S"],
+                            weights,
+                            design["omega"],
+                            strength,
+                            design["V"],
+                            design["Gamma"],
+                            cov,
+                            design["Q"],
+                            donors,
+                            0,
+                            ids,
                         )
                         if any(
-                            risk[key] != symbolic_risk[key]
+                            risk[key] != symbolic[key]
                             for key in ("Z", "K", "MSE_S", "R_U", "R_S", "gain", "relative_gain")
                         ):
                             return False
-                        sigma_inverse = _inverse(sigma)
-                        if risk["Z"] != _add(
-                            _scale(z_scalar, sigma_inverse), _zero(len(S), len(S))
-                        ) or risk["K"] != _scale(k_scalar, sigma_inverse):
-                            return False
-                        direct_z = _zero(len(S), len(S))
-                        for donor_j in donors:
-                            for donor_l in donors:
-                                direct_z = _add(
-                                    direct_z,
-                                    _product(
-                                        _product(weights[donor_j], cov[(donor_j, donor_l)]),
-                                        _transpose(weights[donor_l]),
-                                    ),
-                                )
-                            direct_z = _add(
-                                direct_z,
-                                _product(
-                                    _product(weights[donor_j], Gamma),
-                                    _transpose(weights[donor_j]),
-                                ),
-                            )
-                        P = _inverse(_sum_matrices([weights[j] for j in donors]))
-                        direct_z = _add(_product(_product(P, direct_z), _transpose(P)), Gamma)
-                        if direct_z != risk["Z"]:
-                            return False
-                        other = _collapsed_target_risk(manifest, point, strength, matrices)
-                        cross = cross_covariance(
-                            S,
-                            omega,
+                        collapsed = _collapsed_cross(design, risk)
+                        full = cross_covariance(
+                            design["S"],
+                            design["omega"],
                             strength,
-                            S,
-                            omega,
+                            design["S"],
+                            design["omega"],
                             strength,
                             cov[(0, m + 1)],
                             {j: cov[(0, j)] for j in donors},
                             {j: cov[(j, m + 1)] for j in donors},
-                            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
-                            Gamma,
-                            Q,
+                            {(j, other): cov[(j, other)] for j in donors for other in donors},
+                            design["Gamma"],
+                            design["Q"],
                             donors,
                             donors,
                             weights,
                             0,
                             m + 1,
                             ids,
-                            risk,
-                            other,
+                            symbolic,
+                            symbolic,
                         )
-                        W = weights[donors[0]]
-                        e_i_z_k = _scale(
-                            m,
-                            _product(_product(cov[(0, donors[0])], _transpose(W)), _transpose(P)),
-                        )
-                        z_i_e_k = _scale(m, _product(P, _product(W, cov[(donors[0], m + 1)])))
-                        expected_cross = _add(
-                            _add(
-                                _product(
-                                    _product(risk["B"], cov[(0, m + 1)]),
-                                    _transpose(risk["B"]),
-                                ),
-                                _product(_product(risk["B"], e_i_z_k), _transpose(risk["H"])),
-                            ),
-                            _add(
-                                _product(_product(risk["H"], z_i_e_k), _transpose(risk["B"])),
-                                _product(
-                                    _product(risk["H"], _sub(risk["Z"], Gamma)),
-                                    _transpose(risk["H"]),
-                                ),
-                            ),
-                        )
-                        if cross["Cov_eS"] != expected_cross:
+                        if any(collapsed[key] != full.get(key) for key in ("Cov_eS", "rS", "rU")):
                             return False
     return True
 
 
 def evaluate_map(manifest):
     """Evaluate a caller-supplied synthetic fixture; never constructs a grid."""
+    _CACHE.clear()
     rows, check_rows = [], []
     for point in manifest["points"]:
         row, checks = _eval_point(manifest, point)

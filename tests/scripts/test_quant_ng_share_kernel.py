@@ -1190,13 +1190,15 @@ def test_out_of_range_unconstrained_risk_is_absent_from_every_file(tmp_path):
     )
     output = tmp_path / ".work" / "exp05_stage0_test" / "map"
     output.parent.mkdir(parents=True)
-    kernel.run_map(
+    status = kernel.run_map(
         json.loads(manifest_bytes),
         manifest_bytes,
         output,
         tmp_path,
         hashlib.sha256(manifest_bytes).hexdigest(),
     )
+    # R-K2: an out-of-range point is a normal outcome; the run must not stop as a kernel defect.
+    assert status == "COMPUTED"
     files = [path.read_text() for path in output.iterdir()]
     assert all("3/2620" not in content for content in files)
     row = json.loads((output / "MAP.jsonl").read_text())
@@ -1364,17 +1366,16 @@ def test_each_self_check_marks_a_mutated_formula_failed(monkeypatch, check_id):
             lambda values, point: ({"strengths": []}, {f"SC-{i}": True for i in range(1, 9)}),
         )
     elif check_id == "SC-6":
-        original = kernel.target_risk
-        calls = [0]
+        # R-K2: SC-6 runs on the collapsed path, so the mutation is there (IDENTITY at r_x = 0).
+        original = kernel._collapsed_target_risk
 
-        def wrong(*args, **kwargs):
-            result = original(*args, **kwargs)
-            calls[0] += 1
-            if calls[0] == 13:
+        def wrong(values, point, strength, matrices):
+            result = original(values, point, strength, matrices)
+            if point["omega"] == "IDENTITY" and point["r_x"] == "0":
                 result["R_S"] += 1
             return result
 
-        monkeypatch.setattr(kernel, "target_risk", wrong)
+        monkeypatch.setattr(kernel, "_collapsed_target_risk", wrong)
     elif check_id == "SC-7":
         original = kernel.closed_forms
 
@@ -1396,3 +1397,96 @@ def test_each_self_check_marks_a_mutated_formula_failed(monkeypatch, check_id):
     _, table = kernel.evaluate_map(manifest)
     failed = {item["id"] for item in table if not item["passed"]}
     assert check_id in failed
+
+
+# ---- The master's consolidated repair R-K2 of delegation 2 ----
+
+
+def _demanding_manifest(points, strengths=("0", "1/9", "1", "INFINITE")):
+    # Off the grid by p = 3 and m = 10 (the fixture rule); k > 1 and c > 0, which the first
+    # fixtures did not exercise and which hid the two-target covariance and SC-7 defects.
+    _assert_fixture(donors=10, regressors=3)
+    return {
+        "schema": "ucpe.exp05_stage0.manifest.v1",
+        "prereg_sha256": "1" * 64,
+        "spec_sha256": "1" * 64,
+        "code_sha256": "2" * 64,
+        "environment": kernel._environment(),
+        "fixed": {"p": 3, "sigma2": "1", "t": "1"},
+        "points": points,
+        "strengths": list(strengths),
+        "sc4_subset": {"m": 2, "a": ["0", "1"], "c": ["0", "3/5"]},
+        "self_checks": [f"SC-{index}" for index in range(1, 9)],
+        "cap_seconds": 600,
+        "random_numbers": "NONE",
+        "provenance": "SYNTHETIC_PARAMETERS",
+    }
+
+
+_DEMANDING_POINTS = [
+    {"a": "0", "m": 10, "k": 9, "c": "1/2", "r_x": "0", "omega": "GRAM"},
+    {"a": "1/10", "m": 10, "k": 4, "c": "3/10", "r_x": "9/10", "omega": "GRAM"},
+    {"a": "3", "m": 10, "k": 16, "c": "99/100", "r_x": "9/10", "omega": "IDENTITY"},
+]
+
+
+def test_rk2_demanding_fixture_passes_every_self_check():
+    rows, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS))
+    assert all(item["passed"] for item in table), table
+    for row, point in zip(rows, _DEMANDING_POINTS, strict=True):
+        # The two targets' covariance is c·V, so rU equals c whatever k is.
+        assert all(item["rU"] == F(point["c"]) for item in row["strengths"])
+    out_of_range = rows[0]["closed_form"]
+    assert out_of_range["flag"] == "OUT_OF_RANGE"
+    # The reported best risk is the total, equal to R_S at complete pooling when w* < 0.
+    assert out_of_range["R_best"] == rows[0]["strengths"][-1]["R_S"]
+    assert rows[1]["closed_form"]["flag"] == "IN_RANGE"
+    assert all(rows[1]["closed_form"]["R_best"] <= item["R_S"] for item in rows[1]["strengths"])
+
+
+def test_rk2_a_wrong_collapsed_z_is_caught_by_sc2_and_sc4(monkeypatch):
+    original = kernel._collapsed_moments
+
+    def wrong(design):
+        Z, K = original(design)
+        return kernel.matrix_sum(Z, kernel.matrix_scale(F(1, 1000), kernel.matrix_identity(3))), K
+
+    monkeypatch.setattr(kernel, "_collapsed_moments", wrong)
+    _, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS))
+    failed = {item["id"] for item in table if not item["passed"]}
+    assert {"SC-2", "SC-4"} <= failed
+
+
+def test_rk2_per_symbol_functions_run_only_inside_sc4(monkeypatch):
+    calls = {"target_risk": 0, "cross_covariance": 0}
+    for name in calls:
+        original = getattr(kernel, name)
+
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(kernel, name, counted)
+    manifest = _demanding_manifest(_DEMANDING_POINTS)
+    kernel.evaluate_map(manifest)
+    shapes = {(point["r_x"], point["omega"]) for point in manifest["points"]}
+    k_values = {point["k"] for point in manifest["points"]}
+    expected = (
+        len(shapes)
+        * len(k_values)
+        * len(manifest["sc4_subset"]["a"])
+        * len(manifest["sc4_subset"]["c"])
+        * len(manifest["strengths"])
+    )
+    assert calls == {"target_risk": expected, "cross_covariance": expected}
+
+
+def test_rk2_cost_does_not_grow_with_the_donor_count():
+    import time
+
+    point = {"a": "1/10", "m": 2000, "k": 4, "c": "3/10", "r_x": "9/10", "omega": "GRAM"}
+    manifest = _demanding_manifest([point])
+    kernel._CACHE.clear()
+    start = time.perf_counter()
+    kernel._eval_point(manifest, point)
+    assert time.perf_counter() - start < 2.0
