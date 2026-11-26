@@ -1,6 +1,7 @@
 """Known-answer tests for EXP-04 stage-1 identity and numeric primitives."""
 
 import ast
+import contextlib
 import hashlib
 import json
 import math
@@ -1474,6 +1475,47 @@ def _orchestration_env():
     }
 
 
+@contextlib.contextmanager
+def _unprotected_tmpdir():
+    """A temporary root whose path has no protected component.
+
+    The harness refuses any path with a component containing 5a, f3, look_run, holdout, sealed
+    or f2_, and a random temporary name can contain one (CI on #365: tmp615a3l43). A name that
+    does is discarded and another is made, so the child-process tests never depend on the draw.
+    """
+    rejected = []
+    try:
+        for _ in range(64):
+            tmp = tempfile.TemporaryDirectory()
+            if not q._protected_path(tmp.name):
+                with tmp:
+                    yield Path(tmp.name)
+                return
+            rejected.append(tmp)
+        raise AssertionError("no unprotected temporary directory in 64 tries")
+    finally:
+        for tmp in rejected:
+            tmp.cleanup()
+
+
+def test_kat_i2_unprotected_tmpdir_discards_a_protected_name(tmp_path, monkeypatch):
+    real = tempfile.TemporaryDirectory
+    kept = []  # holding each object keeps its finalizer from cleaning up on the helper's behalf
+
+    def fake():
+        tmp = real(prefix="tmp615a3" if not kept else "tmp", dir=tmp_path)
+        kept.append(tmp)
+        return tmp
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", fake)
+    made = []
+    with _unprotected_tmpdir() as root:
+        made = [tmp.name for tmp in kept]
+        assert root == Path(made[-1]) and root.is_dir() and not q._protected_path(root)
+        assert len(made) >= 2 and all(q._protected_path(name) for name in made[:-1])
+    assert not any(Path(name).exists() for name in made)
+
+
 def _tiny_manifest(stage="KAT"):
     s = q.Scenario("N-CORE", "SIZE", 0.0, 0.0, 5, 26)
     return {
@@ -1715,8 +1757,7 @@ def test_kat_i2_environment_platform_and_child_manifest_guard():
     assert platform_attrs == {"system", "release", "machine"}
     record = q.environment_record(_orchestration_env())
     assert set(record) == {"python", "numpy", "system", "release", "machine", "threads"}
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+    with _unprotected_tmpdir() as root:
         lane = root / ".work" / "exp04_stage1_test"
         lane.mkdir(parents=True)
         out = lane / "manifest"
@@ -2343,8 +2384,7 @@ def test_kat_r1_namespace_and_validation_provenance_refusals(tmp_path, monkeypat
 
 def test_kat_i2_cli_run_refusals_exit_2_and_plan_is_guarded():
     script = str(Path(q.__file__).resolve())
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
+    with _unprotected_tmpdir() as root:
         lane = root / ".work" / "exp04_stage1_test"
         lane.mkdir(parents=True)
         env = os.environ.copy() | _orchestration_env()
