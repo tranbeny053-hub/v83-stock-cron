@@ -14,13 +14,14 @@ Added:
   local). Its seeds come from the namespace `UCPE-EXP04-STAGE1-v2` (owner ruling OD-EXP04-1 = A). It has four stages
   (DEV, VAL, KAT, BENCH) and reports Clopper-Pearson intervals, size classes, power cells, decisions and minimum
   detectable effects; every constant stays PROPOSED. It uses no network, no real data, no child process and no
-  database: an audit hook refuses network and process creation and any write outside its output folder, and `plan`
-  and `benchmark` may write nothing. A validation run is single-use: its consumed marker refuses a second one. The
-  one validation run has been made, its outputs stay local, and it is never rerun.
-- #365: `tests/scripts/test_quant_ng_null_design.py`, 141 tests including known-answer tests. A test-session fixture
-  refuses any DEV or VAL draw (incident M1). The two child-process tests take their root from a helper that discards
-  a temporary-directory name holding a protected token, after the first CI run failed on `tmp615a3l43`; an AST test
-  keeps every temporary directory inside that helper.
+  database: an audit hook refuses network and process creation and any write outside its output folder except the
+  validation run's consumed marker, and `plan` and `benchmark` may write nothing. A validation run is single-use: its
+  consumed marker refuses a second one. The one validation run has been made, its outputs stay local, and it is
+  never rerun.
+- #365: `tests/scripts/test_quant_ng_null_design.py`, 141 tests including known-answer tests. An autouse fixture
+  refuses any DEV or VAL draw in every test (incident M1). The two child-process tests take their root from a helper
+  that discards a temporary-directory name holding a protected token, after the first CI run failed on
+  `tmp615a3l43`; an AST test keeps every temporary directory inside that helper.
 - #365: one row in `docs/TOOLING_INVENTORY.md` (ACTIVE_OWNER_TOOL, owner-local).
 
 Changed:
