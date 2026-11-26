@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import ast
+import json
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
+from typing import get_args
 
 import pytest
+from pydantic import ValidationError
 
 import crypto_probability_engine.api.analysis_service as service
 from crypto_probability_engine.adapters.candle_history import CandleHistory
 from crypto_probability_engine.adapters.types import ProviderError
-from crypto_probability_engine.api.schemas import AnalysisRequest
+from crypto_probability_engine.api.schemas import (
+    AnalysisRequest,
+    LeanReferenceReason,
+    LeanReferenceState,
+)
 from crypto_probability_engine.config.settings import Settings
 from crypto_probability_engine.detail.saved_run_view import build_saved_run_view
 from crypto_probability_engine.oos.pair_context import OOSArm, build_oos_pair_context
@@ -23,6 +32,7 @@ from crypto_probability_engine.quant_ng.reference_pooled import (
     RefusalReason,
     bars_required,
 )
+from crypto_probability_engine.quant_ng.windows import UnavailableReason
 from tests.fixtures.market_data import FIXED_NOW, make_candles, make_snapshot
 
 
@@ -180,8 +190,7 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
         "direction_line": "Up and Down are split equally: no direction.",
         "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
         "honesty_line": (
-            "Not a validated forecast and not a prediction interval. "
-            "Not recorded for scoring."
+            "Not a validated forecast and not a prediction interval. Not recorded for scoring."
         ),
         "extended_line": "Extended horizon: not modelled.",
     }
@@ -189,6 +198,20 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
         "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
     )
     assert response["decision_brief"]["model_readiness"] == "DESCRIPTIVE_REFERENCE_UNVALIDATED"
+    assert response["decision_brief"]["calibration_status"] is None
+    assert response["decision_brief"]["reliability_status"] is None
+    assert response["decision_brief"]["calibration_status_reason"] == "NO_SCORED_COHORT_BY_DESIGN"
+    assert response["decision_brief"]["reliability_status_reason"] == "NO_SCORED_COHORT_BY_DESIGN"
+    assert any(
+        reason.startswith(
+            "Backend score (risk pressure only; the reference has no directional edge): "
+        )
+        for reason in response["decision_brief"]["key_reasons"]
+    )
+    assert response["decision_synthesis"]["model_quality_summary"]["reliability_status"] is None
+    assert response["decision_synthesis"]["model_quality_summary"]["reliability_status_reason"] == (
+        "NO_SCORED_COHORT_BY_DESIGN"
+    )
     assert response["decision_brief"]["probability_explanation"].startswith(
         "In band is the share of recent matured six-bar outcomes"
     )
@@ -235,6 +258,10 @@ def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
         def persistence_status(self):
             return "OK"
 
+        def save_run(self, row):
+            assert set(row) <= set(service._run_summary({}))
+            return super().save_run(row)
+
     repository = HealthyMemoryRepository()
     service._open_save_receipt(response, "OK")
     work = service._persistence_work(response, "OK")
@@ -267,6 +294,124 @@ def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
     assert repository._predictions == {}
     assert repository._feature_snapshots == {}
     assert repository._derivatives_snapshots == {}
+    assert set(work.run_summary) == set(service._run_summary({}))
+
+
+@pytest.mark.parametrize("status", ["SERVED", "FALLBACK", "UNNAMED"])
+def test_reference_run_summary_keeps_only_analysis_run_columns(monkeypatch, status):
+    if status == "UNNAMED":
+        _setup(monkeypatch, timeframe="1D")
+        response = _analyze("1D")
+    else:
+        _setup(monkeypatch, timeframe="4H")
+        if status == "SERVED":
+            monkeypatch.setattr(
+                service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+            )
+        else:
+            _setup(monkeypatch, timeframe="15m", count=205)
+            monkeypatch.setattr(
+                service,
+                "_reference_history_adapter",
+                lambda _settings: HistoryAdapter(
+                    ProviderError("FAILED", "mock history failure", provider="binance")
+                ),
+            )
+            response = _analyze("15m")
+        if status == "SERVED":
+            response = _analyze("4H")
+    work = service._persistence_work(response, "OK")
+    assert set(work.run_summary) == set(service._run_summary({}))
+    assert work.reference_served is (status == "SERVED")
+
+
+def test_reference_reason_enum_matches_quant_enums():
+    assert set(get_args(LeanReferenceReason)) == {
+        "NOT_NAMED_CELL",
+        "VENUE_NOT_BINANCE",
+        *(reason.value for reason in RefusalReason),
+        *(reason.value for reason in UnavailableReason),
+    }
+
+
+def test_reference_state_bad_values_are_rejected_by_both_schemas():
+    from jsonschema import Draft202012Validator
+
+    root = Path(__file__).resolve().parents[2]
+    schema = json.loads((root / "schemas/response.schema.json").read_text())
+    reference_schema = schema["properties"]["reference_state"]["oneOf"][1]
+    json_validator = Draft202012Validator(reference_schema)
+    valid = {
+        "schema": "lean-reference-state.v1",
+        "status": "SERVED",
+        "reason": None,
+        "methodology_version": "reference-pooled-tk-v1",
+        "served_methodology_version": "reference-pooled-tk-v1",
+        "cell": {"symbol": "BTC/USDT", "timeframe": "4H", "venue": "binance"},
+        "h_extended": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
+        "prediction_ledger": "NOT_RECORDED_BY_DESIGN",
+        "display": {
+            key: "text"
+            for key in (
+                "title",
+                "count_line",
+                "direction_line",
+                "overlap_line",
+                "honesty_line",
+                "extended_line",
+            )
+        },
+    }
+    for mutate in (
+        lambda item: item.update(reason="HISTORY_FAILED"),
+        lambda item: item.update(reason="MADE_UP"),
+        lambda item: item.update(methodology_version="other"),
+        lambda item: item.update(prediction_ledger="RECORDED_AS_x"),
+        lambda item: item["display"].pop("honesty_line"),
+    ):
+        malformed = json.loads(json.dumps(valid))
+        mutate(malformed)
+        with pytest.raises(ValidationError):
+            LeanReferenceState.model_validate(malformed)
+        assert list(json_validator.iter_errors(malformed))
+
+
+def test_product_dynamic_imports_require_a_literal_module_name():
+    root = Path(__file__).resolve().parents[2]
+    product_files = [
+        root / "src/crypto_probability_engine/api/analysis_service.py",
+        root / "src/crypto_probability_engine/api/schemas.py",
+        *sorted((root / "src/crypto_probability_engine/detail").glob("*.py")),
+        root / "src/crypto_probability_engine/quant_ng/reference_pooled.py",
+    ]
+    forbidden_parts = ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
+    violations = []
+    for path in product_files:
+        if any(part in component.lower() for component in path.parts for part in forbidden_parts):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        import_module_aliases = {
+            alias.asname or alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module == "importlib"
+            for alias in node.names
+            if alias.name == "import_module"
+        }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            name = (
+                function.id
+                if isinstance(function, ast.Name)
+                else (function.attr if isinstance(function, ast.Attribute) else None)
+            )
+            if name not in {"import_module", "__import__", *import_module_aliases}:
+                continue
+            first = node.args[0] if node.args else None
+            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+                violations.append(f"{path}:{node.lineno}")
+    assert not violations, "non-literal dynamic imports found: " + ", ".join(violations)
 
 
 def test_served_15m_fetches_one_history_request_of_678(monkeypatch):

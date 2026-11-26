@@ -659,8 +659,14 @@ class DecisionBrief(BaseModel):
         "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY",
     ]
     model_readiness: str
-    calibration_status: str
-    reliability_status: str
+    calibration_status: str | None
+    reliability_status: str | None
+    calibration_status_reason: Literal["NO_SCORED_COHORT_BY_DESIGN"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    reliability_status_reason: Literal["NO_SCORED_COHORT_BY_DESIGN"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     profitability_claim: Literal[False]
     state_summary: str
     key_reasons: list[str]
@@ -699,28 +705,43 @@ class LeanReferenceHorizon(BaseModel):
     reason: str
 
 
+LeanReferenceReason = Literal[
+    "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+    "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+    "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+    "HISTORY_CONFLICT",
+]
+
+
+class LeanReferenceDisplay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    count_line: str
+    direction_line: str
+    overlap_line: str
+    honesty_line: str
+    extended_line: str
+
+
 class LeanReferenceState(BaseModel):
     model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
 
     schema_name: Literal["lean-reference-state.v1"] = Field(alias="schema")
     status: Literal["SERVED", "UNAVAILABLE"]
-    reason: str | None
-    methodology_version: str
+    reason: LeanReferenceReason | None
+    methodology_version: Literal["reference-pooled-tk-v1"]
     served_methodology_version: str
     cell: LeanReferenceCell
     h_extended: LeanReferenceHorizon
-    prediction_ledger: str
-    display: dict[
-        Literal[
-            "title",
-            "count_line",
-            "direction_line",
-            "overlap_line",
-            "honesty_line",
-            "extended_line",
-        ],
-        str,
-    ]
+    prediction_ledger: Literal["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"]
+    display: LeanReferenceDisplay
+
+    @model_validator(mode="after")
+    def reason_matches_status(self) -> LeanReferenceState:
+        if (self.status == "SERVED") != (self.reason is None):
+            raise ValueError("reference reason is null exactly when status is SERVED")
+        return self
 
 
 class AnalysisResponse(BaseModel):

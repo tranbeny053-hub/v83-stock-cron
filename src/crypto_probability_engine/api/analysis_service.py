@@ -156,6 +156,7 @@ class PersistenceWork:
     run_summary: dict
     timeframe_result: dict
     provider_observations: tuple[dict, ...]
+    reference_served: bool = False
     news_items: tuple[dict, ...] = ()
     news_clusters: tuple[dict, ...] = ()
     news_evidence_links: tuple[dict, ...] = ()
@@ -411,7 +412,7 @@ def _analyze(
                 "cell": {"symbol": symbol.display, "timeframe": request.timeframe,
                          "venue": snapshot.provider},
                 "h_extended": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
-                "prediction_ledger": "RECORDED_AS_" + METHODOLOGY_VERSION,
+                "prediction_ledger": "HEURISTIC_COHORT",
             }
 
         if cell not in NAMED_CELLS:
@@ -1436,7 +1437,7 @@ def _persist_work_confirmed(
         or (
             not work.prediction_rows
             and work.run_detail_row is not None
-            and work.run_summary.get("reference_state", {}).get("status") == "SERVED"
+            and work.reference_served
         )
     )
     if (
@@ -1462,7 +1463,7 @@ def _persist_work_confirmed(
                 if (
                     not work.prediction_rows
                     and work.run_detail_row is not None
-                    and work.run_summary.get("reference_state", {}).get("status") == "SERVED"
+                    and work.reference_served
                 )
                 else _aggregate_receipt(receipts, len(work.prediction_rows))
             ),
@@ -1878,8 +1879,6 @@ def _persistence_work(
 ) -> PersistenceWork:
     run_summary = _run_summary(payload)
     run_summary["persistence_status"] = persistence_status
-    if payload.get("reference_state") is not None:
-        run_summary["reference_state"] = payload["reference_state"]
     (
         prediction_rows,
         feature_snapshot_rows,
@@ -1895,6 +1894,7 @@ def _persistence_work(
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),
         provider_observations=tuple(_provider_observations(payload)),
+        reference_served=((payload.get("reference_state") or {}).get("status") == "SERVED"),
         news_items=tuple(_news_item_rows(payload)),
         news_clusters=tuple(_news_cluster_rows(payload)),
         news_evidence_links=tuple(_news_evidence_link_rows(payload)),

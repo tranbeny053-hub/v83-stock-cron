@@ -297,6 +297,16 @@ def test_response_schema_keeps_prior_contract_outside_ng_and_reference_additions
     }
     for name in ("probability_explanation", "uncalibrated_banner", "model_readiness_label"):
         current["properties"]["decision_brief"]["properties"].pop(name)
+    brief_properties = current["properties"]["decision_brief"]["properties"]
+    brief_properties["calibration_status"] = {"type": "string"}
+    brief_properties["reliability_status"] = {"type": "string"}
+    brief_properties.pop("calibration_status_reason", None)
+    brief_properties.pop("reliability_status_reason", None)
+    quality_properties = current["$defs"]["decisionSynthesis"]["properties"][
+        "model_quality_summary"
+    ]["properties"]
+    quality_properties["reliability_status"] = {"type": "string"}
+    quality_properties.pop("reliability_status_reason", None)
     assert _canonical_sha(current) == M53_RESPONSE_SCHEMA_SHA256
 
 

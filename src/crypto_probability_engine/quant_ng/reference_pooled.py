@@ -140,6 +140,29 @@ class PooledReference:
     methodology_version: str
 
 
+def selected_anchors(
+    window: Sequence[MarketCandle], timeframe: str, band: object
+) -> tuple[tuple[datetime, datetime, Label], ...]:
+    """Select matured lattice anchors within the reference memory window."""
+    ref = window[-1].close_time_utc
+    memory_start = ref - timedelta(days=MEMORY_DAYS[timeframe])
+    lattice_seconds = LATTICE_BARS * TIMEFRAME_SECONDS[timeframe]
+    selected = []
+    for index, anchor in enumerate(window):
+        horizon_index = index + HORIZON_BARS
+        if horizon_index >= len(window):
+            continue
+        if int(anchor.close_time_utc.timestamp()) % lattice_seconds != 0:
+            continue
+        end = window[horizon_index]
+        if memory_start < end.close_time_utc <= ref:
+            selected.append(
+                (anchor.close_time_utc, end.close_time_utc,
+                 label(end.close / anchor.close - 1.0, float(band)))
+            )
+    return tuple(selected)
+
+
 def compute_pooled_reference(
     candles: Sequence[MarketCandle], *, timeframe: str, band_frac: object
 ) -> PooledReference:
@@ -174,23 +197,9 @@ def compute_pooled_reference(
             f"Window has {len(candles)} candles; {needed} are required.",
         )
     window = candles[-needed:]
-    ref = window[-1].close_time_utc
-    memory = timedelta(days=MEMORY_DAYS[timeframe])
-    lattice_seconds = LATTICE_BARS * TIMEFRAME_SECONDS[timeframe]
-    matured = 0
-    inside = 0
-    for index in range(len(window)):
-        if index + HORIZON_BARS >= len(window):
-            continue
-        anchor = window[index]
-        if int(anchor.close_time_utc.timestamp()) % lattice_seconds != 0:
-            continue
-        end = window[index + HORIZON_BARS]
-        if end.close_time_utc <= ref and end.close_time_utc > ref - memory:
-            matured += 1
-            result = label(end.close / anchor.close - 1.0, band)
-            if result is Label.TIMEOUT:
-                inside += 1
+    selected_anchors_for_window = selected_anchors(window, timeframe, band)
+    matured = len(selected_anchors_for_window)
+    inside = sum(result is Label.TIMEOUT for _, _, result in selected_anchors_for_window)
 
     expected = expected_k(timeframe)
     if matured != expected:

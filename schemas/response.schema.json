@@ -121,8 +121,10 @@
           ]
         },
         "model_readiness": { "type": "string" },
-        "calibration_status": { "type": "string" },
-        "reliability_status": { "type": "string" },
+        "calibration_status": { "type": ["string", "null"] },
+        "reliability_status": { "type": ["string", "null"] },
+        "calibration_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
+        "reliability_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
         "profitability_claim": { "const": false },
         "state_summary": { "type": "string" },
         "key_reasons": { "type": "array", "items": { "type": "string" } },
@@ -187,8 +189,13 @@
           "properties": {
             "schema": { "const": "lean-reference-state.v1" },
             "status": { "enum": ["SERVED", "UNAVAILABLE"] },
-            "reason": { "type": ["string", "null"] },
-            "methodology_version": { "type": "string" },
+            "reason": { "type": ["string", "null"], "enum": [
+              "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+              "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+              "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+              "HISTORY_CONFLICT", null
+            ] },
+            "methodology_version": { "const": "reference-pooled-tk-v1" },
             "served_methodology_version": { "type": "string" },
             "cell": {
               "type": "object", "additionalProperties": false,
@@ -207,10 +214,10 @@
                 "reason": { "type": "string" }
               }
             },
-            "prediction_ledger": { "type": "string" },
+            "prediction_ledger": { "enum": ["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"] },
             "display": {
               "type": "object", "additionalProperties": false,
-              "required": ["title", "count_line"],
+              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"],
               "properties": {
                 "title": { "type": "string" },
                 "count_line": { "type": "string" },
@@ -220,7 +227,22 @@
                 "extended_line": { "type": "string" }
               }
             }
-          }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "SERVED" } }, "required": ["status"] },
+              "then": { "properties": { "reason": { "type": "null" } } }
+            },
+            {
+              "if": { "properties": { "status": { "const": "UNAVAILABLE" } }, "required": ["status"] },
+              "then": { "properties": { "reason": { "type": "string", "enum": [
+                "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+                "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+                "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+                "HISTORY_CONFLICT"
+              ] } } }
+            }
+          ]
         }
       ]
     },
@@ -1223,7 +1245,8 @@
           ],
           "properties": {
             "calibration_status": { "type": "string" },
-            "reliability_status": { "type": "string" },
+            "reliability_status": { "type": ["string", "null"] },
+            "reliability_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
             "sample_count": { "type": ["integer", "null"], "minimum": 0 },
             "sample_gate": { "type": ["string", "null"] },
             "brier_score": { "type": ["number", "null"] },

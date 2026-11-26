@@ -210,4 +210,6 @@ def test_module_is_pure_and_uses_strict_memory_boundary() -> None:
     for forbidden in ("open(", "requests", "httpx", "urllib", "socket", "datetime.now", "random"):
         assert forbidden not in source
     # The fixed window has no candidate ending exactly at ref-memory; retain this rule explicitly.
-    assert "end.close_time_utc > ref - memory" in source
+    assert "def selected_anchors(" in source
+    assert "memory_start < end.close_time_utc <= ref" in source
+    assert "selected_anchors(window, timeframe, band)" in source

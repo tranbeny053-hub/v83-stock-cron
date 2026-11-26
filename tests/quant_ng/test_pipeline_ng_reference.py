@@ -66,6 +66,25 @@ def test_reference_4h_composes_shared_pipeline_tail():
         assert result[key] == legacy[key]
 
 
+@pytest.mark.parametrize("mock_risk_pressure", [0.0, 0.25, 0.75, 1.0])
+def test_reference_score_has_zero_edge_and_never_exceeds_neutral_under_mock_risk(
+    monkeypatch, mock_risk_pressure
+):
+    snapshot = make_snapshot(timeframe="4H", count=210)
+    compute_risk = pipeline_ng.compute_risk_arbiter
+
+    def mock_risk(*args):
+        state = compute_risk(*args)
+        return {**state, "risk_pressure": mock_risk_pressure}
+
+    monkeypatch.setattr(pipeline_ng, "compute_risk_arbiter", mock_risk)
+    result = run_pipeline_reference(
+        snapshot, {"status": "OK"}, window_candles=snapshot.candles, window_source="SNAPSHOT"
+    )
+    assert result["score_stack"]["directional_edge"] == 0.0
+    assert result["score_stack"]["total_score"] <= 50
+
+
 def test_reference_15m_uses_history_only_for_pooled_estimate():
     snapshot = make_snapshot(timeframe="15m", count=205)
     prefix = make_candles(

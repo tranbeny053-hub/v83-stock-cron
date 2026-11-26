@@ -5,6 +5,7 @@ No network: every provider response is served by an ``httpx.MockTransport``.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -227,7 +228,23 @@ def test_no_production_path_calls_the_history_capability() -> None:
         assert "acquire_window" not in sources[name], name
     service = sources["api/analysis_service.py"]
     assert service.count("acquire_window(") == 1
-    assert service.index("LEAN_REFERENCE_ENABLED\n") < service.index("acquire_window(")
+    service_tree = ast.parse(service)
+    analyze = next(
+        node for node in service_tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_analyze"
+    )
+    reference_block = next(
+        node for node in ast.walk(analyze)
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Name)
+        and node.test.id == "attempt_reference"
+    )
+    assert sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "acquire_window"
+        for node in ast.walk(reference_block)
+    ) == 1
 
 
 # --------------------------------------------------------------------------- request bounds

@@ -150,6 +150,11 @@ def build_decision_synthesis(
             "plain_english": "Future quant hooks are shadow-only and do not affect this result.",
         },
     }
+    if methodology == "DESCRIPTIVE_REFERENCE":
+        result["model_quality_summary"]["reliability_status"] = None
+        result["model_quality_summary"]["reliability_status_reason"] = (
+            "NO_SCORED_COHORT_BY_DESIGN"
+        )
     return result
 
 

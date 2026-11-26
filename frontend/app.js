@@ -815,24 +815,7 @@ function renderSavedRun(payload, saved) {
   const gates = gateView(saved.gates);
   const range = saved.range || {};
   const sentence = (text, className) => (backendText(text) ? [textBlock("p", text, className)] : []);
-  const referenceBlock = typeof renderReferenceDisplay === "function"
-    ? renderReferenceDisplay(saved.reference)
-    : (() => {
-    const display = saved.reference;
-    if (!display || typeof display !== "object" || typeof display.title !== "string") return null;
-    const block = document.createElement("div");
-    block.className = "reference-display";
-    const title = document.createElement("strong");
-    title.textContent = display.title;
-    block.append(title);
-    for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
-      if (typeof display[key] !== "string" || !display[key].trim()) continue;
-      const line = document.createElement("p");
-      line.textContent = display[key];
-      block.append(line);
-    }
-    return block;
-      })();
+  const referenceBlock = renderReferenceDisplay(saved.reference);
   return section("Saved analysis", [
     ...sentence(range.explanation, "decision-detail"),
     ...(referenceBlock ? [referenceBlock] : []),
@@ -997,6 +980,14 @@ function overviewCard(payload) {
   demoBanner.className = "demo-banner";
   demoBanner.textContent = view ? decisionDataBanner(view.data) : dataBannerText(display);
   node.insertBefore(demoBanner, node.querySelector("dl"));
+  const referenceBrief = payload.decision_brief;
+  if (referenceBrief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY") {
+    const referenceLabel = document.createElement("p");
+    referenceLabel.className = "model-readiness";
+    referenceLabel.textContent = referenceBrief.uncalibrated_banner ||
+      referenceBrief.model_readiness_label || "Descriptive reference";
+    node.insertBefore(referenceLabel, node.querySelector("dl"));
+  }
   if (view) {
     const headline = document.createElement("p");
     headline.className = "decision-headline";
@@ -1014,7 +1005,8 @@ function overviewCard(payload) {
   }
   const heatRow = ["Signal heat (not risk)", heatBand.level];
   // The heat is a reading of the percentages: none is shown where the view assesses none.
-  const viewHeat = notAssessedByView(payload) ? [] : [heatRow];
+  const servedReference = payload.decision_brief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY";
+  const viewHeat = notAssessedByView(payload) || servedReference ? [] : [heatRow];
   const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [
     [dispositionLabel(null), display.disposition],
     ["Score", display.total_score],
@@ -1044,6 +1036,7 @@ function overviewCard(payload) {
   });
   return node;
 }
+
 
 function loadingCard(timeframe) {
   const node = document.createElement("article");
@@ -1210,7 +1203,9 @@ function horizonCard(payload) {
       keyValueTable([
         ...decisionViewRows(payload, view),
         // The heat is a reading of the percentages: none is shown where the view assesses none.
-        ...(notAssessedByView(payload) ? [] : [["Signal heat (not risk)", heatBand.level]]),
+        ...(notAssessedByView(payload) || payload.decision_brief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+          ? []
+          : [["Signal heat (not risk)", heatBand.level]]),
       ]),
     );
   } else {
@@ -2337,24 +2332,7 @@ function renderDecisionViewSection(payload, view) {
   const gates = gateViewOf(payload);
   const referenceDisplay =
     payload.reference_state?.display || payload.detail_view?.reference_state?.display;
-  const referenceBlock = typeof renderReferenceDisplay === "function"
-    ? renderReferenceDisplay(referenceDisplay)
-    : (() => {
-    const display = referenceDisplay;
-    if (!display || typeof display !== "object" || typeof display.title !== "string") return null;
-    const block = document.createElement("div");
-    block.className = "reference-display";
-    const title = document.createElement("strong");
-    title.textContent = display.title;
-    block.append(title);
-    for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
-      if (typeof display[key] !== "string" || !display[key].trim()) continue;
-      const line = document.createElement("p");
-      line.textContent = display[key];
-      block.append(line);
-    }
-    return block;
-      })();
+  const referenceBlock = renderReferenceDisplay(referenceDisplay);
   return section("Decision view", [
     textBlock("p", view.headline, "decision-headline"),
     textBlock("p", view.detail, "decision-detail"),

@@ -110,7 +110,11 @@ def build_decision_brief(
     action = _decision_action(gate, score)
     hard_blockers = list(gate.get("hard_blocks") or [])
     reliability = calibration.get("reliability_status", DEFAULT_PHASE1A.reliability_status)
-    calibration_status = calibration.get("calibration_status", DEFAULT_PHASE1A.calibration_status)
+    calibration_status = None if is_reference else calibration.get(
+        "calibration_status", DEFAULT_PHASE1A.calibration_status
+    )
+    if is_reference:
+        reliability = None
     key_reasons = _key_reasons(
         action=action,
         gate=gate,
@@ -137,6 +141,10 @@ def build_decision_brief(
         ),
         "calibration_status": calibration_status,
         "reliability_status": reliability,
+        **({
+            "calibration_status_reason": "NO_SCORED_COHORT_BY_DESIGN",
+            "reliability_status_reason": "NO_SCORED_COHORT_BY_DESIGN",
+        } if is_reference else {}),
         "profitability_claim": False,
         "state_summary": _state_summary(
             action=action,
@@ -210,12 +218,13 @@ def _key_reasons(
     forced = f" ({NOT_FORCED_BY_A_RISK_GATE})" if not_forced_by_a_risk_gate else ""
     reasons.append(f"Backend disposition: {score.get('disposition', 'UNKNOWN')}{forced}.")
     if score.get("total_score") is not None:
-        label = (
-            "Backend signal heat score"
-            if methodology == REFERENCE_METHOD
-            else "Heuristic signal heat score"
-        )
-        reasons.append(f"{label}: {score.get('total_score')}.")
+        if methodology == REFERENCE_METHOD:
+            reasons.append(
+                "Backend score (risk pressure only; the reference has no directional edge): "
+                f"{score.get('total_score')}."
+            )
+        else:
+            reasons.append(f"Heuristic signal heat score: {score.get('total_score')}.")
     data_source = data_quality.get("data_source")
     if data_source:
         reasons.append(f"Data source: {data_source}.")
@@ -298,4 +307,11 @@ def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dic
         line = "Available only for BTC/USDT, ETH/USDT and SOL/USDT on Binance at 15m, 1H and 4H."
     else:
         line = f"Unavailable for this run ({reason}); the percentages shown are the heuristic's."
-    return {"title": "Descriptive reference", "count_line": line}
+    return {
+        "title": "Descriptive reference",
+        "count_line": line,
+        "direction_line": "",
+        "overlap_line": "",
+        "honesty_line": "",
+        "extended_line": "",
+    }

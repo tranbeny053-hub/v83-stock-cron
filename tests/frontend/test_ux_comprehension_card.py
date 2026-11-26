@@ -66,6 +66,10 @@ LETTERS = list("ABCDEFGHI")
 
 @pytest.fixture(scope="module")
 def screens() -> dict[str, dict[str, object]]:
+    # Keep the generated cut-out aligned with the product renderer after the fallback copies
+    # were removed: use the actual app.js implementation.
+    original_functions = card._FUNCTIONS
+    card._FUNCTIONS = (*original_functions, "renderReferenceDisplay")
     shown = {}
     for screen in card.screens():
         (rows,) = [block["rows"] for block in screen["blocks"] if block["kind"] == "rows"]
@@ -76,7 +80,8 @@ def screens() -> dict[str, dict[str, object]]:
             "texts": card.shown_lines(screen),
             "key": card.answers(screen["payload"], screen["receipt"]),
         }
-    return shown
+    yield shown
+    card._FUNCTIONS = original_functions
 
 
 def test_the_analyses_cover_what_the_check_must_tell_apart(
