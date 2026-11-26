@@ -375,3 +375,43 @@ def test_kat_missing_checksum_record_is_a_pairing_failure():
 def test_kat_weekday_check_needs_no_locale():
     source = Path(capture.__file__).read_text()
     assert "strftime" not in source and "locale" not in source
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["seq_gap", "unknown_refusal", "recapture_without_previous", "licence_notice"],
+    ids=["seq-gap", "unknown-refusal", "recapture-without-previous", "licence-notice"],
+)
+def test_kat_malformed_probe_gaps(mutation):
+    log, _ = fixture()
+    if mutation == "seq_gap":
+        log["records"][1]["seq"] = 3
+    elif mutation == "unknown_refusal":
+        log["run_status"], log["run_end_utc"] = "REFUSED", None
+        log["refusal"] = "not a reason of the contract"
+    elif mutation == "recapture_without_previous":
+        log["step"] = "recapture"
+    else:
+        log["licence_notice"] = {"credit": "x"}
+    raises(log)
+
+
+def test_kat_recapture_with_previous_digest_passes():
+    log, manifest = fixture()
+    log["step"], log["previous_capture_log_sha256"] = "recapture", "e" * 64
+    capture.validate_capture_log(log)
+    capture.check_manifest_binding(log, manifest)
+
+
+def test_kat_binding_refuses_a_none_digest_whose_class_is_not_missing():
+    log, manifest = fixture()
+    manifest["files"][1]["class"] = "ok"
+    with pytest.raises(capture.Refusal, match="^capture log not bound$"):
+        capture.check_manifest_binding(log, manifest)
+
+
+def test_kat_date_check_refuses_a_negative_tolerance():
+    with pytest.raises(capture.Refusal, match="^capture log malformed$"):
+        capture.date_check(
+            None, "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z", tolerance_seconds=-1
+        )
