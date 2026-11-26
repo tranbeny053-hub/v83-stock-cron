@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import inspect
 from fractions import Fraction as F
+from itertools import combinations
 from pathlib import Path
+from time import perf_counter
 
 import pytest
 
@@ -50,6 +52,42 @@ def _oracle_inverse(matrix):
                 factor = rows[row][col]
                 rows[row] = [a - factor * b for a, b in zip(rows[row], rows[col], strict=True)]
     return [row[n:] for row in rows]
+
+
+def _oracle_determinant(matrix):
+    if len(matrix) == 1:
+        return F(matrix[0][0])
+    return sum(
+        (
+            (-1) ** col
+            * matrix[0][col]
+            * _oracle_determinant([row[:col] + row[col + 1 :] for row in matrix[1:]])
+            for col in range(len(matrix))
+        ),
+        F(0),
+    )
+
+
+def _oracle_positive_definite(matrix):
+    return (
+        len(matrix) == len(matrix[0])
+        and matrix == list(map(list, zip(*matrix, strict=True)))
+        and all(
+            _oracle_determinant([row[:size] for row in matrix[:size]]) > 0
+            for size in range(1, len(matrix) + 1)
+        )
+    )
+
+
+def _oracle_positive_semidefinite(matrix):
+    if len(matrix) != len(matrix[0]) or matrix != list(map(list, zip(*matrix, strict=True))):
+        return False
+    n = len(matrix)
+    return all(
+        _oracle_determinant([[matrix[row][col] for col in indexes] for row in indexes]) >= 0
+        for size in range(1, n + 1)
+        for indexes in combinations(range(n), size)
+    )
 
 
 def _oracle_unshared(S, moment):
@@ -100,6 +138,74 @@ def _scalar_fixture(gamma=F(1, 100), c=F(0), donor_v=F(1, 40), count=10):
                 cov[(i, j)] = [[c * kernel.exact_square_root(vi * vj)]]
     w = {j: [[F(1)]] for j in donors}
     return donors, ids, cov, w, [[gamma]]
+
+
+def _three_regressor_fixture(rx, c, gamma, shape="IDENTITY"):
+    donors = tuple(range(1, 11))
+    ids = {0, 11, *donors}
+    sigma = [[F(1), 0, 0], [0, F(1), rx], [0, rx, F(1)]]
+    sigma_inverse = kernel.matrix_inverse(sigma)
+    eye = [[F(int(row == col)) for col in range(3)] for row in range(3)]
+    cov = {}
+    for i in ids:
+        for j in ids:
+            if i == j:
+                factor = F(1) if i not in donors else F(1, 4)
+            elif i in donors and j in donors:
+                factor = c / 4
+            elif i in donors or j in donors:
+                factor = c / 2
+            else:
+                factor = c
+            cov[(i, j)] = [[factor * item for item in row] for row in sigma_inverse]
+    weights = {j: sigma for j in donors}
+    S = sigma
+    Omega = [row[:] for row in sigma] if shape == "GRAM" else [row[:] for row in eye]
+    Omega[0] = [F(0) for _ in range(3)]
+    for row in Omega:
+        row[0] = F(0)
+    Gamma = [[gamma * item for item in row] for row in sigma_inverse]
+    V = [row[:] for row in sigma_inverse]
+    return donors, ids, cov, weights, S, Omega, V, Gamma, sigma
+
+
+def _compare_three_regressor_paths(shape, rx, c, gamma, strengths):
+    _assert_fixture(donors=10, regressors=3)
+    donors, ids, cov, weights, S, Omega, V, Gamma, sigma = _three_regressor_fixture(
+        rx, c, gamma, shape
+    )
+    z = (F(1, 4) * (1 + 9 * c) + gamma) / 10 + gamma
+    cross = c / 2
+    for strength in strengths:
+        risk = kernel.target_risk(S, weights, Omega, strength, V, Gamma, cov, sigma, donors, 0, ids)
+        other = kernel.target_risk(
+            S, weights, Omega, strength, V, Gamma, cov, sigma, donors, 11, ids
+        )
+        matrix_path = kernel.cross_covariance(
+            S,
+            Omega,
+            strength,
+            S,
+            Omega,
+            strength,
+            cov[(0, 11)],
+            {j: cov[(0, j)] for j in donors},
+            {j: cov[(j, 11)] for j in donors},
+            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
+            Gamma,
+            sigma,
+            donors,
+            donors,
+            weights,
+            0,
+            11,
+            ids,
+            risk,
+            other,
+        )
+        form = kernel.directional_totals(F(1), z, cross, gamma, c, 1, 3, shape, strength, rx=rx)
+        assert risk["R_S"] == form["R_S"]
+        assert matrix_path["rS"] == form["rS"]
 
 
 def _scalar_risk(gamma=F(1, 100), c=F(0), donor_v=F(1, 40), strength=F(0), target=0):
@@ -467,6 +573,286 @@ def test_kat_20_identity_and_gram_match_when_uncorrelated():
         F(1, 40), F(27, 2000), F(0), F(1, 100), F(0), 40, 3, "IDENTITY", F(20), rx=0
     )
     assert gram == identity
+
+
+def test_exact_definiteness_matches_brute_force_oracles():
+    matrices = (
+        [[1, 0], [0, 1]],
+        [[2, 1], [1, 2]],
+        [[1, 1], [1, 1]],
+        [[1, 2], [2, 1]],
+        [[2, 1, 0], [1, 2, 1], [0, 1, 2]],
+        [[1, 1, 0], [1, 1, 0], [0, 0, 0]],
+        [[2, 0, 0, 0], [0, 1, 0, 0], [0, 0, 3, 1], [0, 0, 1, 3]],
+        [[1, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, -1]],
+    )
+    for matrix in matrices:
+        assert kernel.matrix_is_positive_definite(matrix) == _oracle_positive_definite(matrix)
+        assert kernel.matrix_is_positive_semidefinite(matrix) == _oracle_positive_semidefinite(
+            matrix
+        )
+
+
+def test_nine_by_nine_exact_definiteness_is_fast():
+    psd = [[F(int(row == col) + 1) for col in range(9)] for row in range(9)]
+    pd = [[F(int(row == col) + 2) for col in range(9)] for row in range(9)]
+    started = perf_counter()
+    assert kernel.matrix_is_positive_semidefinite(psd)
+    assert perf_counter() - started < 0.5
+    started = perf_counter()
+    assert kernel.matrix_is_positive_definite(pd)
+    assert perf_counter() - started < 0.5
+
+
+@pytest.mark.parametrize(
+    ("gamma", "c", "donor_v", "k"),
+    [
+        (F(1, 100), F(0), F(1, 40), 1),
+        (F(1, 100), F(1, 2), F(1, 40), 1),
+        (F(0), F(0), F(1, 40), 1),
+        (F(0), F(1, 2), F(1, 360), 9),
+    ],
+    ids=("kat-2", "kat-3", "kat-15", "kat-16"),
+)
+def test_isotropic_moments_match_scalar_kats(gamma, c, donor_v, k):
+    _assert_fixture(donors=10)
+    result, _ = _scalar_risk(gamma=gamma, c=c, donor_v=donor_v)
+    moments = kernel.isotropic_moments(F(1, 40), k, 10, c, gamma)
+    assert (moments["Z"], moments["K"]) == (result["Z"][0][0], result["K"][0][0])
+
+
+def test_exact_square_root_refuses_nonperfect_rationals():
+    for value in (2, F(1, 2)):
+        with pytest.raises(
+            kernel.Refusal,
+            match="square root requires a nonnegative perfect-square rational",
+        ):
+            kernel.exact_square_root(value)
+
+
+def test_closed_form_break_even_boundary():
+    _assert_fixture(donors=10)
+    assert kernel.closed_forms(F(1, 10), F(1, 10), 0, 10)["w_be"] == "NONE"
+    assert isinstance(kernel.closed_forms(F(1, 10), F(1, 10) + F(1, 100), 0, 10)["w_be"], F)
+
+
+def test_missing_covariance_and_weight_entries_refuse_cleanly():
+    _assert_fixture(donors=10)
+    donors, ids, cov, weights, gamma = _scalar_fixture()
+    missing = dict(cov)
+    del missing[(1, 1)]
+    with pytest.raises(kernel.Refusal, match="covariance entry missing"):
+        kernel.target_risk(
+            [[40]], weights, [[1]], 0, [[F(1, 40)]], gamma, missing, [[1]], donors, 0, ids
+        )
+    with pytest.raises(kernel.Refusal, match="weights must be supplied for every donor"):
+        kernel.target_risk(
+            [[40]],
+            {j: weights[j] for j in donors[:-1]},
+            [[1]],
+            0,
+            [[F(1, 40)]],
+            gamma,
+            cov,
+            [[1]],
+            donors,
+            0,
+            ids,
+        )
+    with pytest.raises(kernel.Refusal, match="covariance entry missing"):
+        kernel.cross_covariance(
+            [[40]],
+            [[1]],
+            0,
+            [[40]],
+            [[1]],
+            0,
+            cov[(0, 11)],
+            {},
+            {j: cov[(j, 11)] for j in donors},
+            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
+            gamma,
+            [[1]],
+            donors,
+            donors,
+            weights,
+            0,
+            11,
+            ids,
+            {},
+            {},
+        )
+    risk_i = kernel.target_risk(
+        [[40]], weights, [[1]], 0, [[F(1, 40)]], gamma, cov, [[1]], donors, 0, ids
+    )
+    risk_k = kernel.target_risk(
+        [[40]], weights, [[1]], 0, [[F(1, 40)]], gamma, cov, [[1]], donors, 11, ids
+    )
+    common = (
+        [[40]],
+        [[1]],
+        0,
+        [[40]],
+        [[1]],
+        0,
+        cov[(0, 11)],
+        {j: cov[(0, j)] for j in donors},
+        {j: cov[(j, 11)] for j in donors},
+        {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
+        gamma,
+        [[1]],
+        donors,
+        donors,
+        weights,
+        0,
+        11,
+        ids,
+        risk_i,
+        risk_k,
+    )
+    for field_index in (7, 8, 9):
+        malformed = list(common)
+        malformed[field_index] = dict(malformed[field_index])
+        malformed[field_index].pop(next(iter(malformed[field_index])))
+        with pytest.raises(kernel.Refusal, match="covariance entry missing"):
+            kernel.cross_covariance(*malformed)
+    malformed_weights = dict(weights)
+    malformed_weights.pop(donors[0])
+    malformed = list(common)
+    malformed[14] = malformed_weights
+    with pytest.raises(kernel.Refusal, match="weights must be supplied for every donor"):
+        kernel.cross_covariance(*malformed)
+
+
+def test_mutually_targeted_donors_cross_covariance_direct_expansion():
+    _assert_fixture(donors=5, regressors=2)
+    donors_i, donors_k = (1, 3), (0, 1)
+    ids = {0, 1, 2, 3, 4}
+    eye = [[F(1), 0], [0, F(1)]]
+    weights = {j: eye for j in (0, 1, 3)}
+    gamma = [[F(1, 10), 0], [0, F(1, 10)]]
+    cov = {
+        (i, j): [[F(1, 10) if i == j else F(1, 30), 0], [0, F(1, 10) if i == j else F(1, 30)]]
+        for i in ids
+        for j in ids
+    }
+    cov[(3, 3)] = [[F(1, 8), 0], [0, F(1, 8)]]
+    si, sk, oi, ok = [[10, 0], [0, 10]], [[8, 0], [0, 8]], eye, eye
+    vi, vk = [[F(1, 10), 0], [0, F(1, 10)]], [[F(1, 8), 0], [0, F(1, 8)]]
+    ri = kernel.target_risk(
+        si, {j: weights[j] for j in donors_i}, oi, 2, vi, gamma, cov, eye, donors_i, 0, ids
+    )
+    rk = kernel.target_risk(
+        sk, {j: weights[j] for j in donors_k}, ok, 3, vk, gamma, cov, eye, donors_k, 3, ids
+    )
+    wi = {j: F(1, 2) for j in donors_i}
+    wk = {j: F(1, 2) for j in donors_k}
+    bi, hi, bk, hk = F(5, 6), F(1, 6), F(8, 11), F(3, 11)
+    e_i_z_k = sum((cov[(0, j)][0][0] * wk[j] for j in donors_k), F(0))
+    z_i_e_k = sum((cov[(j, 3)][0][0] * wi[j] for j in donors_i), F(0))
+    z_i_z_k = (
+        sum(
+            (
+                wi[j] * wk[donor_l] * cov[(j, donor_l)][0][0]
+                for j in donors_i
+                for donor_l in donors_k
+            ),
+            F(0),
+        )
+        + wi[1] * wk[1] * gamma[0][0]
+    )
+    z_i_z_k -= F(1, 2) * gamma[0][0]
+    z_i_z_k -= F(1, 2) * gamma[0][0]
+    direct = bi * bk * cov[(0, 3)][0][0] + bi * hk * e_i_z_k + hi * bk * z_i_e_k + hi * hk * z_i_z_k
+    got = kernel.cross_covariance(
+        si,
+        oi,
+        2,
+        sk,
+        ok,
+        3,
+        cov[(0, 3)],
+        {j: cov[(0, j)] for j in donors_k},
+        {j: cov[(j, 3)] for j in donors_i},
+        {(j, donor_l): cov[(j, donor_l)] for j in donors_i for donor_l in donors_k},
+        gamma,
+        eye,
+        donors_i,
+        donors_k,
+        weights,
+        0,
+        3,
+        ids,
+        ri,
+        rk,
+    )
+    assert got["Cov_eS"] == [[direct, 0], [0, direct]]
+
+
+def test_identity_correlated_regressors_matrix_and_closed_form_totals_match():
+    _compare_three_regressor_paths("IDENTITY", F(9, 10), F(1, 2), F(1, 100), (20, 80, "INFINITE"))
+
+
+def test_gram_total_correlation_with_nonzero_c_and_gamma_matches():
+    _compare_three_regressor_paths("GRAM", F(0), F(1, 2), F(1, 100), (20, 80, "INFINITE"))
+
+
+def test_complete_pooling_risk_through_target_risk():
+    _assert_fixture(donors=10)
+    donors = tuple(range(1, 11))
+    ids = {0, *donors}
+    omega = [[0, 0], [0, 1]]
+    S = [[4, 2], [2, 3]]
+    cov = {
+        (i, j): [
+            [F(1, 2) if i == j and i in donors else 0, 0],
+            [0, F(1, 2) if i == j and i in donors else 0],
+        ]
+        for i in ids
+        for j in ids
+    }
+    weights = {j: [[1, 0], [0, 1]] for j in donors}
+    result = kernel.target_risk(
+        S,
+        weights,
+        omega,
+        "INFINITE",
+        [[F(1, 10), 0], [0, F(1, 10)]],
+        [[0, 0], [0, 0]],
+        cov,
+        [[1, 0], [0, 1]],
+        donors,
+        0,
+        ids,
+    )
+    assert result["R_U"] == F(1, 5)
+    assert result["R_S"] == F(3, 16)
+
+    _assert_fixture(donors=10, regressors=3)
+    donors = tuple(range(1, 11))
+    ids = {0, *donors}
+    eye = [[F(int(i == j)) for j in range(3)] for i in range(3)]
+    cov = {
+        (i, j): [
+            [(F(1, 40) if i == j and i in donors else 0) * item for item in row] for row in eye
+        ]
+        for i in ids
+        for j in ids
+    }
+    result = kernel.target_risk(
+        [[40, 0, 0], [0, 40, 0], [0, 0, 40]],
+        {j: eye for j in donors},
+        [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+        "INFINITE",
+        [[F(1, 40) if i == j else 0 for j in range(3)] for i in range(3)],
+        [[F(1, 100) if i == j else 0 for j in range(3)] for i in range(3)],
+        cov,
+        eye,
+        donors,
+        0,
+        ids,
+    )
+    assert result["R_S"] == F(13, 250)
 
 
 def test_fixture_rule_applies_to_all_known_answer_fixtures():

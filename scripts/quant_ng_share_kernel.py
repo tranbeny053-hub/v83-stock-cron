@@ -1,7 +1,6 @@
 """Exact synthetic coefficient-prior risk calculations; this module never estimates coefficients."""
 
 from fractions import Fraction as _Fraction
-from itertools import combinations as _combinations
 from math import isqrt as _isqrt
 
 
@@ -116,32 +115,80 @@ def _leading_determinants(matrix):
 
 
 def _determinant(matrix):
-    if len(matrix) == 1:
-        return matrix[0][0]
-    total = _Fraction(0)
-    for col, value in enumerate(matrix[0]):
-        minor = [row[:col] + row[col + 1 :] for row in matrix[1:]]
-        total += (-1 if col % 2 else 1) * value * _determinant(minor)
-    return total
+    work = [row[:] for row in matrix]
+    determinant = _Fraction(1)
+    for col in range(len(work)):
+        pivot = next((row for row in range(col, len(work)) if work[row][col]), None)
+        if pivot is None:
+            return _Fraction(0)
+        if pivot != col:
+            work[col], work[pivot] = work[pivot], work[col]
+            determinant = -determinant
+        value = work[col][col]
+        determinant *= value
+        for row in range(col + 1, len(work)):
+            factor = work[row][col] / value
+            for item in range(col + 1, len(work)):
+                work[row][item] -= factor * work[col][item]
+    return determinant
 
 
 def _positive_definite(matrix):
-    return (
-        len(matrix) == len(matrix[0])
-        and _symmetric(matrix)
-        and all(value > 0 for value in _leading_determinants(matrix))
-    )
+    if len(matrix) != len(matrix[0]) or not _symmetric(matrix):
+        return False
+    work = [row[:] for row in matrix]
+    for pivot in range(len(work)):
+        value = work[pivot][pivot]
+        if value <= 0:
+            return False
+        for row in range(pivot + 1, len(work)):
+            for col in range(row, len(work)):
+                updated = work[row][col] - work[row][pivot] * work[pivot][col] / value
+                work[row][col] = updated
+                work[col][row] = updated
+    return True
 
 
 def _positive_semidefinite(matrix):
     if len(matrix) != len(matrix[0]) or not _symmetric(matrix):
         return False
-    size = len(matrix)
-    return all(
-        _determinant([[matrix[row][col] for col in indexes] for row in indexes]) >= 0
-        for count in range(1, size + 1)
-        for indexes in _combinations(range(size), count)
-    )
+    work = [row[:] for row in matrix]
+    size = len(work)
+    for pivot in range(size):
+        largest = max(range(pivot, size), key=lambda index: work[index][index])
+        if largest != pivot:
+            work[pivot], work[largest] = work[largest], work[pivot]
+            for row in work:
+                row[pivot], row[largest] = row[largest], row[pivot]
+        value = work[pivot][pivot]
+        if value < 0:
+            return False
+        if value == 0:
+            return all(
+                work[pivot][index] == 0 and work[index][pivot] == 0 for index in range(pivot, size)
+            )
+        for row in range(pivot + 1, size):
+            for col in range(row, size):
+                updated = work[row][col] - work[row][pivot] * work[pivot][col] / value
+                work[row][col] = updated
+                work[col][row] = updated
+    return True
+
+
+def _covariance_entry(mapping, key):
+    try:
+        return mapping[key]
+    except (KeyError, TypeError):
+        raise Refusal("covariance entry missing") from None
+
+
+def _weight_entries(mapping, donors):
+    if not isinstance(mapping, dict) or set(mapping) != set(donors):
+        raise Refusal("weights must be supplied for every donor")
+    try:
+        return {index: _matrix(mapping[index]) for index in donors}
+    except KeyError:
+        raise Refusal("weights must be supplied for every donor") from None
 
 
 def _root(value):
@@ -307,6 +354,16 @@ def exact_square_root(value):
     return _root(value)
 
 
+def isotropic_moments(v, k, m, c, gamma):
+    v, c, gamma = map(_fraction, (v, c, gamma))
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 1 for value in (k, m)):
+        raise Refusal("k and m must be positive integers")
+    v_direction = v / k
+    z = (v_direction * (1 + (m - 1) * c) + gamma) / m + gamma
+    cross = c * v / _root(k)
+    return {"Z": z, "K": cross}
+
+
 def target_risk(S, weights, Omega, strength, V, Gamma, C, Q, donors, target, donor_ids):
     S, Omega, strength = _validate_design(S, Omega, strength)
     V, Gamma, Q = _matrix(V), _matrix(Gamma), _matrix(Q)
@@ -320,9 +377,7 @@ def target_risk(S, weights, Omega, strength, V, Gamma, C, Q, donors, target, don
         raise Refusal("target must not be in its donor set")
     if any(index not in donor_ids for index in donors) or target not in donor_ids:
         raise Refusal("donor index out of range")
-    if set(weights) != set(donors):
-        raise Refusal("weights must be supplied for every donor")
-    W = {index: _matrix(weights[index]) for index in donors}
+    W = _weight_entries(weights, donors)
     if any(len(matrix) != size or len(matrix[0]) != size for matrix in W.values()):
         raise Refusal("dimension mismatch")
     total_w = _zero(size, size)
@@ -332,12 +387,21 @@ def target_risk(S, weights, Omega, strength, V, Gamma, C, Q, donors, target, don
     z_cov = _zero(size, size)
     for j in donors:
         for k in donors:
-            z_cov = _add(z_cov, _product(_product(W[j], _matrix(C[(j, k)])), _transpose(W[k])))
+            z_cov = _add(
+                z_cov,
+                _product(_product(W[j], _matrix(_covariance_entry(C, (j, k)))), _transpose(W[k])),
+            )
         z_cov = _add(z_cov, _product(_product(W[j], Gamma), _transpose(W[j])))
     Z = _add(_product(_product(P, z_cov), _transpose(P)), Gamma)
     K = _zero(size, size)
     for j in donors:
-        K = _add(K, _product(_product(_matrix(C[(target, j)]), _transpose(W[j])), _transpose(P)))
+        K = _add(
+            K,
+            _product(
+                _product(_matrix(_covariance_entry(C, (target, j))), _transpose(W[j])),
+                _transpose(P),
+            ),
+        )
     if strength == "INFINITE":
         B = pooling_projector(S, Omega)
         H = _sub(_identity(size), B)
@@ -392,29 +456,34 @@ def cross_covariance(
     S_i, Omega_i, strength_i = _validate_design(S_i, Omega_i, strength_i)
     S_k, Omega_k, strength_k = _validate_design(S_k, Omega_k, strength_k)
     Gamma = _matrix(Gamma)
-    W = {index: _matrix(value) for index, value in weights.items()}
     if target_i in donors_i or target_k in donors_k:
         raise Refusal("target must not be in its donor set")
     if not donors_i or not donors_k:
         raise Refusal("donor set must be nonempty")
     if any(index not in donor_ids for index in set(donors_i) | set(donors_k)):
         raise Refusal("donor index out of range")
+    W = _weight_entries(weights, set(donors_i) | set(donors_k))
     P_i = _inverse(_sum_matrices([W[j] for j in donors_i]))
     P_k = _inverse(_sum_matrices([W[j] for j in donors_k]))
     e_i_z_k = _product(
-        _sum_matrices([_product(_matrix(C_i_dk[j]), _transpose(W[j])) for j in donors_k]),
+        _sum_matrices(
+            [_product(_matrix(_covariance_entry(C_i_dk, j)), _transpose(W[j])) for j in donors_k]
+        ),
         _transpose(P_k),
     )
     z_i_e_k = _product(
         P_i,
-        _sum_matrices([_product(W[j], _matrix(C_di_k[j])) for j in donors_i]),
+        _sum_matrices([_product(W[j], _matrix(_covariance_entry(C_di_k, j))) for j in donors_i]),
     )
     z_i_z_k = _zero(len(S_i), len(S_k))
     for j in donors_i:
         for donor_l in donors_k:
             z_i_z_k = _add(
                 z_i_z_k,
-                _product(_product(W[j], _matrix(C_didk[(j, donor_l)])), _transpose(W[donor_l])),
+                _product(
+                    _product(W[j], _matrix(_covariance_entry(C_didk, (j, donor_l)))),
+                    _transpose(W[donor_l]),
+                ),
             )
         if j in donors_k:
             z_i_z_k = _add(z_i_z_k, _product(_product(W[j], Gamma), _transpose(W[j])))
