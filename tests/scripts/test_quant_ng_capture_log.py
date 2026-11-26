@@ -580,3 +580,18 @@ def test_kat_unicode_digit_instant_is_malformed():
     log, _ = fixture()
     log["run_start_utc"] = "２024-01-01T00:00:00Z"
     raises(log)
+
+
+def test_kat_binding_refuses_a_listing_log_with_an_empty_manifest():
+    _, manifest = fixture()
+    manifest["files"] = []
+    log = single_record_log("listing", "listing_page", LISTING_PATH)
+    with pytest.raises(capture.Refusal, match="^capture log not bound$"):
+        capture.check_manifest_binding(log, manifest)
+
+
+@pytest.mark.parametrize("role", ["zip", "checksum"], ids=["zip", "checksum"])
+def test_kat_non_string_archive_path_is_malformed(role):
+    log, _ = fixture()
+    log["records"][0 if role == "zip" else 1]["path"] = 123
+    raises(log)
