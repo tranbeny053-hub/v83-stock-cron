@@ -164,8 +164,10 @@ def _positive_semidefinite(matrix):
         if value < 0:
             return False
         if value == 0:
+            # The largest remaining diagonal is 0, so every remaining diagonal is <= 0. PSD then
+            # needs the whole remaining block to be 0: a negative diagonal or a nonzero entry fails.
             return all(
-                work[pivot][index] == 0 and work[index][pivot] == 0 for index in range(pivot, size)
+                work[row][col] == 0 for row in range(pivot, size) for col in range(pivot, size)
             )
         for row in range(pivot + 1, size):
             for col in range(row, size):

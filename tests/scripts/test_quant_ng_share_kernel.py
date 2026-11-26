@@ -1000,3 +1000,30 @@ def test_refusals_exact_contract():
         kernel.target_risk([[1]], {1: [[1]]}, [[1]], 0, [[1]], [[0]], {}, [[1]], [1], 0, {0})
     with pytest.raises(kernel.Refusal, match=r"best weight undefined when v \+ Z - 2K = 0"):
         kernel.closed_forms(1, 1, 1, 1)
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        [[0, 0], [0, -1]],
+        [[0, 0, 0], [0, 0, 1], [0, 1, 0]],
+        [[1, 0, 0], [0, 0, 0], [0, 0, -1]],
+        [[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+        [[2, 1, 0], [1, 0, 0], [0, 0, 0]],
+        [[1, 1, 0], [1, 1, 0], [0, 0, 0]],
+    ],
+    ids=[
+        "zero-then-negative",
+        "zero-diagonal-nonzero-offdiagonal",
+        "positive-zero-negative",
+        "all-zero",
+        "zero-diagonal-coupled",
+        "singular-psd",
+    ],
+)
+def test_psd_zero_pivot_cases_match_the_brute_force_oracle(matrix):
+    # Master's repair: a zero largest pivot used to accept an indefinite remaining block.
+    fractions = [[F(value) for value in row] for row in matrix]
+    assert kernel.matrix_is_positive_semidefinite(fractions) is _oracle_positive_semidefinite(
+        fractions
+    )
