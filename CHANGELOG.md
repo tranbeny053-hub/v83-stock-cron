@@ -2,6 +2,33 @@
 
 All notable changes to this project are recorded here.
 
+## 2026-11-26 - EXP-04: the stage-1 synthetic null harness (on main, not released)
+
+It records #365, and the documentation correction in #364. Nothing in this entry is released: production still
+serves 49ab0855, and the harness is not part of its runtime. The harness is synthetic only. It decides nothing,
+adopts no constant and makes no claim.
+
+Added:
+- #365: `scripts/quant_ng_null_design.py`, the synthetic-only null and power harness for EXP-04 stage 1, the
+  inference design of the universe claim (owner ruling P, 2026-11-25; preregistration d3 and specification d3, kept
+  local). Its seeds come from the namespace `UCPE-EXP04-STAGE1-v2` (owner ruling OD-EXP04-1 = A). It has four stages
+  (DEV, VAL, KAT, BENCH) and reports Clopper-Pearson intervals, size classes, power cells, decisions and minimum
+  detectable effects; every constant stays PROPOSED. It uses no network, no real data, no child process and no
+  database: an audit hook refuses network and process creation and any write outside its output folder except the
+  validation run's consumed marker, and `plan` and `benchmark` may write nothing. A validation run is single-use: its
+  consumed marker refuses a second one. The one validation run has been made, its outputs stay local, and it is
+  never rerun.
+- #365: `tests/scripts/test_quant_ng_null_design.py`, 141 tests including known-answer tests. An autouse fixture
+  refuses any DEV or VAL draw in every test (incident M1). The two child-process tests take their root from a helper
+  that discards a temporary-directory name holding a protected token, after the first CI run failed on
+  `tmp615a3l43`; an AST test keeps every temporary directory inside that helper.
+- #365: one row in `docs/TOOLING_INVENTORY.md` (ACTIVE_OWNER_TOOL, owner-local).
+
+Changed:
+- #364: `docs/NG_SCALE_CONTRACTS.md` now describes the NG4 lattice as it is on main: the reviewed switch (#349) for
+  one 14-day TEST_ONLY window from 2026-11-23T00:00Z, NOT_CONFIGURED without its writer, WINDOW_CLOSED after the
+  window, and migration 0019 applied once (run 44133908695).
+
 ## 2026-11-24 - NGA: the dormant registry v2 (on main, not released)
 
 It records #361. Nothing in this entry is released: production still serves 49ab0855. The served path does not
