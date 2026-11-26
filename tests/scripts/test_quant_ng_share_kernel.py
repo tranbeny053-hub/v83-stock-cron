@@ -1767,3 +1767,57 @@ def test_rk2_spec_digest_must_equal_the_prereg_digest():
     manifest["spec_sha256"] = "3" * 64
     with pytest.raises(kernel.Refusal, match="^malformed digest$"):
         kernel.validate_manifest(manifest)
+
+
+def test_c1_main_refuses_an_uppercase_protected_manifest_path(tmp_path):
+    import subprocess
+    import sys
+
+    manifest_bytes = _fixture_manifest()
+    manifest_path = tmp_path / "F3MANIFEST.json"
+    manifest_path.write_bytes(manifest_bytes)
+    (tmp_path / ".work" / "exp05_stage0_test").mkdir(parents=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-B",
+            str(Path(kernel.__file__).resolve()),
+            "map",
+            "--manifest",
+            str(manifest_path),
+            "--expect-sha256",
+            "0" * 64,
+            "--out",
+            str(tmp_path / ".work" / "exp05_stage0_test" / "map"),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (result.returncode, result.stderr.strip()) == (2, "REFUSAL: protected manifest path")
+    assert not (tmp_path / ".work" / "exp05_stage0_test" / "map").exists()
+
+
+def test_c1_resolved_output_path_is_checked_case_insensitively(tmp_path, monkeypatch):
+    import hashlib
+    import json
+
+    monkeypatch.setattr(
+        kernel, "evaluate_map", lambda manifest: pytest.fail("evaluation must remain unreachable")
+    )
+    valid_bytes = _fixture_manifest()
+    real = tmp_path / ".work" / "exp05_stage0_HOLDOUT_real"
+    real.mkdir(parents=True)
+    link = tmp_path / ".work" / "exp05_stage0_link"
+    link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(kernel.Refusal, match="^protected output path$"):
+        kernel.run_map(
+            json.loads(valid_bytes),
+            valid_bytes,
+            link / "map",
+            tmp_path,
+            hashlib.sha256(valid_bytes).hexdigest(),
+        )
+    assert not (real / "map").exists()
