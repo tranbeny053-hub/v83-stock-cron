@@ -4,6 +4,10 @@ Manifest decisions: the preregistration is its own specification, so callers sup
 equal preregistration and specification digests; neither is hard-coded. The closed
 manifest schema is enforced. The builder accepts all values explicitly and has no
 default grid. The only command is ``map``.
+
+Within the validated manifest ranges, all matrices requiring positive definiteness
+are positive definite. The sole degenerate case (c = 1, k = 1, a = 0, GRAM)
+refuses before any output is written; the run therefore fails closed.
 """
 
 import hashlib as _hashlib
@@ -34,12 +38,10 @@ def _fraction(value):
 def _matrix(matrix):
     if not isinstance(matrix, (list, tuple)) or not matrix:
         raise Refusal("dimension mismatch")
+    if any(not isinstance(row, (list, tuple)) for row in matrix):
+        raise Refusal("dimension mismatch")
     result = [list(row) for row in matrix]
-    if (
-        any(not isinstance(row, (list, tuple)) for row in matrix)
-        or not result[0]
-        or any(len(row) != len(result[0]) for row in result)
-    ):
+    if not result[0] or any(len(row) != len(result[0]) for row in result):
         raise Refusal("dimension mismatch")
     return [[_fraction(value) for value in row] for row in result]
 
@@ -258,48 +260,6 @@ def validate_arm(arm):
     return True
 
 
-def matrix_product(left, right):
-    return _product(_matrix(left), _matrix(right))
-
-
-def matrix_transpose(matrix):
-    return _transpose(_matrix(matrix))
-
-
-def matrix_sum(left, right):
-    return _add(_matrix(left), _matrix(right))
-
-
-def matrix_scale(factor, matrix):
-    return _scale(factor, _matrix(matrix))
-
-
-def matrix_identity(size):
-    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
-        raise Refusal("dimension mismatch")
-    return _identity(size)
-
-
-def matrix_trace(matrix):
-    return _trace(_matrix(matrix))
-
-
-def matrix_inverse(matrix):
-    return _inverse(_matrix(matrix))
-
-
-def matrix_is_symmetric(matrix):
-    return _symmetric(_matrix(matrix))
-
-
-def matrix_is_positive_definite(matrix):
-    return _positive_definite(_matrix(matrix))
-
-
-def matrix_is_positive_semidefinite(matrix):
-    return _positive_semidefinite(_matrix(matrix))
-
-
 def pooling_projector(S, Omega):
     S = _matrix(S)
     Omega = _matrix(Omega)
@@ -336,10 +296,6 @@ def pooling_projector(S, Omega):
         _product(_transpose(basis), S),
     )
     return projected
-
-
-def exact_square_root(value):
-    return _root(value)
 
 
 def isotropic_moments(v, k, m, c, gamma):
@@ -405,6 +361,8 @@ def target_risk(S, weights, Omega, strength, V, Gamma, C, Q, donors, target, don
         ),
     )
     risk_u = _trace(_product(Q, V))
+    if risk_u == 0:
+        raise Refusal("unshared risk must be positive")
     risk_s = _trace(_product(Q, mse))
     return {
         "Z": Z,
@@ -480,8 +438,22 @@ def cross_covariance(
         z_i_z_k = _sub(z_i_z_k, _product(_product(P_i, W[target_k]), Gamma))
     if target_i in donors_k:
         z_i_z_k = _sub(z_i_z_k, _product(_product(Gamma, _transpose(W[target_i])), _transpose(P_k)))
-    bi, hi = risk_i["B"], risk_i["H"]
-    bk, hk = risk_k["B"], risk_k["H"]
+
+    def operators(S, Omega, strength):
+        if strength == "INFINITE":
+            B = pooling_projector(S, Omega)
+            return B, _sub(_identity(len(S)), B)
+        A = _inverse(_add(S, _scale(strength, Omega)))
+        return _product(A, S), _scale(strength, _product(A, Omega))
+
+    bi, hi = operators(S_i, Omega_i, strength_i)
+    bk, hk = operators(S_k, Omega_k, strength_k)
+    if any(
+        _matrix(risk[field]) != expected
+        for risk, expected in ((risk_i, (bi, hi)), (risk_k, (bk, hk)))
+        for field, expected in zip(("B", "H"), expected, strict=True)
+    ):
+        raise Refusal("risk does not match its design")
     result = _add(
         _add(
             _product(_product(bi, _matrix(C_ik)), _transpose(bk)),
@@ -524,7 +496,9 @@ def _scalar_risk(v, z, k, weight):
 
 def closed_forms(v, z, k, t):
     v, z, k, t = map(_fraction, (v, z, k, t))
-    if min(v, z, t) < 0:
+    if t <= 0:
+        raise Refusal("t must be positive")
+    if min(v, z) < 0:
         raise Refusal("closed-form variances and t must be nonnegative")
     denominator = v + z - 2 * k
     if denominator == 0:
@@ -587,6 +561,8 @@ def directional_totals(v, z, k, gamma, c, t, regressors, shape, strength, rx=0):
         for weight in direction_weights
     ]
     total_u = regressors * v
+    if total_u == 0:
+        raise Refusal("unshared risk must be positive")
     total_s = v + sum(direction_risks, _Fraction(0))
     total_cross = c * v + sum(direction_numerators, _Fraction(0))
     return {
@@ -753,6 +729,7 @@ def validate_manifest(manifest):
         raise Refusal("sigma2 and t must be positive")
     if not isinstance(manifest["points"], list) or not manifest["points"]:
         raise Refusal("points must be a nonempty list")
+    seen_points = set()
     for point in manifest["points"]:
         if not isinstance(point, dict) or set(point) != _POINT_KEYS:
             raise Refusal("malformed point")
@@ -765,6 +742,10 @@ def validate_manifest(manifest):
             raise Refusal("m and k must be positive integers")
         if point["omega"] not in ("GRAM", "IDENTITY"):
             raise Refusal("malformed omega")
+        point_key = _canonical(point)
+        if point_key in seen_points:
+            raise Refusal("duplicate points")
+        seen_points.add(point_key)
         if _parse_fraction(point["a"]) < 0 or not 0 <= _parse_fraction(point["c"]) <= 1:
             raise Refusal("malformed point fraction")
         if not 0 <= _parse_fraction(point["r_x"]) < 1:
@@ -773,6 +754,8 @@ def validate_manifest(manifest):
     if not isinstance(manifest["strengths"], list) or not manifest["strengths"]:
         raise Refusal("strengths must be a nonempty list")
     strengths = manifest["strengths"]
+    if strengths[0] != "0":
+        raise Refusal('strengths must start with "0"')
     parsed = []
     infinite = False
     for strength in strengths:
@@ -803,16 +786,21 @@ def validate_manifest(manifest):
         raise Refusal("malformed sc4_subset")
     if isinstance(subset["m"], bool) or subset["m"] < 1:
         raise Refusal("malformed sc4_subset")
-    for value in subset["a"] + subset["c"]:
-        _parse_fraction(value)
+    for value in subset["a"]:
+        if _parse_fraction(value) < 0:
+            raise Refusal("malformed sc4_subset")
+    for value in subset["c"]:
+        if not 0 <= _parse_fraction(value) <= 1:
+            raise Refusal("malformed sc4_subset")
     if manifest["self_checks"] != _SELF_CHECKS:
         raise Refusal("malformed self_checks")
     if (
         isinstance(manifest["cap_seconds"], bool)
         or not isinstance(manifest["cap_seconds"], int)
         or manifest["cap_seconds"] < 1
+        or manifest["cap_seconds"] > 1800
     ):
-        raise Refusal("malformed cap_seconds")
+        raise Refusal("cap_seconds must be between 1 and 1800")
     if manifest["random_numbers"] != "NONE":
         raise Refusal('random_numbers must be "NONE"')
     if manifest["provenance"] != "SYNTHETIC_PARAMETERS":
@@ -1241,7 +1229,7 @@ def _guard_reason(event, args, allowed):
 
 def _protected_component(path):
     return any(
-        token in str(part)
+        token in str(part).lower()
         for part in _Path(path).parts
         for token in ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
     )
@@ -1280,16 +1268,30 @@ def run_map(manifest, manifest_bytes, out_folder, repo_root, expected_sha256):
     if len(relative.parts) < 2 or not relative.parts[0].startswith("exp05_stage0_"):
         raise Refusal("output folder must be below .work/exp05_stage0_*")
     protected = ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
-    if any(any(token in part for token in protected) for part in resolved.parts):
+    if any(any(token in part.lower() for token in protected) for part in resolved.parts):
         raise Refusal("protected output path")
+    if not out.parent.is_dir():
+        raise Refusal("lane folder must exist")
     if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
         raise Refusal("output folder must be new or empty")
     if manifest["random_numbers"] != "NONE" or manifest["provenance"] != "SYNTHETIC_PARAMETERS":
         raise Refusal("manifest provenance refused")
     # Measure a single fixture evaluation and project conservatively before any write.
+    _CACHE.clear()
     start = _perf_counter()
     _eval_point(manifest, manifest["points"][0])
-    sample = _perf_counter() - start
+    t_point = _perf_counter() - start
+    reduced = dict(manifest)
+    reduced["points"] = [manifest["points"][0]]
+    reduced["sc4_subset"] = {
+        "m": manifest["sc4_subset"]["m"],
+        "a": manifest["sc4_subset"]["a"][:1],
+        "c": manifest["sc4_subset"]["c"][:1],
+    }
+    _CACHE.clear()
+    start = _perf_counter()
+    _sc4_check(reduced)
+    t_sc4 = _perf_counter() - start
     sc6_count = len(
         {(point["a"], point["m"], point["k"], point["c"]) for point in manifest["points"]}
     )
@@ -1299,11 +1301,10 @@ def run_map(manifest, manifest_bytes, out_folder, repo_root, expected_sha256):
         * len(manifest["sc4_subset"]["a"])
         * len(manifest["sc4_subset"]["c"])
     )
-    projected = sample * (len(manifest["points"]) + sc6_count + sc4_count)
+    projected = len(manifest["points"]) * t_point + 2 * sc6_count * t_point + sc4_count * t_sc4
     if projected > manifest["cap_seconds"]:
         raise Refusal("projected runtime exceeds cap_seconds")
     rows, table = evaluate_map(manifest)
-    status = "COMPUTED" if all(item["passed"] for item in table) else "STOP_KERNEL_DEFECT"
     for row in rows:
         raw_point = row["parameters"]
         row["parameters"] = {
@@ -1333,6 +1334,14 @@ def run_map(manifest, manifest_bytes, out_folder, repo_root, expected_sha256):
                 for key, value in row["closed_form"].items()
             }
     map_bytes = b"".join(_canonical(row) for row in rows)
+    try:
+        written_rows = [_json.loads(line) for line in map_bytes.splitlines()]
+        table[4]["passed"] = len(written_rows) == len(manifest["points"]) and sum(
+            len(row["strengths"]) for row in written_rows
+        ) == len(manifest["points"]) * len(manifest["strengths"])
+    except (ValueError, KeyError, TypeError):
+        table[4]["passed"] = False
+    status = "COMPUTED" if all(item["passed"] for item in table) else "STOP_KERNEL_DEFECT"
     report = {
         "status": status,
         "counts": {"points": len(rows), "evaluations": len(rows) * len(manifest["strengths"])},

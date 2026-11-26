@@ -135,7 +135,7 @@ def _scalar_fixture(gamma=F(1, 100), c=F(0), donor_v=F(1, 40), count=10):
             else:
                 vi = F(1, 40) if i in (0, count + 1) else donor_v
                 vj = F(1, 40) if j in (0, count + 1) else donor_v
-                cov[(i, j)] = [[c * kernel.exact_square_root(vi * vj)]]
+                cov[(i, j)] = [[c * kernel._root(vi * vj)]]
     w = {j: [[F(1)]] for j in donors}
     return donors, ids, cov, w, [[gamma]]
 
@@ -144,7 +144,7 @@ def _three_regressor_fixture(rx, c, gamma, shape="IDENTITY"):
     donors = tuple(range(1, 11))
     ids = {0, 11, *donors}
     sigma = [[F(1), 0, 0], [0, F(1), rx], [0, rx, F(1)]]
-    sigma_inverse = kernel.matrix_inverse(sigma)
+    sigma_inverse = kernel._inverse(sigma)
     eye = [[F(int(row == col)) for col in range(3)] for row in range(3)]
     cov = {}
     for i in ids:
@@ -230,6 +230,14 @@ def _walk_numbers(value):
 
 def _assert_fixture(donors=10, regressors=1):
     assert donors == 10 or regressors != 8
+
+
+def _assert_manifest_fixture(manifest):
+    points = manifest["points"]
+    assert manifest["fixed"]["p"] != 8 or all(point["m"] == 10 for point in points)
+    grid_m = {point["m"] for point in points}
+    assert manifest["sc4_subset"]["m"] != 4
+    assert manifest["sc4_subset"]["m"] not in grid_m
 
 
 def test_kat_01_oracle():
@@ -440,9 +448,9 @@ def test_kat_18_nonorthogonal_pooling_limit():
     S, omega = [[4, 2], [2, 3]], [[0, 0], [0, 1]]
     projector = kernel.pooling_projector(S, omega)
     assert projector == [[F(1), F(1, 2)], [F(0), F(0)]]
-    assert kernel.matrix_product(
-        kernel.matrix_product(projector, [[F(1, 10), 0], [0, F(1, 10)]]),
-        kernel.matrix_transpose(projector),
+    assert kernel._product(
+        kernel._product(projector, [[F(1, 10), 0], [0, F(1, 10)]]),
+        kernel._transpose(projector),
     ) == [[F(1, 8), 0], [0, 0]]
 
 
@@ -587,20 +595,18 @@ def test_exact_definiteness_matches_brute_force_oracles():
         [[1, 1, 0, 0], [1, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, -1]],
     )
     for matrix in matrices:
-        assert kernel.matrix_is_positive_definite(matrix) == _oracle_positive_definite(matrix)
-        assert kernel.matrix_is_positive_semidefinite(matrix) == _oracle_positive_semidefinite(
-            matrix
-        )
+        assert kernel._positive_definite(matrix) == _oracle_positive_definite(matrix)
+        assert kernel._positive_semidefinite(matrix) == _oracle_positive_semidefinite(matrix)
 
 
 def test_nine_by_nine_exact_definiteness_is_fast():
     psd = [[F(int(row == col) + 1) for col in range(9)] for row in range(9)]
     pd = [[F(int(row == col) + 2) for col in range(9)] for row in range(9)]
     started = perf_counter()
-    assert kernel.matrix_is_positive_semidefinite(psd)
+    assert kernel._positive_semidefinite(psd)
     assert perf_counter() - started < 0.5
     started = perf_counter()
-    assert kernel.matrix_is_positive_definite(pd)
+    assert kernel._positive_definite(pd)
     assert perf_counter() - started < 0.5
 
 
@@ -627,7 +633,7 @@ def test_exact_square_root_refuses_nonperfect_rationals():
             kernel.Refusal,
             match="square root requires a nonnegative perfect-square rational",
         ):
-            kernel.exact_square_root(value)
+            kernel._root(value)
 
 
 def test_closed_form_break_even_boundary():
@@ -722,6 +728,36 @@ def test_missing_covariance_and_weight_entries_refuse_cleanly():
     malformed[14] = malformed_weights
     with pytest.raises(kernel.Refusal, match="weights must be supplied for every donor"):
         kernel.cross_covariance(*malformed)
+
+
+def test_cross_covariance_refuses_risk_operators_from_another_design():
+    donors, ids, cov, weights, gamma = _scalar_fixture()
+    risk_i, _ = _scalar_risk(target=0)
+    risk_k, _ = _scalar_risk(target=11)
+    risk_i["B"] = [[F(0)]]
+    with pytest.raises(kernel.Refusal, match="^risk does not match its design$"):
+        kernel.cross_covariance(
+            [[40]],
+            [[1]],
+            0,
+            [[40]],
+            [[1]],
+            0,
+            cov[(0, 11)],
+            {j: cov[(0, j)] for j in donors},
+            {j: cov[(j, 11)] for j in donors},
+            {(j, other): cov[(j, other)] for j in donors for other in donors},
+            gamma,
+            [[1]],
+            donors,
+            donors,
+            weights,
+            0,
+            11,
+            ids,
+            risk_i,
+            risk_k,
+        )
 
 
 def test_mutually_targeted_donors_cross_covariance_direct_expansion():
@@ -860,6 +896,50 @@ def test_fixture_rule_applies_to_all_known_answer_fixtures():
         _assert_fixture(donors, regressors)
 
 
+def test_public_kat_results_do_not_return_coefficient_shaped_matrices():
+    def walk(value):
+        if isinstance(value, dict):
+            for nested in value.values():
+                yield from walk(nested)
+        elif isinstance(value, (list, tuple)):
+            if value and all(isinstance(row, (list, tuple)) for row in value):
+                rows = [list(row) for row in value]
+                if len(rows) == 1 and len(rows[0]) > 1:
+                    yield (1, len(rows[0]))
+                if len(rows) > 1 and all(len(row) == 1 for row in rows):
+                    yield (len(rows), 1)
+            for nested in value:
+                yield from walk(nested)
+
+    # Scalar p=1 KATs legitimately contain 1x1 risk matrices. Square p x p risks and
+    # operators are also allowed; only a p-by-1 or 1-by-p matrix with p > 1 is forbidden.
+    donors, ids, cov, weights, S, Omega, V, gamma, _ = _three_regressor_fixture(
+        F(1, 2), F(1, 3), F(1, 100)
+    )
+    risk_i = kernel.target_risk(
+        S,
+        weights,
+        Omega,
+        0,
+        V,
+        gamma,
+        cov,
+        [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        donors,
+        0,
+        ids,
+    )
+    projector = kernel.pooling_projector(S, [[0, 0, 0], [0, 1, 0], [0, 0, 1]])
+    form = kernel.closed_forms(F(1, 10), F(1, 5), F(0), F(1))
+    totals = kernel.directional_totals(F(1, 10), F(1, 5), F(0), F(0), F(0), 1, 3, "GRAM", 1)
+    moments = kernel.isotropic_moments(F(1, 10), 4, 10, F(0), F(0))
+    import json
+
+    map_rows, checks = kernel.evaluate_map(json.loads(_fixture_manifest()))
+    for result in (risk_i, projector, form, totals, moments, map_rows, checks):
+        assert not list(walk(result))
+
+
 def test_public_callable_inventory_and_signature_barrier():
     expected = (
         "Refusal",
@@ -868,19 +948,8 @@ def test_public_callable_inventory_and_signature_barrier():
         "cross_covariance",
         "directional_totals",
         "evaluate_map",
-        "exact_square_root",
         "isotropic_moments",
         "main",
-        "matrix_identity",
-        "matrix_inverse",
-        "matrix_is_positive_definite",
-        "matrix_is_positive_semidefinite",
-        "matrix_is_symmetric",
-        "matrix_product",
-        "matrix_scale",
-        "matrix_sum",
-        "matrix_trace",
-        "matrix_transpose",
         "pooling_projector",
         "run_map",
         "target_risk",
@@ -1011,7 +1080,7 @@ def test_refusals_exact_contract():
         )
     for invalid in (True, float("inf"), 1.5):
         with pytest.raises(kernel.Refusal, match="number must be a finite Fraction or int"):
-            kernel.exact_square_root(invalid)
+            kernel._root(invalid)
     with pytest.raises(kernel.Refusal, match="S must be symmetric positive definite"):
         kernel.target_risk([[0]], {1: [[1]]}, [[1]], 0, [[1]], [[0]], {}, [[1]], [1], 0, {0, 1})
     with pytest.raises(kernel.Refusal, match="Omega must be symmetric positive semidefinite"):
@@ -1029,9 +1098,9 @@ def test_refusals_exact_contract():
             {0, 1},
         )
     with pytest.raises(kernel.Refusal, match="dimension mismatch"):
-        kernel.matrix_product([[1, 2]], [[1]])
+        kernel._product([[1, 2]], [[1]])
     with pytest.raises(kernel.Refusal, match="singular matrix"):
-        kernel.matrix_inverse([[1, 2], [2, 4]])
+        kernel._inverse([[1, 2], [2, 4]])
     with pytest.raises(kernel.Refusal, match="target must not be in its donor set"):
         kernel.target_risk([[1]], {1: [[1]]}, [[1]], 0, [[1]], [[0]], {}, [[1]], [0], 0, {0, 1})
     with pytest.raises(kernel.Refusal, match="donor set must be nonempty"):
@@ -1040,6 +1109,29 @@ def test_refusals_exact_contract():
         kernel.target_risk([[1]], {1: [[1]]}, [[1]], 0, [[1]], [[0]], {}, [[1]], [1], 0, {0})
     with pytest.raises(kernel.Refusal, match=r"best weight undefined when v \+ Z - 2K = 0"):
         kernel.closed_forms(1, 1, 1, 1)
+
+
+def test_public_malformed_inputs_refuse_with_exact_messages():
+    with pytest.raises(kernel.Refusal, match="^dimension mismatch$"):
+        kernel.target_risk([1], {}, [[1]], 0, [[1]], [[0]], {}, [[1]], [1], 0, {0, 1})
+    with pytest.raises(kernel.Refusal, match="^unshared risk must be positive$"):
+        kernel.target_risk(
+            [[1]],
+            {1: [[1]]},
+            [[1]],
+            0,
+            [[1]],
+            [[0]],
+            {(0, 1): [[0]], (1, 1): [[0]]},
+            [[0]],
+            [1],
+            0,
+            {0, 1},
+        )
+    with pytest.raises(kernel.Refusal, match="^unshared risk must be positive$"):
+        kernel.directional_totals(0, 1, 0, 0, 0, 1, 2, "GRAM", 0)
+    with pytest.raises(kernel.Refusal, match="^t must be positive$"):
+        kernel.closed_forms(1, 2, 0, 0)
 
 
 @pytest.mark.parametrize(
@@ -1064,16 +1156,14 @@ def test_refusals_exact_contract():
 def test_psd_zero_pivot_cases_match_the_brute_force_oracle(matrix):
     # Master's repair: a zero largest pivot used to accept an indefinite remaining block.
     fractions = [[F(value) for value in row] for row in matrix]
-    assert kernel.matrix_is_positive_semidefinite(fractions) is _oracle_positive_semidefinite(
-        fractions
-    )
+    assert kernel._positive_semidefinite(fractions) is _oracle_positive_semidefinite(fractions)
 
 
 def _fixture_manifest():
     _assert_fixture(donors=10, regressors=3)
     source = Path(kernel.__file__).read_bytes()
     digest = __import__("hashlib").sha256(source).hexdigest()
-    return kernel.build_manifest(
+    manifest_bytes = kernel.build_manifest(
         "ucpe.exp05_stage0.manifest.v1",
         "1" * 64,
         "1" * 64,
@@ -1093,6 +1183,8 @@ def _fixture_manifest():
         "NONE",
         "SYNTHETIC_PARAMETERS",
     )
+    _assert_manifest_fixture(__import__("json").loads(manifest_bytes))
+    return manifest_bytes
 
 
 def test_fixture_map_matches_collapsed_and_closed_paths():
@@ -1109,6 +1201,39 @@ def test_fixture_map_matches_collapsed_and_closed_paths():
         assert row["strengths"][1]["R_S"] == F(1, 40) + 2 * F(27, 3080)
         assert row["strengths"][2]["R_S"] == F(13, 250)
     assert rows[0]["strengths"] == rows[1]["strengths"]
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ("duplicate_points", "duplicate points"),
+        ("strengths_without_zero", 'strengths must start with "0"'),
+        ("cap_over_limit", "cap_seconds must be between 1 and 1800"),
+        ("sc4_bad_m", "malformed sc4_subset"),
+        ("sc4_negative_a", "malformed sc4_subset"),
+        ("sc4_large_c", "malformed sc4_subset"),
+    ],
+    ids=("duplicate-points", "zero-strength-required", "cap-limit", "sc4-m", "sc4-a", "sc4-c"),
+)
+def test_manifest_validator_rejects_stricter_contract_violations(change, reason):
+    import json
+
+    manifest = json.loads(_fixture_manifest())
+    if change == "duplicate_points":
+        manifest["points"].append(dict(manifest["points"][0]))
+    elif change == "strengths_without_zero":
+        manifest["strengths"] = ["1", "INFINITE"]
+    elif change == "cap_over_limit":
+        manifest["cap_seconds"] = 1801
+    elif change == "sc4_bad_m":
+        manifest["sc4_subset"]["m"] = 0
+    elif change == "sc4_negative_a":
+        manifest["sc4_subset"]["a"] = ["-1"]
+    else:
+        manifest["sc4_subset"]["c"] = ["2"]
+    with pytest.raises(kernel.Refusal) as error:
+        kernel.validate_manifest(manifest)
+    assert str(error.value) == reason
 
 
 def test_fixture_cli_outputs_repeat_byte_for_byte(tmp_path):
@@ -1147,6 +1272,31 @@ def test_fixture_cli_outputs_repeat_byte_for_byte(tmp_path):
         captured.append({path.name: path.read_bytes() for path in output.iterdir()})
     assert captured[0] == captured[1]
     assert json.loads(captured[0]["REPORT.json"])["status"] == "COMPUTED"
+
+
+def test_run_map_sc5_counts_serialized_map_lines_and_recomputes_status(tmp_path, monkeypatch):
+    import hashlib
+    import json
+
+    manifest_bytes = _fixture_manifest()
+    manifest = json.loads(manifest_bytes)
+    output = tmp_path / ".work" / "exp05_stage0_sc5" / "map"
+    output.parent.mkdir(parents=True)
+    original = kernel._canonical
+
+    def omit_serialized_row(value):
+        if isinstance(value, dict) and "parameters" in value and "strengths" in value:
+            return b""
+        return original(value)
+
+    monkeypatch.setattr(kernel, "_canonical", omit_serialized_row)
+    status = kernel.run_map(
+        manifest, manifest_bytes, output, tmp_path, hashlib.sha256(manifest_bytes).hexdigest()
+    )
+    report = json.loads((output / "REPORT.json").read_bytes())
+    assert status == "STOP_KERNEL_DEFECT"
+    assert report["status"] == status
+    assert report["self_checks"][4] == {"id": "SC-5", "passed": False}
 
 
 def test_decimal_formatter_is_exact_and_half_even():
@@ -1217,6 +1367,9 @@ def test_out_of_range_unconstrained_risk_is_absent_from_every_file(tmp_path):
         ("symlink", "output folder is a symlink"),
         ("not_empty", "output folder must be new or empty"),
         ("protected", "protected output path"),
+        ("protected_f3_upper", "protected output path"),
+        ("protected_holdout_upper", "protected output path"),
+        ("lane_folder_missing", "lane folder must exist"),
         ("random_numbers", 'random_numbers must be "NONE"'),
         ("provenance", 'provenance must be "SYNTHETIC_PARAMETERS"'),
         ("budget", "projected runtime exceeds cap_seconds"),
@@ -1231,6 +1384,9 @@ def test_out_of_range_unconstrained_risk_is_absent_from_every_file(tmp_path):
         "symlink-folder",
         "nonempty-folder",
         "protected-folder",
+        "protected-f3-uppercase",
+        "protected-holdout-uppercase",
+        "missing-lane-folder",
         "random-number-guard",
         "provenance-guard",
         "runtime-cap",
@@ -1248,7 +1404,10 @@ def test_map_stop_rules_refuse_before_evaluation(tmp_path, monkeypatch, rule, re
     valid_bytes = _fixture_manifest()
     manifest = json.loads(valid_bytes)
     output = tmp_path / ".work" / "exp05_stage0_test" / "map"
-    output.parent.mkdir(parents=True, exist_ok=True)
+    if rule == "lane_folder_missing":
+        (tmp_path / ".work").mkdir()
+    else:
+        output.parent.mkdir(parents=True, exist_ok=True)
     expected = hashlib.sha256(valid_bytes).hexdigest()
     if rule == "input_digest":
         expected = "0" * 64
@@ -1271,17 +1430,33 @@ def test_map_stop_rules_refuse_before_evaluation(tmp_path, monkeypatch, rule, re
         (output / "existing.txt").write_text("fixture")
     elif rule == "protected":
         output = tmp_path / ".work" / "exp05_stage0_holdout" / "map"
+    elif rule == "protected_f3_upper":
+        output = tmp_path / ".work" / "exp05_stage0_F3MAP" / "map"
+    elif rule == "protected_holdout_upper":
+        output = tmp_path / ".work" / "exp05_stage0_Holdout" / "map"
+    elif rule == "lane_folder_missing":
+        output = tmp_path / ".work" / "exp05_stage0_test" / "map"
     elif rule == "random_numbers":
         manifest["random_numbers"] = "DRAW"
     elif rule == "provenance":
         manifest["provenance"] = "REAL_DATA"
     elif rule == "budget":
         manifest["cap_seconds"] = 1
-        times = iter((0, 100))
+        times = iter((0, 100, 100, 200))
         monkeypatch.setattr(kernel, "_perf_counter", lambda: next(times))
     supplied = (
         valid_bytes
-        if rule in ("input_digest", "symlink", "not_empty", "outside_folder", "protected")
+        if rule
+        in (
+            "input_digest",
+            "symlink",
+            "not_empty",
+            "outside_folder",
+            "protected",
+            "protected_f3_upper",
+            "protected_holdout_upper",
+            "lane_folder_missing",
+        )
         else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
         if rule == "canonical"
         else (
@@ -1300,6 +1475,8 @@ def test_map_stop_rules_refuse_before_evaluation(tmp_path, monkeypatch, rule, re
         kernel.run_map(manifest, supplied, output, tmp_path, expected)
     assert str(error.value) == reason
     assert not (output / "MAP.jsonl").exists()
+    if rule in ("protected_f3_upper", "protected_holdout_upper", "lane_folder_missing"):
+        assert not output.exists()
 
 
 @pytest.mark.parametrize(
@@ -1389,9 +1566,7 @@ def test_each_self_check_marks_a_mutated_formula_failed(monkeypatch, check_id):
         original = kernel.pooling_projector
 
         def wrong(*args, **kwargs):
-            return kernel.matrix_sum(
-                original(*args, **kwargs), kernel.matrix_identity(len(args[0]))
-            )
+            return kernel._add(original(*args, **kwargs), kernel._identity(len(args[0])))
 
         monkeypatch.setattr(kernel, "pooling_projector", wrong)
     _, table = kernel.evaluate_map(manifest)
@@ -1406,7 +1581,7 @@ def _demanding_manifest(points, strengths=("0", "1/9", "1", "INFINITE")):
     # Off the grid by p = 3 and m = 10 (the fixture rule); k > 1 and c > 0, which the first
     # fixtures did not exercise and which hid the two-target covariance and SC-7 defects.
     _assert_fixture(donors=10, regressors=3)
-    return {
+    manifest = {
         "schema": "ucpe.exp05_stage0.manifest.v1",
         "prereg_sha256": "1" * 64,
         "spec_sha256": "1" * 64,
@@ -1421,6 +1596,8 @@ def _demanding_manifest(points, strengths=("0", "1/9", "1", "INFINITE")):
         "random_numbers": "NONE",
         "provenance": "SYNTHETIC_PARAMETERS",
     }
+    _assert_manifest_fixture(manifest)
+    return manifest
 
 
 _DEMANDING_POINTS = [
@@ -1449,7 +1626,7 @@ def test_rk2_a_wrong_collapsed_z_is_caught_by_sc2_and_sc4(monkeypatch):
 
     def wrong(design):
         Z, K = original(design)
-        return kernel.matrix_sum(Z, kernel.matrix_scale(F(1, 1000), kernel.matrix_identity(3))), K
+        return kernel._add(Z, kernel._scale(F(1, 1000), kernel._identity(3))), K
 
     monkeypatch.setattr(kernel, "_collapsed_moments", wrong)
     _, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS))
@@ -1499,8 +1676,8 @@ def test_rk2_sc2_is_independent_of_the_matrix_path(monkeypatch):
 
     def wrong(design):
         Z, K = original(design)
-        shift = kernel.matrix_scale(F(1, 1000), kernel.matrix_inverse(design["sigma"]))
-        return kernel.matrix_sum(Z, shift), K
+        shift = kernel._scale(F(1, 1000), kernel._inverse(design["sigma"]))
+        return kernel._add(Z, shift), K
 
     monkeypatch.setattr(kernel, "_collapsed_moments", wrong)
     _, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS))
