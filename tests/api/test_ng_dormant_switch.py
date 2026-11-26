@@ -284,11 +284,19 @@ def test_authoritative_gate_actions_vary_across_supported_cases(monkeypatch) -> 
 M53_RESPONSE_SCHEMA_SHA256 = "3b74a5ade30b0ae3db69f8ef7735470912ec7c8d084a3b7981c47471ae470b78"
 
 
-def test_response_schema_is_only_additive_ng_serving_property() -> None:
+def test_response_schema_keeps_prior_contract_outside_ng_and_reference_additions() -> None:
     current = json.loads((ROOT / "schemas/response.schema.json").read_text())
     assert "ng_serving" in current["properties"]
     assert "ng_serving" not in current["required"]
     current["properties"].pop("ng_serving")
+    # This task explicitly versions the optional lean reference detail and its display identity.
+    current["properties"].pop("reference_state")
+    current["$defs"]["decisionView"]["properties"]["evidence"]["properties"].pop("skill_note")
+    current["properties"]["decision_brief"]["properties"]["probability_type"] = {
+        "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
+    }
+    for name in ("probability_explanation", "uncalibrated_banner", "model_readiness_label"):
+        current["properties"]["decision_brief"]["properties"].pop(name)
     assert _canonical_sha(current) == M53_RESPONSE_SCHEMA_SHA256
 
 
@@ -510,4 +518,3 @@ def test_ng_serving_schema_admits_exactly_the_two_shapes() -> None:
 )
 def test_ng_serving_schema_refuses_any_unhidden_or_unruled_value(path, value) -> None:
     assert not _ng_validator().is_valid(_with(_SERVED_NG, path, value))
-

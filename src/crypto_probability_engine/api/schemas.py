@@ -649,7 +649,15 @@ class DecisionBrief(BaseModel):
     timeframe_label: str
     horizon_label: str
     horizon_bars: int
-    probability_type: Literal["UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"]
+    probability_explanation: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    uncalibrated_banner: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    model_readiness_label: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    probability_type: Literal[
+        "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+        "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY",
+    ]
     model_readiness: str
     calibration_status: str
     reliability_status: str
@@ -674,6 +682,45 @@ class SkillEvidenceResponse(BaseModel):
     ]
     n: int = Field(ge=0)
     observed_directional_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class LeanReferenceCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    timeframe: str
+    venue: str
+
+
+class LeanReferenceHorizon(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["UNAVAILABLE"]
+    reason: str
+
+
+class LeanReferenceState(BaseModel):
+    model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
+
+    schema_name: Literal["lean-reference-state.v1"] = Field(alias="schema")
+    status: Literal["SERVED", "UNAVAILABLE"]
+    reason: str | None
+    methodology_version: str
+    served_methodology_version: str
+    cell: LeanReferenceCell
+    h_extended: LeanReferenceHorizon
+    prediction_ledger: str
+    display: dict[
+        Literal[
+            "title",
+            "count_line",
+            "direction_line",
+            "overlap_line",
+            "honesty_line",
+            "extended_line",
+        ],
+        str,
+    ]
 
 
 class AnalysisResponse(BaseModel):
@@ -723,6 +770,7 @@ class AnalysisResponse(BaseModel):
     detail_view: DetailView
     gate_result: JsonObject
     skill_evidence: SkillEvidenceResponse | None = None
+    reference_state: LeanReferenceState | None = None
     debug: JsonObject
     analysis_hash: str
 

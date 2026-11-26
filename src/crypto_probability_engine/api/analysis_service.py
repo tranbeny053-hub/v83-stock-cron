@@ -51,8 +51,11 @@ from crypto_probability_engine.derivatives_intel.schemas import (
 )
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
+    HEURISTIC_METHOD,
+    REFERENCE_METHOD,
     build_decision_brief,
     build_horizon_context,
+    reference_display,
 )
 from crypto_probability_engine.detail.decision_synthesis import build_decision_synthesis
 from crypto_probability_engine.detail.decision_view import build_decision_view
@@ -519,7 +522,13 @@ def _analyze(
         run_id = deterministic_run_id
     else:
         run_id = f"run_{uuid4().hex}"
-    horizon_context = build_horizon_context(request.timeframe)
+    served_reference = bool(reference_state and reference_state["status"] == "SERVED")
+    methodology = REFERENCE_METHOD if served_reference else HEURISTIC_METHOD
+    if reference_state is not None:
+        reference_state["display"] = reference_display(
+            reference_state, quant_result["horizon_timeout_state"]
+        )
+    horizon_context = build_horizon_context(request.timeframe, methodology=methodology)
     frontend_display = build_frontend_display(
         quant_result,
         news_blocks,
@@ -536,6 +545,7 @@ def _analyze(
         timeframe=request.timeframe,
         quant_result=quant_result,
         data_quality=data_quality,
+        methodology=methodology,
     )
     decision_synthesis = build_decision_synthesis(
         timeframe=request.timeframe,
@@ -543,6 +553,7 @@ def _analyze(
         data_quality=data_quality,
         provider_state=provider_state,
         decision_brief=decision_brief,
+        methodology=methodology,
     )
     detail_view = build_detail_view(
         symbol=symbol.display,
@@ -619,7 +630,6 @@ def _analyze(
         # analysis; never for the isolated automation analysis or an OOS arm.
         response["decision_view"] = build_decision_view(
             timeframe=request.timeframe,
-            methodology_version=methodology_version,
             snapshot=snapshot,
             data_quality=data_quality,
             provider_state=provider_state,
@@ -627,6 +637,12 @@ def _analyze(
             decision_brief=decision_brief,
             skill_evidence=skill_evidence,
             primary_venue=settings.provider_priority[0] if settings.provider_priority else None,
+            methodology=methodology,
+            methodology_version=(
+                reference_state["methodology_version"]
+                if served_reference
+                else methodology_version
+            ),
         )
     response["analysis_hash"] = stable_hash(response)
     prediction_row = (
@@ -669,14 +685,7 @@ def _analyze(
         if record_prediction and not served_reference
         else None
     )
-    # reference_state is a backend-owned extension until the public response model is versioned.
-    # Keep it in the hashed wire response while validating the established response contract.
-    validation_response = {
-        key: value for key, value in response.items() if key != "reference_state"
-    }
-    validated = AnalysisResponse.model_validate(validation_response).model_dump(mode="json")
-    if reference_state is not None:
-        validated["reference_state"] = reference_state
+    validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     if "decision_view" not in response:
         # No view, no key: the automation analysis and OOS arms carry no decision_view at all.
         validated.pop("decision_view", None)

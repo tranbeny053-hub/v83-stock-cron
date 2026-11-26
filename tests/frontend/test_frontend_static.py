@@ -702,12 +702,15 @@ def test_ui_d1_4b_uses_endpoint_without_database_dependency() -> None:
 
 
 def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
-    html = read_frontend("index.html")
+    html = " ".join(read_frontend("index.html").split())
     js = read_frontend("app.js")
     css = read_frontend("styles.css")
-    assert "Uncalibrated heuristic" in html
-    assert "not validated forecasts" in html
-    assert "Up/Down/In band are momentum-based estimates" in html
+    assert "Most markets use a momentum-based heuristic" in html
+    assert "validated forecasts" in html
+    assert (
+        "on BTC, ETH and SOL (Binance, 15m/1H/4H) Detail may show a descriptive historical"
+        in html
+    )
     assert "Open Detail for the full breakdown." in html
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
@@ -721,7 +724,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
 def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert html.count("Up/Down/In band are momentum-based estimates") == 1
+    assert html.count("Up/Down/In band describe where the close ~6 bars ahead ends") == 1
     assert "probability-explainer compact" not in js
     assert "qualitativeCardLean" not in js
     assert "uncalibrated" + " — see Detail" not in js

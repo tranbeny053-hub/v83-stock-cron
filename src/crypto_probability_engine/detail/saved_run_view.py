@@ -33,6 +33,10 @@ from crypto_probability_engine.detail.decision_brief import (
     MODEL_READINESS_COPY,
     PROBABILITY_EXPLANATION,
     PROBABILITY_TYPE,
+    REFERENCE_MODEL_READINESS,
+    REFERENCE_MODEL_READINESS_COPY,
+    REFERENCE_PROBABILITY_EXPLANATION,
+    REFERENCE_PROBABILITY_TYPE,
 )
 from crypto_probability_engine.detail.decision_view import (
     COST_LABEL,
@@ -73,6 +77,8 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
     )
     assessed = _assessed(gate, provider_state)
     heuristic = brief.get("probability_type") == PROBABILITY_TYPE
+    reference = brief.get("probability_type") == REFERENCE_PROBABILITY_TYPE
+    reference_state = _mapping(detail.get("reference_state"))
     band = _fraction(execution.get("round_trip_cost_frac"))
     # The liquidity state as this record can read it: the measure's own state, or the one value
     # that says the record holds no readable measurement (then no cause is asserted of the gate).
@@ -107,7 +113,13 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
             "down_frac": _fraction(horizon.get("p_down_frac")) if assessed else None,
             "meaning": RANGE_MEANING if assessed else NOT_ASSESSED,
             # What the percentages are, said from the stored evidence level, not a stored sentence.
-            "explanation": PROBABILITY_EXPLANATION if assessed and heuristic else None,
+            "explanation": (
+                REFERENCE_PROBABILITY_EXPLANATION
+                if assessed and reference
+                else PROBABILITY_EXPLANATION
+                if assessed and heuristic
+                else None
+            ),
         },
         # The caveat is read from the stored execution state, as a live view reads it: a record
         # that does not hold that state has none.
@@ -119,15 +131,19 @@ def build_saved_run_view(detail: Mapping[str, Any]) -> dict[str, Any]:
         "evidence": {
             "level": MODEL_READINESS_COPY
             if brief.get("model_readiness") == MODEL_READINESS
+            else REFERENCE_MODEL_READINESS_COPY
+            if brief.get("model_readiness") == REFERENCE_MODEL_READINESS
             else None,
             "probability_type": _text(brief.get("probability_type")),
-            "calibration_status": _text(brief.get("calibration_status")),
-            "reliability_status": _text(brief.get("reliability_status")),
+            "calibration_status": None if reference else _text(brief.get("calibration_status")),
+            "reliability_status": None if reference else _text(brief.get("reliability_status")),
             # The directional-skill verdict and its count are not stored with a run.
             "skill_verdict": None,
             "resolved_outcomes": None,
             "directional_evidence_hold": None if gate is None else _hold_active(gate),
+            **({"skill_note": "NO_SCORED_COHORT_BY_DESIGN"} if reference else {}),
         },
+        **({"reference": reference_state.get("display")} if reference else {}),
     }
 
 

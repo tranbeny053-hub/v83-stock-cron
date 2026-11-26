@@ -111,7 +111,15 @@
         "timeframe_label": { "type": "string" },
         "horizon_label": { "type": "string" },
         "horizon_bars": { "type": "integer" },
-        "probability_type": { "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME" },
+        "probability_explanation": { "type": "string" },
+        "uncalibrated_banner": { "type": "string" },
+        "model_readiness_label": { "type": "string" },
+        "probability_type": {
+          "enum": [
+            "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+            "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+          ]
+        },
         "model_readiness": { "type": "string" },
         "calibration_status": { "type": "string" },
         "reliability_status": { "type": "string" },
@@ -165,6 +173,56 @@
           "maximum": 1.0
         }
       }
+    },
+    "reference_state": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema", "status", "reason", "methodology_version", "served_methodology_version",
+            "cell", "h_extended", "prediction_ledger", "display"
+          ],
+          "properties": {
+            "schema": { "const": "lean-reference-state.v1" },
+            "status": { "enum": ["SERVED", "UNAVAILABLE"] },
+            "reason": { "type": ["string", "null"] },
+            "methodology_version": { "type": "string" },
+            "served_methodology_version": { "type": "string" },
+            "cell": {
+              "type": "object", "additionalProperties": false,
+              "required": ["symbol", "timeframe", "venue"],
+              "properties": {
+                "symbol": { "type": "string" },
+                "timeframe": { "type": "string" },
+                "venue": { "type": "string" }
+              }
+            },
+            "h_extended": {
+              "type": "object", "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": { "const": "UNAVAILABLE" },
+                "reason": { "type": "string" }
+              }
+            },
+            "prediction_ledger": { "type": "string" },
+            "display": {
+              "type": "object", "additionalProperties": false,
+              "required": ["title", "count_line"],
+              "properties": {
+                "title": { "type": "string" },
+                "count_line": { "type": "string" },
+                "direction_line": { "type": "string" },
+                "overlap_line": { "type": "string" },
+                "honesty_line": { "type": "string" },
+                "extended_line": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
     },
     "debug": { "type": "object" },
     "analysis_hash": { "type": "string" },
@@ -419,6 +477,7 @@
             "reliability_status": { "type": ["string", "null"] },
             "skill_verdict": { "type": ["string", "null"] },
             "resolved_outcomes": { "type": ["integer", "null"] },
+            "skill_note": { "type": ["string", "null"] },
             "directional_evidence_hold": { "type": "boolean" },
             "profitability_claim": { "const": false },
             "limitations": { "type": "array", "items": { "type": "string" } }

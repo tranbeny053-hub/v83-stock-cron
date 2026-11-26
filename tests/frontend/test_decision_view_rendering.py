@@ -44,6 +44,7 @@ FUNCTIONS = (
     "decisionViewRows",
     "costCaveatRows",
     "dispositionLabel",
+    "renderReferenceDisplay",
 )
 CONSTANTS = ("NOT_ASSESSED_TEXT", "VENUE_LABELS")
 
@@ -213,6 +214,65 @@ def test_the_rows_a_user_reads() -> None:
     assert labels.index("Horizon end (Vietnam)") + 1 == labels.index("Horizon end (UTC)")
     assert rows["Reference close (UTC)"] != view["time"]["as_of_utc"]
     assert refuses_unknown, "a view of an unknown schema version is never rendered"
+
+
+@pytest.mark.parametrize(
+    "display, expected_lines",
+    [
+        (
+            {
+                "title": "Descriptive reference",
+                "count_line": (
+                    "In band: 3 of 14 matured six-bar outcomes over the last 28 days ended "
+                    "inside today's decision band."
+                ),
+                "direction_line": "Up and Down are split equally: no direction.",
+                "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
+                "honesty_line": (
+                    "Not a validated forecast and not a prediction interval. "
+                    "Not recorded for scoring."
+                ),
+                "extended_line": "Extended horizon: not modelled.",
+            },
+            5,
+        ),
+        ({"title": "Descriptive reference", "count_line": "Available only for named cells."}, 1),
+        (
+            {
+                "title": "Descriptive reference",
+                "count_line": (
+                    "Unavailable for this run (HISTORY_FAILED); the percentages shown are "
+                    "the heuristic's."
+                ),
+            },
+            1,
+        ),
+    ],
+)
+def test_reference_display_uses_backend_lines_as_text(display: dict, expected_lines: int) -> None:
+    rendered = _node(
+        """
+const nodes = [];
+global.document = { createElement: (tag) => {
+  const node = { tag, children: [], append(child) { this.children.push(child); } };
+  nodes.push(node);
+  return node;
+} };
+const block = renderReferenceDisplay(display);
+console.log(JSON.stringify({
+  absent: renderReferenceDisplay(null) === null,
+  className: block.className,
+  tags: nodes.map((node) => node.tag),
+  text: block.children.map((node) => node.textContent),
+}));
+""",
+        display=display,
+    )
+    assert rendered["absent"] is True
+    assert rendered["className"] == "reference-display"
+    assert rendered["text"][0] == "Descriptive reference"
+    assert len(rendered["text"]) - 1 == expected_lines
+    assert all(tag in {"div", "strong", "p"} for tag in rendered["tags"])
 
 
 def _formatted_vietnam(value: str) -> str:

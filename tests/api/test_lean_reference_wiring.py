@@ -10,6 +10,7 @@ from crypto_probability_engine.adapters.candle_history import CandleHistory
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.api.schemas import AnalysisRequest
 from crypto_probability_engine.config.settings import Settings
+from crypto_probability_engine.detail.saved_run_view import build_saved_run_view
 from crypto_probability_engine.oos.pair_context import OOSArm, build_oos_pair_context
 from crypto_probability_engine.persistence.repository import InMemoryPersistenceRepository
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
@@ -35,6 +36,17 @@ class HistoryAdapter:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
+
+
+def _strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
 
 
 def _setup(monkeypatch, *, timeframe="4H", provider="binance", symbol="BTC/USDT", count=210):
@@ -145,7 +157,9 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
         window_candles=snapshot.candles,
         window_source="SNAPSHOT",
     )
-    assert response["reference_state"] == {
+    assert {
+        key: value for key, value in response["reference_state"].items() if key != "display"
+    } == {
         "schema": "lean-reference-state.v1",
         "status": "SERVED",
         "reason": None,
@@ -155,6 +169,51 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
         "h_extended": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
         "prediction_ledger": "NOT_RECORDED_BY_DESIGN",
     }
+    timeout = response["horizon_timeout_state"]
+    assert response["reference_state"]["display"] == {
+        "title": "Descriptive reference",
+        "count_line": (
+            f"In band: {timeout['inside_band_count']} of {timeout['matured_outcome_count']} "
+            f"matured six-bar outcomes over the last {timeout['memory_days']} days ended inside "
+            "today's decision band."
+        ),
+        "direction_line": "Up and Down are split equally: no direction.",
+        "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
+        "honesty_line": (
+            "Not a validated forecast and not a prediction interval. "
+            "Not recorded for scoring."
+        ),
+        "extended_line": "Extended horizon: not modelled.",
+    }
+    assert response["decision_brief"]["probability_type"] == (
+        "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+    )
+    assert response["decision_brief"]["model_readiness"] == "DESCRIPTIVE_REFERENCE_UNVALIDATED"
+    assert response["decision_brief"]["probability_explanation"].startswith(
+        "In band is the share of recent matured six-bar outcomes"
+    )
+    assert response["decision_brief"]["uncalibrated_banner"].startswith(
+        "⚠️ Descriptive historical frequency"
+    )
+    assert response["decision_brief"]["model_readiness_label"].startswith(
+        "Model readiness: Descriptive reference"
+    )
+    assert response["decision_view"]["state"] == "NO_ACCEPTED_CLAIM"
+    assert response["decision_view"]["evidence"]["skill_verdict"] is None
+    assert response["decision_view"]["evidence"]["resolved_outcomes"] is None
+    assert response["decision_view"]["evidence"]["skill_note"] == "NO_SCORED_COHORT_BY_DESIGN"
+    reference_strings = " ".join(
+        str(item)
+        for section in (
+            response["decision_brief"],
+            response["decision_synthesis"],
+            response["decision_view"],
+            response["reference_state"]["display"],
+            response["frontend_display"],
+        )
+        for item in _strings(section)
+    ).lower()
+    assert "heuristic" not in reference_strings and "momentum" not in reference_strings
     assert response["probability_state"] == reference["probability_state"]
     assert set(response["probability_state"]["horizons"]) == {"H_primary"}
     assert response["analysis_hash"] == real_stable_hash(hashed_payloads[0])
@@ -197,6 +256,14 @@ def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
         repository._run_details[response["run_id"]]["detail_payload"]["reference_state"]
         == response["reference_state"]
     )
+    saved_view = build_saved_run_view(response["detail_view"])
+    assert (
+        saved_view["range"]["explanation"] == response["decision_brief"]["probability_explanation"]
+    )
+    assert saved_view["evidence"]["level"] == (
+        "Model readiness: Descriptive reference (pooled matured frequency) — not validated."
+    )
+    assert saved_view["reference"] == response["reference_state"]["display"]
     assert repository._predictions == {}
     assert repository._feature_snapshots == {}
     assert repository._derivatives_snapshots == {}
@@ -264,6 +331,16 @@ def test_reference_fallbacks_are_explicit_and_keep_heuristic_row(monkeypatch, re
     actual = _analyze(timeframe)
     assert actual["reference_state"]["status"] == "UNAVAILABLE"
     assert actual["reference_state"]["reason"] == reason
+    display = actual["reference_state"]["display"]
+    assert display["title"] == "Descriptive reference"
+    if reason == "NOT_NAMED_CELL":
+        assert display["count_line"] == (
+            "Available only for BTC/USDT, ETH/USDT and SOL/USDT on Binance at 15m, 1H and 4H."
+        )
+    else:
+        assert display["count_line"] == (
+            f"Unavailable for this run ({reason}); the percentages shown are the heuristic's."
+        )
     assert service._peek_prediction_persistence(actual)[0]
     if kind == "venue":
         assert adapter.calls == []

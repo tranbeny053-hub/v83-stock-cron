@@ -798,8 +798,12 @@ function savedRunRows(payload, saved) {
         ? decisionEvidenceText(evidence)
         : savedValue(evidence.skill_verdict),
     ],
-    ["Calibration", savedValue(evidence.calibration_status)],
-    ["Reliability", savedValue(evidence.reliability_status)],
+    ...(saved.reference
+      ? []
+      : [
+          ["Calibration", savedValue(evidence.calibration_status)],
+          ["Reliability", savedValue(evidence.reliability_status)],
+        ]),
     // Without a readable gate result there is no disposition to show: the block says so above.
     ...(gateView(saved.gates) ? [[dispositionLabel(null), savedValue(saved.disposition)]] : []),
   ];
@@ -811,8 +815,27 @@ function renderSavedRun(payload, saved) {
   const gates = gateView(saved.gates);
   const range = saved.range || {};
   const sentence = (text, className) => (backendText(text) ? [textBlock("p", text, className)] : []);
+  const referenceBlock = typeof renderReferenceDisplay === "function"
+    ? renderReferenceDisplay(saved.reference)
+    : (() => {
+    const display = saved.reference;
+    if (!display || typeof display !== "object" || typeof display.title !== "string") return null;
+    const block = document.createElement("div");
+    block.className = "reference-display";
+    const title = document.createElement("strong");
+    title.textContent = display.title;
+    block.append(title);
+    for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
+      if (typeof display[key] !== "string" || !display[key].trim()) continue;
+      const line = document.createElement("p");
+      line.textContent = display[key];
+      block.append(line);
+    }
+    return block;
+      })();
   return section("Saved analysis", [
     ...sentence(range.explanation, "decision-detail"),
+    ...(referenceBlock ? [referenceBlock] : []),
     // Without a readable gate result, the backend's note stands in the summary's place, in the
     // neutral style: never the risk or the amber one (the release-prep review's minor M-4).
     ...(gates
@@ -2312,6 +2335,26 @@ function renderDecisionSynthesis(synthesis, payload = {}) {
 // backend's. The owner's UX card prints exactly what this draws (scripts/ux_comprehension).
 function renderDecisionViewSection(payload, view) {
   const gates = gateViewOf(payload);
+  const referenceDisplay =
+    payload.reference_state?.display || payload.detail_view?.reference_state?.display;
+  const referenceBlock = typeof renderReferenceDisplay === "function"
+    ? renderReferenceDisplay(referenceDisplay)
+    : (() => {
+    const display = referenceDisplay;
+    if (!display || typeof display !== "object" || typeof display.title !== "string") return null;
+    const block = document.createElement("div");
+    block.className = "reference-display";
+    const title = document.createElement("strong");
+    title.textContent = display.title;
+    block.append(title);
+    for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
+      if (typeof display[key] !== "string" || !display[key].trim()) continue;
+      const line = document.createElement("p");
+      line.textContent = display[key];
+      block.append(line);
+    }
+    return block;
+      })();
   return section("Decision view", [
     textBlock("p", view.headline, "decision-headline"),
     textBlock("p", view.detail, "decision-detail"),
@@ -2323,9 +2366,31 @@ function renderDecisionViewSection(payload, view) {
     ...(backendText(view.range?.explanation)
       ? [textBlock("p", view.range.explanation, "muted")]
       : []),
+    ...(referenceBlock ? [referenceBlock] : []),
     textBlock("p", view.cost?.label || "", "muted"),
     listBlock(view.evidence?.limitations || []),
   ]);
+}
+
+function renderReferenceDisplay(display) {
+  if (
+    !display ||
+    typeof display !== "object" ||
+    typeof display.title !== "string" ||
+    !display.title.trim()
+  ) return null;
+  const block = document.createElement("div");
+  block.className = "reference-display";
+  const title = document.createElement("strong");
+  title.textContent = display.title;
+  block.append(title);
+  for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"]) {
+    if (typeof display[key] !== "string" || !display[key].trim()) continue;
+    const line = document.createElement("p");
+    line.textContent = display[key];
+    block.append(line);
+  }
+  return block;
 }
 
 function renderStructuredDetail(payload, detailView) {
@@ -2380,7 +2445,9 @@ function renderStructuredDetail(payload, detailView) {
     ...(decisionSection ? [decisionSection] : []),
     ...(savedSection ? [savedSection] : []),
     ...(checksSection ? [checksSection] : []),
-    renderModelQualitySection(payload.decision_synthesis || {}, accepted),
+    ...(payload.reference_state?.status === "SERVED" || saved?.reference
+      ? []
+      : [renderModelQualitySection(payload.decision_synthesis || {}, accepted)]),
     section("Overview", [
       downloadJsonButton(backendResponse),
       keyValueTable([
