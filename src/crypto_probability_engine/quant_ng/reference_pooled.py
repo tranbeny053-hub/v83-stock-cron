@@ -51,6 +51,54 @@ class PooledReferenceUnavailable(Exception):
         super().__init__(f"{reason.value}: {detail}")
 
 
+def build_reference_probability_state(ref: PooledReference, *, epistemic_state: dict) -> dict:
+    """Build the standard probability payload for the pooled reference."""
+    status = "OK" if epistemic_state.get("action") == "ALLOW" else "NULL"
+    null_reason = None if status == "OK" else epistemic_state.get("reason", "EPISTEMIC_VOID")
+    horizons = {}
+    for horizon in ("H_primary", "H_extended"):
+        validate_probability_triplet(ref.p_up_frac, ref.p_down_frac, ref.p_timeout_frac)
+        horizons[horizon] = {
+            "p_up_frac": ref.p_up_frac,
+            "p_down_frac": ref.p_down_frac,
+            "p_timeout_frac": ref.p_timeout_frac,
+            "p_up_user_norm_frac": 0.5,
+            "p_down_user_norm_frac": 0.5,
+            "confidence_frac": 0.0,
+            "news_confidence_adj_frac": 0.0,
+            "status": status,
+            "null_reason": null_reason,
+        }
+    return {
+        "schema_version": "1.1-crypto-probability",
+        "horizons": horizons,
+        "calibration_status": DEFAULT_PHASE1A.calibration_status,
+        "null_reason": null_reason,
+    }
+
+
+def build_reference_timeout_state(ref: PooledReference, *, window_source: str) -> dict:
+    """Build the horizon timeout payload for the pooled reference."""
+    return {
+        "status": "OK",
+        "method": METHODOLOGY_VERSION,
+        "p_timeout_frac": ref.p_timeout_frac,
+        "timeout_is_directional": False,
+        "timeframe": ref.timeframe,
+        "band_frac": ref.band_frac,
+        "inside_band_count": ref.inside_band_count,
+        "matured_outcome_count": ref.matured_outcome_count,
+        "memory_days": ref.memory_days,
+        "lattice_bars": ref.lattice_bars,
+        "horizon_bars": ref.horizon_bars,
+        "outcome_overlap": ref.outcome_overlap,
+        "window_first_close_utc": ref.window_first_close_utc.isoformat().replace("+00:00", "Z"),
+        "window_last_close_utc": ref.window_last_close_utc.isoformat().replace("+00:00", "Z"),
+        "window_source": window_source,
+        "semantics": SEMANTICS,
+    }
+
+
 def bars_required(timeframe: str) -> int:
     if timeframe not in MEMORY_DAYS:
         raise PooledReferenceUnavailable(
