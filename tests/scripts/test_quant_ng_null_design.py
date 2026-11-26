@@ -1498,22 +1498,64 @@ def _unprotected_tmpdir():
             tmp.cleanup()
 
 
-def test_kat_i2_unprotected_tmpdir_discards_a_protected_name(tmp_path, monkeypatch):
+def _forced_tmpdirs(monkeypatch, parent, always=False):
+    """Patch tempfile.TemporaryDirectory so the first name (or every name) holds "5a"."""
     real = tempfile.TemporaryDirectory
     kept = []  # holding each object keeps its finalizer from cleaning up on the helper's behalf
 
     def fake():
-        tmp = real(prefix="tmp615a3" if not kept else "tmp", dir=tmp_path)
+        tmp = real(prefix="tmp615a3" if always or not kept else "tmp", dir=parent)
         kept.append(tmp)
         return tmp
 
     monkeypatch.setattr(tempfile, "TemporaryDirectory", fake)
+    return kept
+
+
+def test_kat_i2_unprotected_tmpdir_discards_a_protected_name(tmp_path, monkeypatch):
+    kept = _forced_tmpdirs(monkeypatch, tmp_path)
     made = []
     with _unprotected_tmpdir() as root:
         made = [tmp.name for tmp in kept]
         assert root == Path(made[-1]) and root.is_dir() and not q._protected_path(root)
         assert len(made) >= 2 and all(q._protected_path(name) for name in made[:-1])
     assert not any(Path(name).exists() for name in made)
+
+
+def test_kat_i2_unprotected_tmpdir_cleans_up_when_the_body_raises(tmp_path, monkeypatch):
+    kept = _forced_tmpdirs(monkeypatch, tmp_path)
+    with pytest.raises(KeyError, match="the body"):
+        with _unprotected_tmpdir():
+            raise KeyError("the body")
+    assert len(kept) >= 2 and not any(Path(tmp.name).exists() for tmp in kept)
+
+
+def test_kat_i2_unprotected_tmpdir_exhaustion_is_loud_and_clean(tmp_path, monkeypatch):
+    kept = _forced_tmpdirs(monkeypatch, tmp_path, always=True)
+    with pytest.raises(AssertionError, match="no unprotected temporary directory in 64 tries"):
+        with _unprotected_tmpdir():
+            pass
+    assert len(kept) == 64 and not any(Path(tmp.name).exists() for tmp in kept)
+
+
+def test_kat_i2_temporary_directories_come_only_from_the_unprotected_tmpdir_helper():
+    """EXP04-T1 NOTE 1: a bare temporary directory would fail by chance again (#365)."""
+    tree = ast.parse(Path(__file__).read_text())
+    calls = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and isinstance(n.func.value, ast.Name)
+        and n.func.value.id == "tempfile"
+        and n.func.attr != "gettempdir"
+    ]
+    helper = next(
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_unprotected_tmpdir"
+    )
+    assert [c.func.attr for c in calls] == ["TemporaryDirectory"]
+    assert helper.lineno <= calls[0].lineno <= helper.end_lineno
+    assert not any(isinstance(n, ast.ImportFrom) and n.module == "tempfile" for n in ast.walk(tree))
 
 
 def _tiny_manifest(stage="KAT"):
