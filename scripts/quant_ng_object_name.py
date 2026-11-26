@@ -1,4 +1,11 @@
-"""Token-safe reversible names for digest-derived local objects."""
+"""Token-safe reversible names for digest-derived local objects.
+
+Scope (OBJ-1 NOTE 1): a name is token-safe only as a WHOLE path component. Concatenating it with
+anything (a suffix such as `_run.json`, a prefix) can form a protected token, so consumers must
+build paths with `object_path` and never append to a name. `object_path` is lexical: it checks
+components and containment, not symlinks or forbidden trees, so a consumer that touches the
+filesystem still needs the fit tool's path checks.
+"""
 
 from __future__ import annotations
 
@@ -70,10 +77,14 @@ def _root_parts(root: Path) -> tuple[str, ...]:
 def object_path(root: str | os.PathLike[str], hex_digest: str) -> Path:
     try:
         root_path = Path(root)
-    except (TypeError, ValueError):
+    except (
+        Exception
+    ):  # a PathLike whose __fspath__ raises is refused, never surfaced (OBJ-1 NOTE 2)
         raise Refusal("root must be an absolute path") from None
-    if not root_path.is_absolute():
+    if not root_path.is_absolute() or "\x00" in str(root_path):
         raise Refusal("root must be an absolute path")
+    if not _root_parts(root_path):
+        raise Refusal("root must not be a filesystem root")
     if not all(is_token_safe(part) for part in _root_parts(root_path)):
         raise Refusal("protected root component")
     name = encode_digest(hex_digest)

@@ -99,7 +99,7 @@ def test_strict_encode_refusals(value: object) -> None:
 @pytest.mark.parametrize(
     "root",
     ["relative/root", "/tmp/F3root", "/tmp/HOLDOUT"],
-    ids=["relative", "uppercase-f3", "uppercase-holdout"],
+    ids=["relative", "uppercase-token-one", "uppercase-token-two"],
 )
 def test_root_refusals(root: str) -> None:
     message = (
@@ -147,10 +147,40 @@ def test_static_module_constraints() -> None:
         if path != SCRIPT:
             assert "quant_ng_object_name" not in path.read_text()
     test_paths = (path for path in (ROOT / "tests").rglob("*.py") if not _blocked(path, blocked))
+    src_paths = (path for path in (ROOT / "src").rglob("*.py") if not _blocked(path, blocked))
     for path in test_paths:
         if path != Path(__file__):
             assert "quant_ng_object_name" not in path.read_text()
+    for path in src_paths:
+        assert "quant_ng_object_name" not in path.read_text()
 
 
 def _blocked(path: Path, tokens: tuple[str, ...]) -> bool:
     return any(token in part.lower() for part in path.parts for token in tokens)
+
+
+class _RaisingPath:
+    def __fspath__(self):
+        raise OSError("refused fspath")
+
+
+@pytest.mark.parametrize(
+    "root, reason",
+    [
+        ("/", "root must not be a filesystem root"),
+        ("/tmp/objects\x00root", "root must be an absolute path"),
+        (_RaisingPath(), "root must be an absolute path"),
+    ],
+    ids=["filesystem-root", "nul-byte", "raising-pathlike"],
+)
+def test_obj1_object_path_refuses_odd_roots(root, reason):
+    with pytest.raises(names.Refusal, match="^" + reason + "$"):
+        names.object_path(root, "0" * 64)
+
+
+def test_obj1_a_bare_name_is_safe_only_as_a_whole_component():
+    # The documented scope: concatenation can form a token, so object_path is the only API.
+    name = names.encode_digest("0" * 60 + "5884")
+    assert names.is_token_safe(name)
+    assert not names.is_token_safe(name + "_run.json")
+    assert "WHOLE path component" in names.__doc__
