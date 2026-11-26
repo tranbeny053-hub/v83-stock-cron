@@ -21,6 +21,12 @@ from crypto_probability_engine.quant_ng.windows import (
 from crypto_probability_engine.utils.invariants import validate_probability_triplet
 
 METHODOLOGY_VERSION = "reference-pooled-tk-v1"
+REFERENCE_METHODOLOGY_VERSION = METHODOLOGY_VERSION
+NAMED_CELLS = frozenset(
+    (symbol, timeframe)
+    for symbol in ("BTC/USDT", "ETH/USDT", "SOL/USDT")
+    for timeframe in ("15m", "1H", "4H")
+)
 HORIZON_BARS = 6
 LATTICE_BARS = 3
 MEMORY_DAYS = MappingProxyType({"15m": 7, "1H": 28, "4H": 28})
@@ -56,7 +62,7 @@ def build_reference_probability_state(ref: PooledReference, *, epistemic_state: 
     status = "OK" if epistemic_state.get("action") == "ALLOW" else "NULL"
     null_reason = None if status == "OK" else epistemic_state.get("reason", "EPISTEMIC_VOID")
     horizons = {}
-    for horizon in ("H_primary", "H_extended"):
+    for horizon in ("H_primary",):
         validate_probability_triplet(ref.p_up_frac, ref.p_down_frac, ref.p_timeout_frac)
         horizons[horizon] = {
             "p_up_frac": ref.p_up_frac,

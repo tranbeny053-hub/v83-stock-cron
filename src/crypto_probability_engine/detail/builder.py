@@ -13,8 +13,9 @@ def build_detail_view(
     provider_state: dict,
     data_quality: dict,
     decision_brief: dict,
+    reference_state: dict | None = None,
 ) -> dict:
-    return {
+    detail = {
         "symbol": symbol,
         "run_id": run_id,
         "analysis_mode": analysis_mode,
@@ -74,3 +75,6 @@ def build_detail_view(
             "calibration_state": quant_result["calibration_state"],
         },
     }
+    if reference_state is not None:
+        detail["reference_state"] = reference_state
+    return detail

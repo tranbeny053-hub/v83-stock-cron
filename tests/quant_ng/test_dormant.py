@@ -133,6 +133,8 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
                 path.read_text(encoding="utf-8"), path, _module_path(path, folder)
             )
             violations.extend((str(path.relative_to(ROOT)), name) for name in found)
+            calls = _dynamic_ng_import_violations(path.read_text(encoding="utf-8"))
+            violations.extend((str(path.relative_to(ROOT)), name) for name in calls)
     assert violations == []
     _found, used = _ng_import_violations(
         SERVING_IMPORTER.read_text(encoding="utf-8"),
@@ -149,10 +151,22 @@ REHEARSAL_QUANT_IMPORT = (
     (("lattice", None),),
 )
 # NG3's dormant wiring (owner R3a, 2026-11-04): the only product statements that may name quant_ng.
+# the Lean reference wiring (owner P3/P4, 2026-11-26), dormant behind LEAN_REFERENCE_ENABLED.
 ALLOWED_NG_IMPORTS = {
-    f"{NG_PREFIX}.pipeline_ng": frozenset({("run_pipeline_ng", None)}),
+    f"{NG_PREFIX}.pipeline_ng": frozenset(
+        {("run_pipeline_ng", None), ("run_pipeline_reference", None)}
+    ),
     f"{NG_PREFIX}.registry": frozenset(
         {("SCHEMA_ID", None), ("SLOT_POLICY", None), ("Refusal", None)}
+    ),
+    f"{NG_PREFIX}.windows": frozenset({("WindowUnavailable", None), ("acquire_window", None)}),
+    f"{NG_PREFIX}.reference_pooled": frozenset(
+        {
+            ("REFERENCE_METHODOLOGY_VERSION", None),
+            ("NAMED_CELLS", None),
+            ("PooledReferenceUnavailable", None),
+            ("bars_required", None),
+        }
     ),
 }
 PILOT_IMPORT_ALLOWANCE = (
@@ -236,6 +250,39 @@ def _ng_import_violations(source: str, path: Path, module_path: str) -> tuple[li
     return violations, used
 
 
+def _dynamic_ng_import_violations(source: str) -> list[str]:
+    """Reject dynamic imports of quant_ng, including the former importlib escape hatch."""
+    violations = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        function = node.func
+        is_dynamic_import = (
+            isinstance(function, ast.Attribute)
+            and function.attr == "import_module"
+            and isinstance(function.value, ast.Name)
+            and function.value.id == "importlib"
+        ) or (isinstance(function, ast.Name) and function.id in {"import_module", "__import__"})
+        argument = node.args[0]
+        if (
+            is_dynamic_import
+            and isinstance(argument, ast.Constant)
+            and isinstance(argument.value, str)
+            and argument.value.startswith(NG_PREFIX)
+        ):
+            violations.append(argument.value)
+    return violations
+
+
+def test_dynamic_import_guard_rejects_former_s3_importlib_form() -> None:
+    former_s3 = (
+        'importlib.import_module("crypto_probability_engine.quant_ng.pipeline_ng")'
+    )
+    assert _dynamic_ng_import_violations(former_s3) == [
+        "crypto_probability_engine.quant_ng.pipeline_ng"
+    ]
+
+
 def test_rehearsal_quant_import_allowance_is_one_exact_node():
     allowed = "from crypto_probability_engine.quant_ng import lattice"
     assert _ng_import_violations(allowed, REHEARSAL_DRIVER, "rehearse_pilot")[0] == []
@@ -299,11 +346,21 @@ def test_direct_gate_allowance_is_narrow() -> None:
 def test_external_ng_import_allowance_rejects_other_forms() -> None:
     """The same function the real-file guard uses: only the two exact statements are exempt."""
     module_path = _module_path(SERVING_IMPORTER, ROOT / "src")
-    pipeline = "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng"
+    pipeline = (
+        "from crypto_probability_engine.quant_ng.pipeline_ng import "
+        "run_pipeline_ng, run_pipeline_reference"
+    )
     registry = (
         "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal"
     )
-    allowed = f"{pipeline}\n{registry}"
+    windows = (
+        "from crypto_probability_engine.quant_ng.windows import WindowUnavailable, acquire_window"
+    )
+    reference = (
+        "from crypto_probability_engine.quant_ng.reference_pooled import "
+        "NAMED_CELLS, REFERENCE_METHODOLOGY_VERSION, PooledReferenceUnavailable, bars_required"
+    )
+    allowed = f"{pipeline}\n{registry}\n{windows}\n{reference}"
     assert _ng_import_violations(allowed, SERVING_IMPORTER, module_path) == (
         [],
         set(ALLOWED_NG_IMPORTS),
@@ -311,6 +368,7 @@ def test_external_ng_import_allowance_rejects_other_forms() -> None:
     rejected = (
         "import crypto_probability_engine.quant_ng.pipeline_ng",
         "import crypto_probability_engine.quant_ng",
+        "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
         f"{pipeline} as run",
         "from crypto_probability_engine.quant_ng.registry import serving_state",
         "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY",
@@ -325,6 +383,9 @@ def test_external_ng_import_allowance_rejects_other_forms() -> None:
     for source in rejected:
         found, _used = _ng_import_violations(source, SERVING_IMPORTER, module_path)
         assert found, source
+    assert _dynamic_ng_import_violations(
+        'importlib.import_module("crypto_probability_engine.quant_ng.pipeline_ng")'
+    )
     other = ROOT / "src/crypto_probability_engine/api/errors.py"
     found, _used = _ng_import_violations(pipeline, other, _module_path(other, ROOT / "src"))
     assert found
