@@ -2,6 +2,9 @@
 
 It validates a capture log as a Python mapping. It does no I/O and no network, is wired into
 nothing, and refuses every ARCHIVE log.
+
+`Refusal` is the class this module loads through the fetch tool, so a caller catches
+`quant_ng_capture_log.Refusal`; each loader of the fit tool makes its own class.
 """
 
 from __future__ import annotations
@@ -11,7 +14,6 @@ import re
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
@@ -97,12 +99,14 @@ REFUSAL_REASONS = frozenset(
         "unverified share above the cap",
     }
 )
-_INSTANT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")
+_INSTANT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$", re.ASCII)
 _HEX = re.compile(r"^[0-9a-f]{64}$")
 _IMF = re.compile(
-    r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) "
-    r"\d{4} \d{2}:\d{2}:\d{2} GMT$"
+    r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), (\d{2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) "
+    r"(\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$",
+    re.ASCII,
 )
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 def _refuse(reason: str = "capture log malformed") -> None:
@@ -132,15 +136,23 @@ def _one_of(value: Any, allowed: frozenset[str] | set[str]) -> bool:
 
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-_NEVER_REQUESTED = frozenset({"BTCUSDT", "ETHUSDT"})
 
 
 def _archive_path(path: Any) -> bool:
-    """True for a layout path; refuse BTCUSDT and ETHUSDT by name (OP-2, ruled; fetch.py's text)."""
-    match = LAYOUT.fullmatch(path) if isinstance(path, str) else None
-    if match is not None and match.group(2) in _NEVER_REQUESTED:
-        _refuse("BTCUSDT and ETHUSDT are never requested")
-    return match is not None
+    """Fetch's own archive-path check (`_archive_fields`), reused rather than copied.
+
+    A path that is not an archive kline path is False (malformed here). Fetch's other refusals
+    propagate with fetch's text: a protected component, and BTCUSDT or ETHUSDT (OP-2, ruled).
+    """
+    if not isinstance(path, str):
+        return False  # fetch would call a non-string "protected path"; here it is malformed
+    try:
+        _FETCH._archive_fields(path, [])
+    except Refusal as exc:
+        if str(exc) == "not an archive kline path":
+            return False
+        raise
+    return True
 
 
 def date_check(
@@ -152,22 +164,35 @@ def date_check(
 ) -> str:
     if not _integer(tolerance_seconds) or tolerance_seconds < 0:
         _refuse()
-    if date_header is None:
-        return "ABSENT"
-    if not isinstance(date_header, str) or not _IMF.fullmatch(date_header):
-        return "UNPARSEABLE"
-    try:
-        parsed = parsedate_to_datetime(date_header)
-    except (TypeError, ValueError, OverflowError):
-        return "UNPARSEABLE"
-    if _WEEKDAYS[parsed.weekday()] != date_header[:3]:
-        return "UNPARSEABLE"
     requested, last_byte = _instant(requested_at_utc), _instant(last_byte_at_utc)
     if requested is None or last_byte is None:
         _refuse()
-    date_value = parsed.replace(tzinfo=UTC)
-    lower = requested.replace(microsecond=0) - timedelta(seconds=tolerance_seconds)
-    upper = last_byte.replace(microsecond=0) + timedelta(seconds=tolerance_seconds)
+    if date_header is None:
+        return "ABSENT"
+    match = _IMF.fullmatch(date_header) if isinstance(date_header, str) else None
+    if match is None:
+        return "UNPARSEABLE"
+    weekday, day, month, year, hour, minute, second = match.groups()
+    try:
+        # Built from the header's own fields, so a year such as 0026 stays year 26.
+        date_value = datetime(
+            int(year),
+            _MONTHS.index(month) + 1,
+            int(day),
+            int(hour),
+            int(minute),
+            int(second),
+            tzinfo=UTC,
+        )
+    except ValueError:
+        return "UNPARSEABLE"
+    if _WEEKDAYS[date_value.weekday()] != weekday:
+        return "UNPARSEABLE"
+    try:
+        lower = requested.replace(microsecond=0) - timedelta(seconds=tolerance_seconds)
+        upper = last_byte.replace(microsecond=0) + timedelta(seconds=tolerance_seconds)
+    except OverflowError:
+        _refuse()
     return "WITHIN_TOLERANCE" if lower <= date_value <= upper else "BEYOND_TOLERANCE"
 
 
@@ -303,6 +328,8 @@ def validate_capture_log(log: Any, *, date_tolerance_seconds: int | None = None)
 
 def check_manifest_binding(log: Any, manifest: Any) -> None:
     validate_capture_log(log)
+    if log["run_status"] != "COMPLETE":
+        _refuse("capture run not complete")
     if log["step"] not in {"acquisition", "recapture"}:
         _refuse("capture log not bound")
     if not isinstance(manifest, Mapping) or not isinstance(manifest.get("files"), list):
@@ -332,5 +359,10 @@ def check_manifest_binding(log: Any, manifest: Any) -> None:
                 _refuse("capture log not bound")
             if digest is not None and digest != record["body_sha256"]:
                 _refuse("capture log not bound")
+        # Fetch writes class "missing" only when a payload is absent, so the rule runs both ways.
+        if row.get("class") == "missing" and all(
+            record["outcome"] == "BODY_2XX" for record in (zip_record, checksum_record)
+        ):
+            _refuse("capture log not bound")
     if set(zips) != set(rows) or set(checksums) != {path + ".CHECKSUM" for path in rows}:
         _refuse("capture log not bound")

@@ -415,3 +415,168 @@ def test_kat_date_check_refuses_a_negative_tolerance():
         capture.date_check(
             None, "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z", tolerance_seconds=-1
         )
+
+
+# ---- LANE2-P1 fold: the contract's literal reasons, the other steps, and date_check's edges ----
+
+CONTRACT_REASONS = {
+    # CTC d2 §10.2, one string per name
+    "capture not authorized",
+    "capture log malformed",
+    "capture instant decreased",
+    "host not allowlisted",
+    "redirect refused",
+    "not https",
+    "capture run not complete",
+    "capture log missing",
+    "capture log not bound",
+    "recapture not linked",
+    "recapture interval too short",
+    "changelog read does not bracket the file reads",
+    "changelog contradicts capture time",
+    "as-of not before capture",
+    "scope sentence incomplete",
+    # CTC d2 §10.1, the five fetch.py refusals
+    "only the mock transport exists",
+    "object is not a mock object",
+    "output folder is not empty",
+    "request cap exceeded",
+    "unverified share above the cap",
+}
+
+
+def test_kat_refusal_reasons_are_exactly_the_contracts():
+    assert len(CONTRACT_REASONS) == 20 and capture.REFUSAL_REASONS == CONTRACT_REASONS
+
+
+def single_record_log(step, role, path):
+    log, _ = fixture()
+    record = log["records"][0] | {"role": role, "path": path, "seq": 1}
+    log.update(step=step, records=[record], records_sha256=[H])
+    return log
+
+
+LISTING_PATH = "data/spot/daily/klines/SOLUSDT/1h/"
+CHANGELOG_PATH = "CHANGELOG.md"
+
+
+def test_kat_listing_and_changelog_logs_pass():
+    capture.validate_capture_log(single_record_log("listing", "listing_page", LISTING_PATH))
+    changelog = single_record_log("changelog", "changelog", CHANGELOG_PATH)
+    capture.validate_capture_log(changelog)
+    changelog["previous_capture_log_sha256"] = "e" * 64
+    capture.validate_capture_log(changelog)
+
+
+@pytest.mark.parametrize(
+    "step,role,path,previous",
+    [
+        ("listing", "zip", ZIP_OK, None),
+        ("listing", "listing_page", "", None),
+        ("listing", "listing_page", LISTING_PATH, "e" * 64),
+        ("changelog", "listing_page", CHANGELOG_PATH, None),
+        ("changelog", "changelog", "", None),
+        ("changelog", "changelog", CHANGELOG_PATH, "not-hex"),
+    ],
+    ids=[
+        "listing-with-zip-role",
+        "listing-empty-path",
+        "listing-with-previous",
+        "changelog-with-listing-role",
+        "changelog-empty-path",
+        "changelog-bad-previous",
+    ],
+)
+def test_kat_listing_and_changelog_mutations(step, role, path, previous):
+    log = single_record_log(step, role, path)
+    log["previous_capture_log_sha256"] = previous
+    raises(log)
+
+
+@pytest.mark.parametrize("step", ["listing", "changelog"], ids=["listing", "changelog"])
+def test_kat_binding_refuses_a_step_without_files(step):
+    role, path = (
+        ("listing_page", LISTING_PATH) if step == "listing" else ("changelog", CHANGELOG_PATH)
+    )
+    _, manifest = fixture()
+    with pytest.raises(capture.Refusal, match="^capture log not bound$"):
+        capture.check_manifest_binding(single_record_log(step, role, path), manifest)
+
+
+def test_kat_binding_refuses_a_refused_run():
+    log, manifest = fixture()
+    log["run_status"], log["run_end_utc"] = "REFUSED", None
+    log["refusal"] = "request cap exceeded"
+    capture.validate_capture_log(log)
+    with pytest.raises(capture.Refusal, match="^capture run not complete$"):
+        capture.check_manifest_binding(log, manifest)
+
+
+def test_kat_binding_refuses_class_missing_with_both_payloads():
+    log, manifest = fixture()
+    manifest["files"][0]["class"] = "missing"
+    with pytest.raises(capture.Refusal, match="^capture log not bound$"):
+        capture.check_manifest_binding(log, manifest)
+
+
+@pytest.mark.parametrize(
+    "header,expected",
+    [
+        ("Mon, 01 Jan 2024 00:00:10 UTC", "UNPARSEABLE"),
+        ("Mon, 01 Jan 2024 00:00:10 EST", "UNPARSEABLE"),
+        ("Mon, ０１ Jan 2024 00:00:10 GMT", "UNPARSEABLE"),
+        ("Mon, 31 Feb 2024 00:00:10 GMT", "UNPARSEABLE"),
+        ("Mon, 01 Jan 0024 00:00:10 GMT", "BEYOND_TOLERANCE"),
+        ("Monday, 01-Jan-24 00:00:10 GMT", "UNPARSEABLE"),
+    ],
+    ids=["utc-zone", "est-zone", "fullwidth-digits", "invalid-day", "year-0024", "rfc850-form"],
+)
+def test_kat_date_check_edges(header, expected):
+    assert (
+        capture.date_check(
+            header, "2024-01-01T00:00:10Z", "2024-01-01T00:00:10Z", tolerance_seconds=2
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "requested,tolerance",
+    [("2024-01-01T00:00:10Z", 10**14), ("0001-01-01T00:00:00Z", 10)],
+    ids=["huge-tolerance", "year-one-instant"],
+)
+def test_kat_date_check_overflow_is_a_refusal(requested, tolerance):
+    with pytest.raises(capture.Refusal, match="^capture log malformed$"):
+        capture.date_check(
+            "Mon, 01 Jan 2024 00:00:10 GMT", requested, requested, tolerance_seconds=tolerance
+        )
+
+
+@pytest.mark.parametrize(
+    "path,reason",
+    [
+        (
+            "data/spot/daily/klines/F3USDT/1h/F3USDT-1h-2024-01-01.zip",
+            "protected path",
+        ),
+        (
+            "data/spot/daily/klines/SOLUSDT/1h/ADAUSDT-4h-2024-01-01.zip",
+            "capture log malformed",
+        ),
+        (
+            "data/spot/daily/klines/SOLUSDT/1h/SOLUSDT-1h-2024-13-45.zip",
+            "capture log malformed",
+        ),
+    ],
+    ids=["protected-component", "filename-mismatch", "invalid-period"],
+)
+def test_kat_zip_paths_use_the_fetch_check(path, reason):
+    log, _ = fixture()
+    log["records"][0]["path"] = path
+    raises(log, reason)
+
+
+def test_kat_unicode_digit_instant_is_malformed():
+    log, _ = fixture()
+    log["run_start_utc"] = "２024-01-01T00:00:00Z"
+    raises(log)
