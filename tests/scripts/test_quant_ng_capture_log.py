@@ -573,7 +573,15 @@ def test_kat_date_check_overflow_is_a_refusal(requested, tolerance):
 def test_kat_zip_paths_use_the_fetch_check(path, reason):
     log, _ = fixture()
     log["records"][0]["path"] = path
+    log["records"][1]["path"] = (
+        path + ".CHECKSUM"
+    )  # so pairing holds and only the path check refuses
     raises(log, reason)
+
+
+def test_kat_date_check_refuses_an_invalid_instant_even_without_a_header():
+    with pytest.raises(capture.Refusal, match="^capture log malformed$"):
+        capture.date_check(None, "not an instant", "2024-01-01T00:00:10Z", tolerance_seconds=2)
 
 
 def test_kat_unicode_digit_instant_is_malformed():
