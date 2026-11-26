@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import get_args
 
 import pytest
+from jsonschema import Draft202012Validator, RefResolver
 from pydantic import ValidationError
 
 import crypto_probability_engine.api.analysis_service as service
@@ -14,6 +15,7 @@ from crypto_probability_engine.adapters.candle_history import CandleHistory
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
+    AnalysisResponse,
     DecisionBrief,
     LeanReferenceReason,
     LeanReferenceState,
@@ -46,6 +48,21 @@ class HistoryAdapter:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
+
+
+def _response_validator():
+    root = Path(__file__).resolve().parents[2]
+    response_schema = json.loads((root / "schemas/response.schema.json").read_text())
+    schema_store = {
+        "quant.schema.json": json.loads((root / "schemas/quant.schema.json").read_text()),
+        "detail_view.schema.json": json.loads(
+            (root / "schemas/detail_view.schema.json").read_text()
+        ),
+    }
+    return Draft202012Validator(
+        response_schema,
+        resolver=RefResolver.from_schema(response_schema, store=schema_store),
+    )
 
 
 def _strings(value):
@@ -426,6 +443,47 @@ def test_served_15m_fetches_one_history_request_of_678(monkeypatch):
     response = _analyze("15m")
     assert response["reference_state"]["status"] == "SERVED"
     assert adapter.calls == [("BTC/USDT", "15m", 678)]
+
+
+def test_whole_analysis_response_validates_for_reference_and_fallback_paths(monkeypatch):
+    snapshot = _setup(monkeypatch)
+    monkeypatch.setattr(
+        service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+    )
+    served_4h = _analyze()
+
+    snapshot = _setup(monkeypatch, timeframe="15m", count=205)
+    monkeypatch.setattr(
+        service,
+        "_reference_history_adapter",
+        lambda _settings: HistoryAdapter(_historical_window(snapshot)),
+    )
+    served_15m = _analyze("15m")
+
+    _setup(monkeypatch, timeframe="15m", count=205)
+    monkeypatch.setattr(
+        service,
+        "_reference_history_adapter",
+        lambda _settings: HistoryAdapter(
+            ProviderError("FAILED", "mock history failure", provider="binance")
+        ),
+    )
+    fallback = _analyze("15m")
+
+    _setup(monkeypatch)
+    monkeypatch.setattr(service, "LEAN_REFERENCE_ENABLED", False)
+    heuristic = _analyze()
+
+    for name, response in (
+        ("served 4H reference", served_4h),
+        ("served 15m reference", served_15m),
+        ("HISTORY_FAILED fallback", fallback),
+        ("switch-off heuristic", heuristic),
+    ):
+        validator = _response_validator()
+        errors = list(validator.iter_errors(response))
+        assert errors == [], f"{name} schema errors: {errors}"
+        AnalysisResponse.model_validate(response)
 
 
 @pytest.mark.parametrize(

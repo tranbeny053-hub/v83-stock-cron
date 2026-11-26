@@ -298,6 +298,89 @@ def test_response_schema_keeps_prior_contract_outside_ng_and_reference_additions
     current["properties"]["decision_brief"]["properties"]["probability_type"] = {
         "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
     }
+    assert current["properties"]["decision_brief"]["allOf"] == [
+        {
+            "if": {
+                "properties": {
+                    "probability_type": {
+                        "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+                    }
+                }
+            },
+            "then": {
+                "required": ["calibration_status_reason", "reliability_status_reason"],
+                "properties": {
+                    "calibration_status": {"type": "null"},
+                    "reliability_status": {"type": "null"},
+                    "calibration_status_reason": {"const": "NO_SCORED_COHORT_BY_DESIGN"},
+                    "reliability_status_reason": {"const": "NO_SCORED_COHORT_BY_DESIGN"},
+                },
+            },
+            "else": {
+                "properties": {
+                    "calibration_status": {"type": "string"},
+                    "reliability_status": {"type": "string"},
+                    "calibration_status_reason": {"type": ["null"]},
+                    "reliability_status_reason": {"type": ["null"]},
+                }
+            },
+        }
+    ]
+    assert current["allOf"] == [
+        {
+            "if": {
+                "properties": {
+                    "decision_brief": {
+                        "properties": {
+                            "probability_type": {
+                                "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+                            }
+                        }
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "decision_synthesis": {
+                        "properties": {
+                            "model_quality_summary": {
+                                "required": [
+                                    "calibration_status_reason",
+                                    "reliability_status_reason",
+                                ],
+                                "properties": {
+                                    "calibration_status": {"type": "null"},
+                                    "reliability_status": {"type": "null"},
+                                    "calibration_status_reason": {
+                                        "const": "NO_SCORED_COHORT_BY_DESIGN"
+                                    },
+                                    "reliability_status_reason": {
+                                        "const": "NO_SCORED_COHORT_BY_DESIGN"
+                                    },
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+            "else": {
+                "properties": {
+                    "decision_synthesis": {
+                        "properties": {
+                            "model_quality_summary": {
+                                "properties": {
+                                    "calibration_status": {"type": "string"},
+                                    "reliability_status": {"type": "string"},
+                                    "calibration_status_reason": {"type": ["null"]},
+                                    "reliability_status_reason": {"type": ["null"]},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    ]
     current["properties"]["decision_brief"].pop("allOf")
     current.pop("allOf")
     for name in ("probability_explanation", "uncalibrated_banner", "model_readiness_label"):

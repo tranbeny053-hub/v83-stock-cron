@@ -320,6 +320,19 @@ def test_dynamic_import_guard_rejects_former_s3_importlib_form() -> None:
     ]
 
 
+def test_nonliteral_dynamic_import_guard_flags_dynamic_names_only() -> None:
+    assert _nonliteral_dynamic_import_violations(
+        "import importlib\nimportlib.import_module(name)"
+    ) == [2]
+    assert _nonliteral_dynamic_import_violations(
+        "from importlib import import_module\nimport_module(f'x{y}')"
+    ) == [2]
+    assert _nonliteral_dynamic_import_violations("__import__(a + b)") == [1]
+    assert _nonliteral_dynamic_import_violations(
+        'import importlib\nimportlib.import_module("json")'
+    ) == []
+
+
 def test_rehearsal_quant_import_allowance_is_one_exact_node():
     allowed = "from crypto_probability_engine.quant_ng import lattice"
     assert _ng_import_violations(allowed, REHEARSAL_DRIVER, "rehearse_pilot")[0] == []

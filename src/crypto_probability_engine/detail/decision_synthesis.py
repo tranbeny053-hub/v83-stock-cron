@@ -151,6 +151,10 @@ def build_decision_synthesis(
         },
     }
     if methodology == "DESCRIPTIVE_REFERENCE":
+        result["model_quality_summary"]["calibration_status"] = None
+        result["model_quality_summary"]["calibration_status_reason"] = (
+            "NO_SCORED_COHORT_BY_DESIGN"
+        )
         result["model_quality_summary"]["reliability_status"] = None
         result["model_quality_summary"]["reliability_status_reason"] = (
             "NO_SCORED_COHORT_BY_DESIGN"
