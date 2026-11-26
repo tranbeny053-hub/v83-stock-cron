@@ -1,81 +1,185 @@
 # STATE
 
-Updated: 2026-11-24 (**THE DORMANT REGISTRY v2 IS ON MAIN (#361 → M94 7afc72e5): NGA v2's vocabulary
-and record shapes, and every claim, authorization and permission refused. PRODUCTION IS UNCHANGED: D
-49ab0855 / UCPE-PROD-NG4P-20261118-B. THE PILOT WINDOW RUNS 2026-11-23T00:00:00Z –
+Updated: 2026-11-26 (**THE EXP-04 STAGE-1 SYNTHETIC HARNESS IS ON MAIN (#365 → M98 b44942bb):
+SYNTHETIC ONLY, NO LOOK, NO CLAIM; ITS ONE VALIDATION RUN IS CONSUMED AND IS NEVER RERUN. PRODUCTION
+IS UNCHANGED: D 49ab0855 / UCPE-PROD-NG4P-20261118-B. THE PILOT WINDOW RUNS 2026-11-23T00:00:00Z –
 2026-12-07T00:00:00Z (DAY-7 CHECKPOINT 2026-11-30T00:00:00Z); NO SPACE CHANGE INSIDE IT. NEVER RERUN
 THE DEPLOY OF 49ab0855, THE APPLY (44133908695) OR PREFLIGHT RUNS 43916685548, 44012717250,
 44039032076 OR 44113873249. THE CREDENTIAL STEP STAYS OWNER-ATTESTED (NOT INDEPENDENTLY VERIFIED).
 NGA IS STILL PROPOSED, NOT ADOPTED. NO FORECAST-QUALITY CLAIM OR DIRECTIONAL PERMISSION IS
 REACHABLE.**
-- The owner (verbatim below), 2026-11-19, 2026-11-24 and 2026-11-25 (ICT): the UOR relay; the NG6
-  rulings NG6-D1 = A, NG6-D2 and NG6-D3; the T3 for this batch.
-- **THE DORMANT REGISTRY v2 (#361 → M94 7afc72e5).**
-  src/crypto_probability_engine/quant_ng/registry.py gains quant-ng-registry.v2: research status
-  (NONE, SHADOW, TRANSFER, HISTORICALLY_CONFIRMED, BASE_RATE_EQUIVALENT, REJECTED), claim status
-  (NOT_RUN, SUPPORTED_FOR_NAMED_SCOPE, NOT_SUPPORTED, INCONCLUSIVE, UNINFORMATIVE), serving state
-  (F.3's six plus HOLD_HIDDEN_REFERENCE, provisional), five boolean permission flags
-  (numerical_availability, historical_evidence, prospective_support, display, directional), the
-  claim-record and authorization-reference shapes of the B-NG6 contract note §3 (NG6-D2). It
-  validates each record's structure first and then refuses every authorization, claim, true flag,
-  non-hold serving state, research status other than NONE/SHADOW and claim status other than
-  NOT_RUN, so a record's presence never counts; E1_OPERATIONAL (the TEST_ONLY pilot) and
-  E4_USER_REQUESTED populations are refused by name. It returns an immutable snapshot read once from
-  the input, and ServingState now refuses any status but NONE/SHADOW and any other slot policy. v1
-  is unchanged and stays the served schema (analysis_service's empty registry; validate_registry
-  still refuses v2; only serving_state dispatches). pipeline_ng, analysis_service, decision_view's
-  four acceptance blockers and its accepted-state guard are untouched. Open for the owner
-  (provisional, unreachable today): NG6-R1 how grants map to flags and serving states; NG6-R2 how a
-  cell's claim status derives from its records; NG6-R3 the per-cell serving-state vocabulary beyond
-  the provisional hold value; NG6-R4 NONE and an absent cell both serve NONE; NG6-R5 whether C-hier
-  (EXP-05) becomes a claim type. Contract: .work/ng6_registry_20261124/NG6_REGISTRY_V2_CONTRACT.md
-  d2. Codex: task-1082 (NEEDS_DECISION: d2 did not enumerate the vocabularies); the master set them
-  to MASTER_PLAN_v2.md:84-85, made every caller mapping read once and reordered the dormant refusals
-  so each is reachable alone; after review NG6-C1 (the docs' existing text restored byte for byte, a
-  fixed flag order, v1's message precedence in serving_state, the sink and snapshot tests) mutation
-  probes 23 of 23 caught under PYTHONHASHSEED 1–3 (17 of 21 at 9d85469, 21 of 21 at a092ce2).
-  VERIFY=PASS 9124 at its head.
-- **THE CHANGELOG (#360 → M93 73d5c7a5):** the entry for #356, #357 and #358, with the rule that an
-  authored migration must be registered like a top-level one.
-- **THE UOR RELAY** of the NG4P-B release: DELIVERED 2026-11-19 on the owner's word (message
-  897a6a85-6de8-466e-883a-0a89f1824094) and ACKNOWLEDGED the same day by the UOR loop-holder (UOR
-  record A10_UCPE_NG4P_RELAY_RECEIVED_20261119): received as informational data, nothing asked of
-  UCPE; what each UOR reader expects is UOR's to state
-  (.work/ng4_window_20261123/UOR_RELAY_LOG_20261119.md).
+- The owner (verbatim below), 2026-11-25 (ICT): the EXP-04 lanes (S = C, P, 7.7, the second lane,
+  licensing, H2-B1 deferred, the docs, PROTECT); the resume; the EXP04-C1 rulings (OD-EXP04-1 = A,
+  1a, OD-EXP04-2 items 1–6, OD-EXP04-3 = A; T3 held for one batch); and 2026-11-26 (ICT): the T3 for
+  this batch and the second T3, for the harness's CI repair.
+- **THE EXP-04 STAGE-1 HARNESS (#365 → M98 b44942bb).** scripts/quant_ng_null_design.py and its test
+  file (plus one docs/TOOLING_INVENTORY.md row): a synthetic-only null and power harness for the
+  universe claim's inference design, built to .work/exp04_stage1_20261125/EXP04_STAGE1_PREREG.d3.md
+  (sha256 94e6b1ee…) and EXP04_STAGE1_HARNESS_SPEC.d3.md (sha256 8c57cad2…), dated amendments of the
+  frozen d2/d2a. No network, no child process, no real data; it reads only its own source (for its
+  digest), the manifests and reports it wrote, and the additions file given to select and manifest;
+  an audit guard as in scripts/quant_ng_fit.py. Its ONE validation run (manifest cc81488d…, recorded
+  before the run in commit e849c4c; namespace UCPE-EXP04-STAGE1-v2; 975 scenarios, 60,564 size and
+  257,742 power cells; 5,866.6 s; 0 restarts; consumed marker COMPLETE) reported COMPUTED with every
+  self-check PASS. Per reading, read alone: the four E65 readings (α 0.05, 0.025, 0.0125, 0.025/3)
+  are STAGE1_PASS_CONDITIONAL with TH_MC/H065, MET only at the largest tested effect pair (1.6, 0.8)
+  (and (0.8, 0.4) at α 0.05, L 104); the four E85 readings are STOP_INSUFFICIENT_POWER with
+  TH_MC/H085 (size VALID, power below the PROPOSED targets at every pair: at d = 0, ρ = 0.9 the
+  δ_weakest power is 0.0000–0.2085); every reading's SENSITIVITY class is INVALID in up to four
+  families (AR(1) overlay, selection on apparent recent performance, slow or large regime-mean
+  shifts and, at E85 with α ≤ 0.025, heavy tails ν = 3; the worst, AR(1), inflates size to 0.18954
+  [0.18711, 0.19198] at nominal 0.05). Every rate carries its exact Clopper–Pearson interval
+  (.work/exp04_stage1_20261125/VAL_RUN_RECORD.md, VAL_TABLES.md). Every constant stays PROPOSED and
+  none is adopted; each reading is read only under its own label (7.7), with no joint or
+  programme-wide error claim; synthetic size and power do not establish real-data validity or remove
+  survivorship bias (S = C).
+- **ITS PR'S CI REPAIR (2026-11-26).** #365's first CI run, at the reviewed head e849c4c5, failed 1
+  of 9,261 tests: a random temporary-directory name (tmp615a3l43) held "5a", and the harness refuses
+  any path with a protected component, by design. #365 was held, and the owner's second T3 (verbatim
+  below) took the test-only repair instead: 9611836a and its NOTE fold 1beab4bd. The module (sha256
+  75cc8dd5…) is unchanged. The two child-process tests take a clean temporary root, and the tests
+  pin that; probes 11 of 11 killed; the gate PASS, 9,265 tests. Its review: EXP04-T1 PASS on
+  9611836a (3 NOTE; NOTE 1–2 folded, NOTE 3 no change), then EXP04-T1-R2 PASS on 1beab4bd.
+- **INCIDENT M1 (2026-11-25).** A master mutation probe fell through a removed refusal into the full
+  namespace-v1 validation evaluation inside pytest's temporary folder (unread, since deleted). Under
+  PREREG §4.5(5) those draws counted as seen, so the owner ruled a new namespace (v2) under prereg
+  d3 and spec d3, and the test session now refuses every DEV or VAL draw
+  (.work/exp04_stage1_20261125/INCIDENT_M1_VAL_SEEDS_EXPOSED.md).
+- **THE CHANGELOG (#363 → M96 6d727875):** the entry for #361.
+- **THE DOC FIX (#364 → M97 6ab4d0f2):** docs/NG_SCALE_CONTRACTS.md's stale sentences made current.
+- **THE SECOND LANE, LOCAL ONLY** (.work/lane2_20261125/): the F-SURV wording, the capture-time
+  contract and the D2/D4/D5 reconciliation (drafts, reviewed); the licensing audit of
+  binance-public-data issue #502 (a contributor's clarification, not binding permission) and the one
+  inquiry to legal@ and data.license@ — NOT sent. No archive access, no data access, no third-party
+  contact.
 - **THE PILOT WINDOW, passively** (raw readings under .work/ng4_window_20261123/obs/ with
-  SHA256SUMS.txt): the Space RUNNING at D with 1 of 1 replicas at each of four readings
-  (2026-11-19T05:43Z and 08:04Z, 2026-11-24T15:52Z and 16:42Z; sha and lastModified
-  2026-11-18T14:16:24Z unchanged); every scheduled keepalive, resolver and guard run green (40 of 40
-  each), the longest gap 12.5 h (normal; I5 is > 24 h); the EXP-09 route 0 runs. A same-sha restart
-  is not visible passively.
+  SHA256SUMS.txt): the Space RUNNING at D with 1 of 1 replicas at every reading through
+  2026-11-26T01:35Z (sha and lastModified 2026-11-18T14:16:24Z unchanged); every scheduled
+  keepalive, resolver and guard run green (40 of 40 each), the longest gap 13.1 h (normal; I5 is >
+  24 h); the EXP-09 route 0 runs. A same-sha restart is not visible passively.
 - **UOR HOLD #4** still stands: the local main checkout stays at
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0.
 - **THE REVIEW.** One independent reviewer: session local_6aa4983c… (claude-opus-5-5, xhigh,
-  read-only). The registry v2 contract: ONE round (NG6-S1: PASS_WITH_AMENDMENTS, 6 MINOR, 4 NOTE;
-  all folded). The code: ONE round (NG6-C1: FINDINGS, 1 MAJOR, 3 MINOR, 3 NOTE; all folded) and ONE
-  delta round (R2: PASS). This record: ONE round (ST-N1: PASS_WITH_AMENDMENTS, 5 MINOR; folded
-  without another round, as the reviewer allowed).
-- Process: Codex delegations 1 (task-1082, NEEDS_DECISION, completed by the master); GPT sidecar
-  consultations 0; paid API $0. Every SEND THIS stated its recommended effort level.
+  read-only). EXP-04: the design ONE round (EXP04-S1: PASS_WITH_AMENDMENTS) and ONE delta (EXP04-S2:
+  PASS_WITH_AMENDMENTS, folded); the code ONE round (EXP04-C1: HOLD, 2 MAJOR, 5 MINOR, 6 NOTE), then
+  the master's repair R-C1 and ONE narrow delta (EXP04-C2: PASS_WITH_AMENDMENTS; its 2 MINOR and
+  NOTE 1–2 folded, NOTE 3 needed no change) and ONE fold read-back (EXP04-C2-R2: PASS; NOTE 1 folded
+  into the probe runner, NOTE 2 followed); the validation record, this record and the T3 package ONE
+  round (EXP04-F1: PASS_WITH_AMENDMENTS, 2 MINOR and 7 NOTE, folded). The harness PR's CI repair:
+  ONE round (EXP04-T1: PASS, 3 NOTE; NOTE 1–2 folded, NOTE 3 needed no change) and ONE fold
+  read-back (EXP04-T1-R2: PASS, 1 optional NOTE, not folded). The lane-2 drafts and the two doc
+  branches: ONE round and ONE delta (LANE2-R1, R2). This record: EXP04-F1 on draft r1
+  (PASS_WITH_AMENDMENTS, 2 MINOR and 7 NOTE; folded into r2), then EXP04-F1-R2 PASS on r2 (its
+  optional wording folded as r3), then ONE narrow exact-delta check of the execution-time wording
+  and values against r3 (EXP04-X1: PASS; its cosmetic NOTE 2 folded in the reviewer's words and NOTE
+  3 followed (the run records saved raw); NOTE 1 is left for a later record).
+- Process: Codex delegations 4 (task-1083 to task-1086, the four delegations of the specification's
+  partition, each re-gated and repaired by the master); GPT sidecar consultations 0; paid API $0.
+  Model substitution: the owner asked for Fable XHIGH; this master session is claude-opus-5-5 xhigh
+  and cannot switch itself; the scientific drafts d1/d2 were written by a Fable xhigh subagent; the
+  reviewer is claude-opus-5-5 xhigh. The defect classes (divergence from the binding text; tests
+  that bypass the run's path) recurred beyond two attempts and were escalated (OD-EXP04-3 = A).
+  Every SEND THIS stated its recommended effort level.
 - Nothing else changed: no dispatch of any workflow (the EXP-09 route has never run), no production
   database read or write, no credential handling, no grant, no Space setting or secret change, no
   push to hf, no product network or data fetch beyond the Space's public metadata, no real data, no
-  F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD and H2 are unchanged; the NG6 rulings
-  adopt no NGA science and activate no serving behaviour.
+  historical fetch, no protected look, no F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4
+  KEEP_HOLD, H2 (H2-B1 deferred; the open rulings, pi_T and the production hold) and the four
+  acceptance blockers are unchanged.
 - CARRIED OVER, still open: passive checks through the window; the day-7 checkpoint
   (2026-11-30T00:00Z, no action); the EXP-09 read, one owner-authorized dispatch, not before
-  2026-12-07T00:10Z for the end-of-window read (else END_NOT_SETTLED; a day-7 read is possible but
-  not recommended: an extra observation); the disable after 2026-12-07T00:00Z, or earlier after a
-  CAPACITY_STOP if one is observed (ALTER ROLE ucpe_lattice_space NOLOGIN PASSWORD NULL, delete the
-  Space secret, end live sessions; docs/runbooks/NG4_PILOT_W2.md; an owner T4), batched with the
-  writer token's renewal (after the window, before 2026-12-18T09:27Z; a secret change restarts the
-  Space); the CHANGELOG entry for #361 (a new T3); the stale sentences in docs/NG_SCALE_CONTRACTS.md
-  (.work/ng6_registry_20261124/FOLLOWUP_STALE_DOC_SENTENCES.md; a separate reviewed doc change);
-  NG6-R1, R2, R3, R5; the licence fit and the survivorship path; D2–D8; OD-NG-7; OD-NG-1, OD-NG-3,
+  2026-12-07T00:10Z for the end-of-window read (else END_NOT_SETTLED); the disable after
+  2026-12-07T00:00Z, or earlier after a CAPACITY_STOP if one is observed
+  (docs/runbooks/NG4_PILOT_W2.md; an owner T4), batched with the writer token's renewal (after the
+  window, before 2026-12-18T09:27Z; a secret change restarts the Space); the CHANGELOG entry for
+  #365 (a new T3); the EXP-04 owner items (which reading applies, if any (the budget and envelope
+  rulings); every PROPOSED constant (TOL20, the effect pairs, q = 4/5, m_min, the control key, H_c,
+  W_hist, the envelopes); what the SENSITIVITY failures (AR(1), selection on apparent recent
+  performance, regime-mean shifts, heavy tails) mean for any real-data design; the OWNER BEFORE
+  STAGE 2 items Q1–Q4, Q15, Q16, Q19, Q20, Q25, Q26; stage 2 itself (it needs real data and the
+  licence, none authorized)); the licensing owner-use facts (Q1, Q3), the inquiry's sending and any
+  listing read; the D2/D4/D5 sentences; NG6-R1, R2, R3, R5; D3 and D6–D8; OD-NG-7; OD-NG-1, OD-NG-3,
   OD-NG-4b; B-NG0's EXP-08; the pre-existing unqualified-function follow-up; the release of UOR HOLD
   #4; cleanup candidates.
-- This record is the batch's last publish. Before it: #361.)
+- This record is the batch's last publish. Before it: #365.)
 **Production is D 49ab0855 / UCPE-PROD-NG4P-20261118-B (R ab2fe87f); rollback target 27edbcad.**
+- **The owner (2026-11-26, ICT), verbatim — the second T3 (the harness's CI repair)**
+  (from .work/p7/redesign/handoff/owner_t3_exp04_repair_20261126.txt, sha256 6d155a94…):
+```text
+CONTINUE CURRENT — T3 AUTHORIZE addendum 1 (.work/exp04_stage1_20261125/T3_PACKAGE_EXP04_BATCH_ADDENDUM_1.md): fast-forward feat/exp04-stage1-harness (#365) from e849c4c5 to 1beab4bd01d2037491a9903a5cd08511afffa212 (tests only; module unchanged), merge #365 at exactly that head onto M97 6ab4d0f2, then STATE last, regenerated on the final main with an exact-delta check. Verify heads, CI, merge commits and trees; HOLD on any drift. GitHub only — no hf push, no deploy, no dispatch, no Space change. Never rerun the EXP-04 validation. All other holds unchanged.
+```
+- **The owner (2026-11-26, ICT), verbatim — the T3 for this batch**
+  (from .work/p7/redesign/handoff/owner_t3_exp04_batch_20261126.txt, sha256 084c7da5…):
+```text
+CONTINUE CURRENT — T3 AUTHORIZE the EXP-04 batch exactly as .work/exp04_stage1_20261125/T3_PACKAGE_EXP04_BATCH.md: (1) docs/changelog-361 @ ac8a04d8, (2) docs/ng-scale-contracts-current @ 724421d1, (3) feat/exp04-stage1-harness @ e849c4c562450779407c4c37af23ae3c81eb224c, (4) STATE last, regenerated on the final main with an exact-delta check. Verify heads, CI, merge commits and trees; HOLD on any drift. GitHub only — no hf push, no deploy, no dispatch, no Space change. Never rerun the EXP-04 validation. All other holds unchanged.
+```
+- **The owner (2026-11-25, ICT), verbatim — the EXP-04 lanes**
+  (from .work/p7/redesign/handoff/owner_exp04_lanes_20261125.txt, sha256 35a91fd7…):
+```text
+CONTINUE CURRENT — Fable XHIGH.
+OWNER RULINGS on .work/nga/master/OWNER_DECISION_RECONCILIATION_20261125.md (SHA256 71f97c42eb78121ab69e14297989e2458aa18f9f05caf64641a253493c05f3f9).
+Recover M95 0544ddc2, preserve all current holds, and continue substantive NGA development without waiting for the NG4 pilot.
+S = C: approve F-SURV observed-panel design under the ruled as-of rule. C3 does not gate the observed-panel route; C2 remains applicable. Every future claim must explicitly identify its population, selection process and survivorship limitation. No historical-universe claim, no unsupported assumption about delisted-symbol retention, and no claim that synthetic validation eliminates real-data survivorship bias.
+P = authorize one bounded LOCAL EXP-04 stage-1 scientific design and synthetic validation lane.
+FIRST, prepare an independently reviewed preregistration draft covering:
+
+* Exact estimand, null family, alternative family, population, aggregation, selection rule, statistic and sign-key semantics.
+* Temporal dependence, cross-asset dependence, long-memory sensitivity and cross-asset weekly-block preservation.
+* Parameter grid, simulation budget, deterministic seed policy, Monte Carlo precision, size/power reporting and predeclared STOP criteria.
+* Separate development and validation simulations to avoid design-selection optimism.
+* Explicit handling of invalid, inconclusive and insufficient-power designs.
+
+Unruled constants remain PROPOSED tested parameters. Do not silently adopt thresholds or optimize them against the final validation simulations. Obtain focused independent specification review before implementation.
+THEN implement the isolated synthetic-only harness through Codex, with known-answer tests, full verification, scanners, mutation probes, actual-diff review and independent scientific/code review. Report operating characteristics with Monte Carlo uncertainty, not point estimates alone. Preserve negative results. No blind retries or selective omission of failed scenarios.
+7.7 = approve per-(cell, claim) interpretation with an explicit scope sentence. Any joint statement must be one preregistered family with a declared error budget. No programme-wide error claim without a separately approved global budget. Numeric error budgets remain unruled unless explicitly authorized.
+SECOND LANE:
+Prepare the offline F-SURV wording, capture-time contract and decision-ready D2/D4/D5 reconciliation. Do not reopen settled rules or repeat completed research.
+LICENSING:
+L-R is the preferred research-only route, but actual owner-use facts and licence applicability must be confirmed before any archive access or use. Keep real-data entry points fail-closed.
+New public evidence: https://github.com/binance/binance-public-data/issues/502, contributor response dated 2026-11-05. Audit its applicability and distinguish contributor clarification from binding permission.
+Prepare one concise licensing inquiry for [legal@binance.com](mailto:legal@binance.com) and [data.license@binance.com](mailto:data.license@binance.com), covering private offline quantitative research, derived artifacts/models, automated archive retrieval and future non-commercial production serving of derived probabilities and evidence. Do not send the inquiry or contact any third party without separate owner approval.
+All raw or derived real-data artifacts must remain local pending a sharing decision. Prepare full source attribution, licence-link and modification-notice requirements. No data access is authorized.
+H2-B1 remains deferred. H2 open rulings, pi_T and production hold remain unchanged.
+Prepare the carried CHANGELOG #361 and the stale-doc correction for a future local T3 package. Preserve existing exact-head evidence; no redundant reviews.
+PROTECT:
+Maximum two substantial active lanes, zero paid API/data cost, UOR HOLD #4, OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD, all four acceptance blockers, F3/section 5A and consumed evidence.
+No historical fetch, real-data use, protected look, production read/write, manual workflow dispatch, deploy, Space change, credential action, push to origin or hf. NG4 remains passive only.
+Do not stop after producing the preregistration draft. Continue through reviewed implementation and synthetic validation wherever the authorized scientific contract permits.
+Return at a genuine owner boundary with exact evidence, scientific limitations, tested operating characteristics, reviewed implementation heads, remaining rulings and one consolidated future T3 package. HOLD on unresolved scientific ambiguity or mandatory gate failure; continue the other safe lane where possible.
+```
+- **The owner (2026-11-25, ICT), verbatim — the resume**
+  (from .work/p7/redesign/handoff/owner_exp04_resume_20261125.txt, sha256 d658e2bc…):
+```text
+CONTINUE CURRENT — Fable XHIGH.
+RESUME EXECUTION NOW.
+The session appears to have stalled after preparing task-1083 at 06:32 ICT. It is now 11:55 ICT, with no active background task visible.
+GPT independently checked the local repository:
+
+* EXP04-S2 review brief exists, but no R2 verdict is recorded in the review directory.
+* MASTER_BIND_DELTA_d2.txt exists.
+* task-1083 is drafted.
+* No delegation-1083 execution or result logs exist.
+* feat/exp04-stage1-harness remains clean at M95 0544ddc2.
+
+Recover the actual EXP04-S2 reviewer session state and retrieve its existing verdict, if available. Do not duplicate an active review or repeat a completed review.
+If the review was interrupted or never delivered, recover it within the existing review budget and established independent-review protocol. Do not bypass the freeze gate.
+Once EXP04-S2 clears:
+
+1. Complete and verify the specification freeze.
+2. Dispatch task-1083 immediately.
+3. Continue all authorized implementation partitions, verification, mutation probes and synthetic validation under the existing owner directive.
+4. Continue eligible offline work in parallel within the two-lane limit.
+
+Do not end the turn merely because a reviewer or Codex task is pending. Use the established continuation mechanism, verify that delegated work is actually running, and recover completed results.
+If continuation is technically impossible, report the exact blocker rather than implying work is continuing in the background.
+All existing authorizations, holds, scientific restrictions and production boundaries remain unchanged.
+Return only at a genuine owner boundary or a mandatory gate failure.
+```
+- **The owner (2026-11-25, ICT), verbatim — the EXP04-C1 rulings**
+  (from .work/p7/redesign/handoff/owner_exp04_rulings_c1_20261125.txt, sha256 2df5e536…):
+```text
+CONTINUE CURRENT — EXP-04 rulings. OD-EXP04-1 = A (new seed namespace UCPE-EXP04-STAGE1-v2, prereg d3 + spec d3 as a dated amendment). OD-EXP04-1a = rerun development under v2. OD-EXP04-2 = approve items 1–6 as listed in the decision pack (step-5 fields as new outcome keys; reasons as fixed step texts). OD-EXP04-3 = A (master's consolidated repair R-C1 as the final attempt, then a narrow independent delta review EXP04-C2). T3 = hold everything for one batch with the harness. All other holds, protections and production boundaries unchanged.
+```
 - **The owner (2026-11-25, ICT), verbatim — the T3 for this batch**
   (from .work/p7/redesign/handoff/owner_t3_ng6_batch_20261124.txt, sha256 18153abc…):
 ```text
@@ -3592,7 +3696,13 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=THE DORMANT REGISTRY v2 IS ON MAIN M94 7afc72e5 (quant-ng-registry.v2: NGA v2's
+LOOP_STATE=THE EXP-04 STAGE-1 SYNTHETIC HARNESS IS ON MAIN M98 b44942bb (synthetic only; its one
+  validation run CONSUMED, never rerun; no look, no claim; every constant PROPOSED) and production
+  is unchanged: D 49ab0855 / UCPE-PROD-NG4P-20261118-B. The pilot window runs passively (Space
+  RUNNING at D, every scheduled run green, EXP-09 0 runs). Its previous head is kept verbatim below
+  (M95 0544ddc2). Main is M98 b44942bb before this record; local main is held at 0118cfaa (UOR HOLD
+  #4). The previous head, below, stands except its last sentence (main before that record).
+  THE DORMANT REGISTRY v2 IS ON MAIN M94 7afc72e5 (quant-ng-registry.v2: NGA v2's
   vocabulary and record shapes; every claim, authorization, permission, non-hold serving state and
   status beyond NONE/SHADOW refused; v1 unchanged and served) and production is unchanged: D
   49ab0855 / UCPE-PROD-NG4P-20261118-B. The pilot window is open (2026-11-23T00:00Z –
@@ -6687,6 +6797,15 @@ LOOP_STATE=THE DORMANT REGISTRY v2 IS ON MAIN M94 7afc72e5 (quant-ng-registry.v2
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
 CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT
+  WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); EXP-04 STAGE 1 (SYNTHETIC) IS COMPLETE AND
+  ON MAIN (2026-11-26):
+  - EXP-04 stage 1: the one validation run consumed (COMPUTED; self-checks 4/4 PASS; E65
+    STAGE1_PASS_CONDITIONAL and E85 STOP_INSUFFICIENT_POWER at every level; the SENSITIVITY class
+    INVALID in up to four families); every outcome returns to the owner and none starts stage 2, a
+    redesign or a second validation; stage 2 needs the owner, real data and the licence, none
+    authorized. NGA otherwise as before: passive checks through the window, then the EXP-09 read and
+    the disable after the end.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT
   WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); THE DORMANT REGISTRY v2 IS ON MAIN
   (2026-11-24):
   - NGA: NG1, NG3, NG4, the pilot, W2, the guarded login, the switch-ON and the EXP-09 route
@@ -7264,7 +7383,11 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOO
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-ng6-batch-20261124 (this record, on main M94 7afc72e5). This batch's
+CURRENT_BRANCH=chore/state-exp04-20261125 (this record, on main M98 b44942bb). This batch's other
+  branches: docs/changelog-361 (#363), docs/ng-scale-contracts-current (#364) and
+  feat/exp04-stage1-harness (#365). Merged branches and local worktrees are cleanup candidates; no
+  cleanup was authorized.
+  Before it: chore/state-ng6-batch-20261124 (this record, on main M94 7afc72e5). This batch's
   other branches: docs/changelog-356-358 (#360) and feat/ng6-registry-v2 (#361). Merged branches and
   local worktrees are cleanup candidates; no cleanup was authorized.
   Before it: chore/state-exp09-batch-20261119 (this record, on main M91 c4737106). This batch's
@@ -7670,7 +7793,10 @@ CURRENT_BRANCH=chore/state-ng6-batch-20261124 (this record, on main M94 7afc72e5
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=M94 7afc72e5 (main, #361, the last merge before this record): push CI 45460945050 and
+LAST_GREEN_SHA=M98 b44942bb (main, #365, the last merge before this record): push CI 45736732910 and
+  build 45736732963 green on their first attempt (M96 CI 45727083120 / build 45727083080, M97 CI
+  45727557110 / build 45727557182).
+  Before it: M94 7afc72e5 (main, #361, the last merge before this record): push CI 45460945050 and
   build 45460945109 green on their first attempt (M93 CI 45458048393 / build 45458048345).
   Before it: M91 c4737106 (main, #358, the last merge before this record): push CI 44516636628 and
   build 44516636487 green on their first attempt (M88 CI 44499911005 / build 44499911128, M89
@@ -8137,7 +8263,9 @@ LAST_GREEN_SHA=M94 7afc72e5 (main, #361, the last merge before this record): pus
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-24 (this record), scanners 3/3: 9124 at its exact head; the registry v2
+LAST_VERIFY=PASS 2026-11-26 (this record), scanners 3/3: 9265 at its exact head; the harness head
+  9265; the CHANGELOG head 9124; the doc-fix head 9124.
+  Before it: PASS 2026-11-24 (this record), scanners 3/3: 9124 at its exact head; the registry v2
   head 9124; the CHANGELOG head 9067.
   Before it: PASS 2026-11-19 (this record), scanners 3/3: 9067 at its exact head; the EXP-09 head
   9064; the registry head 9010; the CHANGELOG head 9009; the enabling head 9066.
@@ -8557,7 +8685,10 @@ LAST_VERIFY=PASS 2026-11-24 (this record), scanners 3/3: 9124 at its exact head;
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. Codex in this batch: 1 (task-1082, NEEDS_DECISION, completed by the master),
+CODEX_PENDING=NONE. Codex in this batch: 4 (task-1083 to task-1086, the four delegations of the
+  specification's partition, each re-gated and repaired by the master), re-gated by the master. No
+  API key, no paid fallback, $0.
+  Before it: NONE. Codex in this batch: 1 (task-1082, NEEDS_DECISION, completed by the master),
   re-gated by the master. No API key, no paid fallback, $0.
   Before it: NONE. Codex in this batch: 7 (task-1076 BLOCKED unchanged; task-1077, 1078, 1079,
   1080; task-1081 twice, the first BLOCKED unchanged by the sandbox's git index), each re-gated by
@@ -8804,7 +8935,19 @@ CODEX_PENDING=NONE. Codex in this batch: 1 (task-1082, NEEDS_DECISION, completed
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-24, after this record): none inside the window
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-26, after this record): none inside the window
+  (no Space change; an incident is reported for the owner to decide; the rollback to 27edbcad is an
+  owner T4). EXP-04: which reading applies, if any (the budget and envelope rulings); every PROPOSED
+  constant (TOL20, the effect pairs, q = 4/5, m_min, the control key, H_c, W_hist, the envelopes);
+  what the SENSITIVITY failures (AR(1), selection on apparent recent performance, regime-mean
+  shifts, heavy tails) mean for any real-data design; the OWNER BEFORE STAGE 2 items Q1–Q4, Q15,
+  Q16, Q19, Q20, Q25, Q26; stage 2 itself (it needs real data and the licence, none authorized).
+  Licensing: the owner-use facts (Q1, Q3), whether to send the inquiry (.work/lane2_20261125/), any
+  listing read; the D2/D4/D5 sentences; D3, D6–D8. After 2026-12-07T00:10Z: the one EXP-09 read (an
+  owner one-shot dispatch) and the disable (an owner T4) batched with the writer token's renewal
+  (before 2026-12-18T09:27Z). Also: the CHANGELOG for #365 (a new T3); NG6-R1, R2, R3, R5; the
+  release of UOR HOLD #4.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-24, after this record): none inside the window
   (no Space change; an incident is reported for the owner to decide; the rollback to 27edbcad is an
   owner T4). After 2026-12-07T00:10Z: the one EXP-09 read (an owner one-shot dispatch, expected_sha
   and as_of_utc blank; its read path is unverified: Supabase's source gives its default
@@ -10357,6 +10500,20 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-24, after this record): none 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
+  (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
+  passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing; a restart
+  or any Space change inside the window is an incident: report it, no backfill, the owner decides.
+  **Never rerun the EXP-04 validation (its consumed marker and manifest
+  cc81488d72275aa245ed2b53cfd834e36ecb875e056af0ce494589d63f066a60 are final; a new validation needs
+  a new preregistration version, a new seed namespace and the owner's word); never rerun the deploy
+  of 49ab0855 or the apply (run 44133908695), never dispatch
+  .github/workflows/apply-migration-0019.yml again; never rerun preflight runs 43916685548,
+  44012717250, 44039032076 or 44113873249; never dispatch the EXP-09 route without the owner's
+  one-shot authorization; never run the credential helper; no Space change inside the pilot window.
+  The 1D evaluation and the S1 build are CONSUMED — never rebuild or rerun either, and verify them
+  only as .work/v1d_1w_20261023/CONSUMED_EVIDENCE.md says.** No push without a T3; no dispatch,
+  production read or write, grant, credential, network, real data, T4 or deploy without the owner.
+  Before it: Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
   (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
   passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing; a restart
   or any Space change inside the window is an incident: report it, no backfill, the owner decides.
