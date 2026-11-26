@@ -170,8 +170,18 @@ class _RaisingPath:
         ("/", "root must not be a filesystem root"),
         ("/tmp/objects\x00root", "root must be an absolute path"),
         (_RaisingPath(), "root must be an absolute path"),
+        ("/..", "root must not contain .."),
+        ("/tmp/..", "root must not contain .."),
+        ("/tmp/objects/../other", "root must not contain .."),
     ],
-    ids=["filesystem-root", "nul-byte", "raising-pathlike"],
+    ids=[
+        "filesystem-root",
+        "nul-byte",
+        "raising-pathlike",
+        "dotdot-at-root",
+        "dotdot-to-root",
+        "dotdot-inside",
+    ],
 )
 def test_obj1_object_path_refuses_odd_roots(root, reason):
     with pytest.raises(names.Refusal, match="^" + reason + "$"):

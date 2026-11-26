@@ -83,7 +83,9 @@ def object_path(root: str | os.PathLike[str], hex_digest: str) -> Path:
         raise Refusal("root must be an absolute path") from None
     if not root_path.is_absolute() or "\x00" in str(root_path):
         raise Refusal("root must be an absolute path")
-    if not _root_parts(root_path):
+    if ".." in root_path.parts:
+        raise Refusal("root must not contain ..")
+    if not _root_parts(Path(os.path.normpath(os.fspath(root_path)))):
         raise Refusal("root must not be a filesystem root")
     if not all(is_token_safe(part) for part in _root_parts(root_path)):
         raise Refusal("protected root component")
