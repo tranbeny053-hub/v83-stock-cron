@@ -1490,3 +1490,103 @@ def test_rk2_cost_does_not_grow_with_the_donor_count():
     start = time.perf_counter()
     kernel._eval_point(manifest, point)
     assert time.perf_counter() - start < 2.0
+
+
+def test_rk2_sc2_is_independent_of_the_matrix_path(monkeypatch):
+    # A Z error that stays in the Σ⁻¹ family would pass a circular SC-2; the independent closed
+    # form (isotropic_moments) must still catch it.
+    original = kernel._collapsed_moments
+
+    def wrong(design):
+        Z, K = original(design)
+        shift = kernel.matrix_scale(F(1, 1000), kernel.matrix_inverse(design["sigma"]))
+        return kernel.matrix_sum(Z, shift), K
+
+    monkeypatch.setattr(kernel, "_collapsed_moments", wrong)
+    _, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS))
+    assert "SC-2" in {item["id"] for item in table if not item["passed"]}
+
+
+def test_rk2_sc7_requires_the_endpoint_equality_when_out_of_range(monkeypatch):
+    original = kernel.closed_forms
+
+    def lower(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result["flag"] == "OUT_OF_RANGE":
+            result["R_best"] -= F(1, 10**6)
+        return result
+
+    monkeypatch.setattr(kernel, "closed_forms", lower)
+    _, table = kernel.evaluate_map(_demanding_manifest(_DEMANDING_POINTS[:1]))
+    assert "SC-7" in {item["id"] for item in table if not item["passed"]}
+
+
+def test_rk2_sc6_compares_the_cross_terms(monkeypatch):
+    original = kernel._collapsed_cross
+
+    def wrong(design, risk):
+        result = original(design, risk)
+        if design["shape"] == "IDENTITY" and design["rx"] == 0:
+            result = dict(result, rS=result["rS"] + F(1, 10**6))
+        return result
+
+    monkeypatch.setattr(kernel, "_collapsed_cross", wrong)
+    manifest = _demanding_manifest(
+        [{"a": "1/10", "m": 10, "k": 4, "c": "3/10", "r_x": "9/10", "omega": "GRAM"}]
+    )
+    _, table = kernel.evaluate_map(manifest)
+    assert "SC-6" in {item["id"] for item in table if not item["passed"]}
+
+
+def test_rk2_a_tie_goes_to_the_weaker_strength(monkeypatch):
+    original = kernel._collapsed_target_risk
+
+    def flat(values, point, strength, matrices):
+        result = original(values, point, strength, matrices)
+        return dict(result, R_S=F(1))
+
+    monkeypatch.setattr(kernel, "_collapsed_target_risk", flat)
+    manifest = _demanding_manifest(_DEMANDING_POINTS[1:2])
+    rows, _ = kernel.evaluate_map(manifest)
+    assert rows[0]["best_strength"] == manifest["strengths"][0]
+
+
+def test_rk2_output_folder_needs_the_exp05_stage0_prefix(tmp_path, monkeypatch):
+    import hashlib
+    import json
+
+    monkeypatch.setattr(
+        kernel, "evaluate_map", lambda manifest: pytest.fail("evaluation must remain unreachable")
+    )
+    valid_bytes = _fixture_manifest()
+    output = tmp_path / ".work" / "other_lane" / "map"
+    output.parent.mkdir(parents=True)
+    with pytest.raises(
+        kernel.Refusal, match=r"^output folder must be below \.work/exp05_stage0_\*$"
+    ):
+        kernel.run_map(
+            json.loads(valid_bytes),
+            valid_bytes,
+            output,
+            tmp_path,
+            hashlib.sha256(valid_bytes).hexdigest(),
+        )
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "event",
+    ["socket.connect", "socket.getaddrinfo", "subprocess.Popen", "os.system"],
+    ids=["socket-connect", "socket-getaddrinfo", "subprocess", "os-system"],
+)
+def test_rk2_guard_refuses_network_and_process_events(tmp_path, event):
+    assert kernel._guard_reason(event, (), tmp_path) is not None
+
+
+def test_rk2_spec_digest_must_equal_the_prereg_digest():
+    import json
+
+    manifest = json.loads(_fixture_manifest())
+    manifest["spec_sha256"] = "3" * 64
+    with pytest.raises(kernel.Refusal, match="^malformed digest$"):
+        kernel.validate_manifest(manifest)
