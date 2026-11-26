@@ -1,7 +1,20 @@
-"""Exact synthetic coefficient-prior risk calculations; this module never estimates coefficients."""
+"""Exact synthetic risk calculations; this module never estimates coefficients.
 
+Manifest decisions: the preregistration is its own specification, so callers supply
+equal preregistration and specification digests; neither is hard-coded. The closed
+manifest schema is enforced. The builder accepts all values explicitly and has no
+default grid. The only command is ``map``.
+"""
+
+import hashlib as _hashlib
+import json as _json
+import os as _os
+import platform as _platform
+import sys as _sys
 from fractions import Fraction as _Fraction
 from math import isqrt as _isqrt
+from pathlib import Path as _Path
+from time import perf_counter as _perf_counter
 
 
 class Refusal(ValueError):
@@ -104,33 +117,6 @@ def _inverse(matrix):
 
 def _symmetric(matrix):
     return matrix == _transpose(matrix)
-
-
-def _leading_determinants(matrix):
-    determinants = []
-    for size in range(1, len(matrix) + 1):
-        sub = [row[:size] for row in matrix[:size]]
-        determinants.append(_determinant(sub))
-    return determinants
-
-
-def _determinant(matrix):
-    work = [row[:] for row in matrix]
-    determinant = _Fraction(1)
-    for col in range(len(work)):
-        pivot = next((row for row in range(col, len(work)) if work[row][col]), None)
-        if pivot is None:
-            return _Fraction(0)
-        if pivot != col:
-            work[col], work[pivot] = work[pivot], work[col]
-            determinant = -determinant
-        value = work[col][col]
-        determinant *= value
-        for row in range(col + 1, len(work)):
-            factor = work[row][col] / value
-            for item in range(col + 1, len(work)):
-                work[row][item] -= factor * work[col][item]
-    return determinant
 
 
 def _positive_definite(matrix):
@@ -616,6 +602,798 @@ def directional_totals(v, z, k, gamma, c, t, regressors, shape, strength, rx=0):
     }
 
 
+_MANIFEST_KEYS = {
+    "schema",
+    "prereg_sha256",
+    "spec_sha256",
+    "code_sha256",
+    "environment",
+    "fixed",
+    "points",
+    "strengths",
+    "sc4_subset",
+    "self_checks",
+    "cap_seconds",
+    "random_numbers",
+    "provenance",
+}
+_POINT_KEYS = {"a", "m", "k", "c", "r_x", "omega"}
+_ENV_KEYS = {"python", "system", "release", "machine"}
+_FIXED_KEYS = {"p", "sigma2", "t"}
+_SELF_CHECKS = [f"SC-{index}" for index in range(1, 9)]
+_WRITE_FLAGS = _os.O_WRONLY | _os.O_RDWR | _os.O_APPEND | _os.O_CREAT | _os.O_TRUNC
+_FS_EVENTS = {
+    "os.mkdir",
+    "os.rename",
+    "os.remove",
+    "os.rmdir",
+    "os.chmod",
+    "os.chown",
+    "os.truncate",
+    "os.link",
+    "os.symlink",
+    "os.utime",
+}
+_PROCESS_EVENTS = ("subprocess.", "os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.fork")
+_DISCLAIMERS = [
+    "Synthetic parameters only. No market data was read. No random number was drawn.",
+    "Exact risk in a declared linear model; not a score, not a floor, not a test.",
+    "Every grid value is PROPOSED and none is adopted by this report.",
+    "No look was taken and no claim is made or supported.",
+    (
+        "A computed risk gain does not establish that sharing helps any real symbol, and does not "
+        "remove real-data survivorship bias."
+    ),
+    "Fixed-strength risk only. No strength is chosen, and no coefficient was estimated.",
+]
+
+
+def _canonical(value):
+    return (
+        _json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n"
+    ).encode()
+
+
+def _environment():
+    return {
+        "python": _sys.version,
+        "system": _platform.system(),
+        "release": _platform.release(),
+        "machine": _platform.machine(),
+    }
+
+
+def _fraction_text(value):
+    number = _fraction(value)
+    return (
+        str(number.numerator)
+        if number.denominator == 1
+        else f"{number.numerator}/{number.denominator}"
+    )
+
+
+def _parse_fraction(value):
+    if not isinstance(value, str):
+        raise Refusal("malformed fraction")
+    pieces = value.split("/")
+    try:
+        if len(pieces) == 1:
+            numerator, denominator = int(pieces[0]), 1
+        elif len(pieces) == 2:
+            numerator, denominator = int(pieces[0]), int(pieces[1])
+        else:
+            raise ValueError
+        result = _Fraction(numerator, denominator)
+    except (ValueError, ZeroDivisionError):
+        raise Refusal("malformed fraction") from None
+    if _fraction_text(result) != value or (len(pieces) == 2 and denominator <= 1):
+        raise Refusal("fraction must be in lowest terms")
+    return result
+
+
+def build_manifest(
+    schema,
+    prereg_sha256,
+    spec_sha256,
+    code_sha256,
+    environment,
+    fixed,
+    points,
+    strengths,
+    sc4_subset,
+    self_checks,
+    cap_seconds,
+    random_numbers,
+    provenance,
+):
+    """Return canonical manifest bytes from caller-supplied values."""
+    item = {
+        "schema": schema,
+        "prereg_sha256": prereg_sha256,
+        "spec_sha256": spec_sha256,
+        "code_sha256": code_sha256,
+        "environment": environment,
+        "fixed": fixed,
+        "points": points,
+        "strengths": strengths,
+        "sc4_subset": sc4_subset,
+        "self_checks": self_checks,
+        "cap_seconds": cap_seconds,
+        "random_numbers": random_numbers,
+        "provenance": provenance,
+    }
+    validate_manifest(item)
+    return _canonical(item)
+
+
+def validate_manifest(manifest):
+    if not isinstance(manifest, dict) or set(manifest) != _MANIFEST_KEYS:
+        raise Refusal("unknown or missing manifest key")
+    if manifest["schema"] != "ucpe.exp05_stage0.manifest.v1":
+        raise Refusal("malformed schema")
+    digests = (manifest["prereg_sha256"], manifest["spec_sha256"], manifest["code_sha256"])
+    if (
+        any(not isinstance(value, str) for value in digests)
+        or manifest["prereg_sha256"] != manifest["spec_sha256"]
+        or any(
+            len(value) != 64 or any(character not in "0123456789abcdef" for character in value)
+            for value in digests
+            if isinstance(value, str)
+        )
+    ):
+        raise Refusal("malformed digest")
+    if manifest["environment"] != _environment():
+        raise Refusal("environment mismatch")
+    if not isinstance(manifest["fixed"], dict) or set(manifest["fixed"]) != _FIXED_KEYS:
+        raise Refusal("malformed fixed values")
+    fixed = manifest["fixed"]
+    if isinstance(fixed["p"], bool) or not isinstance(fixed["p"], int) or fixed["p"] < 2:
+        raise Refusal("p must be an integer of at least two")
+    if _parse_fraction(fixed["sigma2"]) <= 0 or _parse_fraction(fixed["t"]) <= 0:
+        raise Refusal("sigma2 and t must be positive")
+    if not isinstance(manifest["points"], list) or not manifest["points"]:
+        raise Refusal("points must be a nonempty list")
+    for point in manifest["points"]:
+        if not isinstance(point, dict) or set(point) != _POINT_KEYS:
+            raise Refusal("malformed point")
+        for key in ("a", "c", "r_x"):
+            _parse_fraction(point[key])
+        if any(
+            isinstance(point[key], bool) or not isinstance(point[key], int) or point[key] < 1
+            for key in ("m", "k")
+        ):
+            raise Refusal("m and k must be positive integers")
+        if point["omega"] not in ("GRAM", "IDENTITY"):
+            raise Refusal("malformed omega")
+        if _parse_fraction(point["a"]) < 0 or not 0 <= _parse_fraction(point["c"]) <= 1:
+            raise Refusal("malformed point fraction")
+        if not 0 <= _parse_fraction(point["r_x"]) < 1:
+            raise Refusal("malformed r_x")
+        _root(_Fraction(point["k"]))
+    if not isinstance(manifest["strengths"], list) or not manifest["strengths"]:
+        raise Refusal("strengths must be a nonempty list")
+    strengths = manifest["strengths"]
+    parsed = []
+    infinite = False
+    for strength in strengths:
+        if strength == "INFINITE":
+            if infinite:
+                raise Refusal("duplicate strength")
+            infinite = True
+            parsed.append(None)
+        else:
+            value = _parse_fraction(strength)
+            if value < 0 or infinite:
+                raise Refusal("strengths must increase with INFINITE last")
+            parsed.append(value)
+    if parsed != sorted(parsed, key=lambda value: (value is None, value or 0)) or len(
+        set(str(x) for x in strengths)
+    ) != len(strengths):
+        raise Refusal("strengths must increase")
+    if not infinite:
+        raise Refusal('strengths must include "INFINITE" last')
+    subset = manifest["sc4_subset"]
+    if (
+        not isinstance(subset, dict)
+        or set(subset) != {"m", "a", "c"}
+        or not isinstance(subset["m"], int)
+    ):
+        raise Refusal("malformed sc4_subset")
+    if any(not isinstance(subset[key], list) for key in ("a", "c")):
+        raise Refusal("malformed sc4_subset")
+    if isinstance(subset["m"], bool) or subset["m"] < 1:
+        raise Refusal("malformed sc4_subset")
+    for value in subset["a"] + subset["c"]:
+        _parse_fraction(value)
+    if manifest["self_checks"] != _SELF_CHECKS:
+        raise Refusal("malformed self_checks")
+    if (
+        isinstance(manifest["cap_seconds"], bool)
+        or not isinstance(manifest["cap_seconds"], int)
+        or manifest["cap_seconds"] < 1
+    ):
+        raise Refusal("malformed cap_seconds")
+    if manifest["random_numbers"] != "NONE":
+        raise Refusal('random_numbers must be "NONE"')
+    if manifest["provenance"] != "SYNTHETIC_PARAMETERS":
+        raise Refusal('provenance must be "SYNTHETIC_PARAMETERS"')
+    return True
+
+
+def _number(value):
+    value = _fraction(value)
+    if value == 0:
+        decimal = "0"
+    else:
+        sign = "-" if value < 0 else ""
+        numerator, denominator = abs(value.numerator), value.denominator
+        exponent = len(str(numerator)) - len(str(denominator))
+        if (exponent >= 0 and numerator < denominator * 10**exponent) or (
+            exponent < 0 and numerator * 10 ** (-exponent) < denominator
+        ):
+            exponent -= 1
+        shift = 11 - exponent
+        scaled_num, scaled_den = (
+            (numerator * 10**shift, denominator)
+            if shift >= 0
+            else (numerator, denominator * 10 ** (-shift))
+        )
+        quotient, remainder = divmod(scaled_num, scaled_den)
+        if 2 * remainder > scaled_den or (2 * remainder == scaled_den and quotient % 2):
+            quotient += 1
+        if quotient == 10**12:
+            quotient //= 10
+            exponent += 1
+        digits = str(quotient).rjust(12, "0")
+        decimal = f"{sign}{digits[0]}.{digits[1:]}e{exponent:+d}"
+    return {"exact": _fraction_text(value), "decimal": decimal}
+
+
+def _grid_matrices(manifest, point):
+    p = manifest["fixed"]["p"]
+    sigma2, t = (
+        _parse_fraction(manifest["fixed"]["sigma2"]),
+        _parse_fraction(manifest["fixed"]["t"]),
+    )
+    rx, a = _parse_fraction(point["r_x"]), _parse_fraction(point["a"])
+    sigma = [
+        [_Fraction(int(i == j)) if i == 0 else _Fraction(0) for j in range(p)] for i in range(p)
+    ]
+    sigma[0][0] = 1
+    for i in range(1, p):
+        for j in range(1, p):
+            sigma[i][j] = 1 if i == j else rx
+    inv = _inverse(sigma)
+    v = sigma2 / t
+    S = _scale(t, sigma)
+    V = _scale(v, inv)
+    Gamma = _scale(a * v, inv)
+    omega = [[_Fraction(0) for _ in range(p)] for _ in range(p)]
+    for i in range(1, p):
+        for j in range(1, p):
+            omega[i][j] = sigma[i][j] if point["omega"] == "GRAM" else _Fraction(int(i == j))
+    m, k, c = point["m"], point["k"], _parse_fraction(point["c"])
+    donor_ids = set(range(m + 2))
+    donors = tuple(range(1, m + 1))
+    W = _scale(k, S)
+    cov = {}
+    for i in donor_ids:
+        for j in donor_ids:
+            factor = (
+                v
+                if i == j and i in (0, m + 1)
+                else v / k
+                if i == j
+                else c * v / _root(k)
+                if (i in (0, m + 1)) != (j in (0, m + 1))
+                else c * v / k
+                if i != j
+                else 0
+            )
+            cov[(i, j)] = _scale(factor, inv)
+    Q = sigma
+    return S, {j: W for j in donors}, omega, V, Gamma, cov, Q, donors, donor_ids, sigma, v
+
+
+def _collapsed_target_risk(manifest, point, strength, matrices):
+    S, weights, omega, V, Gamma, _, Q, _, _, sigma, v = matrices
+    m, k = point["m"], point["k"]
+    c = _parse_fraction(point["c"])
+    gamma = _parse_fraction(point["a"]) * v
+    donor_v = v / k
+    z = (donor_v * (1 + (m - 1) * c) + gamma) / m + gamma
+    cross = c * v / _root(k)
+    inverse_sigma = _inverse(sigma)
+    Z = _scale(z, inverse_sigma)
+    K = _scale(cross, inverse_sigma)
+    S, omega, strength = _validate_design(S, omega, strength)
+    if strength == "INFINITE":
+        B = pooling_projector(S, omega)
+        H = _sub(_identity(len(S)), B)
+    else:
+        A = _inverse(_add(S, _scale(strength, omega)))
+        B = _product(A, S)
+        H = _scale(strength, _product(A, omega))
+    mse = _add(
+        _add(_product(_product(B, V), _transpose(B)), _product(_product(H, Z), _transpose(H))),
+        _add(
+            _product(_product(B, K), _transpose(H)),
+            _product(_product(H, _transpose(K)), _transpose(B)),
+        ),
+    )
+    risk_u = _trace(_product(Q, V))
+    risk_s = _trace(_product(Q, mse))
+    return {
+        "Z": Z,
+        "K": K,
+        "B": B,
+        "H": H,
+        "MSE_S": mse,
+        "R_U": risk_u,
+        "R_S": risk_s,
+        "gain": risk_u - risk_s,
+        "relative_gain": (risk_u - risk_s) / risk_u,
+    }
+
+
+def _eval_point(manifest, point):
+    matrices = _grid_matrices(manifest, point)
+    S, weights, omega, V, Gamma, cov, Q, donors, donor_ids, sigma, v = matrices
+    m, c = point["m"], _parse_fraction(point["c"])
+    per_strength = []
+    checks = {key: True for key in _SELF_CHECKS}
+    for strength_text in manifest["strengths"]:
+        strength = "INFINITE" if strength_text == "INFINITE" else _parse_fraction(strength_text)
+        risk = _collapsed_target_risk(manifest, point, strength, matrices)
+        other = _collapsed_target_risk(manifest, point, strength, matrices)
+        cross = cross_covariance(
+            S,
+            omega,
+            strength,
+            S,
+            omega,
+            strength,
+            cov[(0, m + 1)],
+            {j: cov[(0, j)] for j in donors},
+            {j: cov[(j, m + 1)] for j in donors},
+            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
+            Gamma,
+            Q,
+            donors,
+            donors,
+            weights,
+            0,
+            m + 1,
+            donor_ids,
+            risk,
+            other,
+        )
+        inverse_sigma = _inverse(sigma)
+        direction_scale = inverse_sigma[1][1]
+        z = risk["Z"][1][1] / direction_scale
+        cross_v = risk["K"][1][1] / direction_scale
+        form = directional_totals(
+            v,
+            z,
+            cross_v,
+            _parse_fraction(point["a"]) * v,
+            c,
+            _parse_fraction(manifest["fixed"]["t"]),
+            manifest["fixed"]["p"],
+            point["omega"],
+            strength,
+            rx=_parse_fraction(point["r_x"]),
+        )
+        checks["SC-1"] &= strength != 0 or (
+            risk["R_S"] == risk["R_U"] and cross["rS"] == cross["rU"]
+        )
+        checks["SC-2"] &= (
+            risk["R_U"] == form["R_U"]
+            and risk["R_S"] == form["R_S"]
+            and risk["gain"] == form["gain"]
+            and risk["relative_gain"] == form["relative_gain"]
+            and cross["rS"] == form["rS"]
+            and cross["rU"] == form["rU"]
+        )
+        checks["SC-3"] &= _symmetric(risk["MSE_S"]) and _positive_semidefinite(risk["MSE_S"])
+        per_strength.append(
+            {
+                "strength": strength_text,
+                "R_S": risk["R_S"],
+                "gain": risk["gain"],
+                "relative_gain": risk["relative_gain"],
+                "rS": cross["rS"],
+                "rU": cross["rU"],
+            }
+        )
+    # The manifest strengths alone define the reported minimum; stable order favors weaker ties.
+    best = min(enumerate(per_strength), key=lambda pair: (pair[1]["R_S"], pair[0]))[1]["strength"]
+    result = {
+        "parameters": point,
+        "R_U": risk["R_U"],
+        "strengths": per_strength,
+        "best_strength": best,
+        "status": "COMPUTED",
+    }
+    if point["omega"] == "GRAM":
+        inverse_sigma = _inverse(sigma)
+        direction_scale = inverse_sigma[1][1]
+        z = risk["Z"][1][1] / direction_scale
+        cross_v = risk["K"][1][1] / direction_scale
+        form = closed_forms(v, z, cross_v, _parse_fraction(manifest["fixed"]["t"]))
+        result["closed_form"] = {
+            key: form[key]
+            for key in ("w_star", "flag", "w_best", "best_strength", "R_best", "w_be")
+        }
+        for item in per_strength:
+            checks["SC-7"] &= form["R_best"] <= item["R_S"]
+        if form["flag"] == "OUT_OF_RANGE":
+            endpoint = next(
+                item["R_S"] for item in per_strength if item["strength"] == form["best_strength"]
+            )
+            checks["SC-7"] &= form["R_best"] == endpoint
+    projector = pooling_projector(S, omega)
+    complement = _sub(_identity(len(S)), projector)
+    checks["SC-8"] = (
+        _product(projector, projector) == projector
+        and _product(omega, projector) == _zero(len(S), len(S))
+        and _product(_product(_transpose(projector), S), complement) == _zero(len(S), len(S))
+    )
+    return result, checks
+
+
+def _sc6_check(manifest):
+    combinations_to_check = sorted(
+        {(point["a"], point["m"], point["k"], point["c"]) for point in manifest["points"]}
+    )
+    for a_value, m, k, c_value in combinations_to_check:
+        common = {"a": a_value, "m": m, "k": k, "c": c_value, "r_x": "0"}
+        gram = _grid_matrices(manifest, {**common, "omega": "GRAM"})
+        identity = _grid_matrices(manifest, {**common, "omega": "IDENTITY"})
+        for strength_text in manifest["strengths"]:
+            strength = "INFINITE" if strength_text == "INFINITE" else _parse_fraction(strength_text)
+            gram_risk = target_risk(
+                gram[0],
+                gram[1],
+                gram[2],
+                strength,
+                gram[3],
+                gram[4],
+                gram[5],
+                gram[6],
+                gram[7],
+                0,
+                gram[8],
+            )
+            identity_risk = target_risk(
+                identity[0],
+                identity[1],
+                identity[2],
+                strength,
+                identity[3],
+                identity[4],
+                identity[5],
+                identity[6],
+                identity[7],
+                0,
+                identity[8],
+            )
+            if any(
+                gram_risk[key] != identity_risk[key]
+                for key in ("Z", "K", "MSE_S", "R_U", "R_S", "gain", "relative_gain")
+            ):
+                return False
+    return True
+
+
+def _sc4_check(manifest):
+    subset = manifest["sc4_subset"]
+    k_values = sorted({point["k"] for point in manifest["points"]})
+    shapes = sorted({(point["r_x"], point["omega"]) for point in manifest["points"]})
+    for rx, shape in shapes:
+        for k_value in k_values:
+            for a_value in subset["a"]:
+                for c_value in subset["c"]:
+                    point = {
+                        "a": a_value,
+                        "m": subset["m"],
+                        "k": k_value,
+                        "c": c_value,
+                        "r_x": rx,
+                        "omega": shape,
+                    }
+                    matrices = _grid_matrices(manifest, point)
+                    S, weights, omega, V, Gamma, cov, Q, donors, ids, sigma, v = matrices
+                    m = point["m"]
+                    c = _parse_fraction(c_value)
+                    gamma_scalar = _parse_fraction(a_value) * v
+                    donor_v = v / k_value
+                    z_scalar = (donor_v * (1 + (m - 1) * c) + gamma_scalar) / m + gamma_scalar
+                    k_scalar = c * v / _root(k_value)
+                    for strength_text in manifest["strengths"]:
+                        strength = (
+                            "INFINITE"
+                            if strength_text == "INFINITE"
+                            else _parse_fraction(strength_text)
+                        )
+                        risk = _collapsed_target_risk(manifest, point, strength, matrices)
+                        symbolic_risk = target_risk(
+                            S, weights, omega, strength, V, Gamma, cov, Q, donors, 0, ids
+                        )
+                        if any(
+                            risk[key] != symbolic_risk[key]
+                            for key in ("Z", "K", "MSE_S", "R_U", "R_S", "gain", "relative_gain")
+                        ):
+                            return False
+                        sigma_inverse = _inverse(sigma)
+                        if risk["Z"] != _add(
+                            _scale(z_scalar, sigma_inverse), _zero(len(S), len(S))
+                        ) or risk["K"] != _scale(k_scalar, sigma_inverse):
+                            return False
+                        direct_z = _zero(len(S), len(S))
+                        for donor_j in donors:
+                            for donor_l in donors:
+                                direct_z = _add(
+                                    direct_z,
+                                    _product(
+                                        _product(weights[donor_j], cov[(donor_j, donor_l)]),
+                                        _transpose(weights[donor_l]),
+                                    ),
+                                )
+                            direct_z = _add(
+                                direct_z,
+                                _product(
+                                    _product(weights[donor_j], Gamma),
+                                    _transpose(weights[donor_j]),
+                                ),
+                            )
+                        P = _inverse(_sum_matrices([weights[j] for j in donors]))
+                        direct_z = _add(_product(_product(P, direct_z), _transpose(P)), Gamma)
+                        if direct_z != risk["Z"]:
+                            return False
+                        other = _collapsed_target_risk(manifest, point, strength, matrices)
+                        cross = cross_covariance(
+                            S,
+                            omega,
+                            strength,
+                            S,
+                            omega,
+                            strength,
+                            cov[(0, m + 1)],
+                            {j: cov[(0, j)] for j in donors},
+                            {j: cov[(j, m + 1)] for j in donors},
+                            {(j, donor_l): cov[(j, donor_l)] for j in donors for donor_l in donors},
+                            Gamma,
+                            Q,
+                            donors,
+                            donors,
+                            weights,
+                            0,
+                            m + 1,
+                            ids,
+                            risk,
+                            other,
+                        )
+                        W = weights[donors[0]]
+                        e_i_z_k = _scale(
+                            m,
+                            _product(_product(cov[(0, donors[0])], _transpose(W)), _transpose(P)),
+                        )
+                        z_i_e_k = _scale(m, _product(P, _product(W, cov[(donors[0], m + 1)])))
+                        expected_cross = _add(
+                            _add(
+                                _product(
+                                    _product(risk["B"], cov[(0, m + 1)]),
+                                    _transpose(risk["B"]),
+                                ),
+                                _product(_product(risk["B"], e_i_z_k), _transpose(risk["H"])),
+                            ),
+                            _add(
+                                _product(_product(risk["H"], z_i_e_k), _transpose(risk["B"])),
+                                _product(
+                                    _product(risk["H"], _sub(risk["Z"], Gamma)),
+                                    _transpose(risk["H"]),
+                                ),
+                            ),
+                        )
+                        if cross["Cov_eS"] != expected_cross:
+                            return False
+    return True
+
+
+def evaluate_map(manifest):
+    """Evaluate a caller-supplied synthetic fixture; never constructs a grid."""
+    rows, check_rows = [], []
+    for point in manifest["points"]:
+        row, checks = _eval_point(manifest, point)
+        rows.append(row)
+        check_rows.append(checks)
+    table = [{"id": key, "passed": all(row[key] for row in check_rows)} for key in _SELF_CHECKS]
+    table[3]["passed"] = _sc4_check(manifest)
+    table[4]["passed"] = len(rows) == len(manifest["points"]) and sum(
+        len(row["strengths"]) for row in rows
+    ) == len(manifest["points"]) * len(manifest["strengths"])
+    table[5]["passed"] = _sc6_check(manifest)
+    return rows, table
+
+
+def _guard_reason(event, args, allowed):
+    if event.startswith("socket.") or event.startswith(_PROCESS_EVENTS):
+        return f"forbidden event: {event}"
+    if event.startswith("shutil.") or event in _FS_EVENTS:
+        for arg in args:
+            if isinstance(arg, (str, bytes, _os.PathLike)):
+                try:
+                    target = _Path(_os.fsdecode(arg)).resolve(strict=False)
+                except (OSError, ValueError, TypeError):
+                    continue
+                if allowed not in (target, *target.parents):
+                    return f"filesystem change outside the output folder: {event}"
+        return None
+    if event == "open":
+        mode = args[1] if len(args) > 1 else None
+        flags = args[2] if len(args) > 2 else None
+        writing = (
+            any(flag in mode for flag in "wax+")
+            if isinstance(mode, str)
+            else isinstance(flags, int) and bool(flags & _WRITE_FLAGS)
+        )
+        if not writing:
+            return None
+        try:
+            target = _Path(_os.fsdecode(args[0])).resolve(strict=False)
+            if allowed not in (target, *target.parents):
+                return "write outside the output folder"
+        except (OSError, ValueError, TypeError):
+            return "write outside the output folder"
+    return None
+
+
+def _protected_component(path):
+    return any(
+        token in str(part)
+        for part in _Path(path).parts
+        for token in ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
+    )
+
+
+def _install_guard(holder):
+    def hook(event, args):
+        reason = _guard_reason(event, args, holder[0])
+        if reason:
+            raise Refusal(reason)
+
+    _sys.addaudithook(hook)
+
+
+def run_map(manifest, manifest_bytes, out_folder, repo_root, expected_sha256):
+    """Validate, evaluate and write one map. Tests call this directly, never through main."""
+    validate_manifest(manifest)
+    if _hashlib.sha256(manifest_bytes).hexdigest() != expected_sha256:
+        raise Refusal("manifest digest mismatch")
+    if manifest_bytes != _canonical(manifest):
+        raise Refusal("manifest is not canonical")
+    if _hashlib.sha256(_Path(__file__).read_bytes()).hexdigest() != manifest["code_sha256"]:
+        raise Refusal("module digest mismatch")
+    root = _Path(repo_root).resolve(strict=True)
+    out = _Path(out_folder)
+    if _protected_component(out):
+        raise Refusal("protected output path")
+    if out.is_symlink():
+        raise Refusal("output folder is a symlink")
+    resolved = out.resolve(strict=False)
+    base = (root / ".work").resolve(strict=True)
+    try:
+        relative = resolved.relative_to(base)
+    except ValueError:
+        raise Refusal("output folder must be below .work/exp05_stage0_*") from None
+    if len(relative.parts) < 2 or not relative.parts[0].startswith("exp05_stage0_"):
+        raise Refusal("output folder must be below .work/exp05_stage0_*")
+    protected = ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
+    if any(any(token in part for token in protected) for part in resolved.parts):
+        raise Refusal("protected output path")
+    if resolved.exists() and (not resolved.is_dir() or any(resolved.iterdir())):
+        raise Refusal("output folder must be new or empty")
+    if manifest["random_numbers"] != "NONE" or manifest["provenance"] != "SYNTHETIC_PARAMETERS":
+        raise Refusal("manifest provenance refused")
+    # Measure a single fixture evaluation and project conservatively before any write.
+    start = _perf_counter()
+    _eval_point(manifest, manifest["points"][0])
+    sample = _perf_counter() - start
+    sc6_count = len(
+        {(point["a"], point["m"], point["k"], point["c"]) for point in manifest["points"]}
+    )
+    sc4_count = (
+        len({point["k"] for point in manifest["points"]})
+        * len({(point["r_x"], point["omega"]) for point in manifest["points"]})
+        * len(manifest["sc4_subset"]["a"])
+        * len(manifest["sc4_subset"]["c"])
+    )
+    projected = sample * (len(manifest["points"]) + sc6_count + sc4_count)
+    if projected > manifest["cap_seconds"]:
+        raise Refusal("projected runtime exceeds cap_seconds")
+    rows, table = evaluate_map(manifest)
+    status = "COMPUTED" if all(item["passed"] for item in table) else "STOP_KERNEL_DEFECT"
+    for row in rows:
+        raw_point = row["parameters"]
+        row["parameters"] = {
+            "fixed": {
+                "p": _number(_Fraction(manifest["fixed"]["p"])),
+                "sigma2": _number(_parse_fraction(manifest["fixed"]["sigma2"])),
+                "t": _number(_parse_fraction(manifest["fixed"]["t"])),
+            },
+            "a": _number(_parse_fraction(raw_point["a"])),
+            "m": _number(_Fraction(raw_point["m"])),
+            "k": _number(_Fraction(raw_point["k"])),
+            "c": _number(_parse_fraction(raw_point["c"])),
+            "r_x": _number(_parse_fraction(raw_point["r_x"])),
+            "omega": raw_point["omega"],
+        }
+        for item in row["strengths"]:
+            if item["strength"] != "INFINITE":
+                item["strength"] = _number(_parse_fraction(item["strength"]))
+            for key in ("R_S", "gain", "relative_gain", "rS", "rU"):
+                item[key] = _number(item[key])
+        row["R_U"] = _number(row["R_U"])
+        if row["best_strength"] != "INFINITE":
+            row["best_strength"] = _number(_parse_fraction(row["best_strength"]))
+        if "closed_form" in row:
+            row["closed_form"] = {
+                key: _number(value) if isinstance(value, _Fraction) else value
+                for key, value in row["closed_form"].items()
+            }
+    map_bytes = b"".join(_canonical(row) for row in rows)
+    report = {
+        "status": status,
+        "counts": {"points": len(rows), "evaluations": len(rows) * len(manifest["strengths"])},
+        "self_checks": table,
+        "non_computed_points": [row["parameters"] for row in rows if row["status"] != "COMPUTED"],
+        "out_of_range_count": sum(
+            row.get("closed_form", {}).get("flag") == "OUT_OF_RANGE" for row in rows
+        ),
+        "disclaimers": _DISCLAIMERS,
+    }
+    report_bytes = _canonical(report)
+    manifest_copy = manifest_bytes
+    sums = "".join(
+        f"{_hashlib.sha256(data).hexdigest()}  {name}\n"
+        for name, data in (
+            ("MANIFEST.json", manifest_copy),
+            ("MAP.jsonl", map_bytes),
+            ("REPORT.json", report_bytes),
+        )
+    )
+    out.mkdir(parents=True, exist_ok=True)
+    for name, data in (
+        ("MANIFEST.json", manifest_copy),
+        ("MAP.jsonl", map_bytes),
+        ("REPORT.json", report_bytes),
+        ("SHA256SUMS.txt", sums.encode()),
+    ):
+        (out / name).write_bytes(data)
+    return status
+
+
+def main(argv):
+    """The sole CLI command; its audit hook is installed only in this entry point."""
+    if (
+        len(argv) != 7
+        or argv[0] != "map"
+        or argv[1] != "--manifest"
+        or argv[3] != "--expect-sha256"
+        or argv[5] != "--out"
+    ):
+        raise Refusal("usage: map --manifest <file> --expect-sha256 <hex> --out <folder>")
+    manifest_path, expected, output = _Path(argv[2]), argv[4], _Path(argv[6])
+    if _protected_component(manifest_path):
+        raise Refusal("protected manifest path")
+    data = manifest_path.read_bytes()
+    manifest = _json.loads(data)
+    holder = [output.resolve(strict=False)]
+    _install_guard(holder)
+    return run_map(manifest, data, output, _Path.cwd(), expected)
+
+
 CALLABLES = tuple(
     sorted(
         name
@@ -623,3 +1401,11 @@ CALLABLES = tuple(
         if callable(value) and not name.startswith("_")
     )
 )
+
+
+if __name__ == "__main__":
+    try:
+        main(_sys.argv[1:])
+    except (Refusal, OSError, ValueError, _json.JSONDecodeError) as error:
+        print(f"REFUSAL: {error}", file=_sys.stderr)
+        raise SystemExit(2) from None

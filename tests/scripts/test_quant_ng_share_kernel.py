@@ -861,6 +861,32 @@ def test_fixture_rule_applies_to_all_known_answer_fixtures():
 
 
 def test_public_callable_inventory_and_signature_barrier():
+    expected = (
+        "Refusal",
+        "build_manifest",
+        "closed_forms",
+        "cross_covariance",
+        "directional_totals",
+        "evaluate_map",
+        "exact_square_root",
+        "isotropic_moments",
+        "main",
+        "matrix_identity",
+        "matrix_inverse",
+        "matrix_is_positive_definite",
+        "matrix_is_positive_semidefinite",
+        "matrix_is_symmetric",
+        "matrix_product",
+        "matrix_scale",
+        "matrix_sum",
+        "matrix_trace",
+        "matrix_transpose",
+        "pooling_projector",
+        "run_map",
+        "target_risk",
+        "validate_arm",
+        "validate_manifest",
+    )
     public = tuple(
         sorted(
             name
@@ -868,6 +894,7 @@ def test_public_callable_inventory_and_signature_barrier():
             if callable(value) and not name.startswith("_")
         )
     )
+    assert kernel.CALLABLES == expected
     assert kernel.CALLABLES == public
     forbidden = {"g", "b", "b0", "bS", "y", "rows", "X"}
     for name in kernel.CALLABLES:
@@ -883,7 +910,20 @@ def test_public_callable_inventory_and_signature_barrier():
 def test_module_imports_exactly_allowed_standard_library_and_has_no_float():
     path = Path(kernel.__file__)
     tree = ast.parse(path.read_text())
-    allowed = {"fractions", "math", "json", "hashlib", "re", "itertools", "functools"}
+    allowed = {
+        "fractions",
+        "math",
+        "json",
+        "hashlib",
+        "re",
+        "itertools",
+        "functools",
+        "os",
+        "platform",
+        "pathlib",
+        "sys",
+        "time",
+    }
     imported = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -1027,3 +1067,332 @@ def test_psd_zero_pivot_cases_match_the_brute_force_oracle(matrix):
     assert kernel.matrix_is_positive_semidefinite(fractions) is _oracle_positive_semidefinite(
         fractions
     )
+
+
+def _fixture_manifest():
+    _assert_fixture(donors=10, regressors=3)
+    source = Path(kernel.__file__).read_bytes()
+    digest = __import__("hashlib").sha256(source).hexdigest()
+    return kernel.build_manifest(
+        "ucpe.exp05_stage0.manifest.v1",
+        "1" * 64,
+        "1" * 64,
+        digest,
+        kernel._environment(),
+        {"p": 3, "sigma2": "1", "t": "40"},
+        [
+            {"a": "2/5", "m": 10, "k": 1, "c": "0", "r_x": "0", "omega": "GRAM"},
+            {"a": "2/5", "m": 10, "k": 1, "c": "0", "r_x": "0", "omega": "IDENTITY"},
+            {"a": "2/5", "m": 10, "k": 1, "c": "0", "r_x": "1/2", "omega": "GRAM"},
+            {"a": "2/5", "m": 10, "k": 1, "c": "0", "r_x": "1/2", "omega": "IDENTITY"},
+        ],
+        ["0", "2000/27", "INFINITE"],
+        {"m": 2, "a": ["1/7"], "c": ["1/8"]},
+        [f"SC-{index}" for index in range(1, 9)],
+        30,
+        "NONE",
+        "SYNTHETIC_PARAMETERS",
+    )
+
+
+def test_fixture_map_matches_collapsed_and_closed_paths():
+    _assert_fixture(donors=10, regressors=3)
+    import json
+
+    manifest = json.loads(_fixture_manifest())
+    rows, checks = kernel.evaluate_map(manifest)
+    assert all(item["passed"] for item in checks)
+    assert len(rows) == 4
+    for row in rows[:2]:
+        assert row["status"] == "COMPUTED"
+        assert row["R_U"] == 3 * F(1, 40)
+        assert row["strengths"][1]["R_S"] == F(1, 40) + 2 * F(27, 3080)
+        assert row["strengths"][2]["R_S"] == F(13, 250)
+    assert rows[0]["strengths"] == rows[1]["strengths"]
+
+
+def test_fixture_cli_outputs_repeat_byte_for_byte(tmp_path):
+    import hashlib
+    import json
+    import shutil
+    import subprocess
+
+    manifest_bytes = _fixture_manifest()
+    manifest_path = tmp_path / "fixture.json"
+    manifest_path.write_bytes(manifest_bytes)
+    output = tmp_path / ".work" / "exp05_stage0_test" / "map"
+    output.parent.mkdir(parents=True)
+    command = [
+        str(Path(kernel.__file__).resolve()),
+        "map",
+        "--manifest",
+        str(manifest_path),
+        "--expect-sha256",
+        hashlib.sha256(manifest_bytes).hexdigest(),
+        "--out",
+        str(output),
+    ]
+    captured = []
+    for iteration in range(2):
+        if iteration:
+            shutil.rmtree(output)
+        result = subprocess.run(
+            [__import__("sys").executable, "-I", "-B", *command],
+            cwd=tmp_path,
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        captured.append({path.name: path.read_bytes() for path in output.iterdir()})
+    assert captured[0] == captured[1]
+    assert json.loads(captured[0]["REPORT.json"])["status"] == "COMPUTED"
+
+
+def test_decimal_formatter_is_exact_and_half_even():
+    assert kernel._number(F(1, 8)) == {"exact": "1/8", "decimal": "1.25000000000e-1"}
+    assert kernel._number(F(1, 2)) == {"exact": "1/2", "decimal": "5.00000000000e-1"}
+    assert kernel._number(F(1, 2000000000000)) == {
+        "exact": "1/2000000000000",
+        "decimal": "5.00000000000e-13",
+    }
+    assert kernel._number(F(200000000001, 200000000000)) == {
+        "exact": "200000000001/200000000000",
+        "decimal": "1.00000000000e+0",
+    }
+    assert kernel._number(F(200000000003, 200000000000)) == {
+        "exact": "200000000003/200000000000",
+        "decimal": "1.00000000002e+0",
+    }
+
+
+def test_out_of_range_unconstrained_risk_is_absent_from_every_file(tmp_path):
+    import hashlib
+    import json
+
+    values = json.loads(_fixture_manifest())
+    values["points"] = [{"a": "0", "m": 10, "k": 9, "c": "1/2", "r_x": "0", "omega": "GRAM"}]
+    source_hash = hashlib.sha256(Path(kernel.__file__).read_bytes()).hexdigest()
+    manifest_bytes = kernel.build_manifest(
+        values["schema"],
+        values["prereg_sha256"],
+        values["spec_sha256"],
+        source_hash,
+        values["environment"],
+        values["fixed"],
+        values["points"],
+        values["strengths"],
+        values["sc4_subset"],
+        values["self_checks"],
+        values["cap_seconds"],
+        values["random_numbers"],
+        values["provenance"],
+    )
+    output = tmp_path / ".work" / "exp05_stage0_test" / "map"
+    output.parent.mkdir(parents=True)
+    kernel.run_map(
+        json.loads(manifest_bytes),
+        manifest_bytes,
+        output,
+        tmp_path,
+        hashlib.sha256(manifest_bytes).hexdigest(),
+    )
+    files = [path.read_text() for path in output.iterdir()]
+    assert all("3/2620" not in content for content in files)
+    row = json.loads((output / "MAP.jsonl").read_text())
+    assert row["closed_form"]["flag"] == "OUT_OF_RANGE"
+
+
+@pytest.mark.parametrize(
+    "rule, reason",
+    [
+        ("input_digest", "manifest digest mismatch"),
+        ("canonical", "manifest is not canonical"),
+        ("module_digest", "module digest mismatch"),
+        ("environment", "environment mismatch"),
+        ("unknown_key", "unknown or missing manifest key"),
+        ("outside_folder", "output folder must be below .work/exp05_stage0_*"),
+        ("symlink", "output folder is a symlink"),
+        ("not_empty", "output folder must be new or empty"),
+        ("protected", "protected output path"),
+        ("random_numbers", 'random_numbers must be "NONE"'),
+        ("provenance", 'provenance must be "SYNTHETIC_PARAMETERS"'),
+        ("budget", "projected runtime exceeds cap_seconds"),
+    ],
+    ids=[
+        "digest-pin",
+        "canonical-json",
+        "module-pin",
+        "environment-pin",
+        "unknown-manifest-key",
+        "outside-folder",
+        "symlink-folder",
+        "nonempty-folder",
+        "protected-folder",
+        "random-number-guard",
+        "provenance-guard",
+        "runtime-cap",
+    ],
+)
+def test_map_stop_rules_refuse_before_evaluation(tmp_path, monkeypatch, rule, reason):
+    import hashlib
+    import json
+
+    monkeypatch.setattr(
+        kernel,
+        "evaluate_map",
+        lambda manifest: pytest.fail("evaluation must remain unreachable"),
+    )
+    valid_bytes = _fixture_manifest()
+    manifest = json.loads(valid_bytes)
+    output = tmp_path / ".work" / "exp05_stage0_test" / "map"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    expected = hashlib.sha256(valid_bytes).hexdigest()
+    if rule == "input_digest":
+        expected = "0" * 64
+    elif rule == "canonical":
+        pass
+    elif rule == "module_digest":
+        manifest["code_sha256"] = "0" * 64
+    elif rule == "environment":
+        manifest["environment"]["machine"] += "-changed"
+    elif rule == "unknown_key":
+        manifest["extra"] = "refused"
+    elif rule == "outside_folder":
+        output = tmp_path / "outside" / "map"
+    elif rule == "symlink":
+        target = output.parent / "target"
+        target.mkdir()
+        output.symlink_to(target, target_is_directory=True)
+    elif rule == "not_empty":
+        output.mkdir()
+        (output / "existing.txt").write_text("fixture")
+    elif rule == "protected":
+        output = tmp_path / ".work" / "exp05_stage0_holdout" / "map"
+    elif rule == "random_numbers":
+        manifest["random_numbers"] = "DRAW"
+    elif rule == "provenance":
+        manifest["provenance"] = "REAL_DATA"
+    elif rule == "budget":
+        manifest["cap_seconds"] = 1
+        times = iter((0, 100))
+        monkeypatch.setattr(kernel, "_perf_counter", lambda: next(times))
+    supplied = (
+        valid_bytes
+        if rule in ("input_digest", "symlink", "not_empty", "outside_folder", "protected")
+        else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
+        if rule == "canonical"
+        else (
+            json.dumps(
+                manifest,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+            + "\n"
+        ).encode()
+    )
+    if rule not in ("input_digest",):
+        expected = hashlib.sha256(supplied).hexdigest()
+    with pytest.raises(kernel.Refusal) as error:
+        kernel.run_map(manifest, supplied, output, tmp_path, expected)
+    assert str(error.value) == reason
+    assert not (output / "MAP.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    "check_id",
+    ["SC-1", "SC-2", "SC-3", "SC-4", "SC-5", "SC-6", "SC-7", "SC-8"],
+    ids=[
+        "zero-strength",
+        "closed-form",
+        "psd",
+        "symbol-sums",
+        "counts",
+        "shape-equality",
+        "best-risk",
+        "pooling-projector",
+    ],
+)
+def test_each_self_check_marks_a_mutated_formula_failed(monkeypatch, check_id):
+    import json
+
+    manifest = json.loads(_fixture_manifest())
+    if check_id == "SC-1":
+        original = kernel._collapsed_target_risk
+
+        def wrong(values, point, strength, matrices):
+            result = original(values, point, strength, matrices)
+            if point["m"] == 10 and strength == 0:
+                result["R_S"] += 1
+            return result
+
+        monkeypatch.setattr(kernel, "_collapsed_target_risk", wrong)
+    elif check_id == "SC-2":
+        original = kernel.directional_totals
+
+        def wrong(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["R_S"] += 1
+            return result
+
+        monkeypatch.setattr(kernel, "directional_totals", wrong)
+    elif check_id == "SC-3":
+        original = kernel._positive_semidefinite
+        valid_omegas = [
+            [[F(0), F(0), F(0)], [F(0), F(1), F(0)], [F(0), F(0), F(1)]],
+            [[F(0), F(0), F(0)], [F(0), F(1), F(1, 2)], [F(0), F(1, 2), F(1)]],
+        ]
+
+        def wrong(matrix):
+            return original(matrix) if matrix in valid_omegas else False
+
+        monkeypatch.setattr(kernel, "_positive_semidefinite", wrong)
+    elif check_id == "SC-4":
+        original = kernel.cross_covariance
+
+        def wrong(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["Cov_eS"][0][0] += 1
+            return result
+
+        monkeypatch.setattr(kernel, "cross_covariance", wrong)
+    elif check_id == "SC-5":
+        monkeypatch.setattr(
+            kernel,
+            "_eval_point",
+            lambda values, point: ({"strengths": []}, {f"SC-{i}": True for i in range(1, 9)}),
+        )
+    elif check_id == "SC-6":
+        original = kernel.target_risk
+        calls = [0]
+
+        def wrong(*args, **kwargs):
+            result = original(*args, **kwargs)
+            calls[0] += 1
+            if calls[0] == 13:
+                result["R_S"] += 1
+            return result
+
+        monkeypatch.setattr(kernel, "target_risk", wrong)
+    elif check_id == "SC-7":
+        original = kernel.closed_forms
+
+        def wrong(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result["R_best"] += 1
+            return result
+
+        monkeypatch.setattr(kernel, "closed_forms", wrong)
+    else:
+        original = kernel.pooling_projector
+
+        def wrong(*args, **kwargs):
+            return kernel.matrix_sum(
+                original(*args, **kwargs), kernel.matrix_identity(len(args[0]))
+            )
+
+        monkeypatch.setattr(kernel, "pooling_projector", wrong)
+    _, table = kernel.evaluate_map(manifest)
+    failed = {item["id"] for item in table if not item["passed"]}
+    assert check_id in failed
