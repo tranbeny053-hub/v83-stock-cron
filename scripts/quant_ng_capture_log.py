@@ -126,6 +126,23 @@ def _hex(value: Any) -> bool:
     return isinstance(value, str) and _HEX.fullmatch(value) is not None
 
 
+def _one_of(value: Any, allowed: frozenset[str] | set[str]) -> bool:
+    """Membership for strings only, so that an unhashable value is malformed, not a TypeError."""
+    return isinstance(value, str) and value in allowed
+
+
+_WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_NEVER_REQUESTED = frozenset({"BTCUSDT", "ETHUSDT"})
+
+
+def _archive_path(path: Any) -> bool:
+    """True for a layout path; refuse BTCUSDT and ETHUSDT by name (OP-2, ruled; fetch.py's text)."""
+    match = LAYOUT.fullmatch(path) if isinstance(path, str) else None
+    if match is not None and match.group(2) in _NEVER_REQUESTED:
+        _refuse("BTCUSDT and ETHUSDT are never requested")
+    return match is not None
+
+
 def date_check(
     date_header: str | None,
     requested_at_utc: str,
@@ -143,7 +160,7 @@ def date_check(
         parsed = parsedate_to_datetime(date_header)
     except (TypeError, ValueError, OverflowError):
         return "UNPARSEABLE"
-    if parsed.strftime("%a") != date_header[:3]:
+    if _WEEKDAYS[parsed.weekday()] != date_header[:3]:
         return "UNPARSEABLE"
     requested, last_byte = _instant(requested_at_utc), _instant(last_byte_at_utc)
     if requested is None or last_byte is None:
@@ -183,7 +200,7 @@ def validate_capture_log(log: Any, *, date_tolerance_seconds: int | None = None)
     if (
         log["capture_log_id"] != CAPTURE_LOG_ID
         or log["transport"] != "mock"
-        or log["step"] not in {"listing", "acquisition", "recapture", "changelog"}
+        or not _one_of(log["step"], {"listing", "acquisition", "recapture", "changelog"})
         or not _hex(log["plan_sha256"])
         or not _hex(log["tool_sha256"])
         or log["host_allowlist"] != []
@@ -210,7 +227,7 @@ def validate_capture_log(log: Any, *, date_tolerance_seconds: int | None = None)
         if _instant(log["run_end_utc"]) is None or log["refusal"] is not None:
             malformed()
     elif log["run_status"] == "REFUSED":
-        if log["run_end_utc"] is not None or log["refusal"] not in REFUSAL_REASONS:
+        if log["run_end_utc"] is not None or not _one_of(log["refusal"], REFUSAL_REASONS):
             malformed()
     else:
         malformed()
@@ -231,12 +248,13 @@ def validate_capture_log(log: Any, *, date_tolerance_seconds: int | None = None)
         if (
             not _integer(record["seq"])
             or record["seq"] != index
-            or role not in {"listing_page", "zip", "checksum", "changelog"}
+            or not _one_of(role, {"listing_page", "zip", "checksum", "changelog"})
             or not _allowed_role(log["step"], role)
             or record["host"] != "mock"
             or _instant(record["requested_at_utc"]) is None
             or _instant(record["last_byte_at_utc"]) is None
             or not _integer(record["http_status"])
+            or not isinstance(record["outcome"], str)
             or (record["http_status"], record["outcome"])
             not in {(200, "BODY_2XX"), (404, "FINAL_NON_2XX")}
             or not _hex(record["body_sha256"])
@@ -252,15 +270,13 @@ def validate_capture_log(log: Any, *, date_tolerance_seconds: int | None = None)
         ):
             malformed()
         if role == "zip":
-            if not isinstance(path, str) or LAYOUT.fullmatch(path) is None:
+            if not _archive_path(path):
                 malformed()
             paths["zip"].append(record)
         elif role == "checksum":
-            if (
-                not isinstance(path, str)
-                or not path.endswith(".CHECKSUM")
-                or LAYOUT.fullmatch(path[:-9]) is None
-            ):
+            if not isinstance(path, str) or not path.endswith(".CHECKSUM"):
+                malformed()
+            if not _archive_path(path[:-9]):
                 malformed()
             paths["checksum"].append(record)
         elif role in {"listing_page", "changelog"} and (not isinstance(path, str) or not path):

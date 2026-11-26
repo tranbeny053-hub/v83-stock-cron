@@ -7,8 +7,9 @@ import pytest
 from scripts import quant_ng_capture_log as capture
 
 H = "a" * 64
-ZIP_OK = "data/spot/daily/klines/BTCUSDT/1h/BTCUSDT-1h-2024-01-01.zip"
-ZIP_MISSING = "data/spot/daily/klines/ETHUSDT/1h/ETHUSDT-1h-2024-01-01.zip"
+# Non-F3 bases only: BTCUSDT and ETHUSDT are never requested (OP-2, ruled).
+ZIP_OK = "data/spot/daily/klines/SOLUSDT/1h/SOLUSDT-1h-2024-01-01.zip"
+ZIP_MISSING = "data/spot/daily/klines/ADAUSDT/1h/ADAUSDT-1h-2024-01-01.zip"
 
 
 def fixture():
@@ -105,6 +106,11 @@ def test_kat_base_log_passes():
         "date_check",
         "pairing",
         "bad_date_tolerance",
+        "unhashable_step",
+        "unhashable_role",
+        "unhashable_outcome",
+        "unhashable_refusal",
+        "records_length",
     ],
     ids=[
         "unknown-field",
@@ -127,6 +133,11 @@ def test_kat_base_log_passes():
         "date-check",
         "pairing",
         "bad-date-tolerance",
+        "unhashable-step",
+        "unhashable-role",
+        "unhashable-outcome",
+        "unhashable-refusal",
+        "records-length",
     ],
 )
 def test_kat_malformed(mutation):
@@ -172,6 +183,17 @@ def test_kat_malformed(mutation):
     elif mutation == "bad_date_tolerance":
         raises(log, date_tolerance_seconds=True)
         return
+    elif mutation == "unhashable_step":
+        log["step"] = ["acquisition"]
+    elif mutation == "unhashable_role":
+        log["records"][0]["role"] = ["zip"]
+    elif mutation == "unhashable_outcome":
+        log["records"][0]["outcome"] = ["BODY_2XX"]
+    elif mutation == "unhashable_refusal":
+        log["run_status"], log["run_end_utc"] = "REFUSED", None
+        log["refusal"] = ["capture log malformed"]
+    elif mutation == "records_length":
+        log["records_sha256"].pop()
     raises(log)
 
 
@@ -207,7 +229,7 @@ def test_kat_bool_not_integer(field):
         ("Tue, 01 Jan 2024 00:00:00 GMT", "UNPARSEABLE", "wrong-weekday"),
         (None, "ABSENT", "absent"),
     ],
-    ids=lambda value: value if isinstance(value, str) and len(value) < 24 else None,
+    ids=["minus-bound", "plus-bound", "minus-over", "plus-over", "wrong-weekday", "absent"],
 )
 def test_kat_date_check(header, expected, label):
     assert (
@@ -244,27 +266,33 @@ def test_kat_equal_instants_pass():
     capture.validate_capture_log(log)
 
 
-@pytest.mark.parametrize("where", ["between", "within"], ids=["between-records", "within-record"])
+@pytest.mark.parametrize(
+    "where",
+    ["between", "within", "run_end"],
+    ids=["between-records", "within-record", "run-end-before-last-byte"],
+)
 def test_kat_decreasing_instants(where):
     log, _ = fixture()
     if where == "between":
         log["records"][1]["requested_at_utc"] = "2024-01-01T00:00:00Z"
-    else:
+    elif where == "within":
         log["records"][0]["last_byte_at_utc"] = "2023-12-31T23:59:59Z"
+    else:
+        log["run_end_utc"] = "2024-01-01T00:00:03Z"
     raises(log, "capture instant decreased")
 
 
 @pytest.mark.parametrize(
     "case",
-    ["digest", "extra", "missing_checksum", "none_ok"],
-    ids=["digest-mismatch", "extra-record", "missing-checksum", "none-with-ok-class"],
+    ["digest", "extra", "row_without_records", "none_ok"],
+    ids=["digest-mismatch", "extra-record", "row-without-records", "none-with-ok-class"],
 )
 def test_kat_manifest_binding_refuses(case):
     log, manifest = fixture()
     if case == "digest":
         manifest["files"][0]["sha256"] = "d" * 64
     elif case == "extra":
-        extra_zip = "data/spot/daily/klines/ADAUSDT/1h/ADAUSDT-1h-2024-01-01.zip"
+        extra_zip = "data/spot/daily/klines/XRPUSDT/1h/XRPUSDT-1h-2024-01-01.zip"
         for offset, role in enumerate(("zip", "checksum"), 5):
             log["records"].append(
                 copy.deepcopy(log["records"][0])
@@ -278,8 +306,17 @@ def test_kat_manifest_binding_refuses(case):
             )
             log["records_sha256"].append("a" * 64)
         log["run_end_utc"] = "2024-01-01T00:00:07Z"
-    elif case == "missing_checksum":
-        log["records"].pop(1)
+    elif case == "row_without_records":
+        # A missing checksum RECORD is a pairing failure, refused by validation first (malformed);
+        # binding's own failure is a MANIFEST row the log has no records for.
+        manifest["files"].append(
+            {
+                "path": "data/spot/daily/klines/XRPUSDT/1h/XRPUSDT-1h-2024-01-01.zip",
+                "class": "missing",
+                "sha256": None,
+                "checksum_file_sha256": None,
+            }
+        )
     else:
         manifest["files"][0]["sha256"] = None
     with pytest.raises(capture.Refusal, match="capture log not bound"):
@@ -309,3 +346,32 @@ def test_kat_ast_is_pure():
             assert (node.module or "").split(".")[0] not in forbidden
         if isinstance(node, ast.Call):
             assert not (isinstance(node.func, ast.Name) and node.func.id == "open")
+
+
+@pytest.mark.parametrize(
+    "base,role",
+    [("BTCUSDT", "zip"), ("ETHUSDT", "zip"), ("BTCUSDT", "checksum")],
+    ids=["btc-zip", "eth-zip", "btc-checksum"],
+)
+def test_kat_btc_eth_never_requested(base, role):
+    log, _ = fixture()
+    path = f"data/spot/daily/klines/{base}/1h/{base}-1h-2024-01-01.zip"
+    index = 0 if role == "zip" else 1
+    log["records"][index]["path"] = path + (".CHECKSUM" if role == "checksum" else "")
+    raises(log, "BTCUSDT and ETHUSDT are never requested")
+
+
+def test_kat_missing_checksum_record_is_a_pairing_failure():
+    log, manifest = fixture()
+    log["records"].pop(1)
+    log["records_sha256"].pop(1)
+    for seq, record in enumerate(log["records"], 1):
+        record["seq"] = seq
+    raises(log)
+    with pytest.raises(capture.Refusal, match="^capture log malformed$"):
+        capture.check_manifest_binding(log, manifest)
+
+
+def test_kat_weekday_check_needs_no_locale():
+    source = Path(capture.__file__).read_text()
+    assert "strftime" not in source and "locale" not in source
