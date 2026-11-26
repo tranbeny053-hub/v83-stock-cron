@@ -985,8 +985,10 @@ function overviewCard(payload) {
     const referenceLabel = document.createElement("p");
     referenceLabel.className = "model-readiness";
     referenceLabel.textContent = referenceBrief.uncalibrated_banner ||
-      referenceBrief.model_readiness_label || "Descriptive reference";
-    node.insertBefore(referenceLabel, node.querySelector("dl"));
+      referenceBrief.model_readiness_label;
+    if (referenceLabel.textContent) {
+      node.insertBefore(referenceLabel, node.querySelector("dl"));
+    }
   }
   if (view) {
     const headline = document.createElement("p");

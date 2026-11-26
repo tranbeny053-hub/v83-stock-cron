@@ -66,10 +66,6 @@ LETTERS = list("ABCDEFGHI")
 
 @pytest.fixture(scope="module")
 def screens() -> dict[str, dict[str, object]]:
-    # Keep the generated cut-out aligned with the product renderer after the fallback copies
-    # were removed: use the actual app.js implementation.
-    original_functions = card._FUNCTIONS
-    card._FUNCTIONS = (*original_functions, "renderReferenceDisplay")
     shown = {}
     for screen in card.screens():
         (rows,) = [block["rows"] for block in screen["blocks"] if block["kind"] == "rows"]
@@ -80,8 +76,24 @@ def screens() -> dict[str, dict[str, object]]:
             "texts": card.shown_lines(screen),
             "key": card.answers(screen["payload"], screen["receipt"]),
         }
-    yield shown
-    card._FUNCTIONS = original_functions
+    return shown
+
+
+def test_screens_use_the_unmodified_product_function_list() -> None:
+    assert "renderReferenceDisplay" in card._FUNCTIONS
+    assert len(card.screens()) == len(card.SCENARIOS)
+
+
+def test_reference_card_adds_no_label_when_backend_labels_are_absent() -> None:
+    source = card.APP_JS.read_text(encoding="utf-8")
+    start = source.index(
+        "if (referenceBrief?.probability_type === "
+        '"DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY")'
+    )
+    end = source.index("\n  }", start) + 4
+    branch = source[start:end]
+    assert '"Descriptive reference"' not in branch
+    assert "if (referenceLabel.textContent)" in branch
 
 
 def test_the_analyses_cover_what_the_check_must_tell_apart(

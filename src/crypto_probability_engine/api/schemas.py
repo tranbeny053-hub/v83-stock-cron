@@ -677,6 +677,24 @@ class DecisionBrief(BaseModel):
     risk_note: str
     disclaimer: str
 
+    @model_validator(mode="after")
+    def reference_status_nullability_matches_probability_type(self) -> DecisionBrief:
+        is_reference = (
+            self.probability_type == "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+        )
+        statuses = (self.calibration_status, self.reliability_status)
+        reasons = (self.calibration_status_reason, self.reliability_status_reason)
+        if is_reference:
+            if any(status is not None for status in statuses) or any(
+                reason != "NO_SCORED_COHORT_BY_DESIGN" for reason in reasons
+            ):
+                raise ValueError("served reference statuses are null with design reasons")
+        elif any(status is None for status in statuses) or any(
+            reason is not None for reason in reasons
+        ):
+            raise ValueError("heuristic statuses are strings without design reasons")
+        return self
+
 
 class SkillEvidenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -731,7 +749,7 @@ class LeanReferenceState(BaseModel):
     status: Literal["SERVED", "UNAVAILABLE"]
     reason: LeanReferenceReason | None
     methodology_version: Literal["reference-pooled-tk-v1"]
-    served_methodology_version: str
+    served_methodology_version: Literal["reference-pooled-tk-v1", "heuristic-v1-wave4b0"]
     cell: LeanReferenceCell
     h_extended: LeanReferenceHorizon
     prediction_ledger: Literal["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"]

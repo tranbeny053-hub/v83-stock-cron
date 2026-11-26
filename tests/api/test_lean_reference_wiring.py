@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +14,7 @@ from crypto_probability_engine.adapters.candle_history import CandleHistory
 from crypto_probability_engine.adapters.types import ProviderError
 from crypto_probability_engine.api.schemas import (
     AnalysisRequest,
+    DecisionBrief,
     LeanReferenceReason,
     LeanReferenceState,
 )
@@ -325,13 +325,56 @@ def test_reference_run_summary_keeps_only_analysis_run_columns(monkeypatch, stat
     assert work.reference_served is (status == "SERVED")
 
 
-def test_reference_reason_enum_matches_quant_enums():
-    assert set(get_args(LeanReferenceReason)) == {
+def test_reference_reason_enum_matches_schema_and_quant_enums():
+    reason_values = {
         "NOT_NAMED_CELL",
         "VENUE_NOT_BINANCE",
         *(reason.value for reason in RefusalReason),
         *(reason.value for reason in UnavailableReason),
     }
+    assert set(get_args(LeanReferenceReason)) == reason_values
+    root = Path(__file__).resolve().parents[2]
+    schema = json.loads((root / "schemas/response.schema.json").read_text())
+    reason_enum = schema["properties"]["reference_state"]["oneOf"][1]["properties"]["reason"][
+        "enum"
+    ]
+    assert set(reason_enum) - {None} == set(get_args(LeanReferenceReason)) == reason_values
+    served_versions = schema["properties"]["reference_state"]["oneOf"][1]["properties"][
+        "served_methodology_version"
+    ]["enum"]
+    assert set(served_versions) == {"reference-pooled-tk-v1", "heuristic-v1-wave4b0"}
+
+
+def test_probability_type_controls_status_nullability_in_both_validators(monkeypatch):
+    from jsonschema import Draft202012Validator
+
+    _setup(monkeypatch)
+    monkeypatch.setattr(
+        service, "_reference_history_adapter", lambda _settings: HistoryAdapter(None)
+    )
+    response = _analyze()
+    reference_brief = response["decision_brief"]
+    heuristic_brief = dict(reference_brief)
+    heuristic_brief["probability_type"] = "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
+    with pytest.raises(ValidationError):
+        DecisionBrief.model_validate(heuristic_brief)
+
+    root = Path(__file__).resolve().parents[2]
+    schema = json.loads((root / "schemas/response.schema.json").read_text())
+    validator = Draft202012Validator(schema["properties"]["decision_brief"])
+    heuristic_response = json.loads(json.dumps(response))
+    heuristic_brief = heuristic_response["decision_brief"]
+    heuristic_brief["probability_type"] = "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
+    assert list(validator.iter_errors(heuristic_brief))
+
+    served_string = dict(reference_brief)
+    served_string["calibration_status"] = "MEASURED"
+    with pytest.raises(ValidationError):
+        DecisionBrief.model_validate(served_string)
+    bad_response = json.loads(json.dumps(response))
+    bad_brief = bad_response["decision_brief"]
+    bad_brief["reliability_status"] = "MEASURED"
+    assert list(validator.iter_errors(bad_brief))
 
 
 def test_reference_state_bad_values_are_rejected_by_both_schemas():
@@ -374,44 +417,6 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
         with pytest.raises(ValidationError):
             LeanReferenceState.model_validate(malformed)
         assert list(json_validator.iter_errors(malformed))
-
-
-def test_product_dynamic_imports_require_a_literal_module_name():
-    root = Path(__file__).resolve().parents[2]
-    product_files = [
-        root / "src/crypto_probability_engine/api/analysis_service.py",
-        root / "src/crypto_probability_engine/api/schemas.py",
-        *sorted((root / "src/crypto_probability_engine/detail").glob("*.py")),
-        root / "src/crypto_probability_engine/quant_ng/reference_pooled.py",
-    ]
-    forbidden_parts = ("5a", "f3", "look_run", "holdout", "sealed", "f2_")
-    violations = []
-    for path in product_files:
-        if any(part in component.lower() for component in path.parts for part in forbidden_parts):
-            continue
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        import_module_aliases = {
-            alias.asname or alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module == "importlib"
-            for alias in node.names
-            if alias.name == "import_module"
-        }
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            function = node.func
-            name = (
-                function.id
-                if isinstance(function, ast.Name)
-                else (function.attr if isinstance(function, ast.Attribute) else None)
-            )
-            if name not in {"import_module", "__import__", *import_module_aliases}:
-                continue
-            first = node.args[0] if node.args else None
-            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
-                violations.append(f"{path}:{node.lineno}")
-    assert not violations, "non-literal dynamic imports found: " + ", ".join(violations)
 
 
 def test_served_15m_fetches_one_history_request_of_678(monkeypatch):

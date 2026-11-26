@@ -143,7 +143,29 @@
         },
         "risk_note": { "type": "string" },
         "disclaimer": { "type": "string" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "probability_type": { "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY" } } },
+          "then": {
+            "required": ["calibration_status_reason", "reliability_status_reason"],
+            "properties": {
+              "calibration_status": { "type": "null" },
+              "reliability_status": { "type": "null" },
+              "calibration_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" },
+              "reliability_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" }
+            }
+          },
+          "else": {
+            "properties": {
+              "calibration_status": { "type": "string" },
+              "reliability_status": { "type": "string" },
+              "calibration_status_reason": { "type": ["null"] },
+              "reliability_status_reason": { "type": ["null"] }
+            }
+          }
+        }
+      ]
     },
     "decision_synthesis": { "$ref": "#/$defs/decisionSynthesis" },
     "decision_view": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/decisionView" }] },
@@ -196,7 +218,7 @@
               "HISTORY_CONFLICT", null
             ] },
             "methodology_version": { "const": "reference-pooled-tk-v1" },
-            "served_methodology_version": { "type": "string" },
+            "served_methodology_version": { "enum": ["reference-pooled-tk-v1", "heuristic-v1-wave4b0"] },
             "cell": {
               "type": "object", "additionalProperties": false,
               "required": ["symbol", "timeframe", "venue"],
@@ -354,6 +376,52 @@
       ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision_brief": {
+            "properties": {
+              "probability_type": { "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY" }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "decision_synthesis": {
+            "properties": {
+              "model_quality_summary": {
+                "required": ["calibration_status_reason", "reliability_status_reason"],
+                "properties": {
+                  "calibration_status": { "type": "null" },
+                  "reliability_status": { "type": "null" },
+                  "calibration_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" },
+                  "reliability_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "decision_synthesis": {
+            "properties": {
+              "model_quality_summary": {
+                "properties": {
+                  "calibration_status": { "type": "string" },
+                  "reliability_status": { "type": "string" },
+                  "calibration_status_reason": { "type": ["null"] },
+                  "reliability_status_reason": { "type": ["null"] }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "decisionView": {
       "type": "object",
@@ -1244,8 +1312,9 @@
             "warning"
           ],
           "properties": {
-            "calibration_status": { "type": "string" },
+            "calibration_status": { "type": ["string", "null"] },
             "reliability_status": { "type": ["string", "null"] },
+            "calibration_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
             "reliability_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
             "sample_count": { "type": ["integer", "null"], "minimum": 0 },
             "sample_gate": { "type": ["string", "null"] },

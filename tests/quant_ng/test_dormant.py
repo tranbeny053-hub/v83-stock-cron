@@ -127,13 +127,14 @@ def test_quant_ng_has_no_importers_outside_its_package_or_tests() -> None:
         if not folder.exists():
             continue
         for path in folder.rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            dynamic_calls = _nonliteral_dynamic_import_violations(source)
+            violations.extend((str(path.relative_to(ROOT)), line) for line in dynamic_calls)
             if NG_DIR == path or NG_DIR in path.parents:
                 continue
-            found, _used = _ng_import_violations(
-                path.read_text(encoding="utf-8"), path, _module_path(path, folder)
-            )
+            found, _used = _ng_import_violations(source, path, _module_path(path, folder))
             violations.extend((str(path.relative_to(ROOT)), name) for name in found)
-            calls = _dynamic_ng_import_violations(path.read_text(encoding="utf-8"))
+            calls = _dynamic_ng_import_violations(source)
             violations.extend((str(path.relative_to(ROOT)), name) for name in calls)
     assert violations == []
     _found, used = _ng_import_violations(
@@ -271,6 +272,42 @@ def _dynamic_ng_import_violations(source: str) -> list[str]:
             and argument.value.startswith(NG_PREFIX)
         ):
             violations.append(argument.value)
+    return violations
+
+
+def _nonliteral_dynamic_import_violations(source: str) -> list[int]:
+    tree = ast.parse(source)
+    importlib_aliases = {"importlib"}
+    import_module_aliases = {"import_module"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "importlib":
+                    importlib_aliases.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module == "importlib":
+            for alias in node.names:
+                if alias.name == "import_module":
+                    import_module_aliases.add(alias.asname or alias.name)
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        function = node.func
+        is_dynamic = (
+            isinstance(function, ast.Name)
+            and function.id in {"__import__", *import_module_aliases}
+        ) or (
+            isinstance(function, ast.Attribute)
+            and function.attr == "import_module"
+            and isinstance(function.value, ast.Name)
+            and function.value.id in importlib_aliases
+        )
+        if is_dynamic and (
+            not node.args
+            or not isinstance(node.args[0], ast.Constant)
+            or not isinstance(node.args[0].value, str)
+        ):
+            violations.append(node.lineno)
     return violations
 
 

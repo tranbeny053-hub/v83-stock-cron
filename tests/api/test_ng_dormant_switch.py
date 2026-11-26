@@ -289,24 +289,47 @@ def test_response_schema_keeps_prior_contract_outside_ng_and_reference_additions
     assert "ng_serving" in current["properties"]
     assert "ng_serving" not in current["required"]
     current["properties"].pop("ng_serving")
+    assert current["properties"]["reference_state"]["oneOf"][1]["properties"][
+        "served_methodology_version"
+    ] == {"enum": ["reference-pooled-tk-v1", "heuristic-v1-wave4b0"]}
     # This task explicitly versions the optional lean reference detail and its display identity.
     current["properties"].pop("reference_state")
     current["$defs"]["decisionView"]["properties"]["evidence"]["properties"].pop("skill_note")
     current["properties"]["decision_brief"]["properties"]["probability_type"] = {
         "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
     }
+    current["properties"]["decision_brief"].pop("allOf")
+    current.pop("allOf")
     for name in ("probability_explanation", "uncalibrated_banner", "model_readiness_label"):
         current["properties"]["decision_brief"]["properties"].pop(name)
     brief_properties = current["properties"]["decision_brief"]["properties"]
+    assert brief_properties["calibration_status"] == {"type": ["string", "null"]}
+    assert brief_properties["reliability_status"] == {"type": ["string", "null"]}
+    assert brief_properties["calibration_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    assert brief_properties["reliability_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
     brief_properties["calibration_status"] = {"type": "string"}
     brief_properties["reliability_status"] = {"type": "string"}
-    brief_properties.pop("calibration_status_reason", None)
-    brief_properties.pop("reliability_status_reason", None)
+    brief_properties.pop("calibration_status_reason")
+    brief_properties.pop("reliability_status_reason")
     quality_properties = current["$defs"]["decisionSynthesis"]["properties"][
         "model_quality_summary"
     ]["properties"]
+    assert quality_properties["calibration_status"] == {"type": ["string", "null"]}
+    assert quality_properties["reliability_status"] == {"type": ["string", "null"]}
+    assert quality_properties["calibration_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    assert quality_properties["reliability_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    quality_properties["calibration_status"] = {"type": "string"}
     quality_properties["reliability_status"] = {"type": "string"}
-    quality_properties.pop("reliability_status_reason", None)
+    quality_properties.pop("calibration_status_reason")
+    quality_properties.pop("reliability_status_reason")
     assert _canonical_sha(current) == M53_RESPONSE_SCHEMA_SHA256
 
 
