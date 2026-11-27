@@ -5,6 +5,7 @@ No network: every provider response is served by an ``httpx.MockTransport``.
 
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -175,7 +176,9 @@ def test_no_production_path_calls_the_history_capability() -> None:
     quant_ng, api/analysis_service.py, and only the registry and pipeline_ng: neither calls the
     window loader that fetches history, and the importer never names it. Since the NG4 pilot build
     (owner NG4-PILOT INPUTS, 2026-11-06) lattice_pilot.py is the second, dormant importer: it calls
-    the window loader only when LATTICE_ENABLED is True and the owner has named a start.
+    the window loader only when LATTICE_ENABLED is True and the owner has named a start. Since the
+    Lean release build (owner P3/P4, 2026-11-26) api/analysis_service.py also names the window
+    loader, at exactly one call site, reached only when LEAN_REFERENCE_ENABLED is True.
     """
 
     package = ROOT / "src" / "crypto_probability_engine"
@@ -207,8 +210,11 @@ def test_no_production_path_calls_the_history_capability() -> None:
         line for line in sources["api/analysis_service.py"].splitlines() if "quant_ng" in line
     ]
     assert service_ng_lines == [
-        "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng",
+        "from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng, "
+        "run_pipeline_reference",
+        "from crypto_probability_engine.quant_ng.reference_pooled import (",
         "from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal",
+        "from crypto_probability_engine.quant_ng.windows import WindowUnavailable, acquire_window",
     ]
     pilot_ng_lines = [
         line for line in sources["lattice_pilot.py"].splitlines() if "quant_ng" in line
@@ -218,8 +224,27 @@ def test_no_production_path_calls_the_history_capability() -> None:
         '    v1 = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1.json").read_text())',
         '    v1d = json.loads((root / "ops/quant_ng/REFERENCE_SPEC_v1d.json").read_text())',
     ]
-    for name in ("api/analysis_service.py", "quant_ng/registry.py", "quant_ng/pipeline_ng.py"):
+    for name in ("quant_ng/registry.py", "quant_ng/pipeline_ng.py"):
         assert "acquire_window" not in sources[name], name
+    service = sources["api/analysis_service.py"]
+    assert service.count("acquire_window(") == 1
+    service_tree = ast.parse(service)
+    analyze = next(
+        node for node in service_tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_analyze"
+    )
+    reference_block = next(
+        node for node in ast.walk(analyze)
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Name)
+        and node.test.id == "attempt_reference"
+    )
+    assert sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "acquire_window"
+        for node in ast.walk(reference_block)
+    ) == 1
 
 
 # --------------------------------------------------------------------------- request bounds

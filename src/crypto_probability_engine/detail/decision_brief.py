@@ -29,6 +29,27 @@ DISCLAIMER = (
     "Uncalibrated heuristic over a multi-bar horizon. Not a forecast, signal, "
     "or financial advice. No profitability claim."
 )
+REFERENCE_PROBABILITY_TYPE = "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+REFERENCE_MODEL_READINESS = "DESCRIPTIVE_REFERENCE_UNVALIDATED"
+REFERENCE_MODEL_READINESS_COPY = (
+    "Model readiness: Descriptive reference (pooled matured frequency) — not validated."
+)
+REFERENCE_PROBABILITY_EXPLANATION = (
+    "In band is the share of recent matured six-bar outcomes on this market whose close ended "
+    "inside today's decision band; Up and Down split the rest equally, so they carry no "
+    "direction. The outcomes overlap. A descriptive historical frequency: not a validated "
+    "forecast, not a prediction interval, not expected return, and not a trade recommendation."
+)
+REFERENCE_BANNER = (
+    "⚠️ Descriptive historical frequency — not a validated forecast. Not financial advice. "
+    "No profitability claim."
+)
+REFERENCE_DISCLAIMER = (
+    "Descriptive historical frequency over a six-bar horizon. Not a forecast, signal, or "
+    "financial advice. No profitability claim."
+)
+REFERENCE_METHOD = "DESCRIPTIVE_REFERENCE"
+HEURISTIC_METHOD = "HEURISTIC"
 
 _HORIZON_LABELS = {
     "15m": ("15m setup", "~90m horizon"),
@@ -40,7 +61,7 @@ _HORIZON_LABELS = {
 }
 
 
-def build_horizon_context(timeframe: str) -> dict:
+def build_horizon_context(timeframe: str, *, methodology: str = HEURISTIC_METHOD) -> dict:
     horizon_bars = DEFAULT_PHASE1A.h_primary_bars
     timeframe_label, horizon_label = _HORIZON_LABELS.get(
         timeframe,
@@ -51,9 +72,19 @@ def build_horizon_context(timeframe: str) -> dict:
         "horizon_bars": horizon_bars,
         "horizon_label": horizon_label,
         "horizon_approx_label": f"{timeframe_label} / {horizon_label}",
-        "probability_explanation": PROBABILITY_EXPLANATION,
-        "uncalibrated_banner": UNCALIBRATED_BANNER,
-        "model_readiness_label": MODEL_READINESS_COPY,
+        "probability_explanation": (
+            REFERENCE_PROBABILITY_EXPLANATION
+            if methodology == REFERENCE_METHOD
+            else PROBABILITY_EXPLANATION
+        ),
+        "uncalibrated_banner": REFERENCE_BANNER
+        if methodology == REFERENCE_METHOD
+        else UNCALIBRATED_BANNER,
+        "model_readiness_label": (
+            REFERENCE_MODEL_READINESS_COPY
+            if methodology == REFERENCE_METHOD
+            else MODEL_READINESS_COPY
+        ),
     }
 
 
@@ -64,8 +95,10 @@ def build_decision_brief(
     timeframe: str,
     quant_result: dict,
     data_quality: dict,
+    methodology: str = HEURISTIC_METHOD,
 ) -> dict:
-    horizon = build_horizon_context(timeframe)
+    is_reference = methodology == REFERENCE_METHOD
+    horizon = build_horizon_context(timeframe, methodology=methodology)
     gate = quant_result.get("gate_result", {})
     score = quant_result.get("score_stack", {})
     calibration = quant_result.get("calibration_state", {})
@@ -77,7 +110,11 @@ def build_decision_brief(
     action = _decision_action(gate, score)
     hard_blockers = list(gate.get("hard_blocks") or [])
     reliability = calibration.get("reliability_status", DEFAULT_PHASE1A.reliability_status)
-    calibration_status = calibration.get("calibration_status", DEFAULT_PHASE1A.calibration_status)
+    calibration_status = None if is_reference else calibration.get(
+        "calibration_status", DEFAULT_PHASE1A.calibration_status
+    )
+    if is_reference:
+        reliability = None
     key_reasons = _key_reasons(
         action=action,
         gate=gate,
@@ -85,18 +122,29 @@ def build_decision_brief(
         data_quality=data_quality,
         hard_blockers=hard_blockers,
         not_forced_by_a_risk_gate=not_forced,
+        methodology=methodology,
     )
-    return {
+    result = {
         "action": action,
         "symbol": symbol,
         "normalized_symbol": normalized_symbol,
         "timeframe_label": horizon["timeframe_label"],
         "horizon_label": horizon["horizon_label"],
         "horizon_bars": horizon["horizon_bars"],
-        "probability_type": PROBABILITY_TYPE,
-        "model_readiness": MODEL_READINESS if reliability != "MEASURED" else "MEASURED",
+        "probability_type": REFERENCE_PROBABILITY_TYPE if is_reference else PROBABILITY_TYPE,
+        "model_readiness": (
+            REFERENCE_MODEL_READINESS
+            if is_reference
+            else MODEL_READINESS
+            if reliability != "MEASURED"
+            else "MEASURED"
+        ),
         "calibration_status": calibration_status,
         "reliability_status": reliability,
+        **({
+            "calibration_status_reason": "NO_SCORED_COHORT_BY_DESIGN",
+            "reliability_status_reason": "NO_SCORED_COHORT_BY_DESIGN",
+        } if is_reference else {}),
         "profitability_claim": False,
         "state_summary": _state_summary(
             action=action,
@@ -105,6 +153,7 @@ def build_decision_brief(
             gate=gate,
             score=score,
             not_forced_by_a_risk_gate=not_forced,
+            methodology=methodology,
         ),
         "key_reasons": key_reasons,
         "hard_blockers": hard_blockers,
@@ -121,8 +170,15 @@ def build_decision_brief(
             "Hard gates, provider/data quality, liquidity, tail risk, and execution realism "
             "remain authoritative. This brief is display-only."
         ),
-        "disclaimer": DISCLAIMER,
+        "disclaimer": REFERENCE_DISCLAIMER if is_reference else DISCLAIMER,
     }
+    if is_reference:
+        result.update(
+            probability_explanation=REFERENCE_PROBABILITY_EXPLANATION,
+            uncalibrated_banner=REFERENCE_BANNER,
+            model_readiness_label=REFERENCE_MODEL_READINESS_COPY,
+        )
+    return result
 
 
 def _decision_action(gate: dict, score: dict) -> str:
@@ -152,6 +208,7 @@ def _key_reasons(
     data_quality: dict,
     hard_blockers: list[str],
     not_forced_by_a_risk_gate: bool,
+    methodology: str = HEURISTIC_METHOD,
 ) -> list[str]:
     reasons: list[str] = []
     if hard_blockers:
@@ -161,7 +218,13 @@ def _key_reasons(
     forced = f" ({NOT_FORCED_BY_A_RISK_GATE})" if not_forced_by_a_risk_gate else ""
     reasons.append(f"Backend disposition: {score.get('disposition', 'UNKNOWN')}{forced}.")
     if score.get("total_score") is not None:
-        reasons.append(f"Heuristic signal heat score: {score.get('total_score')}.")
+        if methodology == REFERENCE_METHOD:
+            reasons.append(
+                "Backend score (risk pressure only; the reference has no directional edge): "
+                f"{score.get('total_score')}."
+            )
+        else:
+            reasons.append(f"Heuristic signal heat score: {score.get('total_score')}.")
     data_source = data_quality.get("data_source")
     if data_source:
         reasons.append(f"Data source: {data_source}.")
@@ -200,13 +263,55 @@ def _state_summary(
     gate: dict,
     score: dict,
     not_forced_by_a_risk_gate: bool,
+    methodology: str = HEURISTIC_METHOD,
 ) -> str:
+    methodology_copy = (
+        "using a descriptive historical frequency"
+        if methodology == REFERENCE_METHOD
+        else "using an uncalibrated heuristic"
+    )
     summary = (
         f"{normalized_symbol} is classified as {action} for {horizon['horizon_approx_label']} "
-        f"using an uncalibrated heuristic. Gate action is {gate.get('action', 'UNKNOWN')} "
+        f"{methodology_copy}. Gate action is {gate.get('action', 'UNKNOWN')} "
         f"and backend disposition is {score.get('disposition', 'UNKNOWN')}"
     )
     if not_forced_by_a_risk_gate:
         # The token stays; the sentence says no risk gate produced it (detail/gate_kinds.py).
         return f"{summary} ({NOT_FORCED_BY_A_RISK_GATE})."
     return f"{summary}."
+
+
+def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dict:
+    """Build the reference block from backend-owned state only."""
+    status = reference_state.get("status")
+    if status == "SERVED":
+        count = horizon_timeout_state.get("inside_band_count")
+        total = horizon_timeout_state.get("matured_outcome_count")
+        days = horizon_timeout_state.get("memory_days")
+        return {
+            "title": "Descriptive reference",
+            "count_line": (
+                f"In band: {count} of {total} matured six-bar outcomes over the last {days} days "
+                "ended inside today's decision band."
+            ),
+            "direction_line": "Up and Down are split equally: no direction.",
+            "overlap_line": "Outcomes overlap: each shares half its horizon with the next.",
+            "honesty_line": (
+                "Not a validated forecast and not a prediction interval. "
+                "Not recorded for scoring."
+            ),
+            "extended_line": "Extended horizon: not modelled.",
+        }
+    reason = reference_state.get("reason")
+    if reason == "NOT_NAMED_CELL":
+        line = "Available only for BTC/USDT, ETH/USDT and SOL/USDT on Binance at 15m, 1H and 4H."
+    else:
+        line = f"Unavailable for this run ({reason}); the percentages shown are the heuristic's."
+    return {
+        "title": "Descriptive reference",
+        "count_line": line,
+        "direction_line": "",
+        "overlap_line": "",
+        "honesty_line": "",
+        "extended_line": "",
+    }

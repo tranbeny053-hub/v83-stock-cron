@@ -649,10 +649,24 @@ class DecisionBrief(BaseModel):
     timeframe_label: str
     horizon_label: str
     horizon_bars: int
-    probability_type: Literal["UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"]
+    probability_explanation: str | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    uncalibrated_banner: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    model_readiness_label: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    probability_type: Literal[
+        "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+        "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY",
+    ]
     model_readiness: str
-    calibration_status: str
-    reliability_status: str
+    calibration_status: str | None
+    reliability_status: str | None
+    calibration_status_reason: Literal["NO_SCORED_COHORT_BY_DESIGN"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    reliability_status_reason: Literal["NO_SCORED_COHORT_BY_DESIGN"] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     profitability_claim: Literal[False]
     state_summary: str
     key_reasons: list[str]
@@ -662,6 +676,24 @@ class DecisionBrief(BaseModel):
     volatility_reference: VolatilityReference
     risk_note: str
     disclaimer: str
+
+    @model_validator(mode="after")
+    def reference_status_nullability_matches_probability_type(self) -> DecisionBrief:
+        is_reference = (
+            self.probability_type == "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+        )
+        statuses = (self.calibration_status, self.reliability_status)
+        reasons = (self.calibration_status_reason, self.reliability_status_reason)
+        if is_reference:
+            if any(status is not None for status in statuses) or any(
+                reason != "NO_SCORED_COHORT_BY_DESIGN" for reason in reasons
+            ):
+                raise ValueError("served reference statuses are null with design reasons")
+        elif any(status is None for status in statuses) or any(
+            reason is not None for reason in reasons
+        ):
+            raise ValueError("heuristic statuses are strings without design reasons")
+        return self
 
 
 class SkillEvidenceResponse(BaseModel):
@@ -674,6 +706,60 @@ class SkillEvidenceResponse(BaseModel):
     ]
     n: int = Field(ge=0)
     observed_directional_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class LeanReferenceCell(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    timeframe: str
+    venue: str
+
+
+class LeanReferenceHorizon(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["UNAVAILABLE"]
+    reason: str
+
+
+LeanReferenceReason = Literal[
+    "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+    "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+    "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+    "HISTORY_CONFLICT",
+]
+
+
+class LeanReferenceDisplay(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    count_line: str
+    direction_line: str
+    overlap_line: str
+    honesty_line: str
+    extended_line: str
+
+
+class LeanReferenceState(BaseModel):
+    model_config = ConfigDict(extra="forbid", serialize_by_alias=True)
+
+    schema_name: Literal["lean-reference-state.v1"] = Field(alias="schema")
+    status: Literal["SERVED", "UNAVAILABLE"]
+    reason: LeanReferenceReason | None
+    methodology_version: Literal["reference-pooled-tk-v1"]
+    served_methodology_version: Literal["reference-pooled-tk-v1", "heuristic-v1-wave4b0"]
+    cell: LeanReferenceCell
+    h_extended: LeanReferenceHorizon
+    prediction_ledger: Literal["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"]
+    display: LeanReferenceDisplay
+
+    @model_validator(mode="after")
+    def reason_matches_status(self) -> LeanReferenceState:
+        if (self.status == "SERVED") != (self.reason is None):
+            raise ValueError("reference reason is null exactly when status is SERVED")
+        return self
 
 
 class AnalysisResponse(BaseModel):
@@ -723,6 +809,7 @@ class AnalysisResponse(BaseModel):
     detail_view: DetailView
     gate_result: JsonObject
     skill_evidence: SkillEvidenceResponse | None = None
+    reference_state: LeanReferenceState | None = None
     debug: JsonObject
     analysis_hash: str
 

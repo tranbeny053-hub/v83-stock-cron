@@ -284,11 +284,135 @@ def test_authoritative_gate_actions_vary_across_supported_cases(monkeypatch) -> 
 M53_RESPONSE_SCHEMA_SHA256 = "3b74a5ade30b0ae3db69f8ef7735470912ec7c8d084a3b7981c47471ae470b78"
 
 
-def test_response_schema_is_only_additive_ng_serving_property() -> None:
+def test_response_schema_keeps_prior_contract_outside_ng_and_reference_additions() -> None:
     current = json.loads((ROOT / "schemas/response.schema.json").read_text())
     assert "ng_serving" in current["properties"]
     assert "ng_serving" not in current["required"]
     current["properties"].pop("ng_serving")
+    assert current["properties"]["reference_state"]["oneOf"][1]["properties"][
+        "served_methodology_version"
+    ] == {"enum": ["reference-pooled-tk-v1", "heuristic-v1-wave4b0"]}
+    # This task explicitly versions the optional lean reference detail and its display identity.
+    current["properties"].pop("reference_state")
+    current["$defs"]["decisionView"]["properties"]["evidence"]["properties"].pop("skill_note")
+    current["properties"]["decision_brief"]["properties"]["probability_type"] = {
+        "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME"
+    }
+    assert current["properties"]["decision_brief"]["allOf"] == [
+        {
+            "if": {
+                "properties": {
+                    "probability_type": {
+                        "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+                    }
+                }
+            },
+            "then": {
+                "required": ["calibration_status_reason", "reliability_status_reason"],
+                "properties": {
+                    "calibration_status": {"type": "null"},
+                    "reliability_status": {"type": "null"},
+                    "calibration_status_reason": {"const": "NO_SCORED_COHORT_BY_DESIGN"},
+                    "reliability_status_reason": {"const": "NO_SCORED_COHORT_BY_DESIGN"},
+                },
+            },
+            "else": {
+                "properties": {
+                    "calibration_status": {"type": "string"},
+                    "reliability_status": {"type": "string"},
+                    "calibration_status_reason": {"type": ["null"]},
+                    "reliability_status_reason": {"type": ["null"]},
+                }
+            },
+        }
+    ]
+    assert current["allOf"] == [
+        {
+            "if": {
+                "properties": {
+                    "decision_brief": {
+                        "properties": {
+                            "probability_type": {
+                                "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+                            }
+                        }
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "decision_synthesis": {
+                        "properties": {
+                            "model_quality_summary": {
+                                "required": [
+                                    "calibration_status_reason",
+                                    "reliability_status_reason",
+                                ],
+                                "properties": {
+                                    "calibration_status": {"type": "null"},
+                                    "reliability_status": {"type": "null"},
+                                    "calibration_status_reason": {
+                                        "const": "NO_SCORED_COHORT_BY_DESIGN"
+                                    },
+                                    "reliability_status_reason": {
+                                        "const": "NO_SCORED_COHORT_BY_DESIGN"
+                                    },
+                                },
+                            }
+                        }
+                    }
+                }
+            },
+            "else": {
+                "properties": {
+                    "decision_synthesis": {
+                        "properties": {
+                            "model_quality_summary": {
+                                "properties": {
+                                    "calibration_status": {"type": "string"},
+                                    "reliability_status": {"type": "string"},
+                                    "calibration_status_reason": {"type": ["null"]},
+                                    "reliability_status_reason": {"type": ["null"]},
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        }
+    ]
+    current["properties"]["decision_brief"].pop("allOf")
+    current.pop("allOf")
+    for name in ("probability_explanation", "uncalibrated_banner", "model_readiness_label"):
+        current["properties"]["decision_brief"]["properties"].pop(name)
+    brief_properties = current["properties"]["decision_brief"]["properties"]
+    assert brief_properties["calibration_status"] == {"type": ["string", "null"]}
+    assert brief_properties["reliability_status"] == {"type": ["string", "null"]}
+    assert brief_properties["calibration_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    assert brief_properties["reliability_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    brief_properties["calibration_status"] = {"type": "string"}
+    brief_properties["reliability_status"] = {"type": "string"}
+    brief_properties.pop("calibration_status_reason")
+    brief_properties.pop("reliability_status_reason")
+    quality_properties = current["$defs"]["decisionSynthesis"]["properties"][
+        "model_quality_summary"
+    ]["properties"]
+    assert quality_properties["calibration_status"] == {"type": ["string", "null"]}
+    assert quality_properties["reliability_status"] == {"type": ["string", "null"]}
+    assert quality_properties["calibration_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    assert quality_properties["reliability_status_reason"] == {
+        "enum": ["NO_SCORED_COHORT_BY_DESIGN", None]
+    }
+    quality_properties["calibration_status"] = {"type": "string"}
+    quality_properties["reliability_status"] = {"type": "string"}
+    quality_properties.pop("calibration_status_reason")
+    quality_properties.pop("reliability_status_reason")
     assert _canonical_sha(current) == M53_RESPONSE_SCHEMA_SHA256
 
 
@@ -510,4 +634,3 @@ def test_ng_serving_schema_admits_exactly_the_two_shapes() -> None:
 )
 def test_ng_serving_schema_refuses_any_unhidden_or_unruled_value(path, value) -> None:
     assert not _ng_validator().is_valid(_with(_SERVED_NG, path, value))
-

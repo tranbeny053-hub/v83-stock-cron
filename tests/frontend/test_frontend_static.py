@@ -702,12 +702,15 @@ def test_ui_d1_4b_uses_endpoint_without_database_dependency() -> None:
 
 
 def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
-    html = read_frontend("index.html")
+    html = " ".join(read_frontend("index.html").split())
     js = read_frontend("app.js")
     css = read_frontend("styles.css")
-    assert "Uncalibrated heuristic" in html
-    assert "not validated forecasts" in html
-    assert "Up/Down/In band are momentum-based estimates" in html
+    assert "Most markets use a momentum-based heuristic" in html
+    assert "validated forecasts" in html
+    assert (
+        "on BTC, ETH and SOL (Binance, 15m/1H/4H) they may instead be a descriptive historical"
+        in html
+    )
     assert "Open Detail for the full breakdown." in html
     assert "Download JSON" in js
     assert "downloadPayloadJson" in js
@@ -721,7 +724,7 @@ def test_wave4a_honesty_copy_and_download_json_are_visible() -> None:
 def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     html = read_frontend("index.html")
     js = read_frontend("app.js")
-    assert html.count("Up/Down/In band are momentum-based estimates") == 1
+    assert html.count("Up/Down/In band refer to a close ~6 bars after a bar") == 1
     assert "probability-explainer compact" not in js
     assert "qualitativeCardLean" not in js
     assert "uncalibrated" + " — see Detail" not in js
@@ -740,6 +743,16 @@ def test_wave4a2_cards_show_probabilities_without_repeated_note() -> None:
     # The older Probability section is retired: the decision view carries its sentence.
     assert "section(\"Probability\"" not in js
     assert "view.range.explanation" in js
+
+
+def test_served_reference_card_shows_backend_readiness_copy() -> None:
+    card = extract_javascript_function(read_frontend("app.js"), "overviewCard")
+    assert (
+        'referenceBrief?.probability_type === "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"'
+        in card
+    )
+    assert "referenceLabel.textContent = referenceBrief.uncalibrated_banner" in card
+    assert 'node.insertBefore(referenceLabel, node.querySelector("dl"))' in card
 
 
 def test_frontend_does_not_present_placeholder_confidence_as_real_confidence() -> None:
@@ -1247,7 +1260,9 @@ def test_the_decision_view_leads_the_card_in_the_plans_order() -> None:
     assert "* 100" not in rows and "100 *" not in rows, "the backend's fractions are only formatted"
     card = _function_text(js, "overviewCard")
     assert "const values = view ? [...decisionViewRows(payload, view), ...viewHeat] : [" in card
-    assert "const viewHeat = notAssessedByView(payload) ? [] : [heatRow];" in card
+    assert (
+        "const viewHeat = notAssessedByView(payload) || servedReference ? [] : [heatRow];" in card
+    )
     # Owner ruling CLASS-B-4=A: each card carries the view's own sentence under its headline.
     assert "sentence.textContent = view.detail;" in card
     assert 'textBlock("p", view.detail, "decision-detail")' in _function_text(js, "horizonCard")

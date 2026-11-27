@@ -57,6 +57,7 @@ def build_decision_synthesis(
     data_quality: dict,
     provider_state: dict,
     decision_brief: dict,
+    methodology: str = "HEURISTIC",
 ) -> dict:
     """Build an additive interpretation block without querying or mutating state."""
     gate = quant_result.get("gate_result") or {}
@@ -68,6 +69,7 @@ def build_decision_synthesis(
         gate=gate,
         calibration=calibration,
         decision_brief=decision_brief,
+        methodology=methodology,
     )
     hard_gate_active = _hard_gate_active(gate)
     reliability_status = _reliability_status(calibration, decision_brief)
@@ -81,7 +83,7 @@ def build_decision_synthesis(
     )
     can_plan_trade = label in {"LONG_CANDIDATE", "SHORT_CANDIDATE"}
     timeframe_role = _timeframe_role(timeframe)
-    model_quality = _model_quality_summary(calibration, reliability_status)
+    model_quality = _model_quality_summary(calibration, reliability_status, methodology)
     actionability_stack = _actionability_stack(
         label=label,
         gate=gate,
@@ -148,6 +150,15 @@ def build_decision_synthesis(
             "plain_english": "Future quant hooks are shadow-only and do not affect this result.",
         },
     }
+    if methodology == "DESCRIPTIVE_REFERENCE":
+        result["model_quality_summary"]["calibration_status"] = None
+        result["model_quality_summary"]["calibration_status_reason"] = (
+            "NO_SCORED_COHORT_BY_DESIGN"
+        )
+        result["model_quality_summary"]["reliability_status"] = None
+        result["model_quality_summary"]["reliability_status_reason"] = (
+            "NO_SCORED_COHORT_BY_DESIGN"
+        )
     return result
 
 
@@ -347,6 +358,7 @@ def _probability_interpretation(
     gate: dict,
     calibration: dict,
     decision_brief: dict,
+    methodology: str = "HEURISTIC",
 ) -> dict:
     horizon = (probability_state.get("horizons") or {}).get("H_primary") or {}
     p_up = _optional_float(horizon.get("p_up_frac"))
@@ -366,7 +378,13 @@ def _probability_interpretation(
         or reliability_status != "MEASURED"
         or str(horizon.get("status") or "UNKNOWN") != "OK"
     )
-    if directional_edge is None:
+    is_reference = methodology == "DESCRIPTIVE_REFERENCE"
+    if is_reference:
+        interpretation_label = "BALANCED"
+        plain_english = (
+            "The descriptive reference splits Up and Down equally, so it has no directional lean."
+        )
+    elif directional_edge is None:
         interpretation_label = "UNAVAILABLE"
         plain_english = "Directional probability values are unavailable for interpretation."
     elif directional_edge > 0.0:
@@ -399,7 +417,12 @@ def _probability_interpretation(
         "directional_balance": directional_balance,
         "interpretation_label": interpretation_label,
         "plain_english": plain_english,
-        "reliability_warning": reliability_warning,
+        "reliability_warning": (
+            "These percentages are a descriptive historical frequency; they are not recorded "
+            "for scoring and make no forecast-quality claim."
+            if is_reference
+            else reliability_warning
+        ),
         "informational_only": informational_only,
     }
 
@@ -505,7 +528,9 @@ def _timeframe_role(timeframe: str) -> dict:
     }
 
 
-def _model_quality_summary(calibration: dict, reliability_status: str) -> dict:
+def _model_quality_summary(
+    calibration: dict, reliability_status: str, methodology: str = "HEURISTIC"
+) -> dict:
     measured = reliability_status == "MEASURED"
     return {
         "calibration_status": str(calibration.get("calibration_status") or "UNKNOWN"),
@@ -520,7 +545,10 @@ def _model_quality_summary(calibration: dict, reliability_status: str) -> dict:
         "reliability_available": measured,
         "not_win_rate": True,
         "warning": (
-            "Probabilities remain heuristic until enough resolved samples exist; they do not "
+            "These percentages are a descriptive historical frequency; they are not recorded "
+            "for scoring and make no forecast-quality claim."
+            if methodology == "DESCRIPTIVE_REFERENCE"
+            else "Probabilities remain heuristic until enough resolved samples exist; they do not "
             "establish realized outcomes or profitability evidence."
             if not measured
             else "Measured reliability is diagnostic and does not establish profitability."

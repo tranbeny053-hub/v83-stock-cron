@@ -111,10 +111,20 @@
         "timeframe_label": { "type": "string" },
         "horizon_label": { "type": "string" },
         "horizon_bars": { "type": "integer" },
-        "probability_type": { "const": "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME" },
+        "probability_explanation": { "type": "string" },
+        "uncalibrated_banner": { "type": "string" },
+        "model_readiness_label": { "type": "string" },
+        "probability_type": {
+          "enum": [
+            "UNCALIBRATED_HEURISTIC_6BAR_OUTCOME",
+            "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+          ]
+        },
         "model_readiness": { "type": "string" },
-        "calibration_status": { "type": "string" },
-        "reliability_status": { "type": "string" },
+        "calibration_status": { "type": ["string", "null"] },
+        "reliability_status": { "type": ["string", "null"] },
+        "calibration_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
+        "reliability_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
         "profitability_claim": { "const": false },
         "state_summary": { "type": "string" },
         "key_reasons": { "type": "array", "items": { "type": "string" } },
@@ -133,7 +143,29 @@
         },
         "risk_note": { "type": "string" },
         "disclaimer": { "type": "string" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "probability_type": { "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY" } } },
+          "then": {
+            "required": ["calibration_status_reason", "reliability_status_reason"],
+            "properties": {
+              "calibration_status": { "type": "null" },
+              "reliability_status": { "type": "null" },
+              "calibration_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" },
+              "reliability_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" }
+            }
+          },
+          "else": {
+            "properties": {
+              "calibration_status": { "type": "string" },
+              "reliability_status": { "type": "string" },
+              "calibration_status_reason": { "type": ["null"] },
+              "reliability_status_reason": { "type": ["null"] }
+            }
+          }
+        }
+      ]
     },
     "decision_synthesis": { "$ref": "#/$defs/decisionSynthesis" },
     "decision_view": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/decisionView" }] },
@@ -165,6 +197,76 @@
           "maximum": 1.0
         }
       }
+    },
+    "reference_state": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schema", "status", "reason", "methodology_version", "served_methodology_version",
+            "cell", "h_extended", "prediction_ledger", "display"
+          ],
+          "properties": {
+            "schema": { "const": "lean-reference-state.v1" },
+            "status": { "enum": ["SERVED", "UNAVAILABLE"] },
+            "reason": { "type": ["string", "null"], "enum": [
+              "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+              "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+              "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+              "HISTORY_CONFLICT", null
+            ] },
+            "methodology_version": { "const": "reference-pooled-tk-v1" },
+            "served_methodology_version": { "enum": ["reference-pooled-tk-v1", "heuristic-v1-wave4b0"] },
+            "cell": {
+              "type": "object", "additionalProperties": false,
+              "required": ["symbol", "timeframe", "venue"],
+              "properties": {
+                "symbol": { "type": "string" },
+                "timeframe": { "type": "string" },
+                "venue": { "type": "string" }
+              }
+            },
+            "h_extended": {
+              "type": "object", "additionalProperties": false,
+              "required": ["status", "reason"],
+              "properties": {
+                "status": { "const": "UNAVAILABLE" },
+                "reason": { "type": "string" }
+              }
+            },
+            "prediction_ledger": { "enum": ["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"] },
+            "display": {
+              "type": "object", "additionalProperties": false,
+              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line"],
+              "properties": {
+                "title": { "type": "string" },
+                "count_line": { "type": "string" },
+                "direction_line": { "type": "string" },
+                "overlap_line": { "type": "string" },
+                "honesty_line": { "type": "string" },
+                "extended_line": { "type": "string" }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "SERVED" } }, "required": ["status"] },
+              "then": { "properties": { "reason": { "type": "null" } } }
+            },
+            {
+              "if": { "properties": { "status": { "const": "UNAVAILABLE" } }, "required": ["status"] },
+              "then": { "properties": { "reason": { "type": "string", "enum": [
+                "NOT_NAMED_CELL", "VENUE_NOT_BINANCE", "TIMEFRAME_UNSUPPORTED", "BAND_UNAVAILABLE",
+                "WINDOW_SHORT", "WINDOW_MALFORMED", "K_MISMATCH", "BARS_OUT_OF_RANGE",
+                "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
+                "HISTORY_CONFLICT"
+              ] } } }
+            }
+          ]
+        }
+      ]
     },
     "debug": { "type": "object" },
     "analysis_hash": { "type": "string" },
@@ -274,6 +376,52 @@
       ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision_brief": {
+            "properties": {
+              "probability_type": { "const": "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY" }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "decision_synthesis": {
+            "properties": {
+              "model_quality_summary": {
+                "required": ["calibration_status_reason", "reliability_status_reason"],
+                "properties": {
+                  "calibration_status": { "type": "null" },
+                  "reliability_status": { "type": "null" },
+                  "calibration_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" },
+                  "reliability_status_reason": { "const": "NO_SCORED_COHORT_BY_DESIGN" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "decision_synthesis": {
+            "properties": {
+              "model_quality_summary": {
+                "properties": {
+                  "calibration_status": { "type": "string" },
+                  "reliability_status": { "type": "string" },
+                  "calibration_status_reason": { "type": ["null"] },
+                  "reliability_status_reason": { "type": ["null"] }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "decisionView": {
       "type": "object",
@@ -419,6 +567,7 @@
             "reliability_status": { "type": ["string", "null"] },
             "skill_verdict": { "type": ["string", "null"] },
             "resolved_outcomes": { "type": ["integer", "null"] },
+            "skill_note": { "type": ["string", "null"] },
             "directional_evidence_hold": { "type": "boolean" },
             "profitability_claim": { "const": false },
             "limitations": { "type": "array", "items": { "type": "string" } }
@@ -1163,8 +1312,10 @@
             "warning"
           ],
           "properties": {
-            "calibration_status": { "type": "string" },
-            "reliability_status": { "type": "string" },
+            "calibration_status": { "type": ["string", "null"] },
+            "reliability_status": { "type": ["string", "null"] },
+            "calibration_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
+            "reliability_status_reason": { "enum": ["NO_SCORED_COHORT_BY_DESIGN", null] },
             "sample_count": { "type": ["integer", "null"], "minimum": 0 },
             "sample_gate": { "type": ["string", "null"] },
             "brier_score": { "type": ["number", "null"] },

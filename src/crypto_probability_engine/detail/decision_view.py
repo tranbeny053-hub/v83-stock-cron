@@ -42,6 +42,8 @@ from crypto_probability_engine.config.defaults import DEFAULT_PHASE1A, TIMEFRAME
 from crypto_probability_engine.detail.decision_brief import (
     PROBABILITY_EXPLANATION,
     PROBABILITY_TYPE,
+    REFERENCE_PROBABILITY_EXPLANATION,
+    REFERENCE_PROBABILITY_TYPE,
 )
 from crypto_probability_engine.detail.frontend_display import evidence_gate_reason
 from crypto_probability_engine.detail.gate_kinds import build_gate_view
@@ -65,15 +67,17 @@ ACCEPTED_DIRECTIONAL_PERMISSIONS: frozenset[str] = frozenset()
 # authorization. BACKEND_COPY (composition review, 2026-10-10) makes the registries' note above a
 # blocker of its own: it was stated there and in STATE.md, and nothing enforced it.
 ACCEPTANCE_BLOCKERS: tuple[str, ...] = (
-    "BANNER: frontend/index.html's static banner calls every timeframe an uncalibrated heuristic, "
-    "not a validated forecast; its wording under an accepted claim is the owner's decision.",
+    "BANNER: frontend/index.html's static banner says no timeframe's percentages are validated "
+    "forecasts (the uncalibrated heuristic, or the descriptive reference on the named cells); its "
+    "wording under an accepted claim is the owner's decision.",
     "RELIABILITY_LABEL: frontend/app.js labels a row 'Why reliability is insufficient', which "
     "contradicts an accepted claim once the backend reports measured reliability.",
     "RENDER_TEST: tests/frontend/test_accepted_state_rendering.py does not pin today's whole "
     "render, compare permission renders, or catch advisory wording on permission surfaces.",
     "BACKEND_COPY: src/crypto_probability_engine/api/calibration_endpoint.py's item warning, the "
     "live calibration state and the brief, synthesis and scenario-plan copy still describe an "
-    "unaccepted early diagnostic, and a run reopened from history carries no view; the backend's "
+    "unaccepted early diagnostic or a descriptive reference, and a run reopened from history "
+    "carries no view; the backend's "
     "own data and copy must agree with an acceptance in the same change.",
 )
 
@@ -149,12 +153,14 @@ def build_decision_view(
     decision_brief: Mapping[str, Any],
     skill_evidence: Mapping[str, Any] | None,
     primary_venue: str | None,
+    methodology: str = "HEURISTIC",
 ) -> dict[str, Any]:
     """The view of one analysis: a pure function of values the analysis already has."""
 
     gate = quant_result.get("gate_result") or {}
     hard_blocks = [str(block) for block in gate.get("hard_blocks") or []]
     data = _data_state(data_quality, provider_state, hard_blocks, primary_venue)
+    is_reference = methodology == "DESCRIPTIVE_REFERENCE"
     claim_key = f"{decision_brief.get('probability_type')}:{methodology_version}:{timeframe}"
     if data["state"] == "UNAVAILABLE":
         state = "INVALID_OR_UNAVAILABLE_DATA"
@@ -188,7 +194,8 @@ def build_decision_view(
     # uncalibrated heuristic, so an accepted state, whose own sentence says what the percentages
     # carry, has none.
     heuristic = decision_brief.get("probability_type") == PROBABILITY_TYPE
-    explained = state == "NO_ACCEPTED_CLAIM" and heuristic
+    reference = decision_brief.get("probability_type") == REFERENCE_PROBABILITY_TYPE
+    explained = state == "NO_ACCEPTED_CLAIM" and (heuristic or reference)
     return {
         "schema_version": SCHEMA_VERSION,
         "state": state,
@@ -206,7 +213,13 @@ def build_decision_view(
             "down_frac": _fraction(horizon.get("p_down_frac")) if assessed else None,
             "evidence_level": decision_brief.get("probability_type"),
             "meaning": RANGE_MEANING if assessed else NOT_ASSESSED,
-            "explanation": PROBABILITY_EXPLANATION if explained else None,
+            "explanation": (
+                REFERENCE_PROBABILITY_EXPLANATION
+                if explained and reference
+                else PROBABILITY_EXPLANATION
+                if explained
+                else None
+            ),
         },
         "cost": {
             "round_trip_cost_frac": _fraction(execution.get("round_trip_cost_frac")),
@@ -217,13 +230,20 @@ def build_decision_view(
         },
         "evidence": {
             "model_readiness": decision_brief.get("model_readiness"),
-            "calibration_status": decision_brief.get("calibration_status"),
-            "reliability_status": decision_brief.get("reliability_status"),
-            "skill_verdict": None if _hold_active(hold) else evidence.get("verdict"),
-            "resolved_outcomes": None if _hold_active(hold) else evidence.get("n"),
+            "calibration_status": None
+            if is_reference
+            else decision_brief.get("calibration_status"),
+            "reliability_status": None
+            if is_reference
+            else decision_brief.get("reliability_status"),
+            "skill_verdict": None
+            if is_reference or _hold_active(hold)
+            else evidence.get("verdict"),
+            "resolved_outcomes": None if is_reference or _hold_active(hold) else evidence.get("n"),
+            **({"skill_note": "NO_SCORED_COHORT_BY_DESIGN"} if is_reference else {}),
             "directional_evidence_hold": _hold_active(hold),
             "profitability_claim": False,
-            "limitations": _limitations(state, _hold_active(hold)),
+            "limitations": _limitations(state, _hold_active(hold), is_reference),
         },
         "gates": gates,
     }
@@ -318,14 +338,20 @@ def _time(snapshot: Any, timeframe: str) -> dict[str, Any]:
     }
 
 
-def _limitations(state: str, hold: bool) -> list[str]:
+def _limitations(state: str, hold: bool, is_reference: bool = False) -> list[str]:
     # Accepted evidence shows its accepted state (owner ruling 2026-10-06); an accepted
     # directional permission stays explicitly non-advisory. Today's states read as before.
     accepted = state in {"ACCEPTED_FORECAST_CLAIM", "DIRECTIONAL_PERMISSION"}
     limitations = [
         "Accepted forecast-quality claim for this model and timeframe."
         if accepted
-        else "Uncalibrated heuristic: its accuracy has not been established on resolved outcomes.",
+        else (
+            "Descriptive historical frequency; not recorded for scoring and no "
+            "forecast-quality claim is made."
+            if is_reference
+            else "Uncalibrated heuristic: its accuracy has not been established on "
+            "resolved outcomes."
+        ),
         "No profitability claim.",
     ]
     if not accepted:

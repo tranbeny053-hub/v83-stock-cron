@@ -35,6 +35,13 @@ from crypto_probability_engine.quant.probability_distributional import (
 from crypto_probability_engine.quant.probability_three_state import compute_probability_state
 from crypto_probability_engine.quant.risk_arbiter import compute_risk_arbiter
 from crypto_probability_engine.quant.tail_cvar import compute_tail_cvar
+from crypto_probability_engine.quant_ng.reference_pooled import (
+    PooledReferenceUnavailable,
+    RefusalReason,
+    build_reference_probability_state,
+    build_reference_timeout_state,
+    compute_pooled_reference,
+)
 from crypto_probability_engine.quant_ng.registry import (
     SLOT_POLICY,
     Refusal,
@@ -102,6 +109,97 @@ def run_pipeline_ng(
             "band_frac": distributional.band_frac,
         }
         probability_model = "probability_distributional"
+    return {
+        "result": _assemble_result(
+            snapshot,
+            provider_state,
+            probability=probability,
+            timeout_state=timeout_state,
+            probability_model=probability_model,
+            epistemic=epistemic,
+            trend=trend,
+            volatility=volatility,
+            liquidity=liquidity,
+            volume=volume,
+            execution=execution,
+            risk_arbiter=risk_arbiter,
+        ),
+        "ng": {
+            "schema": "quant-ng-serving.v1",
+            "serving_state": {
+                "tier": state.tier,
+                "reference": state.reference,
+                "status": state.status,
+                "slot_policy": state.slot_policy,
+                "reason": state.reason,
+            },
+            "reference_state": "HIDDEN",
+            "evidence_status": "NONE",
+            "slot_policy": SLOT_POLICY,
+            "policy_id": None,
+        },
+    }
+
+
+def run_pipeline_reference(
+    snapshot: MarketSnapshot,
+    provider_state: dict,
+    *,
+    window_candles,
+    window_source: str,
+) -> dict:
+    """Run the pooled reference using snapshot features and a separate history window."""
+    if not window_candles or window_candles[-1] != snapshot.candles[-1]:
+        raise PooledReferenceUnavailable(
+            RefusalReason.WINDOW_MALFORMED,
+            "window does not end at the snapshot's last closed candle",
+        )
+    epistemic = assess_epistemic_sufficiency(snapshot)
+    trend = compute_trend_mtf(snapshot.candles)
+    volatility = compute_realized_volatility(snapshot.candles)
+    liquidity = compute_liquidity_depth(snapshot.order_book)
+    volume = compute_volume_anomaly(snapshot.candles)
+    execution = compute_execution_realism(liquidity)
+    risk_arbiter = compute_risk_arbiter(trend, volatility, liquidity, execution)
+    ref = compute_pooled_reference(
+        window_candles,
+        timeframe=snapshot.timeframe,
+        band_frac=execution["round_trip_cost_frac"],
+    )
+    probability = build_reference_probability_state(ref, epistemic_state=epistemic)
+    timeout_state = build_reference_timeout_state(ref, window_source=window_source)
+    result = _assemble_result(
+        snapshot,
+        provider_state,
+        probability=probability,
+        timeout_state=timeout_state,
+        probability_model="reference_pooled_tk",
+        epistemic=epistemic,
+        trend=trend,
+        volatility=volatility,
+        liquidity=liquidity,
+        volume=volume,
+        execution=execution,
+        risk_arbiter=risk_arbiter,
+    )
+    return result
+
+
+def _assemble_result(
+    snapshot: MarketSnapshot,
+    provider_state: dict,
+    *,
+    probability: dict,
+    timeout_state: dict,
+    probability_model: str,
+    epistemic: dict,
+    trend: dict,
+    volatility: dict,
+    liquidity: dict,
+    volume: dict,
+    execution: dict,
+    risk_arbiter: dict,
+) -> dict:
     score = compute_score_stack(probability, risk_arbiter)
     tail_risk = compute_tail_cvar(snapshot.candles, timeframe=snapshot.timeframe)
     risk_flags = global_risk_state()
@@ -164,20 +262,4 @@ def run_pipeline_ng(
         "global_risk_state": risk_flags,
     }
     result["analysis_hash"] = stable_hash(result)
-    return {
-        "result": result,
-        "ng": {
-            "schema": "quant-ng-serving.v1",
-            "serving_state": {
-                "tier": state.tier,
-                "reference": state.reference,
-                "status": state.status,
-                "slot_policy": state.slot_policy,
-                "reason": state.reason,
-            },
-            "reference_state": "HIDDEN",
-            "evidence_status": "NONE",
-            "slot_policy": SLOT_POLICY,
-            "policy_id": None,
-        },
-    }
+    return result

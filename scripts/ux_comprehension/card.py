@@ -149,6 +149,7 @@ _FUNCTIONS = (
     "hasGateFraming",
     "gateFramingBlocks",
     "gateDetailList",
+    "renderReferenceDisplay",
     "saveReceiptText",
     "renderDecisionViewSection",
     "updatePersistenceStatus",

@@ -79,6 +79,23 @@ def screens() -> dict[str, dict[str, object]]:
     return shown
 
 
+def test_screens_use_the_unmodified_product_function_list() -> None:
+    assert "renderReferenceDisplay" in card._FUNCTIONS
+    assert len(card.screens()) == len(card.SCENARIOS)
+
+
+def test_reference_card_adds_no_label_when_backend_labels_are_absent() -> None:
+    source = card.APP_JS.read_text(encoding="utf-8")
+    start = source.index(
+        "if (referenceBrief?.probability_type === "
+        '"DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY")'
+    )
+    end = source.index("\n  }", start) + 4
+    branch = source[start:end]
+    assert '"Descriptive reference"' not in branch
+    assert "if (referenceLabel.textContent)" in branch
+
+
 def test_the_analyses_cover_what_the_check_must_tell_apart(
     screens: dict[str, dict[str, object]],
 ) -> None:

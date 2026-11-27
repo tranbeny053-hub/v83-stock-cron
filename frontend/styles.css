@@ -1523,6 +1523,19 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.reference-display {
+  margin: 8px 0 12px;
+  border-left: 3px solid var(--warning);
+  padding: 6px 10px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reference-display p {
+  margin-top: 4px;
+}
+
 /* The summary and its framing share one bar down their left edge: they read as one group. */
 .decision-gates,
 .decision-gate-framing {

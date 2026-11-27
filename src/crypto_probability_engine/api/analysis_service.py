@@ -18,6 +18,7 @@ from crypto_probability_engine.adapters.provider_selection import (
     ProviderSelectionError,
     select_market_data,
 )
+from crypto_probability_engine.adapters.public_market import BinancePublicAdapter
 from crypto_probability_engine.api import commit_reconciliation as _reconciliation
 from crypto_probability_engine.api import save_receipt as _save_receipt
 from crypto_probability_engine.api.errors import api_error
@@ -50,8 +51,11 @@ from crypto_probability_engine.derivatives_intel.schemas import (
 )
 from crypto_probability_engine.detail.builder import build_detail_view
 from crypto_probability_engine.detail.decision_brief import (
+    HEURISTIC_METHOD,
+    REFERENCE_METHOD,
     build_decision_brief,
     build_horizon_context,
+    reference_display,
 )
 from crypto_probability_engine.detail.decision_synthesis import build_decision_synthesis
 from crypto_probability_engine.detail.decision_view import build_decision_view
@@ -73,6 +77,7 @@ from crypto_probability_engine.persistence.derivatives_snapshot import (
 from crypto_probability_engine.persistence.feature_snapshot import build_feature_snapshot
 from crypto_probability_engine.persistence.prediction_origin import (
     DEFAULT_PREDICTION_ORIGIN,
+    PredictionOrigin,
     validate_prediction_origin,
 )
 from crypto_probability_engine.persistence.repository import (
@@ -84,8 +89,15 @@ from crypto_probability_engine.persistence.repository import (
 )
 from crypto_probability_engine.persistence.run_store import InMemoryRunStore
 from crypto_probability_engine.quant.pipeline import run_quant_pipeline, stable_hash
-from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng
+from crypto_probability_engine.quant_ng.pipeline_ng import run_pipeline_ng, run_pipeline_reference
+from crypto_probability_engine.quant_ng.reference_pooled import (
+    NAMED_CELLS,
+    REFERENCE_METHODOLOGY_VERSION,
+    PooledReferenceUnavailable,
+    bars_required,
+)
 from crypto_probability_engine.quant_ng.registry import SCHEMA_ID, SLOT_POLICY, Refusal
+from crypto_probability_engine.quant_ng.windows import WindowUnavailable, acquire_window
 from crypto_probability_engine.quant_v2.contract import build_quant_v2_shadow
 from crypto_probability_engine.targets.contract_v1 import TARGET_VERSION_V1, VENUE_LABELS, stamp_v1
 from crypto_probability_engine.telemetry.events import (
@@ -106,6 +118,15 @@ _PERSISTENCE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="uc
 # OFF by owner R3a (2026-11-04). Turning this on is activation: a reviewed code change, then T3/T4.
 # No environment variable, setting, header or request parameter reads or sets it.
 NG_PIPELINE_ENABLED = False
+LEAN_REFERENCE_ENABLED = False
+
+
+def _ensure_exclusive_pipeline_switches(ng_enabled: bool, lean_reference_enabled: bool) -> None:
+    if ng_enabled and lean_reference_enabled:
+        raise RuntimeError("NG pipeline and lean reference cannot both be enabled")
+
+
+_ensure_exclusive_pipeline_switches(NG_PIPELINE_ENABLED, LEAN_REFERENCE_ENABLED)
 NG_EMPTY_REGISTRY = {"schema": SCHEMA_ID, "slot_policy": SLOT_POLICY, "cells": []}
 _MAX_IN_FLIGHT_PERSISTENCE_JOBS = 8
 _PERSISTENCE_ADMISSION = threading.BoundedSemaphore(_MAX_IN_FLIGHT_PERSISTENCE_JOBS)
@@ -125,11 +146,17 @@ _ALLOWED_DERIVATIVES_METHODOLOGY_VERSIONS = frozenset(
 _stamp_clock = utc_now
 
 
+def _reference_history_adapter(settings):
+    """Use Binance's ordinary public adapter and its shared HTTP client policy."""
+    return BinancePublicAdapter(settings=settings)
+
+
 @dataclass(frozen=True)
 class PersistenceWork:
     run_summary: dict
     timeframe_result: dict
     provider_observations: tuple[dict, ...]
+    reference_served: bool = False
     news_items: tuple[dict, ...] = ()
     news_clusters: tuple[dict, ...] = ()
     news_evidence_links: tuple[dict, ...] = ()
@@ -357,9 +384,71 @@ def _analyze(
         else None
     )
     ng_serving = None
+    reference_state = None
     use_ng_pipeline = (
         NG_PIPELINE_ENABLED and record_prediction and arm_context is None and pair_context is None
     )
+    attempt_reference = (
+        LEAN_REFERENCE_ENABLED
+        and record_prediction
+        and prediction_origin == PredictionOrigin.USER_REQUESTED.value
+        and arm_context is None
+        and pair_context is None
+        and not deterministic_identity
+        and methodology_version == METHODOLOGY_VERSION
+        and request.asset_class == AssetClass.CRYPTO_SPOT
+    )
+    if attempt_reference:
+        cell = (symbol.display, request.timeframe)
+        ref_version = REFERENCE_METHODOLOGY_VERSION
+
+        def unavailable(reason: str) -> dict:
+            return {
+                "schema": "lean-reference-state.v1",
+                "status": "UNAVAILABLE",
+                "reason": reason,
+                "methodology_version": ref_version,
+                "served_methodology_version": METHODOLOGY_VERSION,
+                "cell": {"symbol": symbol.display, "timeframe": request.timeframe,
+                         "venue": snapshot.provider},
+                "h_extended": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
+                "prediction_ledger": "HEURISTIC_COHORT",
+            }
+
+        if cell not in NAMED_CELLS:
+            reference_state = unavailable("NOT_NAMED_CELL")
+        elif snapshot.provider != "binance":
+            reference_state = unavailable("VENUE_NOT_BINANCE")
+        else:
+            try:
+                window = acquire_window(
+                    snapshot,
+                    symbol=symbol,
+                    bars_required=bars_required(request.timeframe),
+                    history_adapter=_reference_history_adapter(settings),
+                    now_utc=_stamp_clock(),
+                )
+                reference_result = run_pipeline_reference(
+                    snapshot, provider_state, window_candles=window.candles,
+                    window_source=window.source.value,
+                )
+            except WindowUnavailable as exc:
+                reference_state = unavailable(exc.reason.value)
+            except PooledReferenceUnavailable as exc:
+                reference_state = unavailable(exc.reason.value)
+            else:
+                quant_result = reference_result
+                reference_state = {
+                    "schema": "lean-reference-state.v1",
+                    "status": "SERVED",
+                    "reason": None,
+                    "methodology_version": ref_version,
+                    "served_methodology_version": ref_version,
+                    "cell": {"symbol": symbol.display, "timeframe": request.timeframe,
+                             "venue": snapshot.provider},
+                    "h_extended": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
+                    "prediction_ledger": "NOT_RECORDED_BY_DESIGN",
+                }
     if use_ng_pipeline:
         venue = VENUE_LABELS.get(snapshot.provider)
         if venue is None:
@@ -399,12 +488,13 @@ def _analyze(
                     "status": "SERVED_HIDDEN",
                     "h_extended_context": {"status": "UNAVAILABLE", "reason": "NOT_MODELED"},
                 }
-    if not use_ng_pipeline or ng_serving is None or ng_serving["status"] == "UNAVAILABLE":
-        quant_result = run_quant_pipeline(
-            snapshot,
-            provider_state,
-            methodology_version=methodology_version,
-        )
+    if reference_state is None or reference_state["status"] == "UNAVAILABLE":
+        if not use_ng_pipeline or ng_serving is None or ng_serving["status"] == "UNAVAILABLE":
+            quant_result = run_quant_pipeline(
+                snapshot,
+                provider_state,
+                methodology_version=methodology_version,
+            )
     clock.lap("quant_ms")
     core_computed_at = _stamp_clock()
     skill_evidence = (
@@ -433,7 +523,13 @@ def _analyze(
         run_id = deterministic_run_id
     else:
         run_id = f"run_{uuid4().hex}"
-    horizon_context = build_horizon_context(request.timeframe)
+    served_reference = bool(reference_state and reference_state["status"] == "SERVED")
+    methodology = REFERENCE_METHOD if served_reference else HEURISTIC_METHOD
+    if reference_state is not None:
+        reference_state["display"] = reference_display(
+            reference_state, quant_result["horizon_timeout_state"]
+        )
+    horizon_context = build_horizon_context(request.timeframe, methodology=methodology)
     frontend_display = build_frontend_display(
         quant_result,
         news_blocks,
@@ -450,6 +546,7 @@ def _analyze(
         timeframe=request.timeframe,
         quant_result=quant_result,
         data_quality=data_quality,
+        methodology=methodology,
     )
     decision_synthesis = build_decision_synthesis(
         timeframe=request.timeframe,
@@ -457,6 +554,7 @@ def _analyze(
         data_quality=data_quality,
         provider_state=provider_state,
         decision_brief=decision_brief,
+        methodology=methodology,
     )
     detail_view = build_detail_view(
         symbol=symbol.display,
@@ -467,6 +565,7 @@ def _analyze(
         provider_state=provider_state,
         data_quality=data_quality,
         decision_brief=decision_brief,
+        reference_state=reference_state,
     )
     clock.lap("present_ms")
     response = {
@@ -525,12 +624,13 @@ def _analyze(
     }
     if use_ng_pipeline:
         response["ng_serving"] = ng_serving
+    if reference_state is not None:
+        response["reference_state"] = reference_state
     if record_prediction and arm_context is None:
         # The one authoritative view (plan §14.1; owner rulings DP-A and DP-F), for every recorded
         # analysis; never for the isolated automation analysis or an OOS arm.
         response["decision_view"] = build_decision_view(
             timeframe=request.timeframe,
-            methodology_version=methodology_version,
             snapshot=snapshot,
             data_quality=data_quality,
             provider_state=provider_state,
@@ -538,6 +638,12 @@ def _analyze(
             decision_brief=decision_brief,
             skill_evidence=skill_evidence,
             primary_venue=settings.provider_priority[0] if settings.provider_priority else None,
+            methodology=methodology,
+            methodology_version=(
+                reference_state["methodology_version"]
+                if served_reference
+                else methodology_version
+            ),
         )
     response["analysis_hash"] = stable_hash(response)
     prediction_row = (
@@ -555,7 +661,7 @@ def _analyze(
             target=arm_context.target if arm_context is not None else None,
             methodology_version=methodology_version,
         )
-        if record_prediction
+        if record_prediction and not (reference_state and reference_state["status"] == "SERVED")
         else None
     )
     response["quant_v2"] = build_quant_v2_shadow(
@@ -574,8 +680,11 @@ def _analyze(
         rate_limit_per_min=settings.provider_rate_limit_per_min,
         methodology_version=derivatives_methodology_version,
     )
+    served_reference = bool(reference_state and reference_state["status"] == "SERVED")
     feature_snapshot_row = (
-        build_feature_snapshot(prediction_row, response["quant_v2"]) if record_prediction else None
+        build_feature_snapshot(prediction_row, response["quant_v2"])
+        if record_prediction and not served_reference
+        else None
     )
     validated = AnalysisResponse.model_validate(response).model_dump(mode="json")
     if "decision_view" not in response:
@@ -583,6 +692,8 @@ def _analyze(
         validated.pop("decision_view", None)
     if "ng_serving" not in response:
         validated.pop("ng_serving", None)
+    if "reference_state" not in response:
+        validated.pop("reference_state", None)
     derivatives_block = validated["derivatives_intelligence"]
     derivatives_snapshot_required = derivatives_block["block_status"] in {
         "ACTIVE",
@@ -595,7 +706,7 @@ def _analyze(
                 prediction_row,
                 derivatives_block,
             )
-            if record_prediction
+            if record_prediction and not served_reference
             else None
         )
     except Exception:
@@ -1321,7 +1432,14 @@ def _persist_work_confirmed(
             background_status = "UNAVAILABLE"
             unexpected_failure = True
 
-    prediction_succeeded = prediction_confirmation in {"OK", "STATELESS"}
+    prediction_succeeded = (
+        prediction_confirmation in {"OK", "STATELESS"}
+        or (
+            not work.prediction_rows
+            and work.run_detail_row is not None
+            and work.reference_served
+        )
+    )
     if (
         unexpected_failure
         or auxiliary_unavailable
@@ -1340,7 +1458,15 @@ def _persist_work_confirmed(
         overall,
         background_status,
         *_core_receipt(
-            *_aggregate_receipt(receipts, len(work.prediction_rows)),
+            *(
+                (RECEIPT_SAVED, None)
+                if (
+                    not work.prediction_rows
+                    and work.run_detail_row is not None
+                    and work.reference_served
+                )
+                else _aggregate_receipt(receipts, len(work.prediction_rows))
+            ),
             run=run_confirmation,
             detail=detail_confirmation,
             detail_required=work.run_detail_row is not None,
@@ -1768,6 +1894,7 @@ def _persistence_work(
         run_summary=run_summary,
         timeframe_result=_timeframe_result(payload),
         provider_observations=tuple(_provider_observations(payload)),
+        reference_served=((payload.get("reference_state") or {}).get("status") == "SERVED"),
         news_items=tuple(_news_item_rows(payload)),
         news_clusters=tuple(_news_cluster_rows(payload)),
         news_evidence_links=tuple(_news_evidence_link_rows(payload)),
