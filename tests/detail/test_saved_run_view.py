@@ -1022,3 +1022,21 @@ def test_saved_reference_gate_summary_uses_stored_probability_type() -> None:
         "Evidence gate: predictive performance has not been validated for this reference. "
         "No risk gate is active."
     )
+
+
+def test_saved_reference_evidence_detail_makes_no_directional_skill_statement() -> None:
+    reference_type = "DESCRIPTIVE_REFERENCE_6BAR_INSIDE_BAND_FREQUENCY"
+    stored = {
+        "invalidation_detail": EVIDENCE_GATE,
+        "decision_brief": {"probability_type": reference_type},
+    }
+    saved = saved_run_view.build_saved_run_view(stored)
+    heuristic = saved_run_view.build_saved_run_view({"invalidation_detail": EVIDENCE_GATE})
+    (block,) = saved["gates"]["blocks"]
+    assert block["block"] == "SKILL_NOT_DEMONSTRATED"
+    assert block["detail"] == (
+        "Predictive performance has not been validated for this reference. Its evidence is not "
+        "kept in saved history."
+    )
+    (heuristic_block,) = heuristic["gates"]["blocks"]
+    assert "Directional skill" in heuristic_block["detail"]

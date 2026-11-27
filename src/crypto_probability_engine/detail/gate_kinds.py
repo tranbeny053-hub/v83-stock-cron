@@ -60,6 +60,11 @@ EVIDENCE_GATE_DETAIL = "Directional skill is not established for this model and 
 SAVED_EVIDENCE_GATE_DETAIL = (
     f"{EVIDENCE_GATE_DETAIL} Its verdict and counts are not kept in saved history."
 )
+# The same sentence for a saved descriptive reference: no directional-skill claim either way.
+SAVED_REFERENCE_EVIDENCE_GATE_DETAIL = (
+    "Predictive performance has not been validated for this reference. Its evidence is not kept "
+    "in saved history."
+)
 # The summary's part for a liquidity gate whose stored measurement a reopened run cannot read
 # (minor m2): the gate is named, and nothing is said about why it fired. PROVISIONAL wording.
 LIQUIDITY_NOT_READABLE_SUMMARY = (
