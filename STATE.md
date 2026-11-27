@@ -1,87 +1,420 @@
 # STATE
 
-Updated: 2026-11-26 (**EXP-05 STAGE 0 IS COMPUTED AND CONSUMED: ONE LOCAL, EXACT, SYNTHETIC RUN;
-NOTHING ADOPTED; NEVER RERUN. ITS KERNEL, THE CAPTURE-LOG VALIDATOR, THE TOKEN-SAFE OBJECT-NAME
-PRIMITIVE AND CHANGELOG #365 ARE ON MAIN (#367, #368, #369, #370 → M103 88b149dd). PRODUCTION IS
-UNCHANGED: D 49ab0855 / UCPE-PROD-NG4P-20261118-B. THE PILOT WINDOW RUNS 2026-11-23T00:00:00Z –
-2026-12-07T00:00:00Z; NO SPACE CHANGE INSIDE IT. NEVER RERUN THE DEPLOY OF 49ab0855, THE APPLY
-(44133908695), PREFLIGHT RUNS 43916685548, 44012717250, 44039032076 OR 44113873249, THE EXP-04
-VALIDATION OR THE EXP-05 STAGE-0 MAP. NGA IS STILL PROPOSED, NOT ADOPTED. NO FORECAST-QUALITY CLAIM
-OR DIRECTIONAL PERMISSION IS REACHABLE.**
-- The owner (verbatim below), 2026-11-26 (ICT): the continuous-development directive after M99;
-  R-E05-0 (one stage-0 run); the post-stage-0 directive (C-1 adopted; C-2 naming option (b); the T3
-  package); and the T3 for this batch.
-- **EXP-05 STAGE 0, COMPUTED AND CONSUMED (local).** Prereg d3
-  (.work/nga_post_m99_20261126/lane1/EXP05_COEF_PRIOR_KERNEL_PREREG.d3.md, sha256 d617965d…; d2 read
-  back as LANE1-S1-R2 PASS; the d2→d3 exact delta and the manifest read back as E05-F1 PASS).
-  Manifest b59f0479… (1,800 points × 7 strengths), its digest committed before the run (aaf8d20,
-  tree identical to the gated head bb1fded). One run, 2026-11-26T08:23:05Z–08:25:20Z, exit 0: status
-  COMPUTED, SC-1 to SC-8 passed, every point computed, 212 out of range. Output review E05-R1 PASS.
-  Expectations E1, E3, E4, E6 hold; E2's first clause holds in its weak form (no decrease) and its
-  second is unchecked; E5 is unchecked; E7 is SC-6. The figures describe the declared linear model
-  at PROPOSED grid values, reflect the grid's design and are not frequencies of anything; no grid
-  value, sharing strength, thin-symbol definition or estimator is adopted
-  (.work/nga_post_m99_20261126/lane1/STAGE0_RUN_RECORD.md; outputs local). EXP-05 stage 1 and EXP-04
-  stage 2 stay HOLD.
-- **THE KERNEL (#369 → M102 2fe274ba).** scripts/quant_ng_share_kernel.py and its 97 tests (one
-  inventory row): exact rational risk of coefficient-prior sharing in a declared linear model; no
-  public callable takes or returns a coefficient; no random numbers, data or network. Review: spec
-  LANE1-S1, S1-R2 PASS; code LANE1-C1 PASS_WITH_AMENDMENTS (folded), C1-R2 PASS; the master's
-  repairs (a fail-open PSD test; R-K2: the two-target covariance, R_best as a total, the
-  class-collapsed map) caught before the final review.
-- **THE CAPTURE-LOG VALIDATOR (#368 → M101 7b1cf58e).** scripts/quant_ng_capture_log.py: dormant,
-  MOCK-only checks of the PROPOSED capture-time contract d2; every ARCHIVE log refused; no I/O.
-  Review: LANE2-P1 PASS_WITH_AMENDMENTS, P1-R2 PASS_WITH_AMENDMENTS; its exact fixes folded and
-  probe-verified, and the fold delta read back in OBJ-1.
-- **THE CHANGELOG (#367 → M100 3fe4578d):** the entry for #365 and #364's documentation correction.
-- **THE TOKEN-SAFE OBJECT-NAME PRIMITIVE (#370 → M103 88b149dd).** scripts/quant_ng_object_name.py:
-  the owner-approved C-2 naming option (b), a reversible map from 64-character SHA256 hex to 64
-  letters over g-v that cannot hold a protected token; the digest stays the identity; no filesystem
-  access, no network, wired into nothing. Review: OBJ-1 PASS (4 optional NOTEs, folded), OBJ-1-R2
-  PASS_WITH_AMENDMENTS (its MINOR, a root bypass through .., fixed at d3c08e31), then the read-back
-  OBJ-1-R3 PASS.
-- **THE DATA FOUNDATION (local, .work/nga_post_stage0_20261126/DATA_FOUNDATION_RECONCILIATION.md).**
-  C-1 RULED: F-SURV §§1–8 adopted, OP-3 = the archive listing observed at the recorded fetch instant
-  F; a listing is not proof of historical membership, file availability or completeness. C-2's
-  naming decision RULED (option (b)); the rest of the capture-time contract is NOT ruled (the
-  tolerance value and its handling, Date formats, sharing, refusal names). Licence applicability
-  (Q1, Q3) unresolved; no archive access, listing or changelog read; every real-data entry point and
-  allowlist fail-closed.
+Updated: 2026-11-27 (**THE LEAN QUANT RELEASE IS THE PRODUCT FINISH LINE (OWNER P1-P10); ITS DORMANT
+BUILD IS ON MAIN (#372 → M105 6a8477ed), SWITCH OFF: LEAN_REFERENCE_ENABLED = False. PRODUCTION IS
+UNCHANGED: D 49ab0855 / UCPE-PROD-NG4P-20261118-B, OD-NG-4 KEEP_HOLD UNTIL A SEPARATE T4. THE
+RELEASE HOLDS ON THE P6 RIGHTS GATE (NOT ESTABLISHED), EXP-03 AND THE OWNER'S READ OF THE P5
+WORDING. THE PILOT WINDOW RUNS 2026-11-23T00:00:00Z – 2026-12-07T00:00:00Z; NO SPACE CHANGE INSIDE
+IT. NEVER RERUN THE DEPLOY OF 49ab0855, THE APPLY (44133908695), PREFLIGHT RUNS 43916685548,
+44012717250, 44039032076 OR 44113873249, THE EXP-04 VALIDATION OR THE EXP-05 STAGE-0 MAP. NO
+FORECAST-QUALITY CLAIM, INTERVAL CLAIM OR DIRECTIONAL PERMISSION IS REACHABLE.**
+- The owner (verbatim below): 2026-11-26 (ICT), the resource-optimized Fable x Astra reconciliation
+  request and the final strategic rulings P1-P10 with the bounded LOCAL build authorization;
+  2026-11-27 (ICT), the T3 for this batch.
+- **THE CONSULTATION (T0, consumed).** Fable (claude-fable-5-2; XHIGH requested, numeric effort 80
+  reported, named level unconfirmed) recorded its position first
+  (.work/nga_strategy_20261126/FABLE_INITIAL_POSITION.md, sha256 cdf8e6f3…, sealed before Astra was
+  shown), then one cross-review (MATERIAL_DISAGREEMENT: YES). The existing gpt-6-astra High findings
+  were reused, not rerun; ONE targeted gpt-6-astra reply (Codex CLI, high, read-only, ephemeral,
+  ChatGPT login; thread 01a217f4-df17-7aa2-aaff-6e9ba969e716; 18,231 in / 511 out tokens) amended
+  all three disputed points; reconciled in .work/nga_strategy_20261126/RECONCILED_RECOMMENDATION.md
+  (sha256 167c8272…). Paid API $0.
+- **THE RULINGS (P1-P10).** P1 one bounded Lean Quant Release is the finish line, then stop model
+  development; P2 a new identity, pooled T/K, no prior or fitted constant; P3 reference-slot serving
+  for named cells only, KEEP_HOLD in production until activation; P4 nine named cells (BTC/USDT,
+  ETH/USDT, SOL/USDT x 15m, 1H, 4H; Binance Spot; six-bar horizon); P5 descriptive, not a
+  forecast-quality claim; P6 personal non-commercial use, rights gate retained; P7 request-time
+  serving is not a look, no new stored scoring; P8 C1 DEFER; P9 the advanced NGA research programme
+  NOT PURSUED for this release (reopenable, nothing deleted); P10 EXP-03 later.
+- **THE BUILD (#372 → M105 6a8477ed).** Contract
+  .work/lean_release_20261126/IMPLEMENTATION_CONTRACT.md (d1 2dd75e20…; d2 772fd927…, with LEAN-C1's
+  amendments). reference-pooled-tk-v1: p_timeout = T/K of six-bar terminal returns inside the
+  request-time cost band over a pooled 7-day (15m) or 28-day (1H, 4H) memory on the 3-bar lattice; a
+  full gap-free window makes K exactly 224, 224 or 56; UP = DOWN; no H_extended. Served only for
+  USER_REQUESTED default-method analyses of a named cell on Binance; every refusal falls back
+  explicitly to the heuristic with its reason; every other path, and everything with the switch off,
+  unchanged. A served reference writes no prediction, feature or derivatives row (nothing resolvable
+  or scored); its run row and its detail ARE saved, and the detail carries reference_state. The
+  brief, synthesis, views and UI carry the reference's own identity; reference_state is
+  schema-typed. 15m and 1H use one bounded Binance klines request (679 rows); 4H uses the snapshot.
+  Review: spec LEAN-C1 PASS_WITH_AMENDMENTS (folded as contract d2); code LEAN-R1 FAIL on one
+  blocker (the run summary carried a non-column key the REST writer would refuse), repaired; LEAN-R2
+  PASS_WITH_AMENDMENTS (its repair added one MAJOR, the UX card generator broken behind a test
+  patch, and three MINORs); LEAN-R3 PASS_WITH_AMENDMENTS (one new MAJOR: the served synthesis failed
+  the response schema); each repaired; LEAN-R4 PASS. The master's own repairs: S3's importlib
+  evasion of the import guard replaced by exact static imports and a dynamic-import guard; Codex's
+  protected-name skip in that guard reverted. Gate at the exact clean head e24efa59: 9571, scanners
+  3/3; mutation probes S1 6/6 killed and wiring W1-W9 8 killed, W4 equivalent (W8, W9 recorded in
+  probes_s3/result_w8_w9.json).
+- **THE RIGHTS GATE (P6): NOT ESTABLISHED** (.work/lean_release_20261126/P6_RIGHTS_REVIEW.md). The
+  live REST API falls under the Binance Terms of Use (cl. 27: "non-commercial personal or internal
+  business use"); the separate API terms (cl. 14.1.2(b)), the incorporated Prohibited Use and AI
+  Policies and the binding regional version could not be established from public text. The Binance
+  Vision archive terms do not apply (no archive). Release HOLD.
+- **EXP-03** (.work/lean_release_20261126/EXP03_REHEARSAL_PACKAGE.md): one local, in-memory,
+  operational rehearsal over the nine cells (at most 48 klines requests); prepared, NOT authorized.
+- **DISCLOSURES.** Fable's filtered STATE reads included the public §5A result summary line (the
+  filter is case-sensitive); no protected path was opened. Codex's read-only audit (task-1093)
+  reported one broad search with a case-sensitive exclusion that may have scanned two public docs/
+  files whose names carry the §5A token (a preregistration and an acceptance matrix); no content
+  entered the audit and the master did not open the log. Later tasks carried case-insensitive
+  per-component exclusions.
 - **THE PILOT WINDOW, passively** (.work/ng4_window_20261123/obs/): the Space RUNNING at D with 1 of
-  1 replicas at every reading through 2026-11-26T07:30Z (sha and lastModified 2026-11-18T14:16:24Z
+  1 replicas at the readings through 2026-11-27T04:33Z (sha and lastModified 2026-11-18T14:16:24Z
   unchanged); every scheduled keepalive, resolver and guard run listed green (the last 40 of each);
   the EXP-09 route 0 runs. A same-sha restart is not visible passively.
 - **UOR HOLD #4** still stands: the local main checkout stays at
   0118cfaace93d911bef88cf2bdf5a0fd31dc39e0.
 - **THE REVIEW.** One independent reviewer: session local_6aa4983c… (claude-opus-5-5, xhigh,
-  read-only), whose reviews of this batch are LANE2-P1 and P1-R2 (the validator, the CHANGELOG),
-  LANE1-S1, S1-R2, C1, C1-R2, E05-F1 and E05-R1 (the kernel and the stage-0 run). This record: OBJ-1
-  on draft r1 (PASS_WITH_AMENDMENTS; folded into r2), OBJ-1-R2 PASS on r2 and OBJ-1-R3 PASS (r3 and
-  r4 change only the naming review value), then ONE exact-delta check of the execution-time values
-  against r4 (X2: PASS).
-- Process: Codex delegations 6 (task-1087 the validator; task-1088 to task-1091 the kernel;
-  task-1092 the naming primitive), each re-gated and its actual diff read by the master; GPT sidecar
-  consultations 0; paid API $0. Models: the master claude-opus-5-5 xhigh; the Lane 1 scientific
-  author a subagent verified as claude-fable-5-2 whose environment reported a numeric effort of 80
-  (named level unconfirmed); the reviewer claude-opus-5-5 at xhigh as set for its session (a session
-  cannot see its own effort level).
+  read-only), whose reviews of this batch are LEAN-C1 (the contract), LEAN-R1, LEAN-R2, LEAN-R3 and
+  LEAN-R4 (the build); LEAN-R4's NOTEs (assert which path ran in the whole-response test; one
+  validator per response) and LEAN-R2's NOTE (the card's heat colour still applies on a served
+  reference) are recorded, not folded. This record: LEAN-S1 on draft r1 (PASS_WITH_AMENDMENTS;
+  folded into r2), LEAN-S2 on r2 (PASS_WITH_AMENDMENTS; its two amendments folded into r3, exact
+  delta exact_delta_r2_vs_r3.txt), then ONE exact-delta check of the execution-time values against
+  r3 (X: PASS).
+- Process: Codex delegations 10 (task-1093 the serving-path audit; task-1094 S1; task-1095 S2;
+  task-1096 and task-1098 S3; task-1097 S4, two runs, the first NEEDS_DECISION with no change;
+  task-1099, task-1100 and task-1101 the review repairs), each re-gated and its actual diff read by
+  the master; one subagent (Fable); one targeted gpt-6-astra reply (owner-authorized, subscription,
+  $0); paid API $0. Models: the master claude-opus-5-5 (the owner's directive names High; a session
+  cannot see its own effort level); the reviewer claude-opus-5-5 at xhigh as set for its session.
 - Nothing else changed: no dispatch, no production database read or write, no credential handling,
-  no Space setting or secret change, no push to hf, no real data, no listing or changelog read, no
-  protected look, no F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD, H2 (H2-B1
-  deferred) and the four acceptance blockers are unchanged.
+  no Space setting or secret change, no push to hf, no live market request, no real data, no
+  protected look, no F3 or §5A access, no rerun. OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD (production), H2
+  and NO_TRADE, the hard gates and the four acceptance blockers are unchanged.
 - CARRIED OVER, still open: passive checks through the window; the EXP-09 read (owner one-shot, not
   before 2026-12-07T00:10Z) and the disable (owner T4) batched with the writer token's renewal
-  (before 2026-12-18T09:27Z); the CHANGELOG entries for #368 and #369 and #370 (a new T3); C-2's
-  remaining inputs, C-3 to C-7, D2–D8 and Q1/Q3
-  (.work/nga_post_stage0_20261126/DATA_FOUNDATION_RECONCILIATION.md §4); the day-7 checkpoint
-  (2026-11-30T00:00Z, no action); the EXP-04 owner items (which reading applies, if any; every
-  PROPOSED constant; what the SENSITIVITY failures mean for any real-data design; the OWNER BEFORE
-  STAGE 2 items) and the EXP-04 and EXP-05 holds; the licensing inquiry's sending; OD-NG-7; OD-NG-1,
-  OD-NG-3, OD-NG-4b; B-NG0's EXP-08; the pre-existing unqualified-function follow-up; NG6-R1, R2,
-  R3, R5; the release of UOR HOLD #4; cleanup candidates; and every other item M99's record carries,
-  unchanged.
-- This record is the batch's last publish. Before it: #370.)
+  (before 2026-12-18T09:27Z); the day-7 checkpoint (2026-11-30T00:00Z, no action); the CHANGELOG
+  entries for #368, #369, #370 and #372 (a new T3); the release blockers (the P6 rights fact;
+  EXP-03; the owner's read of the P5 wording, with the stale RELIABILITY_LABEL text reconciled in
+  the activation change; the activation T3/T4); the release of UOR HOLD #4; cleanup candidates.
+  Carried, not release dependencies: the pre-existing unqualified-function follow-up; OD-NG-1,
+  OD-NG-3, OD-NG-4b, OD-NG-7; NG6-R1, R2, R3, R5; the licensing inquiry's sending (not authorized:
+  P6 allows no third-party contact); and every other item M104's record carries. NOT PURSUED for
+  this release (P9), reopenable, nothing deleted: C-2's remaining inputs to C-7, D2-D8, Q1/Q3,
+  EXP-04 stage 2 and its redesign, EXP-05 stage 1, EXP-06/07/08/10-13, Option B, H2-B1 and lattice
+  expansion; the EXP-04 and EXP-05 holds stay.
+- This record is the batch's last publish. Before it: #372.)
 **Production is D 49ab0855 / UCPE-PROD-NG4P-20261118-B (R ab2fe87f); rollback target 27edbcad.**
+- **The owner (2026-11-27, ICT), verbatim — the T3 for this batch**
+  (from .work/p7/redesign/handoff/owner_t3_lean_release.txt, sha256 559aa6bc…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER T3 AUTHORIZE the Lean Quant Release dormant build exactly as:
+.work/lean_release_20261126/T3_PACKAGE_LEAN_BUILD.md
+Package SHA256:
+f3ef1666178b6e9392965e45a7309848ee9e73823a19fb5ed8fb7ae22bb24fdd
+Base M104:
+8e04f3cb4c1366c1d575de1b0dfe6a60e15ce000
+Authorized build:
+feat/lean-reference-release
+e24efa59dfc9c2351df9712583559dede6cdc1f4
+Expected merge tree:
+f2b60d8d475f65662a09014aeab047f7ea60b2b4
+GPT independently verified the 22 package checksums, exact head, predicted tree, clean worktree, live GitHub main, zero open PRs, exact-head gate (9,571 tests, scanners 3/3), LEAN-R4 PASS and LEAN-S2 review record.
+EXECUTE:
+
+1. Reconfirm all preflight conditions and mandatory gates.
+2. Publish the exact dormant build without modification.
+3. Require all green CI checks at the authorized head.
+4. Merge with --merge --match-head-commit, verify exact parents and expected tree, and require green post-merge CI and reproducible build.
+5. Regenerate STATE-last from draft r3 on the final main. Include the owner T3 verbatim, the declared review amendments and exact execution facts.
+6. Complete the exact-delta check, mandatory gate, STATE publication and merge verification.
+
+HOLD on any drift or failed mandatory check.
+No additional implementation or review rounds for the already reviewed dormant head.
+AFTER T3:
+Prepare the carried CHANGELOG entries locally. Batch them with the next eligible release-critical T3 where practical rather than creating an unnecessary standalone publication cycle.
+Keep P6 NOT ESTABLISHED pending the applicable terms confirmation. The owner has confirmed exclusive personal, non-commercial use.
+Additional official-source evidence:
+
+* https://developers.binance.com/en/docs/introduction explicitly identifies dashboards, analytics and reporting systems as API integration uses.
+* https://developers.binance.com/en/docs/products/spot/rest-api identifies public market-data endpoints separately from authenticated account and trading endpoints.
+* https://www.binance.com/vi/terms contains a non-commercial personal-use IP licence.
+
+These support the proposed use but do not independently establish every applicable API or derived-output right. Record them concisely; do not reopen broad licensing research.
+Before requesting EXP-03 authorization, ensure that an all-UNAVAILABLE result cannot qualify the upgraded product for activation. Distinguish operational correctness from actual named-cell serving readiness. Do not silently revise scientific thresholds or the run contract.
+Carry the heat-colour and serving-path assertion notes into the final activation change. Verify UOR compatibility given the response-schema changes, without releasing HOLD #4 or modifying UOR.
+Preserve the 9-step resource budget. No additional model research, Fable/Astra consultation, advanced experiments, real-data evaluation or speculative infrastructure.
+Preserve the disclosed protected-path incidents and their exact limitations. Do not inspect protected material to investigate them.
+GitHub-only authorization. No hf push, deploy, manual workflow dispatch, live rehearsal, database access, Space change, credential action or activation.
+LEAN_REFERENCE_ENABLED must remain False.
+All current production holds and pilot restrictions remain binding.
+Return with verified final main and one consolidated remaining release checklist.
+```
+- **The owner (2026-11-26, ICT), verbatim — the rulings P1-P10 and the local build**
+  (from .work/p7/redesign/handoff/owner_lean_release_rulings_20261126.txt, sha256 f10230d4…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER FINAL STRATEGIC RULINGS AND BOUNDED LOCAL BUILD AUTHORIZATION — UCPE LEAN QUANT RELEASE.
+Binding consultation reference:
+.work/nga_strategy_20261126/RECONCILED_RECOMMENDATION.md
+SHA256:
+167c827224f94eeb075a5deca01a13ba1729bbf83742e8de85d63c8fcdf48dfe
+The owner confirms that UCPE is exclusively for personal, non-commercial use. No monetization or commercial distribution is intended.
+The owner prioritizes completing the upgraded application with the greatest defensible product value within limited time, subscription capacity, supervision effort and financial resources.
+The full NGA research programme is no longer the product completion objective.
+FINAL P1–P10 RULINGS:
+P1 — ACCEPT.
+One bounded Lean Quant Release is the mandatory finish line. Stop model development after successful release and close-out.
+P2 — AMEND.
+Adopt the window-only direction. Prefer a simple pooled matured-frequency reference, p_timeout = T/K, with the remaining probability split equally between UP and DOWN.
+This is a new methodology identity, not reference-v1 parity or historical acceptance.
+No frozen external prior, fitted constants, arbitrary neutral prior or TEST_ONLY placeholder.
+Specify exact matured-anchor selection, horizon, band semantics, window coverage, minimum sample adequacy, overlap disclosure, stale-data behavior and deterministic abstention rules before implementation.
+Reuse applicable existing governed rules. Do not silently import unruled statistical thresholds.
+Do not implement day-type shrinkage as a second model or initiate comparative model research. Escalate only if a concrete dependency or correctness issue makes the pooled route unsuitable.
+P3 — SCOPED ACCEPT.
+Approve the target architecture of OD-NG-4 reference-slot serving for the named cells only, subject to lawful source use, reviewed implementation, all applicable acceptance blockers, EXP-03 and separate T3/T4 authorization.
+The current KEEP_HOLD remains effective in production until the separately authorized activation. No forecast-quality claim, directional claim or interval-coverage claim is permitted.
+No prospective lattice or R0 predictive-evidence programme is required for the descriptive product scope. Retain applicable operational rehearsal, safety and consistency requirements.
+P4 — AMEND.
+Initial upgraded scope:
+BTC/USDT, ETH/USDT and SOL/USDT.
+Binance Spot.
+15m, 1H and 4H.
+Six-bar terminal-return horizon.
+Nine named cells.
+Do not remove existing market-analysis, context, liquidity or risk functionality for other cells.
+Preserve eligible existing functionality with explicit methodology separation and unchanged hard gates. Unqualified new reference outputs must be UNAVAILABLE; never imply that they inherit named-cell evidence.
+Do not expand scope automatically.
+P5 — ACCEPT.
+A labelled descriptive reference is not a validated forecast-quality claim.
+Preserve all applicable acceptance blockers and reconcile their exact implementation and wording for this limited scope.
+No misleading reliability label, confidence claim or conditional prediction interval.
+P6 — OWNER FACT RESOLVED, RIGHTS GATE RETAINED.
+Personal, non-commercial use only.
+No historical archive acquisition is required or authorized.
+Complete one compact official-source review of the applicable live public market-data terms, derived-output use, persistence and personal-access boundaries.
+Distinguish live public REST API terms from Binance Vision archive terms.
+Do not infer legal permission solely from public accessibility or personal use. Do not contact third parties, buy data, introduce a new provider, or reopen the broad licensing programme.
+If applicable rights cannot be established, preserve a release HOLD. Continue authorized MOCK-only implementation where useful.
+P7 — SCOPED ACCEPT.
+Ordinary request-time descriptive serving is the intended product use, not authorization for a protected research look.
+Preserve F3/section 5A research boundaries.
+No new stored outcome scoring, retrospective protected look, BTC/ETH lattice or scientific claim population is authorized.
+Audit existing prediction persistence, resolver, history, calibration and UOR consumers. Keep methodology cohorts separate. Prevent unauthorized scoring and evidence contamination.
+Do not claim that nothing is retained if the existing persistence path stores derived predictions.
+P8 — DEFER.
+C1 is a separate optional post-release project only.
+Preserve all existing implementation and historical evidence. No C1 fitting, refitting, acceptance or activation.
+P9 — ACCEPT.
+Close the advanced NGA research programme as NOT PURSUED for this product release.
+Preserve all code, evidence, prior rulings, consumed runs and reopenability.
+Remove EXP-04 redesign/stage 2, EXP-05 stage 1, hierarchy, transfer, universe-wide acquisition, C-2 through C-7 research-foundation completion, D2–D8 broad archive programme, EXP-06/07/08/10–13, Option B automation, H2-B1 and lattice expansion from release dependencies.
+This is a product-scope reduction, not a deletion or scientific reversal.
+P10 — AUTHORIZE LATER.
+Prepare one bounded EXP-03 rehearsal package after local implementation. Live rehearsal requires separate authorization.
+LOCAL BUILD AUTHORIZATION:
+Authorize the necessary LOCAL T1/T2 work for the Lean Release under the existing verification and independent-review discipline.
+Start with one compact implementation contract. Do not produce another master plan or commission more Fable/Astra consultations.
+Resolve mechanical and implementation details using existing governed values and actual code. Do not invent scientific policy.
+IMPORTANT CODE FINDING FROM GPT:
+At M104, the ordinary market snapshot is based on min_history_bars=200 plus a small buffer.
+That snapshot may not cover the old reference memory, especially 15m and 1H.
+The existing adapters/candle_history.py capability supports up to 800 closed bars, including a single Binance klines request for bars+1.
+The existing quant_ng/windows.py already supports bounded history acquisition and validation.
+Audit and reuse these capabilities rather than introducing another archive or data-fetch framework.
+Do not enlarge the ordinary snapshot silently: that would alter existing realized volatility, CVaR and legacy distributional consumers.
+Use the smallest adequate validated reference-specific window. Assess reuse of existing 7-day and 28-day memory contracts without claiming v1 parity. Additional request-time history is a proposed serving capability only; no live request is authorized now.
+IMPLEMENTATION SCOPE:
+
+1. New reference identity and pure deterministic calculation.
+2. Exact validated-window selection and explicit refusal reasons.
+3. Coherent pipeline substitution: probability, score, hard gates, response, analysis_hash, persistence and methodology identity.
+4. Named-cell gating and eligible fallback without silent methodology substitution.
+5. Backend-owned evidence labels and frontend rendering.
+6. Correct distinction between terminal inside-band probability, direction and conditional interval.
+7. UOR compatibility, cohort isolation, hard-gate preservation and eligible rollback.
+8. Targeted tests, actual-diff review, bounded mutation probes where required, full verification and mandatory independent review.
+
+Use MOCK fixtures for local implementation and verification.
+A small comparative evaluation against the existing heuristic may be prepared only if it can reuse admissible evidence or a bounded lawful evaluation path without new research infrastructure.
+It is not authorized to run now.
+Do not call the release a demonstrated predictive improvement without appropriate out-of-sample evidence. If evaluation is not economical or permitted, release scope remains explicitly descriptive.
+RESOURCE BUDGET:
+One primary development lane.
+Target the consultation estimate of 6–9 reviewed PR-sized steps for mandatory remaining engineering. Include any materially necessary added work in that budget.
+One consolidated local publication package where feasible.
+Use Opus High for the master; escalate effort only when necessary for a mandatory high-risk review.
+Codex for bounded mechanical work with precise acceptance tests.
+No further Fable or Astra consultation.
+No paid API or data fallback.
+No advanced research, new model variants, speculative infrastructure or work merely to avoid idle time.
+One targeted causal repair before escalation. Preserve failed evidence.
+If the build exceeds 9 substantive steps, stop and reconcile scope once. On a second overrun, return HOLD.
+If lawful inputs, operational costs, minimum correctness or coherent serving cannot be achieved within the budget, narrow the proposed named scope once or return HOLD. Do not reopen a large research programme.
+PILOT:
+NG4 remains a separate passive operational lane, not a predictive-validation dependency.
+No Space change during the pilot.
+At the authorized post-window boundary, prepare the existing one-shot EXP-09 read and disable sequence, coordinated with the writer-token renewal. These actions retain their separate owner authorizations.
+No expansion of the lattice.
+PROTECT:
+M104, UOR HOLD #4, OD-NG-2 DEFER, current production OD-NG-4 KEEP_HOLD pending activation, H2, NO_TRADE, hard gates, F3/section 5A, acceptance blockers, immutable cohorts, consumed EXP-04 and EXP-05 evidence and all other applicable restrictions.
+No historical data fetch, real-data research, protected look, live rehearsal, scientific run, fitting, database access, credential action, manual workflow dispatch, push to origin or hf, deployment or Space change.
+No T3/T4 is authorized by this directive.
+CONTINUE THROUGH THE AUTHORIZED LOCAL BUILD.
+Do not return after merely writing the contract if implementation can proceed safely.
+Return with the completed reviewed and gated local build, exact heads, minimal EXP-03 rehearsal package, consolidated T3 package, remaining release blockers and an updated Definition of Done.
+The finish line is a working, honest, maintainable personal-use UCPE application, not the completion of the NGA research roadmap.
+```
+- **The owner (2026-11-26, ICT), verbatim — the Fable x Astra reconciliation request**
+  (from .work/p7/redesign/handoff/owner_fable_astra_reconciliation_20261126.txt, sha256 d2f80fcd…):
+```text
+CONTINUE CURRENT — Opus High.
+OWNER REQUEST — RESOURCE-OPTIMIZED FABLE × ASTRA STRATEGIC RECONCILIATION.
+This is a bounded T0 consultation only.
+The owner's resources are severely constrained. The objective is to complete the best achievable upgraded UCPE application as quickly and economically as possible, while preserving the greatest defensible predictive value.
+GPT has already conducted an independent GPT-6 Astra High consultation through the authenticated Codex CLI.
+Verified consultation metadata:
+
+* Model: gpt-6-astra.
+* Effort: High.
+* Session: 01a217a8-5944-7ef2-85bf-cd2f5173f444.
+* Read-only, ephemeral, ChatGPT-authenticated.
+* Tokens used: 26,297.
+* Status: NEEDS_DECISION.
+* No code changes, tests, market-data access or scientific runs.
+
+DO NOT REPEAT THE ASTRA CONSULTATION.
+You, the Claude master, must directly orchestrate Fable's consultation, its critique of the existing Astra findings and the final reconciliation. The owner must not act as a message relay.
+1. FABLE INDEPENDENT PROPOSAL
+Commission one verified Fable XHIGH subagent through the established subscription-backed Claude Desktop mechanism.
+Initially provide only a compact factual packet from M104, the existing master plans, current implementation, recorded scientific outcomes and unresolved dependencies.
+Do not reveal Astra's recommendation until Fable has recorded its own position.
+Fable must independently recommend the highest-value achievable product under the owner's resource constraints.
+Evaluate:
+
+* Full NGA.
+* Reference-only release.
+* Reference plus narrowly scoped C1.
+* Selective candidate-first release.
+* Reuse of the existing distributional implementation.
+* Alternative simplified architectures.
+* Stopping further model development if no meaningful improvement can be justified economically.
+
+Pay particular attention to whether removing C1 would sacrifice too much of the conditional-scale forecasting value that originally motivated NGA.
+Distinguish descriptive historical frequencies, probabilistic forecasts, conditional-scale forecasts, prediction intervals, demonstrated predictive improvement and directional skill.
+Identify which remaining tasks affect actual predictive quality and which mainly support research breadth, stronger claims, automation or governance.
+Estimate the remaining engineering effort, unavoidable evidence time and maintenance burden.
+Do not invent accuracy-retention percentages, data rights, statistical thresholds or precise release dates.
+2. EXISTING ASTRA CONSULTATION — REUSE, DO NOT RERUN
+After Fable records its initial recommendation, provide the following substantive findings from Astra:
+A. RECOMMENDED ROUTE
+Named-cell reference-only, with a firm finish line.
+Full NGA adds research, collection, refitting and claim machinery beyond the owner's product objective. Broad reference-only still hides substantial coverage and data work.
+Reference-first with optional C1 risks expanding incrementally back into full NGA. C1 should therefore be excluded from mandatory completion criteria.
+B. MODEL COMPARISON
+Minimum reference:
+Matured six-bar returns classified at today's cost band, smoothed timeout frequency, and remaining probability divided equally between UP and DOWN.
+It requires lawful windows, frozen prior specification, rehearsal and explicit serving/display authorization.
+Existing distributional implementation:
+The current pipeline exposes candle-derived bar/horizon scale and cost-band probabilities. The existing record establishes integration feasibility, not superiority or production acceptance.
+Scoped C1:
+Fitted conditional scale with a reflected empirical return distribution, coherent triplet and central range. No eligible fitted constants are shipped. It requires lawful training data, eligible artifacts, staleness/band controls and separate claim permissions.
+Symmetry provides no directional edge. Reference timeout frequency does not identify C1's central prediction interval.
+C. FROZEN PRIOR BLOCKER
+Fit-free does not mean assumption-free.
+The existing reference is:
+p_T = (n0 * pi0_d + T_d) / (n0 + K_d).
+When no matching anchors exist, the result is entirely prior-driven.
+The permitted records do not establish an approved prior source.
+A defensible proposed source is a bounded, owner-approved initialization window from the same lawful venue, symbol and timeframe, containing matured outcomes.
+Predeclare selection before inspection. Freeze the manifest and day-type empirical absolute-return distributions, deriving pi0_d at each admissible band.
+Initialization data cannot simultaneously constitute independent validation.
+A possible alternative is a new reference identity using unsmoothed matured frequency T/K, potentially with one pooled calendar type. This requires a new owner ruling, sample/abstention rules and separate evaluation. It inherits no v1 parity or historical status.
+Never use arbitrary neutral priors or TEST_ONLY pilot placeholders.
+D. DATA AND LICENSING
+A broad historical archive is unnecessary for a descriptive named-cell baseline.
+However, lawful acquisition, retention, computation and user-facing derived-output rights remain necessary.
+Public accessibility does not establish these rights.
+If lawful inputs remain unresolved, do not activate the model or use paid fallback.
+E. MINIMUM IMPLEMENTATION
+
+* Bind named cells to approved sources, reference identities and frozen priors.
+* Validate bounded windows, reject gaps and immature outcomes.
+* Integrate probabilities, scores, gates, hashes and persistence coherently.
+* Render methodology, horizon, cost band, observation counts, freshness, evidence status and refusal reasons.
+* Preserve H2, hard gates, UOR HOLD #4 and eligible rollback.
+* Do not imply directional skill or validated interval coverage.
+
+The current pipeline wrapper preserves legacy behavior. Enabling its flag alone is insufficient.
+F. MINIMUM VALIDATION
+Retain deterministic/parity checks, end-to-end serving rehearsal, measured request/latency/storage costs, browser review, mandatory verification and safety gates.
+Retain prospective descriptive calibration and proper-score monitoring on matured outcomes, with overlap acknowledged.
+Do not turn repeated monitoring into repeated significance claims.
+Superiority and calibrated-coverage claims require separately valid evidence.
+G. NG4
+The SOL pilot is not a mathematical dependency of request-driven reference serving. It tests collection reliability, not forecast skill or prior validity.
+Complete its existing one-shot EXP-09 and disable sequence. Do not expand it merely to justify a reference release.
+H. DEFERRALS
+Universe expansion, daily/weekly model research, extended horizons, C1 fits/refits, hierarchy, transfer claims, lattice expansion and statistical demotion research.
+EXP-04 sensitivity failures and EXP-05 non-adoption argue against reopening those programmes for launch.
+I. STOP CONDITIONS
+Stop if lawful rights or prior provenance remain unresolved, measured costs exceed the owner's resource budget, or acceptance requires another extensive research programme.
+Preserve the first failure. Allow one targeted repair, then stop on repeated cause.
+All four acceptance blockers remain binding unless explicitly rescoped by the proper authority.
+J. ASTRA'S FINAL CONCLUSION
+Recommend one narrowly scoped descriptive reference release with explicit source rights, frozen initialization, coherent serving and UX.
+Exclude C1 from completion criteria.
+Neither green tests nor the operational pilot establishes forecast quality.
+Astra's consultation was architectural, not empirical validation.
+3. FABLE CROSS-REVIEW
+Have Fable critically review the Astra findings above.
+Fable must explicitly identify:
+
+* Where Astra is correct.
+* Where Astra may be overly conservative.
+* Whether reference-only sacrifices disproportionate predictive value.
+* Whether a narrowly scoped C1 is worth its incremental cost.
+* Whether another architecture offers better predictive value per unit of effort.
+* Any hidden dependencies or unsupported assumptions in either proposal.
+
+Fable may amend its initial recommendation.
+Do not force agreement.
+4. CONDITIONAL ASTRA RESPONSE
+Do not call Astra again by default.
+If Fable agrees materially with Astra, proceed directly to master reconciliation.
+If Fable identifies a material disagreement that could change the recommended architecture, predictive value or remaining resource burden, authorize at most ONE short, targeted Astra response through Codex CLI.
+Provide only the disputed points and the relevant compact extracts.
+Do not commission another independent proposal, full repository audit or broad consultation.
+Prefer resuming the existing Astra session only if genuinely available and resource-efficient. Otherwise use one narrow fresh query.
+Use existing subscription authentication only. No paid fallback.
+After that response, reconcile directly. No further model debate.
+5. FINAL DELIVERABLE
+Return ONE concise recommendation containing:
+
+1. Fable's independent initial position.
+2. Fable's critique of Astra.
+3. Any material concessions or disagreements.
+4. Any targeted Astra response, if genuinely necessary.
+5. The final reconciled product architecture.
+6. KEEP / SIMPLIFY / DEFER / REMOVE FROM RELEASE REQUIREMENTS for the remaining NGA roadmap.
+7. Impact of each major reduction on predictive quality, functionality and evidence strength.
+8. Shortest remaining critical path.
+9. Estimated engineering effort versus unavoidable evidence time.
+10. Remaining AI usage and maintenance implications.
+11. Explicit Definition of Done.
+12. Resource-budget STOP criteria.
+13. One consolidated owner decision package.
+
+Recommend the highest-value route, not simply the cheapest route.
+Explicitly distinguish product usability from demonstrated predictive improvement.
+Record actual model identity, effort and consultation evidence.
+PROTECT
+No roadmap change or implementation is authorized yet.
+Preserve M104, all existing rulings, acceptance blockers, UOR HOLD #4, OD-NG-2 DEFER, OD-NG-4 KEEP_HOLD, H2, F3/section 5A and consumed evidence.
+No new experiment, fitting, simulation, real-data access, protected look, archive fetch, production access, database access, workflow dispatch, credential action, push, deploy or Space change.
+NG4 remains passive under its existing protocol.
+No automatic implementation after consultation.
+RESOURCE DISCIPLINE:
+One Fable consultation with one focused critique.
+Zero additional Astra calls unless a material disagreement genuinely requires one targeted response.
+No unnecessary research rounds, repeated full-context consultations or large new architecture programme.
+Return the reconciled recommendation for owner approval.
+The objective is maximum useful predictive product value per unit of remaining resources, with a realistic and explicit finish line.
+```
 - **The owner (2026-11-26, ICT), verbatim — the T3 for this batch**
   (from .work/p7/redesign/handoff/owner_t3_postm99_batch.txt, sha256 f4ecf933…):
 ```text
@@ -3802,7 +4135,14 @@ file governs.
 
 ## Recovery block — read this first on resume
 ```
-LOOP_STATE=EXP-05 STAGE 0 IS COMPUTED AND CONSUMED (local; never rerun; nothing adopted); its
+LOOP_STATE=THE LEAN QUANT RELEASE IS THE FINISH LINE (owner P1-P10); its dormant build is on main
+  M105 6a8477ed with LEAN_REFERENCE_ENABLED = False; production is unchanged: D 49ab0855 /
+  UCPE-PROD-NG4P-20261118-B (OD-NG-4 KEEP_HOLD). The release holds on P6 (rights NOT ESTABLISHED)
+  and EXP-03. The pilot window runs passively (Space RUNNING at D, every scheduled run listed green,
+  EXP-09 0 runs). Its previous head is kept verbatim below (M104 8e04f3cb). Main is M105 6a8477ed
+  before this record; local main is held at 0118cfaa (UOR HOLD #4). The previous head, below, stands
+  except its last sentence (main before that record).
+  EXP-05 STAGE 0 IS COMPUTED AND CONSUMED (local; never rerun; nothing adopted); its
   kernel, the capture-log validator, the token-safe object-name primitive and CHANGELOG #365 are on
   main M103 88b149dd; production is unchanged: D 49ab0855 / UCPE-PROD-NG4P-20261118-B. The pilot
   window runs passively (Space RUNNING at D, every scheduled run listed green, EXP-09 0 runs). Its
@@ -6909,7 +7249,13 @@ LOOP_STATE=EXP-05 STAGE 0 IS COMPUTED AND CONSUMED (local; never rerun; nothing 
   - The owner-authorized batch T3 is CONSUMED and VERIFIED: B #107, C #108, D #109, A #110 (BATCH_T3).
   - The owner-authorized 0010 T4 is CONSUMED and VERIFIED: run 35190794876 (BATCH_0010).
   - Since then there has been no other dispatch, database access or deploy.
-CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT
+CURRENT_MILESTONE=THE LEAN QUANT RELEASE (owner P1-P10, 2026-11-27): THE DORMANT BUILD IS ON MAIN;
+  THE NG4 PILOT WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); THE ADVANCED NGA RESEARCH
+  PROGRAMME IS NOT PURSUED FOR THIS RELEASE (P9):
+  - next: the P6 rights fact, then the EXP-03 rehearsal (separate authorization) and the owner's
+    read of the P5 wording, then the activation T3 and release T4; after the window, the EXP-09 read
+    and the disable.
+  Before it: POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOOLING; THE NG4 PILOT
   WINDOW IS OPEN (2026-11-23T00:00Z – 2026-12-07T00:00Z); EXP-05 STAGE 0 COMPUTED (local,
   2026-11-26); THE DATA FOUNDATION AT C-1 RULED AND C-2 NAMING RULED:
   - next: C-2's remaining inputs, then C-3 to C-7 and Q1/Q3
@@ -7502,7 +7848,10 @@ CURRENT_MILESTONE=POST-PHASE-4 / PHASE 7-8, THE NGA PROPOSAL AND ITS DORMANT TOO
   - a freeze, wiring, a new T0, any database action and any HF deploy;
   - any further F1/F2 read, and any implementation of the D-1 rulings without its own authorization
     (OWNER_BOUNDARY 5).
-CURRENT_BRANCH=chore/state-postm99-batch (this record, on main M103 88b149dd). This batch's other
+CURRENT_BRANCH=chore/state-lean-release (this record, on main M105 6a8477ed). This batch's other
+  branch: feat/lean-reference-release (#372). Merged branches and local worktrees are cleanup
+  candidates; no cleanup was authorized.
+  Before it: chore/state-postm99-batch (this record, on main M103 88b149dd). This batch's other
   branches: docs/changelog-365 (#367), feat/capture-log-validator-mock (#368) and
   feat/exp05-share-kernel-stage0 (#369) and feat/token-safe-object-names (#370). Merged branches and
   local worktrees are cleanup candidates; no cleanup was authorized.
@@ -7916,7 +8265,11 @@ CURRENT_BRANCH=chore/state-postm99-batch (this record, on main M103 88b149dd). T
   - prep/v2-integration-prep;
   - prep/v2-history-serving;
   - chore/state-post-106.
-LAST_GREEN_SHA=M103 88b149dd (main, #370, the last merge before this record): push CI 45799856562
+LAST_GREEN_SHA=M105 6a8477ed (main, #372, the last merge before this record): push CI 45940620977
+  and Reproducible build 45940620979, both success at 6a8477ed; PR #372's 12 checks all green at the
+  authorized head e24efa59; MERGE_VERIFY PASS (parents 8e04f3cb and e24efa59, tree f2b60d8d, as
+  predicted).
+  Before it: M103 88b149dd (main, #370, the last merge before this record): push CI 45799856562
   and reproducible build 45799856418 green on their first attempt (the intermediate builds of M101
   and M102 were cancelled by concurrency).
   Before it: M98 b44942bb (main, #365, the last merge before this record): push CI 45736732910 and
@@ -8389,7 +8742,9 @@ LAST_GREEN_SHA=M103 88b149dd (main, #370, the last merge before this record): pu
   - Exact-main CI run 35195392429 green.
   Before it: e22ce337 (PR #110), whose exact-main CI run 35189507625 was green. Its tree 2e1667b4 is the
   owner-authorized, locally gated composition.
-LAST_VERIFY=PASS 2026-11-26 (this record), scanners 3/3: 9502 at its exact head; the integrated
+LAST_VERIFY=PASS 2026-11-27 (this record), scanners 3/3: 9571 at its exact head; the build head 9571
+  (e24efa59, the exact clean head).
+  Before it: PASS 2026-11-26 (this record), scanners 3/3: 9502 at its exact head; the integrated
   batch tree 9502 (the four-branch tree 799f5cb6); the kernel head 9362 (bb1fded; aaf8d20 has the
   identical tree); the validator head 9372; the CHANGELOG head 9265; the naming head 9298.
   Before it: PASS 2026-11-26 (this record), scanners 3/3: 9265 at its exact head; the harness head
@@ -8814,7 +9169,11 @@ LAST_VERIFY=PASS 2026-11-26 (this record), scanners 3/3: 9502 at its exact head;
   - Per lane: B 2393, C 2264, D 2282, against 2230 for main alone. 2230 + 163 + 34 + 18 = 2445.
   - Independent post-merge re-check: .work/817/t3-batch/verify_batch.sh returned BATCH_VERIFIED, 46 checks
     (verify_batch.output).
-CODEX_PENDING=NONE. Codex in this batch: 6 (task-1087 the validator; task-1088 to task-1091 the
+CODEX_PENDING=NONE. Codex in this batch: 10 (task-1093 the serving-path audit; task-1094 S1;
+  task-1095 S2; task-1096 and task-1098 S3; task-1097 S4, two runs, the first NEEDS_DECISION with no
+  change; task-1099, task-1100 and task-1101 the review repairs), each re-gated and its actual diff
+  read by the master. No API key, no paid fallback, $0.
+  Before it: NONE. Codex in this batch: 6 (task-1087 the validator; task-1088 to task-1091 the
   kernel; task-1092 the naming primitive), each re-gated and its actual diff read by the master. No
   API key, no paid fallback, $0.
   Before it: NONE. Codex in this batch: 4 (task-1083 to task-1086, the four delegations of the
@@ -9067,7 +9426,15 @@ CODEX_PENDING=NONE. Codex in this batch: 6 (task-1087 the validator; task-1088 t
 GPT_REQUEST_ID=NONE
 GPT_THREAD_URL=NONE
 GPT_REQUEST_STATE=NONE
-OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-26, after this record): none inside the window
+OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-27, after this record): none inside the window
+  (no Space change). The P6 rights fact (.work/lean_release_20261126/P6_RIGHTS_REVIEW.md: read the
+  Binance terms shown for the owner's own account region, or record that there is no account); then
+  the EXP-03 authorization (.work/lean_release_20261126/EXP03_REHEARSAL_PACKAGE.md) and the read of
+  the P5 wording (banner, card label, Detail block); then the activation T3 (LEAN_REFERENCE_ENABLED
+  = True) and the release T4. After 2026-12-07T00:10Z: the one EXP-09 read and the disable batched
+  with the token renewal (before 2026-12-18T09:27Z). Also: CHANGELOG entries (a new T3); the release
+  of UOR HOLD #4.
+  Before it: THE OWNER'S NEXT DECISIONS (2026-11-26, after this record): none inside the window
   (no Space change). Data foundation: C-2's remaining inputs (tolerance value and handling, Date
   formats, sharing, refusal names), C-3 to C-7, then Q1/Q3
   (.work/nga_post_stage0_20261126/DATA_FOUNDATION_RECONCILIATION.md §4); the PROPOSED scope-sentence
@@ -10639,6 +11006,17 @@ OWNER_BOUNDARY=THE OWNER'S NEXT DECISIONS (2026-11-26, after this record): none 
   - T3: delete merged branches: release/prod-safe-3 and the four batch branches.
   - The OPEN_ITEMS decisions.
 NEXT_ACTION=Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
+  (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
+  passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing. **Never
+  turn LEAN_REFERENCE_ENABLED on outside a reviewed, owner-authorized activation; never run the
+  EXP-03 rehearsal without the owner's authorization; never rerun the EXP-05 stage-0 map (manifest
+  b59f0479…) or the EXP-04 validation (manifest cc81488d…); never rerun the deploy of 49ab0855 or
+  the apply (run 44133908695), never dispatch .github/workflows/apply-migration-0019.yml again;
+  never rerun preflight runs 43916685548, 44012717250, 44039032076 or 44113873249; never dispatch
+  the EXP-09 route without the owner's one-shot authorization; never run the credential helper; no
+  Space change inside the pilot window.** No push without a T3; no dispatch, production read or
+  write, grant, credential, live market request, real data, T4 or deploy without the owner.
+  Before it: Claude: after this record merges, verify its CI/build and keep local main at 0118cfaa
   (HOLD #4); through the window, read the Space's public runtime and the scheduled run list
   passively, saving each reading raw under .work/ng4_window_20261123/obs/ before parsing. **Never
   rerun the EXP-05 stage-0 map (manifest b59f0479…) or the EXP-04 validation (manifest cc81488d…): a
