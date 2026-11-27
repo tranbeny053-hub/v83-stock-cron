@@ -2383,7 +2383,7 @@ function renderReferenceDisplay(display) {
   const title = document.createElement("strong");
   title.textContent = display.title;
   block.append(title);
-  for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "history_line"]) {
+  for (const key of ["count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "retention_line"]) {
     if (typeof display[key] !== "string" || !display[key].trim()) continue;
     const line = document.createElement("p");
     line.textContent = display[key];

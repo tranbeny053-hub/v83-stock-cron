@@ -283,8 +283,14 @@ def test_overview_card_renders_reference_label_with_decision_view_and_no_heat() 
                     "Not recorded for scoring."
                 ),
                 "extended_line": "Extended horizon: not modelled.",
+                "retention_line": (
+                    "Recent Analysis keeps this reference only in the app's current session "
+                    "memory; "
+                    "it may disappear after eviction or restart, and it is not recorded for "
+                    "forecast evaluation."
+                ),
             },
-            5,
+            6,
         ),
         ({"title": "Descriptive reference", "count_line": "Available only for named cells."}, 1),
         (
@@ -322,6 +328,9 @@ console.log(JSON.stringify({
     assert rendered["className"] == "reference-display"
     assert rendered["text"][0] == "Descriptive reference"
     assert len(rendered["text"]) - 1 == expected_lines
+    if "retention_line" in display:
+        assert display["retention_line"] in rendered["text"]
+        assert all("Saved as an analysis run" not in line for line in rendered["text"])
     assert all(tag in {"div", "strong", "p"} for tag in rendered["tags"])
 
 

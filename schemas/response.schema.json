@@ -239,7 +239,7 @@
             "prediction_ledger": { "enum": ["NOT_RECORDED_BY_DESIGN", "HEURISTIC_COHORT"] },
             "display": {
               "type": "object", "additionalProperties": false,
-              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "history_line"],
+              "required": ["title", "count_line", "direction_line", "overlap_line", "honesty_line", "extended_line", "retention_line", "history_line"],
               "properties": {
                 "title": { "type": "string" },
                 "count_line": { "type": "string" },
@@ -247,6 +247,7 @@
                 "overlap_line": { "type": "string" },
                 "honesty_line": { "type": "string" },
                 "extended_line": { "type": "string" },
+                "retention_line": { "type": ["string", "null"] },
                 "history_line": { "type": ["string", "null"] }
               }
             }
@@ -257,7 +258,7 @@
               "then": {
                 "properties": {
                   "reason": { "type": "null" },
-                  "display": { "properties": { "history_line": { "type": "string" } } }
+                  "display": { "properties": { "history_line": { "type": "string" }, "retention_line": { "type": "string" } } }
                 }
               }
             },
@@ -271,7 +272,7 @@
                     "SNAPSHOT_MISMATCH", "SHORT_SNAPSHOT", "HISTORY_FAILED", "HISTORY_INVALID",
                     "HISTORY_CONFLICT"
                   ] },
-                  "display": { "properties": { "history_line": { "type": ["string", "null"] } } }
+                  "display": { "properties": { "history_line": { "type": ["string", "null"] }, "retention_line": { "type": ["null"] } } }
                 }
               }
             }

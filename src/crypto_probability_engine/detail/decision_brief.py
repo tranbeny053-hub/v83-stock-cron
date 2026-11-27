@@ -299,6 +299,11 @@ def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dic
                 "Not recorded for scoring."
             ),
             "extended_line": "Extended horizon: not modelled.",
+            "retention_line": (
+                "Recent Analysis keeps this reference only in the app's current session memory; "
+                "it may disappear after eviction or restart, and it is not recorded for "
+                "forecast evaluation."
+            ),
             "history_line": (
                 "Saved as an analysis run. Available in Recent Analysis while retained in the "
                 "app's current session memory; it may disappear after eviction or restart, and "
@@ -317,5 +322,6 @@ def reference_display(reference_state: dict, horizon_timeout_state: dict) -> dic
         "overlap_line": "",
         "honesty_line": "",
         "extended_line": "",
+        "retention_line": None,
         "history_line": None,
     }

@@ -740,6 +740,7 @@ class LeanReferenceDisplay(BaseModel):
     overlap_line: str
     honesty_line: str
     extended_line: str
+    retention_line: str | None
     history_line: str | None
 
 
@@ -762,6 +763,8 @@ class LeanReferenceState(BaseModel):
             raise ValueError("reference reason is null exactly when status is SERVED")
         if (self.status == "SERVED") != isinstance(self.display.history_line, str):
             raise ValueError("history_line is a string exactly when the reference is served")
+        if (self.status == "SERVED") != isinstance(self.display.retention_line, str):
+            raise ValueError("retention_line is a string exactly when the reference is served")
         return self
 
 

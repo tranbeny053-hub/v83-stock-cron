@@ -210,6 +210,11 @@ def test_served_4h_uses_snapshot_skips_ledger_and_snapshots(monkeypatch):
             "Not a validated forecast and not a prediction interval. Not recorded for scoring."
         ),
         "extended_line": "Extended horizon: not modelled.",
+        "retention_line": (
+            "Recent Analysis keeps this reference only in the app's current session memory; "
+            "it may disappear after eviction or restart, and it is not recorded for "
+            "forecast evaluation."
+        ),
         "history_line": (
             "Saved as an analysis run. Available in Recent Analysis while retained in the app's "
             "current session memory; it may disappear after eviction or restart, and it is not "
@@ -338,6 +343,11 @@ def test_served_reference_persists_run_detail_and_saved_receipt(monkeypatch):
         "Historical-frequency reference — descriptive estimate, not validated."
     )
     assert saved_view["reference"] == response["reference_state"]["display"]
+    assert saved_view["reference"]["retention_line"] == (
+        "Recent Analysis keeps this reference only in the app's current session memory; "
+        "it may disappear after eviction or restart, and it is not recorded for "
+        "forecast evaluation."
+    )
     assert repository._predictions == {}
     assert repository._feature_snapshots == {}
     assert repository._derivatives_snapshots == {}
@@ -449,6 +459,7 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
                 "overlap_line",
                 "honesty_line",
                 "extended_line",
+                "retention_line",
                 "history_line",
             )
         },
@@ -459,9 +470,23 @@ def test_reference_state_bad_values_are_rejected_by_both_schemas():
         lambda item: item.update(methodology_version="other"),
         lambda item: item.update(prediction_ledger="RECORDED_AS_x"),
         lambda item: item["display"].pop("honesty_line"),
+        lambda item: item["display"].pop("retention_line"),
     ):
         malformed = json.loads(json.dumps(valid))
         mutate(malformed)
+        with pytest.raises(ValidationError):
+            LeanReferenceState.model_validate(malformed)
+        assert list(json_validator.iter_errors(malformed))
+
+    for mutation in (
+        lambda item: item["display"].update(retention_line=None),
+        lambda item: (
+            item.update(status="UNAVAILABLE", reason="HISTORY_FAILED"),
+            item["display"].update(history_line=None, retention_line="not served"),
+        ),
+    ):
+        malformed = json.loads(json.dumps(valid))
+        mutation(malformed)
         with pytest.raises(ValidationError):
             LeanReferenceState.model_validate(malformed)
         assert list(json_validator.iter_errors(malformed))
